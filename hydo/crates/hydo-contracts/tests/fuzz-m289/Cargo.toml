@@ -1,0 +1,19 @@
+# The third fixture of tests/fuzz.rs (Milestone 289): a crate with what stopped `hydo fuzz` in
+# the second evaluation (docs/design/function-fuzzing-evaluation-2.md).
+[package]
+name = "fuzz-m289"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# its own workspace (not part of the repository root's)
+[workspace]
+
+# `cargo metadata` does not give the lints: hydo's copy must keep them, or the crate's
+# `deny(warnings)` in its tests stops on the `cfg` below
+[lints.rust.unexpected_cfgs]
+level = "warn"
+check-cfg = [
+    "cfg(fixture_simd)",
+]

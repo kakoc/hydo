@@ -769,6 +769,10 @@ pub enum FTy {
         bits: u32,
     },
     Bool,
+    /// `f32` or `f64` (Milestone 289): `bits` is 32 or 64.
+    Float {
+        bits: u32,
+    },
     /// `String` (or `str` behind a reference).
     Str,
     /// `Vec<T>` (or `[T]` behind a reference).
@@ -814,6 +818,7 @@ impl FTy {
         match self {
             FTy::Int { name, .. } => name.clone(),
             FTy::Bool => "bool".into(),
+            FTy::Float { bits } => format!("f{bits}"),
             FTy::Str => "String".into(),
             FTy::List(x) => format!("Vec<{}>", x.rust()),
             FTy::Array(x, n) => format!("[{}; {n}]", x.rust()),
@@ -898,6 +903,8 @@ impl Resolver<'_> {
                     ("i128", 0) => int("i128", true, 128),
                     ("isize", 0) => int("isize", true, 64),
                     ("bool", 0) => FTy::Bool,
+                    ("f32", 0) => FTy::Float { bits: 32 },
+                    ("f64", 0) => FTy::Float { bits: 64 },
                     ("String" | "str", 0) => FTy::Str,
                     ("Vec", 1) => FTy::List(Box::new(arg(0, stack))),
                     ("Option", 1) => FTy::Opt(Box::new(arg(0, stack))),

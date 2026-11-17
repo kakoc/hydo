@@ -247,3 +247,44 @@ pleasant to use. What stops the evaluator, worst first:
 5. A run does not show the inputs it generated, so a pass gives no evidence of what it reached.
 
 Open item 139 in `AGENTS.md` points to this page.
+
+## After the fixes of M289
+
+Milestone 289 fixed problems 1, 2, 4 and 5 of the verdict. Of the friction log it fixed 2, 3, 5,
+6, 9 and 11, and the exit status of 8. The runs below used copies of the evaluation's crates with the evaluator's
+contracts. In these copies, strsim's `#![forbid(unsafe_code)]` and httparse's
+`#![cfg_attr(test, deny(warnings))]` were put back as the crates publish them. Each run used seed 1
+and 1,000 inputs, on the Mac, with `hydo` built from this milestone's tree. "Before" is `main` at
+`0038380d`.
+
+| Crate and run | Before | After |
+|---|---|---|
+| strsim, `--fn jaro` | the harness does not build (E0453), exit 2; with `deny` in place of `forbid`, `held ... on 0 calls, undecided on 1000`, exit 0 | `held: ensures result <= 1 (line 190) on 1000 calls`, exit 0 |
+| strsim, all 13 functions | none fuzzed (E0453), exit 2 | 12 held, 1 broken: finding 1 at `a = "ab", b = "aba"`, exit 1 |
+| httparse, all functions | `the crate does not build in the test profile without hydo's harness`, exit 2 | 4 held, 1 broken: finding 2 at `text = "\r\n"`, exit 1 |
+| num-traits, `--fn abs` | the clause `vacuous`, and `to fix: give the inputs the shape ...` | the clause `not reached`, the 81 calls that panicked named, no `to fix:` line; exit 1 for the panic |
+| bytes, all functions | `6 held; 2 not fuzzed`, exit 0 | the same counts, a line that says the run did not test every contract, exit 3 |
+
+On strsim's `jaro`, hydo now reads the `f64` result. `--input 'a = "abc", b = "abd"'` prints
+`result = 0.7777777777777777`. With the clause changed to `ensures result < 1`, the run breaks on
+15 of 1,000 calls and shrinks to `a = "", b = ""` with `result = 1.0`.
+
+httparse's chunk size property now takes the bytes themselves. An added property
+`chunk_size_bytes(buf: &[u8])` with `input buf like b"4\r\nRust\r\n", b"0\r\n\r\n", b"1a;ext=1\r\n", b"ff \r\n"` breaks on 25
+of 1,000 calls at `buf = b"\r\n"`, which is finding 2 without a wrapper that takes `&str`.
+`--show-inputs 5` printed inputs such as `buf = b"1a;ex\n"` and `buf = b"0\xa4\r\n\r\r\n"`.
+Its `again:` line replays alone. The crate denies warnings in its tests, and a property function
+that only hydo calls stays in use when `--fn` names another one.
+
+The new message for a copy that does not build was checked with a test build of hydo that left
+out the `[lints]` tables. On httparse it printed this, shortened:
+
+```text
+hydo fuzz: hydo's copy of the crate does not build, though the crate itself builds with `cargo
+test --no-run`: the cause is hydo's copy (its Cargo.toml, which hydo writes from `cargo
+metadata`, or its harness), not the crate. The first error: error[unexpected_cfgs]: unexpected
+`cfg` condition name: `httparse_simd`.
+```
+
+Still open: frictions 1, 7, 10 and 12, and problem 3 of the verdict. Methods of types
+that hold pointers, trait methods and enumeration results are still refused or not read.

@@ -46,10 +46,13 @@ holds the whole report.
   (`l.balance`), or the elements of a list (`v[]`).
 - `// hydo: with T = i64`: the type that a generic function's type parameter takes.
 
-An expression reads parameters, fields, `result`, integers, strings, `old(e)` (the value at the
-call's entry), and the functions `len`, `is_some`, `is_none`, `is_ok`, `is_err`, `some`, `ok` and
-`err`. The operators are `||`, `&&`, the comparisons, `+ - * / %`, `!` and unary `-`. Integers
-are exact, with no overflow. A call of the program's own code is refused.
+An expression reads parameters, fields, `result`, integers, floating-point numbers (`0.5`),
+strings, `old(e)` (the value at the call's entry), and the functions `len`, `is_some`, `is_none`,
+`is_ok`, `is_err`, `some`, `ok` and `err`. The operators are `||`, `&&`, the comparisons,
+`+ - * / %`, `!` and unary `-`. Integers are exact, with no overflow. A comparison of an integer
+with an `f32` or `f64` value is exact too. Arithmetic on such a value is the program's own `f64`
+arithmetic, and a NaN is unequal to everything, itself included. A call of the program's own code
+is refused.
 
 ## The `input` line
 
@@ -57,16 +60,18 @@ An `input` line has a path and one or more parts:
 
 | Part | For | Example |
 |---|---|---|
-| `in <lo>..<hi>` or `..=<hi>` | an integer | `input amount in 1..=10_000` |
+| `in <lo>..<hi>` or `..=<hi>` | an integer, or a floating-point number between integers | `input amount in 1..=10_000` |
 | `len <lo>..<hi>` or one number | a string's bytes or a list's elements | `input v len 0..1000` |
 | `chars <set>` | a string's characters | `input s len 0..200 chars ascii` |
 | `like "<text>", ...` | strings like these examples | `input text like "1.2.3", "0.1.0-rc.1"` |
+| `like b"<bytes>", ...` | a `&[u8]` or `Vec<u8>` like these examples | `input buf like b"GET / HTTP/1.1\r\n"` |
 
 A set is `ascii`, `alnum`, `alpha`, `digits`, `hex`, `lower`, `upper`, `any`, or a quoted set in
 which `a-z` is a range, such as `"0-9.+-"`. A `like` string is used as it is in about a third of
 the inputs. In the others, a few characters are removed, added or replaced, a part is repeated,
 or the end comes from another example. Give a parser a few valid inputs with `like`: random text
-almost never parses.
+almost never parses. A byte string takes Rust's escapes, `\r`, `\n` and `\xff` among them. A list
+of bytes takes text examples too, as their bytes, and a report shows it as a byte string.
 
 ## How values are generated without an `input` line
 
@@ -78,6 +83,8 @@ almost never parses.
 - A list or a string is short in the first inputs and up to 256 long later. Some lists are edge
   sizes up to 4,096, such as 63, 64, and 65.
 - Some lists repeat one value with a few others among it.
+- A floating-point number is 0, -0, 1, -1, a half, the type's smallest or largest value, an
+  infinity, NaN, a small fraction, a value of the `in` range, or any bits.
 - A value that a clause compares with a list's element is put at a random place of the list.
 
 ## The verdicts
@@ -87,13 +94,23 @@ almost never parses.
 | `held` | Every clause held, and the run tested enough. | 0 |
 | `broken` | A clause broke, or a call panicked, ended the process or did not return. | 1 |
 | `too few inputs` | Fewer calls than `--min-inputs` (default a tenth of `--cases`). | 3 |
+| `not judged` | hydo decided a clause on fewer calls than `--min-reach`. | 3 |
 | `vacuous` | A clause held without being checked: see below. | 3 |
 
+A clause is undecided on a call when it reads a value of a type that hydo does not read, such as
+an enumeration. Such a value shows as `<not read>`. A clause that is decided on fewer than
+`--min-reach` calls (default 1 % of `--cases`) gives `not judged`, with the reason.
+
 A clause `a || ... || z` holds without checking `z` when a part before it is true. The report
-counts the calls on which `z` decided. Fewer than `--min-reach` such calls (default 1 % of
-`--cases`) make the run `vacuous`. Each `too few inputs` and `vacuous` verdict ends with a `to
-fix:` line that names an `input` line to add. `--min-inputs 0` and `--min-reach 0` turn the
-checks off.
+counts the calls on which `z` decided. Fewer than `--min-reach` such calls make the run
+`vacuous`. When calls panicked, the clause line says `not reached` instead: the calls that
+panicked may be the ones that reach `z`, so the verdict is the panic. Each `too few inputs`,
+`not judged` and `vacuous` verdict ends with a `to fix:` line. `--min-inputs 0` and
+`--min-reach 0` turn the checks off.
+
+A contracted function that hydo does not fuzz also makes the exit status 3, when nothing broke.
+Such a function is refused (see "What is not fuzzed"), or its test module did not build.
+`--allow-skipped` keeps the exit status of the functions that ran.
 
 ## Write a property function
 
@@ -116,13 +133,29 @@ pub fn display_roundtrip(text: &str) -> Option<bool> {
 
 - a method of a trait, and a method of a generic `impl` block;
 - a generic function without a `with` line for each type parameter;
-- a parameter of an enumeration, a floating-point type, or a type that holds a pointer;
+- a parameter of an enumeration, or of a type that holds a pointer;
 - a parameter whose structure has a private field of another module. Fuzz its constructor, or a
   function that takes the parts.
 
 A result of such a type is read in part, and a clause that reads the rest is undecided. A
 function whose test module does not build is reported with the compiler's first error, and the
-other functions run. hydo builds the test module in a `#![no_std]` crate too.
+other functions run. hydo builds the test module in a `#![no_std]` crate too. The copy keeps the
+crate's `[lints]` tables, and the test module allows no lint that the crate forbids.
+
+When the copy does not build without any test module, hydo builds the crate with its own
+`Cargo.toml` to find the cause. If the crate builds, the message says that hydo's copy is the
+cause and names the first error.
+
+## See the inputs
+
+`--show-inputs N` prints N of each function's inputs, spread from the first to the last, and
+keeps them in `fuzz.json` as `samples`:
+
+```text
+hydo:   input 1 of 3: buf = b"0\r\n\r\n"
+hydo:   input 2 of 3: buf = b"1a;ex\n"
+hydo:   input 3 of 3: buf = b"ff \r\n"
+```
 
 ## Long runs
 

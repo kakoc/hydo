@@ -741,6 +741,23 @@ Every harness of the six crates built. memchr's own contract found the planted b
 found num-integer#55. The verdict: kept for functions over integers, strings and lists, not yet
 for APIs of traits or of types that hold pointers.
 
+A second evaluation by a fresh user (M288, `docs/design/function-fuzzing-evaluation-2.md`)
+found that a clause on an `f64` result counted as `held` on 0 decided calls. It also found that
+the harness failed on `#![forbid(unsafe_code)]` and lost the `[lints]` table. M289 fixed them:
+- `f32` and `f64` values are read, compared exactly with integers, and generated. A clause
+  decided on fewer than `--min-reach` calls is `not judged` (exit 3), never `held`.
+- When only panicking calls could reach a clause's last part, the clause is `not reached` and
+  the verdict is the panic, with no advice to change the inputs.
+- The test module allows no lint that the crate forbids, and the copy keeps the `[lints]`
+  tables. Each contracted function that the run does not build a harness for stays in use.
+- When the copy fails but the crate builds with its own `Cargo.toml`, the message names hydo's
+  copy as the cause.
+- A contracted function that is not fuzzed makes the exit status 3 (`--allow-skipped`).
+- `like b"..."` gives examples for `&[u8]` and `Vec<u8>`, which reports show as byte strings,
+  and `--show-inputs N` prints and keeps some of the inputs.
+
+strsim's `jaro` is judged on all 1,000 calls, and strsim and httparse build unchanged.
+
 **Value history (M285, tentative number; a first version on the Mac engine).** `// hydo: key
 <expr>` and `// hydo: record <expr> [as <name>] [at entry|at return]` next to a function record
 values at every call, through the contracts' plan and breakpoints, so a run with the plan has
@@ -1773,13 +1790,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A fault of a stepped instruction other than #DE, #UD, #GP and #PF leaves the trap flag in
       its frame. Only user mode is counted, so a loop in the guest kernel stays the observer's.
     - The k3s example is not in `hydo/onboard/recorded.json`.
-139. Function fuzzing (M275, M280, M282). What is left:
+139. Function fuzzing (M275, M280, M282, M289). What is left:
     - The run inside hydo's VM with faults is designed and not built
       (docs/design/function-fuzzing.md, "Inside the virtual machine"). It needs the harness built
       for the guest and a runner that makes an image per batch. Durability properties also need a
       second phase in the recovery boot.
-    - Rust only, natively. Go, floating-point values, enumerations, `char` and maps are not
-      fuzzed.
+    - Rust only, natively. Go, enumerations, `char` and maps are not fuzzed. Floating-point
+      values are since M289, but a clause cannot name a NaN or an infinity, and the shrink of a
+      floating-point value only halves it.
     - Trait methods and methods of generic `impl` blocks are refused; `with T = <type>` covers
       generic free functions and methods of plain `impl` blocks only. Most of base64's engine
       API, byteorder's `ReadBytesExt` and num-integer's `Integer` still need property functions.
@@ -1802,9 +1820,13 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       more than 8 without a documented panic.
     - A second evaluation on six other crates (M288,
       `docs/design/function-fuzzing-evaluation-2.md`) found three candidates and two gaps in
-      documentation. Its worst problems are a clause on an `f64` result that counts as `held` on
-      0 decided calls, and harness builds that fail on `#![forbid(unsafe_code)]` or lose the
-      package's `[lints]` table.
+      documentation, none posted. M289 fixed its first two problems and the smaller ones of
+      `like` and of the inputs that a run shows. What is left of it:
+      - Methods of types that hold pointers (bytes' `Bytes`), trait methods, and enumeration
+        results (httparse's `Status`) are still refused or not read.
+      - A workspace member without a lock file cannot be built apart, so a failing copy's
+        message cannot name the cause there.
+      - A panic inside a macro-generated implementation is placed at the macro's call.
 140. The SurrealDB example (M277). What is left:
     - The SurrealKV candidate is not reported upstream.
     - An exploration cannot leave out one fault kind, and `hydo explore` reads `faults:` without
@@ -2615,6 +2637,10 @@ build machine, before 2026-10-13.
   httparse, bytes, num-traits and chrono. Candidates: strsim's `sorensen_dice` divides by byte
   lengths, httparse accepts a chunk size line without a digit, and num-traits' `abs_sub` returns a
   negative difference. A clause on an `f64` result passes unchecked. Nothing recorded moved
+- M289 (tentative number): the blockers of M288 fixed. `hydo fuzz` reads and generates `f32`
+  and `f64` values, and a clause it cannot decide is `not judged`, never `held`. The harness
+  builds under `#![forbid(unsafe_code)]` and keeps the `[lints]` tables. Skipped functions exit 3
+  (`--allow-skipped`). `like b"..."` and `--show-inputs N` are new. Nothing recorded moved
 
 ## Where to look
 

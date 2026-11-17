@@ -406,8 +406,81 @@ pub fn manifest(pkg: &Pkg, target: &Target) -> String {
         t.push('\n');
     }
     // the workspace's profiles and patches, as written there
-    if let Ok(root) = std::fs::read_to_string(pkg.workspace_root.join("Cargo.toml")) {
-        t.push_str(&sections(&root, &pkg.workspace_root));
+    let root = std::fs::read_to_string(pkg.workspace_root.join("Cargo.toml")).ok();
+    if let Some(root) = &root {
+        t.push_str(&sections(root, &pkg.workspace_root));
+    }
+    // the package's lints (Milestone 289): `cargo metadata` does not give them, and a crate
+    // that denies warnings in its tests needs its `check-cfg` list
+    if let Ok(own) = std::fs::read_to_string(pkg.dir.join("Cargo.toml")) {
+        t.push_str(&lints(&own, root.as_deref()));
+    }
+    t
+}
+
+/// Whether a manifest's line is a table header (`[lints.rust]`, `[[bin]]`), not a line of a
+/// value such as a multi-line array.
+fn is_header(line: &str) -> bool {
+    let l = line.split('#').next().unwrap_or("").trim();
+    l.starts_with('[')
+        && l.ends_with(']')
+        && l.trim_matches(|c| c == '[' || c == ']')
+            .chars()
+            .all(|c| c.is_alphanumeric() || "_-.\"' ".contains(c))
+}
+
+/// The tables of a manifest's text whose header starts with one of `prefixes`, as written.
+fn tables(text: &str, prefixes: &[&str]) -> Vec<(String, Vec<String>)> {
+    let mut out: Vec<(String, Vec<String>)> = Vec::new();
+    let mut keep = false;
+    for line in text.lines() {
+        if is_header(line) {
+            let h = line.split('#').next().unwrap_or("").trim().to_string();
+            let name = h.trim_matches(|c| c == '[' || c == ']').trim().to_string();
+            keep = prefixes
+                .iter()
+                .any(|p| name == *p || name.starts_with(&format!("{p}.")));
+            if keep {
+                out.push((name, Vec::new()));
+            }
+            continue;
+        }
+        if keep {
+            if let Some(last) = out.last_mut() {
+                last.1.push(line.to_string());
+            }
+        }
+    }
+    out
+}
+
+/// The package's `[lints]` tables for the copy's manifest: its own, or with `workspace = true`
+/// the workspace's `[workspace.lints]` tables.
+pub fn lints(own: &str, workspace: Option<&str>) -> String {
+    let mine = tables(own, &["lints"]);
+    let inherits = mine.iter().any(|(n, body)| {
+        n == "lints"
+            && body
+                .iter()
+                .any(|l| l.replace(' ', "").starts_with("workspace=true"))
+    });
+    let mut t = String::new();
+    if inherits {
+        for (n, body) in tables(workspace.unwrap_or(""), &["workspace.lints"]) {
+            t.push_str(&format!("\n[{}]\n", n.trim_start_matches("workspace.")));
+            for l in body {
+                t.push_str(&l);
+                t.push('\n');
+            }
+        }
+        return t;
+    }
+    for (n, body) in mine {
+        t.push_str(&format!("\n[{n}]\n"));
+        for l in body {
+            t.push_str(&l);
+            t.push('\n');
+        }
     }
     t
 }
@@ -598,6 +671,60 @@ pub fn build(
         }
     }
     Err(fail("cargo built no test program for the target".into()))
+}
+
+/// Whether the package itself builds its test program, with its own manifest (Milestone 289):
+/// `Some(true)` when it does, so that a failure of hydo's copy is hydo's. A package of its own
+/// is built in a plain copy at `scratch`, whose sources `prepare` writes; a workspace member in
+/// place with `--locked`, so that
+/// the project's files stay as they are. `None` when it cannot be told (a member without a
+/// lock file).
+pub fn original_builds(
+    cargo: &Cargo,
+    pkg: &Pkg,
+    target: &Target,
+    target_dir: &Path,
+    scratch: &Path,
+    prepare: &dyn Fn(&Path) -> Result<(), String>,
+) -> Option<bool> {
+    let standalone = pkg.dir == pkg.workspace_root;
+    let dir = if standalone {
+        if scratch.exists() {
+            std::fs::remove_dir_all(scratch).ok()?;
+        }
+        std::fs::create_dir_all(scratch).ok()?;
+        copy_package(pkg, scratch).ok()?;
+        prepare(scratch).ok()?;
+        scratch.to_path_buf()
+    } else {
+        if !pkg.workspace_root.join("Cargo.lock").is_file() {
+            return None;
+        }
+        pkg.dir.clone()
+    };
+    let mut c = cargo.cmd();
+    c.args(["test", "--no-run", "--quiet"]);
+    if !standalone {
+        c.arg("--locked");
+    }
+    if cargo.release {
+        c.arg("--release");
+    }
+    if target.kind == "bin" {
+        c.args(["--bin", &target.name]);
+    } else {
+        c.arg("--lib");
+    }
+    let out = c
+        .arg("--manifest-path")
+        .arg(dir.join("Cargo.toml"))
+        .current_dir(&dir)
+        .env("CARGO_TARGET_DIR", target_dir)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .ok()?;
+    Some(out.success())
 }
 
 /// How one run of the test program ended.

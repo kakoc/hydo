@@ -29,7 +29,8 @@ use value::{Hints, Rng, Val};
 pub const USAGE: &str =
     "usage: hydo fuzz [CRATE_DIR] [--fn NAME]... [--cases N] [--seed S] [--out DIR]
                  [--target-dir DIR] [--toolchain TC] [--release] [--timeout SECS]
-                 [--min-inputs N] [--min-reach N] [--json]
+                 [--min-inputs N] [--min-reach N] [--allow-skipped]
+                 [--show-inputs N] [--json]
        hydo fuzz [CRATE_DIR] --fn NAME --input 'NAME = VALUE, ...'
        hydo fuzz [CRATE_DIR] --list
   tests each Rust function of the crate that has `// hydo: requires` and `ensures` comments on
@@ -53,12 +54,18 @@ pub const USAGE: &str =
                    --cases; 0 turns it off)
   --min-reach N    a clause `a || ... || z` whose `z` decided fewer than N calls, or a
                    property `-> Option<bool>` that answered `Some` fewer than N times, gives
-                   the verdict `vacuous` (default 1 % of --cases; 0 turns it off)
+                   the verdict `vacuous`, and a clause that hydo decided on fewer than N
+                   calls gives `not judged` (default 1 % of --cases; 0 turns both off)
+  --allow-skipped  a contracted function that is not fuzzed (refused, or its harness did
+                   not build) leaves the exit status as it is; without it the status is 3
+  --show-inputs N  prints N of each function's inputs, spread over the run, and keeps them
+                   in fuzz.json as `samples`
   --list           lists the contracted functions and whether each can be fuzzed
   --json           prints the report as one JSON line; the progress goes to standard error
-  Each function ends with one verdict: `held`, `broken`, `vacuous` or `too few inputs`.
-  The exit status is 1 when a clause broke or a call failed, 3 when none did but a function
-  tested too little, 2 for a mistake in the options or the contracts, and 0 otherwise.";
+  Each function ends with one verdict: `held`, `broken`, `not judged`, `vacuous` or `too few
+  inputs`. The exit status is 1 when a clause broke or a call failed, 3 when none did but a
+  function tested too little or a contracted function was not fuzzed, 2 for a mistake in the
+  options or the contracts, and 0 otherwise.";
 
 /// One function to fuzz, as read from the sources.
 pub struct Fn {
@@ -77,6 +84,8 @@ pub struct Fn {
     /// Where the harness module goes in the file (a byte offset).
     insert_at: usize,
     pub hints: Hints,
+    /// The lints that the crate forbids anywhere, which the harness must not allow.
+    forbidden: Vec<String>,
 }
 
 /// Why a contracted function is not fuzzed.
@@ -103,6 +112,14 @@ pub fn find(
         }
     }
     let (mut fns, mut skipped, mut errors) = (Vec::new(), Vec::new(), Vec::new());
+    let mut forbidden: Vec<String> = Vec::new();
+    for (_, text) in &texts {
+        for l in forbidden_lints(text) {
+            if !forbidden.contains(&l) {
+                forbidden.push(l);
+            }
+        }
+    }
     for (f, text) in &texts {
         if !text.contains("// hydo:") {
             continue;
@@ -148,7 +165,10 @@ pub fn find(
                 why,
             };
             match read_fn(text, &m, &c, &items, pkg, &module, &rel) {
-                Ok(f) => fns.push(f),
+                Ok(mut f) => {
+                    f.forbidden = forbidden.clone();
+                    fns.push(f)
+                }
                 Err(why) => skipped.push(skip(why)),
             }
         }
@@ -320,7 +340,43 @@ fn read_fn(
         is_unsafe: sig.is_unsafe,
         insert_at,
         hints,
+        forbidden: Vec::new(),
     })
+}
+
+/// The lints that a source's attributes forbid: `#![forbid(unsafe_code)]`, `#[forbid(...)]`,
+/// and `forbid(...)` inside `cfg_attr`.
+pub fn forbidden_lints(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut from = 0;
+    while let Some(i) = text[from..].find("forbid(") {
+        let at = from + i;
+        let after = at + "forbid(".len();
+        from = after;
+        // only in an attribute: its line starts with `#`
+        let line_start = text[..at].rfind('\n').map_or(0, |n| n + 1);
+        let in_attr = text[line_start..at].trim_start().starts_with('#')
+            || text[..line_start]
+                .lines()
+                .next_back()
+                .is_some_and(|p| p.trim_start().starts_with("#") && !p.contains(']'));
+        if !in_attr {
+            continue;
+        }
+        let end = text[after..].find(')').map_or(text.len(), |e| after + e);
+        for name in text[after..end].split(',') {
+            let name = name.trim();
+            if !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || c == '_' || c == ':')
+                && !out.iter().any(|x| x == name)
+            {
+                out.push(name.to_string());
+            }
+        }
+    }
+    out
 }
 
 /// The type arguments of a call (`::<i64>`), or nothing.
@@ -388,14 +444,15 @@ fn input_hints(x: &lang::SrcInput, params: &[harness::Param], h: &mut Hints) -> 
     let t = input_ty(&x.name, params)?;
     let what = match t {
         FTy::Int { .. } => "an integer",
+        FTy::Float { .. } => "a floating-point number",
         FTy::Str => "a string",
         FTy::List(_) | FTy::Array(..) => "a list",
         _ => "a value of another type",
     };
     if let Some(r) = x.range {
-        if !matches!(t, FTy::Int { .. }) {
+        if !matches!(t, FTy::Int { .. } | FTy::Float { .. }) {
             return Err(format!(
-                "`in` narrows an integer, and `{}` is {what}; write `len` for a length",
+                "`in` narrows a number, and `{}` is {what}; write `len` for a length",
                 x.name
             ));
         }
@@ -410,10 +467,27 @@ fn input_hints(x: &lang::SrcInput, params: &[harness::Param], h: &mut Hints) -> 
         }
         h.domains.insert(format!("{}#len", x.name), r);
     }
+    let bytes = matches!(t, FTy::List(e) | FTy::Array(e, _)
+        if matches!(**e, FTy::Int { signed: false, bits: 8, .. }));
+    if bytes && (!x.like.is_empty() || !x.like_bytes.is_empty()) && x.chars.is_none() {
+        // a list of bytes like the examples: `like b"GET / HTTP/1.1\r\n"` or a text's bytes
+        let e = h.like_bytes.entry(x.name.clone()).or_default();
+        e.extend(x.like.iter().map(|s| s.as_bytes().to_vec()));
+        e.extend(x.like_bytes.iter().cloned());
+        return Ok(());
+    }
+    if !x.like_bytes.is_empty() {
+        return Err(format!(
+            "`like b\"...\"` is for a list of bytes (`&[u8]`, `Vec<u8>`), and `{}` is {what}; \
+             write `like \"...\"` for a string",
+            x.name
+        ));
+    }
     if x.chars.is_some() || !x.like.is_empty() {
         if *t != FTy::Str {
             return Err(format!(
-                "`chars` and `like` are for a string, and `{}` is {what}",
+                "`chars` is for a string and `like` for a string or a list of bytes, and `{}` \
+                 is {what}",
                 x.name
             ));
         }
@@ -478,6 +552,8 @@ pub struct Judged {
     pub failures: Vec<Failure>,
     /// The clauses (by index) that could not be judged.
     pub undecided: Vec<usize>,
+    /// Why each undecided clause could not be judged, by index.
+    pub why: Vec<(usize, String)>,
     /// The clauses `a || ... || z` (by index) whose last part decided the call: every part
     /// before it was false. A clause that no call reached held without checking its point.
     pub reached: Vec<usize>,
@@ -557,6 +633,7 @@ impl Fn {
             ret: self.ret.clone(),
             ret_ref: self.ret_ref,
             is_unsafe: self.is_unsafe,
+            forbidden: self.forbidden.clone(),
         }
     }
 
@@ -610,6 +687,7 @@ impl Fn {
         let mut j = Judged {
             failures: vec![],
             undecided: vec![],
+            why: vec![],
             reached: vec![],
         };
         match o {
@@ -635,7 +713,11 @@ impl Fn {
                                     j.failures.push(Failure::Clause(i));
                                 }
                             }
-                            _ => j.undecided.push(i),
+                            _ => {
+                                j.undecided.push(i);
+                                j.why
+                                    .push((i, "the property's `Some` holds no boolean".into()));
+                            }
                         }
                         continue;
                     }
@@ -653,7 +735,10 @@ impl Fn {
                                 j.reached.push(i);
                             }
                         }
-                        Err(_) => j.undecided.push(i),
+                        Err(e) => {
+                            j.undecided.push(i);
+                            j.why.push((i, e));
+                        }
                     }
                 }
             }
@@ -1035,6 +1120,22 @@ pub struct Held {
     /// The clause held, but its last part decided fewer calls than `--min-reach`.
     #[serde(default)]
     pub vacuous: bool,
+    /// The clause was decided on fewer calls than `--min-reach`: hydo could not read a value
+    /// that it compares (Milestone 289).
+    #[serde(default)]
+    pub not_judged: bool,
+    /// Why the first undecided call could not be judged.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub undecided_why: String,
+    /// For a clause whose last part decided too few calls: the calls that panicked, ended the
+    /// process or did not return, which could not be judged and may be the ones that reach it.
+    /// The function's verdict is then the failure, and the clause is not called vacuous.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub failed_calls: u64,
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }
 
 /// A `requires` clause and the generated inputs it turned away.
@@ -1073,6 +1174,9 @@ pub struct FnReport {
     /// What to change in the contract, for a verdict `vacuous` or `too few inputs`.
     #[serde(default)]
     pub advice: Vec<String>,
+    /// Some of the inputs that were run, spread over the run (`--show-inputs`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub samples: Vec<String>,
 }
 
 /// When a run tested too little to count (Milestone 282).
@@ -1082,6 +1186,8 @@ pub struct Limits {
     pub min_inputs: u64,
     /// A clause `a || ... || z` whose last part decided fewer calls than this is `vacuous`.
     pub min_reach: u64,
+    /// The generated inputs to keep in the report as samples (`--show-inputs`).
+    pub show_inputs: usize,
 }
 
 /// Fuzz one function: `cases` inputs from `seed`, then a shrink of the first input of each
@@ -1128,10 +1234,13 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64, lim: Limits) -> Result<FnRepo
             }
         })
         .collect();
-    let mut calls = 0u64;
+    let (mut calls, mut failed_calls) = (0u64, 0u64);
     for (i, (a, o)) in inputs.iter().zip(&outs).enumerate() {
         if *o != Outcome::NotRun {
             calls += 1;
+        }
+        if matches!(o, Outcome::Panicked { .. } | Outcome::Ended | Outcome::Hung) {
+            failed_calls += 1;
         }
         let j = f.judge(a, o);
         for x in &j.failures {
@@ -1142,6 +1251,11 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64, lim: Limits) -> Result<FnRepo
             for (h, ci) in held.iter_mut().zip(&ens) {
                 if j.undecided.contains(ci) {
                     h.undecided += 1;
+                    if h.undecided_why.is_empty() {
+                        if let Some((_, w)) = j.why.iter().find(|(k, _)| k == ci) {
+                            h.undecided_why = w.clone();
+                        }
+                    }
                 } else {
                     h.cases += 1;
                 }
@@ -1188,7 +1302,15 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64, lim: Limits) -> Result<FnRepo
             .any(|b| b.kind == "ensures" && b.line == h.line && b.text == h.text)
     });
     for h in &mut held {
-        h.vacuous = h.cases > 0 && h.reached.is_some_and(|n| n < lim.min_reach);
+        // a clause that hydo could hardly decide is not judged, whatever its parts did
+        h.not_judged = calls > 0 && h.cases < lim.min_reach;
+        h.vacuous = !h.not_judged && h.reached.is_some_and(|n| n < lim.min_reach);
+        // calls that failed may be the ones that reach the last part: the failure is the
+        // verdict, and the inputs need no other shape
+        if h.vacuous && failed_calls > 0 && h.reached.unwrap_or(0) + failed_calls >= lim.min_reach {
+            h.vacuous = false;
+            h.failed_calls = failed_calls;
+        }
     }
     let mut rejected_by: Vec<Rejection> = by_clause
         .iter()
@@ -1206,6 +1328,8 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64, lim: Limits) -> Result<FnRepo
         "broken"
     } else if calls < lim.min_inputs {
         "too few inputs"
+    } else if held.iter().any(|h| h.not_judged) {
+        "not judged"
     } else if held.iter().any(|h| h.vacuous) {
         "vacuous"
     } else {
@@ -1225,9 +1349,25 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64, lim: Limits) -> Result<FnRepo
         calls,
         rejected_by,
         advice: vec![],
+        samples: samples(f, &inputs, lim.show_inputs),
     };
     rep.advice = advice(f, &rep, lim);
     Ok(rep)
+}
+
+/// `n` of the inputs, spread evenly from the first to the last, as `name = value, ...`.
+fn samples(f: &Fn, inputs: &[Vec<Val>], n: usize) -> Vec<String> {
+    let n = n.min(inputs.len());
+    (0..n)
+        .map(|i| {
+            let k = if n == 1 {
+                0
+            } else {
+                i * (inputs.len() - 1) / (n - 1)
+            };
+            f.show_args(&inputs[k])
+        })
+        .collect()
 }
 
 /// What to change in a contract whose run tested too little: an `input` line that keeps the
@@ -1267,19 +1407,23 @@ fn advice(f: &Fn, rep: &FnReport, lim: Limits) -> Vec<String> {
             ));
         }
     }
-    for h in rep
-        .held
-        .iter()
-        .filter(|h| h.vacuous && h.undecided > h.cases)
-    {
+    for h in rep.held.iter().filter(|h| h.not_judged) {
+        let why = if h.undecided_why.is_empty() {
+            "a value it reads is of a type that hydo does not read"
+        } else {
+            h.undecided_why.as_str()
+        };
         out.push(format!(
-            "`ensures {}` (line {}) could not be judged on {} calls: a value it reads is of a \
-             type that hydo does not read (`--input` shows it as `<not read>`); compare a part \
-             that hydo reads, such as a number, a string or a list",
-            h.text, h.line, h.undecided
+            "`ensures {}` (line {}) could not be judged on {} of {} calls ({why}): compare a \
+             part that hydo reads, such as an integer, a floating-point number, a string or a \
+             list (`--input` shows a value it does not read as `<not read>`)",
+            h.text,
+            h.line,
+            h.undecided,
+            h.cases + h.undecided,
         ));
     }
-    if rep.held.iter().any(|h| h.vacuous && h.undecided <= h.cases) {
+    if rep.held.iter().any(|h| h.vacuous) {
         let strings: Vec<&str> = f
             .params
             .iter()
@@ -1291,6 +1435,15 @@ fn advice(f: &Fn, rep: &FnReport, lim: Limits) -> Vec<String> {
             s.push_str(&format!(
                 ": for a string the function parses, `// hydo: input {n} like \"<a text it \
                  accepts>\"`, or `// hydo: input {n} len 0..=64 chars \"<its characters>\"`"
+            ));
+        } else if let Some(p) = f.params.iter().find(|p| {
+            matches!(&p.ty, FTy::List(e) if matches!(**e, FTy::Int { signed: false, bits: 8, .. }))
+                && !f.hints.like_bytes.contains_key(&p.name)
+        }) {
+            s.push_str(&format!(
+                ": for bytes the function parses, `// hydo: input {} like b\"<bytes it \
+                 accepts>\"`",
+                p.name
             ));
         } else {
             s.push_str(": `input` lines with ranges, lengths and characters");
@@ -1476,6 +1629,8 @@ struct Opts {
     json: bool,
     min_inputs: Option<u64>,
     min_reach: Option<u64>,
+    allow_skipped: bool,
+    show_inputs: usize,
 }
 
 fn opts(args: &[String]) -> Result<Opts, String> {
@@ -1494,6 +1649,8 @@ fn opts(args: &[String]) -> Result<Opts, String> {
         json: false,
         min_inputs: None,
         min_reach: None,
+        allow_skipped: false,
+        show_inputs: 0,
     };
     let mut it = args.iter();
     let mut dir_set = false;
@@ -1518,6 +1675,12 @@ fn opts(args: &[String]) -> Result<Opts, String> {
             "--min-reach" => {
                 o.min_reach = Some(val("--min-reach")?.parse().map_err(|_| "--min-reach N")?)
             }
+            "--show-inputs" => {
+                o.show_inputs = val("--show-inputs")?
+                    .parse()
+                    .map_err(|_| "--show-inputs N")?
+            }
+            "--allow-skipped" => o.allow_skipped = true,
             "--list" => o.list = true,
             "--release" => o.release = true,
             "--json" => o.json = true,
@@ -1539,6 +1702,7 @@ impl Opts {
         Limits {
             min_inputs: self.min_inputs.unwrap_or(self.cases.div_ceil(10)),
             min_reach: self.min_reach.unwrap_or(self.cases.div_ceil(100).max(1)),
+            show_inputs: self.show_inputs,
         }
     }
 
@@ -1604,11 +1768,39 @@ struct Placed {
     cols: (u32, u32),
 }
 
+/// The contracted functions that the run builds harnesses for, and the others of the same
+/// target, which the copy keeps in use (Milestone 289).
+struct Set<'a> {
+    fns: &'a [Fn],
+    others: &'a [Fn],
+}
+
+impl Set<'_> {
+    /// The function of index `k`: `fns`, then `others`.
+    fn get(&self, k: usize) -> &Fn {
+        if k < self.fns.len() {
+            &self.fns[k]
+        } else {
+            &self.others[k - self.fns.len()]
+        }
+    }
+}
+
 /// Write the copy's sources with the harness modules of the functions `active` (indices into
-/// `fns`): every file that holds a function starts again from the project's own text.
-fn place(pkg_dir: &Path, copy: &Path, fns: &[Fn], active: &[usize]) -> Result<Vec<Placed>, String> {
+/// `set.fns`) and a use of each function `keeps` (indices into `set.fns` and then `set.others`,
+/// as `fns.len() + index`): every file that holds a function starts again from the project's
+/// own text. The uses keep a property function that only hydo calls from being dead code in a
+/// crate that denies warnings, when the run does not build its harness (Milestone 289).
+fn place(
+    pkg_dir: &Path,
+    copy: &Path,
+    set: &Set,
+    active: &[usize],
+    keeps: &[usize],
+) -> Result<Vec<Placed>, String> {
+    let fns = set.fns;
     let mut by_file: BTreeMap<&Path, Vec<(usize, usize, String)>> = BTreeMap::new();
-    for f in fns {
+    for f in fns.iter().chain(set.others) {
         by_file.entry(f.file.as_path()).or_default();
     }
     for &k in active {
@@ -1617,6 +1809,14 @@ fn place(pkg_dir: &Path, copy: &Path, fns: &[Fn], active: &[usize]) -> Result<Ve
             f.insert_at,
             k,
             harness::module(&f.spec(k)),
+        ));
+    }
+    for &k in keeps.iter().filter(|k| !active.contains(k)) {
+        let f = set.get(k);
+        by_file.entry(f.file.as_path()).or_default().push((
+            f.insert_at,
+            k,
+            harness::keep(&f.spec(k)),
         ));
     }
     let mut placed = Vec::new();
@@ -1669,6 +1869,37 @@ fn blame(errors: &[cargo::Diag], placed: &[Placed], copy: &Path) -> BTreeMap<usi
 /// out with the compiler's first error.
 type Built = (Option<PathBuf>, Vec<usize>, Vec<(usize, String)>);
 
+/// Build the copy with only the uses `keeps`, leaving out each use that an error names. The
+/// uses that stay, or the last build's failure.
+#[allow(clippy::too_many_arguments)]
+fn build_bare(
+    cg: &cargo::Cargo,
+    pkg_dir: &Path,
+    copy: &Path,
+    target_dir: &Path,
+    target: &cargo::Target,
+    log: &Path,
+    set: &Set,
+    mut keeps: Vec<usize>,
+) -> Result<Vec<usize>, cargo::BuildFail> {
+    loop {
+        let placed = place(pkg_dir, copy, set, &[], &keeps).map_err(|e| cargo::BuildFail {
+            errors: vec![],
+            text: e,
+        })?;
+        match cargo::build(cg, copy, target_dir, target, log) {
+            Ok(_) => return Ok(keeps),
+            Err(e) => {
+                let blamed = blame(&e.errors, &placed, copy);
+                if blamed.is_empty() || keeps.is_empty() {
+                    return Err(e);
+                }
+                keeps.retain(|k| !blamed.contains_key(k));
+            }
+        }
+    }
+}
+
 /// Build the harness of every function that builds. A function whose harness module does not
 /// compile is left out with the compiler's message, and the others are built again without it.
 #[allow(clippy::too_many_arguments)]
@@ -1679,13 +1910,17 @@ fn build_each(
     target_dir: &Path,
     target: &cargo::Target,
     log: &Path,
-    fns: &[Fn],
+    set: &Set,
 ) -> Result<Built, String> {
+    let fns = set.fns;
+    let all = fns.len() + set.others.len();
     let mut active: Vec<usize> = (0..fns.len()).collect();
+    // every function the run does not build a harness for is named by a use
+    let mut keeps: Vec<usize> = (0..all).collect();
     let mut failed: Vec<(usize, String)> = Vec::new();
     let mut alone_tried = false;
     loop {
-        let placed = place(&pkg.dir, copy, fns, &active)?;
+        let placed = place(&pkg.dir, copy, set, &active, &keeps)?;
         let err = match cargo::build(cg, copy, target_dir, target, log) {
             Ok(exe) => return Ok((Some(exe), active, failed)),
             Err(e) => e,
@@ -1693,6 +1928,11 @@ fn build_each(
         let blamed = blame(&err.errors, &placed, copy);
         if !blamed.is_empty() {
             for (k, m) in blamed {
+                if !active.contains(&k) {
+                    // a use of a function whose harness is not built: left out
+                    keeps.retain(|&x| x != k);
+                    continue;
+                }
                 active.retain(|&x| x != k);
                 failed.push((k, m));
             }
@@ -1703,12 +1943,18 @@ fn build_each(
         }
         // an error outside the harness modules: the crate itself, or a function's harness that
         // breaks code elsewhere; the crate without any harness tells them apart
-        place(&pkg.dir, copy, fns, &[])?;
-        if let Err(e) = cargo::build(cg, copy, target_dir, target, log) {
-            return Err(format!(
-                "the crate does not build in the test profile without hydo's harness, so no \
-                 function can be fuzzed: {}",
-                e.text
+        if let Err(e) = build_bare(
+            cg,
+            &pkg.dir,
+            copy,
+            target_dir,
+            target,
+            log,
+            set,
+            keeps.clone(),
+        ) {
+            return Err(bare_failure(
+                cg, pkg, copy, target_dir, target, log, set, &keeps, &e,
             ));
         }
         if alone_tried || active.len() <= 1 {
@@ -1720,7 +1966,7 @@ fn build_each(
         alone_tried = true;
         let mut ok = Vec::new();
         for &k in &active {
-            place(&pkg.dir, copy, fns, &[k])?;
+            place(&pkg.dir, copy, set, &[k], &keeps)?;
             match cargo::build(cg, copy, target_dir, target, log) {
                 Ok(_) => ok.push(k),
                 Err(e) => failed.push((k, e.first_error())),
@@ -1730,6 +1976,56 @@ fn build_each(
             return Ok((None, ok, failed));
         }
         active = ok;
+    }
+}
+
+/// Why the copy without any harness does not build (Milestone 289): the crate, when the crate
+/// with its own Cargo.toml and the same sources does not build either, else hydo's copy.
+#[allow(clippy::too_many_arguments)]
+fn bare_failure(
+    cg: &cargo::Cargo,
+    pkg: &cargo::Pkg,
+    copy: &Path,
+    target_dir: &Path,
+    target: &cargo::Target,
+    log: &Path,
+    set: &Set,
+    keeps: &[usize],
+    e: &cargo::BuildFail,
+) -> String {
+    let scratch = copy.with_file_name("original");
+    // the scratch copy gets the same uses as hydo's, so that only the manifest differs
+    let prepare = |dir: &Path| place(&pkg.dir, dir, set, &[], keeps).map(|_| ());
+    let profile = if cg.release { "release" } else { "test" };
+    match cargo::original_builds(cg, pkg, target, target_dir, &scratch, &prepare) {
+        Some(true) => format!(
+            "hydo's copy of the crate does not build, though the crate itself builds with \
+             `cargo test --no-run`: the cause is hydo's copy (its Cargo.toml, which hydo writes \
+             from `cargo metadata`, or its harness), not the crate. The first error: {}. Hint: \
+             a setting of the crate's Cargo.toml that the copy lost, such as a lint or a `cfg` \
+             list, gives such an error; compare {} with the crate's own, and report it to \
+             hydo's maintainers with cargo's output: {}",
+            e.first_error(),
+            copy.join("Cargo.toml").display(),
+            log.display()
+        ),
+        Some(false) => format!(
+            "the crate does not build in the {profile} profile (`cargo test --no-run` fails \
+             without hydo too), so no function can be fuzzed{}: {}",
+            if e.first_error().contains("is never used") {
+                " (a function that only `hydo fuzz` calls is unused in the crate's own tests, \
+                 and the crate denies warnings: mark it `#[allow(dead_code)]`)"
+            } else {
+                ""
+            },
+            e.text
+        ),
+        None => format!(
+            "hydo's copy of the crate does not build without hydo's harness, so no function can \
+             be fuzzed; hydo could not build the crate apart to tell whether the crate or the \
+             copy is the cause: {}",
+            e.text
+        ),
     }
 }
 
@@ -1748,7 +2044,7 @@ fn run_all(o: &Opts) -> Result<i32, String> {
     if !errors.is_empty() {
         return Ok(2);
     }
-    let fns: Vec<Fn> = fns.into_iter().filter(|f| named(f, &o.fns)).collect();
+    let (fns, others): (Vec<Fn>, Vec<Fn>) = fns.into_iter().partition(|f| named(f, &o.fns));
     let no_contract = || {
         format!(
             "no function of {} has a `// hydo:` contract: write `// hydo: ensures <expr>` (and \
@@ -1861,6 +2157,11 @@ fn run_all(o: &Opts) -> Result<i32, String> {
             same
         })
         .collect();
+    let in_first = |f: &Fn| {
+        pkg.target_of(&pkg.dir.join(&f.file))
+            .is_some_and(|t| t.name == first.name && t.kind == first.kind)
+    };
+    let others: Vec<Fn> = others.into_iter().filter(in_first).collect();
     std::fs::write(copy.join("Cargo.toml"), cargo::manifest(&pkg, &first))
         .map_err(|e| e.to_string())?;
     let target_dir = o.target_dir.clone().unwrap_or_else(|| out.join("target"));
@@ -1877,7 +2178,10 @@ fn run_all(o: &Opts) -> Result<i32, String> {
         &target_dir,
         &first,
         &out.join("build.log"),
-        &fns,
+        &Set {
+            fns: &fns,
+            others: &others,
+        },
     )?;
     for (k, why) in &failed {
         let f = &fns[*k];
@@ -1972,11 +2276,18 @@ fn run_all(o: &Opts) -> Result<i32, String> {
     }
     write_report(&report, &out, o.json)?;
     let count = |v: &str| report.functions.iter().filter(|f| f.verdict == v).count();
-    let (broken, vacuous, few) = (count("broken"), count("vacuous"), count("too few inputs"));
+    let (broken, vacuous, few, unjudged) = (
+        count("broken"),
+        count("vacuous"),
+        count("too few inputs"),
+        count("not judged"),
+    );
+    let not_fuzzed = report.skipped.len();
     if !o.json {
         let mut parts = vec![format!("{} held", count("held"))];
         for (n, w) in [
             (broken, "broken"),
+            (unjudged, "not judged"),
             (vacuous, "vacuous"),
             (few, "too few inputs"),
         ] {
@@ -1984,10 +2295,10 @@ fn run_all(o: &Opts) -> Result<i32, String> {
                 parts.push(format!("{n} {w}"));
             }
         }
-        let not = if report.skipped.is_empty() {
+        let not = if not_fuzzed == 0 {
             String::new()
         } else {
-            format!("; {} not fuzzed", report.skipped.len())
+            format!("; {not_fuzzed} not fuzzed")
         };
         println!(
             "hydo: fuzz: {} function{} fuzzed: {}{not}",
@@ -1995,14 +2306,38 @@ fn run_all(o: &Opts) -> Result<i32, String> {
             if report.functions.len() == 1 { "" } else { "s" },
             parts.join(", ")
         );
+        if not_fuzzed > 0 {
+            println!(
+                "hydo: fuzz: {not_fuzzed} contracted function{} not fuzzed (each line \
+                 `is not fuzzed` above says why), so the run did not test every contract{}",
+                if not_fuzzed == 1 { " was" } else { "s were" },
+                if o.allow_skipped {
+                    "; --allow-skipped lets it pass"
+                } else if broken > 0 {
+                    ""
+                } else {
+                    ": the exit status is 3 unless --allow-skipped is given"
+                }
+            );
+        }
     }
-    Ok(if broken > 0 {
+    Ok(exit_status(
+        broken,
+        vacuous + few + unjudged,
+        if o.allow_skipped { 0 } else { not_fuzzed },
+    ))
+}
+
+/// The exit status of a run: 1 when a clause broke or a call failed; else 3 when a function
+/// tested too little or a contracted function was not fuzzed; else 0.
+pub fn exit_status(broken: usize, too_little: usize, not_fuzzed: usize) -> i32 {
+    if broken > 0 {
         1
-    } else if vacuous + few > 0 {
+    } else if too_little + not_fuzzed > 0 {
         3
     } else {
         0
-    })
+    }
 }
 
 fn write_report(report: &Report, out: &Path, json: bool) -> Result<(), String> {
@@ -2071,6 +2406,9 @@ fn print_report(r: &FnReport, f: &Fn, o: &Opts, lim: Limits) {
             );
         }
     }
+    for (i, x) in r.samples.iter().enumerate() {
+        println!("hydo:   input {} of {}: {x}", i + 1, r.samples.len());
+    }
     for b in &r.broken {
         let what = match b.kind.as_str() {
             "ensures" => format!(
@@ -2111,11 +2449,42 @@ fn print_report(r: &FnReport, f: &Fn, o: &Opts, lim: Limits) {
             Some(n) => format!(", `Some` on {n}"),
             None => String::new(),
         };
-        let word = if h.vacuous { "vacuous" } else { "held" };
+        let word = if h.not_judged {
+            "not judged"
+        } else if h.vacuous {
+            "vacuous"
+        } else if h.failed_calls > 0 {
+            "not reached"
+        } else {
+            "held"
+        };
         println!(
             "hydo:   {word}: ensures {} (line {}) on {} calls{reach}{und}",
             h.text, h.line, h.cases
         );
+        if h.not_judged {
+            println!(
+                "hydo:     hydo decided it on {} of {} calls, fewer than --min-reach ({}): {}",
+                h.cases,
+                h.cases + h.undecided,
+                lim.min_reach,
+                if h.undecided_why.is_empty() {
+                    "a value it reads is of a type that hydo does not read"
+                } else {
+                    h.undecided_why.as_str()
+                }
+            );
+        }
+        if h.failed_calls > 0 {
+            let parts = or_parts(&h.text);
+            println!(
+                "hydo:     `{}` decided {} of the calls; the {} calls that failed above could \
+                 not be judged and may be the ones that reach it: fix the failure, then run again",
+                parts[parts.len() - 1],
+                h.reached.unwrap_or(0),
+                h.failed_calls
+            );
+        }
         if h.vacuous {
             let parts = or_parts(&h.text);
             let n = h.reached.unwrap_or(0);
@@ -2148,6 +2517,11 @@ fn print_report(r: &FnReport, f: &Fn, o: &Opts, lim: Limits) {
         "too few inputs" => println!(
             "hydo: fuzz: {}: too few inputs: {} calls of the {} wanted, and --min-inputs is {}",
             r.function, r.calls, o.cases, lim.min_inputs
+        ),
+        "not judged" => println!(
+            "hydo: fuzz: {}: not judged: a clause was decided on fewer than {} calls \
+             (--min-reach)",
+            r.function, lim.min_reach
         ),
         _ => println!(
             "hydo: fuzz: {}: vacuous: a clause's last part decided fewer than {} calls (--min-reach)",

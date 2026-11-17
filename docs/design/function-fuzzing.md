@@ -77,8 +77,8 @@ the crate's type aliases. hydo refuses a function with one reason each:
 
 - a generic function or a method of a generic `impl` block;
 - an `async` function, a method of a trait, or a function inside another function;
-- a parameter of a type it cannot generate: floating-point values, enumerations, references
-  inside structures, a recursive structure, `impl Trait`.
+- a parameter of a type it cannot generate: enumerations, references inside structures, a
+  recursive structure, `impl Trait`. Floating-point values are generated since Milestone 289.
 
 `hydo fuzz --list` prints each contracted function and whether it can be fuzzed. A result or a
 field of a type that hydo cannot read is shown as not read, and a clause that reads it is
@@ -257,8 +257,9 @@ pause.
   in the function's package, by the same design.
 - The language has no quantifier, so `delta_pack`'s "the input is sorted" cannot be stated. A
   property function that sorts its input first is the way around it.
-- No floating-point values and no enumerations. A generic function needs a `with T = <type>`
-  line for each type parameter (Milestone 282), and a method of a trait is not fuzzed.
+- No enumerations; floating-point values are fuzzed since Milestone 289. A generic function
+  needs a `with T = <type>` line for each type parameter (Milestone 282), and a method of a
+  trait is not fuzzed.
 - A result that borrows from a `&mut` parameter was not tried.
 - The reading of the sources is textual. A structure defined by a macro is not found, and a
   field type of a structure in another module is written as that module writes it.

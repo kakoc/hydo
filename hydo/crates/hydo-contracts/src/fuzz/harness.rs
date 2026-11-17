@@ -28,6 +28,30 @@ pub struct Spec {
     /// Whether the result is a reference (the harness then encodes it as it is).
     pub ret_ref: bool,
     pub is_unsafe: bool,
+    /// The lints that the crate forbids (`#![forbid(unsafe_code)]`): the module does not allow
+    /// them, because an `allow` of a forbidden lint is an error (E0453, Milestone 289).
+    pub forbidden: Vec<String>,
+}
+
+/// The lints the module allows, so that the crate's own `deny` settings do not stop it.
+const ALLOWED: &[&str] = &[
+    "warnings",
+    "unused",
+    "clippy::all",
+    "clippy::pedantic",
+    "clippy::nursery",
+    "clippy::restriction",
+];
+
+/// The module's `allow` list: [`ALLOWED`] without the forbidden lints, and `unsafe_code` only
+/// for an `unsafe` function, whose call the module makes in an `unsafe` block.
+fn allow_list(s: &Spec) -> String {
+    let mut l: Vec<&str> = ALLOWED.to_vec();
+    if s.is_unsafe {
+        l.insert(2, "unsafe_code");
+    }
+    l.retain(|x| !s.forbidden.iter().any(|f| f == x));
+    l.join(", ")
 }
 
 /// The owned type as the harness writes it.
@@ -57,6 +81,8 @@ fn dec(t: &FTy) -> String {
     match t {
         FTy::Int { .. } => "r.int()".into(),
         FTy::Bool => "r.b()".into(),
+        FTy::Float { bits: 32 } => "(r.f() as f32)".into(),
+        FTy::Float { .. } => "r.f()".into(),
         FTy::Str => "r.s()".into(),
         FTy::List(x) => format!(
             "{{ let n = r.n(); let mut v = self::std::vec::Vec::with_capacity(n); for _ in 0..n {{ v.push({}); }} v }}",
@@ -119,6 +145,9 @@ fn enc(t: &FTy, v: &str, d: usize) -> String {
     match t {
         FTy::Int { .. } => format!("ei({v}, o);"),
         FTy::Bool => format!("eb({v}, o);"),
+        FTy::Float { .. } => {
+            format!("ef(<f64 as self::std::convert::From<_>>::from(*{v}), o);")
+        }
         FTy::Str => format!("es({v}, o);"),
         FTy::List(e) | FTy::Array(e, _) => format!(
             "{{ let _ = self::std::write!(o, \"L{{}} \", ({v}).len()); for {x} in ({v}).iter() {{ {} }} }}",
@@ -170,10 +199,12 @@ const COMMON: &str = concat!(
     "fn w(&mut self) -> &'a str { self.w.next().unwrap_or(\"\") } ",
     "fn int<T: self::std::convert::TryFrom<i128>>(&mut self) -> T { match self.w().parse::<i128>().ok().and_then(|x| T::try_from(x).ok()) { self::std::option::Option::Some(v) => v, self::std::option::Option::None => self::std::process::abort() } } ",
     "fn b(&mut self) -> bool { self.w() == \"t\" } ",
+    "fn f(&mut self) -> f64 { f64::from_bits(u64::from_str_radix(self.w().get(1..).unwrap_or(\"\"), 16).unwrap_or(0)) } ",
     "fn n(&mut self) -> usize { self.w().trim_start_matches('L').parse().unwrap_or(0) } ",
     "fn s(&mut self) -> self::std::string::String { let h = self.w(); let h = h.get(1..).unwrap_or(\"\"); let b: self::std::vec::Vec<u8> = (0..h.len() / 2).map(|i| u8::from_str_radix(&h[2 * i..2 * i + 2], 16).unwrap_or(0)).collect(); self::std::string::String::from_utf8(b).unwrap_or_default() } ",
     "} ",
     "fn ei<T: self::std::fmt::Display>(v: T, o: &mut self::std::string::String) { let _ = self::std::write!(o, \"{} \", v); } ",
+    "fn ef(v: f64, o: &mut self::std::string::String) { let _ = self::std::write!(o, \"F{:x} \", v.to_bits()); } ",
     "fn eb(v: &bool, o: &mut self::std::string::String) { o.push_str(if *v { \"t \" } else { \"f \" }); } ",
     "fn es(v: &str, o: &mut self::std::string::String) { o.push('s'); for b in v.as_bytes() { let _ = self::std::write!(o, \"{:02x}\", b); } o.push(' '); } ",
     "fn hx(v: &str, o: &mut self::std::string::String) { o.push('s'); for b in v.as_bytes() { let _ = self::std::write!(o, \"{:02x}\", b); } o.push(' '); } ",
@@ -197,12 +228,27 @@ const COMMON: &str = concat!(
     "use self::std::io::Write as _; let _ = out.write_all(o.as_bytes()); let _ = out.flush(); } } ",
 );
 
+/// A one-line module that only names the function, so that it is in use in the copy's tests
+/// when the run fuzzes other functions (Milestone 289): a property function that only hydo
+/// calls is otherwise dead code, which a crate that denies warnings in its tests refuses.
+pub fn keep(s: &Spec) -> String {
+    let b = format!(
+        " #[cfg(test)] #[allow({})] mod {} {{ use super::*; const _: () = {{ let _ = {}; }}; }}",
+        allow_list(s),
+        s.module,
+        s.call
+    );
+    debug_assert!(!b.contains('\n'));
+    b
+}
+
 /// The module's text: one line, with no line comment in it.
 pub fn module(s: &Spec) -> String {
     let mut b = String::new();
     let _ = write!(
         b,
-        " #[cfg(test)] #[allow(warnings, unused, unsafe_code, clippy::all, clippy::pedantic, clippy::nursery, clippy::restriction)] mod {} {{ {COMMON}",
+        " #[cfg(test)] #[allow({})] mod {} {{ {COMMON}",
+        allow_list(s),
         s.module
     );
     b.push_str("fn one(line: &str, o: &mut self::std::string::String) { let mut r = R { w: line.split_ascii_whitespace() }; ");

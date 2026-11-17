@@ -14626,3 +14626,71 @@ The worst problems, in order:
 5. A run shows only counts, never the inputs it generated.
 
 Open item 139 points to the page. Nothing recorded moved.
+
+## Milestone 289 (tentative number): the blockers of `hydo fuzz` from the second evaluation
+
+Milestone 288's evaluation found that `hydo fuzz` passed a clause it could not read, and that its
+harness failed on ordinary crates. This milestone fixes both before the 0.4.0 release, in the
+crate `hydo-contracts` (the module `fuzz`). The page `docs/design/function-fuzzing-evaluation-2.md`
+has a section "After the fixes of M289" with the runs before and after.
+
+**Verdicts that never pass an unread clause.**
+
+- `f32` and `f64` values are a type of their own (`FTy::Float`). The harness writes a result's
+  bits, and a clause compares it. A comparison of an integer with such a value is exact, so
+  `9007199254740992.0 < 9007199254740993` holds. Arithmetic is `f64` arithmetic, and a NaN is
+  unequal to everything. Floating-point parameters are generated too: edges, small fractions,
+  values of an `in` range, and any bits.
+- A clause that hydo decided on fewer than `--min-reach` calls is `not judged`, with the first
+  reason, a `to fix:` line, and exit status 3. Before, such a clause was `held` whenever it had
+  one part.
+- A clause `a || ... || z` whose `z` decided too few calls, in a run where calls panicked, is
+  `not reached`. The calls that panicked may be the ones that reach `z`, so the verdict is the
+  panic, and no `to fix:` line asks for other inputs.
+
+**A harness that builds on common crates.**
+
+- The test module's `allow` list leaves out every lint that a source of the crate forbids, and
+  names `unsafe_code` only for an `unsafe` function.
+- The copy's `Cargo.toml` keeps the package's `[lints]` tables, or the workspace's with
+  `workspace = true`. `cargo metadata` does not give them.
+- Each contracted function that the run does not build a harness for gets a one-line module that
+  names it (`harness::keep`). A property function that only hydo calls then stays in use when
+  `--fn` names another function, so a crate that denies warnings in its tests still builds.
+- When the copy does not build without any harness, hydo builds the crate with its own
+  `Cargo.toml` and the same sources: in a plain copy for a package of its own, or in place with
+  `--locked` for a workspace member. If that builds, the message says that hydo's copy is the
+  cause, with the first error and a hint.
+
+**Skipped functions.** A contracted function that was refused, or whose harness did not build,
+makes the exit status 3 when nothing broke. The summary says so. `--allow-skipped` keeps the
+status of the functions that ran.
+
+**Bytes and the inputs.** `input buf like b"GET / HTTP/1.1\r\n"` gives examples for `&[u8]` and
+`Vec<u8>`, and text examples give their bytes. A list of bytes shows as a byte string, and
+`--input` reads one. `--show-inputs N` prints N of each function's inputs, spread over the run,
+and keeps them in `fuzz.json` as `samples`.
+
+**Evidence.** Seed 1 and 1,000 inputs on copies of the evaluation's crates, with strsim's
+`#![forbid(unsafe_code)]` and httparse's `#![cfg_attr(test, deny(warnings))]` put back:
+
+| Run | Before | After |
+|---|---|---|
+| strsim `jaro`, `ensures result <= 1` | harness error E0453, exit 2 (0 of 1,000 decided with `deny`) | held on 1,000 calls, exit 0 |
+| strsim `jaro`, `ensures result < 1` | (not run) | broken on 15 calls, shrunk to `a = "", b = ""` with `result = 1.0` |
+| strsim, 13 functions | none built, exit 2 | 12 held, 1 broken, exit 1 |
+| httparse, 5 functions | `the crate does not build in the test profile without hydo's harness`, exit 2 | 4 held, 1 broken (`text = "\r\n"`), exit 1 |
+| httparse, a property over `&[u8]` with `like b"..."` | (not possible) | broken on 25 calls at `buf = b"\r\n"` |
+| num-traits `abs` | clause `vacuous`, advice to change the inputs | clause `not reached`, no advice; broken by the panic |
+| bytes, 6 functions and 2 refused | exit 0 | exit 3, with a line that names the 2 |
+
+The new fixture `hydo/crates/hydo-contracts/tests/fuzz-m289` has each case: it forbids
+`unsafe_code`, denies warnings with a `cfg` from its `[lints]` table, and holds `f64` results and
+a parameter, an enumeration result, `abs32`, a byte parser and a trait method. The test
+`fuzz::a_crate_that_forbids_unsafe_code_fuzzes_with_floats_bytes_and_honest_verdicts` checks the
+verdicts and the exit statuses. Four unit tests check the floating-point wire form and
+comparisons, the allow list, the kept lints, and the byte examples. Nothing recorded moved.
+
+**Left** (open item 139): trait methods, methods of types that hold pointers, and enumeration
+results are still refused or not read. A workspace member without a lock file cannot be built
+apart.

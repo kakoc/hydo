@@ -11,6 +11,9 @@ use std::fmt::Write as _;
 pub enum Val {
     Int(i128),
     Bool(bool),
+    /// A floating-point value as the bits of an `f64` (an `f32` widened exactly), so that the
+    /// value keeps `Eq` (Milestone 289).
+    Float(u64),
     Str(String),
     List(Vec<Val>),
     Opt(Option<Box<Val>>),
@@ -40,7 +43,8 @@ pub fn int_range(signed: bool, bits: u32) -> (i128, i128) {
 
 /// The wire form: space-separated words in the order of the type. An integer is its decimal
 /// digits, a boolean `t` or `f`, a string `s` and its bytes in hexadecimal, a list `L<n>` and its
-/// elements, an option `N` or `S` and the value, a result `O` or `E` and the value, a tuple or a
+/// elements, a floating-point value `F` and the hexadecimal bits of its `f64`, an option `N` or
+/// `S` and the value, a result `O` or `E` and the value, a tuple or a
 /// structure its fields in order, and an opaque value `X`.
 pub fn encode(v: &Val, o: &mut String) {
     match v {
@@ -48,6 +52,9 @@ pub fn encode(v: &Val, o: &mut String) {
             let _ = write!(o, "{x} ");
         }
         Val::Bool(b) => o.push_str(if *b { "t " } else { "f " }),
+        Val::Float(b) => {
+            let _ = write!(o, "F{b:x} ");
+        }
         Val::Str(s) => {
             o.push('s');
             for b in s.as_bytes() {
@@ -97,6 +104,16 @@ pub fn decode<'a>(t: &FTy, w: &mut impl Iterator<Item = &'a str>) -> Result<Val,
             "X" => Val::Opaque,
             x => return Err(format!("`{x}` is not a boolean")),
         },
+        FTy::Float { .. } => {
+            let x = word()?;
+            if x == "X" {
+                return Ok(Val::Opaque);
+            }
+            let h = x
+                .strip_prefix('F')
+                .ok_or_else(|| format!("`{x}` is not a floating-point value"))?;
+            Val::Float(u64::from_str_radix(h, 16).map_err(|e| e.to_string())?)
+        }
         FTy::Str => {
             let x = word()?;
             if x == "X" {
@@ -157,7 +174,22 @@ pub fn show(v: &Val, t: &FTy) -> String {
     match (v, t) {
         (Val::Int(x), _) => x.to_string(),
         (Val::Bool(b), _) => b.to_string(),
+        (Val::Float(b), FTy::Float { bits: 32 }) => format!("{:?}", f64::from_bits(*b) as f32),
+        (Val::Float(b), _) => format!("{:?}", f64::from_bits(*b)),
         (Val::Str(s), _) => format!("{s:?}"),
+        (Val::List(l), FTy::List(x) | FTy::Array(x, _))
+            if is_byte(x) && l.iter().all(|v| matches!(v, Val::Int(0..=255))) =>
+        {
+            // bytes as a byte string, `b"GET /\r\n"` (Milestone 289)
+            let mut s = String::from("b\"");
+            for v in l {
+                if let Val::Int(b) = v {
+                    s.extend(std::ascii::escape_default(*b as u8).map(char::from));
+                }
+            }
+            s.push('"');
+            s
+        }
         (Val::List(l), FTy::List(x) | FTy::Array(x, _)) => format!(
             "[{}]",
             l.iter().map(|e| show(e, x)).collect::<Vec<_>>().join(", ")
@@ -304,6 +336,24 @@ impl Reader<'_> {
                 }
                 Ok(Val::Int(x))
             }
+            FTy::Float { bits } => {
+                let st = self.i;
+                while self.s[self.i..].starts_with(|c: char| {
+                    c.is_ascii_alphanumeric() || matches!(c, '-' | '+' | '.' | '_')
+                }) {
+                    self.i += 1;
+                }
+                let w = self.s[st..self.i].replace('_', "");
+                let x: f64 = match w.as_str() {
+                    "NaN" | "nan" => f64::NAN,
+                    "inf" | "+inf" => f64::INFINITY,
+                    "-inf" => f64::NEG_INFINITY,
+                    _ => w
+                        .parse()
+                        .map_err(|_| format!("expected a floating-point value at `{w}`"))?,
+                };
+                Ok(Val::Float(float_bits(x, *bits)))
+            }
             FTy::Bool => match self.ident().as_str() {
                 "true" => Ok(Val::Bool(true)),
                 "false" => Ok(Val::Bool(false)),
@@ -347,6 +397,51 @@ impl Reader<'_> {
                     }
                 }
                 Ok(Val::Str(out))
+            }
+            FTy::List(x) | FTy::Array(x, _)
+                if is_byte(x) && {
+                    self.ws();
+                    self.s[self.i..].starts_with("b\"")
+                } =>
+            {
+                self.i += 2;
+                let mut l = Vec::new();
+                let b = self.s.as_bytes();
+                loop {
+                    let Some(&c) = b.get(self.i) else {
+                        return Err("a byte string without its closing `\"`".into());
+                    };
+                    self.i += 1;
+                    match c {
+                        b'"' => break,
+                        b'\\' => {
+                            let e = b.get(self.i).copied().unwrap_or(0);
+                            self.i += 1;
+                            l.push(match e {
+                                b'n' => b'\n',
+                                b't' => b'\t',
+                                b'r' => b'\r',
+                                b'0' => 0,
+                                b'x' => {
+                                    let h = self.s.get(self.i..self.i + 2).unwrap_or("");
+                                    self.i += 2;
+                                    u8::from_str_radix(h, 16)
+                                        .map_err(|_| format!("a bad `\\x{h}` escape"))?
+                                }
+                                o => o,
+                            });
+                        }
+                        o => l.push(o),
+                    }
+                }
+                if let FTy::Array(_, n) = t {
+                    if l.len() != *n {
+                        return Err(format!("an array of {n} needs {n} elements"));
+                    }
+                }
+                Ok(Val::List(
+                    l.into_iter().map(|b| Val::Int(b as i128)).collect(),
+                ))
             }
             FTy::List(x) | FTy::Array(x, _) => {
                 self.eat("vec!");
@@ -454,6 +549,27 @@ impl Reader<'_> {
     }
 }
 
+/// Whether a list's elements are bytes (`u8`).
+pub fn is_byte(t: &FTy) -> bool {
+    matches!(
+        t,
+        FTy::Int {
+            signed: false,
+            bits: 8,
+            ..
+        }
+    )
+}
+
+/// The bits of `x` as a value of a floating-point type of `bits` (an `f32` is rounded to one).
+pub fn float_bits(x: f64, bits: u32) -> u64 {
+    if bits == 32 {
+        (x as f32 as f64).to_bits()
+    } else {
+        x.to_bits()
+    }
+}
+
 /// A deterministic generator (SplitMix64).
 #[derive(Clone, Debug)]
 pub struct Rng(u64);
@@ -494,6 +610,8 @@ pub struct Hints {
     pub chars: BTreeMap<String, Vec<char>>,
     /// `input <path> like "<text>", ...`: example strings that the generator uses and changes.
     pub like: BTreeMap<String, Vec<String>>,
+    /// `input <path> like b"<bytes>", ...` for a list of bytes (Milestone 289).
+    pub like_bytes: BTreeMap<String, Vec<Vec<u8>>>,
     /// Constants a clause compares the path with: the generator tries each, one below and one
     /// above.
     pub consts: BTreeMap<String, Vec<i128>>,
@@ -557,7 +675,29 @@ impl Gen<'_> {
                 1 => true,
                 _ => self.rng.below(2) == 1,
             }),
+            FTy::Float { bits } => Val::Float(self.float(*bits, path)),
             FTy::Str => Val::Str(self.string(path)),
+            FTy::List(x)
+                if matches!(
+                    **x,
+                    FTy::Int {
+                        signed: false,
+                        bits: 8,
+                        ..
+                    }
+                ) && self
+                    .hints
+                    .like_bytes
+                    .get(path)
+                    .is_some_and(|e| !e.is_empty()) =>
+            {
+                Val::List(
+                    self.bytes_like(path)
+                        .into_iter()
+                        .map(|b| Val::Int(b as i128))
+                        .collect(),
+                )
+            }
             FTy::List(x) => {
                 let n = self.len(path);
                 let ep = format!("{path}[]");
@@ -725,6 +865,32 @@ impl Gen<'_> {
         s
     }
 
+    /// Bytes like one of the examples at `path`, changed as [`Gen::like`] changes a string, and
+    /// fitted to the path's `len` part.
+    fn bytes_like(&mut self, path: &str) -> Vec<u8> {
+        let ex: Vec<String> = self.hints.like_bytes[path]
+            .iter()
+            .map(|b| b.iter().map(|&c| c as char).collect())
+            .collect();
+        let set: Vec<char> = (0u8..=255).map(|c| c as char).collect();
+        let mut b: Vec<u8> = self
+            .like(&ex, &set)
+            .chars()
+            .map(|c| c as u32 as u8)
+            .collect();
+        if let Some(&(lo, hi)) = self.hints.domains.get(&format!("{path}#len")) {
+            let (lo, hi) = (lo.max(0) as usize, hi.max(0) as usize);
+            b.truncate(hi);
+            let fill = ex
+                .iter()
+                .find_map(|e| e.chars().next())
+                .map_or(b'a', |c| c as u8);
+            b.resize(b.len().max(lo), fill);
+        }
+        self.take(b.len());
+        b
+    }
+
     /// A string like one of the examples: the example itself, or the example with a few
     /// changes (a character removed, added or replaced, a part repeated, the end cut, or the
     /// end of another example).
@@ -788,6 +954,69 @@ impl Gen<'_> {
             }
         }
         c.into_iter().collect()
+    }
+
+    /// A floating-point value: an edge (0, -0, 1, -1, the type's smallest and largest, the
+    /// infinities, NaN, a clause's constant), a small integer, a value of the domain of an
+    /// `in` part, or any bits (Milestone 289).
+    fn float(&mut self, bits: u32, path: &str) -> u64 {
+        let dom = self.hints.domains.get(path).copied();
+        let (lo, hi) = match dom {
+            Some((a, b)) => (a as f64, b as f64),
+            None if bits == 32 => (f32::MIN as f64, f32::MAX as f64),
+            None => (f64::MIN, f64::MAX),
+        };
+        let x = match self.mode {
+            0 => 0f64.clamp(lo, hi),
+            1 => hi,
+            _ => {
+                self.take(1);
+                let r = self.rng.below(10);
+                if r < 3 {
+                    let tiny = if bits == 32 {
+                        f32::MIN_POSITIVE as f64
+                    } else {
+                        f64::MIN_POSITIVE
+                    };
+                    let eps = if bits == 32 {
+                        f32::EPSILON as f64
+                    } else {
+                        f64::EPSILON
+                    };
+                    let mut e = vec![0.0, -0.0, 1.0, -1.0, 0.5, -0.5, lo, hi, tiny, -tiny, eps];
+                    if dom.is_none() {
+                        e.extend([f64::INFINITY, f64::NEG_INFINITY, f64::NAN]);
+                    }
+                    if let Some(c) = self.hints.consts.get(path) {
+                        for &k in c {
+                            let k = k as f64;
+                            e.extend([k, k - 0.5, k + 0.5, k - eps * k.abs(), k + eps * k.abs()]);
+                        }
+                    }
+                    e.retain(|x| x.is_nan() || (lo..=hi).contains(x));
+                    e[self.rng.below(e.len() as u64) as usize]
+                } else if r < 5 {
+                    // a small integer, or a half or a tenth of one
+                    let n = self.rng.below(33) as f64 - 16.0;
+                    let d = [1.0, 2.0, 10.0][self.rng.below(3) as usize];
+                    (n / d).clamp(lo, hi)
+                } else if r < 8 || dom.is_some() {
+                    // uniform in the domain
+                    let u = self.rng.word() as f64 / u64::MAX as f64;
+                    let v = lo + (hi - lo) * u;
+                    if v.is_finite() {
+                        v
+                    } else {
+                        lo / 2.0 + hi / 2.0 * u
+                    }
+                } else if bits == 32 {
+                    f32::from_bits(self.rng.word() as u32) as f64
+                } else {
+                    f64::from_bits(self.rng.word())
+                }
+            }
+        };
+        float_bits(x, bits)
     }
 
     fn int(&mut self, name: &str, signed: bool, bits: u32, path: &str) -> i128 {
@@ -983,6 +1212,32 @@ pub fn simpler(v: &Val, t: &FTy, path: &str, hints: &Hints) -> Vec<Val> {
                     if c != *x && (lo..=hi).contains(&c) && !out.contains(&Val::Int(c)) {
                         out.push(Val::Int(c));
                     }
+                }
+            }
+        }
+        (Val::Float(b), FTy::Float { bits }) => {
+            // towards 0: 0, then the value without its fraction, then halves
+            let x = f64::from_bits(*b);
+            let (lo, hi) = match hints.domains.get(path) {
+                Some(&(a, b)) => (a as f64, b as f64),
+                None => (f64::MIN, f64::MAX),
+            };
+            let mut cs = vec![0f64.clamp(lo, hi)];
+            if !x.is_finite() {
+                cs.push(1.0);
+            } else {
+                cs.push(x.trunc());
+                let mut d = x;
+                for _ in 0..8 {
+                    d /= 2.0;
+                    cs.push(d);
+                }
+            }
+            for c in cs {
+                let k = float_bits(c, *bits);
+                let c = Val::Float(k);
+                if c != *v && (lo..=hi).contains(&f64::from_bits(k)) && !out.contains(&c) {
+                    out.push(c);
                 }
             }
         }

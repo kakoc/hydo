@@ -136,7 +136,8 @@ pub struct SrcClause {
 /// An input line as written, for function fuzzing: `input <path> <part>...`, each part one of
 /// `in <lo>..<hi>` (or `..=`) for an integer, `len <lo>..<hi>` (or `..=`, or one number) for
 /// the length of a string or a list, `chars <set>` for a string's characters, and
-/// `like "<text>", ...` for strings like the examples (Milestone 282). The path is a parameter,
+/// `like "<text>", ...` for strings like the examples (Milestone 282), also `b"<bytes>"` for a list
+/// of bytes (Milestone 289). The path is a parameter,
 /// a field under one (`l.balance`), or the elements of a list (`v[]`); `len(v) in a..b` is
 /// `v len a..b`.
 #[derive(Clone, Debug, PartialEq)]
@@ -150,6 +151,8 @@ pub struct SrcInput {
     pub chars: Option<Vec<char>>,
     /// `like`: example strings.
     pub like: Vec<String>,
+    /// `like b"..."`: example byte strings, for a list of bytes (Milestone 289).
+    pub like_bytes: Vec<Vec<u8>>,
     pub text: String,
     pub line: u32,
 }
@@ -471,6 +474,8 @@ fn parse_line(t: &str, line: u32) -> Result<Line, LangError> {
 enum ITok {
     Word(String),
     Quoted(String),
+    /// A byte string, `b"..."`.
+    Bytes(Vec<u8>),
     Comma,
 }
 
@@ -485,39 +490,19 @@ fn input_tokens(t: &str) -> Result<Vec<ITok>, String> {
             out.push(ITok::Comma);
         } else if c == '"' {
             it.next();
-            let mut s = String::new();
-            loop {
-                match it.next() {
-                    None => return Err("a string without its closing `\"`".into()),
-                    Some('"') => break,
-                    Some('\\') => match it.next() {
-                        Some('n') => s.push('\n'),
-                        Some('t') => s.push('\t'),
-                        Some('r') => s.push('\r'),
-                        Some('0') => s.push('\0'),
-                        Some('u') => {
-                            let mut h = String::new();
-                            for c in it.by_ref() {
-                                if c == '}' {
-                                    break;
-                                }
-                                if c != '{' {
-                                    h.push(c);
-                                }
-                            }
-                            let c = u32::from_str_radix(&h, 16)
-                                .ok()
-                                .and_then(char::from_u32)
-                                .ok_or("a bad `\\u{...}` escape")?;
-                            s.push(c);
-                        }
-                        Some(c) => s.push(c),
-                        None => return Err("a string without its closing `\"`".into()),
-                    },
-                    Some(c) => s.push(c),
-                }
-            }
+            let b = quoted(&mut it, false)?;
+            let s = String::from_utf8(b)
+                .map_err(|_| "a `\\x` escape past `\\x7f` in a string: write it in `b\"...\"`")?;
             out.push(ITok::Quoted(s));
+        } else if c == 'b' && {
+            let mut la = it.clone();
+            la.next();
+            la.peek() == Some(&'"')
+        } {
+            // a byte string, `b"GET / HTTP/1.1\r\n"` (Milestone 289)
+            it.next();
+            it.next();
+            out.push(ITok::Bytes(quoted(&mut it, true)?));
         } else {
             let mut w = String::new();
             while let Some(&c) = it.peek() {
@@ -531,6 +516,54 @@ fn input_tokens(t: &str) -> Result<Vec<ITok>, String> {
         }
     }
     Ok(out)
+}
+
+/// The rest of a quoted text after its opening `"`, as bytes: Rust's escapes `\n`, `\t`, `\r`,
+/// `\0`, `\\`, `\"`, `\'`, `\xNN` and, outside a byte string, `\u{...}`.
+fn quoted(it: &mut std::iter::Peekable<std::str::Chars>, bytes: bool) -> Result<Vec<u8>, String> {
+    let mut s: Vec<u8> = Vec::new();
+    let push = |s: &mut Vec<u8>, c: char| {
+        let mut b = [0u8; 4];
+        s.extend_from_slice(c.encode_utf8(&mut b).as_bytes());
+    };
+    loop {
+        match it.next() {
+            None => return Err("a string without its closing `\"`".into()),
+            Some('"') => break,
+            Some('\\') => match it.next() {
+                Some('n') => s.push(b'\n'),
+                Some('t') => s.push(b'\t'),
+                Some('r') => s.push(b'\r'),
+                Some('0') => s.push(0),
+                Some('x') => {
+                    let h: String = it.by_ref().take(2).collect();
+                    let v = u8::from_str_radix(&h, 16)
+                        .map_err(|_| format!("a bad `\\x{h}` escape: write two hex digits"))?;
+                    s.push(v);
+                }
+                Some('u') if !bytes => {
+                    let mut h = String::new();
+                    for c in it.by_ref() {
+                        if c == '}' {
+                            break;
+                        }
+                        if c != '{' {
+                            h.push(c);
+                        }
+                    }
+                    let c = u32::from_str_radix(&h, 16)
+                        .ok()
+                        .and_then(char::from_u32)
+                        .ok_or("a bad `\\u{...}` escape")?;
+                    push(&mut s, c);
+                }
+                Some(c) => push(&mut s, c),
+                None => return Err("a string without its closing `\"`".into()),
+            },
+            Some(c) => push(&mut s, c),
+        }
+    }
+    Ok(s)
 }
 
 /// The characters of a set that `chars` names: a name of [`CHAR_SETS`], or a quoted set in
@@ -590,7 +623,8 @@ fn parse_input(t: &str, line: u32) -> Result<SrcInput, String> {
         format!(
             "`input {t}`: write `input <path> in <lo>..<hi>` for an integer, `input <path> len \
              <lo>..<hi>` for a length, `input <path> chars <set>` for a string's characters, or \
-             `input <path> like \"<text>\", ...` for strings like examples (`..=` includes <hi>)"
+             `input <path> like \"<text>\", ...` for strings like examples, `b\"<bytes>\"` for \
+             bytes (`..=` includes <hi>)"
         )
     };
     let toks = input_tokens(t).map_err(|e| format!("`input {t}`: {e}"))?;
@@ -619,6 +653,7 @@ fn parse_input(t: &str, line: u32) -> Result<SrcInput, String> {
         len: None,
         chars: None,
         like: Vec::new(),
+        like_bytes: Vec::new(),
         text: t.to_string(),
         line,
     };
@@ -684,6 +719,7 @@ fn parse_input(t: &str, line: u32) -> Result<SrcInput, String> {
             "like" => loop {
                 match it.next() {
                     Some(ITok::Quoted(q)) => x.like.push(q),
+                    Some(ITok::Bytes(b)) => x.like_bytes.push(b),
                     _ => return Err(usage()),
                 }
                 if it.peek() == Some(&ITok::Comma) {

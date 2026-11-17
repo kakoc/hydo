@@ -93,7 +93,9 @@ fn types_resolve_through_structures_aliases_and_self() {
     // a recursive structure and a generic one cannot be generated
     assert!(t("Node").generable().is_err());
     assert!(t("G").generable().is_err());
-    assert!(t("f64").generable().is_err());
+    // a floating-point type is generated since Milestone 289
+    assert_eq!(t("f64"), FTy::Float { bits: 64 });
+    assert!(t("f32").generable().is_ok());
     assert_eq!(t("&[u64]"), FTy::List(Box::new(u64t())));
     assert_eq!(t("&str"), FTy::Str);
 }
@@ -271,6 +273,7 @@ fn the_harness_is_one_line_that_calls_the_function() {
         ret: FTy::Opt(Box::new(u64t())),
         ret_ref: false,
         is_unsafe: false,
+        forbidden: vec![],
     };
     let m = harness::module(&s);
     assert!(!m.contains('\n'));
@@ -487,6 +490,7 @@ fn the_harness_builds_without_std_and_names_no_hidden_field() {
         },
         ret_ref: false,
         is_unsafe: false,
+        forbidden: vec![],
     };
     let m = harness::module(&s);
     assert!(m.contains("extern crate std;"), "{m}");
@@ -613,4 +617,250 @@ fn a_no_std_crate_fuzzes_function_by_function_with_verdicts() {
     assert_eq!(code, 3);
     let (code, rep) = fuzz_nostd(t.path(), &["--fn", "digit_of", "--min-reach", "0"]);
     assert_eq!(code, 0, "{rep:?}");
+}
+
+// ---------------------------------------------------------------- Milestone 289
+
+#[test]
+fn floating_point_values_go_through_the_wire_and_compare_exactly() {
+    let f64t = FTy::Float { bits: 64 };
+    let t = FTy::Tuple(vec![f64t.clone(), FTy::Float { bits: 32 }]);
+    let v = Val::Tuple(vec![
+        Val::Float(0.1f64.to_bits()),
+        Val::Float((0.1f32 as f64).to_bits()),
+    ]);
+    let mut w = String::new();
+    encode(&v, &mut w);
+    assert_eq!(decode(&t, &mut w.split_ascii_whitespace()).unwrap(), v);
+    assert_eq!(show(&v, &t), "(0.1, 0.1)");
+    assert_eq!(parse("(0.1, 0.1)", &t).unwrap(), v);
+    assert_eq!(parse("NaN", &f64t).unwrap(), Val::Float(f64::NAN.to_bits()));
+    assert_eq!(
+        parse("-inf", &f64t).unwrap(),
+        Val::Float(f64::NEG_INFINITY.to_bits())
+    );
+    let judge = |x: f64, c: &str| {
+        let e: Vec<(String, Val)> = vec![("x".into(), Val::Float(x.to_bits()))];
+        let r = Val::Float(x.to_bits());
+        let env = Env {
+            entry: &e,
+            after: &e,
+            result: Some(&r),
+        };
+        holds(&parse_expr(c).unwrap(), &env)
+    };
+    assert_eq!(
+        judge(1.0, "result <= 1 && result >= 1 && result == 1"),
+        Ok(true)
+    );
+    assert_eq!(
+        judge(1.0, "result < 1 || result > 1 || result != 1"),
+        Ok(false)
+    );
+    assert_eq!(judge(1.0, "result * 2 == 2.0 && -result < 0"), Ok(true));
+    // an integer compares exactly: 2^53 + 1 is not the double next to it
+    let big = 9007199254740992.0;
+    assert_eq!(judge(big, "result < 9007199254740993"), Ok(true));
+    assert_eq!(judge(big, "result == 9007199254740992"), Ok(true));
+    assert_eq!(
+        judge(0.5, "result > 0 && result < 1 && result != 0"),
+        Ok(true)
+    );
+    // a NaN compares unequal to everything, itself included
+    assert_eq!(
+        judge(f64::NAN, "x != x && !(result <= 1) && !(result > 1)"),
+        Ok(true)
+    );
+    // a float where an integer must be is undecided
+    assert!(judge(1.0, "len(result) == 1").is_err());
+}
+
+#[test]
+fn the_harness_allows_no_lint_that_the_crate_forbids() {
+    use hydo_contracts::fuzz::forbidden_lints;
+    let src = "#![forbid(unsafe_code)]\n#![cfg_attr(test, forbid(\n    missing_docs,\n))]\n\
+               // forbid(x) in a comment\nfn f() { let s = \"forbid(y)\"; }\n";
+    assert_eq!(forbidden_lints(src), ["unsafe_code", "missing_docs"]);
+    let mut s = harness::Spec {
+        module: "__hydo_fuzz_0".into(),
+        call: "super::f".into(),
+        receiver: None,
+        params: vec![],
+        ret: FTy::Float { bits: 64 },
+        ret_ref: false,
+        is_unsafe: false,
+        forbidden: vec!["warnings".into()],
+    };
+    let m = harness::module(&s);
+    assert!(m.contains("#[allow(unused, clippy::all"), "{m}");
+    assert!(
+        !m.contains("unsafe_code") && !m.contains("warnings,"),
+        "{m}"
+    );
+    assert!(m.contains("ef(<f64 as"), "{m}");
+    s.is_unsafe = true;
+    s.forbidden.clear();
+    assert!(harness::module(&s).contains("unsafe_code"));
+    let k = harness::keep(&s);
+    assert!(
+        k.contains("const _: () = { let _ = super::f; };") && !k.contains('\n'),
+        "{k}"
+    );
+}
+
+#[test]
+fn the_copy_keeps_the_package_lints_and_the_workspace_ones() {
+    use hydo_contracts::fuzz::cargo::lints;
+    let own = "[package]\nname = \"x\"\n\n[lints.rust.unexpected_cfgs]\nlevel = \"warn\"\n\
+               check-cfg = [\n    \"cfg(x_simd)\",\n]\n\n[profile.bench]\nlto = true\n";
+    let l = lints(own, None);
+    assert!(
+        l.contains("[lints.rust.unexpected_cfgs]\nlevel = \"warn\""),
+        "{l}"
+    );
+    assert!(
+        l.contains("\"cfg(x_simd)\",\n]") && !l.contains("profile"),
+        "{l}"
+    );
+    let member = "[package]\nname = \"m\"\n\n[lints]\nworkspace = true\n";
+    let ws = "[workspace]\nmembers = [\"m\"]\n\n[workspace.lints.rust]\nunsafe_code = \"deny\"\n\n\
+              [workspace.lints.clippy]\nall = \"warn\"\n";
+    let l = lints(member, Some(ws));
+    assert!(l.contains("[lints.rust]\nunsafe_code = \"deny\""), "{l}");
+    assert!(
+        l.contains("[lints.clippy]\nall = \"warn\"") && !l.contains("workspace"),
+        "{l}"
+    );
+    assert_eq!(lints("[package]\nname = \"y\"\n", None), "");
+}
+
+#[test]
+fn byte_lists_take_byte_string_examples_and_show_as_byte_strings() {
+    use hydo_contracts::lang::scan;
+    let src = "// hydo: input buf like b\"GET / HTTP/1.1\\r\\n\", \"A:b\", b\"\\x00\\xff\"\n\
+               fn f(buf: &[u8]) {}\n";
+    let (cs, errs) = scan(src);
+    assert!(errs.is_empty(), "{errs:?}");
+    let i = &cs[0].inputs[0];
+    assert_eq!(i.like, ["A:b"]);
+    assert_eq!(
+        i.like_bytes,
+        [b"GET / HTTP/1.1\r\n".to_vec(), vec![0u8, 255]]
+    );
+    let bytes = FTy::List(Box::new(FTy::Int {
+        name: "u8".into(),
+        signed: false,
+        bits: 8,
+    }));
+    let v = Val::List(
+        [0u8, b'G', b'\r', b'"', 255]
+            .iter()
+            .map(|&b| Val::Int(b as i128))
+            .collect(),
+    );
+    assert_eq!(show(&v, &bytes), "b\"\\x00G\\r\\\"\\xff\"");
+    assert_eq!(parse(&show(&v, &bytes), &bytes).unwrap(), v);
+    assert_eq!(
+        parse("[0, 71]", &bytes).unwrap(),
+        Val::List(vec![Val::Int(0), Val::Int(71)])
+    );
+    // the generator changes the examples, as it changes strings
+    let mut h = Hints::default();
+    h.like_bytes.insert("buf".into(), i.like_bytes.clone());
+    let mut rng = Rng::new(3);
+    let mut seen_example = false;
+    for k in 0..200u8 {
+        let mut g = Gen {
+            rng: &mut rng,
+            hints: &h,
+            mode: k.min(2),
+            max_len: 64,
+            budget: 1 << 16,
+        };
+        if let Val::List(l) = g.val(&bytes, "buf") {
+            let b: Vec<u8> = l
+                .iter()
+                .map(|v| match v {
+                    Val::Int(x) => *x as u8,
+                    _ => 0,
+                })
+                .collect();
+            seen_example |= b == b"GET / HTTP/1.1\r\n";
+        }
+    }
+    assert!(seen_example);
+}
+
+/// The third fixture's report: what stopped the second evaluation (Milestone 289).
+fn fuzz_m289(dir: &Path, extra: &[&str]) -> (i32, Report) {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fuzz-m289");
+    let out = dir.join("out");
+    let mut args: Vec<String> = vec![
+        fixture.to_string_lossy().into(),
+        "--out".into(),
+        out.to_string_lossy().into(),
+    ];
+    args.extend(extra.iter().map(|s| s.to_string()));
+    let code = hydo_contracts::fuzz::main(&args);
+    let text = std::fs::read_to_string(out.join("fuzz.json")).unwrap_or_default();
+    (code, serde_json::from_str(&text).unwrap_or_default())
+}
+
+#[test]
+fn a_crate_that_forbids_unsafe_code_fuzzes_with_floats_bytes_and_honest_verdicts() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m289");
+    // the crate forbids `unsafe_code`, and denies warnings with a `cfg` its lints list
+    let (code, rep) = fuzz_m289(t.path(), &["--show-inputs", "3"]);
+    assert_eq!(code, 1, "{rep:?}");
+    let f = |n: &str| {
+        rep.functions
+            .iter()
+            .find(|f| f.function.ends_with(n))
+            .unwrap_or_else(|| panic!("{n}: {rep:?}"))
+    };
+    // an f64 result is read and judged on every call
+    let ratio = f("::ratio");
+    assert_eq!(ratio.verdict, "held");
+    assert_eq!((ratio.held[0].cases, ratio.held[0].undecided), (1000, 0));
+    assert_eq!(ratio.samples.len(), 3);
+    let score = f("::score");
+    assert_eq!(score.broken[0].input, "x = 200");
+    assert_eq!(score.broken[0].after, "result = 1.0");
+    assert_eq!(f("::clamp_unit").verdict, "held");
+    // a clause that hydo cannot decide is never `held`
+    let kind = f("::kind");
+    assert_eq!(kind.verdict, "not judged", "{kind:?}");
+    assert!(kind.held[0].not_judged && kind.held[0].cases == 0);
+    assert!(kind.advice[0].contains("could not be judged on 1000 of 1000 calls"));
+    // the only inputs that reach a clause panic: the verdict is the panic, not `vacuous`
+    let abs = f("::abs32");
+    assert_eq!(abs.verdict, "broken");
+    assert_eq!(abs.broken[0].kind, "panic");
+    assert!(
+        !abs.held[0].vacuous && abs.held[0].failed_calls > 0,
+        "{abs:?}"
+    );
+    assert!(abs.advice.is_empty(), "{:?}", abs.advice);
+    // bytes like the examples reach the parser's success
+    let chunk = f("::chunk_len");
+    assert_eq!(chunk.verdict, "held");
+    assert!(chunk.held[0].reached.unwrap() > 100, "{chunk:?}");
+    assert!(rep.skipped.iter().any(|s| s.contains("::Shape::area")));
+    // a clause never decided exits 3
+    let (code, _) = fuzz_m289(t.path(), &["--fn", "kind"]);
+    assert_eq!(code, 3);
+    // a run that skips a named contracted function exits 3, unless --allow-skipped
+    let (code, rep) = fuzz_m289(t.path(), &["--fn", "ratio", "--fn", "area"]);
+    assert_eq!(code, 3, "{rep:?}");
+    let (code, _) = fuzz_m289(
+        t.path(),
+        &["--fn", "ratio", "--fn", "area", "--allow-skipped"],
+    );
+    assert_eq!(code, 0);
+    // one function alone: the others stay in use, so `deny(warnings)` finds no dead code
+    let (code, _) = fuzz_m289(
+        t.path(),
+        &["--fn", "chunk_len", "--input", "buf = b\"4\\r\\n\""],
+    );
+    assert_eq!(code, 0);
 }

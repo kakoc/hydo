@@ -37,7 +37,7 @@ pub fn value(a: &Ast, env: &Env) -> Result<Val, Undecided> {
 fn eval(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
     Ok(match a {
         Ast::Int(x) => Val::Int(*x),
-        Ast::Float(_) => return Err("function fuzzing does not read floating-point values".into()),
+        Ast::Float(f) => Val::Float(f.to_bits()),
         Ast::Bool(b) => Val::Bool(*b),
         Ast::Str(s) => Val::Str(s.clone()),
         Ast::Name(n) => {
@@ -105,11 +105,10 @@ fn eval(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
             }
         }
         Ast::Not(x) => Val::Bool(!truth(&eval(x, env, old)?)?),
-        Ast::Neg(x) => Val::Int(
-            int(&eval(x, env, old)?)?
-                .checked_neg()
-                .ok_or("an integer past 128 bits")?,
-        ),
+        Ast::Neg(x) => match eval(x, env, old)? {
+            Val::Float(b) => Val::Float((-f64::from_bits(b)).to_bits()),
+            v => Val::Int(int(&v)?.checked_neg().ok_or("an integer past 128 bits")?),
+        },
         Ast::Bin(op, x, y) => {
             if matches!(op, BinOp::Or | BinOp::And) {
                 let l = truth(&eval(x, env, old)?)?;
@@ -119,6 +118,9 @@ fn eval(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
                 return Ok(Val::Bool(truth(&eval(y, env, old)?)?));
             }
             let (l, r) = (eval(x, env, old)?, eval(y, env, old)?);
+            if matches!(l, Val::Float(_)) || matches!(r, Val::Float(_)) {
+                return float_op(*op, &l, &r);
+            }
             match op {
                 BinOp::Eq | BinOp::Ne => {
                     if l == Val::Opaque || r == Val::Opaque {
@@ -156,11 +158,83 @@ fn eval(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
     })
 }
 
+/// A number of a side of an operation with a floating-point value: an integer exactly, or the
+/// floating-point value.
+enum Num {
+    I(i128),
+    F(f64),
+}
+
+fn num(v: &Val) -> Result<Num, Undecided> {
+    match v {
+        Val::Float(b) => Ok(Num::F(f64::from_bits(*b))),
+        o => Ok(Num::I(int(o)?)),
+    }
+}
+
+/// How an integer compares with a floating-point value, exactly (no rounding of the integer);
+/// `None` for a NaN.
+fn cmp_int_float(i: i128, f: f64) -> Option<std::cmp::Ordering> {
+    use std::cmp::Ordering;
+    if f.is_nan() {
+        return None;
+    }
+    if f >= 1.7e38 {
+        return Some(Ordering::Less);
+    }
+    if f <= -1.7e38 {
+        return Some(Ordering::Greater);
+    }
+    let fl = f.floor();
+    // `fl` is an integer within i128's range, so the cast is exact
+    let fi = fl as i128;
+    Some(match i.cmp(&fi) {
+        Ordering::Equal if f == fl => Ordering::Equal,
+        Ordering::Equal => Ordering::Less,
+        o => o,
+    })
+}
+
+/// An operation where one side is a floating-point value (Milestone 289). A comparison with an
+/// integer is exact. Arithmetic is the machine's `f64` arithmetic, as in the program. A NaN
+/// compares unequal to everything, itself included.
+fn float_op(op: BinOp, l: &Val, r: &Val) -> Result<Val, Undecided> {
+    use std::cmp::Ordering;
+    let (a, b) = (num(l)?, num(r)?);
+    let ord: Option<Ordering> = match (&a, &b) {
+        (Num::F(x), Num::F(y)) => x.partial_cmp(y),
+        (Num::I(i), Num::F(f)) => cmp_int_float(*i, *f),
+        (Num::F(f), Num::I(i)) => cmp_int_float(*i, *f).map(Ordering::reverse),
+        (Num::I(i), Num::I(j)) => Some(i.cmp(j)),
+    };
+    let fl = |n: &Num| match n {
+        Num::I(i) => *i as f64,
+        Num::F(f) => *f,
+    };
+    let (x, y) = (fl(&a), fl(&b));
+    let f = |v: f64| Val::Float(v.to_bits());
+    Ok(match op {
+        BinOp::Eq => Val::Bool(ord == Some(Ordering::Equal)),
+        BinOp::Ne => Val::Bool(ord != Some(Ordering::Equal)),
+        BinOp::Lt => Val::Bool(ord == Some(Ordering::Less)),
+        BinOp::Le => Val::Bool(matches!(ord, Some(Ordering::Less | Ordering::Equal))),
+        BinOp::Gt => Val::Bool(ord == Some(Ordering::Greater)),
+        BinOp::Ge => Val::Bool(matches!(ord, Some(Ordering::Greater | Ordering::Equal))),
+        BinOp::Add => f(x + y),
+        BinOp::Sub => f(x - y),
+        BinOp::Mul => f(x * y),
+        BinOp::Div => f(x / y),
+        BinOp::Rem => f(x % y),
+        BinOp::Or | BinOp::And => unreachable!("decided before"),
+    })
+}
+
 fn int(v: &Val) -> Result<i128, Undecided> {
     match v {
         Val::Int(x) => Ok(*x),
         Val::Bool(b) => Ok(*b as i128),
         Val::Opaque => Err("a value of a type not read".into()),
+        Val::Float(_) => Err("a floating-point value where an integer must be".into()),
         _ => Err("arithmetic on a value that is not a number".into()),
     }
 }
