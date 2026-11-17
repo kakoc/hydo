@@ -610,6 +610,17 @@ pub enum ReactAction {
     /// `cont-<svc>`: SIGCONT the service (a `P=` pause healed at the reaction point instead of
     /// at its step).
     Cont(String),
+    /// `clock+<s>` or `clock-<s>` (Milestone 296): step the realtime clock by `s` seconds at the
+    /// reaction point, inside whatever the guest is doing then, as `T=` does between two steps.
+    Clock(i64),
+    /// `stop-workload/<thread>[#<k>]-<ms>` (Milestone 296): freeze the workload's threads of that
+    /// name for ms of guest time with the cgroup freezer, as `P=workload/<thread>@...` does; the
+    /// other threads run on. (`stop-workload-<ms>` is a [`ReactAction::Stop`] of the workload's
+    /// whole process tree.)
+    StopThreads(ThreadSel, u64),
+    /// `kill-workload/<name>[#<k>]` (Milestone 296): SIGKILL the workload's processes of that
+    /// name (`/proc/<pid>/comm`), or only the k-th of them; the workload's other processes go on.
+    KillProcs(ThreadSel),
 }
 
 impl ReactAction {
@@ -619,36 +630,69 @@ impl ReactAction {
         }
         let bad = || {
             err(format!(
-                "{what}: the action is cut, kill-<svc>, stop-<svc>-<ms> or cont-<svc>"
+                "{what}: the action is cut, kill-<svc>, stop-<svc>-<ms>, cont-<svc>, \
+                 clock+<s> or clock-<s>, stop-workload/<thread>-<ms> or kill-workload/<name>"
             ))
         };
-        let (kind, rest) = v.split_once('-').ok_or_else(bad)?;
-        Ok(match kind {
-            "kill" => {
-                name(rest, what)?;
-                ReactAction::Kill(rest.to_string())
+        // Milestone 296: a clock step at the reaction point
+        if let Some(d) = v.strip_prefix("clock") {
+            let delta = match d.strip_prefix('+') {
+                Some(n) => sdec(n, what)?,
+                None if d.starts_with('-') => sdec(d, what)?,
+                None => return Err(bad()),
+            };
+            if delta == 0 || d.starts_with("+-") {
+                return Err(err(format!(
+                    "{what}: a clock step is clock+<s> or clock-<s>, with s at least 1"
+                )));
             }
+            return Ok(ReactAction::Clock(delta));
+        }
+        let (kind, rest) = v.split_once('-').ok_or_else(bad)?;
+        // Milestone 296: threads or processes of the workload
+        let of_workload = |r: &str| -> Option<String> {
+            r.strip_prefix(THREAD_TARGET)
+                .and_then(|x| x.strip_prefix('/'))
+                .map(str::to_string)
+        };
+        Ok(match kind {
+            "kill" => match of_workload(rest) {
+                Some(n) => ReactAction::KillProcs(ThreadSel::parse(&n, what)?),
+                None => {
+                    name(rest, what)?;
+                    ReactAction::Kill(rest.to_string())
+                }
+            },
             "cont" => {
                 name(rest, what)?;
                 ReactAction::Cont(rest.to_string())
             }
             "stop" => {
                 let (svc, ms) = rest.rsplit_once('-').ok_or_else(bad)?;
-                name(svc, what)?;
                 let ms = dec(ms, what)?;
                 if ms == 0 {
                     return Err(err(format!("{what}: a stop lasts at least 1 ms")));
                 }
-                ReactAction::Stop(svc.to_string(), ms)
+                match of_workload(svc) {
+                    Some(t) => ReactAction::StopThreads(ThreadSel::parse(&t, what)?, ms),
+                    None => {
+                        name(svc, what)?;
+                        ReactAction::Stop(svc.to_string(), ms)
+                    }
+                }
             }
             _ => return Err(bad()),
         })
     }
 
-    /// The service the action acts on (none for a cut).
+    /// The service the action acts on (none for a cut, a clock step, or the workload's threads
+    /// or processes; `workload` for a stop of the workload's tree).
     pub fn svc(&self) -> Option<&str> {
         match self {
-            ReactAction::Cut => None,
+            ReactAction::Cut
+            | ReactAction::Clock(_)
+            | ReactAction::StopThreads(..)
+            | ReactAction::KillProcs(_) => None,
             ReactAction::Kill(s) | ReactAction::Stop(s, _) | ReactAction::Cont(s) => Some(s),
         }
     }
@@ -661,6 +705,10 @@ impl fmt::Display for ReactAction {
             ReactAction::Kill(s) => write!(f, "kill-{s}"),
             ReactAction::Stop(s, ms) => write!(f, "stop-{s}-{ms}"),
             ReactAction::Cont(s) => write!(f, "cont-{s}"),
+            ReactAction::Clock(d) if *d > 0 => write!(f, "clock+{d}"),
+            ReactAction::Clock(d) => write!(f, "clock{d}"),
+            ReactAction::StopThreads(t, ms) => write!(f, "stop-{THREAD_TARGET}/{t}-{ms}"),
+            ReactAction::KillProcs(t) => write!(f, "kill-{THREAD_TARGET}/{t}"),
         }
     }
 }

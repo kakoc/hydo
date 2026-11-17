@@ -54,7 +54,14 @@ fn text(v: Option<i64>) -> String {
 /// The T= branch of explore_run before step `p`.
 pub(super) fn clock_jump(fx: &mut F<'_>, p: i64, delta: i64) -> Step<()> {
     let tnow = date_now(fx)?;
-    jump(fx, p, tnow, delta, None)
+    jump(fx, &format!("before step {p}"), tnow, delta, None)
+}
+
+/// A reaction's clock step (`A=...:clock+<s>`, Milestone 296): the T= step by `delta`, at the
+/// reaction point instead of before a step; `at` names the point for the log line.
+pub(super) fn clock_jump_at(fx: &mut F<'_>, at: &str, delta: i64) -> Step<()> {
+    let tnow = date_now(fx)?;
+    jump(fx, at, tnow, delta, None)
 }
 
 /// `T=<at>:@<point>` before step `p`: the clock is set to the point's next instant after the
@@ -65,12 +72,12 @@ pub(super) fn clock_to(fx: &mut F<'_>, p: i64, to: &ClockPoint) -> Step<()> {
     let tnow = date_now(fx)?;
     let now = tnow.unwrap_or(0);
     let delta = to.next_after(now) - now;
-    jump(fx, p, tnow, delta, Some(to))
+    jump(fx, &format!("before step {p}"), tnow, delta, Some(to))
 }
 
 fn jump(
     fx: &mut F<'_>,
-    p: i64,
+    at: &str,
     tnow: Option<i64>,
     delta: i64,
     to: Option<&ClockPoint>,
@@ -95,7 +102,7 @@ fn jump(
     log(
         fx,
         format!(
-            "CLOCK JUMP of {delta}s{point} before step {p} (realtime {} -> {})",
+            "CLOCK JUMP of {delta}s{point} {at} (realtime {} -> {})",
             text(tnow),
             text(tnew)
         ),

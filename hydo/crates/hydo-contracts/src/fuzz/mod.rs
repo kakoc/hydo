@@ -1053,7 +1053,16 @@ impl<'a> Runner<'a> {
                     );
                 }
             };
-            let ran = cargo::run(&exe, &filter, &cases, &answers, timeout, &[], &mut tick)?;
+            // Milestone 296: each call works in an empty folder of its own, not in the current
+            // folder, so that a function that writes files leaves nothing behind
+            let dirs = self.work.join("calls");
+            let _ = std::fs::remove_dir_all(&dirs);
+            std::fs::create_dir_all(&dirs).map_err(|e| format!("{}: {e}", dirs.display()))?;
+            let dirs = dirs.canonicalize().unwrap_or(dirs);
+            let env = [("HYDO_FUZZ_DIRS".to_string(), dirs.display().to_string())];
+            let ran = cargo::run(&exe, &filter, &cases, &answers, timeout, &env, &mut tick);
+            let _ = std::fs::remove_dir_all(&dirs);
+            let ran = ran?;
             self.runs += 1;
             let mut next = from;
             for line in &ran.lines {

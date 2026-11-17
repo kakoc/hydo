@@ -671,7 +671,9 @@ variables! {
     HYDO_FUZZ_CASES: Passed, Passed, "path", "", "set by hydo fuzz for its generated test harness";
     /// Where the generated harness of `hydo fuzz` appends its answers (Milestone 275).
     HYDO_FUZZ_OUT: Passed, Passed, "path", "", "set by hydo fuzz for its generated test harness";
-    /// `hydo-bench rebaseline`'s work folder, for its staging script
+    /// The folder in which the generated harness of native `hydo fuzz` makes an empty folder for
+    /// each call and runs the call there (Milestone 296).
+    HYDO_FUZZ_DIRS: Passed, Passed, "path", "", "set by hydo fuzz for its generated test harness";    /// `hydo-bench rebaseline`'s work folder, for its staging script
     /// (`hydo/onboard/rebaseline/stage.sh`, M164).
     HYDO_REBASE_WORK: Passed, Passed, "path", "", "set by hydo-bench rebaseline for hydo/onboard/rebaseline/stage.sh";
     /// The folder of the inputs the staging script makes or fetches once (M164).

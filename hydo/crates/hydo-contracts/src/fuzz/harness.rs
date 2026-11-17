@@ -211,6 +211,7 @@ const COMMON: &str = concat!(
     "fn unbox<T: ?Sized>(b: &self::std::boxed::Box<T>) -> &T { b } ",
     "fn unrc<T: ?Sized>(b: &self::std::rc::Rc<T>) -> &T { b } ",
     "fn unarc<T: ?Sized>(b: &self::std::sync::Arc<T>) -> &T { b } ",
+    "const EVENT: &[u8] = b\"HYDO-ASSERT {\\\"t\\\":\\\"reachable\\\",\\\"id\\\":\\\"fuzz.call\\\",\\\"ok\\\":true,\\\"msg\\\":\\\"a call of hydo fuzz --vm started\\\"}\\n\"; ",
     "static LAST: self::std::sync::Mutex<self::std::option::Option<(self::std::string::String, self::std::string::String)>> = self::std::sync::Mutex::new(self::std::option::Option::None); ",
     "#[test] fn run() { ",
     "let cases = self::std::env::var(\"HYDO_FUZZ_CASES\").unwrap_or_default(); if cases.is_empty() { return; } ",
@@ -224,7 +225,14 @@ const COMMON: &str = concat!(
     "let at = at.trim_start_matches(\"./\"); let mut parts = at.rsplitn(3, ':'); let _ = parts.next(); let line = parts.next().unwrap_or(\"\"); let file = parts.next().unwrap_or(at); loc = self::std::format!(\"{}:{}\", file, line); } } ",
     "let p = i.payload(); let msg = if let self::std::option::Option::Some(s) = p.downcast_ref::<&str>() { self::std::string::ToString::to_string(*s) } else if let self::std::option::Option::Some(s) = p.downcast_ref::<self::std::string::String>() { s.clone() } else { self::std::string::String::new() }; ",
     "let mut g = LAST.lock().unwrap_or_else(|e| e.into_inner()); if g.is_none() { *g = self::std::option::Option::Some((loc, msg)); } })); ",
-    "for line in text.lines() { let (k, rest) = line.split_once(' ').unwrap_or((line, \"\")); let mut o = self::std::string::String::new(); o.push_str(k); o.push(' '); one(rest, &mut o); o.push('\\n'); ",
+    // Milestone 296: natively each call works in a folder of its own (HYDO_FUZZ_DIRS/<k>); in the
+    // VM, the call that the schedule names (HYDO_FUZZ_EVENT) names its thread hydo-call, which the
+    // threads it starts inherit, and reports its start on the console for a reaction (A=fuzz.call)
+    "let dirs = self::std::env::var(\"HYDO_FUZZ_DIRS\").unwrap_or_default(); let event = !self::std::env::var(\"HYDO_FUZZ_EVENT\").unwrap_or_default().is_empty(); ",
+    "for line in text.lines() { let (k, rest) = line.split_once(' ').unwrap_or((line, \"\")); let mut o = self::std::string::String::new(); o.push_str(k); o.push(' '); ",
+    "if !dirs.is_empty() { let d = self::std::format!(\"{}/{}\", dirs, k); let _ = self::std::fs::create_dir_all(&d); let _ = self::std::env::set_current_dir(&d); } ",
+    "if event { let _ = self::std::fs::write(\"/proc/thread-self/comm\", \"hydo-call\"); if let self::std::result::Result::Ok(mut c) = self::std::fs::OpenOptions::new().write(true).open(\"/dev/console\") { use self::std::io::Write as _; let _ = c.write_all(EVENT); } } ",
+    "one(rest, &mut o); o.push('\\n'); ",
     "use self::std::io::Write as _; let _ = out.write_all(o.as_bytes()); let _ = out.flush(); } } ",
 );
 

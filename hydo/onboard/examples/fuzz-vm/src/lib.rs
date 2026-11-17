@@ -189,3 +189,173 @@ pub fn save_synced(text: String) -> Result<(), String> {
 pub fn save_synced_survives(text: String, done: Option<Result<(), String>>) -> Option<bool> {
     save_survives(text, done)
 }
+
+// ---- Milestone 296: faults inside a call ----
+//
+// The four functions below have no durability check. Their bugs show only when a fault meets a
+// call while it runs: a clock step during a wait, or a pause of a thread that the call started.
+// `hydo fuzz --vm` puts such a fault inside one call of a schedule: the call reports its start,
+// and a reaction acts a few milliseconds later (`hydo guide fuzz`, "Faults inside a call").
+
+use std::sync::{mpsc, Arc, Mutex};
+use std::time::{Duration, Instant, SystemTime};
+
+/// A worker that answers `work_ms` after it starts, on a channel.
+fn worker(work_ms: u64) -> mpsc::Receiver<u64> {
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(work_ms));
+        let _ = tx.send(work_ms);
+    });
+    rx
+}
+
+/// Waits for a worker's answer, which comes after `work_ms`, and gives up after `work_ms +
+/// slack_ms`. It measures the wait with the wall clock (`SystemTime`), so a clock step during
+/// the wait moves its deadline: the planted bug.
+pub fn wait_reply(work_ms: u64, slack_ms: u64) -> Result<u64, String> {
+    let rx = worker(work_ms);
+    let timeout = Duration::from_millis(work_ms + slack_ms);
+    let start = SystemTime::now();
+    loop {
+        match rx.recv_timeout(Duration::from_millis(5)) {
+            Ok(v) => return Ok(v),
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Err("the worker died".into()),
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+        // a clock that went back reads as no time at all
+        if start.elapsed().unwrap_or_default() > timeout {
+            return Err("timed out".into());
+        }
+    }
+}
+
+/// [`wait_reply`] with the wait measured on the monotonic clock (`Instant`), which a clock step
+/// does not move.
+pub fn wait_reply_monotonic(work_ms: u64, slack_ms: u64) -> Result<u64, String> {
+    let rx = worker(work_ms);
+    let timeout = Duration::from_millis(work_ms + slack_ms);
+    let start = Instant::now();
+    loop {
+        match rx.recv_timeout(Duration::from_millis(5)) {
+            Ok(v) => return Ok(v),
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Err("the worker died".into()),
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+        }
+        if start.elapsed() > timeout {
+            return Err("timed out".into());
+        }
+    }
+}
+
+/// What a wait promises: an answer is the worker's, and `timed out` comes only after the timeout
+/// passed on the monotonic clock. A pause of the whole call lets the timeout pass for real, so
+/// it may time out then.
+fn honest(work_ms: u64, slack_ms: u64, wait: fn(u64, u64) -> Result<u64, String>) -> bool {
+    let t0 = Instant::now();
+    match wait(work_ms, slack_ms) {
+        Ok(v) => v == work_ms,
+        Err(_) => t0.elapsed() >= Duration::from_millis(work_ms + slack_ms),
+    }
+}
+
+/// The promise of [`wait_reply`].
+// hydo: input work_ms in 20..=300
+// hydo: input slack_ms in 200..=1000
+// hydo: ensures result
+pub fn wait_reply_is_honest(work_ms: u64, slack_ms: u64) -> bool {
+    honest(work_ms, slack_ms, wait_reply)
+}
+
+/// The promise of [`wait_reply_monotonic`].
+// hydo: input work_ms in 20..=300
+// hydo: input slack_ms in 200..=1000
+// hydo: ensures result
+pub fn wait_reply_monotonic_is_honest(work_ms: u64, slack_ms: u64) -> bool {
+    honest(work_ms, slack_ms, wait_reply_monotonic)
+}
+
+/// Counts `n` events on a worker thread, 10 ms apart, and `n` on this one, into one total under
+/// a lock, and returns the total. It waits for the worker's "done" with a timeout of half a
+/// second instead of joining it, and takes a late worker as done: the planted missing wait. The
+/// worker needs about `10 * n` ms, so without a pause the timeout never comes.
+// hydo: input n in 1..=20
+// hydo: ensures result == 2 * n
+pub fn count_twice(n: u64) -> u64 {
+    let total = Arc::new(Mutex::new(0u64));
+    let (tx, rx) = mpsc::channel();
+    let t = Arc::clone(&total);
+    std::thread::spawn(move || {
+        for _ in 0..n {
+            std::thread::sleep(Duration::from_millis(10));
+            *t.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+        }
+        let _ = tx.send(());
+    });
+    for _ in 0..n {
+        *total.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+    }
+    let _ = rx.recv_timeout(Duration::from_millis(500));
+    let v = *total.lock().unwrap_or_else(|e| e.into_inner());
+    v
+}
+
+/// [`count_twice`], joining the worker before it reads the total.
+// hydo: input n in 1..=20
+// hydo: ensures result == 2 * n
+pub fn count_twice_joined(n: u64) -> u64 {
+    let total = Arc::new(Mutex::new(0u64));
+    let t = Arc::clone(&total);
+    let worker = std::thread::spawn(move || {
+        for _ in 0..n {
+            std::thread::sleep(Duration::from_millis(10));
+            *t.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+        }
+    });
+    for _ in 0..n {
+        *total.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+    }
+    let _ = worker.join();
+    let v = *total.lock().unwrap_or_else(|e| e.into_inner());
+    v
+}
+
+// ---- Milestone 296: two crates from crates.io under faults inside a call ----
+
+/// crossbeam-channel 0.5.17's `recv_timeout`: an answer that comes after `work_ms` is received,
+/// and a timeout comes only after the timeout passed on the monotonic clock.
+// hydo: input work_ms in 20..=300
+// hydo: input slack_ms in 200..=1000
+// hydo: ensures result
+pub fn crossbeam_recv_is_honest(work_ms: u64, slack_ms: u64) -> bool {
+    let (tx, rx) = crossbeam_channel::bounded(1);
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(work_ms));
+        let _ = tx.send(work_ms);
+    });
+    let timeout = Duration::from_millis(work_ms + slack_ms);
+    let t0 = Instant::now();
+    match rx.recv_timeout(timeout) {
+        Ok(v) => v == work_ms,
+        Err(_) => t0.elapsed() >= timeout,
+    }
+}
+
+/// rs-snowflake 0.6.0's `real_time_generate`: `n` ids made 2 ms apart by one generator are
+/// distinct and in increasing order, as Twitter's snowflake ids are. The generator reads the
+/// wall clock (`SystemTime`).
+// hydo: input n in 2..=100
+// hydo: ensures result
+pub fn snowflake_ids_increase(n: u64) -> bool {
+    let mut g = snowflake::SnowflakeIdGenerator::new(1, 1);
+    let mut last = g.real_time_generate();
+    for _ in 1..n {
+        std::thread::sleep(Duration::from_millis(2));
+        let id = g.real_time_generate();
+        if id <= last {
+            return false;
+        }
+        last = id;
+    }
+    true
+}

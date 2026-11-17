@@ -767,9 +767,9 @@ the harness failed on `#![forbid(unsafe_code)]` and lost the `[lints]` table. M2
 
 strsim's `jaro` is judged on all 1,000 calls, and strsim and httparse build unchanged.
 
-**Function fuzzing inside the VM (M292, tentative number, a prototype on hvx).** `hydo fuzz --vm
-[CRATE_DIR]` makes the calls inside hydo's VM under faults: power cuts (`C=`, `cf=`), disk errors,
-clock steps, and pauses of the calls. It builds the harness as a static musl program and writes a
+**Function fuzzing inside the VM (M292 and M296, tentative numbers; a prototype on hvx and on
+the Mac engine).** `hydo fuzz --vm [CRATE_DIR]` makes the calls inside hydo's VM under faults: power
+cuts (`C=`, `cf=` on hvx), disk errors, clock steps, pauses, and since M296 kills. It builds the harness as a static musl program and writes a
 project. The project's workload makes the calls, one step per batch, each call in an empty
 folder of its own on the data disk. hydo builds its image and runs it under drawn schedules.
 `// hydo: durable <check>` names a property function that runs after the run, in the recovery
@@ -782,9 +782,23 @@ step under the same faults, and `hydo run <image> '<schedule>'` replays it. The 
   shrunk to `text = ""`;
 - the same save with two syncs held.
 
-The verdict: keep it for functions that write files and promise durability or atomicity. It is
-not yet worth it for time or concurrency. The evaluation is the section "Inside the virtual
-machine" of `docs/design/function-fuzzing.md`.
+The verdict of M292: keep it for functions that write files and promise durability or atomicity.
+
+Since M296 most drawn schedules put the fault inside one call. `E=<step>.<call>` names the call,
+which reports its start as the event `fuzz.call` and names its thread `hydo-call`. The reaction
+`A=fuzz.call+<ms>:<action>` then cuts the power, steps the clock, stops the call's process or
+its first thread, or kills it. The reactions gained the actions `clock+<s>`, `stop-workload-<ms>`,
+`stop-workload/<thread>-<ms>` and `kill-workload/<name>`. On hvx and on the Mac engine:
+- a wait whose deadline reads `SystemTime` broke under a forward clock step inside the call, and
+  its twin on `Instant` held;
+- a count that waits for its worker with a timeout broke under a pause inside the call, and the
+  twin that joins held;
+- rs-snowflake 0.6.0's `real_time_generate` gave a smaller id after a backward step of 30 s, a
+  candidate not posted; crossbeam-channel 0.5.17's `recv_timeout` held.
+
+The Mac engine repeated M292's results: redb held, the unsynced save lost its text, and the
+synced save held. Each shrunk finding replayed with its fingerprint. The design and the
+evaluation are the section "Inside the virtual machine" of `docs/design/function-fuzzing.md`.
 
 **Value history (M285, tentative number; a first version on the Mac engine).** `// hydo: key
 <expr>` and `// hydo: record <expr> [as <name>] [at entry|at return]` next to a function record
@@ -1430,6 +1444,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       moved into the cgroup. On the Mac this happened at 11 of the 81 starts, where the test
       process ends. Fixing it changes the controller's commands for every pause of threads,
       also on hvx and on epoch-2 images.
+    - The freeze script takes the first session leader with `HYDO_FROM` in the order of
+      `/proc`'s names. busybox's `timeout` leaves a watcher that leads a session of its own
+      with that variable, so a workload that runs `timeout <s> <program>` can lose the pause
+      (M296: a shrink run of `hydo fuzz --vm` stopped nothing). M296's reaction freeze takes the
+      largest session and leaves an ended thread out; the timer keeps its script.
     - A pause of a service's thread, and pauses that repeat in every period of a CPU limit, are
       not built.
     - The blind exploration does not find Qdrant's 1 ms windows: 0 of 300 schedules with starts
@@ -1865,14 +1884,25 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A fault of a stepped instruction other than #DE, #UD, #GP and #PF leaves the trap flag in
       its frame. Only user mode is counted, so a loop in the guest kernel stays the observer's.
     - The k3s example is not in `hydo/onboard/recorded.json`.
-139. Function fuzzing (M275, M280, M282, M289, M292). What is left:
-    - The run inside the VM (`hydo fuzz --vm`, M292) is a prototype that ran on hvx only, not on
-      the Mac engine or KVM. A kill has no target, and a clock step or a pause meets a call only
-      between steps. A `cf=` failure, or one whose input passes alone, is not shrunk. On hvx a
-      VM's console keeps 64 KiB, so long answers past 32 KiB per boot are not read. A recovery
-      boot with about 90 KiB of carried ids hung with `HVX_HC_PUT: No space left on device`
-      (as open item 120). A hung `hydo run` stops the fuzzing. Native `hydo fuzz` of a function
-      that writes files runs every call in the current folder.
+139. Function fuzzing (M275, M280, M282, M289, M292, M296). What is left:
+    - The run inside the VM (`hydo fuzz --vm`, M292, M296) is a prototype that ran on hvx and
+      on the Mac engine, not on KVM. What is left of it:
+      - A fault inside a call comes 1 to 13 ms after its drawn delay, at the controller's next
+        stop, so a window of one millisecond is reached only by chance.
+      - One call per run gets a fault inside it, and the draw spreads those over all calls of
+        all functions. A function of time or threads needs `--fn` and `--faults` to get enough.
+      - Several vCPUs were not tried, and the thread pause names only the first thread that the
+        function starts (`hydo-call#2`).
+      - A `cf=` failure, or one whose input passes alone under every schedule tried, is not
+        shrunk.
+      - On hvx a VM's console keeps 64 KiB, so long answers past 32 KiB per boot are not read.
+        A recovery boot with about 90 KiB of carried ids hung with `HVX_HC_PUT: No space left
+        on device` (as open item 120).
+      - The rs-snowflake candidate (an id smaller than the one before after a backward clock
+        step) is not posted.
+      - The timer's freeze of `P=workload/<thread>` can take a session of busybox's `timeout`
+        watcher instead of the workload's, and fails on a thread that ended (open item 80). The
+        reaction's freeze of M296 fixes both for itself only.
     - Rust only, natively. Go, enumerations, `char` and maps are not fuzzed. Floating-point
       values are since M289, but a clause cannot name a NaN or an infinity, and the shrink of a
       floating-point value only halves it.
@@ -2787,6 +2817,13 @@ build machine, before 2026-10-13.
   It shrinks drawn differences and writes `compare.json`. On the Mac engine Redis `always`
   against `everysec` differs on 4 of 10 drawn schedules. Two builds of one source and `hz` agree.
   Formance v2.4.0 shows the account race that v2.3.24 does not. Nothing recorded moved
+
+- M296 (tentative number): faults inside a call and the Mac engine for `hydo fuzz --vm`. A named
+  call (`E=`) reports its start, and a reaction cuts the power, steps the clock, pauses the call
+  or its thread, or kills it a few milliseconds later. Planted wall-clock and missing-wait bugs
+  broke and their twins held, rs-snowflake gave a smaller id after a backward step, and the Mac
+  repeated M292's results. A host timeout per run, and native calls in folders of their own.
+  Nothing recorded moved
 
 ## Where to look
 

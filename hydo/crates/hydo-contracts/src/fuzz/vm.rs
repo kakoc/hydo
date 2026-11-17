@@ -30,7 +30,7 @@ pub const USAGE: &str =
     "usage: hydo fuzz --vm [CRATE_DIR] [--fn NAME]... [--cases N] [--seed S] [--schedules N]
                       [--schedule S]... [--faults KIND,...] [--batch N] [--out DIR]
                       [--toolchain TC] [--release] [--timeout SECS] [--shrink-runs N]
-                      [--data-mib N] [--backend hvx|kvm]
+                      [--data-mib N] [--run-timeout SECS] [--backend hvx|kvm]
   tests each contracted Rust function of the crate inside hydo's virtual machine, under faults.
   It builds the crate's harness for the guest, writes a project whose workload makes the calls
   (one workload step per batch of --batch calls, each call in an empty folder of its own on the
@@ -38,18 +38,24 @@ pub const USAGE: &str =
   with `hydo run`. Each call is judged by `ensures`, as natively. A function with
   `// hydo: durable <check>` also gets its check called after the run, in the recovery boot
   after a power cut, once for each call that started: what the call promised before the cut
-  must hold after it. A failing call is shrunk alone under the same faults, and replays from
-  its image and schedule. `hydo guide fuzz` has the comment lines.
+  must hold after it. A fault inside a call comes from a reaction: the call that the schedule
+  names (E=<step>.<call>) reports its start, and A=fuzz.call+<ms>:<action> acts that long after
+  it. A failing call is shrunk alone under the same faults, and replays from its image and
+  schedule. `hydo guide fuzz` has the comment lines.
   --cases N        inputs per function that keep `requires` (default 200)
   --seed S         the seed of the inputs and of the schedules (default 1)
   --schedules N    schedules to run (default 12): the first has no fault, the others are drawn
   --schedule S     run this schedule only (repeat it for more), e.g. 'disk=cut | run C=4'
-  --faults K,...   the kinds the drawn schedules take: cut (C= and cf=), disk (disk=ioerr),
-                   clock (T=), pause (P=workload) (default all four)
+  --faults K,...   the kinds the drawn schedules take: cut (C=, cf= on hvx, and a cut inside a
+                   call), disk (disk=ioerr), clock (T=, and a clock step inside a call), pause
+                   (P=workload, and a pause of the call's process or of a thread it started),
+                   kill (the call's process killed inside the call) (default all five)
   --batch N        calls per workload step (default 25)
   --timeout SECS   a call that takes longer in guest time is stopped (default 10)
   --shrink-runs N  runs that one shrink may take (default 16)
   --data-mib N     the data disk's size (default 256)
+  --run-timeout S  a `hydo run` that takes longer on this machine is stopped, and the fuzzing
+                   goes on (default 600 plus 2 per call of the image)
   --backend B      passed to `hydo run`
   The exit status is 1 when a clause or a check broke or a call failed, 2 for a mistake in the
   options or the contracts, and 0 otherwise.";
@@ -91,10 +97,12 @@ struct Opts {
     timeout: u64,
     shrink_runs: u64,
     data_mib: u64,
+    /// The host's limit on one `hydo run`, in seconds (0: 600 plus 2 per call).
+    run_timeout: u64,
     backend: Option<String>,
 }
 
-const KINDS: [&str; 4] = ["cut", "disk", "clock", "pause"];
+const KINDS: [&str; 5] = ["cut", "disk", "clock", "pause", "kill"];
 
 fn opts(args: &[String]) -> Result<Opts, String> {
     let mut o = Opts {
@@ -112,6 +120,7 @@ fn opts(args: &[String]) -> Result<Opts, String> {
         timeout: 10,
         shrink_runs: 16,
         data_mib: 256,
+        run_timeout: 0,
         backend: None,
     };
     let mut it = args.iter();
@@ -151,6 +160,7 @@ fn opts(args: &[String]) -> Result<Opts, String> {
             "--timeout" => o.timeout = num(val()?)?.max(1),
             "--shrink-runs" => o.shrink_runs = num(val()?)?,
             "--data-mib" => o.data_mib = num(val()?)?.max(64),
+            "--run-timeout" => o.run_timeout = num(val()?)?.max(10),
             "--backend" => o.backend = Some(val()?),
             s if s.starts_with('-') => {
                 return Err(format!("unknown option {s} (hydo fuzz --vm --help)"))
@@ -216,6 +226,8 @@ struct Answers {
     checks: BTreeMap<(usize, usize), (Option<Val>, Outcome)>,
     /// The checks ran in a recovery boot after a power cut.
     after_cut: bool,
+    /// The call whose process the schedule killed (Milestone 296).
+    killed: Option<(usize, usize)>,
 }
 
 /// One run of an image under a schedule.
@@ -229,6 +241,9 @@ pub struct RunInfo {
     pub power_cut: bool,
     pub calls: u64,
     pub checks: u64,
+    /// Milestone 296: for a fault inside a call, whether its reaction acted, and on which call.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub in_call: String,
 }
 
 /// A failure over the runs, for the report and `vm.json`.
@@ -459,8 +474,9 @@ fn run_all(o: &Opts) -> Result<i32, String> {
     let image = ctx.image("explore", &calls, steps)?;
     ctx.explore_image = image.clone();
     // the schedules
+    let places: Vec<(usize, usize)> = calls.iter().map(|c| (c.step, c.k)).collect();
     let scheds: Vec<String> = if o.fixed.is_empty() {
-        draw_schedules(o.seed, o.schedules, &o.faults, steps, calls.len())
+        draw_schedules(o.seed, o.schedules, &o.faults, steps, &places, cf_ok(o))
     } else {
         o.fixed.clone()
     };
@@ -473,12 +489,15 @@ fn run_all(o: &Opts) -> Result<i32, String> {
         ..VmReport::default()
     };
     let mut found: BTreeMap<Key, (u64, u64, usize, Call, Outcome)> = BTreeMap::new();
+    // Milestone 296: each run's first call that failed each way, for a shrink under another
+    // schedule when the first one does not shrink
+    let mut others: BTreeMap<Key, Vec<(usize, Call)>> = BTreeMap::new();
     let mut judged: BTreeMap<(usize, usize), u64> = BTreeMap::new();
     for (si, s) in scheds.iter().enumerate() {
         let (info, ans) = ctx.run(&image, s, &format!("s{si:03}"), &calls)?;
         ctx.explore_fps.insert(s.clone(), info.fingerprint.clone());
         println!(
-            "hydo: fuzz: run {}/{}: {s}: {} calls, {} checks{}: {}",
+            "hydo: fuzz: run {}/{}: {s}: {} calls, {} checks{}{}: {}",
             si + 1,
             scheds.len(),
             info.calls,
@@ -488,7 +507,12 @@ fn run_all(o: &Opts) -> Result<i32, String> {
             } else {
                 ""
             },
-            info.verdict
+            match info.in_call.as_str() {
+                "" => String::new(),
+                m => format!(", {m}"),
+            },
+            // the invariant only calls the checks, and the host judges their answers
+            info.verdict.trim_end_matches(" (fuzz.checks: )")
         );
         let mut seen_here: Vec<Key> = Vec::new();
         for c in &calls {
@@ -499,6 +523,7 @@ fn run_all(o: &Opts) -> Result<i32, String> {
                 e.0 += 1;
                 if !seen_here.contains(&key) {
                     e.1 += 1;
+                    others.entry(key.clone()).or_default().push((si, c.clone()));
                     seen_here.push(key);
                 }
             }
@@ -542,7 +567,25 @@ fn run_all(o: &Opts) -> Result<i32, String> {
                  before any fault meets it"
             );
         }
-        let sh = ctx.shrink(key, call, sched)?;
+        // a schedule whose input does not fail alone (a timed fault of the whole run) gives way to
+        // the next one under which the call failed, up to three schedules (Milestone 296)
+        let mut sh = ctx.shrink(key, call, sched)?;
+        let mut tried = 1;
+        for (sj, cj) in others.get(key).into_iter().flatten().skip(1) {
+            if tried >= 3 || !sh.note.starts_with("not shrunk") {
+                break;
+            }
+            tried += 1;
+            let again = ctx.shrink(key, cj, &scheds[*sj])?;
+            if !again.note.starts_with("not shrunk") {
+                println!(
+                    "hydo:   shrunk under `{}`, where it failed too; alone in one step, the \
+                     input passed under the first schedule",
+                    scheds[*sj]
+                );
+                sh = again;
+            }
+        }
         let mut fnd = VmFinding {
             function: f.name.clone(),
             phase: if *is_check { "check" } else { "call" }.into(),
@@ -686,32 +729,63 @@ fn hash(s: &str) -> u64 {
     h
 }
 
-/// The schedules of an exploration: the first without a fault, then one drawn kind each.
+/// The schedules of an exploration: the first without a fault, then one drawn kind each, in
+/// turn. `calls` are the places (step, call) of the calls; `cf` says whether the engine applies
+/// `cf=` (hvx).
+///
+/// Since Milestone 296 a schedule may put its fault inside one call: the schedule names a drawn
+/// call with `E=<step>.<call>`, that call reports its start as the event `fuzz.call`, and the
+/// reaction `A=fuzz.call+<ms>:<action>` acts that long after it. The actions are a power cut, a
+/// clock step, a stop of the workload's tree (the call's process and the workload's shell), a
+/// freeze of the first thread that the call started (`hydo-call#2`), and a kill of the call's
+/// process. Of each kind's schedules in turn: a cut comes between steps (`C=`), inside a call,
+/// and at a flush (`cf=`, hvx) or inside a call; a clock step or a pause comes inside a call
+/// twice and between steps once; a kill always comes inside a call.
 pub fn draw_schedules(
     seed: u64,
     n: u64,
     kinds: &[String],
     steps: usize,
-    calls: usize,
+    calls: &[(usize, usize)],
+    cf: bool,
 ) -> Vec<String> {
     let mut out = vec!["disk=none | run".to_string()];
     let mut r = Rng::new(seed.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ 0x5eed);
     let steps = steps as u64;
     let mut tries = 0;
+    const DELAYS: [u64; 7] = [0, 2, 5, 10, 20, 50, 100];
+    const SECS: [i64; 8] = [-86_400, -3_600, -300, -30, 30, 300, 3_600, 86_400];
     while (out.len() as u64) < n && !kinds.is_empty() && tries < n * 20 {
         tries += 1;
         let kind = &kinds[(out.len() - 1) % kinds.len()];
+        // the how-manieth schedule of its kind
+        let nth = (out.len() - 1) / kinds.len();
+        let inside = !calls.is_empty()
+            && match kind.as_str() {
+                "cut" => nth % 3 == 1 || (nth % 3 == 2 && !cf),
+                _ => nth % 3 != 2,
+            };
         let dseed = r.word();
         // a step in the second half of the run, so that most calls are made before the fault
         let late = |r: &mut Rng| steps / 2 + 1 + r.below(steps - steps / 2);
+        // a call, and the reaction's head that acts `ms` after its start
+        let react = |r: &mut Rng| -> String {
+            let (s, k) = calls[r.below(calls.len() as u64) as usize];
+            let ms = DELAYS[r.below(DELAYS.len() as u64) as usize];
+            let delay = if ms == 0 {
+                String::new()
+            } else {
+                format!("+{ms}")
+            };
+            format!("E={s}.{k} A={CALL_EVENT}{delay}")
+        };
         let s = match kind.as_str() {
-            "cut" if (out.len() / kinds.len()).is_multiple_of(2) || !cfg!(target_os = "linux") => {
-                format!("disk=cut dseed={dseed:016x} | run C={}", late(&mut r))
-            }
-            "cut" => format!(
+            "cut" if inside => format!("disk=cut dseed={dseed:016x} | run {}:cut", react(&mut r)),
+            "cut" if cf && nth % 3 == 2 => format!(
                 "disk=cut dseed={dseed:016x} cf={} | run",
-                1 + r.below((calls as u64 * 8).max(8))
+                1 + r.below((calls.len() as u64 * 8).max(8))
             ),
+            "cut" => format!("disk=cut dseed={dseed:016x} | run C={}", late(&mut r)),
             "disk" => {
                 let p = 1 + r.below(3);
                 if r.below(2) == 0 {
@@ -720,14 +794,35 @@ pub fn draw_schedules(
                     format!("disk=ioerr:{p} dseed={dseed:016x} | run C={}", late(&mut r))
                 }
             }
-            "clock" => {
-                let secs = [-86_400i64, -3_600, -300, -30, 30, 300, 3_600, 86_400];
-                format!(
-                    "disk=none | run T={}:{}",
-                    r.below(steps),
-                    secs[r.below(secs.len() as u64) as usize]
-                )
+            "clock" if inside => {
+                let head = react(&mut r);
+                let d = SECS[r.below(SECS.len() as u64) as usize];
+                let d = if d > 0 {
+                    format!("+{d}")
+                } else {
+                    d.to_string()
+                };
+                format!("disk=none | run {head}:clock{d}")
             }
+            "clock" => format!(
+                "disk=none | run T={}:{}",
+                r.below(steps),
+                SECS[r.below(SECS.len() as u64) as usize]
+            ),
+            "pause" if inside => {
+                let head = react(&mut r);
+                let dur = [50u64, 500, 3_000][r.below(3) as usize];
+                if r.below(2) == 0 {
+                    format!("disk=none | run {head}:stop-workload-{dur}")
+                } else {
+                    format!("disk=none | run {head}:stop-workload/{CALL_THREAD}#2-{dur}")
+                }
+            }
+            "kill" if !calls.is_empty() => format!(
+                "disk=none | run {}:kill-workload/{CALL_PROCESS}",
+                react(&mut r)
+            ),
+            "kill" => continue,
             _ => {
                 let dur = [50u64, 500, 3_000][r.below(3) as usize];
                 format!(
@@ -745,7 +840,8 @@ pub fn draw_schedules(
 }
 
 /// The schedule of a run of one step, from a schedule whose failing call was at `step`: a step
-/// token before or at it moves to step 0, one after it to step 1 (the end of the one step). `cf=`
+/// token before or at it moves to step 0, one after it to step 1 (the end of the one step), and
+/// the call that `E=` names becomes call 0 of step 0; a reaction (`A=`) keeps its event. `cf=`
 /// counts flushes from the workload's start, so a schedule with it stays as it is.
 pub fn one_step_schedule(sched: &str, step: usize) -> String {
     let (host, guest) = sched.split_once('|').unwrap_or((sched, "run"));
@@ -762,6 +858,9 @@ pub fn one_step_schedule(sched: &str, step: usize) -> String {
         if let Some(c) = w.strip_prefix("C=") {
             let n: usize = c.parse().unwrap_or(0);
             words.push(format!("C={}", if n <= step { 0 } else { 1 }));
+        } else if w.starts_with("E=") {
+            // Milestone 296: the call alone is call 0 of step 0
+            words.push("E=0.0".into());
         } else if let Some(rest) = w.strip_prefix("T=") {
             let (n, v) = rest.split_once(':').unwrap_or((rest, ""));
             words.push(format!("T={}:{v}", moved(n)));
@@ -780,6 +879,107 @@ pub fn one_step_schedule(sched: &str, step: usize) -> String {
         }
     }
     format!("{} | {}", host.trim(), words.join(" "))
+}
+
+/// Whether the engine applies `cf=`: hvx only (Milestone 296: the Mac engine and KVM get the
+/// power cuts of `C=` and of a reaction instead).
+fn cf_ok(o: &Opts) -> bool {
+    match o.backend.as_deref() {
+        Some("hvx") => true,
+        Some(_) => false,
+        None => cfg!(target_os = "linux") && Path::new("/dev/hvx").exists(),
+    }
+}
+
+/// The event that the call named by `E=` reports when it starts (Milestone 296).
+pub const CALL_EVENT: &str = "fuzz.call";
+
+/// The name that the named call gives its thread; the threads it starts inherit it.
+pub const CALL_THREAD: &str = "hydo-call";
+
+/// The name of the program of the call that `E=` names (`/tmp/fuzz-call`, a link to
+/// `/fuzz/harness`), which a kill inside a call names: a kill that comes after the call's end
+/// meets no other call.
+pub const CALL_PROCESS: &str = "fuzz-call";
+
+/// The fault inside a call of a schedule (Milestone 296): the call `E=<step>.<call>` names, and
+/// whether the reaction kills the call's process (then the call's own answer is not judged: the
+/// schedule ended it).
+pub fn in_call(sched: &str) -> Option<((usize, usize), bool)> {
+    let guest = sched.split_once('|').map(|(_, g)| g).unwrap_or("");
+    let mut at = None;
+    let mut kill = false;
+    for w in guest.split_whitespace() {
+        if let Some(v) = w.strip_prefix("E=") {
+            let (s, k) = v.split_once('.')?;
+            at = Some((s.parse().ok()?, k.parse().ok()?));
+        } else if let Some(r) = w.strip_prefix(&format!("A={CALL_EVENT}")) {
+            kill = r.ends_with(&format!(":kill-workload/{CALL_PROCESS}"));
+        }
+    }
+    at.map(|a| (a, kill))
+}
+
+/// The schedule with its `E=` naming the call `k` of step `s` instead.
+pub fn with_call(sched: &str, s: usize, k: usize) -> String {
+    let (host, guest) = sched.split_once('|').unwrap_or((sched, "run"));
+    let words: Vec<String> = guest
+        .split_whitespace()
+        .map(|w| {
+            if w.starts_with("E=") {
+                format!("E={s}.{k}")
+            } else {
+                w.to_string()
+            }
+        })
+        .collect();
+    format!("{} | {}", host.trim(), words.join(" "))
+}
+
+/// Run a command with a limit on this machine's time: on the limit its process group is
+/// killed. Ok(None) for a command that ran out of time.
+fn output_within(c: &mut Command, secs: u64) -> std::io::Result<Option<std::process::Output>> {
+    use std::os::unix::process::CommandExt as _;
+    let dir = std::env::temp_dir();
+    let tag = format!(
+        "hydo-fuzz-vm-{}-{}",
+        std::process::id(),
+        hash(&format!("{c:?}"))
+    );
+    let (op, ep) = (
+        dir.join(format!("{tag}.out")),
+        dir.join(format!("{tag}.err")),
+    );
+    let mut child = c
+        .process_group(0)
+        .stdout(std::fs::File::create(&op)?)
+        .stderr(std::fs::File::create(&ep)?)
+        .spawn()?;
+    let t0 = std::time::Instant::now();
+    let status = loop {
+        if let Some(st) = child.try_wait()? {
+            break Some(st);
+        }
+        if t0.elapsed().as_secs() >= secs {
+            // the whole group: `hydo run` and the engine it started
+            let _ = Command::new("kill")
+                .args(["-KILL", "--", &format!("-{}", child.id())])
+                .status();
+            let _ = child.kill();
+            let _ = child.wait();
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    };
+    let out = std::fs::read(&op).unwrap_or_default();
+    let err = std::fs::read(&ep).unwrap_or_default();
+    let _ = std::fs::remove_file(&op);
+    let _ = std::fs::remove_file(&ep);
+    Ok(status.map(|status| std::process::Output {
+        status,
+        stdout: out,
+        stderr: err,
+    }))
 }
 
 struct Ctx<'a> {
@@ -925,7 +1125,27 @@ impl Ctx<'_> {
         if let Some(b) = &self.o.backend {
             c.args(["--backend", b]);
         }
-        let o = c.output().map_err(|e| format!("hydo run: {e}"))?;
+        let limit = match self.o.run_timeout {
+            0 => 600 + 2 * calls.len() as u64,
+            n => n,
+        };
+        let Some(o) = output_within(&mut c, limit).map_err(|e| format!("hydo run: {e}"))? else {
+            // Milestone 296: a hung run is a run without answers, and the fuzzing goes on
+            eprintln!(
+                "hydo: fuzz: hydo run {sched} of {} took longer than {limit} s on this machine \
+                 and was stopped (--run-timeout)",
+                image.display()
+            );
+            let _ = std::fs::create_dir_all(&dir);
+            let info = RunInfo {
+                schedule: sched.into(),
+                dir: dir.display().to_string(),
+                image: image.display().to_string(),
+                verdict: format!("TIMEOUT on this machine after {limit} s"),
+                ..RunInfo::default()
+            };
+            return Ok((info, Answers::default()));
+        };
         let _ = std::fs::create_dir_all(&dir);
         let _ = std::fs::write(
             dir.join("hydo-run.txt"),
@@ -943,7 +1163,23 @@ impl Ctx<'_> {
             })?;
         let first = std::fs::read_to_string(dir.join("one.log")).unwrap_or_default();
         let rec = std::fs::read_to_string(dir.join("one.recovery.log")).ok();
-        let ans = self.read_answers(calls, &first, rec.as_deref());
+        let mut ans = self.read_answers(calls, &first, rec.as_deref());
+        ans.killed = in_call(sched).filter(|(_, kill)| *kill).map(|(c, _)| c);
+        // Milestone 296: the reaction of a fault inside a call says in the control log that it
+        // saw the call's start
+        let in_call_note = match in_call(sched) {
+            None => String::new(),
+            Some(((s, k), _)) => {
+                let ctl = std::fs::read_to_string(dir.join("one.control.log"))
+                    .or_else(|_| std::fs::read_to_string(dir.join("one.log")))
+                    .unwrap_or_default();
+                if ctl.contains(&format!("saw {CALL_EVENT}")) {
+                    format!("the fault came inside call {s}.{k}")
+                } else {
+                    format!("call {s}.{k} did not report its start, so no fault came")
+                }
+            }
+        };
         let info = RunInfo {
             schedule: sched.into(),
             dir: dir.display().to_string(),
@@ -957,6 +1193,7 @@ impl Ctx<'_> {
             power_cut: rec.is_some(),
             calls: ans.calls.len() as u64,
             checks: ans.checks.len() as u64,
+            in_call: in_call_note,
         };
         Ok((info, ans))
     }
@@ -971,6 +1208,7 @@ impl Ctx<'_> {
             after_cut: recovery.is_some(),
             ..Answers::default()
         };
+
         let steps: BTreeMap<usize, usize> = calls.iter().map(|c| (c.step, c.w)).collect();
         let step_call = |id: &str| -> Option<(usize, usize, usize)> {
             let (s, k) = id.split_once('.')?;
@@ -1093,7 +1331,9 @@ impl Ctx<'_> {
         let wr = &self.writers[c.w];
         let f = &self.built[wr.f];
         let mut out = Vec::new();
-        let call = a.calls.get(&(c.step, c.k));
+        // Milestone 296: the call whose process the schedule killed gave no answer of its own
+        let killed = a.killed == Some((c.step, c.k));
+        let call = a.calls.get(&(c.step, c.k)).filter(|_| !killed);
         if let Some(o) = call {
             *judged.entry((c.w, 0)).or_default() += 1;
             for x in f.judge(&c.args, o).failures {
@@ -1115,7 +1355,9 @@ impl Ctx<'_> {
     }
 
     /// Shrink a failure: the input alone in a run of one step under the same faults, then
-    /// simpler inputs, a chunk of them per run.
+    /// simpler inputs, a chunk of them per image and run. A fault inside a call (Milestone 296)
+    /// meets one call per run, so each candidate of a chunk gets its own run of the chunk's
+    /// image, with `E=` naming it.
     fn shrink(&self, key: &Key, call: &Call, sched: &str) -> Result<Shrunk, String> {
         let (w, _, _) = key;
         let f = &self.built[self.writers[*w].f];
@@ -1129,16 +1371,22 @@ impl Ctx<'_> {
                      img: &Path,
                      sched: &str,
                      t: &str|
-         -> Result<(Option<usize>, RunInfo), String> {
+         -> Result<(Vec<usize>, RunInfo), String> {
             let (info, ans) = self.run(img, sched, t, calls)?;
             let mut judged = BTreeMap::new();
-            let hit = calls.iter().position(|c| {
-                self.judge(c, &ans, &mut judged)
-                    .iter()
-                    .any(|(k, _)| k == key)
-            });
+            let hit = calls
+                .iter()
+                .enumerate()
+                .filter(|(_, c)| {
+                    self.judge(c, &ans, &mut judged)
+                        .iter()
+                        .any(|(k, _)| k == key)
+                })
+                .map(|(i, _)| i)
+                .collect();
             Ok((hit, info))
         };
+        let inside = in_call(sched).is_some();
         let mut best = Shrunk {
             args: call.args.clone(),
             calls: self.explore_calls.clone(),
@@ -1169,7 +1417,7 @@ impl Ctx<'_> {
         let img = self.image(&format!("{tag}-0"), &alone, 1)?;
         runs += 1;
         let (hit, info) = fails(&alone, &img, &one, &format!("{tag}-0"))?;
-        if hit.is_none() {
+        if hit.is_empty() {
             best.note = format!(
                 "not shrunk: the input alone in one step passed under `{one}`, so the replay is \
                  the whole run"
@@ -1204,25 +1452,44 @@ impl Ctx<'_> {
                         args: a.clone(),
                     })
                     .collect();
-                runs += 1;
-                let t = format!("{tag}-{runs}");
+                let t = format!("{tag}-{}", runs + 1);
                 let img = self.image(&t, &calls, 1)?;
-                let (hit, info) = fails(&calls, &img, &one, &t)?;
-                if hit.is_none() {
+                let mut hit = None;
+                if inside {
+                    // one run per candidate, each with the fault inside its own call
+                    for i in 0..calls.len() {
+                        if runs >= self.o.shrink_runs {
+                            break;
+                        }
+                        runs += 1;
+                        let sch = with_call(&one, 0, i);
+                        let rt = format!("{t}.{i}");
+                        let (h, info) = fails(&calls, &img, &sch, &rt)?;
+                        if h.contains(&i) {
+                            hit = Some((i, info, sch, rt));
+                            break;
+                        }
+                    }
+                } else {
+                    runs += 1;
+                    let (h, info) = fails(&calls, &img, &one, &t)?;
+                    hit = h.first().map(|&i| (i, info, one.clone(), t.clone()));
+                }
+                let Some((i, info, sch, rt)) = hit else {
                     // a candidate image that passed is not kept: only the replays are
                     let _ = std::fs::remove_dir_all(self.out.join("images").join(&t));
-                }
-                if let Some(i) = hit {
-                    cur = part[i].clone();
-                    best.steps += 1;
-                    best.args = cur.clone();
-                    best.image = img;
-                    best.calls = calls;
-                    best.k = i;
-                    best.fingerprint = info.fingerprint;
-                    best.tag = t;
-                    continue 'outer;
-                }
+                    continue;
+                };
+                cur = part[i].clone();
+                best.steps += 1;
+                best.args = cur.clone();
+                best.image = img;
+                best.calls = calls;
+                best.k = i;
+                best.fingerprint = info.fingerprint;
+                best.schedule = sch;
+                best.tag = rt;
+                continue 'outer;
             }
             break;
         }
@@ -1265,7 +1532,7 @@ fn find_image(dir: &Path) -> Result<PathBuf, String> {
 
 fn manifest(name: &str, steps: usize, data_mib: u64, timeout: u64, calls: usize) -> String {
     format!(
-        "# Written by `hydo fuzz --vm` (Milestone 292); every run of hydo fuzz --vm writes it again.
+        "# Written by `hydo fuzz --vm` (Milestones 292 and 296); every run of hydo fuzz --vm writes it again.
 # The workload makes the calls of cases/<step>/calls, each call in a process of its own and in the
 # folder /data/fuzz/<step>.<call>; check.sh calls each durability check after the run.
 format: 1
@@ -1281,6 +1548,14 @@ root:
 data:
   size_mib: {data_mib}
 provision: /fuzz/dirs.sh
+knobs:
+  # Milestone 296: E=<step>.<call> names the call that reports its start (the event fuzz.call),
+  # for a fault inside it (A=fuzz.call+<ms>:<action>)
+  - token: E
+    name: the call that reports its start
+    default: none
+    values: [none]
+    set: echo $HYDO_VALUE > /tmp/fz.event
 workload:
   steps: {steps}
   run: /fuzz/run.sh $HYDO_FROM $HYDO_TO
@@ -1327,6 +1602,10 @@ fn run_sh(timeout: u64) -> String {
 # check is also listed there when it starts (<step>.<call>), so that the check after a power cut
 # knows each call that started.
 s=$1; to=$2
+# the call that the schedule names (E=<step>.<call>) reports its start, for a fault inside it
+ev=$(cat /tmp/fz.event 2>/dev/null)
+# ... and runs as /tmp/{CALL_PROCESS}, so that a kill inside the call meets only it
+[ -n \"$ev\" ] && ln -sf /fuzz/harness /tmp/{CALL_PROCESS}
 while [ \"$s\" -lt \"$to\" ]; do
   d=/fuzz/cases/$s
   if [ -d $d ]; then
@@ -1337,7 +1616,9 @@ while [ \"$s\" -lt \"$to\" ]; do
       [ $c = 1 ] && echo \"$s.$k\" >> \"$HYDO_ACKED\"
       echo \"$k $rest\" > /tmp/fz.in
       rm -f /tmp/fz.out
-      HYDO_FUZZ_CASES=/tmp/fz.in HYDO_FUZZ_OUT=/tmp/fz.out timeout -s KILL {timeout} /fuzz/harness \"$f\" --test-threads=1 -q < /dev/null > /dev/null 2>&1
+      e=; p=/fuzz/harness
+      [ \"$s.$k\" = \"$ev\" ] && {{ e=1; p=/tmp/{CALL_PROCESS}; }}
+      HYDO_FUZZ_EVENT=$e HYDO_FUZZ_CASES=/tmp/fz.in HYDO_FUZZ_OUT=/tmp/fz.out timeout -s KILL {timeout} $p \"$f\" --test-threads=1 -q < /dev/null > /dev/null 2>&1
       rc=$?
       a=$(cat /tmp/fz.out 2>/dev/null)
       if [ -n \"$a\" ]; then v=$(echo ${{a#* }} | tr ' ' ,)
@@ -1405,14 +1686,66 @@ exit 0
 mod tests {
     use super::*;
 
+    fn places() -> Vec<(usize, usize)> {
+        (0..8).flat_map(|s| (0..25).map(move |k| (s, k))).collect()
+    }
+
     #[test]
     fn the_first_schedule_has_no_fault_and_the_draw_repeats() {
         let k: Vec<String> = KINDS.iter().map(|s| s.to_string()).collect();
-        let a = draw_schedules(1, 9, &k, 8, 200);
+        let a = draw_schedules(1, 11, &k, 8, &places(), true);
         assert_eq!(a[0], "disk=none | run");
-        assert_eq!(a.len(), 9);
-        assert_eq!(a, draw_schedules(1, 9, &k, 8, 200));
-        assert_ne!(a, draw_schedules(2, 9, &k, 8, 200));
+        assert_eq!(a.len(), 11);
+        assert_eq!(a, draw_schedules(1, 11, &k, 8, &places(), true));
+        assert_ne!(a, draw_schedules(2, 11, &k, 8, &places(), true));
+        // a host part and a guest part (hydo-cli's tests parse them with the schedule language)
+        for s in &a {
+            assert!(s.contains(" | run"), "{s}");
+        }
+    }
+
+    /// Milestone 296: faults inside a call, through the event of the call that E= names, and no
+    /// cf= on an engine without it.
+    #[test]
+    fn faults_inside_a_call_name_the_call_and_the_mac_gets_no_cf() {
+        let k: Vec<String> = KINDS.iter().map(|s| s.to_string()).collect();
+        let a = draw_schedules(3, 41, &k, 8, &places(), false);
+        assert!(a.iter().all(|s| !s.contains("cf=")), "{a:?}");
+        let inside: Vec<&String> = a.iter().filter(|s| in_call(s).is_some()).collect();
+        for want in [
+            ":cut",
+            ":clock",
+            ":stop-workload-",
+            ":stop-workload/hydo-call#2-",
+            ":kill-",
+        ] {
+            assert!(
+                inside.iter().any(|s| s.contains(want)),
+                "{want}: {inside:?}"
+            );
+        }
+        for s in &inside {
+            assert!(s.contains(" A=fuzz.call"), "{s}");
+            let ((st, c), kill) = in_call(s).unwrap_or_else(|| unreachable!());
+            assert!(st < 8 && c < 25, "{s}");
+            assert_eq!(kill, s.ends_with(":kill-workload/fuzz-call"), "{s}");
+        }
+        assert!(draw_schedules(3, 41, &k, 8, &places(), true)
+            .iter()
+            .any(|s| s.contains("cf=")));
+        assert_eq!(
+            in_call("disk=none | run E=3.7 A=fuzz.call+20:clock-300"),
+            Some(((3, 7), false))
+        );
+        assert_eq!(
+            with_call("disk=none | run E=3.7 A=fuzz.call+20:clock-300", 0, 4),
+            "disk=none | run E=0.4 A=fuzz.call+20:clock-300"
+        );
+        assert_eq!(
+            one_step_schedule("disk=cut dseed=1 | run E=5.9 A=fuzz.call+5:cut", 5),
+            "disk=cut dseed=1 | run E=0.0 A=fuzz.call+5:cut"
+        );
+        assert_eq!(in_call("disk=none | run T=2:30"), None);
     }
 
     #[test]

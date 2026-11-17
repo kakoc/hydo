@@ -610,9 +610,11 @@ Three findings hold for every type of system:
 
 - **What it is.** `hydo fuzz` tests each contracted Rust function natively, with inputs from its
   `requires` and `input` lines, and judges each call by `ensures` (`hydo guide fuzz`).
-- **What to write.** The contract's comments, then `hydo fuzz path/to/crate --fn find`.
+- **What to write.** The contract's comments, then `hydo fuzz path/to/crate --fn find`. Add
+  `--vm` to make the calls inside hydo's VM under faults.
 - **When it fits.** A library function over integers, strings, bytes, or lists, such as a
-  parser, an encoder, or a distance.
+  parser, an encoder, or a distance. Inside the VM: a function that writes files, measures a
+  timeout, or waits for a thread that it starts.
 - **What it found.**
   - contracts-ledger (Milestone 275): the planted bug from the contract alone, on 96 of 1,000
     inputs.
@@ -622,9 +624,19 @@ Three findings hold for every type of system:
   - num-integer's `gcd` (Milestone 282) gives the known rust-num/num-integer#55.
   - Milestone 288: strsim's `sorensen_dice` divides by byte lengths. httparse's
     `parse_chunk_size` accepts `\r\n` as size 0. num-traits' `abs_sub` panics in a debug build.
+  - Inside the VM with `hydo fuzz --vm` (Milestones 292 and 296, on hvx and the Mac engine), a
+    save by rename without a sync lost its text at every power cut. redb's commits held.
+  - A fault inside one call (Milestone 296): a planted wait whose deadline reads `SystemTime`
+    broke under a forward clock step drawn 5 ms after the call's start. A planted count that
+    waits for its worker with a timeout broke under a pause drawn 2 ms after it. rs-snowflake 0.6.0's
+    `real_time_generate` gave a smaller id after a backward step of 30 s. Each twin held, and
+    so did crossbeam-channel's `recv_timeout`.
 - **What it misses.** Trait methods, types that hold pointers, and enumeration results are
-  refused or not read (Milestone 289). None of the candidates was posted.
-- **Cost.** 1 to 15 s per build and run, with no VM.
+  refused or not read (Milestone 289). None of the candidates was posted. Inside the VM, one
+  call per run gets a fault inside it, so a function of time or threads needs `--fn` and
+  `--faults`.
+- **Cost.** 1 to 15 s per build and run, with no VM. Inside the VM, 76 to 251 s for 16 to 24
+  runs.
 
 ## Measured without a gain
 

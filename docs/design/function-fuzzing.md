@@ -225,9 +225,10 @@ twice, and the replay of an input.
 
 ## Inside the virtual machine
 
-Status: a prototype since Milestone 292 (tentative number), run on hvx. The code is the module
-`fuzz::vm` of `hydo-contracts`, and the command is `hydo fuzz --vm`. `hydo guide fuzz` is the
-user's reference.
+Status: a prototype since Milestone 292 (tentative number), run on hvx, and on the Mac engine
+since Milestone 296 (tentative number). Milestone 296 also puts faults inside a call. The code is
+the module `fuzz::vm` of `hydo-contracts`, and the command is `hydo fuzz --vm`. `hydo guide fuzz`
+is the user's reference.
 
 A function that writes files, syncs them, or reads the clock gives other results under faults.
 `hydo fuzz --vm` makes the calls inside hydo's VM, where a power cut, a disk error, a clock step
@@ -251,10 +252,15 @@ the judge of `ensures` are the native ones. Only the place of the calls changes.
    `hydo build` makes the image, which holds the program and the inputs.
 3. **The schedules.** `hydo run` runs the image under each schedule. The first has no fault, and
    the others draw one kind each, in turn:
-   - a power cut: `disk=cut` with `C=<step>`, or with `cf=<k>` at the disk's k-th flush on hvx;
+   - a power cut: `disk=cut` with `C=<step>`, with `cf=<k>` at the disk's k-th flush on hvx, or
+     inside a call;
    - disk errors: `disk=ioerr:<p>`, half of them with a `C=`;
-   - a clock step: `T=<step>:<seconds>`;
-   - a pause of the calls: `P=workload@<step>~<ms>:<ms>`.
+   - a clock step: `T=<step>:<seconds>`, or inside a call;
+   - a pause: `P=workload@<step>~<ms>:<ms>`, or of the call's process or a thread it started,
+     inside a call;
+   - a kill of the call's process, inside a call.
+
+   The next section says how a fault comes inside a call.
 
    `--schedule S` names the schedules instead.
 4. **The answers.** A call's answer is an id `<step>.<call>=<answer>` in `$HYDO_ACKED`. The run
@@ -264,6 +270,62 @@ the judge of `ensures` are the native ones. Only the place of the calls changes.
    same, at most 32 KiB of them per boot. The reason is that a recovery boot on hvx with about
    90 KiB of carried ids did not start ("What is left").
 5. **The judgment.** The host decodes each answer and judges it with the function's `ensures`.
+
+### Faults inside a call
+
+Milestone 292's clock steps and pauses came between workload steps, and a call ends inside its
+step, so they never met a call. Its evaluation found that they tested nothing. A function that
+measures a timeout or a lease with the wall clock, or waits for a thread it started, fails only
+when the fault comes while it runs. Milestone 296 places such faults with hydo's reactions
+(`A=`, Milestone 139), whose delay counts from an event that the guest reports:
+
+1. The schedule names one call with the knob `E=<step>.<call>`. The project's manifest declares
+   the knob, and its `set` command writes the value to `/tmp/fz.event` in the guest.
+2. `run.sh` gives that call `HYDO_FUZZ_EVENT=1` and starts it as `/tmp/fuzz-call`, a link to the
+   harness. Right before the call, the harness writes the name `hydo-call` to its thread's
+   `/proc/thread-self/comm` and the record `HYDO-ASSERT {"t":"reachable","id":"fuzz.call",...}`
+   to the console. The threads that the function starts inherit the name.
+3. `A=fuzz.call+<ms>:<action>` acts `ms` milliseconds of guest time after the controller sees
+   the record. Milestone 296 adds four actions to the reactions (`hydo_schedule::ReactAction`):
+   - `clock+<s>` and `clock-<s>`: the clock step of `T=`, at that moment;
+   - `stop-workload-<ms>`: a stop and a continue of the workload's tree with signals, as
+     `stop-<svc>-<ms>` does for a service;
+   - `stop-workload/<thread>[#<k>]-<ms>`: the cgroup freezer of `P=workload/<thread>`
+     (Milestone 226), for the threads of that name;
+   - `kill-workload/<name>[#<k>]`: a kill of the workload's processes of that name with
+     `SIGKILL`, while the workload goes on.
+
+   `cut` was there before.
+
+The drawn actions are `cut`, a clock step, `stop-workload-<ms>`,
+`stop-workload/hydo-call#2-<ms>` (the first thread that the function starts), and
+`kill-workload/fuzz-call`. Only the named call reports its start, so the console gets one record
+per run. On hvx a VM's console keeps 64 KiB, and a record per call would fill it. A kill that
+comes after the call's end meets no other call, because only the named call runs as `fuzz-call`.
+hydo does not judge the `ensures` lines of a killed call, and its durability check runs with
+`None`.
+
+The schedules hold the whole fault, so the shrink keeps it. `one_step_schedule` turns `E=` into
+`E=0.0` for the input alone. A fault inside a call meets one call per run, so each smaller input
+gets a run of its own on its chunk's image, with `E=0.<k>` naming it. A failure under a timed
+fault of the whole run often passes alone. The shrink then tries the next two schedules under
+which the call failed.
+
+The reaction's delay is in guest time, but the controller sees the record only at its next stop.
+A probe on hvx measured when a clock step reached a call that slept 1 ms at a time. With no delay
+it came 1 ms after the call's start, with 20 ms 32 ms after it, and with 100 ms 113 ms after it.
+The same in a busy loop gave 5, 29, and 109 ms.
+
+Two scripts of the controller had to change for faults this early in a call:
+
+- busybox's `timeout` leaves a watcher process that leads a session of its own and has the
+  workload's environment. Milestone 226's freeze takes the first leader with `HYDO_FROM` in the
+  order of `/proc`'s names. In a shrink run it took a watcher, found only `timeout`, and stopped
+  nothing. The reaction's freeze and kill take the leader whose session has the most processes.
+  The timer's freeze keeps its script, so that its runs send the same commands.
+- A thread that ends between the freeze's listing and its move ended the Mac run in
+  `ERROR P=workload/hydo-call#2: unexpected output "sh: write error: No such process"`. The
+  reaction's freeze leaves such a thread out. The timer's freeze keeps the error (open item 80).
 
 ### The second phase: `durable`
 
@@ -347,6 +409,47 @@ the crates. Each one is a lesson for a user:
 - `check.sh` compared the ids `0.1` and `0.10` with awk as numbers, which are equal. Nine
   checks got another call's result. hydo's script compares them as text now.
 
+### Proof of the faults inside a call, and of the Mac engine
+
+Milestone 296 added four functions to the example, two with planted bugs and two twins, and two
+functions that call crates from crates.io:
+
+- `wait_reply_is_honest` waits for a worker's answer with a deadline read from `SystemTime`.
+  Its twin `wait_reply_monotonic_is_honest` reads `Instant`. Both promise that an answer is the
+  worker's, and that "timed out" comes only after the timeout passed on the monotonic clock.
+- `count_twice` counts on a worker and on the caller under one lock, and waits 500 ms for the
+  worker's "done" instead of joining it. Its twin `count_twice_joined` joins. Both promise a
+  total of `2 * n`.
+- `crossbeam_recv_is_honest` makes the same promise for crossbeam-channel 0.5.17's
+  `recv_timeout`.
+- `snowflake_ids_increase` promises that rs-snowflake 0.6.0's `real_time_generate` gives
+  increasing ids, made 2 ms apart by one generator.
+
+Natively all six held. With 40 inputs per function and seed 1 (the schedules are the same on
+both engines):
+
+| Functions, `--faults`, schedules | hvx | the Mac engine |
+|---|---|---|
+| the waits, `clock`, 16 | `SystemTime`: broken on 2 calls in 2 runs, first under `E=0.7 A=fuzz.call+5:clock+86400`; shrunk to `work_ms = 20, slack_ms = 200`. `Instant`: held on 640 calls | the same: broken on 2 calls in 2 runs, shrunk to `work_ms = 20, slack_ms = 200`. `Instant`: held on 640 calls |
+| the counts, `pause`, 16 | `count_twice`: broken on 6 calls in 6 runs; shrunk under `E=1.19 A=fuzz.call+2:stop-workload-3000` to `n = 3`. `count_twice_joined`: held on 640 calls | `count_twice`: broken on 5 calls in 5 runs; shrunk under the same schedule to `n = 1`. `count_twice_joined`: held on 640 calls |
+| the crates, `clock,pause`, 24 | rs-snowflake: broken on 1 call, under `E=3.15 A=fuzz.call+20:clock-30`; shrunk to `n = 12`. crossbeam-channel: held on 960 calls | rs-snowflake: broken on 2 calls in 2 runs, first under the same schedule; shrunk to `n = 12`. crossbeam-channel: held on 960 calls |
+
+Each shrunk finding's replay gave its fingerprint again. rs-snowflake's id went back with the
+clock: its code has a comment for a clock that moves backwards and no check for one. It is a
+candidate, not posted.
+
+On the Mac engine, M292's three functions gave M292's results. 200 inputs per function, 24
+schedules per seed:
+
+| Function | Seed 1 | Seed 2 |
+|---|---|---|
+| `commit_all` | held: 4,576 checks, 1,376 of them after a power cut | held: 4,800 checks, 1,400 of them after a power cut |
+| `save` | broken on 373 calls in 3 runs, first under `disk=cut \| run C=14`; shrunk to `text = ""` | broken on 925 calls in 5 runs, first under `disk=cut \| run C=14`; shrunk to `text = ""` |
+| `save_synced` | held: 3,300 checks, 100 of them after a power cut | held: 3,759 checks, 359 of them after a power cut |
+
+The replays of `save`'s smallest input gave their fingerprints again (`a373bb16002967d6`, and
+`ba19400d6860bca7`). A seed took 251 and 239 s.
+
 ### The evaluation: would a Rust developer keep it
 
 The question was whether a developer would keep `hydo fuzz --vm` after the first runs, and for
@@ -376,33 +479,36 @@ Neither is new. Native fuzzing can find neither: its runs have no power cut.
    shrink's note that the input passed alone, told them apart.
 4. Disk errors made the file system read-only at the first error, so each later call of that
    run met the same error path. They tested how a function reports an error, and little else.
-5. Clock steps and pauses come between steps, never inside a call. No function of the example
-   read the clock, so they tested nothing here.
+5. Clock steps and pauses came between steps, never inside a call. No function of the example
+   read the clock, so they tested nothing here. Milestone 296 puts them inside a call.
 6. On hvx a long answer, such as an error message with a path, is not read past 32 KiB per
    boot. 212 of 600 answers of a run with disk errors were not read.
 
 **The verdict.** Keep it for one job: a function that writes files and promises durability or
 atomicity, such as a save routine, a log, or a commit to an embedded store. It finds the missing
-sync that native fuzzing cannot find, and each finding comes with a small input and a replay. It is not yet worth it for
-time or concurrency: faults meet a call only at power cuts and disk flushes, and each call is
-one process on one vCPU.
+sync that native fuzzing cannot find, and each finding comes with a small input and a replay.
+
+After Milestone 296 it is worth it for time and threads too, with `--fn` and `--faults`. The
+planted wall-clock deadline and the missing wait broke within 16 schedules on both engines. Their
+twins held. It found a crate's ids that go back with the clock. A blind run over all of a
+crate's functions gives each function few faults inside its calls, because one call per run
+gets one.
 
 ### What is left
 
 The run with faults is a prototype (open item 139):
 
-- It ran on hvx only. The Mac engine and KVM did not run it.
-- A kill has no target, because the calls are the workload. A clock step or a pause meets a
-  call only between steps. Threads and several vCPUs were not tried.
-- A schedule with `cf=` is not shrunk, and a failure whose input passes alone is not shrunk.
+- It ran on hvx and on the Mac engine (Milestone 296). KVM did not run it.
+- A fault inside a call comes 1 to 13 ms after its drawn delay, at the controller's next stop.
+  One call per run gets it. Several vCPUs were not tried.
+- A schedule with `cf=` is not shrunk, and a failure whose input passes alone under its first
+  three schedules is not shrunk.
 - The answers' channels are small on hvx: 64 KiB of console per VM, and a recovery boot with
   about 90 KiB of carried ids hung with `HVX_HC_PUT: No space left on device` (open item
   120). Long answers are dropped past 32 KiB per boot, and their checks get `None`.
-- `hydo run` has no host timeout in `hydo fuzz --vm`: a run that hangs stops the fuzzing.
 - The schedules come from `hydo fuzz --vm`'s own draw, not from `hydo explore`, and their
   `cf=` values are drawn without the run's count of flushes.
-- Native `hydo fuzz` of a function that writes files writes into the current folder, every call
-  into the same one.
+- The rs-snowflake candidate is not posted.
 
 ## Limits
 

@@ -389,6 +389,64 @@ fn reactions() {
     refused("disk=none | run A=a/b:cut", "not an assertion id");
 }
 
+/// Milestone 296: the reactions that act inside a call of the workload: a clock step, a stop of
+/// the workload's tree or of its threads, and a kill of its processes of a name.
+#[test]
+fn reactions_inside_the_workload() {
+    for s in [
+        "disk=none | run E=3.7 A=fuzz.call+20:clock-300",
+        "disk=none | run A=fuzz.call:clock+86400",
+        "disk=none | run A=fuzz.call+5:stop-workload-500",
+        "disk=none | run A=fuzz.call+5:stop-workload/hydo-call#2-3000",
+        "disk=none | run A=fuzz.call+50:stop-workload/tokio-rt-*-50",
+        "disk=none | run A=fuzz.call+10:kill-workload/harness",
+        "disk=none | run A=fuzz.call:kill-workload/harness#2",
+    ] {
+        round_trip(s);
+    }
+    let one = |s: &str| match Schedule::parse(s).unwrap().guest.pop() {
+        Some(GuestToken::React(r)) => r.action,
+        t => panic!("{s}: {t:?}"),
+    };
+    assert_eq!(
+        one("disk=none | run A=x:clock-300"),
+        ReactAction::Clock(-300)
+    );
+    assert_eq!(one("disk=none | run A=x:clock+30"), ReactAction::Clock(30));
+    assert_eq!(
+        one("disk=none | run A=x:stop-workload-500"),
+        ReactAction::Stop("workload".into(), 500)
+    );
+    assert_eq!(
+        one("disk=none | run A=x:stop-workload/hydo-call#2-50"),
+        ReactAction::StopThreads(
+            ThreadSel {
+                name: "hydo-call".into(),
+                nth: Some(2)
+            },
+            50
+        )
+    );
+    assert_eq!(
+        one("disk=none | run A=x:kill-workload/harness"),
+        ReactAction::KillProcs(ThreadSel {
+            name: "harness".into(),
+            nth: None
+        })
+    );
+    assert_eq!(one("disk=none | run A=x:clock-300").svc(), None);
+    refused("disk=none | run A=x:clock300", "the action is");
+    refused("disk=none | run A=x:clock+0", "at least 1");
+    refused("disk=none | run A=x:clock-0", "not -0");
+    refused("disk=none | run A=x:clock+-3", "at least 1");
+    refused("disk=none | run A=x:stop-workload/-50", "not a thread name");
+    refused(
+        "disk=none | run A=x:stop-workload/abcdefghijklmnopq-50",
+        "first 15 bytes",
+    );
+    refused("disk=none | run A=x:kill-workload/a#0", "counted from #1");
+}
+
 /// Targets beyond one service (Milestone 195): lists, group selectors and partition shapes.
 #[test]
 fn several_services_and_partitions() {

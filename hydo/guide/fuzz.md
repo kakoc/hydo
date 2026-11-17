@@ -166,7 +166,9 @@ A function that writes files, syncs them, or reads the clock can fail only under
 - power cuts, with `disk=cut` and `C=<step>`, or `cf=<k>` at the disk's k-th flush on hvx;
 - disk errors (`disk=ioerr:<p>`);
 - clock steps (`T=<step>:<seconds>`);
-- pauses of the calls (`P=workload@<step>~<ms>:<ms>`).
+- pauses of the calls (`P=workload@<step>~<ms>:<ms>`);
+- since Milestone 296, a power cut, a clock step, a pause, or a kill inside one call (section
+  "Faults inside a call").
 
 ```sh
 hydo fuzz --vm path/to/crate
@@ -180,8 +182,9 @@ it as natively. A failure that came also under the schedule without a fault gets
 function or its check is wrong before any fault meets it.
 
 The harness's target must be installed: `rustup target add x86_64-unknown-linux-musl` for hvx
-and KVM, or `aarch64-unknown-linux-musl` for the Mac engine. Since Milestone 292 it ran on hvx;
-the Mac engine and KVM have not run it yet.
+and KVM, or `aarch64-unknown-linux-musl` for the Mac engine. It runs on hvx since Milestone 292
+and on the Mac engine since Milestone 296. KVM has not run it yet. Only hvx has `cf=`, so on the
+Mac engine a power cut comes before a step (`C=`) or inside a call.
 
 ### What survives a power cut: `durable`
 
@@ -209,6 +212,48 @@ pub fn save_survives(text: String, done: Option<Result<(), String>>) -> Option<b
 }
 ```
 
+### Faults inside a call
+
+A clock step or a pause between two workload steps never meets a call, because each call ends
+inside its step. A function that measures a timeout with the wall clock, or that waits for a
+thread it started, fails only when the fault comes while the call runs. Since Milestone 296 most
+drawn schedules put the fault inside one call:
+
+```text
+disk=none | run E=2.3 A=fuzz.call+20:stop-workload/hydo-call#2-1000
+```
+
+- `E=2.3` names call 3 of workload step 2. That call names its thread `hydo-call` and writes the
+  event `fuzz.call` to the console when it starts. The threads that the function starts inherit
+  the name.
+- `A=fuzz.call+20:<action>` is a reaction (`hydo guide faults`): 20 ms of guest time after the
+  event, hydo does the action.
+
+The actions are these:
+
+| Action | What it does to the call |
+|---|---|
+| `cut` | cuts the power |
+| `clock+<s>`, `clock-<s>` | steps the clock forward or back by `s` seconds |
+| `stop-workload-<ms>` | stops the call's process for `ms` milliseconds |
+| `stop-workload/hydo-call#2-<ms>` | stops the first thread that the function started; the caller runs on |
+| `kill-workload/fuzz-call` | kills the call's process, which runs as `fuzz-call` |
+
+A killed call has no answer, so hydo does not judge its `ensures` lines. Its durability check
+runs, with `None` for the result. The run's line says whether the fault came inside the call:
+`the fault came inside call 2.3`. The fault comes 1 to 13 ms later than the delay says. On hvx,
+a clock step drawn 20 ms after the start came 29 to 32 ms after it. One drawn 100 ms after the
+start came 109 to 113 ms after it.
+
+The shrink keeps the fault inside the call. It runs each smaller input in a run of its own, with
+`E=` naming that input's call.
+
+To test a function that depends on time or threads, name it and the kinds of fault:
+
+```sh
+hydo fuzz --vm path/to/crate --fn count_twice --faults pause
+```
+
 ### The report
 
 Each failure names the schedule it came under, the input, and what the call or the check gave.
@@ -226,10 +271,15 @@ hydo:   again: hydo run .../shrink1-2/hydo-out/explore-ob-fuzz-vm-shrink1-2-disk
 The image holds the inputs, and the schedule holds the faults, so `hydo run` of the two repeats
 the run exactly. `vm.json` in `--out DIR` (default `hydo-out/fuzz-vm`) holds the whole report.
 The options are in `hydo fuzz --vm --help`: `--schedules N` (default 12), `--schedule S` for one
-schedule, `--faults cut,disk,clock,pause`, `--cases N` (default 200) and `--batch N` (calls per
-workload step, default 25).
+schedule, `--faults cut,disk,clock,pause,kill`, `--cases N` (default 200) and `--batch N` (calls
+per workload step, default 25). `--run-timeout S` stops a `hydo run` that takes longer than `S`
+seconds on this machine, and the fuzzing goes on without its answers. The default is 600
+seconds plus 2 per call of the image.
 
 ## Long runs
+
+Natively, each call runs in an empty folder of its own, which hydo removes after the batch. A
+function that writes files therefore leaves none in the current folder.
 
 A run prints a progress line on standard error every 5 seconds. A call that does not return
 within `--timeout` (default 10 seconds) is a finding. After 3 such calls, the function's other

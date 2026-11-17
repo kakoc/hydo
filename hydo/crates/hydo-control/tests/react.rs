@@ -66,7 +66,7 @@ fn by<'a>(items: &'a [Item], who: &str) -> Vec<&'a Item> {
     items.iter().filter(|i| i.by() == Some(who)).collect()
 }
 
-const SCHEDULES: [&str; 12] = [
+const SCHEDULES: [&str; 16] = [
     "disk=none | run A=client.place_failed:kill-redis",
     "disk=none | run A=client.place_failed+200:stop-redis-500",
     "disk=none | run A=server.place_acked@4:stop-redis-300",
@@ -79,6 +79,11 @@ const SCHEDULES: [&str; 12] = [
     "disk=none | run A=order.broken:kill-redis",
     "disk=none | run A=no.such.event:cut K=redis@5+2",
     "disk=none | run A=client.place_failed:kill-nosuch",
+    // Milestone 296: actions inside the workload's own work
+    "disk=none | run A=client.place_failed+20:clock-300",
+    "disk=none | run A=client.place_failed:stop-workload-500",
+    "disk=none | run A=client.place_failed+5:stop-workload/hydo-call#2-50",
+    "disk=none | run A=client.place_failed:kill-workload/harness",
 ];
 
 #[test]
@@ -178,6 +183,22 @@ fn a_reaction_acts_where_its_event_is_seen_and_replays() {
                         }
                         ReactAction::Cont(v) => {
                             assert!(sig(it.next().unwrap(), v, Sig::Cont), "{text}")
+                        }
+                        // Milestone 296: the clock is read, then set
+                        ReactAction::Clock(_) => {
+                            assert!(matches!(it.next().unwrap(), Command::ClockGet(_)), "{text}")
+                        }
+                        // the freezer's script, or the kill's, named by its $0
+                        ReactAction::StopThreads(..) | ReactAction::KillProcs(_) => {
+                            let want = if matches!(r.action, ReactAction::KillProcs(_)) {
+                                "hydo-kill"
+                            } else {
+                                "hydo-pause"
+                            };
+                            assert!(
+                                matches!(it.next().unwrap(), Command::Run(x) if x.argv.get(4).is_some_and(|a| a == want)),
+                                "{text}"
+                            )
                         }
                         ReactAction::Cut => {
                             // the main sequence freezes the workload and every service at once

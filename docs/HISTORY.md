@@ -15467,3 +15467,150 @@ test checks the notes. `hydo-results`' examples test reads the new example. The 
 re-recorded for the main help's new lines and the changed `hydo guide manifest`.
 
 **What is left.** Open item 149.
+
+
+## Milestone 296 (tentative number): faults inside a call, and `hydo fuzz --vm` on the Mac engine
+
+Milestone 292's evaluation named two gaps of `hydo fuzz --vm`. Its clock steps and pauses came
+between workload steps, and a call ends inside its step, so they never met a call. Code that
+depends on time or on threads could not be tested. And it ran on hvx only. This milestone puts a
+fault inside one call with hydo's reactions, and runs the whole tool on the Mac engine. The
+design is the section "Faults inside a call" of `docs/design/function-fuzzing.md`, and the
+user's reference is the section of the same name in `hydo guide fuzz`.
+
+**What a user writes.** Nothing new. A function of time or threads gets the same contract, and
+the command names it and the kinds of fault:
+
+```sh
+hydo fuzz --vm path/to/crate --fn count_twice --faults pause
+```
+
+**How a fault comes inside a call.**
+
+- The schedule names one call with a knob, `E=<step>.<call>`. The project's manifest declares
+  the knob `E`, whose `set` command writes the value to `/tmp/fz.event` in the guest.
+- `run.sh` starts that call as `/tmp/fuzz-call`, a link to the harness, with
+  `HYDO_FUZZ_EVENT=1`. Right before the call the harness names its thread `hydo-call`
+  (`/proc/thread-self/comm`) and writes the record `HYDO-ASSERT {"t":"reachable",
+  "id":"fuzz.call",...}` to the console. The threads that the function starts inherit the name.
+- The reaction `A=fuzz.call+<ms>:<action>` (Milestone 139) acts `ms` milliseconds of guest
+  time after the controller sees the record. The draw takes the delay from 0, 2, 5, 10, 20, 50,
+  and 100 ms.
+- The reactions gained four actions (`hydo_schedule::ReactAction`, the controller's
+  `features/react.rs`):
+  - `clock+<s>` and `clock-<s>`: the clock step of `T=` at that moment;
+  - `stop-workload-<ms>`: SIGSTOP and SIGCONT of the workload's tree;
+  - `stop-workload/<thread>[#<k>]-<ms>`: the cgroup freezer of Milestone 226, for the threads
+    of that name;
+  - `kill-workload/<name>[#<k>]`: SIGKILL of the workload's processes of that name, while the
+    workload goes on.
+- The draw puts the fault inside a call in two of three clock and pause schedules, in one of
+  three power cuts, and in every kill (the new kind `kill`). The thread pause names the first
+  thread that the function starts (`hydo-call#2`). The kill names `fuzz-call`, so a kill after
+  the call's end meets no other call. hydo does not judge a killed call's `ensures`, and its
+  durability check runs with `None`.
+- The shrink keeps the fault. `one_step_schedule` turns `E=` into `E=0.0`, and each smaller
+  input gets a run of its own with `E=0.<k>` naming it. A failure whose input passes alone
+  under its first schedule is shrunk under the next two schedules under which it failed.
+
+Only the named call writes the record, so a run's console gets one. On hvx a VM's console keeps
+64 KiB, and a record per call would fill it.
+
+**Two fixes to the controller's scripts, for the reactions only.** busybox's `timeout` leaves a
+watcher that leads a session of its own and carries `HYDO_FROM`. The freeze of Milestone 226
+takes the first such leader in the order of `/proc`'s names. In one shrink run on hvx it took a
+watcher, saw only the thread `timeout`, and stopped nothing. The reaction's freeze and kill take
+the leader whose session has the most processes. On the Mac a thread that ended between the
+freeze's listing and its move ended a run in `ERROR P=workload/hydo-call#2: unexpected output
+"sh: write error: No such process"`. The reaction's freeze leaves such a thread out. The timer's
+freeze keeps its script, so that every recorded pause of threads sends the commands it sent
+before (open item 80).
+
+**When the fault comes.** The controller sees the record at its next stop, so the fault comes
+later than its delay. A probe on hvx stepped the clock inside a call that read the clock every
+millisecond:
+
+| Delay drawn | A call that sleeps 1 ms at a time | A call in a busy loop |
+|---|---|---|
+| 0 ms | 1 ms after the start | not seen in 500 ms; 5 ms in the run of the input alone |
+| 20 ms | 32 ms | 29 ms |
+| 100 ms | 113 ms | 109 ms |
+
+**The planted bugs and their twins.** The fuzz-vm example gained four functions and two of
+crates.io. Natively, all six held on 100 inputs each.
+
+- `wait_reply_is_honest` waits for a worker's answer with a deadline on `SystemTime`, and its
+  twin `wait_reply_monotonic_is_honest` on `Instant`. The promise: an answer is the worker's,
+  and "timed out" comes only after the timeout passed on the monotonic clock.
+- `count_twice` counts on a worker and on the caller under one lock, and waits for the worker's
+  "done" with a timeout of 500 ms. The worker needs 10 ms per count. Its twin
+  `count_twice_joined` joins the worker. The promise: the total is `2 * n`.
+- `crossbeam_recv_is_honest`: crossbeam-channel 0.5.17's `recv_timeout`, with the same promise
+  as the waits.
+- `snowflake_ids_increase`: `n` ids of rs-snowflake 0.6.0's `real_time_generate`, made 2 ms
+  apart by one generator, are in increasing order. The generator reads `SystemTime`.
+
+**Evidence: faults inside a call.** 40 inputs per function, 20 calls per workload step, seed 1.
+The seed gives the same schedules on both engines.
+
+| Functions, `--faults`, schedules | hvx | the Mac engine |
+|---|---|---|
+| the waits, `clock`, 16 | `SystemTime`: broken on 2 calls in 2 runs, first under `E=0.7 A=fuzz.call+5:clock+86400`; shrunk to `work_ms = 20, slack_ms = 200`. `Instant`: held on 640 calls | the same: broken on 2 calls in 2 runs, shrunk to `work_ms = 20, slack_ms = 200`. `Instant`: held on 640 calls |
+| the counts, `pause`, 16 | `count_twice`: broken on 6 calls in 6 runs; shrunk under `E=1.19 A=fuzz.call+2:stop-workload-3000` to `n = 3`. `count_twice_joined`: held on 640 calls | `count_twice`: broken on 5 calls in 5 runs; shrunk under the same schedule to `n = 1`. `count_twice_joined`: held on 640 calls |
+| the crates, `clock,pause`, 24 | rs-snowflake: broken on 1 call, under `E=3.15 A=fuzz.call+20:clock-30`; shrunk to `n = 12`. crossbeam-channel: held on 960 calls | rs-snowflake: broken on 2 calls in 2 runs, first under the same schedule; shrunk to `n = 12`. crossbeam-channel: held on 960 calls |
+
+Every shrunk finding's replay gave its fingerprint again. On hvx these were `2a2350666cadc6b6`,
+`6f8a8ed8a7657033`, and `c80eeeb9ad130c04`. On the Mac engine they were `8294279ee2bb5a27`,
+`a377ee6167670f11`, and `654b05c7c46bccf4`. The Mac's values come from before Milestone 294's tree hash of
+the guest's RAM, which moves every Mac fingerprint. The first failure of `count_twice` came under a
+timed pause of the whole run, `P=workload@0~291:500`. Its input passed alone under that
+schedule, so the shrink took the next schedule. The runs took 128, 196 and 193 s on hvx.
+
+rs-snowflake's ids went back with the clock: the crate's comment names "clock is moving
+backwards situation", and the code keeps no last value to compare with. It is a candidate. It is
+not reported upstream and not posted.
+
+**Evidence: the Mac engine.** `hydo fuzz --vm` needed no change of its build for the Mac. The
+harness is built for `aarch64-unknown-linux-musl` with `rust-lld`, and `hydo build` writes an
+`-arm64.cpio.gz` image. The draw now gives `cf=` only to hvx. M292's example, 200 inputs per
+function (600 calls in 24 steps), 24 schedules per seed, `--data-mib 64`:
+
+| Function | Seed 1 | Seed 2 |
+|---|---|---|
+| `commit_all` | held: 4,576 checks, 1,376 of them after a power cut | held: 4,800 checks, 1,400 of them after a power cut |
+| `save` | broken on 373 calls in 3 runs, first under `disk=cut \| run C=14`; shrunk to `text = ""` | broken on 925 calls in 5 runs, first under `disk=cut \| run C=14`; shrunk to `text = ""` |
+| `save_synced` | held: 3,300 checks, 100 of them after a power cut | held: 3,759 checks, 359 of them after a power cut |
+
+The replays of `save`'s smallest input gave their fingerprints again (`a373bb16002967d6` and
+`ba19400d6860bca7`). A seed took 251 and 239 s, against 452 s on hvx in Milestone 292. On the
+Mac a cut inside a call comes from a reaction, not from `cf=`. Seed 1 killed four calls inside
+the call: two commits, a save, and a synced save.
+
+**Two frictions of the 0.4.0 user trial (Milestone 297).** `hydo fuzz --vm --help` printed the
+native help; it prints the VM's options now. A run's line printed the verdict with an empty part,
+`HYDO-ORACLE: OK invariants=1 held (fuzz.checks: )`; the empty part is left out.
+
+**The two small items of open item 139.**
+
+- `--run-timeout S` stops a `hydo run` that takes longer than `S` seconds on the host. hydo
+  kills its process group, notes the run as `TIMEOUT on this machine`, and goes on. The default
+  is 600 seconds plus 2 per call of the image.
+- Native `hydo fuzz` runs each call in an empty folder of its own (`HYDO_FUZZ_DIRS/<k>`) and
+  removes the folders after the batch. A save of the example no longer leaves `saved.txt` in
+  the current folder.
+
+**Tests.** `fuzz::vm`'s unit tests check the draw of faults inside a call, `in_call`,
+`with_call`, and `E=` in `one_step_schedule`. `language::reactions_inside_the_workload` checks
+the new actions, and `react::a_reaction_acts_where_its_event_is_seen_and_replays` runs four of
+them on the scripted engine. `threads::the_reaction_finds_the_largest_session` checks that the
+reaction's freeze differs from the timer's only in the two places. Nothing recorded moved: a
+schedule without the new actions sends the commands it sent before.
+
+**Left.** Open item 139 lists these parts:
+
+- The fault comes 1 to 13 ms after its delay, so a window of one millisecond is reached by chance.
+- One call per run gets a fault inside it. A function of time or threads needs `--fn` and
+  `--faults`.
+- KVM and several vCPUs were not tried.
+- The rs-snowflake candidate is not posted.
+- The timer's freeze of `P=workload/<thread>` keeps both script problems (open item 80).

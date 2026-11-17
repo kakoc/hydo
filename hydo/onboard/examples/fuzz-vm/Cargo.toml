@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
 publish = false
-description = "Function fuzzing inside hydo's virtual machine (Milestone 292): redb's commits and a file saved by rename, under power cuts, disk errors, clock steps and pauses"
+description = "Function fuzzing inside hydo's virtual machine (Milestones 292 and 296): redb's commits and a file saved by rename under power cuts and disk errors, and waits and threads under faults inside a call"
 
 # its own workspace (not part of the repository root's hydo crate)
 [workspace]
@@ -12,3 +12,5 @@ description = "Function fuzzing inside hydo's virtual machine (Milestone 292): r
 [dependencies]
 redb = "=4.6.0"
 tempfile = "=3.27.0"
+crossbeam-channel = "=0.5.17"
+rs-snowflake = "=0.6.0"

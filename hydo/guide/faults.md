@@ -434,6 +434,15 @@ use reactions: write `A=<event>:kill-<svc>`. `<event>` is the id of an assertion
 system writes to the console (`hydo guide manifest`, section `Reactions`).
 `hydo explore --reactive fault --react-events <id>` draws them.
 
+A reaction can also act inside the workload's own work (Milestone 296):
+
+- `clock+<s>` or `clock-<s>` steps the clock by `s` seconds at that moment.
+- `stop-workload-<ms>` stops the workload's process tree for `ms` milliseconds.
+- `stop-workload/<thread>[#<k>]-<ms>` freezes only the workload's threads of that name.
+- `kill-workload/<name>[#<k>]` kills the workload's processes of that name, and the rest goes on.
+
+`hydo fuzz --vm` uses them to put a fault inside one call of a function (`hydo guide fuzz`).
+
 ## Reach every route in every step
 
 A retry bug at an outside service often needs one route faulted in one step. For example, a

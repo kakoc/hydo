@@ -12,6 +12,14 @@
 //! - `stop-<svc>-<ms>`: SIGSTOP the tree, sleep, SIGCONT (the pause timer's shape);
 //! - `cont-<svc>`: SIGCONT the tree: a `P=` pause healed at the reaction point (heal on no
 //!   progress) instead of at its step; the step's own SIGCONT later is a no-op;
+//! - `stop-workload-<ms>` (Milestone 296): the same stop of the workload's own process tree;
+//! - `clock+<s>`, `clock-<s>` (Milestone 296): step the realtime clock as `T=` does, at the
+//!   reaction point instead of before a step, so that the step meets whatever the guest is
+//!   doing then (a call of `hydo fuzz --vm`, which reports its start as an event);
+//! - `stop-workload/<thread>[#<k>]-<ms>` (Milestone 296): freeze the workload's threads of that
+//!   name, as `P=workload/<thread>@...` does (schedule/threads.rs), the others running on;
+//! - `kill-workload/<name>[#<k>]` (Milestone 296): SIGKILL the workload's processes of that
+//!   name; the workload's other processes go on;
 //! - `cut`: a power cut. The reaction only marks it; the main sequence, which waits for the
 //!   workload's exit *or* the mark (see [`workload`]), leaves the step loop and takes the power
 //!   cut's path: the workload's client and every service are frozen at once, then the ids are
@@ -29,7 +37,8 @@
 //! byte for byte.
 
 use super::{
-    bb, env, log, run, secs, spawn_cmd, svc_sig, timeout_argv, xassert, Ctx, Memo, Step, F,
+    bb, clock, env, log, run, secs, spawn_cmd, svc_sig, threads, timeout_argv, xassert, Ctx, Memo,
+    Step, F,
 };
 use hydo_agent_proto::msg::Sig;
 use hydo_schedule::{React, ReactAction};
@@ -72,7 +81,9 @@ pub(super) fn armed(fx: &mut F<'_>, ctx: &Ctx) -> Vec<(usize, React)> {
     let mut out = Vec::new();
     for (i, r) in ctx.run.a.iter().enumerate() {
         if let Some(s) = r.action.svc() {
-            if ctx.plan.service(s).is_none() {
+            // Milestone 296: `stop-workload-<ms>` stops the workload's own tree
+            let workload = s == crate::names::WORKLOAD && matches!(r.action, ReactAction::Stop(..));
+            if !workload && ctx.plan.service(s).is_none() {
                 log(fx, format!("A: no service {s}, ignored"));
                 continue;
             }
@@ -204,6 +215,15 @@ pub(super) fn watch(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<()> {
         ReactAction::Cont(s) => {
             svc_sig(fx, s, Sig::Cont)?;
             log(fx, format!("RESUMED {s} (reaction A={r})"));
+        }
+        ReactAction::Clock(d) => {
+            clock::clock_jump_at(fx, &format!("at the reaction A={r}"), *d)?;
+        }
+        ReactAction::StopThreads(t, ms) => {
+            threads::pause_threads_now(fx, ctx, t, *ms, &format!("reaction A={r}"))?;
+        }
+        ReactAction::KillProcs(t) => {
+            threads::kill_procs_now(fx, ctx, t, &format!("reaction A={r}"))?;
         }
     }
     xassert(fx, REACT_DECL.0, REACT_DECL.1, REACT_DECL.2);

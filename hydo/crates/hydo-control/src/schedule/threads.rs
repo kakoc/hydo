@@ -77,6 +77,51 @@ $m
 EOF
 "#;
 
+/// Milestone 296: how [`FREEZE`] finds the workload's session, and how a reaction's freeze and
+/// kill find it. busybox's `timeout` leaves a watcher process that leads a session of its own
+/// (busybox daemonizes it) and has the workload's environment, `HYDO_FROM` too. The first loop
+/// takes the first such leader in the order of `/proc`'s names, which can be a watcher of a
+/// command inside the workload (`timeout <s> <program>`). The second takes the leader whose
+/// session has the most processes: the workload's. [`FREEZE`] keeps the first, so that every
+/// timed pause of threads sends the commands it sent before.
+const SESSION_FIRST: &str = r#"r=
+for d in /proc/[0-9]*; do
+  read -r s 2>/dev/null <$d/stat || continue
+  s=${s##*) }; set -- $s
+  [ "$2" = 1 ] && [ "$4" = "${d#/proc/}" ] || continue
+  $B grep -q -a -e HYDO_FROM= $d/environ 2>/dev/null && { r=$4; break; }
+done
+"#;
+const SESSION_LARGEST: &str = r#"all=$(for d in /proc/[0-9]*; do
+  read -r s 2>/dev/null <$d/stat || continue
+  s=${s##*) }; set -- $s
+  echo "${d#/proc/} $2 $4"
+done)
+r=$(echo "$all" | while read -r p q i; do
+  [ "$q" = 1 ] && [ "$i" = "$p" ] || continue
+  $B grep -q -a -e HYDO_FROM= /proc/$p/environ 2>/dev/null || continue
+  echo "$(echo "$all" | $B awk -v i=$p '$3 == i' | $B wc -l) $p"
+done | $B sort -n | $B tail -n 1)
+r=${r#* }
+"#;
+
+/// How [`FREEZE`] moves a thread into the cgroup: a thread that ended after the listing is an
+/// error (open item 80).
+const MOVE_STRICT: &str = r#"  echo $t >$D/cgroup.threads || { echo "E the kernel refused to move the thread $t ($c) into $D"; exit 1; }"#;
+/// How a reaction's freeze moves it: a thread that ended meanwhile is left out (Milestone 296).
+/// A reaction acts a few milliseconds after a call's start, when the threads that the call
+/// starts and ends come and go.
+const MOVE_ENDED_OK: &str = r#"  echo $t 2>/dev/null >$D/cgroup.threads || { [ -d /proc/$t ] || continue; echo "E the kernel refused to move the thread $t ($c) into $D"; exit 1; }"#;
+
+/// [`FREEZE`] with the session found as [`SESSION_LARGEST`] finds it, and with a thread that
+/// ended before its move left out, for a reaction's freeze.
+fn freeze_now() -> String {
+    debug_assert!(FREEZE.contains(SESSION_FIRST) && FREEZE.contains(MOVE_STRICT));
+    FREEZE
+        .replacen(SESSION_FIRST, SESSION_LARGEST, 1)
+        .replacen(MOVE_STRICT, MOVE_ENDED_OK, 1)
+}
+
 /// Step 4 as a `busybox sh -c` script; its arguments are pairs of a cgroup dir and a thread id
 /// from [`FREEZE`]'s `T` lines. A thread that exited meanwhile cannot be moved back, which is
 /// not an error.
@@ -170,12 +215,37 @@ pub(super) fn pause_threads(
         e.clone(),
         None,
     )?;
+    freeze_for(fx, ctx, sel, dur, "timer", FREEZE)
+}
+
+/// A reaction's pause of threads (`A=...:stop-workload/<sel>-<ms>`, Milestone 296): the
+/// timer's steps 2 to 4, at once; `by` names the reaction in the log lines.
+pub(super) fn pause_threads_now(
+    fx: &mut F<'_>,
+    ctx: &Ctx,
+    sel: &ThreadSel,
+    dur: u64,
+    by: &str,
+) -> Step<()> {
+    freeze_for(fx, ctx, sel, dur, by, &freeze_now())
+}
+
+/// Steps 2 to 4 of the pause: freeze the threads `sel` names, sleep `dur` ms, thaw them.
+fn freeze_for(
+    fx: &mut F<'_>,
+    ctx: &Ctx,
+    sel: &ThreadSel,
+    dur: u64,
+    by: &str,
+    script: &str,
+) -> Step<()> {
+    let e = env(fx, ctx, &[]);
     let what = format!("workload/{sel}");
     let argv = vec![
         bb(ctx),
         "sh".into(),
         "-c".into(),
-        FREEZE.into(),
+        script.into(),
         "hydo-pause".into(),
         bb(ctx),
         sel.name.clone(),
@@ -198,7 +268,7 @@ pub(super) fn pause_threads(
             log(
                 fx,
                 format!(
-                    "PAUSED nothing: no thread of the workload matches {what} (timer; its \
+                    "PAUSED nothing: no thread of the workload matches {what} ({by}; its \
                      threads: {})",
                     seen.join(", ")
                 ),
@@ -208,7 +278,7 @@ pub(super) fn pause_threads(
         Frozen::NoWorkload => {
             log(
                 fx,
-                format!("PAUSED nothing: the workload was not running for {what} (timer)"),
+                format!("PAUSED nothing: the workload was not running for {what} ({by})"),
             );
             return Ok(());
         }
@@ -222,7 +292,7 @@ pub(super) fn pause_threads(
         .collect();
     log(
         fx,
-        format!("PAUSED {what} (timer, threads {})", list.join(", ")),
+        format!("PAUSED {what} ({by}, threads {})", list.join(", ")),
     );
     xassert(
         fx,
@@ -262,13 +332,102 @@ pub(super) fn pause_threads(
             ),
         );
     }
-    log(fx, format!("RESUMED {what} (timer)"));
+    log(fx, format!("RESUMED {what} ({by})"));
+    Ok(())
+}
+
+/// `kill-workload/<sel>` as a `busybox sh -c` script (Milestone 296). Its arguments are
+/// busybox's path, the name pattern, and the index (empty for every matching process). It finds
+/// the workload's session as [`SESSION_LARGEST`] does, SIGKILLs its processes whose name
+/// (`/proc/<pid>/comm`) matches, in the order of their process ids, and prints `K <pid> <name>`
+/// for each; when none matches, `N <count> <name>` for each name of the workload's processes, and
+/// `W` when the workload is not running.
+pub(super) const KILL: &str = r#"B=$1 P=$2 K=$3
+all=$(for d in /proc/[0-9]*; do
+  read -r s 2>/dev/null <$d/stat || continue
+  s=${s##*) }; set -- $s
+  echo "${d#/proc/} $2 $4"
+done)
+r=$(echo "$all" | while read -r p q i; do
+  [ "$q" = 1 ] && [ "$i" = "$p" ] || continue
+  $B grep -q -a -e HYDO_FROM= /proc/$p/environ 2>/dev/null || continue
+  echo "$(echo "$all" | $B awk -v i=$p '$3 == i' | $B wc -l) $p"
+done | $B sort -n | $B tail -n 1)
+r=${r#* }
+[ -n "$r" ] || { echo W; exit 0; }
+a=$(for d in /proc/[0-9]*; do
+  read -r s 2>/dev/null <$d/stat || continue
+  s=${s##*) }; set -- $s
+  [ "$4" = "$r" ] || continue
+  read -r c 2>/dev/null <$d/comm && echo "${d#/proc/} $c"
+done | $B sort -n)
+m=$(echo "$a" | while read -r t c; do [ -n "$t" ] && case $c in $P) echo "$t $c";; esac; done)
+[ -z "$K" ] || m=$(echo "$m" | $B sed -n "${K}p")
+if [ -z "$m" ]; then
+  echo "$a" | while read -r t c; do [ -n "$t" ] && echo "$c"; done | $B sort | $B uniq -c |
+    while read -r n c; do echo "N $n $c"; done
+  exit 0
+fi
+echo "$m" | while read -r t c; do kill -9 $t 2>/dev/null && echo "K $t $c"; done
+exit 0
+"#;
+
+/// A reaction's kill of the workload's processes of a name (`A=...:kill-workload/<sel>`,
+/// Milestone 296). The workload's other processes go on, so the workload's step continues.
+pub(super) fn kill_procs_now(fx: &mut F<'_>, ctx: &Ctx, sel: &ThreadSel, by: &str) -> Step<()> {
+    let e = env(fx, ctx, &[]);
+    let what = format!("workload/{sel}");
+    let argv = vec![
+        bb(ctx),
+        "sh".into(),
+        "-c".into(),
+        KILL.into(),
+        "hydo-kill".into(),
+        bb(ctx),
+        sel.name.clone(),
+        sel.nth.map(|k| k.to_string()).unwrap_or_default(),
+    ];
+    let r = run(fx, argv, e, Some(CAPTURE))?;
+    let killed: Vec<&str> = r.out.lines().filter_map(|l| l.strip_prefix("K ")).collect();
+    if killed.is_empty() {
+        let seen: Vec<&str> = r.out.lines().filter_map(|l| l.strip_prefix("N ")).collect();
+        let why = if r.out.lines().any(|l| l == "W") {
+            "the workload was not running".to_string()
+        } else {
+            format!(
+                "no process of the workload matches; its processes: {}",
+                seen.join(", ")
+            )
+        };
+        log(fx, format!("KILLED nothing for {what} ({by}): {why}"));
+        return Ok(());
+    }
+    log(
+        fx,
+        format!("KILLED {what} ({by}, processes {})", killed.join(", ")),
+    );
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Milestone 296: the reaction's freeze differs from the timer's only in how it finds the
+    /// workload's session, and the kill finds it the same way.
+    #[test]
+    fn the_reaction_finds_the_largest_session() {
+        let f = freeze_now();
+        assert_ne!(f, FREEZE);
+        assert!(f.contains(SESSION_LARGEST) && !f.contains(SESSION_FIRST));
+        assert_eq!(
+            f.replacen(SESSION_LARGEST, SESSION_FIRST, 1)
+                .replacen(MOVE_ENDED_OK, MOVE_STRICT, 1),
+            FREEZE,
+            "only the session's search and the move of an ended thread change"
+        );
+        assert!(KILL.contains(SESSION_LARGEST));
+    }
 
     #[test]
     fn the_freeze_output_is_read() {

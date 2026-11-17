@@ -1224,6 +1224,18 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
                 ReactAction::Kill(s) => format!("kills {}", code(s)),
                 ReactAction::Stop(s, n) => format!("pauses {} for {}", code(s), ms(*n)),
                 ReactAction::Cont(s) => format!("lets {} continue", code(s)),
+                ReactAction::Clock(d) if *d < 0 => {
+                    format!("moves the clock back by {}", duration(d.unsigned_abs()))
+                }
+                ReactAction::Clock(d) => format!("moves the clock forward by {}", duration(d.unsigned_abs())),
+                ReactAction::StopThreads(t, n) => format!(
+                    "pauses the workload's threads {} for {}",
+                    code(&t.to_string()),
+                    ms(*n)
+                ),
+                ReactAction::KillProcs(t) => {
+                    format!("kills the workload's processes {}", code(&t.to_string()))
+                }
             };
             let from = if r.at > 0 {
                 format!(" from {} on", nth_step(r.at))
@@ -1240,6 +1252,15 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
                 ReactAction::Kill(s) => ("crashes", format!("after {} was killed", code(s))),
                 ReactAction::Stop(s, _) => ("pauses", format!("while {} was paused", code(s))),
                 ReactAction::Cont(s) => ("pauses", format!("after {} continued", code(s))),
+                ReactAction::Clock(_) => ("clock jumps", "after a clock jump".to_string()),
+                ReactAction::StopThreads(t, _) => (
+                    "pauses",
+                    format!("while the threads {} were paused", code(&t.to_string())),
+                ),
+                ReactAction::KillProcs(t) => (
+                    "crashes",
+                    format!("after the processes {} were killed", code(&t.to_string())),
+                ),
             };
             fault(
                 format!(
