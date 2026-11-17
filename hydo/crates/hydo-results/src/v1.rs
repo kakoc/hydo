@@ -947,7 +947,9 @@ pub struct TimelineEvent {
     /// fault applied or healed), `note` (the host controller's note), `report` (a line of the
     /// run's report), `assertion`, `guest` (a line the guest printed), `snapshot`, `engine`,
     /// `end` (the end of a conversation), `verdict`, `preempt` (a forced preemption point,
-    /// placed at the stop that follows it, `at` its exit count; added in Milestone 208).
+    /// placed at the stop that follows it, `at` its exit count; added in Milestone 208), `value`
+    /// (a call's entry or return with the values its `// hydo: record` lines name, `details` a
+    /// [`ValuePoint`]; added in Milestone 285).
     pub kind: String,
     pub text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -999,6 +1001,104 @@ pub struct Timeline {
     /// added in Milestone 208). Each point is also an event of the kind `preempt`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preempt: Option<PreemptSummary>,
+}
+
+tag!(ValuesType, "values");
+
+/// `hydo inspect values <run dir>`: how the values that functions' `// hydo: record` lines name
+/// changed through a run, per key (added in Milestone 285, docs/design/value-history.md).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ValueHistory {
+    pub v: V1,
+    #[serde(rename = "type")]
+    pub ty: ValuesType,
+    pub run_dir: String,
+    pub verdict: Verdict,
+    /// The record plan (`<image>.contracts.json`).
+    pub plan: String,
+    /// The functions with `record` lines, by name.
+    #[serde(default)]
+    pub functions: Vec<String>,
+    /// Calls of those functions the run recorded.
+    pub calls: u64,
+    /// Keys matching the filters (before paging).
+    pub total: u64,
+    /// Of those, the keys with a change.
+    #[serde(default)]
+    pub changed: u64,
+    /// The index of the first key shown among them.
+    pub offset: u64,
+    #[serde(default)]
+    pub keys: Vec<ValueKey>,
+    /// More keys match than are shown.
+    pub truncated: bool,
+    /// The command that shows the next page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next: Option<String>,
+}
+
+/// One key's history: every stop of a recording function whose call had this key (or a copy's
+/// key), in the run's order, and each change of a value.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ValueKey {
+    /// The key's value (`d17`); absent for the values of functions without a `key` line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// Keys that extend this one after `_`, `-`, `.`, `:`, `/` or `#` (a queue copy `d17_q`):
+    /// their stops are in this history.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub copies: Vec<String>,
+    /// The values' names, in the order first recorded.
+    #[serde(default)]
+    pub names: Vec<String>,
+    #[serde(default)]
+    pub points: Vec<ValuePoint>,
+    #[serde(default)]
+    pub changes: Vec<ValueChange>,
+}
+
+/// One stop of a recording function: a call's entry or its return.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ValuePoint {
+    pub function: String,
+    pub file: String,
+    /// The function's declaration line.
+    pub line: u32,
+    /// The call's number among the function's recorded calls (1 is the first).
+    pub call: u64,
+    /// `entry` or `return`.
+    pub when: String,
+    /// The call's own key when it is a copy's (`d17_q` in the history of `d17`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// The function that made the call, by its return address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caller: Option<String>,
+    /// `<conversation>:<stop>`: the first recorded stop at or after the call, the form `hydo
+    /// inspect start --at` takes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub point: Option<String>,
+    pub conversation: String,
+    /// The engine's clock at the stop (VM exits on the Mac and KVM engines).
+    pub at: u64,
+    /// Where the run was: `workload steps 0..29`, `after the workload`, `the recovery boot`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step: Option<String>,
+    /// The values recorded here, by name (`50.0`, `true`, `absent`, `"d17"`, `unreadable (...)`).
+    #[serde(default)]
+    pub values: std::collections::BTreeMap<String, String>,
+}
+
+/// One change of a value between two stops of a key's history.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct ValueChange {
+    pub name: String,
+    pub from: String,
+    pub to: String,
+    /// The index of the stop where the new value is seen, in the key's `points`.
+    pub point: u64,
+    /// The index of the stop with the value before.
+    pub before: u64,
 }
 
 /// What a run's forced preemption points did (`<tag>.preempt.jsonl`, written by the KVM and Mac
@@ -2510,6 +2610,8 @@ pub enum AnyV1 {
     /// The history store's ledger (`hydo ci record`; added in stage 2).
     CiFindingEvent(Box<CiFindingEvent>),
     CiLedger(Box<CiLedger>),
+    /// `hydo inspect values` (added in Milestone 285).
+    Values(Box<ValueHistory>),
 }
 
 impl Run {

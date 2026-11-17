@@ -738,6 +738,27 @@ Every harness of the six crates built. memchr's own contract found the planted b
 found num-integer#55. The verdict: kept for functions over integers, strings and lists, not yet
 for APIs of traits or of types that hold pointers.
 
+**Value history (M285, tentative number; a first version on the Mac engine).** `// hydo: key
+<expr>` and `// hydo: record <expr> [as <name>] [at entry|at return]` next to a function record
+values at every call, through the contracts' plan and breakpoints, so a run with the plan has
+the fingerprint of the run without it. `hydo inspect values <run dir> [--key K] [--changes]
+--text` shows each key's values in the run's order with each change marked. A key that extends
+another after `_` (`d17_q`) is in its history. `hydo inspect events` lists them as `value`
+events, and `hydo report --html` has a section on how the recorded values changed. The new
+readers are these:
+
+- `float64` and `float32`, which clauses now compare too;
+- strings;
+- a Go interface's dynamic value, by its runtime type descriptor;
+- a Go map's value by a constant key, in a map of at most 8 entries.
+
+Each record also names its caller from the return address. On Blnk's overdraft regression the
+history showed the limit at 50.0 in the API and absent from the saved metadata. It was 0.0 in
+the worker's coalesced copy of the two draws the rule found. The fixed build kept 50.0
+throughout. The plan left the fingerprint as it was, and its 142 breakpoint stops cost less
+than the runs' spread. The design is `docs/design/value-history.md`, the guide `hydo guide
+values` (open item 146).
+
 **Fakes from OpenAPI descriptions (M249).** `hydo fake from-openapi <spec>` writes a `fakes:`
 entry from an OpenAPI 3.0 or 3.1 description (the module `openapi` of `hydo-compose`). It writes
 one route per operation, with the spec's example or a body made from the schema, and no random
@@ -1447,8 +1468,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       (three otherwise), one less in a position-independent program. The engine stops in the
       process of the latest system call and in processes with recorded calls.
     - A run judges at most 100,000 calls; the report says how many it did not judge.
-    - From Blnk (M260): contracts read no floating-point value, map, or interface value, and a
-      report shows only the values a clause compares. A string is shown to the literal's
+    - From Blnk (M260): a clause reads no map or interface value. Since M285 a clause compares
+      floats, and `record` lines show maps and interfaces. A report shows only the values a
+      clause compares. A string is shown to the literal's
       length, past its own end, and a value read inside `old()` lacks `old()` in its name.
       The Blnk comparison ran 24 blind schedules on the buggy build and none on the fixed build;
       30 and 20 more were planned and stopped for disk space.
@@ -1823,6 +1845,23 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - hydo sets no limits. Every process is in the root cgroup, so a program that sizes itself
       from `memory.max` or `cpu.max` uses the whole guest. Limits per service, as Compose's
       `mem_limit` and `cpus` give a container, are not built.
+    - The Mac engine and KVM did not run the example; the Mac had too little free disk.
+146. Value history (M285, `docs/design/value-history.md`). What is left:
+    - KVM: the engine makes the reads, but no KVM run was made. Blnk's plan needs 3 entry
+      breakpoints and 1 for returns, and KVM has 3 debug registers.
+    - hvx has no breakpoints; the side module of `docs/design/contracts.md` is designed only.
+    - A function the compiler inlined everywhere has no address to stop at. Blnk's
+      `restoreTransactionFlagsFromMetadata` was recorded through its callee instead.
+    - A Go map of more than 8 entries is shown as unreadable; a map lookup by hash needs the
+      runtime's seed. A struct as a map's value, and an interface's value of a type outside the
+      11 read types, are not shown.
+    - A call through a function value or an interface method names its return address only.
+    - A record is not a finding: the history marks changes, and no rule judges them. An
+      exploration does not use the records.
+    - The view's step comes from the transcript's `workload steps a..z` notes, so a run
+      without faults reads `workload steps 0..29` for every stop.
+    - A run with a power cut was not recorded; the boot number of the records is tested on
+      synthetic records only.
 
 ## Milestone index
 
@@ -2502,6 +2541,12 @@ build machine, before 2026-10-13.
   and the images' bytes stay; `guest.cgroup2: false` turns it off, and an older image mounts
   nothing. Dragonfly and Redpanda start on hvx without their `setup:` mounts. The pinned
   reproducers keep their values. Every epoch-4 run moves and waits for the pass (open item 105)
+  committed transaction is visible on only one of its partitions. Nothing recorded moved
+- M285 (tentative number): value history. `// hydo: key` and `// hydo: record` lines record
+  values at every call through the contracts' breakpoints, and `hydo inspect values` shows them
+  per key with each change. Floats, strings, Go interfaces and small Go maps are read. On Blnk
+  the overdraft limit is 50.0 in the API, absent from the saved metadata, and 0.0 in the
+  worker's coalesced copy. One fingerprint with and without the plan. Nothing recorded moved
 
 ## Where to look
 

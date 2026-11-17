@@ -22,6 +22,10 @@ on it from your own code. To use hydo, install the command with `cargo install h
 - The judgement of a run's records: each broken clause with the first broken call's values.
 - Function fuzzing (`hydo fuzz`): one Rust function at a time, called in a copy of its crate
   with inputs generated from `requires` and `input`, judged by `ensures`, and shrunk.
+- The value history: `// hydo: key <expr>` and `// hydo: record <expr>` lines, read at every
+  call with the same breakpoints. Their values include floating-point numbers, strings, a Go
+  interface's dynamic value and a Go map's value by a constant key. A run's records become a
+  history per key, with each change of a value.
 
 ## License
 

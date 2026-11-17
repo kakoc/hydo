@@ -58,6 +58,7 @@ fn ledger_plan() -> Plan {
             pie: false,
             head: String::new(),
             unchecked: vec![],
+            calls: vec![],
             functions: vec![Function {
                 id: 0,
                 name: "ledger::apply".into(),
@@ -89,6 +90,8 @@ fn ledger_plan() -> Plan {
                     },
                 ],
                 inputs: vec![],
+                values: vec![],
+                ret_addr: None,
             }],
         }],
     }
@@ -104,6 +107,7 @@ fn the_first_broken_call_is_named_with_its_values() {
         ret: after.map(|_| at + 5),
         at_return: after.map(|b| vec![Some(b)]),
         lost: None,
+        boot: 0,
     };
     let recs = vec![
         rec(100, 1, 0, 1000, Some(990)),
@@ -146,6 +150,7 @@ fn plans_and_records_read_back() {
         ret: None,
         at_return: None,
         lost: Some("no breakpoint".into()),
+        boot: 0,
     };
     let t = records_text(std::slice::from_ref(&r), 3);
     assert_eq!(

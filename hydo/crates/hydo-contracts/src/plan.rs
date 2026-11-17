@@ -52,6 +52,10 @@ pub struct Program {
     /// Contracts that are not checked, each with the reason.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unchecked: Vec<Unchecked>,
+    /// The direct calls of the functions that record values (Milestone 285): a record's return
+    /// address names its caller.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calls: Vec<CallSite>,
 }
 
 /// A contract that the plan cannot check, with the reason.
@@ -109,6 +113,95 @@ pub struct Function {
     pub clauses: Vec<Clause>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inputs: Vec<Input>,
+    /// The values its `// hydo: record` and `// hydo: key` lines record at each call, for the
+    /// value history (Milestone 285, docs/design/value-history.md). An engine makes their reads
+    /// with the others; only the host reads this list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<Value>,
+    /// The entry read that gives the call's return address, when the function records values:
+    /// the host names the caller from [`Program::calls`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ret_addr: Option<u32>,
+}
+
+/// One value a function records (`// hydo: record <expr> [as <name>] [at entry|at return]`, or
+/// `// hydo: key <expr>`).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Value {
+    /// The value's name in the history: the `as` name, else the expression as written. Values
+    /// of the same name in several functions are one history.
+    pub name: String,
+    /// The line as written, after `record` or `key`.
+    pub text: String,
+    pub line: u32,
+    /// The key: what the history follows (a transaction's reference), not a value of it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub key: bool,
+    /// How to show it at the call's entry, and at its return (none: not recorded there).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entry: Option<Show>,
+    #[serde(default, rename = "return", skip_serializing_if = "Option::is_none")]
+    pub at_return: Option<Show>,
+}
+
+/// How a recorded value is shown from a call's reads (Milestone 285). Every form only reads. A
+/// read that needs something (an element inside the length, a variant) carries its guard, so a
+/// value that does not exist for a call shows why.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Show {
+    /// A number, a boolean or an address: an expression over the reads.
+    Val(Expr),
+    /// A string: its length, and its first bytes in reads of up to 8 bytes each.
+    Text { len: Expr, chunks: Vec<Expr> },
+    /// A Go interface's dynamic value: its first word (0: nil), the address of its dynamic
+    /// type's descriptor, and for each type hydo reads, the descriptor's address in the program
+    /// and how to show the value. A type that is none of them is shown by its address.
+    Dyn {
+        nil: Expr,
+        ty: Expr,
+        cases: Vec<DynCase>,
+    },
+    /// A Go map's value by a constant key, in a map of at most one group (8 entries): the map
+    /// pointer (0: a nil map), the directory's length (not 0: a larger map, which the record
+    /// does not cover), the group's address (0: an empty map), and each slot.
+    Lookup {
+        map: Expr,
+        dir_len: Expr,
+        group: Expr,
+        slots: Vec<Slot>,
+    },
+}
+
+/// One dynamic type of a Go interface value.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct DynCase {
+    /// The type descriptor's address in the program.
+    pub addr: u64,
+    /// The type's name (`float64`).
+    pub name: String,
+    pub show: Show,
+}
+
+/// One slot of a Go map's group: whether it holds an entry (its control byte is below 0x80),
+/// whether its key is the one asked for, and its value.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct Slot {
+    pub full: Expr,
+    pub hit: Expr,
+    pub val: Show,
+}
+
+/// A place in the program that calls a function which records values: the return address of
+/// the call, and the function that makes it (Milestone 285).
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct CallSite {
+    /// The function called (its [`Function::id`]).
+    pub callee: u32,
+    /// The address after the call instruction (the return address).
+    pub ret: u64,
+    /// The function the call is in.
+    pub caller: String,
 }
 
 impl Function {
@@ -253,6 +346,8 @@ pub enum Ty {
     Ptr,
     /// This many bytes of a string, little-endian (shown as text; Milestone 255).
     Bytes(u8),
+    /// A floating-point number of this many bytes, 4 or 8, as its IEEE 754 bits (Milestone 285).
+    F(u8),
 }
 
 /// A compiled expression. Integers are exact (no overflow and no wrapping): `a - b` of two
@@ -262,6 +357,8 @@ pub enum Ty {
 pub enum Expr {
     /// A literal integer, in decimal.
     Int(String),
+    /// A literal floating-point number, as written (Milestone 285).
+    Float(String),
     Bool(bool),
     /// An entry read with its index and type.
     In(u32, Ty),
@@ -339,6 +436,14 @@ pub struct Record {
     /// Why `out` is missing, when it is not the run's end (`no breakpoint`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lost: Option<String>,
+    /// The boot the call was in: 0 is the run's first, and each power cut or reboot of the guest
+    /// starts the next (Milestone 285: the value history places the call in its boot).
+    #[serde(default, skip_serializing_if = "is_zero32")]
+    pub boot: u32,
+}
+
+fn is_zero32(v: &u32) -> bool {
+    *v == 0
 }
 
 /// The plan next to an image.

@@ -93,10 +93,22 @@ pub fn write_plan(m: &Value, manifest_path: &str, image: &Path, io: &mut Io) -> 
         .flat_map(|p| &p.functions)
         .map(|f| f.clauses.len())
         .sum();
+    // the values of `record` lines (Milestone 285); a plan without them prints as before
+    let values: usize = plan
+        .programs
+        .iter()
+        .flat_map(|p| &p.functions)
+        .map(|f| f.values.iter().filter(|v| !v.key).count())
+        .sum();
+    let recorded = if values > 0 {
+        format!(", {values} recorded values")
+    } else {
+        String::new()
+    };
     outln(
         io,
         &format!(
-            "hydo-build: {} (function contracts: {n} functions, {clauses} clauses)",
+            "hydo-build: {} (function contracts: {n} functions, {clauses} clauses{recorded})",
             plan_path.display()
         ),
     );

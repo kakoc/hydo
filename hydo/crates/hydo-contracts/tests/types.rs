@@ -290,3 +290,126 @@ fn go_types_on_arm64_and_x86_64() {
         }
     }
 }
+
+/// The bytes of an ELF file at a virtual address (its allocated sections only).
+fn elf_bytes(data: &[u8], addr: u64, n: usize) -> Option<&[u8]> {
+    let rd =
+        |o: usize, k: usize| -> u64 { (0..k).fold(0, |a, i| a | (data[o + i] as u64) << (8 * i)) };
+    let (shoff, shnum) = (rd(40, 8) as usize, rd(60, 2) as usize);
+    for i in 0..shnum {
+        let o = shoff + i * 64;
+        let (ty, flags, a, off, size) = (
+            rd(o + 4, 4),
+            rd(o + 8, 8),
+            rd(o + 16, 8),
+            rd(o + 24, 8),
+            rd(o + 32, 8),
+        );
+        if ty != 8 && flags & 2 != 0 && a <= addr && addr + n as u64 <= a + size {
+            let f = (off + addr - a) as usize;
+            return data.get(f..f + n);
+        }
+    }
+    None
+}
+
+/// Milestone 285: a value history's reads of a Go program. The float64 field, a map's value by
+/// a string key and by an integer key, an interface's dynamic value (with the runtime type
+/// descriptors' addresses), an `error`, and a string key; the return address and the direct
+/// call of the function.
+#[test]
+fn go_values_on_arm64_and_x86_64() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/go-values");
+    for (goarch, plan_arch) in [("arm64", "arm64"), ("amd64", "x86_64")] {
+        let b = out_dir().join(format!("values-{goarch}"));
+        let ok = Command::new("go")
+            .args(["build", "-trimpath", "-buildvcs=false", "-o"])
+            .arg(&b)
+            .arg(".")
+            .env("CGO_ENABLED", "0")
+            .env("GOOS", "linux")
+            .env("GOARCH", goarch)
+            .current_dir(&dir)
+            .status()
+            .is_ok_and(|s| s.success());
+        if !ok {
+            eprintln!("NOT CHECKED: go did not build the values program for {goarch}");
+            continue;
+        }
+        let p = compile(&[Source {
+            program: "/bin/values".into(),
+            binary: b.clone(),
+            sources: vec![dir.clone()],
+        }])
+        .unwrap();
+        std::fs::write(
+            out_dir().join(format!("values-{plan_arch}.contracts.json")),
+            plan_text(&p),
+        )
+        .unwrap();
+        let prog = &p.programs[0];
+        assert!(prog.unchecked.is_empty(), "{:#?}", prog.unchecked);
+        let f = func(prog, "main.mark");
+        let v = |n: &str| {
+            f.values
+                .iter()
+                .find(|v| v.name == n)
+                .unwrap_or_else(|| panic!("{n} not in {:?}", f.values))
+        };
+        assert!(v("t.Ref").key && v("t.Ref").at_return.is_none());
+        assert!(matches!(&v("t.Ref").entry, Some(Show::Text { chunks, .. }) if chunks.len() == 4));
+        // a float64 at entry and at return, through the pointer as it was at entry
+        assert!(matches!(
+            &v("limit").entry,
+            Some(Show::Val(Expr::In(_, Ty::F(8))))
+        ));
+        assert!(matches!(
+            &v("limit").at_return,
+            Some(Show::Val(Expr::Out(_, Ty::F(8))))
+        ));
+        // one group of 8 slots, each with its control byte, its key and an interface's value
+        let Some(Show::Lookup { slots, .. }) = &v("meta.limit").at_return else {
+            panic!("meta.limit: {:?}", v("meta.limit"))
+        };
+        assert_eq!(slots.len(), 8);
+        assert!(v("meta.limit").entry.is_none());
+        let Show::Dyn { cases, .. } = &slots[3].val else {
+            panic!("a slot's value: {:?}", slots[3].val)
+        };
+        let data = std::fs::read(&b).unwrap();
+        for (name, size, kind) in [("float64", 8, 14), ("bool", 1, 1), ("string", 16, 24)] {
+            let c = cases.iter().find(|c| c.name == name).unwrap_or_else(|| {
+                panic!(
+                    "{name} not among {:?}",
+                    cases.iter().map(|c| &c.name).collect::<Vec<_>>()
+                )
+            });
+            // the descriptor at the address: internal/abi.Type's Size_ and Kind_
+            let d =
+                elf_bytes(&data, c.addr, 24).unwrap_or_else(|| panic!("{name} at {:#x}", c.addr));
+            assert_eq!(
+                u64::from_le_bytes(d[0..8].try_into().unwrap()),
+                size,
+                "{name}"
+            );
+            assert_eq!(d[23] & 0x1f, kind, "{name}'s kind");
+        }
+        assert!(matches!(&v("any").entry, Some(Show::Dyn { .. })));
+        assert!(matches!(&v("err").at_return, Some(Show::Dyn { .. })));
+        assert!(matches!(&v("count.7").entry, Some(Show::Lookup { .. })));
+        // the caller: the return address at entry, and main.main's call of mark
+        let ra = f.ret_addr.expect("a return address read") as usize;
+        assert_eq!(f.at_entry[ra].name, "the return address");
+        assert!(
+            prog.calls
+                .iter()
+                .any(|c| c.callee == f.id && c.caller == "main.main"),
+            "{:?}",
+            prog.calls
+        );
+        // a clause compares a float64 with a floating-point literal
+        let c = func(prog, "main.check");
+        has(&c.at_entry, &["t.Limit"], plan_arch);
+        assert!(c.values.is_empty() && c.ret_addr.is_none());
+    }
+}

@@ -27,6 +27,8 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Ast {
     Int(i128),
+    /// A floating-point literal (`50.5`; Milestone 285).
+    Float(f64),
     Bool(bool),
     /// A string literal (`s == "hello"`; Milestone 255).
     Str(String),
@@ -96,6 +98,7 @@ impl fmt::Display for Ast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Ast::Int(v) => write!(f, "{v}"),
+            Ast::Float(v) => write!(f, "{v:?}"),
             Ast::Bool(b) => write!(f, "{b}"),
             Ast::Str(s) => write!(f, "{s:?}"),
             Ast::Name(n) => write!(f, "{n}"),
@@ -165,6 +168,28 @@ pub const CHAR_SETS: &[(&str, &str)] = &[
         "hydo's default mix: ASCII, a newline, a NUL, and characters of 2, 3 and 4 bytes",
     ),
 ];
+/// When a recorded value is read (Milestone 285).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum When {
+    Entry,
+    Return,
+    /// At the entry and again at the return (the default).
+    Both,
+}
+
+/// A value to record as written: `record <expr> [as <name>] [at entry|at return]`, or
+/// `key <expr>` (Milestone 285, docs/design/value-history.md).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SrcRecord {
+    pub ast: Ast,
+    /// The `as` name, else the expression as written.
+    pub name: String,
+    pub when: When,
+    /// A `key` line: what the history follows, read at the entry.
+    pub key: bool,
+    pub text: String,
+    pub line: u32,
+}
 
 /// The contract of one function in a source file.
 #[derive(Clone, Debug, PartialEq)]
@@ -178,6 +203,8 @@ pub struct SrcContract {
     /// `with T = i64`: the concrete type that function fuzzing gives a generic function's type
     /// parameter (Milestone 282).
     pub with: Vec<(String, String)>,
+    /// The values the function records for the value history (Milestone 285).
+    pub records: Vec<SrcRecord>,
 }
 
 /// A mistake in a contract, with its line.
@@ -268,6 +295,7 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
         let mut clauses = Vec::new();
         let mut inputs = Vec::new();
         let mut with = Vec::new();
+        let mut records: Vec<SrcRecord> = Vec::new();
         while i < lines.len() {
             let l = lines[i].trim_start();
             if let Some(t) = contract_text(l) {
@@ -275,6 +303,13 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
                     Ok(Line::Clause(c)) => clauses.push(c),
                     Ok(Line::Input(x)) => inputs.push(x),
                     Ok(Line::With(w)) => with.extend(w),
+                    Ok(Line::Record(r)) if r.key && records.iter().any(|x| x.key) => {
+                        errs.push(LangError {
+                            line: r.line,
+                            message: "a function has one `key` line".into(),
+                        })
+                    }
+                    Ok(Line::Record(r)) => records.push(r),
                     Err(e) => errs.push(e),
                 }
             } else if !(l.starts_with("//") || l.starts_with("#[") || l.starts_with("#![")) {
@@ -289,6 +324,7 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
                 clauses,
                 inputs,
                 with,
+                records,
             }),
             None => errs.push(LangError {
                 line: first as u32 + 1,
@@ -306,6 +342,69 @@ enum Line {
     Clause(SrcClause),
     Input(SrcInput),
     With(Vec<(String, String)>),
+    Record(SrcRecord),
+}
+
+/// `record <expr> [as <name>] [at entry|at return]` and `key <expr>` (Milestone 285).
+fn parse_record(t: &str, line: u32, key: bool) -> Result<SrcRecord, String> {
+    let mut rest = t.trim();
+    let mut when = if key { When::Entry } else { When::Both };
+    for (suffix, w) in [(" at entry", When::Entry), (" at return", When::Return)] {
+        if let Some(r) = rest.strip_suffix(suffix) {
+            if key {
+                return Err("a `key` is read at the call's entry: write `key <expr>`".into());
+            }
+            rest = r.trim_end();
+            when = w;
+            break;
+        }
+    }
+    let mut name = None;
+    if let Some((e, n)) = rest.rsplit_once(" as ") {
+        let n = n.trim();
+        let ok = !n.is_empty()
+            && n.chars()
+                .all(|c| c.is_alphanumeric() || matches!(c, '_' | '.' | '-'));
+        if !ok {
+            return Err(format!(
+                "`as {n}`: a value's name is letters, digits, `_`, `.` and `-`"
+            ));
+        }
+        if key {
+            return Err("a `key` has no name of its own: write `key <expr>`".into());
+        }
+        name = Some(n.to_string());
+        rest = e.trim_end();
+    }
+    if rest.is_empty() {
+        return Err(format!(
+            "`{}` names no value: write `{} <expr>`",
+            t.trim(),
+            if key { "key" } else { "record" }
+        ));
+    }
+    let ast = parse_expr(rest)?;
+    if has_old(&ast) {
+        return Err(
+            "a recorded value is read at the entry, at the return, or at both (`at entry`, \
+             `at return`); `old()` is for `ensures`"
+                .into(),
+        );
+    }
+    if when == When::Entry && mentions(&ast, "result") {
+        return Err("`result` has no value at entry: record it `at return`".into());
+    }
+    if when == When::Both && mentions(&ast, "result") {
+        when = When::Return;
+    }
+    Ok(SrcRecord {
+        name: name.unwrap_or_else(|| rest.to_string()),
+        ast,
+        when,
+        key,
+        text: t.trim().to_string(),
+        line,
+    })
 }
 
 fn parse_line(t: &str, line: u32) -> Result<Line, LangError> {
@@ -356,9 +455,13 @@ fn parse_line(t: &str, line: u32) -> Result<Line, LangError> {
             }
             Ok(Line::With(out))
         }
+        "record" | "key" => parse_record(rest, line, kw == "key")
+            .map(Line::Record)
+            .map_err(err),
         _ => Err(err(format!(
             "`// hydo: {kw}`: a contract line is `requires <expr>`, `ensures <expr>`, \
-             `input <path> ...` or `with <type parameter> = <type>`"
+             `input <path> ...`, `with <type parameter> = <type>`, `record <expr> [as <name>] \
+             [at entry|at return]` or `key <expr>`"
         ))),
     }
 }
@@ -618,7 +721,7 @@ pub fn mentions(a: &Ast, name: &str) -> bool {
         Ast::Field(x, _) | Ast::Call(_, x) => mentions(x, name),
         Ast::Old(x) | Ast::Not(x) | Ast::Neg(x) => mentions(x, name),
         Ast::Bin(_, x, y) | Ast::Index(x, y) => mentions(x, name) || mentions(y, name),
-        Ast::Int(_) | Ast::Bool(_) | Ast::Str(_) => false,
+        Ast::Int(_) | Ast::Float(_) | Ast::Bool(_) | Ast::Str(_) => false,
     }
 }
 
@@ -634,6 +737,7 @@ fn has_old(a: &Ast) -> bool {
 #[derive(Clone, Debug, PartialEq)]
 enum Tok {
     Int(i128),
+    Float(f64),
     Ident(String),
     Str(String),
     Op(&'static str),
@@ -656,6 +760,26 @@ fn lex(s: &str) -> Result<Vec<Tok>, String> {
             let st = i;
             while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
                 i += 1;
+            }
+            // a floating-point literal (`50.5`; Milestone 285), but not a tuple field after a
+            // field (`t.0.1`)
+            let after_dot = out.last() == Some(&Tok::Op("."));
+            if !after_dot
+                && i + 1 < b.len()
+                && b[i] == b'.'
+                && b[i + 1].is_ascii_digit()
+                && s[st..i].bytes().all(|c| c.is_ascii_digit() || c == b'_')
+            {
+                i += 1;
+                while i < b.len() && (b[i].is_ascii_digit() || b[i] == b'_') {
+                    i += 1;
+                }
+                let t = s[st..i].replace('_', "");
+                out.push(Tok::Float(
+                    t.parse()
+                        .map_err(|_| format!("`{t}` is not a floating-point number"))?,
+                ));
+                continue;
             }
             let t = &s[st..i];
             out.push(Tok::Int(
@@ -745,6 +869,7 @@ impl Parser<'_> {
     fn show(&self, i: usize) -> String {
         match self.t.get(i) {
             Some(Tok::Int(v)) => v.to_string(),
+            Some(Tok::Float(v)) => format!("{v:?}"),
             Some(Tok::Ident(n)) => n.clone(),
             Some(Tok::Str(s)) => format!("{s:?}"),
             Some(Tok::Op(o)) => o.to_string(),
@@ -864,6 +989,7 @@ impl Parser<'_> {
         self.i += 1;
         match t {
             Some(Tok::Int(v)) => Ok(Ast::Int(v)),
+            Some(Tok::Float(v)) => Ok(Ast::Float(v)),
             Some(Tok::Str(s)) => Ok(Ast::Str(s)),
             Some(Tok::Ident(n)) if n == "true" => Ok(Ast::Bool(true)),
             Some(Tok::Ident(n)) if n == "false" => Ok(Ast::Bool(false)),

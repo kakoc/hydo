@@ -10,10 +10,14 @@
 #                          (function contracts), built with their debug information, which the
 #                          contracts read (hydo-contracts.yaml); their sources, which `hydo build`
 #                          reads, are copied to work/blnk-contracts and work/blnk-fixed-contracts
+#   bin/blnk-values-<arch>, bin/blnk-fixed-values-<arch>
+#                          the same with values.patch, the value history of the overdraft limit
+#                          (hydo-values.yaml); their sources go to work/blnk-values and
+#                          work/blnk-fixed-values
 # for <arch> amd64 (hvx and KVM) and arm64 (the Mac engine).
 # Needs git, network once, and Go 1.27.3 (GOTOOLCHAIN fetches it). Works on a Mac and on Linux;
 # the bytes are checked against the pins below.
-#   sh build.sh                    # all ten
+#   sh build.sh                    # all fourteen
 #   BLNK_SRC=<dir> sh build.sh     # reuse a clone (its work tree is reset to BLNK_COMMIT)
 set -eu
 cd "$(dirname "$0")"
@@ -61,6 +65,14 @@ build_contracts blnk-contracts
 git -C "$SRC" apply "$HERE/fix-overdraft-limit.patch" "$HERE/fix-atomic-bulk.patch"
 build_contracts blnk-fixed-contracts
 git -C "$SRC" checkout -q -f "$BLNK_COMMIT"
+# the programs with the value history of the overdraft limit (hydo-values.yaml): values.patch
+# adds only `// hydo: key` and `// hydo: record` comments (RESULTS.md, "The overdraft limit's
+# history")
+git -C "$SRC" apply "$HERE/values.patch"
+build_contracts blnk-values
+git -C "$SRC" apply "$HERE/fix-overdraft-limit.patch" "$HERE/fix-atomic-bulk.patch"
+build_contracts blnk-fixed-values
+git -C "$SRC" checkout -q -f "$BLNK_COMMIT"
 check() {   # file sha256
   got=$( (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d' ' -f1)
   if [ "$got" = "$2" ]; then echo "$1 ok"; else echo "$1: sha256 $got, expected $2" >&2; exit 1; fi
@@ -75,3 +87,7 @@ check bin/blnk-contracts-amd64 85cfe1e4f9f8a041ac46e39953aa39a9ec1d5ef8f839b27c7
 check bin/blnk-contracts-arm64 d4ac8334015206837d13c81632f8cfa37c9c6334f7480ac0e6f5f9fe28d0d924
 check bin/blnk-fixed-contracts-amd64 3f6032ed662bdebbddf3ef0152d01e3ce2540e82f70732b5d1be124f68ebbb44
 check bin/blnk-fixed-contracts-arm64 85759e20413c5a6d47b0a96fd7df9e1245ab70727129ef4c61c385e4a9eb2c93
+check bin/blnk-values-amd64 796038134951aa85723a913aa09bb82257ce404c123115425994f8fd41a395f2
+check bin/blnk-values-arm64 e6f51ac38801cf50b12e1fdfe06615686f85a6d02f7880527bd85c562de0e86a
+check bin/blnk-fixed-values-amd64 7d4e88a5a97aad62895c3f20403b912b8c0dec313cd2bab83aa4f2c7c46c690f
+check bin/blnk-fixed-values-arm64 e21aa5430963a8ba03fead63221bac9f9ae61f475025c0c1ece65d2ee1f602b8

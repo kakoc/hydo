@@ -292,7 +292,8 @@ stack when it grows, so the stack pointer does not identify a Go call.
 
 The compiler does not read these:
 
-- floating-point values;
+- floating-point values in floating-point registers (a `float64` in memory is read since
+  Milestone 285, and a clause compares it: `requires t.Limit > 0.5`);
 - a result that Go returns on the stack (more words than its registers);
 - inlined functions (the plan names them as not checked);
 - locations that need DWARF's expression stack;
@@ -498,7 +499,8 @@ transaction's reference.
   moving the entry breakpoints to the process that runs at each exit.
 - Calls past the first 100,000 of a run: write the records as the run goes, so a run judges
   every call.
-- More types: floating-point values, Go interfaces' values (not only nil or not), maps, and an
+- More types in clauses: Go interfaces' values and maps, which `record` lines read since
+  Milestone 285 (docs/design/value-history.md), and an
   element chosen by a computed index past the eighth. Blnk's overdraft limit is a `float64` in a
   map (Milestone 260).
 - The report: values that the clause does not compare (a `// hydo: show` line), a string cut at

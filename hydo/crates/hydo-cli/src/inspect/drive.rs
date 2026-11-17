@@ -137,6 +137,15 @@ impl RunFiles {
     }
 
     /// The forced preemption points' records (Milestone 208).
+    /// The records of the function contracts and recorded values (Milestone 241, 285).
+    pub fn contracts(&self) -> String {
+        let s = hydo_contracts::plan::RECORDS_SUFFIX;
+        match &self.tag {
+            None => format!("one{s}"),
+            Some(t) => format!("consoles/{t}{s}"),
+        }
+    }
+
     pub fn preempt(&self) -> String {
         match &self.tag {
             None => crate::preempt::FILE.to_string(),
@@ -363,7 +372,7 @@ impl Recorded {
 
 /// An image path from a result document: as written when it is there, else relative to the run
 /// directory's parent directories.
-fn resolve(p: &str, dir: &Path) -> Option<PathBuf> {
+pub fn resolve(p: &str, dir: &Path) -> Option<PathBuf> {
     if p.is_empty() {
         return None;
     }

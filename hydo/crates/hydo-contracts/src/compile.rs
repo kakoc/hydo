@@ -16,10 +16,10 @@
 //!
 //! Everything else is refused with its reason.
 
-use crate::lang::{self, Ast, Builtin, SrcContract};
+use crate::lang::{self, Ast, Builtin, SrcContract, SrcRecord, When};
 use crate::plan::{
-    Base, BinOp, Clause, ClauseKind, Expr, Frame, Function, Input, Lang, Loc, Plan, Program, Ty,
-    Unchecked, PLAN_TYPE, PLAN_V,
+    Base, BinOp, CallSite, Clause, ClauseKind, DynCase, Expr, Frame, Function, Input, Lang, Loc,
+    Plan, Program, Show, Slot, Ty, Unchecked, Value, PLAN_TYPE, PLAN_V,
 };
 use gimli::{AttributeValue, EndianSlice, LittleEndian, Operation, UnitOffset};
 
@@ -174,10 +174,13 @@ impl Elf {
 #[derive(Clone, Debug)]
 enum Type {
     Scalar(Ty, u8),
-    /// A floating-point number of this many bytes (not read: contracts compare integers).
+    /// A floating-point number of this many bytes (read as its bits since Milestone 285).
     Float(u8),
     Pointer(Option<TRef>),
     Struct(Struct),
+    /// A fixed-size array: its element type and count (a Go map's group of slots; Milestone
+    /// 285).
+    Array(Option<TRef>, u64),
     Other(String),
 }
 
@@ -246,9 +249,61 @@ struct Dwarf<'a> {
     eh: Vec<u8>,
     eh_addr: u64,
     text_addr: u64,
+    /// Go's runtime type descriptors of the types a recorded interface value is shown as: the
+    /// type's name, its debug information, and the descriptor's address (Milestone 285).
+    go_types: Vec<(String, TRef, u64)>,
 }
 
+/// The dynamic types of a Go interface that a recorded value shows (Milestone 285): Go's
+/// `encoding/json` gives numbers as `float64`, and programs put these into `map[string]any`.
+pub const GO_DYN_TYPES: [&str; 11] = [
+    "float64", "float32", "int", "int64", "int32", "uint", "uint64", "uint32", "bool", "string",
+    "uint8",
+];
+
+/// Go's attribute with the offset of a type's runtime descriptor in the program's section of
+/// type descriptors (`DW_AT_go_runtime_type`).
+const DW_AT_GO_RUNTIME_TYPE: gimli::DwAt = gimli::DwAt(0x2904);
+
 impl Dwarf<'_> {
+    /// The runtime type descriptors of [`GO_DYN_TYPES`]: each named type at the top of a unit
+    /// with `DW_AT_go_runtime_type`, at `base` (the address of the section of type descriptors)
+    /// plus the attribute's offset.
+    fn find_go_types(&mut self, base: u64) {
+        let mut out = Vec::new();
+        for (ui, u) in self.units.iter().enumerate() {
+            let Ok(mut tree) = u.entries_tree(None) else {
+                continue;
+            };
+            let Ok(root) = tree.root() else { continue };
+            let mut ch = root.children();
+            while let Ok(Some(c)) = ch.next() {
+                let e = c.entry();
+                let Some(name) = self.name(ui, e) else {
+                    continue;
+                };
+                if !GO_DYN_TYPES.contains(&name.as_str())
+                    || out.iter().any(|x: &(String, TRef, u64)| x.0 == name)
+                {
+                    continue;
+                }
+                let off = match e.attr_value(DW_AT_GO_RUNTIME_TYPE) {
+                    Ok(Some(AttributeValue::Addr(a))) => a,
+                    Ok(Some(v)) => match v.udata_value() {
+                        Some(a) => a,
+                        None => continue,
+                    },
+                    _ => continue,
+                };
+                if off == 0 {
+                    continue;
+                }
+                out.push((name, (ui, e.offset()), base + off));
+            }
+        }
+        self.go_types = out;
+    }
+
     /// The largest offset the call frame information gives the canonical frame address from
     /// register `reg` in the function at `pc`: the offset after the function's prologue, where
     /// the compiler's frame-base offsets count from.
@@ -343,6 +398,13 @@ impl<'a> Dwarf<'a> {
                 gimli::DW_TAG_structure_type | gimli::DW_TAG_class_type => {
                     return Type::Struct(self.structure(unit, off, name, size))
                 }
+                gimli::DW_TAG_array_type => {
+                    let elem = self.type_ref(unit, &e);
+                    return match self.array_count(unit, off) {
+                        Some(n) => Type::Array(elem, n),
+                        None => Type::Other(name),
+                    };
+                }
                 _ => return Type::Other(name),
             }
         }
@@ -420,12 +482,34 @@ impl<'a> Dwarf<'a> {
         s
     }
 
+    /// The number of elements of an array type (its subrange's count, or upper bound plus one).
+    fn array_count(&self, unit: usize, off: UnitOffset) -> Option<u64> {
+        let u = &self.units[unit];
+        let mut tree = u.entries_tree(Some(off)).ok()?;
+        let root = tree.root().ok()?;
+        let mut ch = root.children();
+        while let Ok(Some(c)) = ch.next() {
+            let e = c.entry();
+            if e.tag() != gimli::DW_TAG_subrange_type {
+                continue;
+            }
+            if let Ok(Some(v)) = e.attr_value(gimli::DW_AT_count) {
+                return v.udata_value();
+            }
+            if let Ok(Some(v)) = e.attr_value(gimli::DW_AT_upper_bound) {
+                return v.udata_value().map(|x| x + 1);
+            }
+        }
+        None
+    }
+
     /// The bytes a value of a type takes.
     fn size_of(&self, r: Option<TRef>) -> u64 {
         match self.ty(r) {
             Type::Scalar(_, n) | Type::Float(n) => n as u64,
             Type::Pointer(_) => 8,
             Type::Struct(s) => s.size,
+            Type::Array(e, n) => self.size_of(e) * n,
             Type::Other(_) => {
                 // an array or another type: its own byte size, when it says one
                 let Some((unit, off)) = r else { return 0 };
@@ -551,6 +635,7 @@ impl<'a> Dwarf<'a> {
             Type::Pointer(_) => out.push((at, 8)),
             Type::Float(_) => return Err("a floating-point value".into()),
             Type::Other(n) => return Err(format!("a type the compiler does not read ({n})")),
+            Type::Array(..) => return Err("an array".into()),
             Type::Struct(s) => {
                 for m in &s.members {
                     self.slots(m.ty, at + m.off, out, depth + 1)?;
@@ -588,6 +673,7 @@ impl<'a> Dwarf<'a> {
                     "a floating-point result (Go returns it in a floating-point register)".into(),
                 )
             }
+            Type::Array(..) => return Err("a result that is an array".into()),
             Type::Other(n) => {
                 return Err(format!(
                     "a result of a type the compiler does not read ({n})"
@@ -945,6 +1031,8 @@ struct FnInfo {
     file: String,
     line: u32,
     low_pc: u64,
+    /// The end of its code (0: not known).
+    high_pc: u64,
     lang: Lang,
     params: Vec<Param>,
     /// Rust's return type (named `result`), or Go's results in order with their names (`~r0`
@@ -975,6 +1063,15 @@ fn fn_info<'a>(
     let low_pc = match e.attr_value(gimli::DW_AT_low_pc).ok()? {
         Some(v) => d.dwarf.attr_address(u, v).ok()?,
         None => None,
+    };
+    // the end of its code: an address, or an offset from low_pc
+    let high_pc = match e.attr_value(gimli::DW_AT_high_pc) {
+        Ok(Some(AttributeValue::Addr(a))) => a,
+        Ok(Some(v)) => match (v.udata_value(), low_pc) {
+            (Some(n), Some(lo)) => lo + n,
+            _ => d.dwarf.attr_address(u, v).ok().flatten().unwrap_or(0),
+        },
+        _ => 0,
     };
     // the name, file and line may be on the abstract instance or the declaration
     let mut src = e.clone();
@@ -1054,6 +1151,7 @@ fn fn_info<'a>(
         file,
         line,
         low_pc: low_pc.unwrap_or(0),
+        high_pc,
         lang,
         params,
         results,
@@ -1166,13 +1264,22 @@ pub fn compile_program(src: &Source, first_id: u32) -> Result<Program, String> {
             .find(|s| s.name == n)
             .map_or(0, |s| s.addr)
     };
-    let d = Dwarf {
+    let mut d = Dwarf {
         dwarf,
         units,
         eh: elf.section(".eh_frame")?,
         eh_addr: addr_of(".eh_frame"),
         text_addr: addr_of(".text"),
+        go_types: Vec::new(),
     };
+    // Go's type descriptors: `DW_AT_go_runtime_type` is an offset in the section that holds them
+    // (`.go.type` since Go 1.26; `.rodata` before)
+    let types_base = match addr_of(".go.type") {
+        0 => addr_of(".rodata"),
+        a => a,
+    };
+    d.find_go_types(types_base);
+    let d = d;
     let fns = functions(&d, arch);
     // ET_DYN: a position-independent program, loaded where the guest's kernel chooses
     let pie = rd16(&elf.data, 16) == Some(3);
@@ -1191,6 +1298,7 @@ pub fn compile_program(src: &Source, first_id: u32) -> Result<Program, String> {
         },
         functions: Vec::new(),
         unchecked: Vec::new(),
+        calls: Vec::new(),
     };
     let mut lang_errors = Vec::new();
     let mut id = first_id;
@@ -1242,7 +1350,89 @@ pub fn compile_program(src: &Source, first_id: u32) -> Result<Program, String> {
     if !lang_errors.is_empty() {
         return Err(lang_errors.join("\n"));
     }
+    prog.calls = call_sites(&elf, arch, &fns, &prog.functions);
     Ok(prog)
+}
+
+/// The direct calls of the functions that record values (Milestone 285), found in the program's
+/// code: on arm64 every `BL` whose target is the function's entry; on x86_64 every `CALL rel32`
+/// (`E8`) whose target is the entry, at an offset inside a function of the debug information
+/// (a byte scan, so a call is kept only when it lies in a function's code). The caller is the
+/// function whose code holds the call. A call through a register (an interface's method, a
+/// function value) is not found; its record names the return address only.
+fn call_sites(elf: &Elf, arch: &str, fns: &[FnInfo], funcs: &[Function]) -> Vec<CallSite> {
+    let wanted: Vec<(u64, u32)> = funcs
+        .iter()
+        .filter(|f| !f.values.is_empty())
+        .map(|f| (f.entry, f.id))
+        .collect();
+    if wanted.is_empty() {
+        return Vec::new();
+    }
+    let mut ranges: Vec<(u64, u64, &str)> = fns
+        .iter()
+        .filter(|f| f.concrete && f.high_pc > f.low_pc)
+        .map(|f| (f.low_pc, f.high_pc, f.name.as_str()))
+        .collect();
+    ranges.sort();
+    let caller = |pc: u64| -> Option<&str> {
+        let i = ranges.partition_point(|r| r.0 <= pc);
+        let r = ranges.get(i.checked_sub(1)?)?;
+        (pc < r.1).then_some(r.2)
+    };
+    let mut out = Vec::new();
+    for s in elf
+        .sections
+        .iter()
+        .filter(|s| s.flags & 4 != 0 && !s.nobits)
+    {
+        let Some(code) = elf
+            .data
+            .get(s.offset as usize..(s.offset + s.size) as usize)
+        else {
+            continue;
+        };
+        if arch == "arm64" {
+            for (k, w) in code.chunks_exact(4).enumerate() {
+                let ins = u32::from_le_bytes([w[0], w[1], w[2], w[3]]);
+                if ins & 0xfc00_0000 != 0x9400_0000 {
+                    continue;
+                }
+                let pc = s.addr + 4 * k as u64;
+                let imm = (((ins & 0x03ff_ffff) << 6) as i32 >> 6) as i64 * 4;
+                let target = pc.wrapping_add(imm as u64);
+                for &(_, id) in wanted.iter().filter(|w| w.0 == target) {
+                    if let Some(c) = caller(pc) {
+                        out.push(CallSite {
+                            callee: id,
+                            ret: pc + 4,
+                            caller: c.to_string(),
+                        });
+                    }
+                }
+            }
+        } else {
+            for k in 0..code.len().saturating_sub(4) {
+                if code[k] != 0xe8 {
+                    continue;
+                }
+                let rel = i32::from_le_bytes([code[k + 1], code[k + 2], code[k + 3], code[k + 4]]);
+                let pc = s.addr + k as u64;
+                let target = (pc + 5).wrapping_add(rel as i64 as u64);
+                for &(_, id) in wanted.iter().filter(|w| w.0 == target) {
+                    if let Some(c) = caller(pc) {
+                        out.push(CallSite {
+                            callee: id,
+                            ret: pc + 5,
+                            caller: c.to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    out.sort_by_key(|c| (c.callee, c.ret));
+    out
 }
 
 /// Compile every program's contracts into one plan.
@@ -1293,7 +1483,7 @@ fn dyn_index(a: &Ast) -> Option<&Ast> {
     match a {
         Ast::Field(x, _) | Ast::Call(_, x) => dyn_index(x),
         Ast::Index(x, i) => dyn_index(x).or(match **i {
-            Ast::Int(_) => None,
+            Ast::Int(_) | Ast::Str(_) => None,
             _ => Some(&**i),
         }),
         _ => None,
@@ -1836,8 +2026,17 @@ impl Reads<'_> {
                 "`{}` is a structure ({}); compare its fields one by one",
                 pv.text, s.name
             )),
-            Type::Float(_) => Err(format!(
-                "`{}` is a floating-point number; contracts compare integers",
+            // its IEEE 754 bits; the host compares it as a floating-point number (Milestone 285)
+            Type::Float(n @ (4 | 8)) => {
+                let l = pv.place.scalar(n, &pv.text)?;
+                Ok(self.read(&pv, l, Ty::F(n)))
+            }
+            Type::Float(n) => Err(format!(
+                "`{}` is a floating-point number of {n} bytes; contracts read those of 4 and 8",
+                pv.text
+            )),
+            Type::Array(..) => Err(format!(
+                "`{}` is an array; read its elements one by one",
                 pv.text
             )),
             Type::Other(n) => Err(format!(
@@ -1861,6 +2060,11 @@ impl Reads<'_> {
             ));
         }
         let pv = self.place(x, kind, old)?;
+        self.str_eq_pv(pv, lit)
+    }
+
+    /// A string value's length and its first `n` bytes, in reads of up to 8 bytes.
+    fn text_reads(&mut self, pv: Pv, n: usize) -> Result<(Expr, Vec<Expr>), String> {
         let len = self.len(pv.clone())?;
         let (pv, q) = self.seq(pv)?;
         if !q.text {
@@ -1868,20 +2072,26 @@ impl Reads<'_> {
         }
         let mut chunks = Vec::new();
         let mut at = 0;
-        while at < lit.len() {
-            let n = (lit.len() - at).min(8);
+        while at < n {
+            let k = (n - at).min(8);
             let ptr = Pv {
                 place: pv.place.field(q.ptr_off, 8),
                 ty: None,
                 ..pv.clone()
             };
             let mut e = self.deref(ptr)?;
-            e.place = e.place.field(at as u64, n as u64);
-            e.text = format!("{}[{at}..{}]", pv.text, at + n);
-            let l = e.place.scalar(n as u8, &e.text)?;
-            chunks.push(self.read(&e, l, Ty::Bytes(n as u8)));
-            at += n;
+            e.place = e.place.field(at as u64, k as u64);
+            e.text = format!("{}[{at}..{}]", pv.text, at + k);
+            let l = e.place.scalar(k as u8, &e.text)?;
+            chunks.push(self.read(&e, l, Ty::Bytes(k as u8)));
+            at += k;
         }
+        Ok((len, chunks))
+    }
+
+    /// Whether a string value equals a literal.
+    fn str_eq_pv(&mut self, pv: Pv, lit: &str) -> Result<Expr, String> {
+        let (len, chunks) = self.text_reads(pv, lit.len())?;
         Ok(Expr::StrEq {
             len: Box::new(len),
             chunks,
@@ -1905,6 +2115,7 @@ impl Reads<'_> {
         }
         Ok(match a {
             Ast::Int(v) => Expr::Int(v.to_string()),
+            Ast::Float(v) => Expr::Float(format!("{v:?}")),
             Ast::Bool(b) => Expr::Bool(*b),
             Ast::Str(s) => {
                 return Err(format!(
@@ -1966,6 +2177,308 @@ impl Reads<'_> {
     }
 }
 
+/// How many bytes of a recorded string are read (the history shows longer ones cut).
+pub const TEXT_BYTES: usize = 32;
+
+/// Where a Go map's parts are (Milestone 285), from the types Go's linker writes for it:
+/// `map<K,V>` (`dirPtr`, `dirLen`), `table<K,V>`, `groupReference<K,V>` and the group type,
+/// whose slots are an array of `{key, elem}` or, with Go's split groups, arrays `keys` and
+/// `elems`.
+struct GoMap {
+    dir_ptr: u64,
+    dir_len: u64,
+    ctrl: u64,
+    slots: u64,
+    key_ty: Option<TRef>,
+    elem_ty: Option<TRef>,
+    /// Slot i's key is at `key.0 + i * key.1` in the group, its value at `elem.0 + i * elem.1`.
+    key: (u64, u64),
+    elem: (u64, u64),
+}
+
+impl Reads<'_> {
+    /// A recorded value (Milestone 285): read at the call's entry, or at its return (`ret`),
+    /// where a field read through a pointer parameter is the one at return.
+    fn show(&mut self, a: &Ast, ret: bool) -> Result<Show, String> {
+        let kind = if ret {
+            ClauseKind::Ensures
+        } else {
+            ClauseKind::Requires
+        };
+        if dyn_index(a).is_some() {
+            return Err(format!(
+                "`{a}`: a recorded value names its elements with numbers (`v[0]`)"
+            ));
+        }
+        match a {
+            Ast::Index(x, k) => {
+                let pv = self.place(x, kind, false)?;
+                if let Some(m) = self.go_map(&pv) {
+                    return self.lookup(pv, m, k);
+                }
+                if matches!(**k, Ast::Str(_)) {
+                    return Err(format!(
+                        "`{x}` is not a Go map: a value is read by a string key from a map only"
+                    ));
+                }
+                let pv = self.place(a, kind, false)?;
+                self.show_pv(pv)
+            }
+            Ast::Name(_)
+            | Ast::Field(..)
+            | Ast::Call(Builtin::Some | Builtin::Ok | Builtin::Err, _) => {
+                let pv = self.place(a, kind, false)?;
+                self.show_pv(pv)
+            }
+            _ => Ok(Show::Val(self.compile(a, kind, false)?)),
+        }
+    }
+
+    /// How a value of its type is shown: a string as text, a Go interface by its dynamic value,
+    /// any other scalar as itself.
+    fn show_pv(&mut self, pv: Pv) -> Result<Show, String> {
+        match self.d.ty(pv.ty) {
+            Type::Struct(s) if s.iface() => self.dyn_show(pv, &s),
+            Type::Struct(s) if self.d.seq(&s).is_some_and(|q| q.text) => {
+                let (len, chunks) = self.text_reads(pv, TEXT_BYTES)?;
+                Ok(Show::Text { len, chunks })
+            }
+            Type::Pointer(_) if self.go_map(&pv).is_some() => Err(format!(
+                "`{}` is a Go map: record one of its values by its key, `{0}[\"key\"]`",
+                pv.text
+            )),
+            _ => Ok(Show::Val(self.scalar(pv)?)),
+        }
+    }
+
+    /// A Go interface's dynamic value: `runtime.eface` (`any`) has its type at word 0;
+    /// `runtime.iface` has its itab there, whose type is at offset 8. The value is behind the
+    /// data word for every type [`GO_DYN_TYPES`] names.
+    fn dyn_show(&mut self, pv: Pv, s: &Struct) -> Result<Show, String> {
+        let word = |n: &str| -> Result<u64, String> {
+            s.member(n)
+                .map(|m| m.off)
+                .ok_or_else(|| format!("`{}` ({}) has no `{n}` word", pv.text, s.name))
+        };
+        let first = Pv {
+            place: pv.place.field(
+                word(if s.name == "runtime.eface" {
+                    "_type"
+                } else {
+                    "tab"
+                })?,
+                8,
+            ),
+            ty: None,
+            text: format!("the type word of {}", pv.text),
+            ..pv.clone()
+        };
+        let l = first.place.scalar(8, &first.text)?;
+        let nil = self.read(&first, l, Ty::Ptr);
+        let ty = if s.name == "runtime.eface" {
+            nil.clone()
+        } else {
+            let mut t = self.deref(first)?;
+            t.place = t.place.field(8, 8);
+            t.text = format!("the dynamic type of {}", pv.text);
+            let l = t.place.scalar(8, &t.text)?;
+            self.read(&t, l, Ty::Ptr)
+        };
+        let data = Pv {
+            place: pv.place.field(word("data")?, 8),
+            ty: None,
+            text: pv.text.clone(),
+            ..pv.clone()
+        };
+        let mut cases = Vec::new();
+        for (name, tref, addr) in self.d.go_types.clone() {
+            let mut v = self.deref(data.clone())?;
+            v.place = v.place.field(0, self.d.size_of(Some(tref)));
+            v.ty = Some(tref);
+            v.text = format!("{}.({name})", pv.text);
+            if let Ok(show) = self.show_pv(v) {
+                cases.push(DynCase { addr, name, show });
+            }
+        }
+        Ok(Show::Dyn { nil, ty, cases })
+    }
+
+    /// Whether a value is a Go map, and where its parts are.
+    fn go_map(&self, pv: &Pv) -> Option<GoMap> {
+        let Type::Pointer(t) = self.d.ty(pv.ty) else {
+            return None;
+        };
+        let Type::Struct(m) = self.d.ty(t) else {
+            return None;
+        };
+        if !m.name.starts_with("map<") {
+            return None;
+        }
+        let (dp, dl) = (m.member("dirPtr")?, m.member("dirLen")?);
+        let Type::Pointer(t1) = self.d.ty(dp.ty) else {
+            return None;
+        };
+        let Type::Pointer(t2) = self.d.ty(t1) else {
+            return None;
+        };
+        let Type::Struct(table) = self.d.ty(t2) else {
+            return None;
+        };
+        let Type::Struct(gr) = self.d.ty(table.member("groups")?.ty) else {
+            return None;
+        };
+        let Type::Pointer(gt) = self.d.ty(gr.member("data")?.ty) else {
+            return None;
+        };
+        let Type::Struct(g) = self.d.ty(gt) else {
+            return None;
+        };
+        let ctrl = g.member("ctrl")?.off;
+        if let Some(sl) = g.member("slots") {
+            let Type::Array(st, n) = self.d.ty(sl.ty) else {
+                return None;
+            };
+            let Type::Struct(slot) = self.d.ty(st) else {
+                return None;
+            };
+            let (k, e) = (slot.member("key")?, slot.member("elem")?);
+            return Some(GoMap {
+                dir_ptr: dp.off,
+                dir_len: dl.off,
+                ctrl,
+                slots: n,
+                key_ty: k.ty,
+                elem_ty: e.ty,
+                key: (sl.off + k.off, slot.size),
+                elem: (sl.off + e.off, slot.size),
+            });
+        }
+        let (ks, es) = (g.member("keys")?, g.member("elems")?);
+        let Type::Array(kt, n) = self.d.ty(ks.ty) else {
+            return None;
+        };
+        let Type::Array(et, _) = self.d.ty(es.ty) else {
+            return None;
+        };
+        Some(GoMap {
+            dir_ptr: dp.off,
+            dir_len: dl.off,
+            ctrl,
+            slots: n,
+            key_ty: kt,
+            elem_ty: et,
+            key: (ks.off, self.d.size_of(kt)),
+            elem: (es.off, self.d.size_of(et)),
+        })
+    }
+
+    /// `m["key"]` (or `m[5]`) of a Go map: every slot of the map's one group, its control byte,
+    /// its key compared with the constant, and its value.
+    fn lookup(&mut self, pv: Pv, m: GoMap, k: &Ast) -> Result<Show, String> {
+        let text = format!("{}[{k}]", pv.text);
+        match k {
+            Ast::Str(s) if s.len() > STR_BYTES => {
+                return Err(format!(
+                    "a map key of more than {STR_BYTES} bytes (the engine reads at most \
+                     {STR_BYTES} bytes of a string)"
+                ))
+            }
+            Ast::Str(_) | Ast::Int(_) => {}
+            _ => {
+                return Err(format!(
+                    "`{text}`: a map's value is read by a constant key, a string or an integer"
+                ))
+            }
+        }
+        let map = self.scalar(pv.clone())?;
+        let ms = self.deref(pv.clone())?;
+        let part = |off: u64, what: &str| Pv {
+            place: ms.place.field(off, 8),
+            ty: None,
+            text: format!("{what} of {}", pv.text),
+            ..ms.clone()
+        };
+        let dl = part(m.dir_len, "the directory length");
+        let l = dl.place.scalar(8, &dl.text)?;
+        let dir_len = self.read(&dl, l, Ty::I(8));
+        let dp = part(m.dir_ptr, "the group");
+        let l = dp.place.scalar(8, &dp.text)?;
+        let group = self.read(&dp, l, Ty::Ptr);
+        let g = self.deref(dp)?;
+        let (ksize, esize) = (self.d.size_of(m.key_ty), self.d.size_of(m.elem_ty));
+        let mut slots = Vec::new();
+        for i in 0..m.slots {
+            let at = |off: u64, size: u64, ty: Option<TRef>, what: String| Pv {
+                place: g.place.field(off, size),
+                ty,
+                text: what,
+                ..g.clone()
+            };
+            let c = at(
+                m.ctrl + i,
+                1,
+                None,
+                format!("{}'s control byte {i}", pv.text),
+            );
+            let l = c.place.scalar(1, &c.text)?;
+            let ctrl = self.read(&c, l, Ty::U(1));
+            let full = Expr::Bin(BinOp::Lt, Box::new(ctrl), Box::new(Expr::Int("128".into())));
+            let kp = at(
+                m.key.0 + i * m.key.1,
+                ksize,
+                m.key_ty,
+                format!("{}'s key {i}", pv.text),
+            );
+            let hit = match k {
+                Ast::Str(s) => self.str_eq_pv(kp, s)?,
+                Ast::Int(v) => Expr::Bin(
+                    BinOp::Eq,
+                    Box::new(self.scalar(kp)?),
+                    Box::new(Expr::Int(v.to_string())),
+                ),
+                _ => unreachable!("checked above"),
+            };
+            let vp = at(m.elem.0 + i * m.elem.1, esize, m.elem_ty, text.clone());
+            let val = self.show_pv(vp)?;
+            slots.push(Slot { full, hit, val });
+        }
+        Ok(Show::Lookup {
+            map,
+            dir_len,
+            group,
+            slots,
+        })
+    }
+
+    /// The values of a function's `record` and `key` lines.
+    fn values(&mut self, recs: &[SrcRecord]) -> Result<Vec<Value>, String> {
+        let mut out = Vec::new();
+        for rc in recs {
+            let at = |ret: bool, r: &mut Self| {
+                r.show(&rc.ast, ret)
+                    .map_err(|e| format!("line {}: {e}", rc.line))
+            };
+            let entry = match rc.when {
+                When::Entry | When::Both => Some(at(false, self)?),
+                When::Return => None,
+            };
+            let at_return = match rc.when {
+                When::Return | When::Both => Some(at(true, self)?),
+                When::Entry => None,
+            };
+            out.push(Value {
+                name: rc.name.clone(),
+                text: rc.text.clone(),
+                line: rc.line,
+                key: rc.key,
+                entry,
+                at_return,
+            });
+        }
+        Ok(out)
+    }
+}
+
 fn function_plan<'a>(
     d: &'a Dwarf<'a>,
     elf: &Elf,
@@ -2007,6 +2520,28 @@ fn function_plan<'a>(
             line: x.line,
         });
     }
+    let values = r.values(&c.records)?;
+    // the return address at entry names the caller (x30 on arm64; the top of the stack on
+    // x86_64)
+    let ret_addr = (!values.is_empty()).then(|| {
+        let l = if arch == "arm64" {
+            Loc {
+                name: "the return address".into(),
+                base: Base::Reg(30),
+                size: 8,
+                ..Loc::default()
+            }
+        } else {
+            Loc {
+                name: "the return address".into(),
+                base: Base::Reg(7),
+                path: vec![0],
+                size: 8,
+                ..Loc::default()
+            }
+        };
+        Reads::add(&mut r.at_entry, l)
+    });
     Ok(Function {
         id,
         name: f.name.clone(),
@@ -2024,6 +2559,8 @@ fn function_plan<'a>(
         at_return: r.at_return,
         clauses,
         inputs,
+        values,
+        ret_addr,
     })
 }
 

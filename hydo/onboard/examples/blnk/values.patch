@@ -1,0 +1,51 @@
+diff --git a/model/model.go b/model/model.go
+index 85fbc1b..35f2b92 100644
+--- a/model/model.go
++++ b/model/model.go
+@@ -153,6 +153,11 @@ func (balance *Balance) computeBalance(inflight bool) {
+ // It returns an error if the balance is insufficient and overdraft is not allowed.
+ // This function includes inflight balances and optionally queued balances in the available balance calculation
+ // to prevent creating transactions that would exceed the actual available funds.
++//
++// The value history of the overdraft limit for hydo: what the overdraft decision sees.
++// hydo: key transaction.Reference
++// hydo: record transaction.OverdraftLimit as overdraft_limit at entry
++// hydo: record transaction.AllowOverdraft as allow_overdraft at entry
+ func canProcessTransaction(transaction *Transaction, sourceBalance *Balance) error {
+ 	if transaction.AllowOverdraft && transaction.OverdraftLimit == 0 {
+ 		// If unconditional overdraft is allowed, skip all balance checks
+diff --git a/transaction_queue.go b/transaction_queue.go
+index 0c6365d..79089e0 100644
+--- a/transaction_queue.go
++++ b/transaction_queue.go
+@@ -379,6 +379,14 @@ func setTransactionStatus(transaction *model.Transaction) {
+ //
+ // Parameters:
+ // - transaction *model.Transaction: The transaction for which to set metadata.
++//
++// The value history of the overdraft limit for hydo (hydo/onboard/examples/blnk, RESULTS.md
++// "The overdraft limit's history"): the API's transaction before and after its metadata is set.
++// hydo: key transaction.Reference
++// hydo: record transaction.OverdraftLimit as overdraft_limit
++// hydo: record transaction.AllowOverdraft as allow_overdraft
++// hydo: record transaction.MetaData["overdraft_limit"] as meta.overdraft_limit at return
++// hydo: record transaction.MetaData["allow_overdraft"] as meta.allow_overdraft at return
+ func setTransactionMetadata(transaction *model.Transaction) {
+ 	transaction.CreatedAt = time.Now()
+ 	if transaction.EffectiveDate == nil {
+@@ -417,6 +425,15 @@ func setTransactionMetadata(transaction *model.Transaction) {
+ //
+ // Returns:
+ // - *model.Transaction: A pointer to the new queue copy of the transaction.
++//
++// The value history of the overdraft limit for hydo: the transaction that a queue copy is made
++// of, in the API (before the task goes to Redis) and in the worker (a transaction loaded from
++// PostgreSQL for coalescing or for the queue recovery, after its flags are restored).
++// hydo: key persistedTxn.Reference
++// hydo: record persistedTxn.OverdraftLimit as overdraft_limit at entry
++// hydo: record persistedTxn.AllowOverdraft as allow_overdraft at entry
++// hydo: record persistedTxn.MetaData["overdraft_limit"] as meta.overdraft_limit at entry
++// hydo: record persistedTxn.MetaData["allow_overdraft"] as meta.allow_overdraft at entry
+ func createQueueCopy(persistedTxn *model.Transaction, originalRef string) *model.Transaction {
+ 	queueTxn := *persistedTxn
+ 	queueTxn.TransactionID = model.GenerateUUIDWithSuffix("txn")

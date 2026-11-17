@@ -93,6 +93,14 @@ pub fn fold(plan: &Plan, records: &Path, res: &mut Res) -> Result<Report, String
 /// first [`hydo_contracts::plan::MAX_RECORDS`], and the calls whose return the run did not reach
 /// (their `ensures` clauses are undecided).
 pub fn summary(r: &Report) -> Vec<String> {
+    // a plan of `record` lines only (Milestone 285): no clause to check
+    if r.outcomes.is_empty() {
+        return vec![format!(
+            "hydo: recorded values: {} calls recorded (`hydo inspect values <run dir> --text` \
+             shows their history)",
+            r.calls
+        )];
+    }
     let mut out = vec![format!(
         "hydo: function contracts: {} calls checked against {} clauses, {} broken",
         r.calls,

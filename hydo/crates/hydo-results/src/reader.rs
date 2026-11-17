@@ -15,7 +15,7 @@
 
 use crate::v1::{
     CiFindingEvent, CiLedger, CiRun, DiagnosisDoc, Diff, End, Exploration, Inspect, InspectError,
-    Run, Shrink, Start, Timeline, VersionsDoc,
+    Run, Shrink, Start, Timeline, ValueHistory, VersionsDoc,
 };
 use crate::{EVENTS, EXPLORATION_DOC, RUN_DOC};
 use serde_json::Value;
@@ -49,6 +49,8 @@ pub enum Record {
     /// The history store: `findings.jsonl` and `state.json` (`hydo ci record`; added in stage 2).
     CiFindingEvent(Box<CiFindingEvent>),
     CiLedger(Box<CiLedger>),
+    /// `hydo inspect values` (added in Milestone 285).
+    Values(Box<ValueHistory>),
 }
 
 /// A record the reader skipped (rule 3).
@@ -154,6 +156,7 @@ pub fn record(v: Value) -> Result<Option<Record>, String> {
         "versions" => Record::Versions(de(v, &ty)?),
         "finding-event" => Record::CiFindingEvent(de(v, &ty)?),
         "ci-ledger" => Record::CiLedger(de(v, &ty)?),
+        "values" => Record::Values(de(v, &ty)?),
         _ => return Ok(None),
     }))
 }

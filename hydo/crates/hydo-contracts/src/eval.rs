@@ -4,16 +4,21 @@ use crate::plan::{BinOp, ClauseKind, Expr, Function, Plan, Record, Ty};
 use serde::{Deserialize, Serialize};
 
 /// A value of an expression.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum V {
     Int(i128),
     Bool(bool),
+    /// A floating-point number (Milestone 285). An expression with one is computed in floating
+    /// point; integers stay exact without one.
+    Float(f64),
 }
 
 /// A raw read as a value of its type.
 pub fn typed(raw: u64, ty: Ty) -> V {
     match ty {
         Ty::Bool => V::Bool(raw & 0xff != 0),
+        Ty::F(4) => V::Float(f32::from_bits(raw as u32) as f64),
+        Ty::F(_) => V::Float(f64::from_bits(raw)),
         Ty::Ptr => V::Int(raw as i128),
         Ty::U(n) | Ty::Bytes(n) => {
             let n = n.min(8) as u32;
@@ -53,18 +58,24 @@ pub fn eval(
     let int = |v: V| match v {
         V::Int(x) => x,
         V::Bool(b) => b as i128,
+        V::Float(f) => f as i128,
     };
     let boolean = |v: V| match v {
         V::Bool(b) => b,
         V::Int(x) => x != 0,
+        V::Float(f) => f != 0.0,
     };
     Ok(match e {
         Expr::Int(s) => V::Int(s.parse().unwrap_or(0)),
+        Expr::Float(s) => V::Float(s.parse().unwrap_or(0.0)),
         Expr::Bool(b) => V::Bool(*b),
         Expr::In(i, ty) => read(Some(at_entry), *i, *ty, "entry")?,
         Expr::Out(i, ty) => read(at_return, *i, *ty, "return")?,
         Expr::Not(x) => V::Bool(!boolean(eval(x, at_entry, at_return)?)),
-        Expr::Neg(x) => V::Int(-int(eval(x, at_entry, at_return)?)),
+        Expr::Neg(x) => match eval(x, at_entry, at_return)? {
+            V::Float(f) => V::Float(-f),
+            v => V::Int(-int(v)),
+        },
         Expr::Guard { cond, then, why } => {
             if !boolean(eval(cond, at_entry, at_return)?) {
                 return Err(Undecided(why.clone()));
@@ -118,6 +129,9 @@ pub fn eval(
                 return Ok(V::Bool(boolean(eval(b, at_entry, at_return)?)));
             }
             let (x, y) = (eval(a, at_entry, at_return)?, eval(b, at_entry, at_return)?);
+            if matches!(x, V::Float(_)) || matches!(y, V::Float(_)) {
+                return float_op(*op, x, y);
+            }
             let (i, j) = (int(x), int(y));
             match op {
                 BinOp::Eq => V::Bool(i == j),
@@ -138,6 +152,47 @@ pub fn eval(
             }
         }
     })
+}
+
+/// A number as a floating-point value.
+pub fn as_f64(v: V) -> f64 {
+    match v {
+        V::Int(x) => x as f64,
+        V::Bool(b) => b as u8 as f64,
+        V::Float(f) => f,
+    }
+}
+
+/// An operation where one side is a floating-point number: both are compared and computed as
+/// IEEE 754 doubles. A NaN compares unequal to everything, as in the program.
+fn float_op(op: BinOp, x: V, y: V) -> Result<V, Undecided> {
+    let (a, b) = (as_f64(x), as_f64(y));
+    Ok(match op {
+        BinOp::Eq => V::Bool(a == b),
+        BinOp::Ne => V::Bool(a != b),
+        BinOp::Lt => V::Bool(a < b),
+        BinOp::Le => V::Bool(a <= b),
+        BinOp::Gt => V::Bool(a > b),
+        BinOp::Ge => V::Bool(a >= b),
+        BinOp::Add => V::Float(a + b),
+        BinOp::Sub => V::Float(a - b),
+        BinOp::Mul => V::Float(a * b),
+        BinOp::Div if b == 0.0 => return Err(Undecided("a division by zero".into())),
+        BinOp::Div => V::Float(a / b),
+        BinOp::Rem if b == 0.0 => return Err(Undecided("a division by zero".into())),
+        BinOp::Rem => V::Float(a % b),
+        BinOp::Or | BinOp::And => unreachable!("decided before"),
+    })
+}
+
+/// A floating-point number as hydo shows it: an integral value with `.0` (`50.0`), else the
+/// shortest text that reads back as the same number.
+pub fn float_text(f: f64) -> String {
+    if f.is_finite() && f.fract() == 0.0 && f.abs() < 1e15 {
+        format!("{f:.1}")
+    } else {
+        format!("{f}")
+    }
 }
 
 /// The first call that broke a clause.
@@ -202,6 +257,7 @@ fn shown(v: Option<u64>, ty: Option<Ty>) -> String {
             }
             V::Int(x) => x.to_string(),
             V::Bool(b) => b.to_string(),
+            V::Float(f) => float_text(f),
         },
         (Some(r), None) => r.to_string(),
     }
@@ -242,7 +298,7 @@ fn read_types(f: &Function) -> (Vec<Option<Ty>>, Vec<Option<Ty>>) {
                 }
             }
             Expr::Is { discr, .. } => walk(discr, i, o),
-            Expr::Int(_) | Expr::Bool(_) => {}
+            Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) => {}
         }
     }
     let mut i = vec![None; f.at_entry.len()];
@@ -272,7 +328,9 @@ pub fn judge(plan: &Plan, recs: &[Record]) -> Report {
     let mut ncalls = std::collections::BTreeMap::<u32, u64>::new();
     for r in recs {
         rep.calls += 1;
-        if r.at_return.is_none() {
+        // a function stopped at its entry only (no return reads) has no return to miss
+        let has_ret = fns.iter().any(|f| f.id == r.f && !f.at_return.is_empty());
+        if r.at_return.is_none() && has_ret {
             rep.without_return += 1;
         }
         let n = ncalls.entry(r.f).or_default();
@@ -295,6 +353,7 @@ pub fn judge(plan: &Plan, recs: &[Record]) -> Report {
                 match eval(&c.expr, &r.at_entry, r.at_return.as_deref()) {
                     Ok(V::Bool(true)) => {}
                     Ok(V::Int(x)) if x != 0 => {}
+                    Ok(V::Float(x)) if x != 0.0 => {}
                     Ok(_) => {
                         o.violations += 1;
                         if o.first.is_none() {

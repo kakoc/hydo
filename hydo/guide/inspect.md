@@ -82,6 +82,10 @@ state *before* the commands hydo typed at it, so to see the state just after a k
 stop. `conversations` says, per conversation (`boot`, `run`, `recovery`), which stops can be kept
 as a snapshot.
 
+When the program has `// hydo: record` lines, the kind `value` lists each recorded call with its
+values. `hydo inspect values <run dir> --changes --text` shows them per key, with each change
+marked (`hydo guide values`).
+
 ## 3. Hold the stop and look (one replay, then cheap calls)
 
 ```sh

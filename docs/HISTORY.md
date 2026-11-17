@@ -14232,3 +14232,98 @@ with `false`, or again in a recovery boot; the image's epoch decides an absent k
 hydo-schedule's `language::`; `cargo test -p hydo-config`; hydo-agents's `public_content::`; the
 `hydo` program's `docs::`, `equivalence::cli_matches_golden` and `agents_equivalence`;
 `hydo-schema-compat`; `sh ci/consolidate-tests.sh --check` and `sh ci/vale.sh`.
+### Milestone 285 (tentative number) - DONE (value history: `// hydo: key` and `// hydo: record` lines next to a function record chosen values at every call through the contracts' plan and breakpoints, and `hydo inspect values` shows each key's values in the run's order with each change marked; new readers for floating-point values, strings, a Go interface's dynamic value and a Go map's value by a constant key; on Blnk's overdraft regression the history shows the limit at 50.0 in the API, absent from the saved metadata, and 0.0 in the worker's coalesced copy of the two draws past the limit; one fingerprint with and without the plan; first version on the Mac engine; nothing recorded moved; 2026-11-17)
+
+**In short.** The user's idea was to follow one field of a structure through the program under
+faults. A value history does it for the fields a developer names. `docs/design/value-history.md`
+is the design, and `hydo guide values` the how-to.
+
+```go
+// hydo: key persistedTxn.Reference
+// hydo: record persistedTxn.OverdraftLimit as overdraft_limit at entry
+// hydo: record persistedTxn.MetaData["overdraft_limit"] as meta.overdraft_limit at entry
+func createQueueCopy(persistedTxn *model.Transaction, originalRef string) *model.Transaction {
+```
+
+**The parts.**
+
+- The language (`hydo-contracts`, `lang.rs`): `record <expr> [as <name>] [at entry|at return]`
+  (both by default) and `key <expr>` (at entry, one per function); floating-point literals.
+- The plan (`plan.rs`): `Function.values` (a `Show` per value at entry and at return),
+  `Function.ret_addr` (the entry read of the return address) and `Program.calls` (the direct calls
+  of each recording function, found by a scan for `BL` on arm64 and `CALL rel32` on x86_64, with
+  the calling function). `Ty::F` and `Expr::Float`. `Record.boot`, the boot of a call (each power
+  cut or reboot starts the next), which the Mac and KVM engines set. Every addition is skipped
+  when empty, so a plan or a record of before reads and writes as it did.
+- The readers (`compile.rs`): a `float64` or `float32` in memory; a string's length and first 32
+  bytes; a Go interface's dynamic value (`runtime.eface`'s type word, or `runtime.iface`'s itab
+  and its type at offset 8), compared with the runtime type descriptors of 11 types, each at
+  `.go.type` plus the type's `DW_AT_go_runtime_type`; and a Go map's value by a constant string
+  or integer key in a map of one group (8 slots), from the `map<K,V>`, `table<K,V>` and group
+  types that Go's linker writes. A test builds `tests/go-values` for arm64 and amd64 and checks
+  each descriptor's size and kind in the program's file.
+- Clauses compare floats now (`V::Float`; `requires t.Limit > 0.5`).
+- The host (`values.rs`): each recorded call's entry and return as points in the run's order, a
+  history per key (a key that extends another after `_`, `-`, `.`, `:`, `/` or `#` is its
+  copy), and each change of a value between two points.
+- The view (`hydo-cli`, `inspect/values.rs`): `hydo inspect values <run dir> [--key K] [--name N]
+  [--changes] [--plan FILE] [--limit N] [--offset N]`, the results type `values` (a results
+  addition: `ValueHistory`, `ValueKey`, `ValuePoint`, `ValueChange`; `hydo-schema-compat`
+  passes) or `--text`. Each point names the run's stop (`run:8007`), the workload's step range
+  from the transcript, the function, the caller and the values. `hydo inspect events` adds them
+  as events of the kind `value`, and `hydo report --html` adds the section "How the recorded
+  values changed".
+- `hydo build` prints `10 recorded values` beside the functions and clauses when a plan has
+  them. `hydo run` prints `hydo: recorded values: N calls recorded` for a plan without clauses,
+  and a function stopped at its entry only no longer counts as a call without its return.
+
+**The proof on Blnk.** `hydo/onboard/examples/blnk` (RESULTS.md, "The overdraft limit's
+history"). `values.patch` adds only comments to `setTransactionMetadata`, `createQueueCopy` and
+`canProcessTransaction`; `hydo-values.yaml` is `hydo.yaml` with that program. The first choice,
+`restoreTransactionFlagsFromMetadata`, has no copy of its own: the Go compiler inlined it into
+its three callers. All runs used the Mac engine with this tree's hydo and engine over the 0.3.4
+Mac release's guest files, on `explore-ob-blnk-values-arm64.cpio.gz` (`431e374d…`) and its build
+with the fixes (`8533608f…`):
+
+| image, schedule | with the plan | without it | verdict | calls |
+|---|---|---|---|---|
+| buggy, `overdraft-limit-concurrent-draws` | `f3cbeb9c85945f5c` twice | `f3cbeb9c85945f5c` twice | `VIOLATION [no_overdraft]` | 98 |
+| fixed, the same schedule | `31feeab9f802ef32` twice | `31feeab9f802ef32` twice | OK | 100 |
+| buggy, `disk=none \| run` | `e688c9f3241219f1` | `e688c9f3241219f1` | OK | 283 |
+| buggy at epoch 4 (`62d83259…`), the regression | `ddb6f1730f6854ea` twice | `ddb6f1730f6854ea` twice | `VIOLATION [no_overdraft]` | 97 |
+
+The first three rows ran on `7944ad08` with this milestone on top, at the fingerprint epoch 3.
+The last row ran after the rebase onto `64950f8f` (Milestones 269 and 283, epoch 4); its records
+were the same in both runs with the plan (`eaf3d5fb…`), and its decisions for `c27_q` and `c29_q`
+saw 0.0, the rule's two rows.
+
+The two runs with the plan of each regression wrote the same records (`f1067232…`, `86a7df98…`).
+On the buggy regression 2 of 22 keys changed, `c27` and `c29`, the draws past the limit. Their
+history: `setTransactionMetadata` returns with the limit 50.0 and `meta.overdraft_limit =
+absent`; the API's copy for Redis has 50.0; the worker's coalesced copy, called from
+`buildQueuedCoalescingBatchForScope`, has 0.0 with `allow_overdraft = true`; and the decision
+sees 0.0. On the fixed build no key changed, and the metadata holds 50.0. In the passing run 3 of
+65 keys lost the limit in their coalesced copy, and one of them reached the decision with 0.0.
+
+**The cost.** The regression stopped at 98 entries and 44 returns, 142 breakpoint stops, each
+with its single step; a stop makes at most 115 reads. The engine's time was 5.5 s and 5.1 s with
+the plan and 5.2 s and 5.5 s without it, the same 10,288 stops each; the records are 59 KB.
+
+**Tests and checks.** New: `hydo-contracts`'s `values::` (the lines, floats, each reader's
+evaluation on synthetic reads, histories and copies, a return not reached) and
+`types::go_values_on_arm64_and_x86_64`; the results example
+`hydo/schema/examples/results/v1/mac-blnk-values/values.json`, recorded from the regression's
+run. Re-recorded for the new guide topic and manifest: `hydo`'s `equivalence::` and
+`agents_equivalence::` goldens, and the explorer's `identity-quick.txt` and `corpus-full.txt`.
+On this Mac, after the rebase onto `64950f8f`: workspace clippy with `-D warnings`; `cargo test
+-p hydo-contracts`, `-p hydo-hvm`,
+`-p hydo-config`, `-p hydo-results`; `hydo-schedule`'s `language::`; `hydo-agents`'s
+`public_content::`; `hydo`'s `docs::`; `hydo-explore`'s `identity::` and `corpus::`;
+`hydo-schema-compat`; `sh ci/consolidate-tests.sh --check`; `sh ci/vale.sh`. Nothing recorded
+moved: an image without `record` lines gets the plan it got before, and the engines' only change
+is the `boot` field, written only after a cut.
+
+**Left** (open item 146): KVM did not run it (the Blnk plan needs one more debug register than
+KVM has), hvx has no breakpoints, an inlined function cannot be recorded, a map of more than 8
+entries is unreadable, a call through a function value names only its return address, and no
+run with a power cut was recorded.

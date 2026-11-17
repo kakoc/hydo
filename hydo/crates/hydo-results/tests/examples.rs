@@ -215,6 +215,9 @@ fn note(s: &mut Seen, r: &Record) {
         Record::CiLedger(_) => {
             s.types.insert("ci-ledger".into());
         }
+        Record::Values(_) => {
+            s.types.insert("values".into());
+        }
     }
 }
 
@@ -284,6 +287,7 @@ fn every_example_parses_and_is_valid() {
         "ci-run",
         "finding-event",
         "ci-ledger",
+        "values",
     ] {
         assert!(seen.types.contains(t), "no example has a {t} record");
     }

@@ -84,6 +84,8 @@ pub struct Ct {
     /// Hits at an entry address in another program; calls past [`plan::MAX_RECORDS`].
     pub foreign: u64,
     pub over: u64,
+    /// The boot the calls are in: each power cut or reboot starts the next (Milestone 285).
+    pub boot: u32,
 }
 
 impl Ct {
@@ -123,6 +125,7 @@ impl Ct {
             recs: Vec::new(),
             foreign: 0,
             over: 0,
+            boot: 0,
         };
         let mut entries: Vec<u64> = ct.fns.iter().map(|f| f.entry).collect();
         entries.sort_unstable();
@@ -153,6 +156,7 @@ impl Ct {
         self.skip = None;
         self.foreign = 0;
         self.over = 0;
+        self.boot = 0;
         for &n in &SLOTS {
             if matches!(self.slot_use[n], Use::Return(_)) {
                 self.slot_use[n] = Use::Free;
@@ -162,6 +166,7 @@ impl Ct {
 
     /// A power cut: the calls in progress never return (the recovery boot is a new machine).
     pub fn cut(&mut self) {
+        self.boot += 1;
         for p in self.pending.drain(..) {
             self.recs[p.rec].lost = Some("power cut".into());
         }
@@ -535,6 +540,7 @@ impl Vmm {
             ct.recs.push(Record {
                 f: id,
                 at: exits,
+                boot: ct.boot,
                 at_entry,
                 ..Record::default()
             });

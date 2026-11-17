@@ -639,6 +639,7 @@ fn kind_label(e: &TimelineEvent) -> (&'static str, &'static str, bool) {
         "refused" => ("refused", "warn", false),
         "kernel" => ("kernel", "warn", false),
         "preempt" => ("thread switch", "note", false),
+        "value" => ("recorded value", "note", true),
         "verdict" if t.contains("VIOLATION") || t.contains("ERROR") => ("verdict", "bad", false),
         "verdict" => ("verdict", "ok", false),
         "end" => ("phase ended", "", false),
@@ -746,6 +747,88 @@ fn timeline_html(id: &str, evs: &[TimelineEvent], more: &str) -> String {
     }
     s.push_str("</div>\n");
     s
+}
+
+/// How many keys with a change the page shows.
+const MAX_VALUE_KEYS: usize = 12;
+
+/// The value history (Milestone 285): each key whose recorded values changed, as a table of
+/// its stops, the changed value marked. None: the run has no record plan or no recorded call.
+fn values_html(dir: &Path, run: &Run, shown: &str) -> Option<String> {
+    let rec = Recorded::of(dir, run.clone(), RunFiles::default()).ok()?;
+    let (_, plan) = crate::inspect::values::plan_of(&rec, None).ok()?;
+    let (calls, keys) = crate::inspect::values::keys(&rec, &plan).ok()?;
+    if calls == 0 {
+        return None;
+    }
+    let changed: Vec<&hydo_results::ValueKey> =
+        keys.iter().filter(|k| !k.changes.is_empty()).collect();
+    let mut s = format!(
+        "<p>The program's <code>// hydo: record</code> lines recorded {calls} calls for {} keys. \
+         {} of the keys had a value that changed between two of their stops; each such key is \
+         below, with every stop of its history in the run's order. A changed value is marked. \
+         <code>hydo inspect values {} --text</code> lists every key.</p>\n",
+        keys.len(),
+        changed.len(),
+        esc(&quote(shown))
+    );
+    for k in changed.iter().take(MAX_VALUE_KEYS) {
+        let mut head = match &k.key {
+            Some(key) => format!("Key {}", code(key)),
+            None => "Values without a key".into(),
+        };
+        if !k.copies.is_empty() {
+            let c: Vec<String> = k.copies.iter().map(|c| code(c)).collect();
+            head.push_str(&format!(" and its copy {}", c.join(", ")));
+        }
+        s.push_str(&format!("<p><b>{head}</b></p>\n"));
+        s.push_str("<div class=\"scroll\"><table>\n<thead><tr><th>Stop</th><th>Function</th><th>When</th><th>Called from</th>");
+        for n in &k.names {
+            s.push_str(&format!("<th>{}</th>", esc(n)));
+        }
+        s.push_str("</tr></thead>\n<tbody>\n");
+        for (i, p) in k.points.iter().enumerate() {
+            let mut fun = esc(crate::inspect::values::short(&p.function));
+            if let Some(own) = &p.key {
+                fun.push_str(&format!(" {}", code(own)));
+            }
+            s.push_str(&format!(
+                "<tr><td class=\"n\">{}</td><td>{fun}</td><td>{}</td><td>{}</td>",
+                esc(p.point.as_deref().unwrap_or("")),
+                esc(&p.when),
+                esc(p
+                    .caller
+                    .as_deref()
+                    .map(crate::inspect::values::short)
+                    .unwrap_or(""))
+            ));
+            for n in &k.names {
+                let v = p.values.get(n).map(String::as_str).unwrap_or("");
+                match k
+                    .changes
+                    .iter()
+                    .find(|c| c.point == i as u64 && &c.name == n)
+                {
+                    Some(c) => s.push_str(&format!(
+                        "<td>{} <span class=\"muted\">(was {})</span></td>",
+                        badge("bad", v),
+                        esc(&c.from)
+                    )),
+                    None => s.push_str(&format!("<td>{}</td>", esc(v))),
+                }
+            }
+            s.push_str("</tr>\n");
+        }
+        s.push_str("</tbody></table></div>\n");
+    }
+    if changed.len() > MAX_VALUE_KEYS {
+        s.push_str(&format!(
+            "<p class=\"muted\">{} more keys changed; <code>hydo inspect values {} --changes --text</code> lists them.</p>\n",
+            changed.len() - MAX_VALUE_KEYS,
+            esc(&quote(shown))
+        ));
+    }
+    Some(s)
 }
 
 // ---------------------------------------------------------------- the diff
@@ -1530,6 +1613,10 @@ fn run_page(
     );
     s.push_str(&h3("timeline", "Timeline of the run"));
     s.push_str(&timeline_html("tl-run", &evs, &more));
+    if let Some(v) = values_html(dir, run, &shown) {
+        s.push_str(&h3("values", "How the recorded values changed"));
+        s.push_str(&v);
+    }
     if let Some(d) = &d {
         s.push_str(&h3("diff", "Against a passing run"));
         s.push_str(&diff_html(

@@ -52,6 +52,10 @@ Error logs as findings (`errors: true`) ran beside both kinds, without a rule.
   named the call and the draw's values, but it could not read the limit, a `float64`. No
   contract could state the atomic bulk. The runs are in the section
   "Contracts against rules" (Milestone 260).
+- **Did a value history name the cause?** Yes, for finding 1. A history of the overdraft limit
+  at three functions showed the limit at 50.0 in the API, absent from the metadata that Blnk
+  saves, and 0.0 in the worker's copy of the two draws that went past the limit. The runs are in
+  the section "The overdraft limit's history" (Milestone 285).
 - **What did hydo lack?** Four things, which the section "What hydo lacked" lists.
 
 ## The version
@@ -67,11 +71,13 @@ source.
 
 | file | what it is |
 |---|---|
-| `build.sh` | builds `bin/blnk-<arch>` from `67d88333`, `bin/blnk-fixed-<arch>` with the two patches, and `bin/blnkc-<arch>` from `client/`: static Linux programs for amd64 and arm64. It also builds both Blnk programs with `contracts.patch` and their debug information (`bin/blnk-contracts-<arch>`, `bin/blnk-fixed-contracts-<arch>`). Ten sha256 pins check them (on a Mac) |
+| `build.sh` | builds `bin/blnk-<arch>` from `67d88333`, `bin/blnk-fixed-<arch>` with the two patches, and `bin/blnkc-<arch>` from `client/`: static Linux programs for amd64 and arm64. It also builds both Blnk programs with `contracts.patch` and their debug information (`bin/blnk-contracts-<arch>`, `bin/blnk-fixed-contracts-<arch>`), and with `values.patch` (`bin/blnk-values-<arch>`, `bin/blnk-fixed-values-<arch>`). Fourteen sha256 pins check them (on a Mac) |
 | `contracts.patch` | function contracts on three of Blnk's functions, as `// hydo:` comments only ("Contracts against rules") |
+| `values.patch` | a value history of the overdraft limit at three of Blnk's functions, as `// hydo: key` and `// hydo: record` comments only ("The overdraft limit's history") |
 | `client/main.go` | `blnkc`, the test client: every workload operation, the wait for the queue, and the generic rule (standard library only) |
 | `fix-overdraft-limit.patch`, `fix-atomic-bulk.patch` | the tested fixes of findings 1 and 2, against `67d88333` |
 | `hydo/hydo-contracts.yaml` | `hydo.yaml` with the contracts program and a `contracts:` entry |
+| `hydo/hydo-values.yaml` | `hydo.yaml` with the value-history program and a `contracts:` entry |
 | `hydo/hydo.yaml` | PostgreSQL 16 and Redis 7.2.4 as Blnk's `docker-compose.yaml` runs them, `blnk start` after `blnk migrate up`, and `blnk workers`, each in its own network namespace |
 | `hydo/workload/` | `first_init` funds the accounts; eight `parallel_driver_` commands, one per operation (below); `eventually_1_settle` and `eventually_2_settle` wait for the queue (`helper_settle.sh`) |
 | `hydo/checks/` | the rules (below): 9 SQL files over PostgreSQL and 1 program |
@@ -80,7 +86,7 @@ source.
 | `hydo/fetch-images.sh` | PostgreSQL 16.16 and Redis 7.2.4 by digest for both architectures |
 
 ```sh
-sh build.sh                     # needs Go 1.27.3 and network once; prints "ok" for the ten pins
+sh build.sh                     # needs Go 1.27.3 and network once; prints "ok" for the fourteen pins
 cd hydo && sh fetch-images.sh
 hydo build hydo.yaml --arch arm64 --set arch=arm64     # on a Mac; on Linux: hydo build hydo.yaml
 hydo run "disk=none | run"
@@ -629,6 +635,106 @@ In the order in which they cost time:
 The 100,000-call limit did not matter: a run made fewer than 100 calls. Goroutines did not
 matter either: every call's return was matched. The undecided checks (9 to 12 per run) were
 reads of a word past the end of an empty `abs`: a balance whose debits or credits were still 0.
+
+## The overdraft limit's history
+
+Milestone 285 asked whether a value history names finding 1's cause, which the contracts could
+not state. A value history records chosen values at every call of chosen functions, and `hydo
+inspect values` shows them per key in the run's order, with each change marked
+(`docs/design/value-history.md`). It reads floating-point values, Go interfaces and Go maps,
+which the contracts of Milestone 260 lacked.
+
+### The declaration
+
+`values.patch` adds only comments, to three functions on a draw's way from the API to the
+overdraft decision:
+
+| function | where it runs | what it records |
+|---|---|---|
+| `setTransactionMetadata` | the API, before the transaction is saved | the limit and the flag at entry and at return, and the metadata's `overdraft_limit` and `allow_overdraft` at return |
+| `createQueueCopy` | the API (the task for Redis), and the worker (each transaction it loads for coalescing or for the queue recovery) | the limit, the flag and the two metadata values of the transaction it copies |
+| `canProcessTransaction` | the worker's overdraft decision | the limit and the flag |
+
+```go
+// hydo: key persistedTxn.Reference
+// hydo: record persistedTxn.OverdraftLimit as overdraft_limit at entry
+// hydo: record persistedTxn.AllowOverdraft as allow_overdraft at entry
+// hydo: record persistedTxn.MetaData["overdraft_limit"] as meta.overdraft_limit at entry
+// hydo: record persistedTxn.MetaData["allow_overdraft"] as meta.allow_overdraft at entry
+func createQueueCopy(persistedTxn *model.Transaction, originalRef string) *model.Transaction {
+```
+
+The key is the transaction's reference. The worker's queue copy of `c27` has the reference
+`c27_q`, and the history puts it under `c27`. `restoreTransactionFlagsFromMetadata`, which
+restores the flags, was the first choice. The Go compiler copied it into its three callers and
+kept no copy of its own, so it has no address to stop at; `createQueueCopy` is its next call.
+
+### The runs
+
+All runs used the Mac engine with this tree's hydo, one VM at a time, on the image
+`explore-ob-blnk-values-arm64.cpio.gz` (sha256 `431e374d…`) and its build with the fixes
+(`--set blnk=blnk-fixed`, `8533608f…`). Each schedule gave one fingerprint with the plan and
+without it, and the two runs with the plan wrote the same records:
+
+| image, schedule | with the plan (twice) | without it (twice) | the rules | calls recorded |
+|---|---|---|---|---|
+| buggy, `overdraft-limit-concurrent-draws` | `f3cbeb9c85945f5c` | `f3cbeb9c85945f5c` | `VIOLATION [no_overdraft]` | 98 |
+| fixed, `overdraft-limit-concurrent-draws` | `31feeab9f802ef32` | `31feeab9f802ef32` | OK | 100 |
+| buggy, `disk=none \| run` | `e688c9f3241219f1` (once) | `e688c9f3241219f1` (once) | OK | 283 |
+| buggy at the fingerprint epoch 4, `overdraft-limit-concurrent-draws` | `ddb6f1730f6854ea` | `ddb6f1730f6854ea` | `VIOLATION [no_overdraft]` | 97 |
+
+These images were built at the fingerprint epoch 3. The last row is the regression on the image
+that this tree builds after Milestones 269 and 283 (epoch 4, `62d83259…`), with the plan twice
+and without it twice; its two runs with the plan wrote the same records too. Its timing differs:
+4 of its 22 keys changed. The coalesced copies of `c20`, `c27`, `c28` and `c29` had the limit
+0.0. The decisions for `c27_q` and `c29_q` saw 0.0, and their credit lines ended at -60.57 and
+-55.42, the rule's two rows. The one decision recorded for `c20_q` and for `c28_q` saw 50.0.
+
+### What the history shows
+
+The run had 22 keys, and two of them had a value that changed: `c27` and `c29`, the two draws
+that the rule found past the limit. `hydo inspect values <run dir> --changes --text`:
+
+```text
+key "c27" (and c27_q), first seen in workload steps 0..29
+  run:8007    blnk.setTransactionMetadata entry, called from blnk.(*Blnk).QueueTransaction:  overdraft_limit = 50.0  allow_overdraft = true
+  run:8007    blnk.setTransactionMetadata return, called from blnk.(*Blnk).QueueTransaction:  overdraft_limit = 50.0  allow_overdraft = true  meta.overdraft_limit = absent  meta.allow_overdraft = true
+  run:8007    blnk.createQueueCopy entry, called from blnk.(*Blnk).processSingleTransaction:  overdraft_limit = 50.0  allow_overdraft = true  meta.overdraft_limit = absent  meta.allow_overdraft = true
+  run:9103    blnk.createQueueCopy entry, called from blnk.(*Blnk).buildQueuedCoalescingBatchForScope:  overdraft_limit = 0.0 (CHANGED from 50.0)  allow_overdraft = true  meta.overdraft_limit = absent  meta.allow_overdraft = true
+  run:9103    model.canProcessTransaction entry [c27_q], called from model.UpdateBalances:  overdraft_limit = 0.0  allow_overdraft = true
+  change: overdraft_limit 50.0 -> 0.0 between blnk.createQueueCopy entry (run:8007) and blnk.createQueueCopy entry (run:9103)
+```
+
+(Two more lines of `setTransactionMetadata`, called from `prepareTransactionForQueue`, are left
+out here; they record the same values.) The history reads as the three steps of finding 1's
+cause:
+
+1. The API's `setTransactionMetadata` returns with the limit 50.0 in the transaction and none
+   in its metadata (`meta.overdraft_limit = absent`), and with `allow_overdraft` in both.
+2. The API's copy for Redis keeps 50.0. The worker's coalescing loads the transaction from
+   PostgreSQL, restores its flags, and copies it with the limit 0.0 and the flag `true`.
+3. The overdraft decision sees the limit 0.0 with the flag set, the documented unlimited
+   overdraft.
+
+The other draws on the credit lines (`c0`, `c20`, `c24`, `c26`, `c28`) came to the decision
+from Redis with 50.0, and no value of theirs changed. On the fixed build no key had a change:
+the metadata carries `overdraft_limit = 50.0` from the API on, and the coalesced copies of `c27`,
+`c28` and `c29` reach the decision with 50.0.
+
+The history also shows the bug in a run that every rule passed. In `disk=none | run` on the
+buggy build, 3 of 65 keys changed: the worker's coalesced copies of the draws `c33`, `c50` and
+`c54` had the limit 0.0. The decision for `c54_q` saw 0.0 and skipped the limit, and the credit
+line still stayed above -50.00, so rule 1.6 held. The one decision recorded for `c33_q` and for
+`c50_q` saw 50.0. A rule over the balances cannot tell such a run from a correct one; the
+history of the limit can.
+
+### The cost
+
+The plan has three functions and 10 recorded values; a stop makes at most 115 reads (the entry of `createQueueCopy`, with its two map lookups of 8 slots each). A run of the
+regression stopped at 98 entries and 44 returns: 142 breakpoint stops, each with its single
+step. The run took 5.5 s and 5.1 s of the engine's time with the plan, and 5.2 s and 5.5 s
+without it, with 10,288 stops of the run in each: the record's cost is below the spread of the
+runs. The records file is 59 KB.
 
 ## What hydo lacked
 

@@ -37,6 +37,7 @@ pub fn value(a: &Ast, env: &Env) -> Result<Val, Undecided> {
 fn eval(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
     Ok(match a {
         Ast::Int(x) => Val::Int(*x),
+        Ast::Float(_) => return Err("function fuzzing does not read floating-point values".into()),
         Ast::Bool(b) => Val::Bool(*b),
         Ast::Str(s) => Val::Str(s.clone()),
         Ast::Name(n) => {

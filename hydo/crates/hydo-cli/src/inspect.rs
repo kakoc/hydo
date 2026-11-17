@@ -18,6 +18,7 @@ pub mod diagnose;
 pub mod drive;
 pub mod session;
 pub mod timeline;
+pub mod values;
 pub mod work;
 
 use crate::ctx::Ctx;
@@ -992,8 +993,9 @@ pub fn run_point(rec: &Recorded, t: Target) -> RunPoint {
 pub const HELP: &str = r#"hydo inspect -- look inside a recorded run at any of its stops, without changing it.
 
 Every call prints one JSON document (results format v1: "inspect", "inspect-error",
-"timeline", "diagnosis"); --text prints a view for people instead. A failed call prints an
-"inspect-error" with "try": commands that would work. Exit status: 0 answered, 2 inspect-error.
+"timeline", "diagnosis", "values"); --text prints a view for people instead. A failed call
+prints an "inspect-error" with "try": commands that would work. Exit status: 0 answered, 2
+inspect-error.
 
 Find where to look (no VM; instant):
   hydo inspect diagnose <run dir> [--evidence]   why the run failed (--evidence: one replay
@@ -1001,6 +1003,10 @@ Find where to look (no VM; instant):
   hydo inspect events <run dir> [--kind K,...] [--grep TEXT] [--conversation C]
                       [--from POINT] [--to POINT] [--limit N] [--offset N]
                                                  the run's events, each with its point (boot:172)
+  hydo inspect values <run dir> [--key K] [--name N] [--changes] [--plan FILE]
+                      [--limit N] [--offset N]
+                                                 how the values of `// hydo: record` lines changed
+                                                 through the run, per key (hydo guide values)
 
 Hold a stop (one replay of the run up to it: about as long as the run took to get there):
   hydo inspect start <run dir> [--at end|<conv>:<stop>|<stop>] [--freeze] [--idle SECS]
@@ -1070,6 +1076,11 @@ fn view(v: &Value) -> String {
     if let Some(t) = v.pointer("/file/text").and_then(Value::as_str) {
         return t.to_string();
     }
+    if v.get("type").and_then(Value::as_str) == Some("values") {
+        if let Ok(d) = serde_json::from_value::<hydo_results::ValueHistory>(v.clone()) {
+            return values::text(&d);
+        }
+    }
     serde_json::to_string_pretty(v).unwrap_or_default() + "\n"
 }
 
@@ -1099,6 +1110,7 @@ pub fn cmd_inspect(ctx: &Ctx, argv: &[String]) -> i32 {
         }
         "__serve" => return session::serve(ctx, rest.first().map(String::as_str).unwrap_or("")),
         "events" => timeline::cmd(&rest),
+        "values" => values::cmd(&rest),
         "diagnose" => diagnose::cmd(ctx, &rest),
         "start" => session::start(ctx, &rest),
         "list" => session::list(ctx),

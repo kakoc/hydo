@@ -498,6 +498,12 @@ pub fn events(rec: &Recorded) -> Vec<TimelineEvent> {
             },
         ));
     }
+    // the recorded values (`// hydo: record`, Milestone 285), each at the first stop at or after
+    // it; `at` is the call's own clock
+    for (i, (c, stop, e)) in super::values::events(rec).into_iter().enumerate() {
+        let ci = Conv::ALL.iter().position(|x| *x == c).unwrap_or(0);
+        keyed.push(((ci, stop.unwrap_or(0), 0, i), e));
+    }
     keyed.sort_by_key(|(k, _)| *k);
     let mut out: Vec<TimelineEvent> = keyed.into_iter().map(|(_, e)| e).collect();
     out.push(TimelineEvent {
