@@ -15153,3 +15153,34 @@ and `AGENTS.md` "Where to look" points to it.
 **Checks.** `sh ci/vale.sh`, `cargo test -p hydo --test it docs::`, `cargo test -p hydo-agents
 --test it public_content::`, and `cargo test -p hydo-release --test it test_tiers`. Nothing
 recorded moved: no code, engine, image, or example changed.
+
+## Milestone 297 (tentative number): a new user's trial of 0.4.0's features
+
+A developer who had not used hydo tried the features that are new since 0.3.4 on an Apple
+Silicon Mac, with the Mac engine, from `README.md`, `docs/ONBOARD.md`, `hydo guide`, and the
+`--help` output only. The hydo was built from `main` at `c1d78449`. The whole report, with every
+time and every message, is `docs/design/0.4.0-user-trial.md`.
+
+- **Web apps.** The web-shop example's flaky test failed on every run of
+  `H=api.add_item@1-2:delay=1000`, 6.5 minutes after the start of its `build.sh`. The walk found
+  the planted order-page bug at seed 7 of 10, and its recording replay kept the verdict.
+- **Value properties.** The Blnk example's `disk=none | run` broke the property for the same 3 of
+  66 keys as `hydo guide values` shows, while every business rule held.
+- **CI.** `hydo ci run --base main` on a branch that set `appendfsync everysec` found 2 new
+  findings in 69 s, each proven by a replay on the base.
+- **`hydo fuzz`.** Seven property functions on `glob-match` 0.2.1 ran in 16 s. Two breaks are
+  candidates, not posted: `?` matches one byte, not one character, and `{foo,}` never matches the
+  empty text. `hydo fuzz --vm` ran on the Mac engine for the first time.
+- **`hydo guide strategies`.** For a job queue, its first screen says what to do first.
+
+The trial's answer is that 0.4.0 is almost ready. These are the three fixes it names:
+
+1. Number the workload steps the same way in the schedule, the report, the findings, and
+   `repro.spec.ts`.
+2. Make the CI history page's headline count every branch it lists, and show when each run ran.
+3. Say on the problem's page when a walk's recording passes, and link the recordings from the
+   exploration's page.
+
+A checkout of `main` could not boot a guest: `hydo setup --get 0.3.4` stopped with `the release
+is damaged or incomplete`, because the tree pins the guest kernel `Image-explore-containers`,
+which no published release has. Nothing recorded moved.

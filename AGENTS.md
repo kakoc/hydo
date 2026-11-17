@@ -2725,6 +2725,11 @@ build machine, before 2026-10-13.
   `partly built`, `idea`, or not hydo's job, with its evidence. It lists the questions of seven
   kinds of teams and 33 ideas. Each idea names its need and its source. "How to record new
   work" gains step 4. Nothing recorded moved
+- M297 (tentative number): a new user's trial of 0.4.0's features on the Mac engine, from the
+  guide alone (`docs/design/0.4.0-user-trial.md`). Web apps, value properties, CI, `hydo fuzz`,
+  and the strategies topic each gave a first result within minutes. The fixes before 0.4.0: one
+  step numbering, a true CI history page, and walk recordings that show the failure. Nothing
+  recorded moved
 
 ## Where to look
 

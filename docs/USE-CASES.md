@@ -139,7 +139,7 @@ Ideas that would answer more:
 | The question | What hydo answers today | Status |
 |---|---|---|
 | Does a function keep its contract for every valid input? | `hydo fuzz` generates inputs from `requires` and `input` lines, judges each call by `ensures`, and shrinks a failure. | partly built; M275, M282, M289; open item 139 |
-| Does a function that writes files keep its promise under a power cut? | `hydo fuzz --vm` with a `// hydo: durable` check, which runs again in the recovery boot. | partly built; `fuzz-vm` on hvx (M292) |
+| Does a function that writes files keep its promise under a power cut? | `hydo fuzz --vm` with a `// hydo: durable` check, which runs again in the recovery boot. | partly built; `fuzz-vm` on hvx (M292), and one function on the Mac engine (M297) |
 | Does a contract hold inside the running system? | `contracts:` in the manifest checks every call at hardware breakpoints, without a change of the run. | partly built; the Mac engine and KVM (M241, M255) |
 | Is a flaky test a real race? | `workload.kind: test` with a pause of one thread (`P=workload/<thread>@...`). | built; `qdrant-flaky-10200` (M226) |
 
