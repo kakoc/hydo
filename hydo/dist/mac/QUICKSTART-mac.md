@@ -48,11 +48,11 @@ its installer. The installer copies hydo into `~/.hydo` and runs `hydo setup` th
 `hydo doctor`.
 
 ```sh
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.4/hydo-mac-0.3.4.tar.gz
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.4/SHA256SUMS
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.0/hydo-mac-0.4.0.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.0/SHA256SUMS
 shasum -a 256 -c --ignore-missing SHA256SUMS
-tar xzf hydo-mac-0.3.4.tar.gz
-./hydo-mac-0.3.4/install.sh
+tar xzf hydo-mac-0.4.0.tar.gz
+./hydo-mac-0.4.0/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -354,7 +354,7 @@ third-party software:
 `THIRD-PARTY.md` lists each one with its version, its license, the files it is in, and where its
 source is. `licenses/` holds the full text of every license.
 
-The archive `hydo-mac-0.3.4-sources.tar.gz` accompanies this release; it is published next to
+The archive `hydo-mac-0.4.0-sources.tar.gz` accompanies this release; it is published next to
 the tarball, with the same `SHA256SUMS`. It contains the corresponding source:
 
 - the exact upstream source archives of every third-party component, including every GPL- and

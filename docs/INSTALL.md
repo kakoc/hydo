@@ -17,11 +17,11 @@ hydo doctor
 Without Homebrew:
 
 ```sh
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.4/hydo-mac-0.3.4.tar.gz
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.4/SHA256SUMS
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.0/hydo-mac-0.4.0.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.0/SHA256SUMS
 shasum -a 256 -c --ignore-missing SHA256SUMS
-tar xzf hydo-mac-0.3.4.tar.gz
-./hydo-mac-0.3.4/install.sh
+tar xzf hydo-mac-0.4.0.tar.gz
+./hydo-mac-0.4.0/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -45,10 +45,10 @@ two need the kernel module on your own Intel machine. Both engines run several v
 Download and check the release for both engines:
 
 ```sh
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.4/hydo-linux-0.3.4.tar.gz
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.4/SHA256SUMS
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.0/hydo-linux-0.4.0.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.0/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
-tar xzf hydo-linux-0.3.4.tar.gz
+tar xzf hydo-linux-0.4.0.tar.gz
 ```
 
 For the KVM engine, your user must be able to open `/dev/kvm`. Install, then let
@@ -56,7 +56,7 @@ For the KVM engine, your user must be able to open `/dev/kvm`. Install, then let
 module's engine):
 
 ```sh
-./hydo-linux-0.3.4/install.sh --no-module
+./hydo-linux-0.4.0/install.sh --no-module
 export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor --backend kvm
 ```
@@ -74,7 +74,7 @@ kernel's headers. Do not install it while other virtual machines run under KVM: 
 unloads the kernel modules `kvm_intel` and `kvm`.
 
 ```sh
-./hydo-linux-0.3.4/install.sh
+./hydo-linux-0.4.0/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor
 ```
@@ -90,8 +90,8 @@ hydo doctor                  # on Linux: hydo doctor --backend kvm
 ```
 
 `cargo install` builds only the `hydo` command. `hydo setup` downloads the release for your
-platform into `~/.hydo/versions/0.3.4` (`HYDO_HOME` names another folder than `~/.hydo`) and
-checks every file by sha256. The examples are in `~/.hydo/versions/0.3.4/examples`.
+platform into `~/.hydo/versions/0.4.0` (`HYDO_HOME` names another folder than `~/.hydo`) and
+checks every file by sha256. The examples are in `~/.hydo/versions/0.4.0/examples`.
 
 On Linux this gives the KVM engine, and your user must be able to open `/dev/kvm`, as for the
 tarball. For hydo's kernel module `hvx.ko`, use the tarball.
