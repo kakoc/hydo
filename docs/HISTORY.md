@@ -15107,3 +15107,49 @@ recorded moved: no engine, controller, or guest program changed.
 - `cf=` failures are not shrunk, and the channels of the answers on hvx are small.
 - A hung `hydo run` stops the fuzzing.
 - Native `hydo fuzz` of a function that writes files runs every call in the current folder.
+
+## Milestone 300 (tentative number): the use cases page
+
+**Why.** The user asked for one place that lists every use case hydo serves or could serve, so
+that the capabilities and the ideas can be gone over later and none is forgotten. The user also
+shared a chart that sorts the testing techniques into four stages: before production, at deploy,
+at release, and after release.
+
+**The page.** `docs/USE-CASES.md`, a reference. It has five parts:
+
+- An opening that defines the three status words: `built` (in `main`, with a proof run),
+  `partly built` (built, with gaps that an open item or a milestone names), and `idea` (not
+  built). A row that needs production traffic or real users says "not hydo's job", with the
+  reason.
+- The map against the chart. Each of the chart's 42 techniques has one row with what hydo has
+  (the command or key), its status, and its evidence (an example or a milestone). Fourteen rows
+  are not hydo's job, for example formal verification, lint, canary releases, and A/B tests.
+- The use cases by who asks, in seven sections: a backend team with a database or a queue, a
+  team with a web app, a library author in Rust, an embedded or device team, a team that adopts
+  hydo in CI, a maintainer who receives a bug report, and someone who evaluates an upgrade or a
+  dependency bump. Each section is a table of the team's questions, hydo's answer today with its
+  command, and the status, followed by the ideas that would answer more.
+- The ideas: 33 entries, each with what it is, why it matters, what it would need, and where it
+  came from. They come from the user's brief (differential testing between versions and
+  configuration as an explored dimension, both being built as Milestones 298 and 299; soak tests
+  with exact resource counts; a check that an error path is reached under faults), the open items
+  (13, 49, 56, 67, 68, 77, 109, 110, 113, 114, 116, 117, 119, 122, 125, 128, 131, 136, 139, 140,
+  141, 142, 144, and 146), and the design pages (`ci.md`, `contracts.md`, `cost-tracking.md`,
+  `explain.md`, `inspect.md`, `jepsen-gaps.md`, `messaging.md`, `value-history.md`, and
+  `agent-environments.md`).
+- How to keep it current.
+
+Where a source did not say that a capability had a proof run on an engine, the row says
+`partly built` and names the gap. Code coverage is one example: Intel Processor Trace exists on
+hvx only, through `HVX_EXPLORE_PT_ELF`, and no guide topic describes it for users.
+
+**The rule.** `AGENTS.md` "How to record new work" gains step 4: every milestone updates the rows
+of `docs/USE-CASES.md` for each capability that it builds or changes.
+
+**The wiring.** `ci/vale.sh` checks the page (64 documents now; the count in `AGENTS.md` said 60
+and is corrected). `README.md` "Learn more" and the `docs/` row of `docs/ARCHITECTURE.md` link it,
+and `AGENTS.md` "Where to look" points to it.
+
+**Checks.** `sh ci/vale.sh`, `cargo test -p hydo --test it docs::`, `cargo test -p hydo-agents
+--test it public_content::`, and `cargo test -p hydo-release --test it test_tiers`. Nothing
+recorded moved: no code, engine, image, or example changed.

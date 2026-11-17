@@ -137,6 +137,8 @@ To install the skill as a Claude Code plugin without `hydo onboard`, type these 
 - `hydo guide`, the manual built into the command. Start with `hydo guide workflow`.
 - [The example projects](hydo/onboard/examples/) in this repository.
 - [What hydo does not do](docs/LIMITS.md).
+- [Every use case that hydo serves](docs/USE-CASES.md), each with its status, and the ideas for
+  more.
 - [How hydo is built](docs/ARCHITECTURE.md) and [how to contribute](CONTRIBUTING.md).
 
 The current release is hydo 0.3.4. It is experimental: formats and commands can change between

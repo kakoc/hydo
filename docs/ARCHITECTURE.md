@@ -173,7 +173,7 @@ hashes from a package's path and lock file, so making them members would change 
 | [sdk/](../sdk/) | The assertion SDKs: Rust (the reference), Go, Python, and JavaScript. |
 | [plugin/](../plugin/) | The Claude Code plugin `hydo` with the onboarding skill `onboard` (`/hydo:onboard`; `plugin/skills/onboard/` for every AI tool). |
 | [skills/](../skills/) | `hydo-docs`, the writing standard for contributors. |
-| [docs/](.) | `HISTORY.md` (every milestone with its evidence), `REBASELINE.md` (recorded fingerprints), `BUILD-PINS.md`, `CI.md`, the release documents, `STYLE.md`, and `design/`. |
+| [docs/](.) | `HISTORY.md` (every milestone with its evidence), `REBASELINE.md` (recorded fingerprints), `BUILD-PINS.md`, `CI.md`, the release documents, `STYLE.md`, `USE-CASES.md` (every use case with its status, and the ideas), and `design/`. |
 | [ci/](../ci/) | The scripts that CI runs. |
 
 ## Tests are the specification

@@ -27,6 +27,7 @@ Follow these steps for each milestone:
 1. Add a new milestone section with its details and its evidence to the end of `docs/HISTORY.md`.
 2. Add a one-line entry to the "Milestone index" below.
 3. Update "Current state" below, and "Open items" if something stays open.
+4. Update the rows of `docs/USE-CASES.md` for each capability that the milestone builds or changes.
 
 Keep this file short. Details, evidence and superseded values belong in `docs/HISTORY.md`. This
 file lists only current values. Write every document to `docs/STYLE.md` (the `hydo-docs` skill).
@@ -1162,11 +1163,12 @@ is the recipe for other systems.
 The comment, the page, and the budget ran on this Mac with the Mac engine; nothing ran on GitHub
 (open item 67). The details are in `docs/HISTORY.md` Milestone 286.
 
-**Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 60 documents
+**Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 64 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
 facts and commands of `README.md` and the quickstarts. Release step 6a is a docs review by a
 fresh reader (`docs/RELEASING.md`). Before M187 this file held the full current state; that text
-is kept verbatim in `docs/HISTORY.md` Milestone 187.
+is kept verbatim in `docs/HISTORY.md` Milestone 187. `docs/USE-CASES.md` (M300) maps every use
+case to its status (`built`, `partly built`, or `idea`) and lists the ideas not built yet.
 
 ## Open items
 
@@ -2718,10 +2720,17 @@ build machine, before 2026-10-13.
   cuts, disk errors, clock steps and pauses, and `// hydo: durable <check>` checks each call
   again after a power cut. On hvx redb's commits held, and a save by rename without a sync lost
   its text at every cut. The verdict: keep it for code that writes files. Nothing recorded moved
+- M300 (tentative number): `docs/USE-CASES.md`, every use case that hydo serves or could serve.
+  It maps the techniques of a common chart of testing stages to hydo's commands, each `built`,
+  `partly built`, `idea`, or not hydo's job, with its evidence. It lists the questions of seven
+  kinds of teams and 33 ideas. Each idea names its need and its source. "How to record new
+  work" gains step 4. Nothing recorded moved
 
 ## Where to look
 
 - `docs/HISTORY.md`: every milestone with its evidence, and the superseded values.
+- `docs/USE-CASES.md`: every use case with its status, by testing stage and by who asks, and the
+  ideas not built yet.
 - `docs/REBASELINE.md`: the recorded fingerprints by section; section 13 is epoch 1, section 19
   is epoch 2, section 24 is epoch 3, section 26 is epoch 4.
 - `docs/BUILD-PINS.md`: the pinned toolchain and guest programs.

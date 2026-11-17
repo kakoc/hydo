@@ -31,6 +31,7 @@ PROSELINT_SHA256=48b1fb481ba44f6505d44346b283f6cdc74efd234f913bbdb09bf34420fab81
 # document here once it passes.
 DOCS="README.md CONTRIBUTING.md AGENTS.md docs/STYLE.md docs/ARCHITECTURE.md
   docs/INSTALL.md docs/LIMITS.md docs/YOUR-PROJECT.md docs/ONBOARD.md docs/ONBOARDING-PLAYBOOK.md
+  docs/USE-CASES.md
   skills/hydo-docs/SKILL.md
   hydo/dist/linux/QUICKSTART-linux.md hydo/dist/mac/QUICKSTART-mac.md
   hydo/crates/*/README.md sdk/README.md sdk/*/README.md
