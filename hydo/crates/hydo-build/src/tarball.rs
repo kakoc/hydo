@@ -65,6 +65,9 @@ impl Member {
     pub fn islnk(&self) -> bool {
         self.kind == LNKTYPE
     }
+    pub fn isfifo(&self) -> bool {
+        self.kind == FIFOTYPE
+    }
     /// What `extractfile` returns a file object for (regular members and unknown types).
     pub fn has_data(&self) -> bool {
         self.isreg() || !SUPPORTED.contains(&self.kind)

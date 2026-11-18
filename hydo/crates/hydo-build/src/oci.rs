@@ -7,7 +7,7 @@
 //! every blob is checked against its digest and every layer against the config's diff_ids.
 //! The launchers, `hydo-oci` and image.json are written byte for byte as hydo_oci.py wrote them.
 
-use crate::cpio::{Meta, S_IFDIR, S_IFLNK, S_IFREG};
+use crate::cpio::{Meta, S_IFDIR, S_IFIFO, S_IFLNK, S_IFREG};
 use crate::fsx::{self, io_fail, is_link, lexists};
 use crate::shell::shq;
 use crate::tarball::{self, Member};
@@ -828,6 +828,20 @@ impl Tree {
             }
             self.meta
                 .insert(rel, (S_IFDIR, mi.mode & 0o7777, mi.uid, mi.gid));
+            return Ok(());
+        }
+        if mi.isfifo() {
+            // Milestone 316: a FIFO is a plain inode that a program of the image may need (made
+            // with `mkfifo` in its build). The tree on the build host holds an empty file in its
+            // place, which the image's writers turn into a FIFO by its meta: the cpio writer
+            // (cpio::archive) and the ext4 pass (fix_ext4). A device node stays left out.
+            if lexists(&dst) {
+                self.remove(&rel)?;
+            }
+            File::create(&dst).map_err(|e| e.to_string())?;
+            fsx::chmod(&dst, 0o644).map_err(|e| e.message())?;
+            self.meta
+                .insert(rel, (S_IFIFO, mi.mode & 0o7777, mi.uid, mi.gid));
             return Ok(());
         }
         if !(mi.isreg() || mi.issym() || mi.islnk()) {
@@ -2054,7 +2068,7 @@ pub fn stage_with(
             continue;
         }
         let mut skipped = if t.skipped > 0 {
-            format!(", {} device/FIFO entries skipped", t.skipped)
+            format!(", {} device entries skipped", t.skipped)
         } else {
             String::new()
         };
@@ -2212,6 +2226,15 @@ pub fn fix_ext4(
     for rel in keys {
         let (kind, mode, uid, gid) = meta[rel];
         let p = format!("\"/{rel}\"");
+        if kind == S_IFIFO {
+            // the tree's empty file in a FIFO's place (Milestone 316): a FIFO inode instead.
+            // debugfs's mknod takes a name in its working directory, not a path.
+            let (dir, base) = rel.rsplit_once('/').unwrap_or(("", rel.as_str()));
+            lines.push(format!("rm {p}"));
+            lines.push(format!("cd \"/{dir}\""));
+            lines.push(format!("mknod \"{base}\" p"));
+            lines.push("cd /".into());
+        }
         if kind != S_IFLNK {
             lines.push(format!("sif {p} mode 0{:o}", kind as i64 | mode));
         }

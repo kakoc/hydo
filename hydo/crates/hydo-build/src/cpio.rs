@@ -20,6 +20,7 @@ pub const S_IFLNK: u32 = 0o120000;
 pub const S_IFREG: u32 = 0o100000;
 pub const S_IFDIR: u32 = 0o040000;
 pub const S_IFCHR: u32 = 0o020000;
+pub const S_IFIFO: u32 = 0o010000;
 
 struct Writer<W: Write> {
     buf: W,
@@ -185,6 +186,13 @@ impl<W: Write> Write for CountingWriter<W> {
     }
 }
 
+/// Does an image service's meta say that this path is a FIFO?
+fn is_fifo(meta: Option<&Meta>, p: &[u8]) -> bool {
+    meta.zip(std::str::from_utf8(p).ok())
+        .and_then(|(m, n)| m.get(n))
+        .is_some_and(|e| e.0 == S_IFIFO)
+}
+
 /// Every entry of `root`, sorted, then `dev/console` when the tree has none, then the trailer.
 fn archive<W: Write>(root: &Path, w: &mut Writer<W>, meta: Option<&Meta>) -> Result<(), Fail> {
     let mut have_console = false;
@@ -213,6 +221,9 @@ fn archive<W: Write>(root: &Path, w: &mut Writer<W>, meta: Option<&Meta>) -> Res
             );
         } else if ft.is_dir() {
             w.ent(&p, S_IFDIR | (st.mode() & 0o7777), &[], 2, (0, 0), meta);
+        } else if is_fifo(meta, &p) {
+            // an image service's FIFO (Milestone 316): an empty file in the staged tree
+            w.ent(&p, S_IFIFO | (st.mode() & 0o7777), &[], 1, (0, 0), meta);
         } else {
             let data = fs::read(&full).map_err(|e| io_fail("cannot read", &full, e))?;
             w.ent(&p, S_IFREG | (st.mode() & 0o7777), &data, 1, (0, 0), meta);
@@ -277,5 +288,37 @@ mod tests {
         let _ = fs::remove_dir_all(&d);
         assert_eq!(plain.len() as u64, n);
         assert_eq!(plain, unz);
+    }
+
+    /// Milestone 316: an image service's FIFO is an empty file in the staged tree and a FIFO
+    /// entry in the archive, with the layer's mode and owners and no data.
+    #[test]
+    fn an_image_fifo_is_a_fifo_entry() {
+        let d = crate::tempdir("hydo-cpio-fifo-").unwrap();
+        let r = d.join("root");
+        fs::create_dir_all(r.join("oci/s/run")).unwrap();
+        fs::write(r.join("oci/s/run/pipe"), "").unwrap();
+        fs::write(r.join("oci/s/run/file"), "").unwrap();
+        let mut meta = Meta::new();
+        meta.insert("oci/s/run/pipe".into(), (S_IFIFO, 0o666, 999, 999));
+        let n = write_cpio_file(&r, &d.join("a.cpio"), 1, Some(&meta)).unwrap();
+        let a = fs::read(d.join("a.cpio")).unwrap();
+        let _ = fs::remove_dir_all(&d);
+        assert_eq!(a.len() as u64, n);
+        // each newc header: magic, then inode, mode, uid, gid, nlink, mtime, size as 8 hex digits
+        let entry = |name: &str| -> (u32, u32, u32) {
+            let at = a
+                .windows(name.len() + 1)
+                .position(|w| w == [name.as_bytes(), b"\0"].concat())
+                .unwrap()
+                - 110;
+            let field = |i: usize| {
+                u32::from_str_radix(std::str::from_utf8(&a[at + 6 + 8 * i..][..8]).unwrap(), 16)
+                    .unwrap()
+            };
+            (field(1), field(2), field(6))
+        };
+        assert_eq!(entry("oci/s/run/pipe"), (S_IFIFO | 0o666, 999, 0));
+        assert_eq!(entry("oci/s/run/file").0 & S_IFMT, S_IFREG);
     }
 }
