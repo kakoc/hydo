@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=110
+# wait until vminsert reaches both vmstorage nodes and vmselect answers an export
+exec /bin/vmc settle 100

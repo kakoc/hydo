@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# one import through vminsert: 2 new series with 3 samples each (../../client/main.go, write)
+exec /bin/vmc write

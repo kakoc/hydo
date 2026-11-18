@@ -14,7 +14,7 @@ results page: new as far as the search found, known, by design, or a deployment 
 
 | system | its promise | the techniques that found most | where they found bugs |
 |---|---|---|---|
-| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch |
+| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics |
 | log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults | Redpanda, NATS |
 | job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate |
 | ledger or billing system | the books match the acknowledged operations; a limit holds | the generic rule beside domain rules; concurrent clients without faults; value properties | Blnk, Lago, Formance Ledger |
@@ -288,6 +288,10 @@ Three findings hold for every type of system:
   - NATS JetStream: Jepsen's 3.2, 3.3, and 3.5 in one VM. With two
     nodes' blocks zeroed and the third node killed, 2,456 of 24,446 acknowledged messages were
     lost.
+  - VictoriaMetrics cluster: one node's power loss lost nothing alone. With a backward clock
+    step before it, the power loss lost a batch that vminsert had stored on that node only
+    (finding 3). Damaged files stopped vmstorage at its start in 11 of 30 schedules, and a
+    zeroed range returned another value from vmselect.
 - **What it misses.** NATS's 3.3 and 3.5 need faults in a narrow order on chosen nodes, and the
   explorer did not draw them; they were written by hand. `G=` picks its file and offset from its
   seed, so one token damages other files on another image. The explorer never draws
@@ -348,11 +352,19 @@ Three findings hold for every type of system:
   - Restate (finding 1): a step back of 300 s and then a restart of the server hold
     accepted invocations until the wall clock reaches their creation time. Blind at seed 14 of 20,
     shrunk to `P=svc@28+2 T=30:-300 L=restate@30+1`. Either fault without the step passes.
+  - VictoriaMetrics cluster (findings 1 to 3): a step back of 20 days deletes the
+    current month's partition on both replicas within a minute (`T=20:-1728000`). A step back of
+    an hour keeps new samples in memory for an hour, so a crash of both nodes loses 360 samples
+    instead of 60. The same step leaves a batch with one copy, and one node's power loss then
+    loses it. Blind in 16 of e2's 40 schedules; the shrink was by hand. The watchers run every
+    minute, so the regressions use rounds of 1 s to outlast the first tick.
 - **What it misses.** Many clock effects are by design. Examples are Temporal's delayed timers,
   and River's runs of every periodic job that a forward step skipped. The audit reads text. It
   found no place in Redpanda's 2,694 C++ files, whose transaction expiry uses Seastar's wall
   clock. In Meilisearch's 574 Rust files it found one, a metric, and steps of
-  30 s to a year broke nothing in 50 blind schedules. In Restate it found 8 places that read
+  30 s to a year broke nothing in 50 blind schedules. In VictoriaMetrics it named 21 functions
+  and none of the three findings' places, which read a cached clock (`fasttime`) or
+  `time.Now().UnixMilli()`. In Restate it found 8 places that read
   `SystemTime::now`, and none was the finding's: the scheduler reads the wall clock through the
   project's own `WallClock`. Its first place, a retry's `next_retry_at`, is only reported. A
   step of a year lets retention delete the evidence (Redpanda seed 25, River's cleaner). In Iggy

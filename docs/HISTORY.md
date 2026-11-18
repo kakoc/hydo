@@ -17434,3 +17434,90 @@ Retro: Apache Iggy server 0.10.0, hvx, 2026-11-18
   node's storage faults" of `hydo guide strategies` are updated.
 
 **What is left.** Open item 159.
+
+## Milestone 312 (tentative number): the VictoriaMetrics cluster and its replicas
+
+The onboarding of the VictoriaMetrics cluster version v1.156.0 (2026-11-09, the latest release)
+on hvx, by `docs/ONBOARDING-PLAYBOOK.md`. Three new candidates, all clock effects, none posted.
+Nothing recorded moved.
+
+**The example.** `hydo/onboard/examples/victoriametrics` (RESULTS.md) runs two `vmstorage`
+nodes, one `vminsert` with `-replicationFactor=2` and one `vmselect` with
+`-replicationFactor=2 -dedup.minScrapeInterval=1ms`, from the official images
+(`victoriametrics/<component>:v1.156.0-cluster`), imported with `hydo compose` from the example's
+Compose file. Each node's `/storage` is a file system of its own (`storage:`), and the release is a
+parameter (`vm`). The Go client `vmc` imports 2 new series with 3 samples each per write through
+`/api/v1/import` and records each acknowledged sample. A messages check (`no-loss`,
+`duplicates: forbidden`, `no-phantom` for a wrong value) reads every sample back with
+`/api/v1/export`. A query check compares `count_over_time` and `sum_over_time` with the writes,
+and an `anytime_` read judges the samples acknowledged 30 s earlier during the faults. Two clean
+runs give one fingerprint: `9386f5eab3082c58` on the final image (`da0e7ab0…`), and
+`cb0237a41b672c7f` twice with rounds of 1 s.
+
+**Finding 1, new.** A backward clock step deletes the current month's partition on every
+vmstorage node. `retentionWatcher` (`lib/storage/table.go:446`) drops every partition whose start
+is later than now plus `-futureRetention` (2 days by default, line 464), and `pt.Drop()` removes
+its data and index. `disk=none | run T=20:-1728000 W=740c6cfa,p2,q2,r1000` (20 days back from
+2026-11-18) loses all 162 samples acknowledged before the step, `fp=ed7eab9cd7aa0756` on every
+run; 18 days back passes. v1.141.0, which added the future retention (pull request #10718),
+loses them too, and v1.140.0 keeps the partition. Blind in e1's seeds 4, 7 and 18.
+
+**Finding 2, new.** After a backward clock step, new rows and new index entries wait in
+vmstorage's memory for the step's length. Their buffers store the flush deadline as
+`time.Now().Add(2s).UnixMilli()` (`lib/storage/raw_row.go:248`, `:325`; `lib/mergeset/table.go:208`,
+`:278`) and compare wall-clock milliseconds. A read 30 s after `T=10:-3600` misses 12
+acknowledged samples with both nodes healthy. `T=10:-3600 K=storage.all@50+2` loses 360
+acknowledged samples (`fp=295f21500237d2ee`), and the same kill without the step loses 60.
+
+**Finding 3, new.** A backward clock step leaves a batch with one copy. `BufferedConn`
+(`lib/handshake/buffered_conn.go`) compares the deadline that `SendRPCRequestToConn` set from
+`time.Now()` with `fasttime`, which a goroutine refreshes once a second. Right after the step
+every write to both nodes failed with `i/o timeout`, and vminsert logged `cannot make a copy #2
+out of 2 copies`. `T=10:-3600 L=vmstorage1@50+2` then loses 3 acknowledged samples for good
+(`fp=f52ca18bd47eb06a`): vmstorage1 held its one copy in memory (finding 2) until its power
+loss. Each fault alone loses nothing.
+
+**Known and documented.** A crash of both nodes loses the last seconds (documented). A node that
+lost its unflushed samples stays without them, so a later outage of the other node misses them
+(issue #2613; the cluster has no repair). vminsert answers before vmstorage has the data (issue
+#8677). A new series is invisible for up to 10 s to a cached tag filter, also after
+`/internal/force_flush` (issue #5555, pull request #11116). A sample more than 2 days ahead of
+vmstorage's clock is dropped after vminsert answered `204` (documented). Damaged files stop
+vmstorage or return another value (the environment).
+
+**What held.** Without clock steps, one node's kill, pause, partition, one-way loss, or power
+loss lost no acknowledged sample, and every query returned each sample once with its value. In
+e2 (40 schedules without `G=`) every failure without a clock step needed both nodes to fail
+within a few seconds of each other.
+
+**Explorations.** e1 (process, seeds 1-30, with `G=`, stopped during its shrinks): 21 failures, 11
+of them detected corruption. e2 (process, seeds 31-70, `explore-nocorrupt.yaml`, no shrink): 20
+failures in 273 s. e3 (swarm, seeds 71-110, no shrink, one worker): 24 failures in 387 s, 10 of them detected
+corruption; every violation without `G=` had a clock step or two node faults within seconds.
+
+**Tests.** The explorer's `identity-quick.txt` and `corpus-full.txt` and the controller's
+`corpus-quick.txt` are re-recorded. They gain the new example's entries and the chunk digests
+after them; the quick identity tier samples every fifth group, so the new manifest also moves
+which other examples it samples. `identity-full.txt` is not re-recorded: it already lacked
+Blnk's `hydo-paths.yaml` and a Meilisearch regression from earlier milestones. The CLI golden
+differs on the bare-metal machine only in the `--check` warning of open item 115.
+
+Retro: the VictoriaMetrics cluster v1.156.0, hvx, 2026-11-18
+- Time to the first clean run: 70 minutes of wall time, none of it waiting for machines.
+- Schedules run before the first finding: 4 blind schedules of e1 (seed 4 was finding 1) and
+  10 directed runs that passed. Before them 3 clean runs failed by the checks' mistakes (the
+  console limit, vmselect's 30 s latency offset, the 10 s tag filter cache).
+- The findings: 3 new (clock effects that break a promise or a documented limit), 4 known or
+  documented, 2 of the environment.
+- What took the most time: separating the faults of the explorations' failures (about 1.5
+  hours, 40 directed runs); e1's shrinks of detected corruption (1 hour, stopped); the client's
+  history records over hvx's 64 KiB console (30 minutes).
+- What hydo lacked: nothing warns that a run's history passed the console's 64 KiB; a check's
+  long last line splits one finding into signatures (fixed in the client); the explorer shrinks
+  detected corruption; one `T=` per schedule (open item 65); the clock audit does not follow
+  `fasttime` (all in open item 158).
+- Strategies: clock steps found all three; storage faults found nothing without a step. The
+  entries "Clock steps and the clock audit" and "One node's storage faults" of `hydo guide
+  strategies` are updated.
+
+**What is left.** Open item 158.

@@ -717,6 +717,25 @@ No new bug:
 - A clock effect: after a backward step, the oldest segment's timestamps lie ahead of the clock.
   The cleaner stops there, so a partition keeps all its data for the step's length.
 - Detected damage of a segment, WAL, or frontier file fences the partition, as documented.
+**The VictoriaMetrics cluster (M312, tentative number).** VictoriaMetrics v1.156.0 runs as two
+`vmstorage` nodes, one `vminsert` with `-replicationFactor=2` and one `vmselect` with
+`-dedup.minScrapeInterval=1ms`, from the official images in one hvx guest, in
+`hydo/onboard/examples/victoriametrics` (RESULTS.md), imported with `hydo compose`. Each node's
+data is on a file system of its own. A Go client imports new series and records each
+acknowledged sample; a messages check over the export, a query check, and a read during the
+faults judge them. Without clock steps, losing one node lost no acknowledged sample, and every
+query returned each sample once, with its value. Three new candidates, all clock effects, not
+posted:
+- A backward clock step deletes the current month's data on every node: since v1.141.0 a
+  watcher drops each monthly partition that starts after now plus `-futureRetention` (2 days).
+  `T=20:-1728000` deletes every sample acknowledged before the step; v1.140.0 keeps them.
+- After a backward clock step, new samples and index entries wait in vmstorage's memory for
+  the step's length: their flush deadline is in wall-clock milliseconds. They are not
+  searchable, and a crash of both nodes 40 s after a step back of an hour lost 360 acknowledged
+  samples instead of the last 60.
+- At a backward clock step, vminsert's writes to every node fail with `i/o timeout`: the
+  connection compares its deadline with a cached clock that lags up to a second. A batch then
+  gets one copy, and a power loss of that one node loses acknowledged samples.
 
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
@@ -2472,6 +2491,20 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       only, because no sharded run watches them: only the Mac engine does. The CI page does not
       show them. A declaration that a place must run in an exploration, which fails it, is not
       built.
+158. The example `victoriametrics` (M312, tentative number). What is left:
+    - The three candidates are not reported upstream. Each cause is plain in the code, so no
+      native run was made.
+    - hvx's console holds 64 KiB, so the client names a sample by its write and number and
+      writes 6 samples per write. Nothing warns while a run's history records are cut off.
+    - The explorer shrinks every error of detected corruption; the second exploration left `G=`
+      out through `explore-nocorrupt.yaml`. The swarm exploration ran without shrinks.
+    - The last `T=` of a schedule wins (open item 65), so no schedule steps the clock back and
+      forward again. That the deleted month stays deleted is read from the code and the files.
+    - The clock audit does not follow `fasttime.UnixTimestamp()` or `time.Now().UnixMilli()`
+      into a deadline, so it named none of the three places.
+    - Only hvx ran the example; the Mac engine and KVM did not. vmagent, several vminsert or
+      vmselect nodes, three vmstorage nodes (the documentation's `2*N-1`), and the rollup cache
+      of `query_range` were not tested.
 159. The Iggy example (M314, tentative number). What is left:
     - The example runs one server. Iggy also replicates partitions over a cluster with its own
       consensus, and no cluster of three nodes ran under the cluster faults of `groups:`.
@@ -3352,6 +3385,12 @@ build machine, before 2026-10-13.
   same schedules. On Meilisearch 101 of 360 schedules carried such a kill, against none of 24
   before. Finding 1, the swap that runs twice, was found blind at seed 101 and shrunk to one
   reaction. Nothing recorded moved
+- M312 (tentative number): the onboarding of the VictoriaMetrics cluster v1.156.0 on hvx, two
+  vmstorage nodes with `-replicationFactor=2`. Without clock steps one node's loss lost nothing,
+  and queries returned each sample once. Three new clock-effect candidates, not posted. A step
+  back deletes the current month's partition on every node (since v1.141.0). New samples wait in
+  memory for the step's length. Spurious `i/o timeout`s leave a batch with one copy. Nothing
+  recorded moved
 - M315 (tentative number): `hydo update` updates hydo the way it was installed: Homebrew,
   cargo, the release archive's `install.sh`, or the install cache. It updates every copy of the
   skill too: the known folders, every Claude Code configuration folder, the registry of copies,

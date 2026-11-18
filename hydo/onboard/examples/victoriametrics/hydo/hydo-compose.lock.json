@@ -1,0 +1,177 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "victoriametrics/vminsert:v1.156.0-cluster": {
+   "index_digest": "sha256:3f3fa42ae5b447792da9a14538296b4463a7787f1702d1b69fa168052fdf4efb",
+   "name": "victoriametrics/vminsert",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/vminsert-prod"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "8480/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:81989baab297c69d39c9f580683940747a2fb079fa9098749bfebd358edc6bdb",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/vminsert-prod"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "8480/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:222063ac2c0493597567c41c586167177b8ccd57f112c8711e6bb72b7a7faa21",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "victoriametrics/vminsert:v1.156.0-cluster",
+   "registry": "docker.io",
+   "repo": "victoriametrics/vminsert",
+   "tag": "v1.156.0-cluster"
+  },
+  "victoriametrics/vmselect:v1.156.0-cluster": {
+   "index_digest": "sha256:3ac723ba307d009fd3dcedef21572ea74da9c4ae3a6f37d842580bf3d4c2f3cd",
+   "name": "victoriametrics/vmselect",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/vmselect-prod"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "8481/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:8c7b1015b72b90328cf24cac262e5644760029f0214ac7e34898f9033f5fd0b7",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/vmselect-prod"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "8481/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:d2df9d90443fbdc66f4011e46dda9f3c2476b345fc52431f7a4d0ecf40079fad",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "victoriametrics/vmselect:v1.156.0-cluster",
+   "registry": "docker.io",
+   "repo": "victoriametrics/vmselect",
+   "tag": "v1.156.0-cluster"
+  },
+  "victoriametrics/vmstorage:v1.156.0-cluster": {
+   "index_digest": "sha256:069da20292bdea1843034cb54de18b2639adecbd6006ceea266be9b841789ce2",
+   "name": "victoriametrics/vmstorage",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/vmstorage-prod"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "8400/tcp": {},
+       "8401/tcp": {},
+       "8482/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:0d20231d5a0ddad0eef081bfb7b1ecea21a5b0a5e9c256a52e8c3c66e6fb4132",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/vmstorage-prod"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "8400/tcp": {},
+       "8401/tcp": {},
+       "8482/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:ad337ea96e9e7fbc8097ba380525bce0d5107ba4db921e0a4df01fe90bee4a1e",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "victoriametrics/vmstorage:v1.156.0-cluster",
+   "registry": "docker.io",
+   "repo": "victoriametrics/vmstorage",
+   "tag": "v1.156.0-cluster"
+  }
+ }
+}

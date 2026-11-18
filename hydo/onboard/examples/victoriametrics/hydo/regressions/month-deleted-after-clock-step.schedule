@@ -1,0 +1,8 @@
+# New (RESULTS.md, finding 1): the wall clock goes back 20 days before step 20, from
+# 2026-11-18 to 2026-10-29. Within a minute each vmstorage node's retention watcher deletes the
+# partition 2026_11 (its samples and its index), because the partition starts later than now
+# plus -futureRetention (2 days). Every sample acknowledged before the step is gone on both
+# nodes. Rounds of 1 s (r1000) make the run last past the watcher's first tick. A step of 18
+# days, which ends 2 days before the partition starts, passes, and so does v1.140.0.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run T=20:-1728000 W=740c6cfa,p2,q2,r1000

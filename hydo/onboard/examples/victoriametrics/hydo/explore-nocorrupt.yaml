@@ -1,0 +1,171 @@
+# A copy of hydo.yaml for `hydo explore --manifest explore-nocorrupt.yaml` only: the same image,
+# with corrupted files (G=) left out of the fault kinds. vmstorage detects most damaged files at
+# start and stops, which the explorer reports and shrinks as an error (RESULTS.md, "The
+# explorations"). Keep it equal to hydo.yaml but for `faults:`.
+# The VictoriaMetrics cluster version v1.156.0 (the newest release, 2026-11-09), as
+# ../docker-compose.yaml runs it: two vmstorage nodes, one vminsert with -replicationFactor=2 and
+# one vmselect with -replicationFactor=2 and -dedup.minScrapeInterval=1ms. Each vmstorage node's
+# data directory is a file system of its own (services[].storage), so that one node can lose its
+# power (L=) or have its files corrupted (G=) while the other runs on. RESULTS.md has the
+# promises under test and what was found.
+#
+#   sh ../build.sh            # bin/vmc-<arch>, the test client (../client)
+#   sh fetch-images.sh        # the three images by digest
+#   hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --new-faults --storage-faults
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The services below are the importer's,
+# with these changes:
+# - each vmstorage node's /storage is on its own file system (storage:), not the shared disk;
+# - the readiness checks ask each component's /health;
+# - vmselect's cache is on the shared data disk.
+format: 1
+name: victoriametrics
+description: "The VictoriaMetrics cluster, two vmstorage nodes with -replicationFactor=2: every acknowledged sample is returned once, with its value, under kills, pauses, partitions, one node's power loss or corrupted files, and clock steps"
+hydo_version: "0.3"
+
+params:
+  arch: amd64     # amd64 | arm64: the client's architecture, the same as the image's
+  vm: v1.156.0    # the VictoriaMetrics release (fetch-images.sh fetches v1.156.0, v1.141.0 and v1.140.0)
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 2048   # 2 x 384 MiB for vmstorage, 256 MiB each for vminsert and vmselect, the guest and its page cache
+  clock_start: 1794960000   # 2026-11-18 00:00 UTC, the day of the import
+  clock_after_cut: 60       # samples carry wall-clock timestamps: no real clock runs back across a power cut
+
+data:
+  size_mib: 256   # the shared data disk: vmselect's cache and the error-log scan's files
+  dirs: [vol/s1, vol/s2, vol/c]
+
+root:
+  files:
+    - {src: "../bin/vmc-{{arch}}", dst: /bin/vmc, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 vmstorage1
+      10.89.0.12 vmstorage2
+      10.89.0.13 vminsert
+      10.89.0.14 vmselect
+
+# Error logs as findings: every VictoriaMetrics component writes one line per message with the
+# level as the second tab-separated field (hydo guide error-logs). hydo/known-errors.yaml lists
+# the expected kinds.
+errors: true
+
+groups:
+  - name: storage
+    services: [vmstorage1, vmstorage2]
+
+services:
+  # Compose service vmstorage1
+  # image victoriametrics/vmstorage:v1.156.0-cluster = docker.io/victoriametrics/vmstorage@sha256:069da20292bdea1843034cb54de18b2639adecbd6006ceea266be9b841789ce2
+  #   linux/amd64: sha256:0d20231d5a0ddad0eef081bfb7b1ecea21a5b0a5e9c256a52e8c3c66e6fb4132
+  #   linux/arm64: sha256:ad337ea96e9e7fbc8097ba380525bce0d5107ba4db921e0a4df01fe90bee4a1e
+  - name: vmstorage1
+    image: {x86_64: "images/victoriametrics-vmstorage-{{vm}}-cluster-amd64.docker.tar", arm64: "images/victoriametrics-vmstorage-{{vm}}-cluster-arm64-oci"}
+    image_ref: "victoriametrics/vmstorage:{{vm}}-cluster"
+    cmd: ["-storageDataPath=/storage", "-retentionPeriod=100y", "-dedup.minScrapeInterval=1ms", "-memory.allowedBytes=384MiB", "-httpListenAddr=:8482", "-vminsertAddr=:8400", "-vmselectAddr=:8401"]
+    port: 8400
+    addr: 10.89.0.11
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://10.89.0.11:8482/health"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    errors: {format: none, match: '\t(error|fatal|panic)\t'}
+    storage: {dir: vol/s1, size_mib: 512}   # vmstorage1's data directory, a file system of its own
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/s1, dst: /storage}
+  # Compose service vmstorage2
+  - name: vmstorage2
+    image: {x86_64: "images/victoriametrics-vmstorage-{{vm}}-cluster-amd64.docker.tar", arm64: "images/victoriametrics-vmstorage-{{vm}}-cluster-arm64-oci"}
+    image_ref: "victoriametrics/vmstorage:{{vm}}-cluster"
+    cmd: ["-storageDataPath=/storage", "-retentionPeriod=100y", "-dedup.minScrapeInterval=1ms", "-memory.allowedBytes=384MiB", "-httpListenAddr=:8482", "-vminsertAddr=:8400", "-vmselectAddr=:8401"]
+    port: 8400
+    addr: 10.89.0.12
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://10.89.0.12:8482/health"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    errors: {format: none, match: '\t(error|fatal|panic)\t'}
+    storage: {dir: vol/s2, size_mib: 512}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/s2, dst: /storage}
+  # Compose service vminsert
+  # image victoriametrics/vminsert:v1.156.0-cluster = docker.io/victoriametrics/vminsert@sha256:3f3fa42ae5b447792da9a14538296b4463a7787f1702d1b69fa168052fdf4efb
+  #   linux/amd64: sha256:81989baab297c69d39c9f580683940747a2fb079fa9098749bfebd358edc6bdb
+  #   linux/arm64: sha256:222063ac2c0493597567c41c586167177b8ccd57f112c8711e6bb72b7a7faa21
+  - name: vminsert
+    image: {x86_64: "images/victoriametrics-vminsert-{{vm}}-cluster-amd64.docker.tar", arm64: "images/victoriametrics-vminsert-{{vm}}-cluster-arm64-oci"}
+    image_ref: "victoriametrics/vminsert:{{vm}}-cluster"
+    cmd: ["-storageNode=vmstorage1:8400,vmstorage2:8400", "-replicationFactor=2", "-memory.allowedBytes=256MiB", "-httpListenAddr=:8480"]
+    port: 8480
+    addr: 10.89.0.13
+    depends_on: [vmstorage1, vmstorage2]
+    start_after: started   # Compose's service_started: no wait for readiness
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://10.89.0.13:8480/health"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    errors: {format: none, match: '\t(error|fatal|panic)\t'}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+  # Compose service vmselect
+  # image victoriametrics/vmselect:v1.156.0-cluster = docker.io/victoriametrics/vmselect@sha256:3ac723ba307d009fd3dcedef21572ea74da9c4ae3a6f37d842580bf3d4c2f3cd
+  #   linux/amd64: sha256:8c7b1015b72b90328cf24cac262e5644760029f0214ac7e34898f9033f5fd0b7
+  #   linux/arm64: sha256:d2df9d90443fbdc66f4011e46dda9f3c2476b345fc52431f7a4d0ecf40079fad
+  - name: vmselect
+    image: {x86_64: "images/victoriametrics-vmselect-{{vm}}-cluster-amd64.docker.tar", arm64: "images/victoriametrics-vmselect-{{vm}}-cluster-arm64-oci"}
+    image_ref: "victoriametrics/vmselect:{{vm}}-cluster"
+    cmd: ["-storageNode=vmstorage1:8401,vmstorage2:8401", "-replicationFactor=2", "-dedup.minScrapeInterval=1ms", "-memory.allowedBytes=256MiB", "-cacheDataPath=/cache", "-httpListenAddr=:8481"]
+    port: 8481
+    addr: 10.89.0.14
+    depends_on: [vmstorage1, vmstorage2]
+    start_after: started
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://10.89.0.14:8481/health"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    errors: {format: none, match: '\t(error|fatal|panic)\t'}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/c, dst: /cache}
+
+# 60 rounds of 500 ms: 30 s of guest time with about 120 writes
+workload:
+  steps: 60
+  timeout: 300    # also the drain's limit: it gives up after 220 s
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 500
+  command_timeout: 60
+  drain_timeout: 30
+
+checks:
+  - id: vm
+    type: messages
+    history: vm
+    msg: every acknowledged sample is returned by vmselect's export, once and with its value
+    final: /bin/vmc drain
+    acknowledgement: none           # a read does not consume a sample
+    claims:
+      delivery: at-least-once       # every acknowledged sample is read back (no-loss)
+      duplicates: forbidden         # each sample is returned once: a second copy has another system id
+
+# The task names these faults: kills, pauses, partitions and one-way loss, one storage node's
+# power loss (L=) and corrupted files (G=), and clock steps. A power cut of the whole guest and
+# disk faults of the shared disk are left out: the docs say that the last seconds of samples may
+# be lost on an unclean shutdown of every node (README.md, "Storage").
+faults: [kill, pause, network, oneway, clock, powerloss]

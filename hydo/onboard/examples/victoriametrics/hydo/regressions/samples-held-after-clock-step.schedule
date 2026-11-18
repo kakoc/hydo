@@ -1,0 +1,8 @@
+# New (RESULTS.md, finding 2): the wall clock goes back 1 hour before step 10. The rows and the
+# index items that wait in each vmstorage node's in-memory buffers keep a flush deadline in
+# wall-clock milliseconds, now an hour ahead, so they are neither searchable nor written to disk.
+# A read 30 s later misses acknowledged samples with both nodes healthy, and the kill of both
+# nodes before step 50 loses 360 acknowledged samples; the same kill without the step loses 60,
+# the last seconds that the documentation names.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run T=10:-3600 K=storage.all@50+2 W=740c6cfa,p2,q2,r1000

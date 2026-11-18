@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=25
+# read every sample through vmselect, also while a node is down; exit 100 when a sample
+# acknowledged 30 s ago or earlier is missing, returned twice or has another value
+exec /bin/vmc read

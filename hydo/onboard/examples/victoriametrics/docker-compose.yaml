@@ -1,0 +1,40 @@
+# The VictoriaMetrics cluster version v1.156.0, small: two vmstorage nodes, one vminsert that
+# keeps two copies of every sample (-replicationFactor=2), and one vmselect that removes the
+# copies when it reads (-dedup.minScrapeInterval=1ms, as the cluster docs' section "Replication
+# and data safety" says). vmstorage keeps 100 years of data, so that a forward clock step does
+# not delete the samples under test. Each component is limited to a small share of the memory.
+services:
+  vmstorage1:
+    image: victoriametrics/vmstorage:v1.156.0-cluster
+    command: ["-storageDataPath=/storage", "-retentionPeriod=100y", "-dedup.minScrapeInterval=1ms",
+              "-memory.allowedBytes=384MiB", "-httpListenAddr=:8482", "-vminsertAddr=:8400",
+              "-vmselectAddr=:8401"]
+    volumes: ["s1:/storage"]
+    restart: unless-stopped
+  vmstorage2:
+    image: victoriametrics/vmstorage:v1.156.0-cluster
+    command: ["-storageDataPath=/storage", "-retentionPeriod=100y", "-dedup.minScrapeInterval=1ms",
+              "-memory.allowedBytes=384MiB", "-httpListenAddr=:8482", "-vminsertAddr=:8400",
+              "-vmselectAddr=:8401"]
+    volumes: ["s2:/storage"]
+    restart: unless-stopped
+  vminsert:
+    image: victoriametrics/vminsert:v1.156.0-cluster
+    command: ["-storageNode=vmstorage1:8400,vmstorage2:8400", "-replicationFactor=2",
+              "-memory.allowedBytes=256MiB", "-httpListenAddr=:8480"]
+    ports: ["8480:8480"]
+    depends_on: [vmstorage1, vmstorage2]
+    restart: unless-stopped
+  vmselect:
+    image: victoriametrics/vmselect:v1.156.0-cluster
+    command: ["-storageNode=vmstorage1:8401,vmstorage2:8401", "-replicationFactor=2",
+              "-dedup.minScrapeInterval=1ms", "-memory.allowedBytes=256MiB",
+              "-cacheDataPath=/cache", "-httpListenAddr=:8481"]
+    ports: ["8481:8481"]
+    volumes: ["c:/cache"]
+    depends_on: [vmstorage1, vmstorage2]
+    restart: unless-stopped
+volumes:
+  s1: {}
+  s2: {}
+  c: {}

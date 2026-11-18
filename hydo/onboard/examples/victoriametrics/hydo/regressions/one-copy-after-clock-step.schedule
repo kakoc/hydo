@@ -1,0 +1,8 @@
+# New (RESULTS.md, finding 3): the wall clock goes back 1 hour before step 10. vminsert's writes
+# to both vmstorage nodes then fail with `i/o timeout`, because the connection compares its
+# deadline with a clock that lags up to a second behind; vminsert drops both connections and
+# stores the next batch on one node only ("cannot make a copy #2"). vmstorage1's power loss
+# before step 50 then loses that batch for good: 3 acknowledged samples of write 16. The step
+# alone and the power loss alone lose nothing. The read's violation in the verdict is finding 2.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run T=10:-3600 L=vmstorage1@50+2 W=740c6cfa,p2,q2,r1000

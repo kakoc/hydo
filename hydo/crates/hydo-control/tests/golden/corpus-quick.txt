@@ -83,6 +83,7 @@ input	hydo/onboard/examples/temporal/hydo/hydo.yaml	fbb24c008d046d836092b84e6616
 input	hydo/onboard/examples/tigerbeetle/hydo/hydo.yaml	c10e8648abc8a3040ab99b14f7a4cd4dc35322777c0ade398f7bb7033b9ff423
 input	hydo/onboard/examples/tikv/hydo/hydo.yaml	9e126602c4bc9e597a5f977f97cd242b418056a28de85d0234bad7d339bb0c29
 input	hydo/onboard/examples/valkey/hydo/hydo.yaml	81364d5facc6e5b2d2791e5dda6b3c18af56d6dcb2fb321ad27491681c312ad2
+input	hydo/onboard/examples/victoriametrics/hydo/hydo.yaml	f43f0e70557dd1566fa929fec6661d7e49af18ff4e5518e34aaba6eef5de9b36
 input	hydo/onboard/examples/vikunja/hydo/hydo.yaml	d5288e3ad9f572d525e8d4395eef75695b0aed24de034020b9f4b32e4e7086b9
 input	hydo/onboard/examples/yugabyte/hydo/hydo.yaml	49b022282c7f370ee71d4be2a804c2439d3654c18a2061c4645037e460b7747a
 input	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	97abb5b0751d76f6e9793ab4076e25b3d10ce4b3ae2e98529192eb234ac12917
@@ -7739,6 +7740,7 @@ chunk	hydo/onboard/examples/tigerbeetle/hydo/hydo.yaml	602	500	04ce7ad0baaa4aeea
 chunk	hydo/onboard/examples/tigerbeetle/hydo/hydo.yaml	603	234	41cfc28dc056b4b32d935ddc11338582cc42ebb932d46f8eb0ada40a1032f5f8
 manifest	hydo/onboard/examples/tikv/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/valkey/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
+manifest	hydo/onboard/examples/victoriametrics/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/vikunja/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/yugabyte/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	core
