@@ -3415,6 +3415,17 @@
             "$ref": "#/$defs/Text"
           }
         },
+        "addr": {
+          "description": "The emulator's service's address (Milestone 316). With network: bridge the default is\nthe first free one of 10.89.1.1, 10.89.1.2, ...",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "description": {
           "anyOf": [
             {

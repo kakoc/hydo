@@ -1833,6 +1833,7 @@ emulators:
     port: 12111                # the port the system calls (default: stripe 12111, smtp 1025, s3 9000)
     ref: form:metadata[order]  # the proxy's ref: extractor
     tls: true                  # stripe only (default true): HTTPS for api.stripe.com
+    addr: 10.89.1.10           # the service's address (default with network: bridge: below)
   - use: s3
     buckets: [receipts]        # s3 only: directories /data/<name>/<bucket>, made in setup:
 ```
@@ -1852,6 +1853,14 @@ emulators:
 - `s3` adds `<name>` to `data.dirs` and sets `AWS_ENDPOINT_URL_S3=http://127.0.0.1:<port>`
   (`10.89.0.1` with `network: bridge`), `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and
   `AWS_REGION=us-east-1` in `env:`, each unless `env:` has it.
+- With `network: bridge` (Milestone 316) the service gets the entry's `addr:`, or else the first
+  free address of 10.89.1.1, 10.89.1.2, ... that no service, fake or proxy of the manifest has,
+  and the emulator listens on every address of its own network namespace (`0.0.0.0` in place
+  of `127.0.0.1` above), where its proxy and its readiness check reach it. The proxy listens on
+  10.89.0.1, as every proxy does. A manifest that writes its own `/etc/hosts` in `root.text` (as
+  `hydo compose` does) gets a line for each name it does not have yet: `<addr> <name>_emulator`
+  and `10.89.0.1 <name>`. Before Milestone 316 such a manifest was refused, because the
+  emulator's service had no `addr:`.
 - The validated data keeps `_emulators` (the expanded names and the image pins). The explorer
   draws no kill, pause, freeze or network fault on an emulator's service; `H=` on the proxy is its
   fault. A schedule written by hand may still name the service.

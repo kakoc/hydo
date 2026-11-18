@@ -1791,6 +1791,10 @@ pub struct Emulator {
     /// s3: buckets that exist from the start.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub buckets: Option<Vec<Text>>,
+    /// The emulator's service's address (Milestone 316). With network: bridge the default is
+    /// the first free one of 10.89.1.1, 10.89.1.2, ...
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub addr: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }
