@@ -27,8 +27,7 @@ regex = "1"
 # hydo-cli's, so no crate is added to the program
 tar = { version = "0.4", default-features = false }
 flate2 = { workspace = true }
-
-[dev-dependencies]
+# Claude Code's list of installed plugins (src/copies.rs, Milestone 315): hydo-cli has it already
 serde_json = { workspace = true }
 
 # the integration tests, one program (ci/consolidate-tests.sh)

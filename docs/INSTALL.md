@@ -99,3 +99,33 @@ checks every file by sha256. The examples are in `~/.hydo/versions/0.4.0/example
 On Linux this gives the KVM engine, and your user must be able to open `/dev/kvm`, as for the
 tarball. For hydo's kernel module `hvx.ko`, use the tarball.
 
+
+## Upgrading
+
+From the release after 0.4.0 on, one command updates hydo and every copy of its onboarding skill:
+
+```sh
+hydo update --check          # what is newer; changes nothing (exit status 3: something is newer)
+hydo update --yes            # update hydo the way it was installed, and the skill
+```
+
+`hydo update` reads how hydo was installed. It upgrades a Homebrew install with Homebrew and a
+cargo install with cargo. For a release archive, it downloads only this platform's archive and
+the release's `SHA256SUMS`, checks the sha256, and runs the new `install.sh`. It also updates the
+skill in Claude Code's plugin and in every folder where hydo installed it. `hydo guide update`
+says what it changes and what it reads.
+
+hydo 0.4.0 and older have no `hydo update`. Upgrade such a hydo once by hand, the way you
+installed it:
+
+- Homebrew: `brew update && brew upgrade kakoc/tap/hydo`.
+- cargo: `cargo install hydo --locked`, then `hydo setup`.
+- The release archive: download your platform's archive and `SHA256SUMS`, check the archive,
+  unpack it, and run `install.sh`. The preceding sections show these commands for 0.4.0.
+  You do not need the large `-sources.tar.gz` archives, which hold the third-party sources.
+
+Then update the skill: run `hydo skill update` for its copies. For Claude Code's plugin, run
+`claude plugin marketplace update hydo` and then `claude plugin update hydo@hydo`.
+
+Read the "Before you upgrade" section of the release notes first. For 0.4.0, images get new
+fingerprints, so build your images again after the upgrade.

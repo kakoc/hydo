@@ -4,7 +4,7 @@ description: Set up deterministic fault testing with hydo for a software project
 license: Apache-2.0
 compatibility: Needs the hydo command line tool, 0.1.0 or later (x86_64 Linux, or an Apple Silicon Mac); the skill offers to install it. Every hydo fact comes from the installed hydo (hydo guide); the skill itself needs no network.
 metadata:
-  version: "2.3.3"
+  version: "2.4.0"
   hydo-min: "0.1.0"
 ---
 
@@ -43,6 +43,19 @@ Run `hydo --version`.
 
 Every network install needs the user's yes first, with what it installs: hydo itself, a Rust
 target (`rustup target add aarch64-unknown-linux-musl`), a Go or C toolchain, and Docker images.
+
+Then run `hydo update --check`. It changes nothing; `hydo guide update` explains it.
+
+- Exit status 0: hydo and every copy of this skill are current. Go on.
+- Exit status 3: something is newer. Tell the user, in one message, the hydo version and the
+  skill copies it names with their versions, and the "Before you upgrade" lines it printed. Ask
+  whether to update. On a yes, run `hydo update --yes`, show what it says changed, and go on
+  (this session keeps the skill it loaded; a new session loads the new one). On a no, go on
+  with what is installed.
+- It prints hydo's usage text (exit status 2): this hydo is 0.4.0 or older and has no `hydo
+  update`. Offer the one manual upgrade of [references/install.md](references/install.md)
+  ("Upgrading"), and do it only after a yes.
+- It fails (no network, for example): say so in one line and go on.
 
 Then run `hydo doctor`: it says whether this machine can build and run guests.
 

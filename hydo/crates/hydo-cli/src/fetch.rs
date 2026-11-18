@@ -25,6 +25,9 @@ pub struct Options {
     pub pause: Duration,
     /// Print a line per fetch on stderr.
     pub verbose: bool,
+    /// The most one request may take, from its start to its body's end (None: no such limit,
+    /// only the connect and read timeouts). `hydo doctor`'s look for a newer release uses 3 s.
+    pub timeout: Option<Duration>,
 }
 
 /// The largest file hydo fetches.
@@ -40,6 +43,19 @@ impl Options {
             attempts: 4,
             pause: Duration::from_secs(1),
             verbose: true,
+            timeout: None,
+        }
+    }
+
+    /// One quick attempt, silent, at most `secs` seconds (`hydo doctor`'s look for a newer
+    /// release, Milestone 315): it must never slow the doctor down when the network is away.
+    pub fn quick(base: &str, secs: u64) -> Options {
+        Options {
+            attempts: 1,
+            pause: Duration::ZERO,
+            verbose: false,
+            timeout: Some(Duration::from_secs(secs)),
+            ..Options::standard(base)
         }
     }
 }
@@ -112,6 +128,7 @@ impl Fetcher {
             .proxy(opts.proxy.clone())
             .timeout_connect(Some(Duration::from_secs(30)))
             .timeout_per_read(Some(Duration::from_secs(60)))
+            .timeout_global(opts.timeout)
             .user_agent(format!("hydo/{}", hydo_image::hydo_version()))
             .build();
         Ok(Fetcher {

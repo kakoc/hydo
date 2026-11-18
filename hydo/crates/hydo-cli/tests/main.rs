@@ -14,4 +14,5 @@ mod migrate;
 mod onboard;
 mod readme;
 mod rules;
+mod update;
 mod versions;

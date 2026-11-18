@@ -208,6 +208,13 @@ Ideas that would answer more:
 | Does each operation cost more after the bump? | `perf:` and `hydo perf compare`, exact on hvx. | partly built; M237 |
 | Did the bump change a default setting that matters? | Not answered today. | idea; [Configuration as an explored dimension](#configuration-as-an-explored-dimension) |
 
+### Someone who keeps hydo and its skill current
+
+| The question | What hydo answers today | Status |
+|---|---|---|
+| Is a newer hydo or a newer onboarding skill out? | `hydo update --check` names each part with its version and the newest release's (exit status 3 when one is newer). `hydo doctor` prints one line about a newer hydo, at most once a day. | built; M315 (a fake release in tests; the real `--check` against GitHub) |
+| Can one command update hydo and every copy of the skill? | `hydo update --yes` updates hydo the way it was installed (Homebrew, cargo, the release archive, the install cache). It updates the skill in the known folders, in every Claude Code configuration folder, and in every folder where hydo wrote it, and Claude Code's plugin `hydo@hydo`. | partly built; M315; only fake brew, cargo and claude programs ran it (open item 161) |
+
 ## The ideas
 
 Each idea says what it is, why it matters, what it would need, and where it came from. An idea

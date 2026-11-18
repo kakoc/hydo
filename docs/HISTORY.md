@@ -17146,3 +17146,120 @@ with 0.4.0's steps (meilisearch/meilisearch#6743, restatedev/restate#5951).
 The user then created the skill release `skill-v2.3.3` on the same commit, not marked as the
 latest release. `hydo skill update --check` on an install of 2.3.1 reported 2.3.3 as newer (exit
 status 3), and `hydo skill update` installed it.
+
+## Milestone 315 (tentative number): `hydo update` updates hydo and every copy of its skill
+
+A user's coding agent tried to move a hydo 0.3.1 to 0.4.0. It downloaded every asset of the
+release, two sources archives of about 1.2 GB among them, found that the old hydo cannot install
+a newer one, and needed three steps by hand. On the same Mac, Claude Code had the skill from
+hydo's plugin marketplace at 2.0.0 while 2.3.3 was out, and `hydo skill update` does not reach a
+marketplace install: it updates only the copies in `.claude/skills` and `.agents/skills`. The
+user's requirement: "`hydo update` should update everything without any need to do any other
+harder things".
+
+**What changed.**
+
+- `hydo update [--check] [--yes] [--version V] [--offline]` (`hydo/crates/hydo-cli/src/update.rs`).
+  It reads the release list (`HYDO_RELEASE_API`) once. The target is the newest `v<x>.<y>.<z>`
+  release that is neither a draft nor a pre-release, or `--version V`; the newest skill release
+  comes from the same list. How hydo was installed comes from its own program's real path:
+  - a Homebrew keg (`<prefix>/Cellar/hydo/...`): `brew update` when `brew info --json=v2` names
+    an older formula, then `brew upgrade kakoc/tap/hydo` and the new hydo's `hydo doctor`;
+  - cargo (`<root>/bin/hydo` with cargo's `.crates2.json` naming `hydo` in `<root>`): `cargo
+    install hydo --locked --version V --root <root>`, then the new `hydo setup` and `hydo doctor`;
+  - an `install.sh` tree (`SHA256SUMS` around `bin/hydo`): only this platform's
+    `hydo-<mac|linux>-V.tar.gz` and the release's `SHA256SUMS`, over TLS, the archive accepted
+    only with the sha256 that file names, unpacked in a temporary folder, and its `install.sh
+    --prefix <tree>`. On Linux it adds `--no-module` unless the module `hvx` is loaded, and says
+    first that the module's install asks for `sudo`; with the udev rule it adds `--udev
+    --udev-group <the rule's group>`;
+  - a version of the install cache (`<HYDO_HOME>/versions/<own version>`): the same download,
+    then the new hydo's `hydo setup --archive <archive>` and `hydo setup --get V`;
+  - anything else, such as a checkout's build: nothing of hydo changes, and the commands to
+    update it are printed.
+- The skill is brought to the newest skill release, downloaded once and checked as `hydo skill
+  update` checks it, in every copy found:
+  - the copies that `hydo skill update` knows;
+  - `skills/hydo` of each Claude Code configuration folder: `CLAUDE_CONFIG_DIR`, `~/.claude`,
+    and every other `~/.claude*` folder with `plugins/` or `settings.json`
+    (`hydo_agents::copies::claude_config_dirs`);
+  - every copy in the new registry `~/.hydo/skill-copies.txt` (`<version>\t<path>` lines), which
+    `hydo skill install`, `hydo skill update`, `hydo onboard` and `hydo update` write. A line
+    whose copy is gone is dropped. A copy inside the temporary directory is not recorded: the
+    first run of the whole test program recorded the scratch copies of `tests/readme.rs`, which
+    runs `hydo onboard` with the user's home, in the real `~/.hydo`. Those lines, and the
+    doctor's `update-check.json` of the doctor tests before they set `HYDO_UPDATE_CHECK=0`, were
+    deleted again; both files exist only since this milestone.
+- Claude Code's marketplace installs: in each configuration folder whose
+  `plugins/installed_plugins.json` lists `hydo@hydo`, with `claude` on `PATH`, `claude plugin
+  marketplace update hydo` once, then `claude plugin update hydo@hydo --scope <scope>` for each
+  install (in the project's folder for a project or local install), all with `CLAUDE_CONFIG_DIR`
+  set to that folder. The commands' syntax is that of `claude plugin --help` of Claude Code
+  2.1.327. A managed install is left alone. Only the `hydo@hydo` entries are read; nothing else
+  of these folders is read or printed.
+- The plan lists hydo and each copy and install with its version before and after, the way hydo
+  is updated, and the "Before you upgrade" section of each newer release's notes (the release's
+  body in the list). `--check` changes nothing and exits 0 or 3. Without `--yes` a terminal is
+  asked once; elsewhere the plan is printed, nothing changes, and the exit status is 3. At the
+  end it lists what changed and says that a new session of the AI tool loads the new skill.
+- `hydo doctor` prints one line when a newer release exists, with `hydo update`. It looks at most
+  once a day, with one attempt of at most 3 s (`fetch::Options::quick`, the new `timeout`), and
+  keeps the answer, also a failed look, in `~/.hydo/update-check.json`. `HYDO_UPDATE_CHECK=0`
+  (new, in hydo-config) and `HYDO_OFFLINE` turn the look off. `CLAUDE_CONFIG_DIR` is registered
+  in hydo-config too.
+- The skill 2.4.0: its step 0 runs `hydo update --check` and, when something is newer, asks the
+  user and runs `hydo update --yes`. A hydo without the command (0.4.0 and older) prints its usage
+  text; the skill then offers the one manual upgrade of `references/install.md`, which now says
+  to fetch only this platform's archive. `hydo-min` stays 0.1.0, because the skill still works
+  with an older hydo. The facts are in the new guide topic `hydo guide update`;
+  `docs/INSTALL.md` has the section "Upgrading".
+
+**Evidence.** `tests/update.rs` (12 tests) runs this tree's hydo against a local HTTP server
+with a fake release 0.9.0 (an archive whose `bin/hydo` and `install.sh` are scripts that record
+their arguments, its `SHA256SUMS`, a `-sources` asset, and a skill release 2.9.0), and fake
+`brew`, `cargo` and `claude` programs that record theirs. The hydo under test runs where cargo
+built it (a checkout build) or copied into a Homebrew keg, a cargo bin folder, an `install.sh`
+tree and a version of the install cache:
+
+- the archive tree ran `install.sh --prefix <tree>`, and the server served only `SHA256SUMS`
+  and this platform's archive; the plan quoted only the newer release's "Before you upgrade";
+- a `SHA256SUMS` with another sha256 ended with exit status 1, no `install.sh`, the same
+  `bin/hydo` bytes and an empty temporary folder;
+- the install cache ran the new hydo's `setup --archive <archive>` and `setup --get 0.9.0`;
+- Homebrew ran `brew info`, `brew update`, `brew info` and `brew upgrade kakoc/tap/hydo`, then
+  the new hydo's `doctor`, and nothing was downloaded;
+- cargo ran `cargo install hydo --locked --version 0.9.0 --root <root>`, then `setup` and
+  `doctor` of the new program;
+- the checkout build changed nothing and printed the commands;
+- `--check` exited 3 with an older copy and 0 when everything was current; without `--yes` and
+  without a terminal the plan exited 3 and changed nothing; `HYDO_OFFLINE` and a release list
+  that cannot be reached exited 1 and changed nothing;
+- in a home with two Claude Code folders (one with a skill copy, one with a user and a project
+  install of `hydo@hydo` beside another plugin), a third folder named by `CLAUDE_CONFIG_DIR`, an
+  `.agents/skills/onboard` copy, a registered `--to` copy elsewhere and a registered copy that is
+  gone, every copy reached 2.9.0. `claude` ran `plugin marketplace update hydo` once and `plugin
+  update hydo@hydo` for the user scope and, in the project's folder, for the project scope, each
+  with `CLAUDE_CONFIG_DIR` naming the folder with the installs. The other plugin's name and
+  version and the settings' text appeared in no output, the gone copy's line was dropped, and a
+  second `--check` exited 0;
+- `hydo skill install --to DIR` and `hydo skill update` recorded their copies in the registry;
+- `hydo doctor` named 0.9.0 in two runs with one look at the list, and printed nothing with
+  `HYDO_UPDATE_CHECK=0` or `HYDO_OFFLINE=1`.
+
+The unit tests cover the release list, the notes' section, the recognition of each install
+kind, the daily look, the options, Claude Code's folders, the plugin entries, and the registry.
+On this Mac, `hydo update --check` of the checkout's build against GitHub's real release list
+printed:
+
+```text
+hydo update: hydo 0.4.0, this hydo was built in the checkout <the worktree>
+  hydo: 0.4.0, the newest release (up to date)
+  Claude Code ~/.claude: plugin hydo@hydo 2.0.0 -> 2.3.3: claude plugin update hydo@hydo (scope project, project <a project>)
+  Claude Code ~/.claude-<second>: plugin hydo@hydo 2.3.1 -> 2.3.3: claude plugin update hydo@hydo (scope user)
+```
+
+with exit status 3: the two marketplace installs of the user's two Claude Code folders are
+behind, and no copy is in the known folders. Nothing was updated: the user's Claude Code plugins
+and `~/.hydo` were not changed. Nothing recorded moved.
+
+**What is left.** Open item 161.

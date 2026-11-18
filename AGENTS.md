@@ -413,6 +413,31 @@ maintainers: the shared cases, and the Go module with its frozen copy in `hydo/s
 test in its language (M188). The examples are in `hydo/onboard/examples/`;
 `hydo/onboard/MANIFEST.md` is the project format's reference.
 
+**One command updates everything (M315, tentative number).** `hydo update [--check] [--yes]
+[--version V]` takes the newest `v<x>.<y>.<z>` release of the release list and updates hydo the
+way its own program's path says it was installed. A Homebrew keg gets `brew upgrade
+kakoc/tap/hydo`, a cargo install `cargo install hydo --locked --version V --root <its root>` and
+the new `hydo setup`. An `install.sh` tree gets only this platform's archive and `SHA256SUMS`,
+checked by sha256, and the new `install.sh --prefix <tree>`, with `--no-module` on Linux unless
+hvx is loaded. A version of the install cache gets the new hydo's `setup --archive` and `--get`.
+A checkout's build changes nothing and gets the commands. Then the skill is updated in four
+kinds of places:
+
+- every copy that `hydo skill update` knows;
+- the `skills/hydo` of each Claude Code configuration folder (`CLAUDE_CONFIG_DIR`, `~/.claude`,
+  any `~/.claude*` with `plugins/` or `settings.json`);
+- every copy in the registry `~/.hydo/skill-copies.txt`, which `hydo skill install`, `hydo skill
+  update` and `hydo onboard` write (not for a copy in the temporary directory);
+- the marketplace install `hydo@hydo` of each folder: `claude plugin marketplace update hydo`,
+  then `claude plugin update hydo@hydo --scope <scope>`, with `CLAUDE_CONFIG_DIR` set.
+
+ Only the hydo
+plugin's entries and the skill's version are read in those folders. The plan names each part
+with its versions and the "Before you upgrade" notes. `--check` exits 0 or 3, and without
+`--yes` a non-terminal gets the plan and the exit status 3. `hydo doctor` names a newer release
+once a day (`HYDO_UPDATE_CHECK=0` turns it off). The reference is `hydo guide update`; the skill
+2.4.0 runs `hydo update --check` in its step 0.
+
 **Rules nobody wrote (M236, first version).** The skill proposes a project's business rules from
 its own sources instead of a list per domain, and hydo validates them before the owner sees
 them. `hydo rules scan [DIR]` lists the evidence with file and line. `hydo rules check
@@ -2405,8 +2430,26 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A function named for a recovery that runs at every start (Blnk's `recoverPanic` and
       `logrusRecovery`) runs in every run that restarts the program, without an error.
     - The runs record from the workload's start, so the services' start-up is not watched.
-    - `hydo explore --merge` adds up the parts' error paths since M310 (tested on records only, as
-      no sharded run watches them: only the Mac engine does). The CI page does not show them. A declaration that a place must run in an exploration, which fails it, is not built.
+    - `hydo explore --merge` adds up the parts' error paths since M310. It was tested on records
+      only, because no sharded run watches them: only the Mac engine does. The CI page does not
+      show them. A declaration that a place must run in an exploration, which fails it, is not
+      built.
+161. `hydo update` (M315, tentative number). What is left:
+    - It ships with the first release after 0.4.0. Versions 0.4.0 and older lack it, so their
+      users upgrade once by hand, as the section "Upgrading" of `docs/INSTALL.md` and the skill's
+      `references/install.md` say.
+    - The install kinds ran only against the fake release, brew, cargo and claude programs of
+      `tests/update.rs`. No real `brew upgrade`, `cargo install`, `install.sh` or `claude plugin
+      update` ran through it, and nothing ran on Linux. The real `--check` ran on this Mac
+      against GitHub's release list and Claude Code's real configuration folders.
+    - On Linux it reinstalls the module when `hvx` is loaded, and passes `--udev` with the
+      rule's group but not a side module's `--udev-name`. A module that is installed but not
+      loaded counts as no module.
+    - A copy made before the registry is found only in the known folders until `hydo skill
+      update` runs in its project. A project install of the plugin whose project folder is gone
+      is reported and skipped.
+    - Homebrew installs the formula's version only, so `--version V` with Homebrew is refused
+      unless V is the formula's version.
 
 ## Milestone index
 
@@ -3235,6 +3278,12 @@ build machine, before 2026-10-13.
   same schedules. On Meilisearch 101 of 360 schedules carried such a kill, against none of 24
   before. Finding 1, the swap that runs twice, was found blind at seed 101 and shrunk to one
   reaction. Nothing recorded moved
+- M315 (tentative number): `hydo update` updates hydo the way it was installed: Homebrew,
+  cargo, the release archive's `install.sh`, or the install cache. It updates every copy of the
+  skill too: the known folders, every Claude Code configuration folder, the registry of copies,
+  and the marketplace install through `claude plugin update`. Only this platform's archive is fetched,
+  checked by sha256. `--check` exits 0 or 3, and `hydo doctor` names a newer release once a
+  day. Skill 2.4.0 runs `hydo update --check` first. Nothing recorded moved
 
 ## Where to look
 

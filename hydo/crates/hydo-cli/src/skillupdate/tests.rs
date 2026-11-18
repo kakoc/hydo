@@ -59,6 +59,7 @@ impl Server {
             attempts: 2,
             pause: Duration::ZERO,
             verbose: false,
+            timeout: None,
         })
         .unwrap()
     }

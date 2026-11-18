@@ -171,4 +171,5 @@ hydo::migrate                            fast
 hydo::onboard                            fast
 hydo::readme                             fast
 hydo::rules                              fast
+hydo::update                             fast
 hydo::versions                           fast

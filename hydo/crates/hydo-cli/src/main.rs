@@ -42,6 +42,7 @@ mod runs;
 mod setup;
 mod skillupdate;
 mod sqlgen;
+mod update;
 mod versions;
 
 use ctx::{Ctx, Platform};
@@ -52,6 +53,8 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
                                                    hydo/, install the skill for its AI tool, say what is next
     hydo init    [--dir DIR] [--name NAME]         start a repository's hydo/ folder and its AGENTS.md section
     hydo --version | -V                            print this hydo's version (and commit)
+    hydo update  [--check] [--yes] [--version V]   update hydo (as it was installed) and every copy of
+                                                   the onboarding skill to the newest release
     hydo guide   [TOPIC | --list]                  this hydo's facts for onboarding, and how to get the skill
     hydo skill   install --agent claude|codex|cursor|copilot|gemini|all [--user] | --to DIR
                                                    copy the onboarding skill where an AI tool reads skills
@@ -128,6 +131,8 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
                                                    hydo/, install the skill for its AI tool, say what is next
     hydo init    [--dir DIR] [--name NAME]         start a repository's hydo/ folder and its AGENTS.md section
     hydo --version | -V                            print this hydo's version (and commit)
+    hydo update  [--check] [--yes] [--version V]   update hydo (as it was installed) and every copy of
+                                                   the onboarding skill to the newest release
     hydo guide   [TOPIC | --list]                  this hydo's facts for onboarding, and how to get the skill
     hydo skill   install --agent claude|codex|cursor|copilot|gemini|all [--user] | --to DIR
                                                    copy the onboarding skill where an AI tool reads skills
@@ -197,6 +202,14 @@ fn main() {
     }
     let mut argv: Vec<String> = std::env::args().collect();
     let mut ctx = Ctx::new(hydo_config::Config::process());
+    // Milestone 315: every copy of the skill hydo writes is recorded, so `hydo update` finds it
+    hydo_agents::copies::set_registry(Some(
+        ctx.config
+            .cli
+            .cache
+            .home
+            .join(hydo_agents::copies::REGISTRY),
+    ));
     // the engine of the commands that run guests (Linux: hvx, or KVM with --backend kvm)
     if matches!(
         argv.get(1).map(String::as_str),
@@ -244,6 +257,9 @@ fn main() {
 fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
     let cmd = argv.get(1).map(String::as_str).unwrap_or("");
     let rest = if argv.len() > 2 { &argv[2..] } else { &[] };
+    if cmd == "update" {
+        return update::cmd_update(ctx, rest);
+    }
     if cmd == "skill" && rest.first().map(String::as_str) == Some("update") {
         return skillupdate::cmd_skill_update(ctx, &rest[1..]);
     }

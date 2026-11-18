@@ -434,18 +434,30 @@ variables! {
     /// archives and guest kernels by sha256), `versions/<version>/` (releases `hydo setup --get`
     /// installed), `bin/hydo` (the current one). An empty value means the default.
     HYDO_HOME: Cli, User, "path", "~/.hydo", "hydo-cli";
-    /// Where releases are fetched from: `<value>/v<version>/<file>` (hydo), and
-    /// `<value>/skill-v<version>/<file>` (the onboarding skill, `hydo skill update`). HTTPS only
+    /// Where releases are fetched from: `<value>/v<version>/<file>` (hydo, also `hydo update`),
+    /// and `<value>/skill-v<version>/<file>` (the onboarding skill, `hydo skill update`). HTTPS only
     /// (plain `http://` only to a loopback host). An empty value means the default.
     HYDO_RELEASE_URL: Cli, User, "URL", "https://github.com/kakoc/hydo/releases/download", "hydo-cli";
     /// Where `hydo skill update` lists the releases to find the newest skill release (tags
-    /// `skill-v<version>`): a GitHub releases API URL answering a JSON list. HTTPS only (plain
+    /// `skill-v<version>`), and `hydo update` and `hydo doctor` the newest hydo release (tags
+    /// `v<version>`): a GitHub releases API URL answering a JSON list. HTTPS only (plain
     /// `http://` only to a loopback host). An empty value means the default.
     HYDO_RELEASE_API: Cli, User, "URL", "https://api.github.com/repos/kakoc/hydo/releases", "hydo-cli";
     /// Set and not `0`: never use the network (`hydo setup`, the kernel lookup of runs, `hydo skill
     /// update`); what the install cache does not have is refused with its URL (`--offline` does
     /// the same).
     HYDO_OFFLINE: Cli, User, "flag: set and not `0`", "", "hydo-cli";
+    /// `0`: `hydo doctor` does not look for a newer hydo release (Milestone 315). Otherwise it
+    /// asks the release list at most once a day, with a timeout of 3 s, keeps the answer in
+    /// `~/.hydo/update-check.json`, and prints one line with `hydo update` when a newer release
+    /// exists. `HYDO_OFFLINE` also turns the look off.
+    HYDO_UPDATE_CHECK: Cli, User, "flag: not `0`", "on", "hydo-cli";
+    /// Claude Code's own variable: the folder Claude Code reads its settings, skills and
+    /// plugins from (Claude Code's default is `~/.claude`). `hydo update` (Milestone 315)
+    /// updates the hydo skill and the hydo plugin in this folder, in `~/.claude`, and in every
+    /// other `~/.claude*` folder that holds `plugins/` or `settings.json`; it reads nothing else
+    /// there.
+    CLAUDE_CONFIG_DIR: Cli, User, "path", "~/.claude", "hydo-cli";
     /// `warn`: a plan whose `hydo_version:` this hydo does not satisfy builds with a warning.
     HYDO_VERSION_CHECK: Build, User, "word: warn", "refuse", "hydo-build (through hydo-manifest)";
 
