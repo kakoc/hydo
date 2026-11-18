@@ -222,6 +222,7 @@ these places:
 - The Homebrew tap: `brew install kakoc/tap/hydo`.
 - crates.io: the crates of `cargo install hydo`, and `hydo-assert`.
 - PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.4.0`.
+- The skill release `skill-v2.3.3` (the plugin `hydo`, command `/hydo:onboard`).
 
 0.4.0 adds Milestones 254 to 256 and 258 to 303 to 0.3.4, with the fingerprint epoch 4
 (`docs/HISTORY.md` "The 0.4.0 release"). Milestones 304 to 310 came after it. Its files and

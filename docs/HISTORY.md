@@ -17142,3 +17142,7 @@ release index `hydo/dist/releases.txt` has the 0.4.0 lines. Before the release, 
 Meilisearch and Restate reports' steps on the signed Mac archive: each failing schedule gave its
 recorded fingerprint twice (`44a749b10aeef55b`, `8b211024ba849447`). Both reports were posted
 with 0.4.0's steps (meilisearch/meilisearch#6743, restatedev/restate#5951).
+
+The user then created the skill release `skill-v2.3.3` on the same commit, not marked as the
+latest release. `hydo skill update --check` on an install of 2.3.1 reported 2.3.3 as newer (exit
+status 3), and `hydo skill update` installed it.
