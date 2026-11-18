@@ -447,6 +447,45 @@ fn reactions_inside_the_workload() {
     refused("disk=none | run A=x:kill-workload/a#0", "counted from #1");
 }
 
+/// Milestone 305: the kill at the event's moment, `kill-now-<svc>`, beside the plain kill.
+#[test]
+fn the_kill_at_the_event() {
+    for s in [
+        "disk=none | run A=meili.swap_acked@20+3:kill-now-meilisearch",
+        "disk=none | run A=x:kill-now-a A=y+5:kill-b",
+        "disk=none | run A=x:kill-now-a A=y:cut",
+    ] {
+        round_trip(s);
+    }
+    let one = |s: &str| match Schedule::parse(s).unwrap().guest.pop() {
+        Some(GuestToken::React(r)) => r.action,
+        t => panic!("{s}: {t:?}"),
+    };
+    assert_eq!(
+        one("disk=none | run A=x:kill-now-redis"),
+        ReactAction::KillNow("redis".into())
+    );
+    assert_eq!(
+        one("disk=none | run A=x:kill-now-redis").svc(),
+        Some("redis")
+    );
+    // the plain kill is what it was, also of a service whose name starts with "now" (a
+    // service name has no "-", so no schedule before Milestone 305 had `kill-now-`)
+    assert_eq!(
+        one("disk=none | run A=x:kill-redis"),
+        ReactAction::Kill("redis".into())
+    );
+    assert_eq!(
+        one("disk=none | run A=x:kill-nowhere"),
+        ReactAction::Kill("nowhere".into())
+    );
+    refused("disk=none | run A=x:kill-now-", "not a service name");
+    refused(
+        "disk=none | run A=x:kill-now-a A=y:kill-now-b",
+        "at most one kill-now reaction",
+    );
+}
+
 /// Targets beyond one service (Milestone 195): lists, group selectors and partition shapes.
 #[test]
 fn several_services_and_partitions() {

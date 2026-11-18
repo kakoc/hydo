@@ -391,3 +391,25 @@ fn the_policy_is_the_manifests() {
         "{e}"
     );
 }
+
+/// Milestone 305: a kill-now reaction's kill is hydo's too. Its relay says so on the console
+/// before the agent can report the exit, so the policy leaves the process to the heal.
+#[test]
+fn a_kill_now_reactions_kill_keeps_the_schedules_meaning() {
+    let c = run(
+        &plan(Some("always"), "9/+1/1"),
+        "disk=none | run A=server.place_acked:kill-now-worker",
+    );
+    let r = &c.run.run;
+    let ns = notes(&r.items);
+    if !ns.iter().any(|n| n.contains("KILLED worker at the event")) {
+        panic!("the relay did not kill: {ns:#?}");
+    }
+    let sp = worker_spawns(&r.items);
+    assert_eq!(sp.len(), 1, "{sp:?}");
+    assert_eq!(sp[0].1, "main");
+    assert!(
+        !ns.iter().any(|n| n.contains("(restart: always")),
+        "{ns:#?}"
+    );
+}

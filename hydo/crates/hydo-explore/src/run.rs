@@ -725,6 +725,11 @@ fn setup(a: Args, env: &Env) -> Cx {
         cx.ex.react_fault = r == "fault" || r == "both";
         cx.ex.react_heal = r == "heal" || r == "both";
     }
+    // Milestone 305: the fault reactions' kills at the event's moment
+    if a.kill_now && !cx.ex.react_fault {
+        die("hydo explore: --kill-now changes the kills of the fault reactions; give --reactive fault or both");
+    }
+    cx.ex.react_kill_now = a.kill_now;
     let ids = |v: &str| -> Vec<String> {
         v.split(',')
             .map(str::trim)

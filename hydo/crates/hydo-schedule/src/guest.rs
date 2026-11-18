@@ -621,6 +621,11 @@ pub enum ReactAction {
     /// `kill-workload/<name>[#<k>]` (Milestone 296): SIGKILL the workload's processes of that
     /// name (`/proc/<pid>/comm`), or only the k-th of them; the workload's other processes go on.
     KillProcs(ThreadSel),
+    /// `kill-now-<svc>` (Milestone 305): SIGKILL the service's process tree at the moment the
+    /// event's record is written (or `ms` after it), from a real-time helper in the guest that
+    /// the record wakes, so no thread of the service runs in between. `kill-<svc>` acts later,
+    /// when the host has seen the record and the agent has run.
+    KillNow(String),
 }
 
 impl ReactAction {
@@ -647,6 +652,11 @@ impl ReactAction {
                 )));
             }
             return Ok(ReactAction::Clock(delta));
+        }
+        // Milestone 305: the kill at the event's moment
+        if let Some(svc) = v.strip_prefix("kill-now-") {
+            name(svc, what)?;
+            return Ok(ReactAction::KillNow(svc.to_string()));
         }
         let (kind, rest) = v.split_once('-').ok_or_else(bad)?;
         // Milestone 296: threads or processes of the workload
@@ -693,7 +703,10 @@ impl ReactAction {
             | ReactAction::Clock(_)
             | ReactAction::StopThreads(..)
             | ReactAction::KillProcs(_) => None,
-            ReactAction::Kill(s) | ReactAction::Stop(s, _) | ReactAction::Cont(s) => Some(s),
+            ReactAction::Kill(s)
+            | ReactAction::KillNow(s)
+            | ReactAction::Stop(s, _)
+            | ReactAction::Cont(s) => Some(s),
         }
     }
 }
@@ -703,6 +716,7 @@ impl fmt::Display for ReactAction {
         match self {
             ReactAction::Cut => f.write_str("cut"),
             ReactAction::Kill(s) => write!(f, "kill-{s}"),
+            ReactAction::KillNow(s) => write!(f, "kill-now-{s}"),
             ReactAction::Stop(s, ms) => write!(f, "stop-{s}-{ms}"),
             ReactAction::Cont(s) => write!(f, "cont-{s}"),
             ReactAction::Clock(d) if *d > 0 => write!(f, "clock+{d}"),

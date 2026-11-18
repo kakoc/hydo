@@ -91,6 +91,20 @@ struct World {
     deferred: Vec<Deferred>,
     /// The virtual time of the engine's DiskFaultsOff (the workload's end, "go").
     go_t: Option<u64>,
+    /// Milestone 305: the relays of kill-now reactions (`killnow:a<i>` spawns).
+    relays: Vec<Relay>,
+}
+
+/// Milestone 305: a kill-now reaction's relay as the fake plays it: armed at its spawn, it kills
+/// its service at the first record of its event that the fake writes after that, and says so on
+/// the console, as the guest's relay script does.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Relay {
+    name: String,
+    event: String,
+    svc: String,
+    on: bool,
+    fired: bool,
 }
 
 /// When a scripted exit happens (M134, the restart policies' tests).
@@ -453,7 +467,13 @@ impl Fake {
                 let line = format!(
                     "HYDO-ASSERT {{\"t\":\"{ty}\",\"id\":\"{id}\",\"ok\":{ok},\"msg\":\"fake\",\"details\":{{\"order\":{i}}}}}"
                 );
-                self.emit(t + 10 + 30 * k as u64 + 3, Msg::Kernel(line));
+                let at = t + 10 + 30 * k as u64 + 3;
+                self.emit(at, Msg::Kernel(line));
+                // Milestone 305: an armed relay kills its service at its event's record
+                let event = ok == matches!(ty, "sometimes" | "reachable");
+                if event {
+                    self.relay_fires(id, at);
+                }
             }
         }
     }
@@ -595,6 +615,19 @@ impl Fake {
                 } else if script.contains(" od -An -tx1") {
                     // one byte read in a child process (Milestone 271)
                     (2, 0, format!(" {:02x}\n", self.h(&["byte", &script]) % 256))
+                } else if a1 == "rm"
+                    && r.argv
+                        .get(3)
+                        .is_some_and(|f| f.starts_with("/tmp/hydo-killnow/"))
+                {
+                    // Milestone 305: the end of the steps disarms a relay that saw no event
+                    let f = r.argv[3].clone();
+                    for x in self.world.relays.iter_mut() {
+                        if f == format!("/tmp/hydo-killnow/{}/on", x.name) {
+                            x.on = false;
+                        }
+                    }
+                    (2, 0, String::new())
                 } else if a1 == "sleep" {
                     let ms: f64 = r.argv.get(2).and_then(|x| x.parse().ok()).unwrap_or(1.0);
                     ((ms * 40.0) as u64 + 3, 0, String::new())
@@ -781,6 +814,20 @@ impl Fake {
                     return;
                 }
                 let h = s.h.clone();
+                // Milestone 305: a kill-now reaction's relay (its arguments after the script:
+                // $0, busybox, a<i>, the event, the delay, the log file, the service)
+                if let Some(name) = h.strip_prefix("killnow:") {
+                    let arg = |k: usize| s.argv.get(k).cloned().unwrap_or_default();
+                    self.world.relays.push(Relay {
+                        name: name.to_string(),
+                        event: arg(11),
+                        svc: arg(14),
+                        on: true,
+                        fired: false,
+                    });
+                    self.emit(t + 4, Msg::Kernel(format!("HYDO-KILLNOW {name} armed")));
+                    return;
+                }
                 let from = Self::env_of(&s.env, "HYDO_FROM").and_then(|x| x.parse().ok());
                 let to = Self::env_of(&s.env, "HYDO_TO").and_then(|x| x.parse().ok());
                 if h.starts_with("fakes:") {
@@ -973,6 +1020,30 @@ impl Fake {
     /// The process under `h` (spawn `id`) exits at `at`: it is dying from now (no longer alive
     /// for a probe or pgrep), and it is reaped -- its handle free again -- when its exit line is
     /// written, as in the real agent.
+    /// Milestone 305: the relays armed for `event` kill their service now.
+    fn relay_fires(&mut self, event: &str, at: u64) {
+        for i in 0..self.world.relays.len() {
+            let r = self.world.relays[i].clone();
+            if r.fired || !r.on || r.event != event {
+                continue;
+            }
+            self.world.relays[i].fired = true;
+            match self.world.procs.get(&r.svc).cloned() {
+                Some(p) if p.running && !p.dying => {
+                    self.emit(
+                        at,
+                        Msg::Kernel(format!("HYDO-KILLNOW {} killed {} 2", r.name, r.svc)),
+                    );
+                    self.finish(&r.svc, p.spawn, at + 1, 137, Some(9));
+                }
+                _ => self.emit(
+                    at,
+                    Msg::Kernel(format!("HYDO-KILLNOW {} none {}", r.name, r.svc)),
+                ),
+            }
+        }
+    }
+
     fn finish(&mut self, h: &str, id: u64, at: u64, status: u32, sig: Option<u32>) {
         if let Some(p) = self.world.procs.get_mut(h) {
             if p.spawn == id {

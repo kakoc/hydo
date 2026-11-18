@@ -12,8 +12,9 @@ the task queue promises across kills, power cuts, disk faults, and clock steps.
   1. **An index swap runs twice after a crash.** The swap commits the swapped index mapping in
      one LMDB transaction and the task's `succeeded` status in a second one. A crash between the
      two leaves the task `enqueued`, and the restart swaps the indexes back. A power cut reaches
-     it in hydo (`disk=none | run A=meili.add_acked@20+40:cut`), and a plain SIGKILL reaches it in
-     Docker (`native/swap-twice.sh`, 4 of 48 rounds).
+     it in hydo (`disk=none | run A=meili.add_acked@20+40:cut`), and so does, since Milestone
+     305, a kill at the event's moment (`A=meili.swap_acked@20+14:kill-now-meilisearch`). A plain
+     SIGKILL reaches it in Docker (`native/swap-twice.sh`, 4 of 48 rounds).
   2. **A power cut empties the payload of an enqueued document addition.** The route renames
      the request's payload file into place without an `fsync` and then commits the task. After a
      power cut the task succeeds with `indexedDocuments` 0, or fails with `No such file or
@@ -28,7 +29,8 @@ the task queue promises across kills, power cuts, disk faults, and clock steps.
   Each edit by function ran once in every run but one on a lying disk. Damaged files that
   Meilisearch detects stop it at the start. Every failure with disk I/O errors or a lying disk
   was the disk's own loss.
-- **What did hydo lack?** Section "What hydo lacked": four gaps, none fixed here.
+- **What did hydo lack?** Section "What hydo lacked": four gaps. Milestone 305 fixed the
+  first.
 
 ## The version
 
@@ -117,6 +119,7 @@ queue that does not drain breaks the first promise.
 | `swap-runs-twice-after-a-crash.schedule` | `disk=none \| run A=meili.add_acked@20+40:cut` | `44a749b10aeef55b` |
 | `payload-lost-at-a-power-cut.schedule` | `disk=cut \| run A=meili.add_acked@20+2:cut` | `830da5344ced8d40` |
 | `dump-empty-after-a-power-cut.schedule` | `disk=cut \| run C=30` | `e4469b79f388a979` |
+| `swap-runs-twice-after-a-kill.schedule` (Milestone 305) | `disk=none \| run A=meili.swap_acked@20+14:kill-now-meilisearch` | `49a613db35d5f480` |
 
 The values are from this commit's hydo on the Mac engine, at the fingerprint epoch 4, each the
 same in two runs. The moment of a cut after an event moves with the image's bytes. The first
@@ -177,7 +180,24 @@ container and volume. Released hydo 0.3.4 (fingerprint epoch 3) builds and runs 
 but cuts at other moments: with `+2` and `+40` it reached findings 2 and 3, not the swap, on
 the first image and on this one.
 
-The regression is `hydo/regressions/swap-runs-twice-after-a-crash.schedule`.
+Since Milestone 305 a kill in hydo reaches it too. `A=<event>+<ms>:kill-now-<svc>` kills the
+server from a real-time relay in the guest, `ms` after the client's record, before any of the
+server's threads runs on. One run per delay of 0 to 50 ms after a swap's `202`, on the Mac
+engine:
+
+| delay | verdict |
+|---|---|
+| 0, 6, 7 ms | `VIOLATION [edits]`: an edit by function ran twice, the same split of two commits |
+| 13, 14 ms | `VIOLATION [swap]`: the swap ran twice: task 75, enqueued at 9.768 s, ran again at 21.239 s, after the restart |
+| 1 to 5, 8 to 12, 15 to 50 ms | `OK` |
+
+`+14` gave `fp=49a613db35d5f480` in three runs. `kill-meilisearch` at 13, 14, and 15 ms passed.
+On hvx `A=meili.swap_acked@30+<ms>:kill-now-meilisearch` ran the swap twice at 34 to 40 ms
+(`+36`: `fp=30ab8d845d6f258b` in three runs), and `kill-meilisearch` at 30 to 40 ms passed. The
+same reactions armed at step 20 ran an edit twice at 14 to 22 ms on hvx, with either kill.
+
+The regressions are `hydo/regressions/swap-runs-twice-after-a-crash.schedule` and
+`swap-runs-twice-after-a-kill.schedule`.
 
 ### 2. New: a power cut empties the payload of an enqueued document addition
 
@@ -295,7 +315,8 @@ None of these is fixed here; open item 148 in AGENTS.md lists them.
 1. **A kill reaction does not come between two commits that a power cut finds.** Finding 1 needs
    the server stopped between two LMDB commits. A plain SIGKILL does it in Docker, and in hydo
    only a power cut did. `kill-<svc>` reaches the server through the guest agent, so the
-   server's threads run on until the agent is scheduled. 18 kill delays passed.
+   server's threads run on until the agent is scheduled. 18 kill delays passed. Fixed in
+   Milestone 305: `kill-now-<svc>` broke the swap at 13 and 14 ms.
 2. **One schedule's first violation hides the others.** Every power cut within 30 s of a dump
    breaks `final_dumps`, so most failing schedules of the explorations carry finding 3, and
    the verdict line of finding 1's schedule names finding 2. The swap shows only in

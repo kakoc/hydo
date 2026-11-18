@@ -247,6 +247,7 @@ input	hydo/onboard/examples/meilisearch/hydo/hydo-compose.lock.json	3237351e4dd4
 input	hydo/onboard/examples/meilisearch/hydo/regressions/dump-empty-after-a-power-cut.schedule	6bee196b7d4eff6f7debd79b0e814d5cdb8672567b60dae6cec47e848fece65f
 input	hydo/onboard/examples/meilisearch/hydo/regressions/payload-lost-at-a-power-cut.schedule	561696e064913cd53db959dcbc4518a37258d3e67bb51569c97226c5f7d8d071
 input	hydo/onboard/examples/meilisearch/hydo/regressions/swap-runs-twice-after-a-crash.schedule	703149fa292fe4189c1241e20c929c4e149ebeda52da13be3d0bda8695fa0beb
+input	hydo/onboard/examples/meilisearch/hydo/regressions/swap-runs-twice-after-a-kill.schedule	d3a932119e0c6258beae50146f566a303122bb9f65b739ddd4d4c860248ec717
 input	hydo/onboard/examples/meilisearch/hydo/workload/first_init	70b3bc65bca2fdd74908b10fed005f7e16bd4682529e5e7c28a96ec7d8561e13
 input	hydo/onboard/examples/meilisearch/hydo/workload/parallel_driver_add	cb435596b74e80f78d13cbe13c15fd628e44cdd30bfadefd5469b599044309eb
 input	hydo/onboard/examples/meilisearch/hydo/workload/parallel_driver_add2	e727a827cc6cc6da8046e1c01f0ff05cf8be994c8061fb2e65bb45457d311738

@@ -65,6 +65,9 @@ pub(crate) struct Facts {
     /// Milestone 263: the guest's reboot requests (`HYDO-REBOOT [<reason>]` console lines), as
     /// their reasons, in order. Kept only for a plan with `guest.reboot: true`; empty otherwise.
     pub reboots: Vec<String>,
+    /// Milestone 305: the lines of `kill-now-<svc>` reactions' relays (`HYDO-KILLNOW <rest>` on
+    /// the console), as their rest, in order. Kept only for a run with reactions.
+    pub killnow: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

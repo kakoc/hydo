@@ -1347,6 +1347,23 @@ schedules, in 31 minutes against 75 on one runner. Redpanda in 20 parts found fi
 at the seeds where hvx found them, in 2 h 53 min. The details are in `docs/HISTORY.md`
 Milestone 304.
 
+**A kill at the moment of a console event (M305, tentative number).** The reaction action
+`kill-now-<svc>` (`A=<event>[@<step>][+<ms>]:kill-now-<svc>`) kills a service before any of its
+threads runs on after the event's record. `kill-<svc>` acts when the host has seen the record and
+the agent has run. Before the step, the host starts a relay through the agent. It is a busybox shell at
+`SCHED_FIFO` 99 that reads a FIFO bind-mounted over `/dev/console` and the console device. The
+record's write wakes it in the writer's own system call. With one vCPU nothing else runs until
+it has slept the delay and sent SIGKILL to the service's processes, with builtins only. A
+forwarder at normal priority writes every line to the console. No engine, agent, kernel, or image
+changed, so the code is the same on hvx, the Mac, and KVM. `hydo explore --reactive fault
+--kill-now` draws it, with delays of 0 to 50 ms. On the Mac engine
+`A=meili.swap_acked@20+14:kill-now-meilisearch` runs Meilisearch's index swap twice on every run
+(finding 1), and so does `+13`. `kill-meilisearch` at the same delays passes. On hvx
+`A=meili.swap_acked@30+<ms>:kill-now-meilisearch` runs the swap twice at 34 to 40 ms, and
+`kill-meilisearch` at 30 to 40 ms passes.
+Old schedules gave their fingerprints and control transcripts on both engines. The reference is
+MANIFEST.md "Reactions"; the details are in `docs/HISTORY.md` Milestone 305 (open item 154).
+
 **Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 64 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
 facts and commands of `README.md` and the quickstarts. Release step 6a is a docs review by a
@@ -2225,9 +2242,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 148. The Meilisearch example (M295). What is left:
     - Its three candidates are not reported upstream.
     - A kill reaction (`A=<event>+<ms>:kill-<svc>`) reaches the service through the guest
-      agent. The service's threads run on until the agent runs. Kills at 18 delays never
-      stopped Meilisearch between the swap's two commits, which a power cut and a SIGKILL in
-      Docker do.
+      agent, and kills at 18 delays never stopped Meilisearch between the swap's two commits.
+      Since M305 `kill-now-meilisearch` does, at 13 and 14 ms after a swap's `202`.
     - A run's verdict line names its first broken check only. Every power cut within 30 s of a
       dump breaks `final_dumps`, and finding 1's schedule shows the swap only in `hydo report
       --details`. The example's build parameter `dumps=no` keeps finding 3 out of explorations.
@@ -2236,7 +2252,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       change of the client moved finding 1 from 2 ms to 40 ms after its event.
     - Released 0.3.4 (epoch 3) cuts at other moments and misses finding 1 with `+2` and `+40`.
     - The shared Mac VM lock: the onboarding waited about 1 hour 40 minutes for it.
-    - The example ran on the Mac engine only, not on hvx (no `cf=`) or KVM.
+    - The example ran on the Mac engine and, since M305, on hvx with reactions; no `cf=` run, and
+      KVM did not run it.
 149. Differential testing (M298, `docs/design/differential.md`). What is left:
     - It ran on the Mac engine only. hvx and KVM did not run it.
     - The outcomes come from the controller's reads of `$HYDO_OUTCOMES`. A run that ends in an
@@ -2328,6 +2345,21 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       cover that model. The cause was not looked for.
     - The `known-errors.yaml` of an example's `hydo/` folder is not passed to the explorer, so the
       Dragonfly and Redpanda runs reported their expected error kinds as new.
+154. The kill at the moment of a console event (M305, tentative number). What is left:
+    - The relay sees only the records of a process that opens the console after the reaction
+      is armed. A record written through a file descriptor opened before reaches the host but
+      not the relay, and the reaction does not fire. An SDK in a service started at boot writes
+      so. A service in a mount namespace of its own does not see the bind mount either.
+    - With several vCPUs the service's threads on other CPUs run until the kill's interrupt
+      reaches them. No run used several vCPUs.
+    - One `kill-now-` reaction per schedule, because one relay sits over the console.
+    - The delay is in whole milliseconds. Meilisearch's swap window on the Mac engine is 2 ms
+      wide on that grid; a window narrower than 1 ms can fall between two delays.
+    - The explorer draws a reaction's kill only on a service without the schedule's `K=` and
+      `P=`. On a manifest with one service the process strategy puts both on it in most
+      schedules, so 24 seeds of Meilisearch with `--kill-now` drew no `kill-now-` reaction.
+    - KVM did not run it. The mechanism is the same controller code as on the Mac and hvx, with
+      no engine change.
 155. Error paths (M306, tentative number; `docs/design/error-paths.md`). What is left:
     - Only the Mac engine watches them. KVM's root is on a disk, so a program's pages reach guest
       RAM only when the guest reads them; the engine would search at system calls and write
@@ -3149,6 +3181,12 @@ build machine, before 2026-10-13.
   only faults reached and what never ran. On Blnk 46 of 1,326 places ran only with faults, 27 also
   without, and 1,253 never; every fingerprint stayed. `hydo explore --no-faults`. Nothing
   recorded moved
+- M305 (tentative number): a kill at the moment of a console event. `kill-now-<svc>` kills a
+  service from a real-time relay in the guest that the event's own write wakes, before any
+  thread of the service runs on; no engine, agent, kernel or image changed. `hydo explore
+  --kill-now` draws it. Meilisearch's swap runs twice at 13 and 14 ms after its `202` on the Mac
+  engine and at 34 to 40 ms on hvx, where `kill-<svc>` never did. Old schedules keep their
+  fingerprints on the Mac and hvx. Nothing recorded moved
 
 ## Where to look
 

@@ -1,0 +1,8 @@
+# New (RESULTS.md, finding 1), reached with a kill (Milestone 305): 14 ms after the first swap
+# acknowledged from step 20 on, a real-time relay in the guest kills the server before any of
+# its threads runs on. The swap task is then between its two commits: the swapped index mapping
+# is committed, its succeeded status is not. The restart runs the swap again, so sa and sb end
+# as after an even number of swaps. The plain kill-meilisearch at the same delay passes. The
+# moment moves with the image's bytes: on this image 13 ms gives it too.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run A=meili.swap_acked@20+14:kill-now-meilisearch

@@ -382,9 +382,10 @@ fn check_token(plan: &Plan, t: &GuestToken) -> Result<(), String> {
             | ReactAction::KillProcs(_) => Ok(()),
             // Milestone 296: the workload's own tree
             ReactAction::Stop(svc, _) if svc == WORKLOAD => Ok(()),
-            ReactAction::Kill(svc) | ReactAction::Stop(svc, _) | ReactAction::Cont(svc) => {
-                service(plan, t, svc)
-            }
+            ReactAction::Kill(svc)
+            | ReactAction::KillNow(svc)
+            | ReactAction::Stop(svc, _)
+            | ReactAction::Cont(svc) => service(plan, t, svc),
         },
         // Milestone 258: a walk needs a workload that walks
         GuestToken::Walk(_) if plan.walk => Ok(()),

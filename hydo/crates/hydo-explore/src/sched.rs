@@ -95,8 +95,8 @@ pub struct Fc {
 pub type Kinds = Vec<(String, i64)>;
 
 /// `A=<event>[@<at>][+<delay>]:<action>` (M139): a reaction to the guest's first assertion
-/// record of `event` after step `at`; `action` is `cut`, `kill-<svc>`, `stop-<svc>-<ms>` or
-/// `cont-<svc>` (hydo_schedule::React).
+/// record of `event` after step `at`; `action` is `cut`, `kill-<svc>`, `kill-now-<svc>`
+/// (Milestone 305), `stop-<svc>-<ms>` or `cont-<svc>` (hydo_schedule::React).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ra {
     pub event: String,
@@ -113,6 +113,10 @@ impl Ra {
 
     /// The service the action acts on (none for a cut).
     pub fn svc(&self) -> Option<&str> {
+        // Milestone 305: `kill-now-<svc>`
+        if let Some(s) = self.action.strip_prefix("kill-now-") {
+            return Some(s);
+        }
         let mut it = self.action.split('-');
         it.next();
         it.next()

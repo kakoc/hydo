@@ -25,6 +25,11 @@
 //!   cut's path: the workload's client and every service are frozen at once, then the ids are
 //!   read and the recovery boot follows, as for `C=`.
 //!
+//! - `kill-now-<svc>` (Milestone 305): SIGKILL the service's tree at the moment the event's record
+//!   is written, before any thread of the service runs again. The kills above act when the host
+//!   has seen the record at a stop and the agent has run, and the service's threads run on until
+//!   then. This one is decided in the guest: see [`RELAY`].
+//!
 //! Reactions are live during the workload's steps only: after the last step the main sequence
 //! cancels every reaction that has not seen its event and waits for the others to finish, before
 //! it heals; a power cut (`C=` or a reaction's) cancels them all.
@@ -37,8 +42,8 @@
 //! byte for byte.
 
 use super::{
-    bb, clock, env, log, run, secs, spawn_cmd, svc_sig, threads, timeout_argv, xassert, Ctx, Memo,
-    Step, F,
+    bb, clock, die_oracle, env, log, run, secs, spawn_cmd, svc_sig, threads, timeout_argv, xassert,
+    Ctx, Facts, Memo, Step, F,
 };
 use hydo_agent_proto::msg::Sig;
 use hydo_schedule::{React, ReactAction};
@@ -158,9 +163,254 @@ pub(super) fn workload(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<Option
     Ok(st)
 }
 
+/// Milestone 305: the console lines of a `kill-now-<svc>` reaction's relay.
+pub(super) const KILLNOW_PREFIX: &str = "HYDO-KILLNOW ";
+
+/// Milestone 305: the relay of a `kill-now-<svc>` reaction, a `busybox sh -c` script that runs at
+/// real-time priority (`chrt -f 99`). Its arguments are busybox's path, the reaction's name
+/// (`a<i>`), the event's assertion id, the delay in seconds (empty for none), the service's log
+/// file and the service's name.
+///
+/// It puts a FIFO over `/dev/console` and the agent's console device (bind mounts), so a process
+/// that opens the console from then on writes into the FIFO. The write wakes the relay at once,
+/// in the writer's own system call, with no worker thread of the kernel between them. The relay
+/// outranks every normal process, so with one vCPU no other process runs until it blocks again.
+/// For each line it decides whether the line is the event's record (the test of [`record_of`],
+/// on the record's text), and then hands the line to a forwarder at normal priority (`cat`) that
+/// writes it to the console device, through a device node of its own. At the first event's
+/// record it sleeps the delay, finds the service's processes, kills them with SIGKILL, and only
+/// then forwards the record. The service's processes are the agent's children whose standard
+/// output is the service's log file (`[ ... -ef ... ]`), and their descendants. Everything on
+/// that path is a builtin of the shell, so no process starts and no disk is read between the
+/// record and the kill. The relay reports on the console itself, through its device node:
+/// `HYDO-KILLNOW a<i> armed`, `... killed <svc> <processes>`, `... none <svc>` (no process of
+/// the service ran), or `... error <why>`. It matches only while `/tmp/hydo-killnow/a<i>/on`
+/// exists (the end of the steps removes it), and only once.
+pub(super) const RELAY: &str = r#"B=$1 I=$2 E=$3 D=$4 L=$5 S=$6
+Q=/tmp/hydo-killnow/$I N=/dev/hydo-killnow-$I
+trap '' HUP INT TERM PIPE USR1 USR2
+c=ttyS0
+read -r cl </proc/cmdline
+for w in $cl; do case $w in hydo.tty=*) c=${w#hydo.tty=}; c=${c#/dev/};; esac; done
+read -r mm </sys/class/tty/$c/dev || { echo "HYDO-KILLNOW $I error the console $c has no device numbers" >/dev/console; exit 1; }
+$B mknod $N c ${mm%:*} ${mm#*:} || exit 1
+exec 3>$N
+say() { echo "HYDO-KILLNOW $I $*" >&3; }
+$B mkdir -p $Q && $B mkfifo $Q/in $Q/out || { say error cannot make the pipes of the relay in $Q; exit 1; }
+exec 4<>$Q/in 5<>$Q/out
+exec 9<$L || { say error cannot open the log file $L of $S; exit 1; }
+$B chrt -o 0 $B cat <$Q/out >&3 &
+for f in /dev/console /dev/$c; do
+  $B mount -o bind $Q/in $f || { say error cannot put the relay over $f; exit 1; }
+  [ $c != console ] || break
+done
+: >$Q/on
+say armed
+go=1
+while IFS= read -r l <&4; do
+  if [ $go = 1 ] && [ -e $Q/on ]; then
+    h=0
+    case $l in
+      "HYDO-ASSERT "*"\"id\":\"$E\""*|"HYDO-ASSERT "*"\"id\": \"$E\""*)
+        case $l in
+          *'"t":"sometimes"'*|*'"t": "sometimes"'*|*'"t":"reachable"'*|*'"t": "reachable"'*)
+            case $l in *'"ok":true'*|*'"ok": true'*) h=1;; esac;;
+          *) case $l in *'"ok":false'*|*'"ok": false'*) h=1;; esac;;
+        esac;;
+    esac
+    if [ $h = 1 ]; then
+      go=0
+      [ -z "$D" ] || $B sleep $D
+      a=
+      for d in /proc/[0-9]*; do
+        read -r s 2>/dev/null <$d/stat || continue
+        p=${d#/proc/}; s=${s##*) }; set -- $s
+        a="$a $p:$2"
+      done
+      t=" "
+      for e in $a; do
+        p=${e%:*}
+        [ "${e#*:}" = 1 ] && [ /proc/$p/fd/1 -ef /proc/self/fd/9 ] && t="$t$p "
+      done
+      if [ "$t" = " " ]; then
+        say none $S
+      else
+        ch=1
+        while [ $ch = 1 ]; do
+          ch=0
+          for e in $a; do
+            p=${e%:*}
+            case $t in *" $p "*) continue;; esac
+            case $t in *" ${e#*:} "*) t="$t$p "; ch=1;; esac
+          done
+        done
+        kill -9 $t 2>/dev/null
+        n=0
+        for p in $t; do n=$((n+1)); done
+        say killed $S $n
+      fi
+      $B chrt -o -p 0 $$ 2>/dev/null
+    fi
+  fi
+  printf '%s\n' "$l" >&5
+done
+"#;
+
+/// The relay's directory in the guest (Milestone 305).
+fn relay_dir(i: usize) -> String {
+    format!("/tmp/hydo-killnow/a{i}")
+}
+
+/// What the relay of reaction `i` said last: `armed`, `killed <svc> <n>`, `none <svc>` or
+/// `error <why>` (Milestone 305).
+fn relay_said(f: &Facts, i: usize) -> Option<String> {
+    let me = format!("a{i} ");
+    f.killnow
+        .iter()
+        .rev()
+        .find_map(|l| l.strip_prefix(&me).map(str::to_string))
+}
+
+/// How many times a kill-now relay killed `svc` in this conversation (Milestone 305). A restart
+/// policy's supervisor leaves that exit to the schedule, as it does a `K=` kill's.
+pub(super) fn kills_of(f: &Facts, svc: &str) -> usize {
+    f.killnow
+        .iter()
+        .filter(|l| {
+            l.split_once(' ').is_some_and(|(_, r)| {
+                r.strip_prefix("killed ")
+                    .and_then(|r| r.split_once(' '))
+                    .is_some_and(|(s, _)| s == svc)
+            })
+        })
+        .count()
+}
+
+/// Arm a `kill-now-<svc>` reaction (Milestone 305), in the main sequence before the step it is
+/// armed at: start its relay and wait until the relay says that it watches the console. A relay
+/// that cannot start ends the run as an oracle error, so that a schedule never passes because
+/// its fault could not act.
+pub(super) fn arm_now(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<()> {
+    let r = ctx.run.a[i].clone();
+    let ReactAction::KillNow(svc) = &r.action else {
+        return Ok(());
+    };
+    let e = env(fx, ctx, &[]);
+    let delay = if r.delay_ms > 0 {
+        secs(r.delay_ms, 3)
+    } else {
+        String::new()
+    };
+    let argv = vec![
+        bb(ctx),
+        "chrt".into(),
+        "-f".into(),
+        "99".into(),
+        bb(ctx),
+        "sh".into(),
+        "-c".into(),
+        RELAY.into(),
+        "hydo-killnow".into(),
+        bb(ctx),
+        format!("a{i}"),
+        r.event.clone(),
+        delay,
+        ctx.plan.layout.log_of(svc),
+        svc.clone(),
+    ];
+    let id = fx.send(spawn_cmd(
+        &format!("killnow:a{i}"),
+        argv,
+        e,
+        &format!("/tmp/hydo-killnow-a{i}.log"),
+        false,
+    ))?;
+    fx.until(|_, f| {
+        relay_said(f, i).is_some()
+            || f.exits.contains_key(&id)
+            || matches!(f.replies.get(&id), Some(Err(_)))
+    })?;
+    let said = fx.effect_text(|_, f| relay_said(f, i).unwrap_or_default());
+    if said == "armed" {
+        log(
+            fx,
+            format!("REACT A={r}: armed (a real-time relay watches the console)"),
+        );
+        return Ok(());
+    }
+    let why = match said.strip_prefix("error ") {
+        Some(w) => w.to_string(),
+        None => {
+            format!("its relay ended before it watched the console (/tmp/hydo-killnow-a{i}.log)")
+        }
+    };
+    die_oracle(fx, format!("HYDO-ORACLE: ERROR A={r}: {why}"))
+}
+
+/// The end of a `kill-now-<svc>` reaction that saw no event by the end of the steps (Milestone
+/// 305): its relay stops matching and only forwards the console's lines.
+pub(super) fn disarm(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<()> {
+    if !matches!(ctx.run.a[i].action, ReactAction::KillNow(_)) {
+        return Ok(());
+    }
+    let e = env(fx, ctx, &[]);
+    run(
+        fx,
+        vec![
+            bb(ctx),
+            "rm".into(),
+            "-f".into(),
+            format!("{}/on", relay_dir(i)),
+        ],
+        e,
+        None,
+    )?;
+    Ok(())
+}
+
+/// A `kill-now-<svc>` reaction's thread (Milestone 305): the relay decides in the guest; the
+/// host waits for what it says and keeps the books (the reaction fired, the service stays down
+/// until the heal).
+fn watch_relay(fx: &mut F<'_>, ctx: &Ctx, i: usize, svc: &str) -> Step<()> {
+    let r = ctx.run.a[i].clone();
+    fx.until(|_, f| relay_said(f, i).is_some_and(|l| l != "armed"))?;
+    if fx.is_cancelled() {
+        return Ok(());
+    }
+    let said = fx.effect_text(|h, f| {
+        let said = relay_said(f, i).unwrap_or_default();
+        h.react.fired.insert(i);
+        if said.starts_with("killed ") {
+            if let Some(v) = h.services.get_mut(svc) {
+                v.killed = true;
+            }
+        }
+        said
+    });
+    log(fx, format!("REACT A={r}: saw {}", r.event));
+    match said
+        .strip_prefix("killed ")
+        .and_then(|x| x.rsplit_once(' '))
+    {
+        Some((_, n)) => log(
+            fx,
+            format!("KILLED {svc} at the event (reaction A={r}, {n} processes)"),
+        ),
+        None => log(
+            fx,
+            format!("{svc} was not running at the event (reaction A={r}); nothing killed"),
+        ),
+    }
+    xassert(fx, REACT_DECL.0, REACT_DECL.1, REACT_DECL.2);
+    Ok(())
+}
+
 /// One reaction's thread (`Part::React(i)`).
 pub(super) fn watch(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<()> {
     let r = ctx.run.a[i].clone();
+    if let ReactAction::KillNow(s) = &r.action {
+        return watch_relay(fx, ctx, i, s);
+    }
     // the records seen up to the arming point do not count
     let from = match fx.effect(|_, f| Memo::Id(f.asserts.len() as u64)) {
         Memo::Id(n) => n as usize,
@@ -225,6 +475,7 @@ pub(super) fn watch(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<()> {
         ReactAction::KillProcs(t) => {
             threads::kill_procs_now(fx, ctx, t, &format!("reaction A={r}"))?;
         }
+        ReactAction::KillNow(_) => unreachable!("watch_relay acts for it"),
     }
     xassert(fx, REACT_DECL.0, REACT_DECL.1, REACT_DECL.2);
     Ok(())

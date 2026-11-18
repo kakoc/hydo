@@ -104,11 +104,14 @@ pub(super) fn watch(fx: &mut F<'_>, ctx: &Ctx, svc: &str) -> Step<()> {
     let mut mine: Option<(u64, Option<u64>)> = None;
     loop {
         // the current process ended, and not by one of hydo's kills
-        // (or its start was refused, which counts as exit status 127, the shell's "not found")
+        // (or its start was refused, which counts as exit status 127, the shell's "not found");
+        // a kill-now relay's kill (Milestone 305) says so on the console before the agent can
+        // report the exit, so that exit is hydo's too
         fx.until(|h, f| {
             h.services.get(svc).is_some_and(|s| {
                 Some(s.spawn) != handled
                     && !s.killed
+                    && super::react::kills_of(f, svc) == s.kn
                     && (f.exits.contains_key(&s.spawn)
                         || matches!(f.replies.get(&s.spawn), Some(Err(_))))
             })

@@ -200,6 +200,8 @@ fn a_reaction_acts_where_its_event_is_seen_and_replays() {
                                 "{text}"
                             )
                         }
+                        // Milestone 305: its own test below
+                        ReactAction::KillNow(_) => unreachable!("not in SCHEDULES"),
                         ReactAction::Cut => {
                             // the main sequence freezes the workload and every service at once
                             let ending = ran.run.fin.ending.as_ref().unwrap();
@@ -395,4 +397,112 @@ fn over_one_link_a_reactions_cut_reaches_the_recovery_and_replays() {
         assert_eq!(rep.result_line(), got.result_line(), "{text}");
     }
     assert!(recoveries >= 3, "{recoveries}");
+}
+
+/// Milestone 305: a kill-now reaction (`A=<event>:kill-now-<svc>`). Its relay is spawned by the
+/// main sequence before the workload call of the step the reaction is armed at, and the relay
+/// (which the fake plays as the guest's script does) kills the service at the event's record and
+/// says so on the console. The host then marks the reaction fired and the service killed, so the
+/// heal starts it again. A relay whose event never comes is disarmed at the end of the steps.
+/// Every run gives the same transcript twice, and typed again.
+#[test]
+fn a_kill_now_reaction_kills_at_its_event_and_replays() {
+    let plan = plan_of("hydo/onboard/examples/redis/hydo.yaml").unwrap();
+    let mut killed = 0;
+    let mut disarmed = 0;
+    for salt in ["now-1", "now-2", "now-3"] {
+        let Ok(b) = boot(&plan, salt) else { continue };
+        for text in [
+            "disk=none | run A=client.place_failed:kill-now-redis",
+            "disk=none | run A=server.place_acked@4+5:kill-now-redis",
+            "disk=none | run A=order.broken:kill-now-redis K=redis@2+1",
+            "disk=none | run A=no.such.event:kill-now-redis",
+        ] {
+            let s: Schedule = text.parse().unwrap();
+            let ran = run_schedule(&b, &s).unwrap();
+            assert_eq!(
+                ran.replay.records, ran.run.fin.transcript.records,
+                "{salt} {text}: replay"
+            );
+            let again = run_schedule(&b, &s).unwrap();
+            assert_eq!(
+                again.run.fin.transcript, ran.run.fin.transcript,
+                "{salt} {text}: two runs"
+            );
+            let items = &ran.run.items;
+            let at = if text.contains("@4") { 4 } else { 0 };
+            // the relay comes before the workload call it watches
+            let relay = items.iter().find_map(|i| match i {
+                Item::Send {
+                    n,
+                    by,
+                    cmd: Command::Spawn(x),
+                    ..
+                } if x.h == "killnow:a0" => Some((*n, by.clone(), x.argv.clone())),
+                _ => None,
+            });
+            let (rn, rby, argv) = relay.unwrap_or_else(|| panic!("{salt} {text}: no relay"));
+            assert_eq!(rby, "main", "{text}");
+            assert!(rn <= spawn_stop(items, at).unwrap(), "{salt} {text}");
+            assert_eq!(&argv[1..4], ["chrt", "-f", "99"], "{text}");
+            assert_eq!(argv[14], "redis", "{text}");
+            let notes: Vec<&str> = items
+                .iter()
+                .filter_map(|i| match i {
+                    Item::Note { line, .. } => Some(line.as_str()),
+                    _ => None,
+                })
+                .collect();
+            assert!(
+                notes.iter().any(|l| l.contains("armed (a real-time relay")),
+                "{text}"
+            );
+            let fired = ran.run.fake.delivered.iter().any(
+                |d| matches!(&d.msg, Msg::Kernel(l) if l.starts_with("HYDO-KILLNOW a0 killed redis")),
+            );
+            let disarm = by(items, "main").iter().any(|i| {
+                matches!(i, Item::Send { cmd: Command::Run(r), .. }
+                    if r.argv.iter().any(|a| a == "/tmp/hydo-killnow/a0/on"))
+            });
+            if fired {
+                killed += 1;
+                assert!(!disarm, "{salt} {text}: disarmed after it fired");
+                assert!(
+                    notes
+                        .iter()
+                        .any(|l| l.contains("KILLED redis at the event")),
+                    "{salt} {text}"
+                );
+                assert!(mine_reported(items), "{salt} {text}: the reaction's record");
+                // the host sends no kill of its own: the relay killed
+                assert!(
+                    !by(items, "react:a0").iter().any(|i| matches!(
+                        i,
+                        Item::Send {
+                            cmd: Command::Signal(_),
+                            ..
+                        }
+                    )),
+                    "{text}"
+                );
+            } else if !ran
+                .run
+                .fake
+                .delivered
+                .iter()
+                .any(|d| matches!(&d.msg, Msg::Kernel(l) if l.starts_with("HYDO-KILLNOW a0 none")))
+            {
+                disarmed += 1;
+                assert!(disarm, "{salt} {text}: not disarmed");
+            }
+        }
+    }
+    assert!(killed >= 3, "{killed} kill-now reactions killed");
+    assert!(disarmed >= 2, "{disarmed} disarmed");
+}
+
+fn mine_reported(items: &[Item]) -> bool {
+    by(items, "react:a0")
+        .iter()
+        .any(|i| matches!(i, Item::Report { line, .. } if line.contains("\"fault.reacted\"")))
 }

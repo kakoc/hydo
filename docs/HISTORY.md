@@ -16792,3 +16792,169 @@ results schemas with the additions (hydo-schema-compat passes). Nothing recorded
 `error_paths: true` a plan has no places, and the engine writes nothing new.
 
 **What is left.** Open item 155.
+
+### Milestone 305 (tentative number) - DONE (a kill at the moment of a console event: the reaction action `kill-now-<svc>` kills a service from a real-time relay in the guest that the event's own write wakes, before any thread of the service runs on; no engine, agent, kernel or image changed; `hydo explore --reactive fault --kill-now` draws it; Meilisearch's index swap runs twice at 13 and 14 ms after its `202` on the Mac engine and at 34 to 40 ms on hvx, where `kill-<svc>` never did; old schedules keep their fingerprints and control transcripts on both engines; nothing recorded moved; 2026-11-18)
+
+**What was asked.** A reaction's kill (`A=<event>+<ms>:kill-<svc>`) goes through the guest
+agent. The host sees the event's record at its next stop, sends the agent a signal command, and
+the agent sends SIGKILL when the guest's scheduler runs it. Until then the service's threads run
+on, so the service finishes what it was doing. In Meilisearch (M295, finding 1) an index swap
+commits the swapped mapping and its task's status in two LMDB transactions. A crash between them
+runs the swap again after the restart. A plain SIGKILL in Docker did it in 4 of 48 rounds, and
+18 kill reactions in hydo never did. The task was a kill that takes effect at the exact moment an
+event is printed, deterministic, on every engine where it can be built, without changing any
+existing schedule's commands or values.
+
+**The design.** The new reaction action `kill-now-<svc>` is decided in the guest, by a relay
+that the event's write wakes:
+
+1. Before the reaction's step, the main sequence spawns the relay through the agent's existing
+   `spawn`: `busybox chrt -f 99 busybox sh -c <script>` (`react::RELAY`). It waits for the
+   relay's console line `HYDO-KILLNOW a<i> armed`.
+2. The relay makes two FIFOs under `/tmp/hydo-killnow/a<i>/` and a device node of the console
+   (from `/sys/class/tty/<tty>/dev`). It bind-mounts the input FIFO over `/dev/console` and over
+   the agent's console device (`hydo.tty=`, default `ttyS0`). A process that opens the console
+   from then on writes into the FIFO.
+3. The write wakes the relay in the writer's own system call (`pipe_write`). No worker thread of
+   the kernel stands between them, as one does on the path of a byte that the host types
+   (`flush_to_ldisc` runs in a kworker). At `SCHED_FIFO` 99 the relay outranks every normal
+   process, so with one vCPU no other process runs until it blocks again.
+4. For each line the relay tests whether it is the event's record, as `react::record_of` does:
+   the id, and `ok:true` of a `sometimes` or `reachable` record, `ok:false` of the others. At
+   the first match it sleeps the delay. It then lists `/proc`, takes the agent's children whose
+   standard output is the service's log file (`[ /proc/<pid>/fd/1 -ef /proc/self/fd/9 ]`, the
+   log opened at arming), adds their descendants, and sends `kill -9` to all of them. Every step
+   from the record to the kill is a builtin of busybox's shell, so no process starts and no
+   disk is read in between.
+5. Only then does it hand the record to a forwarder at normal priority (`chrt -o 0 cat`), which
+   writes every line to the console device. It reports `HYDO-KILLNOW a<i> killed <svc> <n>`
+   directly, and drops to normal priority.
+
+The host keeps the books. A run with reactions keeps the `HYDO-KILLNOW` lines as facts. The
+reaction's thread marks the reaction fired and the service killed, so the service stays down
+until the heal's restart pass, as after `kill-<svc>`. A restart policy's supervisor counts the
+relay's kills of its service (`react::kills_of`) and leaves such an exit to the schedule. At the
+end of the steps the host removes `/tmp/hydo-killnow/a<i>/on` of a relay that saw no event, so it
+only forwards from then on. A relay that cannot start ends the run with `HYDO-ORACLE: ERROR
+A=...: <why>`.
+
+**Why not the other options.**
+
+- A kill sent by the agent with priority: the agent cannot change, because its bytes are in
+  every image (open item 127). Its only real-time mode belongs to the packet trigger and needs
+  a netfilter queue, which the Mac's default guest kernel lacks. And a command typed to the
+  agent reaches it through the tty layer's kworker, which runs at normal priority.
+- A host call that the guest kernel handles: the guest kernels are pinned, and a new one moves
+  fingerprints.
+- The cgroup freezer, written by the engine: the engine cannot write a guest file. A freeze
+  written by a guest process has the same problem of who runs first, and a SIGKILL from a
+  process that runs first needs no freeze.
+- A pause of the whole VM: nothing in the guest runs while the VM is paused, so the kill still
+  has to happen after the target could run.
+
+The relay needs nothing new in the engines. It is the same controller code on hvx, the Mac
+engine and KVM, so KVM needs no run of its own for the mechanism.
+
+**What it guarantees.** With one vCPU, no thread of the service runs between the event's record
+and the kill. A thread inside a system call finishes it and dies before it returns to user
+space, as with a SIGKILL anywhere. With `+<ms>` the kill comes at the first switch of the guest's
+scheduler after the relay's sleep, which the guest's timer ends. The limits:
+
+- The event's writer must open the console after the reaction is armed, as the composer's
+  commands and a workload's SDK do. A record written through a file descriptor opened before,
+  such as a service's SDK opened at boot, reaches the host but not the relay.
+- With several vCPUs the service's threads on other CPUs run until the kill's interrupt reaches
+  them.
+- One `kill-now-` reaction per schedule (hydo-schedule refuses a second), because one relay sits
+  over the console.
+
+**The schedule.** `kill-now-<svc>` (`ReactAction::KillNow`). A service name has no `-`, so no
+schedule before this one had `kill-now-`, and `kill-nowhere` stays the kill of the service
+`nowhere`. `hydo_control::names` checks the service as for `kill-`. The describe text is "kills
+`<svc>` at that moment, before it runs on".
+
+**The explorer.** `hydo explore --reactive fault --kill-now` draws `kill-now-<svc>` where the
+reactions draw `kill-<svc>`. The delay of such a kill comes from `REACT_NOW_DELAYS` (0, 1, 2, 3,
+5, 8, 13, 20, 30 and 50 ms), from one more draw at the end of the reaction stream. So without
+the option every draw is the one before (`reactive::the_reactive_stream_is_pinned` passes
+unchanged). The shrinker keeps the action, and its candidates drop the reaction, act at once,
+halve the delay or arm it from the start. `Ra::svc` reads the service of `kill-now-<svc>`.
+
+**Meilisearch on the Mac engine.** The example's image built with this tree (`--set
+arch=arm64`, `dddbbcab…` initramfs), 0.4.0's guest files. One run per delay of
+`disk=none | run A=meili.swap_acked@20+<ms>:kill-now-meilisearch`:
+
+| delay (ms) | verdict |
+|---|---|
+| 0, 6, 7 | `VIOLATION [edits]`: an edit by function ran twice |
+| 13, 14 | `VIOLATION [swap]`: the swap ran twice |
+| 1, 2, 4, 5, 8, 9, 10, 11, 12, 15, 16, 18, 20, 25, 30, 35, 40, 50 | `OK` |
+
+At `+14` the relay killed 2 processes (the service's shell and Meilisearch). Task 75, enqueued at
+9.768 s of the guest's clock, ran again at 21.239 s after the heal's restart, and the check said
+`sa and sb are swapped otherwise than 3 succeeded swaps say`. Three runs of `+14` gave
+`fp=49a613db35d5f480`, and two of `+0` gave `fp=ef86ff1e1fbe26f5`. `kill-meilisearch` at 13, 14
+and 15 ms gave `OK`. The window of the swap is 2 ms wide on a grid of 1 ms. The edit's window is
+the same split of two commits, of `editDocumentsByFunction` in the counter's index; M295 saw an
+edit run twice only on a lying disk. `hydo/regressions/swap-runs-twice-after-a-kill.schedule` is
+the regression.
+
+**hvx.** On the bare-metal machine, in `~/hydo-killnow` under umask 022 with the main module and
+0.4.0's Linux guest files, the image built from the same files, every run through
+`~/bin/hvx-run`. This was the example's first run on hvx. The same scan:
+
+| schedule | delays (ms) with a violation | delays (ms) that passed |
+|---|---|---|
+| `A=meili.swap_acked@20+<ms>:kill-now-meilisearch` | 14 to 22: `[edits]`, an edit ran twice | 0 to 13, 23 to 50 |
+| `A=meili.swap_acked@20+<ms>:kill-meilisearch` | 14, 15, 18, 22: `[edits]` | 6, 8, 10 to 13, 23, 24, 26 |
+| `A=meili.swap_acked@30+<ms>:kill-now-meilisearch` | 34 to 40: `[swap]`, the swap ran twice | 0 to 32 in steps of 2, 41, 42, 44 |
+| `A=meili.swap_acked@30+<ms>:kill-meilisearch` | none | 30, 32, 34, 35, 36, 38, 40 |
+| `A=meili.swap_acked@40+<ms>:kill-now-meilisearch` | none | 0 to 40 in steps of 2 to 4 |
+
+At `@30+36` task 111, enqueued at 14.837 s, ran again at 21.897 s after the restart. Three runs
+of `@30+36` gave `fp=30ab8d845d6f258b`, two of `@30+40` gave `fp=a4673d9b3c2abb21`, and three of
+`@20+15` gave `fp=268af86788b686fd`. The plain kill reached the edit's window, which is 9 ms wide
+on hvx, at the same delays as the kill at the event's moment: there the agent's path lands within
+a millisecond, because hvx stops at each of the agent's records on the host-call port. The swap's
+window of 7 ms it never reached.
+
+**Old schedules keep their values.** The same schedules with the tree before the change
+(`d0159ad0`) and with this one, on the same image:
+
+| schedule | engine | before (`d0159ad0`) and after |
+|---|---|---|
+| `disk=none \| run` | Mac | `fp=eac607c09d945c94 ctl=5ca6c57a1f65e5ce` |
+| `disk=none \| run A=meili.swap_acked@20+3:kill-meilisearch` | Mac | `fp=b61fb18f89a21c6e ctl=d70f5f2bd73c0fa5` |
+| `disk=none \| run A=meili.add_acked@20+40:cut` | Mac | `fp=44a749b10aeef55b ctl=fe674689e25b1224` |
+| `disk=cut \| run A=meili.add_acked@20+2:cut` | Mac | `fp=830da5344ced8d40 ctl=b0eb98cf14cd85d3` |
+| `disk=cut \| run C=30` | Mac | `fp=e4469b79f388a979 ctl=80aea47af604f2c1` |
+| `disk=none \| run` | hvx | `fp=c046f2361f6f3cd9 ctl=6f63682f819ac96e` |
+| `disk=none \| run A=meili.swap_acked@20+3:kill-meilisearch` | hvx | `fp=2e0090148e16fe7c ctl=eb318fe55e0a6d63` |
+| `disk=none \| run A=meili.add_acked@20+40:cut` | hvx | `fp=d88cd724c2962cf7 ctl=76be217f0e603afb` |
+
+The Mac values are those of the example's RESULTS.md. The first hvx run of the example gave
+`OK`, and the cut 40 ms after an addition's `202` gave finding 3 (`VIOLATION [dumps]`).
+
+Each pair also has the same `ctl=`, the hash of the control transcript. A schedule without
+`kill-now-` takes no new path: the relay, the disarm and the supervisor's count act only for one
+(the scripted test `react::a_reaction_that_never_fires_is_inert` still passes).
+
+**Tests.** hydo-schedule's `language::the_kill_at_the_event` (round trips, the action, the
+refusal of a second one); hydo-control's `react::a_kill_now_reaction_kills_at_its_event_and_replays`
+on the Redis example (the relay before the step's workload call, the kill at the record, the
+disarm, two runs and the replay give one transcript) and `restart::a_kill_now_reactions_kill_keeps_the_schedules_meaning`,
+with a scripted relay in the fake agent; hydo-explore's `reactive::kill_now_changes_only_the_drawn_kills`.
+`cargo fmt --all --check`, workspace clippy with `-D warnings`, `cargo test -p hydo --test it`
+(the CLI golden of `hydo guide manifest` re-recorded), `public_content::`, `cargo test -p
+hydo-schedule`, `cargo test -p hydo-config`, `test_tiers`, hydo-explore's `--test it` (the
+identity and corpus goldens re-recorded for the new regression file) and `--test fake_engine`,
+`cargo test -p hydo-control`, hydo-schema-compat, `sh ci/consolidate-tests.sh --check` and `sh
+ci/vale.sh` pass. Nothing recorded moved: no engine, guest program or image changed.
+
+**The explorer on Meilisearch.** `hydo explore --seeds 1-24 --strategy process --reactive fault
+--react-events meili.swap_acked,meili.edit_acked,meili.add_acked --kill-now` drew no
+`kill-now-` reaction. The process strategy put `K=` and `P=` on the example's only service in
+most schedules, and a reaction never kills or stops the `K=` or `P=` service, so every drawn
+reaction was a power cut. Its 11 failures were finding 3.
+
+**What is left.** Open item 154.

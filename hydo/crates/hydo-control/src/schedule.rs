@@ -207,6 +207,9 @@ struct Ctx {
 struct Svc {
     spawn: u64,
     killed: bool,
+    /// Milestone 305: how many kills of this service by kill-now relays the console had shown
+    /// when this process started; one more means that a relay killed it.
+    kn: usize,
 }
 
 /// The host state the threads share (the shell's files in $H and its variables).
@@ -427,6 +430,7 @@ impl ScheduleController {
                         Svc {
                             spawn: *id,
                             killed: false,
+                            kn: 0,
                         },
                     )
                 })
@@ -907,6 +911,11 @@ impl Controller for ScheduleController {
                     if self.watch {
                         if let Some(r) = react::record_of(line) {
                             self.facts.asserts.push(r);
+                            new = true;
+                        }
+                        // Milestone 305: a kill-now reaction's relay
+                        if let Some(r) = line.strip_prefix(react::KILLNOW_PREFIX) {
+                            self.facts.killnow.push(r.to_string());
                             new = true;
                         }
                     }
@@ -1741,12 +1750,13 @@ fn launch_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<Option<Vec<String>>> {
         ),
         &ns,
     ))?;
-    fx.effect(|h, _| {
+    fx.effect(|h, f| {
         h.services.insert(
             s.to_string(),
             Svc {
                 spawn: id,
                 killed: false,
+                kn: react::kills_of(f, s),
             },
         );
         Memo::Unit
@@ -3232,6 +3242,8 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         // M139: a reaction is armed before its step, after that step's faults
         for (i, r) in &reactions {
             if r.at as i64 == p {
+                // Milestone 305: a kill-now reaction's relay watches the console before the step
+                react::arm_now(fx, ctx, *i)?;
                 rthreads.push((*i, fx.start(Part::React(*i))?));
             }
         }
@@ -3246,6 +3258,9 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
                 fx.join(t)?;
             } else {
                 fx.cancel(t);
+                if !cut {
+                    react::disarm(fx, ctx, i)?;
+                }
             }
         }
         if !cut && react::cut_due(fx) {

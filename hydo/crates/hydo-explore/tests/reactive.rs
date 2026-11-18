@@ -175,3 +175,57 @@ fn the_reactive_stream_is_pinned() {
         std::fs::read_to_string(&path).expect("tests/golden/reactive.txt (HYDO_BLESS=1 writes it)");
     assert_eq!(got, want);
 }
+
+/// Milestone 305: `--kill-now` changes only the drawn kills. A schedule with it is the schedule
+/// without it, except that each `kill-<svc>` reaction is `kill-now-<svc>` with a delay from
+/// `REACT_NOW_DELAYS`; every other reaction, and every other field, is the same. Its schedules
+/// are canonical, and no shrink candidate turns the kill at the event's moment into a plain kill.
+#[test]
+fn kill_now_changes_only_the_drawn_kills() {
+    use hydo_explore::gen::REACT_NOW_DELAYS;
+    let mut now = 0;
+    for st in ["random", "process"] {
+        for more in [false, true] {
+            let e = ex(true, true, more);
+            let k = Ex {
+                react_kill_now: true,
+                ..e.clone()
+            };
+            for seed in 1..=800u64 {
+                let a = e.compose_seed(st, seed, false);
+                let b = k.compose_seed(st, seed, false);
+                assert_eq!(a.a.len(), b.a.len(), "{st} {seed}");
+                for (x, y) in a.a.iter().zip(&b.a) {
+                    if x.action.starts_with("kill-") {
+                        assert_eq!(y.action, format!("kill-now-{}", x.svc().unwrap()));
+                        assert_eq!(y.svc(), x.svc());
+                        assert!(REACT_NOW_DELAYS.contains(&y.delay), "{st} {seed}");
+                        assert_eq!((&y.event, y.at), (&x.event, x.at));
+                        now += 1;
+                    } else {
+                        assert_eq!(x, y, "{st} {seed}");
+                    }
+                }
+                let mut ra = a.clone();
+                let mut rb = b.clone();
+                ra.a.clear();
+                rb.a.clear();
+                assert_eq!(ra, rb, "{st} {seed}");
+                let text = k.render(&b);
+                assert!(Schedule::is_canonical(&text), "{text}");
+                if b.a.iter().any(|r| r.action.starts_with("kill-now-")) && seed % 10 == 0 {
+                    for c in k.candidates(&b, None) {
+                        let t = k.render(&c);
+                        assert!(Schedule::is_canonical(&t), "{t}");
+                        assert!(
+                            !c.a.iter().any(|r| r.action.starts_with("kill-")
+                                && !r.action.starts_with("kill-now-")),
+                            "{t}: a shrink turned the kill into a plain kill"
+                        );
+                    }
+                }
+            }
+        }
+    }
+    assert!(now > 100, "{now} kills at the event's moment");
+}

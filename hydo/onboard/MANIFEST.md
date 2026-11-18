@@ -770,7 +770,7 @@ verdict rules are in `hydo/HISTORIES.md`.
 | `N=<a>,<b>/<c>@...`, `N=<group>.<shape>@...` | a partition: netem on every link between two components, or the links that a shape over a group cuts (`halves`, `isolate`, `ring`, `bridge`, `primary`); see "Groups of services and partitions" |
 | `F=<svc>><peer>@<step>[#<n>][:<match>]:<dur>` | freeze `<svc>` at the n-th packet it **sends** to `<peer>` (`<` = **receives** from) at/after step `<step>`, for `<dur>` ms; only with `freeze` in `faults:` (see "Freeze at a call") |
 | `H=<target>@<from>-<to>:<rule>[,<rule>...]` | a protocol fault on a fake or proxy for steps `[from,to)`: an error, slow, missing or reset answer, or a duplicated / reordered / late / lost webhook; see "Fake outside services" |
-| `A=<event>[@<step>][+<ms>]:<action>` | a reaction (M139): from before step `step` (0 when not written) the host watches the console for the first SDK assertion record of `event` (`ok:true` of a `sometimes`/`reachable`, `ok:false` of the others), waits `ms` of guest time and does `<action>`: `cut` (a power cut at that instant: the workload and every service frozen, then the recovery boot), `kill-<svc>` (down until the heal), `stop-<svc>-<ms>` or `cont-<svc>` (resume a paused service: a pause healed at the first sign of no progress); since Milestone 296 also `clock+<s>` or `clock-<s>` (a clock step at that instant), `stop-workload-<ms>` (a stop of the workload's own tree), `stop-workload/<thread>[#<k>]-<ms>` (a freeze of the workload's threads of that name) and `kill-workload/<name>[#<k>]` (a kill of the workload's processes of that name, the workload going on); reactions live during the steps only; see "Reactions" below |
+| `A=<event>[@<step>][+<ms>]:<action>` | a reaction (M139): from before step `step` (0 when not written) the host watches the console for the first SDK assertion record of `event` (`ok:true` of a `sometimes`/`reachable`, `ok:false` of the others), waits `ms` of guest time and does `<action>`: `cut` (a power cut at that instant: the workload and every service frozen, then the recovery boot), `kill-<svc>` (down until the heal), `kill-now-<svc>` (Milestone 305: the same kill, at the moment the record is written or `ms` after it, before the service runs on; see "Reactions" below), `stop-<svc>-<ms>` or `cont-<svc>` (resume a paused service: a pause healed at the first sign of no progress); since Milestone 296 also `clock+<s>` or `clock-<s>` (a clock step at that instant), `stop-workload-<ms>` (a stop of the workload's own tree), `stop-workload/<thread>[#<k>]-<ms>` (a freeze of the workload's threads of that name) and `kill-workload/<name>[#<k>]` (a kill of the workload's processes of that name, the workload going on); reactions live during the steps only; see "Reactions" below |
 | `G=<target>@<at>[+<down>]:<kind>[,...]` | corrupt one file in the service's `storage:` directory before step `at` (`flip`, `zero` or `trunc`); with `+<down>` while the service is killed, started again before step `at+down`; the target is a service, a list or a group's selector, as for `K=`; see "Storage faults of one service" |
 | `L=<svc>@<at>+<down>[:strict]` | a power loss of one service before step `at`: its own file system shut down (what was not written back is lost), the service killed and started again before step `at+down`; `:strict` loses every write it had not synced and cuts its links while it is down; see "Storage faults of one service" |
 | `<X>=<value>` | a knob from `knobs:` |
@@ -971,6 +971,32 @@ schedules, `heal` makes 70% of the counted pauses last to the workload's end wit
 `cont-<svc>` reaction at the first no-progress event. On a manifest give the events with
 `--react-events ID,...` and `--heal-events ID,...` (the defaults are the bug benchmark's order
 service's).
+
+`kill-<svc>` acts through the host: the host sees the record at its next stop, and the guest
+agent then sends SIGKILL. The service's threads run on until the agent runs, so the service
+finishes what it was doing first. `kill-now-<svc>` (Milestone 305) kills the service before any
+of its threads runs again:
+
+- At the reaction's step the host starts a relay in the guest: a busybox shell at real-time
+  priority (`chrt -f 99`) that reads a FIFO bind-mounted over `/dev/console` and the console
+  device.
+- A process that opens the console from then on writes its records into the FIFO. The write
+  wakes the relay in the writer's own system call. With one vCPU no other process runs until
+  the relay blocks again.
+- At the first event's record the relay sleeps `ms`, finds the service's processes, and sends
+  SIGKILL. These are the agent's children whose standard output is the service's log file, and
+  their descendants. It uses only builtins of the shell, so no process starts and no disk is
+  read before the kill.
+- A forwarder at normal priority writes every line to the console, and the relay reports
+  `HYDO-KILLNOW a<i> killed <svc> <processes>`. The service stays down until the heal, as after
+  `kill-<svc>`.
+
+A schedule has at most one `kill-now-` reaction. The event's writer must open the console after
+the reaction is armed, as a workload's client does. A record of a process that opened it earlier,
+such as a service started at boot, reaches the host but not the relay. With several vCPUs the
+service's other threads run until the kill's interrupt reaches their CPU. `hydo explore
+--reactive fault --kill-now` draws `kill-now-<svc>` where it would draw `kill-<svc>`, with delays
+of 0 to 50 ms.
 
 ### Freeze at a call (stop a service at an exact point of its traffic)
 

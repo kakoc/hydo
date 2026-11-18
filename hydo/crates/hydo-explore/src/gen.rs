@@ -102,6 +102,10 @@ pub const STACK_REACT_EVENTS: [&str; 9] = [
 pub const STACK_HEAL_EVENTS: [&str; 2] = ["client.outcome_unknown", "client.place_failed"];
 /// A fault reaction's delay after its event, ms of guest time.
 pub const REACT_DELAYS: [i64; 7] = [0, 0, 10, 50, 200, 1000, 5000];
+/// Milestone 305: a `kill-now-<svc>` reaction's delay after its event (`--kill-now`), ms of
+/// guest time. A kill at the event's moment meets a window of a few milliseconds that the work
+/// the event announced opens, so the delays are short and dense.
+pub const REACT_NOW_DELAYS: [i64; 10] = [0, 1, 2, 3, 5, 8, 13, 20, 30, 50];
 /// A heal reaction's delay after its event.
 pub const HEAL_DELAYS: [i64; 5] = [0, 100, 500, 2000, 10000];
 /// How long a `stop-<svc>-<ms>` reaction stops its service.
@@ -219,6 +223,9 @@ pub struct Ex {
     pub react_events: Vec<String>,
     /// The assertion ids a heal reaction waits for (`--heal-events`).
     pub heal_events: Vec<String>,
+    /// `--kill-now` (Milestone 305): a fault reaction's kill is `kill-now-<svc>`, with its delay
+    /// from [`REACT_NOW_DELAYS`]. False: exactly the old draws.
+    pub react_kill_now: bool,
     /// The manifest's `clock_points:` (Milestone 225): clock steps to a time (`T=<at>:@...`)
     /// drawn beside the fixed amounts of [`CLOCK_DELTAS`]. Empty: exactly the old draws.
     pub clock_points: Vec<String>,
@@ -286,6 +293,7 @@ impl Default for Ex {
             react_heal: false,
             react_events: STACK_REACT_EVENTS.map(String::from).to_vec(),
             heal_events: STACK_HEAL_EVENTS.map(String::from).to_vec(),
+            react_kill_now: false,
         }
     }
 }
@@ -1059,6 +1067,9 @@ impl Ex {
         let f_kind = t.below(3);
         let f_svc = t.next();
         let f_ms = t.pick(&REACT_STOP_MS);
+        // Milestone 305: the last draw, made only with --kill-now, so that every draw before it
+        // stays as it was
+        let f_now_delay = self.react_kill_now.then(|| t.pick(&REACT_NOW_DELAYS));
         let pick = |l: &[String], r: u64| -> Option<String> {
             (!l.is_empty()).then(|| l[(r % l.len() as u64) as usize].clone())
         };
@@ -1114,11 +1125,17 @@ impl Ex {
                     })
                     .cloned()
                     .collect();
+                // Milestone 305: --kill-now kills at the event's moment
+                let kill = if self.react_kill_now {
+                    "kill-now"
+                } else {
+                    "kill"
+                };
                 let action = match (f_kind, pick(&svcs, f_svc)) {
                     (0, _) if cut_ok => Some("cut".to_string()),
-                    (1, Some(v)) => Some(format!("kill-{v}")),
+                    (1, Some(v)) => Some(format!("{kill}-{v}")),
                     (2, Some(v)) => Some(format!("stop-{v}-{f_ms}")),
-                    (_, Some(v)) => Some(format!("kill-{v}")),
+                    (_, Some(v)) => Some(format!("{kill}-{v}")),
                     (_, None) if cut_ok => Some("cut".to_string()),
                     _ => None,
                 };
@@ -1126,10 +1143,14 @@ impl Ex {
                     if action == "cut" {
                         s.disk = "cut".into();
                     }
+                    let delay = match f_now_delay {
+                        Some(d) if action.starts_with("kill-now-") => d,
+                        _ => f_delay,
+                    };
                     s.a.push(Ra {
                         event: ev,
                         at,
-                        delay: f_delay,
+                        delay,
                         action,
                     });
                 }

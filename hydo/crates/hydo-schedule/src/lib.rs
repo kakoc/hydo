@@ -191,6 +191,18 @@ impl Schedule {
 
     /// Rules that join several tokens.
     fn check(&self) -> Result<(), ParseError> {
+        // Milestone 305: a kill-now reaction's relay sits over the guest's console, and only one
+        // can be the first to see a line
+        let now = self
+            .guest
+            .iter()
+            .filter(|t| matches!(t, GuestToken::React(r) if matches!(r.action, ReactAction::KillNow(_))))
+            .count();
+        if now > 1 {
+            return Err(err(
+                "a schedule has at most one kill-now reaction (A=...:kill-now-<svc>)",
+            ));
+        }
         for (_, seg) in self.branch_points() {
             Schedule {
                 host: seg,

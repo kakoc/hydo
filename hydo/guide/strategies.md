@@ -315,8 +315,9 @@ Three findings hold for every type of system:
 - **What it misses.** A kill comes through the guest agent, so the service's threads run on
   until the agent runs. Meilisearch's index swap that runs twice (finding 1) needs
   the server stopped between two LMDB commits. Reactions that killed it at 18 delays after a
-  swap, an edit, or an addition all passed. A power cut at one of them broke it, and a plain
-  SIGKILL in Docker broke it in 4 of 48 rounds (`native/swap-twice.sh`). A pause of a service
+  swap, an edit, or an addition all passed. A reaction's `kill-now-<svc>` kills before the
+  service runs on, and broke it at 13 and 14 ms after the swap's `202` (section "Reactions at
+  console events"). A pause of a service
   alone found nothing: a 15 s pause of a Hatchet engine
   broke nothing, and a kill at the same step lost runs. The restart of a `K=` fault ignores the
   service's restart policy (River, seed 17).
@@ -378,7 +379,9 @@ Three findings hold for every type of system:
   to the console, not at a step boundary.
 - **What to write.** `A=rp.txn_add@20+3:kill-n1` or `A=mender.commit_started@3+7:cut`. Give the
   client an event before each operation that matters. `hydo explore --reactive fault
-  --react-events <id>,...` draws them.
+  --react-events <id>,...` draws them. To kill a service between two commits, write
+  `kill-now-<svc>`: a relay in the guest kills it at the record's moment, or `ms` after it,
+  before any of its threads runs again. `--kill-now` draws it.
 - **When it fits.** A narrow window inside one operation: a transaction that adds partitions, an
   update's commit.
 - **What it found.**
@@ -390,6 +393,10 @@ Three findings hold for every type of system:
     also catches an index swap between its two commits, so the restart runs the swap again. A
     step boundary (`C=30`) loses no payload. Blind, seed 26 of the second exploration lost a
     payload, shrunk to `A=meili.add_acked:cut`.
+  - Meilisearch (finding 1 again): `A=meili.swap_acked@20+14:kill-now-meilisearch`
+    runs the swap twice on every run on the Mac engine, and `+13` too. On hvx
+    `A=meili.swap_acked@30+<ms>:kill-now-meilisearch` does it at 34 to 40 ms. The plain kill at
+    the same delays passes on both.
   - SWUpdate: two of the five minimal schedules of its hvx exploration carry a
     reaction.
 - **What it misses.** Restate held under cuts and kills at six events of the client and the
@@ -413,9 +420,10 @@ Three findings hold for every type of system:
     came at 64 ms and at 69 to 87 ms after the event. On the Mac engine `+7` failed and `+8`
     passed.
   - Redpanda (finding 3): delays of 0, 3, and 8 ms on each node gave 5 failures of 9.
-  - Meilisearch (finding 1): no kill delay after a swap broke it in hydo (1 to
+  - Meilisearch (finding 1): no `kill-<svc>` delay after a swap broke it in hydo (1 to
     25 ms). The same scan in Docker, `pkill -9` 0 to 45 ms after the swap in steps of 3 ms, ran
-    the swap twice at 0, 9, 12, and 15 ms.
+    the swap twice at 0, 9, 12, and 15 ms. `kill-now-meilisearch` at 0 to 50 ms ran it twice at
+    13 and 14 ms on the Mac engine.
 - **What it misses.** The window moves with the program's bytes. A second build of
   `mender-update` moved it to 65, 70, and 75 ms.
 - **Cost.** One run per delay.

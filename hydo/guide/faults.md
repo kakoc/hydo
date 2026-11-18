@@ -434,6 +434,22 @@ use reactions: write `A=<event>:kill-<svc>`. `<event>` is the id of an assertion
 system writes to the console (`hydo guide manifest`, section `Reactions`).
 `hydo explore --reactive fault --react-events <id>` draws them.
 
+`kill-<svc>` acts when the host has seen the record, so the service finishes what it was doing.
+To kill it between two commits, write `A=<event>+<ms>:kill-now-<svc>`. A relay in the guest
+kills the service `ms` milliseconds after the record, before any thread of the service runs on.
+Give the client an event just before the operation, and run one schedule per delay:
+
+```sh
+for ms in 10 11 12 13 14 15; do
+  hydo run "disk=none | run A=meili.swap_acked@20+$ms:kill-now-meilisearch"
+done
+```
+
+On the Meilisearch example on the Mac engine the swap runs twice at 13 and 14 ms, and every other
+delay passes. On hvx the window is 34 to 40 ms after the first swap from step 30.
+`--kill-now` makes `hydo explore --reactive fault` draw `kill-now-<svc>` instead of `kill-<svc>`.
+A schedule has at most one `kill-now-` reaction.
+
 A reaction can also act inside the workload's own work:
 
 - `clock+<s>` or `clock-<s>` steps the clock by `s` seconds at that moment.
