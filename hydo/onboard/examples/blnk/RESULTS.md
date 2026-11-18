@@ -807,6 +807,46 @@ worker's coalesced copy. Eleven schedules cut the power or had a lying disk. The
 say `across boots`, so their stops were compared within each boot. Seeds 18 and 26 broke the
 property in the first boot, before the cut.
 
+## Which error paths the faults reached
+
+Milestone 306 asked which of Blnk's error handling the faults reached at all
+(docs/design/error-paths.md). `hydo/hydo-paths.yaml` runs this example with Blnk built from the
+same commit with its debug information (`bin/blnk-paths-<arch>`, `work/blnk-paths`) and
+`error_paths: true`. The plan has 1,326 places: the bodies of 1,311 `if err != nil` checks of
+Blnk's own sources, and 15 functions named for a retry, a recovery or a rollback. All runs used
+the Mac engine.
+
+```sh
+hydo build hydo-paths.yaml --arch arm64 --set arch=arm64
+hydo explore --seeds 1-12 --strategy process --new-faults --out hydo-out/faults
+hydo explore --seeds 1-12 --no-faults --out hydo-out/clean
+hydo report --paths hydo-out/faults --against hydo-out/clean
+```
+
+Without faults, 27 places ran in the 12 schedules: the lookups that find no row, a busy lock, and
+the rollbacks of the atomic bulks that the workload makes fail on purpose. With faults, 73 ran,
+and 46 of them only with faults:
+
+| The places | How many | The schedules that reached them |
+|---|---|---|
+| Database errors: `getSourceAndDestination`, `validateTxn`, `CreateBalance`, `collectInflightLegs` and 13 more | 17 | Only seeds 4 and 9, the two that kill PostgreSQL |
+| The recovery of queued transactions: `RecoverQueuedTransactions`, `recoverWithThreshold`, `processStuckTransaction` and 5 more | 8 | Seeds 1, 6 and 12, which cut the power, and 2 and 10, which kill Redis |
+| The queue's errors: `(*Queue).Enqueue`, four branches of `persistAndEnqueue`, and `enqueueTransactions` | 6 | `Enqueue` in seeds 1, 2 and 10, which kill Redis or lose its packets |
+| The others, among them the bulk's refund and rollback and `QueueTransaction`'s error | 15 | Seeds 1, 2, 4, 5, 6, 7, 8, 9, 10 and 12 |
+
+Two of the recovery functions, `main.recoverPanic` and `api.logrusRecovery`, run at every start
+of Blnk. They appear in the runs that restart Blnk, without an error. 1,253 places in 606
+functions never ran, among them the 18 of `metrics.Init` and the API that the workload does not
+use (accounts, API keys, balance monitors).
+
+The exploration with faults ran again without the plan, and its 12 first runs gave the same 12
+fingerprints. The schedules `disk=none | run`, the regression `commit-lost-with-redis`, and
+`disk=cut dseed=5 | run C=10` each gave one fingerprint in two runs with the plan and two
+without it, and the runs with the plan recorded the same places. Seed 4's schedule reached
+`validateTxn`'s branch at the engine's clock 590,557 in the exploration and again under `hydo
+run`. The engine searched the 1,536 MiB of guest RAM in 10 ms at each run's start and stopped
+once per place that ran, 24 to 54 times per run.
+
 ## What hydo lacked
 
 In the order in which they cost time. Each is an open item in `AGENTS.md`.

@@ -14,10 +14,12 @@
 #                          the same with values.patch, the value history of the overdraft limit
 #                          (hydo-values.yaml); their sources go to work/blnk-values and
 #                          work/blnk-fixed-values
+#   bin/blnk-paths-<arch>  the first with its debug information and no change, whose error paths
+#                          hydo-paths.yaml watches; its sources go to work/blnk-paths
 # for <arch> amd64 (hvx and KVM) and arm64 (the Mac engine).
 # Needs git, network once, and Go 1.27.3 (GOTOOLCHAIN fetches it). Works on a Mac and on Linux;
 # the bytes are checked against the pins below.
-#   sh build.sh                    # all fourteen
+#   sh build.sh                    # all sixteen
 #   BLNK_SRC=<dir> sh build.sh     # reuse a clone (its work tree is reset to BLNK_COMMIT)
 set -eu
 cd "$(dirname "$0")"
@@ -73,6 +75,9 @@ build_contracts blnk-values
 git -C "$SRC" apply "$HERE/fix-overdraft-limit.patch" "$HERE/fix-atomic-bulk.patch"
 build_contracts blnk-fixed-values
 git -C "$SRC" checkout -q -f "$BLNK_COMMIT"
+# the program whose error paths hydo-paths.yaml watches: upstream's sources unchanged, with the
+# debug information (RESULTS.md, "Which error paths the faults reached")
+build_contracts blnk-paths
 check() {   # file sha256
   got=$( (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | cut -d' ' -f1)
   if [ "$got" = "$2" ]; then echo "$1 ok"; else echo "$1: sha256 $got, expected $2" >&2; exit 1; fi
@@ -91,3 +96,5 @@ check bin/blnk-values-amd64 796038134951aa85723a913aa09bb82257ce404c123115425994
 check bin/blnk-values-arm64 e6f51ac38801cf50b12e1fdfe06615686f85a6d02f7880527bd85c562de0e86a
 check bin/blnk-fixed-values-amd64 7d4e88a5a97aad62895c3f20403b912b8c0dec313cd2bab83aa4f2c7c46c690f
 check bin/blnk-fixed-values-arm64 e21aa5430963a8ba03fead63221bac9f9ae61f475025c0c1ece65d2ee1f602b8
+check bin/blnk-paths-amd64 11f48b9af280ef87bc5ae9fdb5dc6b57ffb8ed7b185efbe75407b830af541b80
+check bin/blnk-paths-arm64 b4b2daa1a3f10759634e18980c767c7084b3f98dd3655e64e4fe040265573255

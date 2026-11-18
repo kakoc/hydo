@@ -328,6 +328,17 @@
               "type": "null"
             }
           ]
+        },
+        "paths": {
+          "description": "Which error-handling places of the image's programs ran (added in Milestone 306,\ndocs/design/error-paths.md): for an image whose manifest has `error_paths: true` in a\n`contracts:` entry, on an engine that watches them.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPaths"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -1890,6 +1901,71 @@
         "value"
       ]
     },
+    "RunPaths": {
+      "description": "The error paths of one run (added in Milestone 306).",
+      "type": "object",
+      "properties": {
+        "places": {
+          "description": "The places the image's plan watches.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reached": {
+          "description": "The places that ran, in the order of their first run.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PathReached"
+          },
+          "default": []
+        },
+        "unwatched": {
+          "description": "The places the engine could not watch in this run: it found none of their code in the\nguest's memory.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "watched": {
+          "description": "False when the engine wrote no record of the error paths (an engine that does not\nwatch them: hvx and KVM); then nothing is known about them.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "places",
+        "watched"
+      ]
+    },
+    "PathReached": {
+      "description": "The first run of one place in a run (added in Milestone 306).",
+      "type": "object",
+      "properties": {
+        "place": {
+          "description": "The place's id in the image's plan (`<image>.contracts.json`).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "at": {
+          "description": "The engine's clock at the first run (VM exits on the Mac engine).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "boot": {
+          "description": "The boot: 0 is the run's first, and each power cut or reboot starts the next.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "place",
+        "at"
+      ]
+    },
     "Exploration": {
       "description": "`exploration.json`: an exploration's result.",
       "type": "object",
@@ -2022,6 +2098,17 @@
           "type": [
             "string",
             "null"
+          ]
+        },
+        "paths": {
+          "description": "Which error-handling places of the image's programs ran in the first runs (added in\nMilestone 306, docs/design/error-paths.md); absent for an image without them.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PathCoverage"
+            },
+            {
+              "type": "null"
+            }
           ]
         }
       },
@@ -3245,6 +3332,131 @@
         "seeds",
         "schedules",
         "failures"
+      ]
+    },
+    "PathCoverage": {
+      "description": "Which error-handling places ran in an exploration's first runs (added in Milestone 306,\ndocs/design/error-paths.md).",
+      "type": "object",
+      "properties": {
+        "runs": {
+          "description": "The first runs whose error paths the engine recorded.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "runs_without_faults": {
+          "description": "The first runs without a fault (a schedule without a fault token): what ran there is\nwhat the workload reaches by itself.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "places": {
+          "description": "Every place of the plan, in the order of the plan (by file and line).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PathPlaceCoverage"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "runs",
+        "runs_without_faults"
+      ]
+    },
+    "PathPlaceCoverage": {
+      "description": "One place across an exploration (added in Milestone 306).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The place's id in the image's plan.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "`err-check`, `err-return`, `err-arm`, `try`, `unwrap`, `panic`, `recovery` or\n`declared`.",
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "function": {
+          "description": "The function the line is written in.",
+          "type": "string"
+        },
+        "runs": {
+          "description": "The first runs where it ran.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "runs_without_faults": {
+          "description": "Of those, the runs without a fault.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "first": {
+          "description": "The first run where it ran, in seed order: replay its schedule to see it run.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PathFirst"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unwatched_runs": {
+          "description": "The first runs where the engine could not watch it.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "file",
+        "line",
+        "function",
+        "runs",
+        "runs_without_faults"
+      ]
+    },
+    "PathFirst": {
+      "description": "The first run of a place in an exploration (added in Milestone 306).",
+      "type": "object",
+      "properties": {
+        "seed": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "tag": {
+          "description": "The run's tag in `events.jsonl` and `consoles/`.",
+          "type": "string"
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "at": {
+          "description": "The engine's clock when the place first ran in that run.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "seed",
+        "tag",
+        "schedule",
+        "at"
       ]
     },
     "Start": {

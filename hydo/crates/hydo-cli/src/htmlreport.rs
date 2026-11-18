@@ -1341,6 +1341,110 @@ fn properties_html(t: &PropertyTable, over: &str) -> String {
     s
 }
 
+/// Which error paths ran (Milestone 306, docs/design/error-paths.md): the places only runs with
+/// faults reached, the places the workload reaches by itself, and the places never reached, by
+/// function.
+fn paths_html(c: &hydo_results::PathCoverage, shown: &str) -> String {
+    use hydo_contracts::paths::{kind_words, short_function};
+    let ran: Vec<&hydo_results::PathPlaceCoverage> =
+        c.places.iter().filter(|p| p.runs > 0).collect();
+    let mut s = format!(
+        "<p>{} of {} error-handling places of the program ran in {} ({} without a fault). A \
+         place is the first instruction of an error branch: the body of an <code>if err != \
+         nil</code>, an <code>Err</code> given back, a <code>?</code>, an <code>unwrap</code> \
+         or a panic, or a retry, recovery or rollback function. A place that never ran was not \
+         tested by these schedules.</p>\n",
+        ran.len(),
+        c.places.len(),
+        plural(c.runs, "run"),
+        c.runs_without_faults
+    );
+    let row = |p: &hydo_results::PathPlaceCoverage| -> (String, Vec<String>) {
+        let first = p
+            .first
+            .as_ref()
+            .map(|f| {
+                format!(
+                    "{}<br><span class=\"muted\">{}</span>",
+                    code(&f.schedule),
+                    esc(&f.tag)
+                )
+            })
+            .unwrap_or_default();
+        (
+            String::new(),
+            vec![
+                format!("<span class=\"t\">{}:{}</span>", esc(&p.file), p.line),
+                format!(
+                    "<span class=\"t\">{}</span>",
+                    esc(short_function(&p.function))
+                ),
+                esc(&kind_words(&p.kind).replace('`', "")),
+                format!("{}", p.runs),
+                first,
+            ],
+        )
+    };
+    let only: Vec<(String, Vec<String>)> = ran
+        .iter()
+        .filter(|p| p.runs_without_faults == 0)
+        .map(|p| row(p))
+        .collect();
+    let also: Vec<(String, Vec<String>)> = ran
+        .iter()
+        .filter(|p| p.runs_without_faults > 0)
+        .map(|p| row(p))
+        .collect();
+    let head = ["Place", "Function", "What", "Runs", "First run (replay it)"];
+    s.push_str(&format!(
+        "<p><b>Ran only with faults ({})</b>: no run without a fault reached them.</p>\n",
+        only.len()
+    ));
+    if !only.is_empty() {
+        s.push_str(&table(&head, &only));
+    }
+    s.push_str(&format!(
+        "<p><b>Ran also without faults ({})</b>: the workload reaches them by itself.</p>\n",
+        also.len()
+    ));
+    if !also.is_empty() {
+        s.push_str(&table(&head, &also));
+    }
+    let mut by_fn: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for p in c.places.iter().filter(|p| p.runs == 0) {
+        by_fn
+            .entry(short_function(&p.function).to_string())
+            .or_default()
+            .push(format!("{}:{}", p.file, p.line));
+    }
+    let never: usize = by_fn.values().map(Vec::len).sum();
+    s.push_str(&format!(
+        "<p><b>Never reached ({never} in {} functions)</b>, by function:</p>\n",
+        by_fn.len()
+    ));
+    let rows: Vec<(String, Vec<String>)> = by_fn
+        .iter()
+        .map(|(f, ls)| {
+            (
+                String::new(),
+                vec![
+                    format!("<span class=\"t\">{}</span>", esc(f)),
+                    format!("{}", ls.len()),
+                    format!("<span class=\"t\">{}</span>", esc(&ls.join(", "))),
+                ],
+            )
+        })
+        .collect();
+    if !rows.is_empty() {
+        s.push_str(&table(&["Function", "Places", "Where"], &rows));
+    }
+    s.push_str(&format!(
+        "<p class=\"small\"><code>hydo report --paths {}</code> prints the same lists.</p>\n",
+        esc(&quote(shown))
+    ));
+    s
+}
+
 /// A run's own checks (invariants, history checks, assertions, messaging claims).
 fn checks_html(run: &Run) -> String {
     let mut rows: Vec<(String, Vec<String>)> = Vec::new();
@@ -1905,6 +2009,12 @@ fn run_page(
     if let Some(v) = values_html(dir, run, &shown) {
         s.push_str(&h3("values", "How the recorded values changed"));
         s.push_str(&v);
+    }
+    if run.paths.is_some() {
+        if let Ok(c) = crate::delegated::paths_of_dir(dir) {
+            s.push_str(&h3("paths", "Which error paths ran"));
+            s.push_str(&paths_html(&c, &shown));
+        }
     }
     if let Some(d) = &d {
         s.push_str(&h3("diff", "Against a passing run"));
@@ -2777,6 +2887,14 @@ fn exploration_page(
     // what held
     body.push_str(&h2("held", "What held"));
     body.push_str(&held_html(st.held.as_ref()));
+    // which error paths the runs reached (Milestone 306)
+    if let Some(c) = &doc.paths {
+        body.push_str(&h2("paths", "Which error paths ran"));
+        body.push_str(&format!(
+            "<div class=\"card\">\n{}</div>\n",
+            paths_html(c, &shown)
+        ));
+    }
     // next
     body.push_str(&h2("next", "Next"));
     body.push_str(&format!(

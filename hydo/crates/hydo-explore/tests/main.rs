@@ -8,6 +8,7 @@ mod support;
 mod cluster_faults;
 mod corpus;
 mod emulators;
+mod error_paths;
 mod fault_space_line;
 mod identity;
 mod lago_gaps;

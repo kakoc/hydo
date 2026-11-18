@@ -680,6 +680,30 @@ Three findings hold for every type of system:
 - **Cost.** The Mac and KVM engines only. A run with the plan has the fingerprint of the run
   without it.
 
+### Error paths that the faults reached (`error_paths: true`)
+
+- **What it is.** hydo records which error-handling places of a program ran in each run: Go's
+  `if err != nil` bodies, Rust's `Err` returns, `?`, `unwrap()` and panics, and retry, recovery
+  and rollback functions (`hydo guide error-paths`). It finds no bug by itself. It says which
+  error handling an exploration tested.
+- **What to write.** `error_paths: true` in the program's `contracts:` entry. Then explore with
+  faults and with `--no-faults`, and compare:
+
+  ```sh
+  hydo report --paths hydo-out/faults --against hydo-out/clean
+  ```
+
+- **When it fits.** After an exploration that found nothing, or before one, to choose the faults
+  that reach the error handling that no run tested.
+- **What it found.** Blnk (the results page's section "Which error paths the faults reached"): of
+  1,326 places, 73 ran in 12 schedules with faults and 27 without them. The kills of PostgreSQL
+  reached 17 places that no other schedule reached. 1,253 places in 606 functions never ran.
+- **What it misses.** A line without an instruction of its own, such as a Rust `?` whose error
+  needs no conversion. It says that a branch ran, not that the branch did the right thing.
+- **Cost.** The Mac engine only. A run with the plan has the fingerprint of the run without it.
+  The engine searched 1,536 MiB of guest RAM in 10 ms per run and stopped once per place that
+  ran.
+
 ### Function fuzzing (`hydo fuzz`)
 
 - **What it is.** `hydo fuzz` tests each contracted Rust function natively, with inputs from its

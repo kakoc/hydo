@@ -795,6 +795,7 @@ fn setup(a: Args, env: &Env) -> Cx {
         .filter_map(|v| v.trim().parse().ok())
         .collect();
     cx.ex.buggify = a.buggify;
+    cx.ex.no_faults = a.no_faults;
     cx.ex.timing = a.timing;
     cx.ex.tj_pm = a
         .tj_pm
@@ -2805,6 +2806,12 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
     let boot = pool.mean_boot();
     let nworkers = pool.workers();
     let cache_hits = *pool.cache_hits.lock().expect("lock");
+    // the error paths of the first runs (Milestone 306)
+    let paths = pool
+        .host
+        .contracts
+        .as_ref()
+        .and_then(|plan| crate::paths::of_exploration(plan, &seeds, &res_all));
     pool.close();
     let total = t0.elapsed().as_secs_f64();
     let secs: Vec<f64> = seeds
@@ -2929,6 +2936,7 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
         .collect();
     with.sort_by(|a, b| format!("{}.log", a.0).cmp(&format!("{}.log", b.0)));
     doc.liveness = results::liveness(&with);
+    doc.paths = paths;
     let _ = hydo_results::write_document(&cx.out.join(hydo_results::EXPLORATION_DOC), &doc);
     let _ = std::fs::write(cx.out.join("report.md"), md::report(&doc));
     if !cx.env.plain_end {

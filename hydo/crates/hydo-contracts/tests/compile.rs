@@ -25,6 +25,7 @@ fn plan_of(bin: &str, src: &str) -> Option<Plan> {
             program: "/bin/ledger".into(),
             binary: b,
             sources: vec![example().join(src)],
+            error_paths: false,
         }])
         .unwrap(),
     )

@@ -16685,3 +16685,110 @@ reference; and the fixture end to end (`fuzz::`). The merge checklist of `AGENTS
 Nothing recorded moved: no engine, guest program or image changed.
 
 **What is left.** Open item 139.
+## Milestone 306 (tentative number): which error paths ran under the faults
+
+The question was the one a team asks after an exploration that found nothing: did the faults
+reach the error handling at all? hydo now records which error-handling places of a program ran
+in each run, in which schedule each first ran, and which ran only in runs with faults. The design
+is `docs/design/error-paths.md`, and the how-to is `hydo guide error-paths`.
+
+**What counts as an error path.** `error_paths: true` in a `contracts:` entry of `hydo.yaml` (a
+format-1 addition) makes `hydo build` list the program's places in the plan
+`<image>.contracts.json` (the module `paths` of `hydo-contracts`). A place is the first
+instruction of a piece of error handling:
+
+- Go: the first line of code in the block of an `if` that compares an error with `nil`.
+- Rust: `return Err(`, an `Err(...)` given back, a `match` arm on `Err`, the body of `if let
+  Err`, the error branch of a `?` (the code of `<Result as FromResidual>::from_residual` that the
+  compiler copied into the function), and the calls of `unwrap_failed`, `expect_failed` and the
+  panic functions (bounds and overflow checks left out).
+- Both: the first instruction of a function whose name has `retry`, `recover` or `rollback`.
+- `// hydo: error path` adds the next line of code. `// hydo: no error path` removes the next
+  line, the block it opens, or the function it declares. The contracts' scanner reads both as
+  comments.
+
+The line table of the debug information gives a line's statement addresses, one per copy of the
+code (a function copied into its callers has a copy in each). The sources' files are matched to
+the debug information's paths by the folder that most of them share (`github.com/blnkfinance/blnk/`
+with Go's `-trimpath`), so that a dependency's `balance.go` is not the project's. The first
+version matched by the end of the path, and Blnk's `database/balance.go` took the lines of the
+folder's own `balance.go`.
+
+**How the engine watches them without a change of the run.** The Mac engine has 5 breakpoint
+registers for contracts and Blnk has 1,334 addresses, so the engine writes the instruction `BRK
+#0x4859` over each place's first instruction in guest RAM (`hydo-hvm`'s module `paths`). The
+places are in the program's file, which the Mac engine's root keeps in guest RAM, page by page.
+The plan lists each 4 KiB page of the file that holds a place by its first nonzero 8 bytes and
+its hash. At each run's start the engine reads 8 bytes of every page of guest RAM, hashes the
+pages whose bytes match, and checks each place's instruction there. A hit is a debug exception
+(the engine traps them while the contracts are armed). The engine puts the place's instruction
+back at all of its addresses, records the first hit with the engine's clock and the boot, and
+lets the guest run the instruction. It counts no exit. The breakpoints are out of guest memory
+whenever the host reads it: when a run call ends (before every fingerprint), and before a
+snapshot that the host takes at a stop. A `BRK` with another immediate is delivered to the
+guest's kernel as the CPU would have delivered it (`Vmm::inject_sync`). The engine writes one
+line per run, `{"paths":...}`, into the run's records.
+
+**The report.** `result.json` gets `paths` (`RunPaths`: the places that ran, with the clock and
+the boot), and `exploration.json` gets `paths` (`PathCoverage`: per place the first runs that
+reached it, those without a fault, and the first run with its schedule). Both are results
+additions. `hydo run` prints `hydo: error paths: 27 of 1326 places ran`. `hydo report --paths
+[DIR] [--against DIR]` prints three lists: the places only runs with faults reached, the places
+the workload reaches by itself, and the places never reached, by function. `--against` leaves out
+of the first list every place that another exploration reached. `hydo report --html` adds the
+section "Which error paths ran" to a run's and an exploration's page. `hydo explore --no-faults`
+runs each seed's workload, its composition and walk, without a fault: the baseline.
+
+**The proof on Blnk.** The example's new manifest `hydo/hydo-paths.yaml` runs Blnk built from the
+example's commit with its debug information (`build.sh`: `bin/blnk-paths-<arch>`). The plan has
+1,326 places at 1,334 addresses on 210 pages: 1,311 `if err != nil` bodies and 15 recovery
+functions. 40 more places have no code in the program. All runs used the Mac engine, at the
+fingerprint epoch 4.
+
+| Schedule | The four runs (two with the plan, two without) | Places that ran |
+|---|---|---|
+| `disk=none \| run` | `a5028e3b9aed3bf3`, OK | 27 |
+| `disk=none dseed=c054734a6f769762 \| run K=redis@21+1 N=worker-*@14-20:delay,100ms W=a36fcf62,p5,q1,r800` | `75eddb844b2c11b9`, VIOLATION | 32 |
+| `disk=cut dseed=5 \| run C=10` | `06683fc030390c31`, VIOLATION | 37, 10 in the recovery boot |
+
+The two runs with the plan recorded the same places at the same clock. No place was unwatched in
+any run. A third run of the first two schedules with the final engine gave the same fingerprints.
+
+Then seeds 1 to 12 were explored three times, on one worker: with faults (`--strategy process
+--new-faults`) and the plan, with `--no-faults` and the plan, and with faults without the plan.
+The first and the third gave the same 12 fingerprints. `hydo report --paths x-faults --against
+x-clean`:
+
+- Without faults 27 places ran: the lookups that find no row, a busy lock, and the rollbacks of
+  the atomic bulks that the workload makes fail on purpose.
+- With faults 73 ran, the 27 among them. 46 ran only with faults: 17 database errors that only the
+  kills of PostgreSQL reached (seeds 4 and 9), 8 places of the recovery of queued transactions
+  (power cuts and kills of Redis), 6 errors of the queue, and 15 others.
+- 1,253 places in 606 functions never ran, for example the 18 of `metrics.Init` and the API that
+  the workload does not use.
+- `main.recoverPanic` and `api.logrusRecovery` are named for a recovery and run at every start of
+  Blnk, so the runs that restart Blnk reach them without an error.
+
+Seed 4's first run reached `validateTxn`'s branch at the clock 590,557. `hydo run` of its schedule
+reached it at 590,557 again, with the fingerprint `061c17092b845ffe`. The example's RESULTS.md has
+the table ("Which error paths the faults reached").
+
+**The cost.** The plan is 570 KB. The search of 1,536 MiB of guest RAM took 10 to 11 ms per run
+(16 runs). A run stopped 24 to 54 times, once per place that ran. The engine's time stayed within
+the spread of the runs: 1.7 and 1.8 s with the plan against 1.7 and 1.6 s without it for `disk=none
+| run`, and 12.5 and 10.9 s against 12.0 and 15.8 s for the power cut. The exploration with faults
+took 122 s with the plan and 152 s without it.
+
+**Rust.** The compiler's test builds a small Rust program and finds its `?` with a conversion, an
+arm on `Err`, an `Err` given back, a retry function, an `unwrap()` and a `panic!`. A `?` whose
+error needs no conversion has no instruction of its own in the optimized build and is no place,
+and a `return Err` that shares its code with another return counts among the places without
+code. No Rust program ran with the plan in a VM.
+
+**Tests.** hydo-contracts `paths::` (the scanners of Go and Rust, the declarations, the hits'
+line, and plans of a Go and a Rust program built in the test); hydo-explore `error_paths::` (a
+run's hits in its result, the exploration's lists, `--no-faults`); the committed project and
+results schemas with the additions (hydo-schema-compat passes). Nothing recorded moved: without
+`error_paths: true` a plan has no places, and the engine writes nothing new.
+
+**What is left.** Open item 155.

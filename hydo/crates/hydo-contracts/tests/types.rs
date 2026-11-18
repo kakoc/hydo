@@ -71,6 +71,7 @@ fn plan(bin: PathBuf, src: &str) -> Program {
         program: "/bin/types".into(),
         binary: bin,
         sources: vec![example().join(src)],
+        error_paths: false,
     }])
     .unwrap();
     // kept for a look: target/tmp/contracts-types/<program>.contracts.json
@@ -257,6 +258,7 @@ fn go_named_slices_on_arm64_and_x86_64() {
             program: "/bin/named".into(),
             binary: b,
             sources: vec![dir.clone()],
+            error_paths: false,
         }])
         .unwrap();
         std::fs::write(
@@ -340,6 +342,7 @@ fn go_values_on_arm64_and_x86_64() {
             program: "/bin/values".into(),
             binary: b.clone(),
             sources: vec![dir.clone()],
+            error_paths: false,
         }])
         .unwrap();
         std::fs::write(

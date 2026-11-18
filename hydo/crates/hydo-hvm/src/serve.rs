@@ -507,6 +507,8 @@ impl Host {
             }
         }
         let snap_dir = self.o.snap_dir.clone();
+        // the snapshot takes the guest's own instructions at every error path (M306)
+        vm.ct_park();
         xsnap_take(vm, &mut self.snaps[slot].x, "ctl", &snap_dir);
         let mut k = self.c.k.clone();
         for s in &mut k.s {

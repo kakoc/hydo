@@ -160,6 +160,9 @@ pub struct Ex {
     pub pp_values: Vec<i64>,
     pub xt_rates: Vec<i64>,
     pub buggify: bool,
+    /// `--no-faults` (Milestone 306): each seed's workload (its composition and walk) without a
+    /// fault: what the workload reaches by itself, for `hydo report --paths --against`.
+    pub no_faults: bool,
     pub concurrency: bool,
     pub more_faults: bool,
     /// `--storage-faults`: G= and L= from their own stream (STORAGE_SALT).
@@ -249,6 +252,7 @@ impl Default for Ex {
             pp_values: vec![1 << 16, 1 << 14],
             xt_rates: vec![4, 16],
             buggify: false,
+            no_faults: false,
             concurrency: false,
             more_faults: false,
             storage_faults: false,
@@ -1530,7 +1534,15 @@ impl Ex {
         s = self.add_protocol_cover(s, seed);
         s = self.add_grpc_faults(s, seed);
         s = self.add_upgrades(s, seed);
-        self.add_point_streams(s, seed)
+        let s = self.add_point_streams(s, seed);
+        if self.no_faults {
+            // `--no-faults` (Milestone 306): the seed's workload alone
+            let mut c = S::new("none", s.dseed);
+            c.w = s.w;
+            c.i = s.i;
+            return c;
+        }
+        s
     }
 
     /// The streams every sweep point and generated schedule gets (explore.py main()).

@@ -55,6 +55,9 @@ pub mod hv;
 pub mod hvm_main;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod mem;
+/// Error paths: one-shot breakpoint instructions (Milestone 306).
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod paths;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub mod serve;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]

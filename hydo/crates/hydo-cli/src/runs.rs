@@ -704,12 +704,22 @@ pub fn contracts_one(
     match hydo_explore::contracts::fold(&plan, &records, &mut res) {
         Ok(j) => {
             if !quiet {
-                for l in hydo_explore::contracts::summary(&j.report)
+                // a plan of error paths only (Milestone 306) has no calls to speak of
+                let calls = plan.programs.iter().any(|p| !p.functions.is_empty());
+                let summary = if calls {
+                    hydo_explore::contracts::summary(&j.report)
+                } else {
+                    Vec::new()
+                };
+                for l in summary
                     .into_iter()
                     .chain(hydo_explore::contracts::lines(&j.report))
                     .chain(hydo_explore::contracts::values_lines(&j))
                 {
                     println!("{l}");
+                }
+                if let Some(rp) = hydo_explore::paths::of_res(&res) {
+                    println!("{}", hydo_explore::paths::run_line(&rp));
                 }
             }
         }

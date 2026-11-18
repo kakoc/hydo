@@ -60,6 +60,9 @@ fn ledger_plan() -> Plan {
             unchecked: vec![],
             calls: vec![],
             keeps: vec![],
+            paths: vec![],
+            path_pages: vec![],
+            paths_without_code: 0,
             functions: vec![Function {
                 id: 0,
                 name: "ledger::apply".into(),

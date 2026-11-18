@@ -86,6 +86,8 @@ pub struct Ct {
     pub over: u64,
     /// The boot the calls are in: each power cut or reboot starts the next (Milestone 285).
     pub boot: u32,
+    /// The error paths the run watches (Milestone 306, [`crate::paths`]).
+    pub ep: Option<crate::paths::Ep>,
 }
 
 impl Ct {
@@ -126,6 +128,7 @@ impl Ct {
             foreign: 0,
             over: 0,
             boot: 0,
+            ep: crate::paths::Ep::from_plan(p),
         };
         let mut entries: Vec<u64> = ct.fns.iter().map(|f| f.entry).collect();
         entries.sort_unstable();
@@ -157,6 +160,9 @@ impl Ct {
         self.foreign = 0;
         self.over = 0;
         self.boot = 0;
+        if let Some(ep) = self.ep.as_mut() {
+            ep.begin();
+        }
         for &n in &SLOTS {
             if matches!(self.slot_use[n], Use::Return(_)) {
                 self.slot_use[n] = Use::Free;
@@ -167,6 +173,9 @@ impl Ct {
     /// A power cut: the calls in progress never return (the recovery boot is a new machine).
     pub fn cut(&mut self) {
         self.boot += 1;
+        if let Some(ep) = self.ep.as_mut() {
+            ep.cut();
+        }
         for p in self.pending.drain(..) {
             self.recs[p.rec].lost = Some("power cut".into());
         }
@@ -190,7 +199,13 @@ impl Ct {
         }
         self.active = false;
         let p = outdir.join(format!("{tag}{}", plan::RECORDS_SUFFIX));
-        let _ = std::fs::write(p, plan::records_text(&self.recs, self.over));
+        // the error paths' line first (Milestone 306): a plan without places writes as before
+        let mut text = match self.ep.as_mut() {
+            Some(ep) => hydo_contracts::paths::hits_line(&ep.finish()),
+            None => String::new(),
+        };
+        text.push_str(&plan::records_text(&self.recs, self.over));
+        let _ = std::fs::write(p, text);
         self.recs.clear();
         self.pending.clear();
     }
@@ -222,6 +237,12 @@ impl Vmm {
             } else {
                 self.ct_set(bcr(n), 0);
             }
+        }
+        // the error paths' breakpoint instructions (Milestone 306)
+        if let Some(ep) = self.ct.as_mut().and_then(|c| c.ep.as_mut()) {
+            ep.arm(self.ram.bytes_mut(), RAM_BASE, &|p| {
+                crate::hv::icache_invalidate(p, 4)
+            });
         }
     }
 
@@ -255,6 +276,57 @@ impl Vmm {
             self.ct_set(bcr(n), 0);
         }
         self.ct_set(sr::MDSCR_EL1, m);
+        // the guest's own instructions back at every error path (Milestone 306)
+        if let Some(ep) = self.ct.as_mut().and_then(|c| c.ep.as_mut()) {
+            ep.disarm(self.ram.bytes_mut(), RAM_BASE);
+        }
+    }
+
+    /// Before a snapshot at a stop inside `run_until` (Milestone 306): the guest's own
+    /// instructions back at every error path, until [`Vmm::ct_unpark`] before the guest runs.
+    pub fn ct_park(&mut self) {
+        if !self.ct.as_ref().is_some_and(|c| c.armed) {
+            return;
+        }
+        if let Some(ep) = self.ct.as_mut().and_then(|c| c.ep.as_mut()) {
+            ep.disarm(self.ram.bytes_mut(), RAM_BASE);
+            ep.parked = true;
+        }
+    }
+
+    /// The error paths' breakpoints again after [`Vmm::ct_park`].
+    pub fn ct_unpark(&mut self) {
+        if let Some(ep) = self.ct.as_mut().and_then(|c| c.ep.as_mut()) {
+            if std::mem::take(&mut ep.parked) {
+                ep.arm(self.ram.bytes_mut(), RAM_BASE, &|p| {
+                    crate::hv::icache_invalidate(p, 4)
+                });
+            }
+        }
+    }
+
+    /// A `BRK` while the contracts are armed (EC 0x3C, Milestone 306): an error path's
+    /// breakpoint (its instructions go back and the guest goes on), or the guest's own, which
+    /// the guest's kernel gets as the CPU would have given it. True when handled: the guest
+    /// resumes, and no exit is counted.
+    pub fn ct_brk(&mut self, syndrome: u64) -> bool {
+        if !self.ct.as_ref().is_some_and(|c| c.armed) {
+            return false;
+        }
+        if crate::paths::is_ours(syndrome) {
+            let pc = self.rd(HV_REG_PC);
+            let exits = self.m.exits;
+            if let Some(pa) = self.ct_pa(pc) {
+                if let Some(ep) = self.ct.as_mut().and_then(|c| c.ep.as_mut()) {
+                    if ep.hit(pa, exits, self.ram.bytes_mut(), RAM_BASE, &|p| {
+                        crate::hv::icache_invalidate(p, 4)
+                    }) {
+                        return true;
+                    }
+                }
+            }
+        }
+        self.inject_sync(syndrome)
     }
 
     /// The guest's own values of what the contracts change, for a vCPU snapshot: (MDSCR_EL1,

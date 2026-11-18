@@ -73,6 +73,8 @@ pub const CONTRACTS: &str = "_contracts";
 pub const VALUES: &str = "_values";
 /// How many calls the function contracts judged ({calls, without_return}).
 pub const CONTRACT_CALLS: &str = "_contract_calls";
+/// Which error paths ran (`RunPaths`, Milestone 306).
+pub const PATHS: &str = "_paths";
 
 /// A result without the host-only keys (what a tool that prints a result map shows).
 pub fn public(r: &Res) -> Res {
@@ -599,6 +601,7 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
         tag: Some(tag.to_string()),
         messages,
         upgrades: upgrades_of(&texts.concat()),
+        paths: crate::paths::of_res(r),
         schedule: text.to_string(),
         warnings,
         verdict,

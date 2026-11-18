@@ -31,6 +31,8 @@ use std::path::{Path, PathBuf};
 
 type R<'a> = EndianSlice<'a, LittleEndian>;
 
+mod paths;
+
 /// How many elements an index computed per call can reach (`v[k]`): the engine reads the first
 /// this many.
 pub const ELEMS: u64 = 8;
@@ -44,6 +46,8 @@ pub struct Source {
     pub program: String,
     pub binary: PathBuf,
     pub sources: Vec<PathBuf>,
+    /// Watch the program's error paths too (`error_paths: true`, Milestone 306).
+    pub error_paths: bool,
 }
 
 /// The ELF file: its machine and sections.
@@ -1300,6 +1304,7 @@ pub fn compile_program(src: &Source, first_id: u32) -> Result<Program, String> {
         unchecked: Vec::new(),
         calls: Vec::new(),
         keeps: Vec::new(),
+        ..Program::default()
     };
     let mut lang_errors = Vec::new();
     // the `keep` lines, with their file and the function they stand next to (Milestone 291)
@@ -1375,6 +1380,13 @@ pub fn compile_program(src: &Source, first_id: u32) -> Result<Program, String> {
                 reason,
             }),
         }
+    }
+    // the error paths (Milestone 306): ids from 0 here, made unique in the plan by `compile`
+    if src.error_paths {
+        let found = paths::find(&elf, &d, &fns, arch, &source_files(&src.sources), 0);
+        prog.paths = found.places;
+        prog.path_pages = found.pages;
+        prog.paths_without_code = found.without_code;
     }
     Ok(prog)
 }
@@ -1536,9 +1548,15 @@ pub fn compile(sources: &[Source]) -> Result<Plan, String> {
         programs: Vec::new(),
     };
     let mut id = 0;
+    let mut path_id = 0;
     for s in sources {
         let p = compile_program(s, id)?;
         id += p.functions.len() as u32;
+        let mut p = p;
+        for pl in &mut p.paths {
+            pl.id += path_id;
+        }
+        path_id += p.paths.len() as u32;
         plan.programs.push(p);
     }
     Ok(plan)

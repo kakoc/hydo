@@ -60,6 +60,17 @@ pub struct Program {
     /// (Milestone 291): judged on the host after the run, over the histories of every program.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub keeps: Vec<Keep>,
+    /// The error-handling places an engine watches (Milestone 306, docs/design/error-paths.md):
+    /// `error_paths: true` in the manifest's `contracts:` entry.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub paths: Vec<crate::paths::PathPlace>,
+    /// The pages of the program's file that hold the places' instructions.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub path_pages: Vec<crate::paths::PathPage>,
+    /// Places of the sources whose line has no code in the program (the compiler removed it, or
+    /// the program does not link the function).
+    #[serde(default, skip_serializing_if = "is_zero32")]
+    pub paths_without_code: u32,
 }
 
 /// A property of a recorded value along a key's history (`// hydo: keep <name> [once set]
@@ -555,6 +566,9 @@ pub fn read_run(p: &Path) -> Result<(Vec<Record>, End), String> {
     let mut end = None;
     for l in t.lines().filter(|l| !l.trim().is_empty()) {
         let bad = |e: serde_json::Error| format!("{}: {e}: {l}", p.display());
+        if crate::paths::is_hits_line(l) {
+            continue;
+        }
         if l.starts_with("{\"end\"") {
             end = Some(serde_json::from_str::<EndLine>(l).map_err(bad)?.end);
         } else {

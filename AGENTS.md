@@ -909,6 +909,22 @@ fingerprint with and without the plan. In 30 blind schedules the line broke in 9
 design is the section "Value properties" of `docs/design/value-history.md`, and the how-to is
 section 4 of `hydo guide values` (open item 146).
 
+**Error paths (M306, tentative number; a first version on the Mac engine).** `error_paths: true`
+in a `contracts:` entry (a format-1 addition) makes `hydo build` list the program's
+error-handling places. They are Go's `if err != nil` bodies, Rust's `Err` returns and arms, `?`,
+`unwrap()` and panics, and functions named for a retry, a recovery, or a rollback. `// hydo: error
+path` adds a line, and `// hydo: no error path` removes a line, a block, or a function. The Mac
+engine writes a one-shot `BRK` over each place's first instruction in guest RAM while the guest
+runs. It puts the instruction back at the first hit and counts no exit, so the fingerprint stays.
+`result.json` and `exploration.json` get `paths` (results additions). `hydo report --paths [DIR]
+[--against DIR]` lists what only faults reached and what never ran, by function. `hydo report
+--html` has the section on which error paths ran. `hydo explore --no-faults` runs each seed's
+workload without a fault, the baseline. On Blnk (1,326 places), 73 ran in 12 schedules with
+faults and 27 without. The 46 that only faults reached were database errors under kills of
+PostgreSQL, queue errors, and the recovery of queued transactions. Every schedule gave one
+fingerprint with the plan and without it, and a run's search of guest RAM took 10 ms. The design is
+`docs/design/error-paths.md`, the how-to `hydo guide error-paths` (open item 155).
+
 **Fakes from OpenAPI descriptions (M249).** `hydo fake from-openapi <spec>` writes a `fakes:`
 entry from an OpenAPI 3.0 or 3.1 description (the module `openapi` of `hydo-compose`). It writes
 one route per operation, with the spec's example or a body made from the schema, and no random
@@ -2312,6 +2328,20 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       cover that model. The cause was not looked for.
     - The `known-errors.yaml` of an example's `hydo/` folder is not passed to the explorer, so the
       Dragonfly and Redpanda runs reported their expected error kinds as new.
+155. Error paths (M306, tentative number; `docs/design/error-paths.md`). What is left:
+    - Only the Mac engine watches them. KVM's root is on a disk, so a program's pages reach guest
+      RAM only when the guest reads them; the engine would search at system calls and write
+      `INT3`. hvx needs the contracts' side module. hvx and KVM runs say that nothing was watched.
+    - The search finds a program by the pages of its file in the guest's page cache. A program
+      that reads its own file while it runs reads the breakpoint instructions; no example does.
+    - In an optimized build, a Rust `?` whose error needs no conversion has no instruction of its
+      own, and is no place. A `return Err` that shares its code with another return counts among
+      the places without code. Rust ran only in the compiler's test, not in a VM.
+    - A function named for a recovery that runs at every start (Blnk's `recoverPanic` and
+      `logrusRecovery`) runs in every run that restarts the program, without an error.
+    - The runs record from the workload's start, so the services' start-up is not watched.
+    - `hydo explore --merge` does not merge the parts' error paths, and the CI page does not show
+      them. A declaration that a place must run in an exploration, which fails it, is not built.
 
 ## Milestone index
 
@@ -3113,6 +3143,12 @@ build machine, before 2026-10-13.
   bytes' `Bytes`. `requires sorted(v)` sorts the generated list. On the second evaluation's six
   crates and byteorder, refused contracted functions fell from 59 of 66 to 2; no new finding.
   Nothing recorded moved
+- M306 (tentative number): which error paths ran. `error_paths: true` lists a program's
+  error-handling places from its sources and debug information. The Mac engine watches each with
+  a one-shot `BRK` in guest RAM without a change of the run. `hydo report --paths` lists what
+  only faults reached and what never ran. On Blnk 46 of 1,326 places ran only with faults, 27 also
+  without, and 1,253 never; every fingerprint stayed. `hydo explore --no-faults`. Nothing
+  recorded moved
 
 ## Where to look
 

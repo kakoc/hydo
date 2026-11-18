@@ -32,6 +32,7 @@ pub mod fc;
 pub mod gen;
 pub mod md;
 pub mod merge;
+pub mod paths;
 pub mod pool;
 pub mod py;
 pub mod report;

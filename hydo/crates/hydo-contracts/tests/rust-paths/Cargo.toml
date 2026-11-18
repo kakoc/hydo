@@ -1,0 +1,15 @@
+[package]
+name = "rust-paths"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+description = "The Rust program of hydo-contracts' error paths test (tests/paths.rs)"
+
+# its own workspace (not part of the repository root's hydo crate)
+[workspace]
+
+[profile.release]
+codegen-units = 1
+# the error paths read the line table and the inlined calls of the debug information
+debug = true

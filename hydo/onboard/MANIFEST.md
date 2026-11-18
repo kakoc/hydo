@@ -1543,6 +1543,16 @@ which `--input` replays. An `input` line can narrow a field too: `input l.balanc
 `vacuous` and `too few inputs`, the `with T = i64` line for a generic function, and what is not
 fuzzed (Milestones 280 and 282, docs/design/function-fuzzing-evaluation.md).
 
+`error_paths: true` in a `contracts:` entry records which error-handling places of the program
+ran in each run (Milestone 306, docs/design/error-paths.md). A place is the first line of a Go
+`if err != nil` block, a Rust `Err` given back or matched, the error branch of a `?`, a failed
+`unwrap()` or a panic, or a function whose name has `retry`, `recover` or `rollback`. The entry
+needs no `// hydo:` comment. `// hydo: error path` adds the next line, and `// hydo: no error
+path` removes the next line, block or function. The Mac engine records them without a change of
+the run. `result.json` and `exploration.json` get `paths`, and `hydo report --paths` lists the
+places that only runs with faults reached and the places never reached (`hydo guide
+error-paths`).
+
 ### Service networks (`network: bridge`)
 
 ```yaml

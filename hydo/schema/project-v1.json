@@ -4066,6 +4066,13 @@
             "type": "string"
           }
         },
+        "error_paths": {
+          "description": "Watch the program's error paths (Milestone 306, docs/design/error-paths.md): the bodies\nof Go's `if err != nil`, Rust's `Err` returns and arms, `?`, `unwrap()` and panics, and\nfunctions named for a retry, a recovery or a rollback. Each run records which of them\nran; `// hydo: error path` and `// hydo: no error path` lines add and remove places. The\nMac engine watches them.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "description": {
           "anyOf": [
             {

@@ -154,6 +154,8 @@ fn fold_verdict(res: &mut Res, text: String) {
 /// property. Returns what was judged.
 pub fn fold(plan: &Plan, records: &Path, res: &mut Res) -> Result<Judged, String> {
     let (recs, end) = hydo_contracts::plan::read_run(records)?;
+    // the error paths (Milestone 306): which places ran; they never change the verdict
+    crate::paths::fold(plan, records, res)?;
     let mut rep = judge(plan, &recs);
     rep.not_recorded = end.not_recorded;
     let fs: Vec<Value> = findings(&rep)

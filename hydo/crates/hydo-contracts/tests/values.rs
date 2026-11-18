@@ -186,6 +186,9 @@ fn plan_with(values: Vec<Value>, entry: u64) -> Plan {
                 caller: "github.com/x/y.(*Blnk).buildBatch".into(),
             }],
             keeps: vec![],
+            paths: vec![],
+            path_pages: vec![],
+            paths_without_code: 0,
             functions: vec![Function {
                 id: 0,
                 name: "github.com/x/y.createQueueCopy".into(),

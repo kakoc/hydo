@@ -4365,9 +4365,9 @@ R	^	<tmp>/mutants/m3152.json --arch x86_64 []	err	"contracts[0] (/bin/ledger): s
 R	^	<tmp>/mutants/m3153.json --arch x86_64 []	err	"contracts[0]: must be a mapping"
 R	^	<tmp>/mutants/m3154.json --arch x86_64 []	err	"root.files[0]: missing field `src` (project format 1; the sc…#995df533c1ff08e2"
 R	^	<tmp>/mutants/m3155.json --arch x86_64 []	ok	d:0bc194a9 w:4f53cda1 c:ccd87e87 m:74234e98
-R	^	<tmp>/mutants/m3156.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, program, sources)"
+R	^	<tmp>/mutants/m3156.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, er…#57b15b67ec405722"
 R	^	<tmp>/mutants/m3157.json --arch x86_64 []	err	"root.files[0].mode: a string (or a whole number), not True (…#dcd328f0eae39994"
-R	^	<tmp>/mutants/m3158.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, program, sources)"
+R	^	<tmp>/mutants/m3158.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, er…#57b15b67ec405722"
 R	^	<tmp>/mutants/m3159.json --arch x86_64 []	ok	d:cbe2532f w:4f53cda1 c:46fa2797 m:74234e98
 R	^	<tmp>/mutants/m3160.json --arch x86_64 []	err	"root: unknown field(s) bogus (known: description, dirs, file…#6633452f32f12b46"
 R	^	<tmp>/mutants/m3161.json --arch x86_64 []	ok	d:044c359a w:4f53cda1 c:979ba52e m:74234e98
@@ -4382,7 +4382,7 @@ R	^	<tmp>/mutants/m3169.json --arch x86_64 []	err	"services[0]: must be a mappin
 R	^	<tmp>/mutants/m3170.json --arch x86_64 []	err	"services[0]: missing required field 'name'"
 R	^	<tmp>/mutants/m3171.json --arch x86_64 []	err	"services[1]: duplicate service name 'ledger'"
 R	^	<tmp>/mutants/m3172.json --arch x86_64 []	err	"contracts: a list of {program: <path in the guest>, sources:…#7a7cc02bcb815d6f"
-R	^	<tmp>/mutants/m3173.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, program, sources)"
+R	^	<tmp>/mutants/m3173.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, er…#57b15b67ec405722"
 R	^	<tmp>/mutants/m3174.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, kind, …#9dccb4f7c32693e2"
 R	^	<tmp>/mutants/m3175.json --arch x86_64 []	ok	d:112839a9 w:4f53cda1 c:4121250c m:74234e98
 R	^	<tmp>/mutants/m3176.json --arch x86_64 []	err	"services[0]: missing required field 'cmd'"
@@ -4412,7 +4412,7 @@ R	^	<tmp>/mutants/m3199.json --arch x86_64 []	ok	d:c6d6effb w:4f53cda1 c:68eea39
 R	^	<tmp>/mutants/m3200.json --arch x86_64 []	ok	d:a51e3887 w:4f53cda1 c:c289c485 m:74234e98
 R	^	<tmp>/mutants/m3201.json --arch x86_64 []	err	"invariants[1]: duplicate id 'ledger.present'"
 R	^	<tmp>/mutants/m3202.json --arch x86_64 []	err	"contracts[0].program: {{p}} is not a declared parameter"
-R	^	<tmp>/mutants/m3203.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, program, sources)"
+R	^	<tmp>/mutants/m3203.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, er…#57b15b67ec405722"
 R	^	<tmp>/mutants/m3204.json --arch x86_64 []	err	"description: a string, a number or true/false, not {} (proje…#45c15fb276d68dd6"
 R	^	<tmp>/mutants/m3205.json --arch x86_64 []	err	"invariants[0]: unknown field(s) bogus (known: after, cmd, de…#cc796248e472a6a1"
 R	^	<tmp>/mutants/m3206.json --arch x86_64 []	err	"contracts[0]: must be a mapping"
@@ -4443,7 +4443,7 @@ R	^	<tmp>/mutants/m3230.json --arch x86_64 []	ok	d:e857a86f w:4f53cda1 c:8e46296
 R	^	<tmp>/mutants/m3231.json --arch x86_64 []	ok	d:625c6492 w:4f53cda1 c:2cd865f1 m:74234e98
 R	^	<tmp>/mutants/m3232.json --arch x86_64 []	ok	d:93e572e0 w:4f53cda1 c:53d30604 m:74234e98
 R	^	<tmp>/mutants/m3233.json --arch x86_64 []	err	"contracts[0] (/bin/ledger): sources: a list of folders (or f…#2bd252eadd00b53a"
-R	^	<tmp>/mutants/m3234.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, program, sources)"
+R	^	<tmp>/mutants/m3234.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, er…#57b15b67ec405722"
 R	^	<tmp>/mutants/m3235.json --arch x86_64 []	err	"contracts[0] (/bin/ledger): sources: a list of folders (or f…#2bd252eadd00b53a"
 R	^	<tmp>/mutants/m3236.json --arch x86_64 []	ok	d:d2534275 w:4f53cda1 c:053899cf m:74234e98
 R	^	<tmp>/mutants/m3237.json --arch x86_64 []	ok	d:a2ef9159 w:4f53cda1 c:87e950df m:74234e98
@@ -4564,7 +4564,7 @@ R	^	<tmp>/mutants/m3351.json --arch x86_64 []	err	"top level: unknown field(s) b
 R	^	<tmp>/mutants/m3352.json --arch x86_64 []	err	"invariants[1]: duplicate id 'types.present'"
 R	^	<tmp>/mutants/m3353.json --arch x86_64 []	err	"contracts[0] (/bin/types): sources: a list of folders (or fi…#eede5d575328ef52"
 R	^	<tmp>/mutants/m3354.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: int object is not iterable"
-R	^	<tmp>/mutants/m3355.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, program, sources)"
+R	^	<tmp>/mutants/m3355.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, er…#57b15b67ec405722"
 R	^	<tmp>/mutants/m3356.json --arch x86_64 []	ok	d:af3c11cf w:4f53cda1 c:fde6f76d m:74234e98
 R	^	<tmp>/mutants/m3357.json --arch x86_64 []	err	"workload: missing required field 'steps'"
 R	^	<tmp>/mutants/m3358.json --arch x86_64 []	err	"root.files[0]: invalid type: string \"eventually\", expected a…#da184b9c3e1959da"

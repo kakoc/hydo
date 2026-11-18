@@ -82,6 +82,7 @@ hydo-contracts::eval                     fast
 hydo-contracts::fuzz                     fast
 hydo-contracts::keeps                    fast
 hydo-contracts::lang                     fast
+hydo-contracts::paths                    fast
 hydo-contracts::types                    fast
 hydo-contracts::values                   fast
 hydo-errors                              fast
@@ -90,6 +91,7 @@ hydo-explore                             fast
 hydo-explore::cluster_faults             fast
 hydo-explore::corpus                     full
 hydo-explore::emulators                  fast
+hydo-explore::error_paths                fast
 hydo-explore::fake_engine                fast
 hydo-explore::fault_space_line           fast
 hydo-explore::identity                   fast

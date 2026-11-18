@@ -431,7 +431,65 @@ fn held_lines(dir: &Path) -> String {
     o
 }
 
+/// The error paths of a run or exploration directory (Milestone 306): an exploration's, or one
+/// run's with the plan next to its image.
+pub fn paths_of_dir(d: &Path) -> Result<hydo_results::PathCoverage, String> {
+    let none = "it recorded no error paths: build the image with `error_paths: true` in a \
+                `contracts:` entry of hydo.yaml (hydo guide error-paths)";
+    match hydo_results::read_dir(d).map_err(|e| format!("{}: {e}", d.display()))? {
+        hydo_results::Results::Exploration { doc: Some(doc), .. } => doc
+            .paths
+            .ok_or_else(|| format!("{}: the exploration: {none}", d.display())),
+        hydo_results::Results::Exploration { .. } => {
+            Err(format!("{}: the exploration has not finished", d.display()))
+        }
+        hydo_results::Results::Run { run, .. } => {
+            let rp = run
+                .paths
+                .clone()
+                .ok_or_else(|| format!("{}: the run: {none}", d.display()))?;
+            let img = run
+                .image
+                .as_ref()
+                .map(|i| i.resolved.clone().unwrap_or_else(|| i.path.clone()))
+                .ok_or_else(|| format!("{}: the run names no image", d.display()))?;
+            let plan = match hydo_contracts::plan::plan_of_image(Path::new(&img)) {
+                Some(Ok(p)) => p,
+                Some(Err(e)) => return Err(e),
+                None => return Err(format!("{img}: no plan next to the image")),
+            };
+            Ok(hydo_explore::paths::of_run(&plan, &run.schedule, rp))
+        }
+    }
+}
+
+/// `hydo report --paths [DIR] [--against DIR2]` (Milestone 306).
+fn report_paths(argv: &[String]) -> i32 {
+    let mut d = None;
+    let mut against = None;
+    let mut it = argv.iter().filter(|a| *a != "--paths");
+    while let Some(a) = it.next() {
+        if a == "--against" {
+            against = it.next().cloned();
+        } else if d.is_none() {
+            d = Some(a.clone());
+        }
+    }
+    let d = d.unwrap_or_else(|| pjoin(OUT, "explore"));
+    let c = paths_of_dir(Path::new(&d)).unwrap_or_else(|e| die(&e));
+    let other = against.map(|a| paths_of_dir(Path::new(&a)).unwrap_or_else(|e| die(&e)));
+    let mut o = std::io::stdout().lock();
+    for l in hydo_explore::paths::text(&c, other.as_ref()) {
+        let _ = writeln!(o, "{l}");
+    }
+    0
+}
+
 pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
+    // `--paths`: which error paths ran (Milestone 306)
+    if argv.iter().any(|a| a == "--paths") {
+        return report_paths(argv);
+    }
     // `--html`: one web page instead (src/htmlreport.rs)
     if argv.iter().any(|a| a == "--html") {
         let rest: Vec<String> = argv.iter().filter(|a| *a != "--html").cloned().collect();

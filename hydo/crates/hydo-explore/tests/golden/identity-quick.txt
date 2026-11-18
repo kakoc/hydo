@@ -67,6 +67,7 @@ input	hydo/onboard/examples/blnk/hydo/checks/final_queued_once.sql	9bd67e8b8e012
 input	hydo/onboard/examples/blnk/hydo/checks/final_reference_once.sql	a6d6a239d797b7ba33363b21034cc7f997205fde074b3341bc5330835c28a2c0
 input	hydo/onboard/examples/blnk/hydo/fetch-images.sh	ed5a09164e65ef78e07130db7cdc95f5130b317d9b509f52ffdbfbbbc2d0e7fc
 input	hydo/onboard/examples/blnk/hydo/hydo-contracts.yaml	afcb0e17941e0c0e95be949e2356518be932c20d9506ea35f687852266edc831
+input	hydo/onboard/examples/blnk/hydo/hydo-paths.yaml	e9b16b593717945fac07e5a163e80bf035bf0dd17360ab8a6058c82254ab963f
 input	hydo/onboard/examples/blnk/hydo/hydo-values.yaml	fd49f164c7c21fd022b238f93425d5fbd8fa432ca2bce15de6e38545a1779772
 input	hydo/onboard/examples/blnk/hydo/known-errors.yaml	47c4cd8de5e4b031465407f2b242effddf3b14bd5f3354e37d14759f1e2ca4d0
 input	hydo/onboard/examples/blnk/hydo/regressions/bulk-partial-after-redis-pause.schedule	f081456976ad4e612ad8284a12f3ab540f1bb1ba6c34a6ad921fefc3b2462c42

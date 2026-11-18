@@ -6,6 +6,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        --image IMG --out DIR [--schedule S] [--sweep KIND] [--manifest hydo.yaml] [--backend hvx|hvm|kvm]
        [--timing] [--new-faults] [--durable-only] [--concurrency] [--more-faults] [--preempt] [--buggify]
        [--freeze-call] [--protocol-faults] [--protocol-cover] [--grpc-faults] [--vcpus N --turns [--bursts]] [--cpu v2|v3]
+       [--no-faults]
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--shrink-causes N]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...]]
@@ -88,6 +89,9 @@ pub struct Args {
     pub pct_exits: String,
     pub preempt: bool,
     pub buggify: bool,
+    /// `--no-faults` (Milestone 306): each seed's workload (its composition and walk) without a
+    /// fault: what the workload reaches by itself, for `hydo report --paths --against`.
+    pub no_faults: bool,
     pub backend: String,
     pub hvm_kernel: Option<String>,
     pub manifest: Option<String>,
@@ -210,6 +214,7 @@ impl Default for Args {
             pct_exits: "3000,10000".into(),
             preempt: false,
             buggify: false,
+            no_faults: false,
             backend: "hvx".into(),
             hvm_kernel: None,
             manifest: None,
@@ -249,7 +254,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 24] = [
+const FLAGS: [&str; 25] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -269,6 +274,7 @@ const FLAGS: [&str; 24] = [
     "grpc-faults",
     "preempt",
     "buggify",
+    "no-faults",
     "turns",
     "no-compose",
     "bursts",
@@ -438,6 +444,7 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "grpc-faults" => a.grpc_faults = true,
             "preempt" => a.preempt = true,
             "buggify" => a.buggify = true,
+            "no-faults" => a.no_faults = true,
             "turns" => a.turns = true,
             "no-compose" => a.no_compose = true,
             "bursts" => a.bursts = true,

@@ -1505,6 +1505,13 @@ pub struct ContractProgram {
     /// The folders (or files) of the program's sources, relative to the manifest: every `.rs`,
     /// `.go`, `.c`, `.h`, `.cc` and `.cpp` file in them is read for `// hydo:` comments.
     pub sources: Vec<String>,
+    /// Watch the program's error paths (Milestone 306, docs/design/error-paths.md): the bodies
+    /// of Go's `if err != nil`, Rust's `Err` returns and arms, `?`, `unwrap()` and panics, and
+    /// functions named for a retry, a recovery or a rollback. Each run records which of them
+    /// ran; `// hydo: error path` and `// hydo: no error path` lines add and remove places. The
+    /// Mac engine watches them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_paths: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }

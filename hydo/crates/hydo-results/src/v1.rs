@@ -499,6 +499,97 @@ pub struct Run {
     /// and the workload's own numbers. `hydo perf compare` compares two runs' measures.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub perf: Option<Perf>,
+    /// Which error-handling places of the image's programs ran (added in Milestone 306,
+    /// docs/design/error-paths.md): for an image whose manifest has `error_paths: true` in a
+    /// `contracts:` entry, on an engine that watches them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paths: Option<RunPaths>,
+}
+
+/// The error paths of one run (added in Milestone 306).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RunPaths {
+    /// The places the image's plan watches.
+    pub places: u64,
+    /// The places that ran, in the order of their first run.
+    #[serde(default)]
+    pub reached: Vec<PathReached>,
+    /// The places the engine could not watch in this run: it found none of their code in the
+    /// guest's memory.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unwatched: Vec<u32>,
+    /// False when the engine wrote no record of the error paths (an engine that does not
+    /// watch them: hvx and KVM); then nothing is known about them.
+    pub watched: bool,
+}
+
+/// The first run of one place in a run (added in Milestone 306).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PathReached {
+    /// The place's id in the image's plan (`<image>.contracts.json`).
+    pub place: u32,
+    /// The engine's clock at the first run (VM exits on the Mac engine).
+    pub at: u64,
+    /// The boot: 0 is the run's first, and each power cut or reboot starts the next.
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub boot: u32,
+}
+
+fn is_zero_u32(v: &u32) -> bool {
+    *v == 0
+}
+
+/// Which error-handling places ran in an exploration's first runs (added in Milestone 306,
+/// docs/design/error-paths.md).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PathCoverage {
+    /// The first runs whose error paths the engine recorded.
+    pub runs: u64,
+    /// The first runs without a fault (a schedule without a fault token): what ran there is
+    /// what the workload reaches by itself.
+    pub runs_without_faults: u64,
+    /// Every place of the plan, in the order of the plan (by file and line).
+    #[serde(default)]
+    pub places: Vec<PathPlaceCoverage>,
+}
+
+/// One place across an exploration (added in Milestone 306).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PathPlaceCoverage {
+    /// The place's id in the image's plan.
+    pub id: u32,
+    /// `err-check`, `err-return`, `err-arm`, `try`, `unwrap`, `panic`, `recovery` or
+    /// `declared`.
+    pub kind: String,
+    pub file: String,
+    pub line: u32,
+    /// The function the line is written in.
+    pub function: String,
+    /// The first runs where it ran.
+    pub runs: u64,
+    /// Of those, the runs without a fault.
+    pub runs_without_faults: u64,
+    /// The first run where it ran, in seed order: replay its schedule to see it run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first: Option<PathFirst>,
+    /// The first runs where the engine could not watch it.
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub unwatched_runs: u64,
+}
+
+fn is_zero_u64(v: &u64) -> bool {
+    *v == 0
+}
+
+/// The first run of a place in an exploration (added in Milestone 306).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PathFirst {
+    pub seed: i64,
+    /// The run's tag in `events.jsonl` and `consoles/`.
+    pub tag: String,
+    pub schedule: String,
+    /// The engine's clock when the place first ran in that run.
+    pub at: u64,
 }
 
 /// One switch of a service to another version (`U=`; added in Milestone 238).
@@ -1907,6 +1998,10 @@ pub struct Exploration {
     /// not finish), written `lo-hi,lo-hi`; absent when the parts cover the range.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub missing_seeds: Option<String>,
+    /// Which error-handling places of the image's programs ran in the first runs (added in
+    /// Milestone 306, docs/design/error-paths.md); absent for an image without them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paths: Option<PathCoverage>,
 }
 
 /// Where an event of one run is in that run (added in M165): its conversation, the number of the

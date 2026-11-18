@@ -1161,6 +1161,61 @@ impl Vmm {
         true
     }
 
+    /// A synchronous exception that the engine trapped but the guest owns (the guest's own
+    /// `BRK` while the engine traps debug exceptions, Milestone 306): taken into the guest's
+    /// EL1 as the CPU takes it, with `esr` as its syndrome. False when the guest is in a state
+    /// the engine does not deliver from (AArch32).
+    pub fn inject_sync(&mut self, esr: u64) -> bool {
+        let cpsr = self.rd(HV_REG_CPSR);
+        let pc = self.rd(HV_REG_PC);
+        if cpsr & 0x10 != 0 {
+            return false;
+        }
+        let off = match cpsr & 0xf {
+            0x0 => 0x400,
+            0x4 => 0x000,
+            0x5 => 0x200,
+            _ => return false,
+        };
+        let v = self.v();
+        let vbar = v.sys_chk(
+            "hv_vcpu_get_sys_reg(vcpu, HV_SYS_REG_VBAR_EL1, &vbar)",
+            sr::VBAR_EL1,
+        );
+        let sctlr = v.sys_chk(
+            "hv_vcpu_get_sys_reg(vcpu, HV_SYS_REG_SCTLR_EL1, &sctlr)",
+            sr::SCTLR_EL1,
+        );
+        v.set_sys(
+            "hv_vcpu_set_sys_reg(vcpu, HV_SYS_REG_ESR_EL1, esr)",
+            sr::ESR_EL1,
+            esr,
+        );
+        v.set_sys(
+            "hv_vcpu_set_sys_reg(vcpu, HV_SYS_REG_SPSR_EL1, cpsr)",
+            sr::SPSR_EL1,
+            cpsr,
+        );
+        v.set_sys(
+            "hv_vcpu_set_sys_reg(vcpu, HV_SYS_REG_ELR_EL1, pc)",
+            sr::ELR_EL1,
+            pc,
+        );
+        let mut n = 0u64;
+        n |= cpsr & (1 << 24);
+        n |= cpsr & (1 << 22);
+        if sctlr & (1 << 23) == 0 {
+            n |= 1 << 22;
+        }
+        if sctlr & (1 << 44) != 0 {
+            n |= 1 << 12;
+        }
+        n |= 0x3c0 | 0x5;
+        self.wr(HV_REG_CPSR, n);
+        self.wr(HV_REG_PC, vbar.wrapping_add(off));
+        true
+    }
+
     // ---------------- the run loop ----------------
     /// `run_until(marker)` with `hvm_stop_hook` = `hook`: the stop reason (`STOP_*`).
     pub fn run_until(
@@ -1215,6 +1270,7 @@ impl Vmm {
                 }
             }
             resume = false;
+            self.ct_unpark();
             self.apply_stepping();
             self.v().set_pending_irq(line);
             self.watch.armed.store(true, Ordering::Relaxed);
@@ -1264,6 +1320,12 @@ impl Vmm {
             }
             let e2 = (e.syndrome >> 26) & 0x3f;
             let in_ram = e.pa >= RAM_BASE && e.pa < RAM_BASE + self.ram_size;
+            if e.reason == hv::HV_EXIT_REASON_EXCEPTION && e2 == 0x3c && self.ct_brk(e.syndrome) {
+                // an error path's breakpoint instruction, or the guest's own BRK delivered to
+                // it (M306): not the guest's exit, no time passes
+                resume = true;
+                continue;
+            }
             if e.reason == hv::HV_EXIT_REASON_EXCEPTION && self.ct_exit(e2) {
                 // a contract's breakpoint or its step: not the guest's exit, no time passes
                 resume = true;

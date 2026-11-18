@@ -80,6 +80,7 @@ pub fn write_plan(m: &Value, manifest_path: &str, image: &Path, io: &mut Io) -> 
             program: program.to_string(),
             binary: expand(src, &mdir),
             sources: dirs,
+            error_paths: c.get("error_paths").and_then(Value::as_bool) == Some(true),
         });
     }
     let plan = hydo_contracts::compile::compile(&sources)
@@ -113,13 +114,34 @@ pub fn write_plan(m: &Value, manifest_path: &str, image: &Path, io: &mut Io) -> 
             if keeps == 1 { "y" } else { "ies" }
         ));
     }
+    let paths_only = n == 0 && plan.programs.iter().any(|p| !p.paths.is_empty());
     outln(
         io,
-        &format!(
-            "hydo-build: {} (function contracts: {n} functions, {clauses} clauses{recorded})",
-            plan_path.display()
-        ),
+        &if paths_only {
+            format!("hydo-build: {} (error paths)", plan_path.display())
+        } else {
+            format!(
+                "hydo-build: {} (function contracts: {n} functions, {clauses} clauses{recorded})",
+                plan_path.display()
+            )
+        },
     );
+    // the error paths (Milestone 306); a plan without them prints as before
+    for p in plan.programs.iter().filter(|p| !p.paths.is_empty()) {
+        let sites: usize = p.paths.iter().map(|x| x.sites.len()).sum();
+        let mut line = format!(
+            "hydo-build: error paths of {}: {} places at {sites} addresses",
+            p.program,
+            p.paths.len()
+        );
+        if p.paths_without_code > 0 {
+            line.push_str(&format!(
+                "; {} more places of the sources have no code in the program",
+                p.paths_without_code
+            ));
+        }
+        outln(io, &line);
+    }
     for p in &plan.programs {
         for u in &p.unchecked {
             outln(

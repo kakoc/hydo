@@ -39,7 +39,7 @@ at release, and after release. The tables below take the chart's techniques in i
 | Formal verification | Not hydo's job. A proof covers every state of a model, and hydo checks only the runs that it makes. | not hydo's job | |
 | Static analysis | `hydo rules scan` lists a project's promises from its sources. `hydo rules scan --kind clock` lists the code that measures a duration with the wall clock. Both read text, not syntax. | partly built | M236, M248; open items 110, 117, and 122 |
 | Mutation tests | `hydo rules check --mutate` plants a change of the stored state and says whether each rule catches it. A change of the program is not built. | partly built | M236; open item 110 |
-| Coverage | hvx traces the guest's code with Intel Processor Trace (`HVX_EXPLORE_PT_ELF`). A CI report names the properties that no run reached. Coverage-guided exploration found no bug sooner. | partly built | M40, M41, M44, M197 |
+| Coverage | hvx traces the guest's code with Intel Processor Trace (`HVX_EXPLORE_PT_ELF`). A CI report names the properties that no run reached. Coverage-guided exploration found no bug sooner. `error_paths: true` records which error-handling places of a program ran, on the Mac engine, and `hydo report --paths` lists the places that only faults reached and the places never reached. | partly built | M40, M41, M44, M197, M306 (`blnk`); open item 155 |
 | Benchmarks | `perf:` in the manifest counts the work of each workload step, and `hydo perf compare A B` says each change in words. The work is exact on hvx only. | partly built | M237 (`perf-kv`) |
 | Contract tests | For functions, see the property-based row. For APIs, `hydo fake from-openapi` builds a fake from the provider's published description, so the client runs against that contract. | partly built | M241, M249 |
 | Lint | Not hydo's job. A linter reads source text, and hydo runs programs. | not hydo's job | |
@@ -104,6 +104,7 @@ last line names the ideas that would answer more.
 | Does an acknowledged job run, and run once? | A `type: messages` check declares the claims. Kills of the process that holds the work test them. A durable execution's journaled steps append to an effects file, and a rule finds a step that runs again. | built; `hatchet`, `river`, `redpanda`, `restate` |
 | Do the books still match the client's operations? | The generic rule and domain rules, proposed by `hydo rules scan` and validated by `hydo rules check`. | built; `blnk`, `lago`, `formance-ledger` |
 | Where did a wrong value come from? | Value history and value properties on the Mac engine. | partly built; `blnk` (M285, M291) |
+| Did the faults reach the error handling at all? | `error_paths: true` records which `if err != nil` bodies, `Err` returns, `?` branches, panics and retry functions ran in each run. `hydo report --paths` lists what only faults reached, against `hydo explore --no-faults`, and what no run reached. | partly built; `blnk` on the Mac engine (M306; open item 155) |
 | Does the cluster upgrade in place? | `U=` switches a member's version during a run, and `hydo explore --upgrades` draws it. | built; `etcd-upgrade` (M238) |
 
 Ideas that would answer more:
@@ -239,8 +240,11 @@ that a milestone builds moves into the tables of this page with its new status.
   least one run of an exploration. hydo reports the paths that no run reached.
 - **Why it matters.** Static architecture rules, such as those of the cargo-pup lint tool, say
   where errors may go. Only a run shows that the error handling runs at all under real faults.
-- **What it needs.** The contracts' breakpoints at the paths' functions, or hvx's Processor
-  Trace, and a results addition that lists the paths never reached.
+- **What is built.** Milestone 306 records which error paths ran, on the Mac engine, and lists
+  the paths never reached (`hydo guide error-paths`). The declaration that a path must run, which
+  fails an exploration, is not built (open item 155).
+- **What it needs.** A property that an exploration breaks, not one run, and the error paths
+  on KVM and hvx.
 - **Where it came from.** A conversation with the user about static architecture rules, and the
   user's direction to observe the code that runs under faults.
 

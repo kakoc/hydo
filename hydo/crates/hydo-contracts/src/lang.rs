@@ -323,7 +323,12 @@ impl fmt::Display for LangError {
 
 /// The text after `// hydo:` on a line, when the line is a contract line.
 fn contract_text(line: &str) -> Option<&str> {
-    line.trim_start().strip_prefix("// hydo:").map(str::trim)
+    line.trim_start()
+        .strip_prefix("// hydo:")
+        .map(str::trim)
+        // `// hydo: error path` and `// hydo: no error path` mark error paths, not contracts
+        // (Milestone 306)
+        .filter(|t| crate::paths::decl_of(t).is_none())
 }
 
 /// The name a function declaration line declares: Rust `fn name`, Go `func name(` or

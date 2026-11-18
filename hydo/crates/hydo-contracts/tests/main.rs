@@ -10,5 +10,6 @@ mod eval;
 mod fuzz;
 mod keeps;
 mod lang;
+mod paths;
 mod types;
 mod values;
