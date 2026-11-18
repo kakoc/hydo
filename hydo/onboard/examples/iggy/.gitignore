@@ -1,0 +1,7 @@
+# hydo (hydo compose): the build cache, fetched images and run results
+.hydo/
+hydo/images/
+hydo-out/
+hydo/explore-*.yaml
+# the client's programs (sh client/build.sh)
+bin/

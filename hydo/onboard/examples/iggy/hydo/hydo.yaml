@@ -1,0 +1,108 @@
+# Apache Iggy server 0.10.0 (the newest release), one server from its official image as
+# ../docker-compose.yaml runs it, and the test client iggyc on Iggy's Go SDK v0.10.0 (../client).
+# RESULTS.md says what was hunted and found.
+#
+#   sh ../client/build.sh amd64          # bin/iggyc-amd64, the test client
+#   sh fetch-images.sh                   # the Iggy image by digest
+#   hydo build hydo.yaml                 # durability=persisted, the durable value
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --new-faults --storage-faults
+#
+# hydo-configs.yaml beside this file explores the durability setting from Iggy's default.
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The service below is the importer's,
+# without the bridge network (one service, and the client in the guest's own namespace), with the
+# server's data directory on a file system of its own (storage:, the target of G= and L=) and the
+# client's readiness check.
+format: 1
+name: iggy
+description: "Apache Iggy 0.10.0: acknowledged messages and consumer-group offsets under kills, pauses, power cuts, clock steps and disk faults, and a topic's message expiry under clock steps"
+hydo_version: "0.3"
+
+params:
+  durability: persisted   # replicated | persisted: the topics' durability and consumer_offset_durability (Iggy's default is replicated)
+  expiry_s: "20"          # the message expiry of the topic x, in seconds
+
+guest:
+  ram_mib: 2048
+  clock_start: 1794960000   # 2026-11-18 00:00 UTC, the day of the import
+  clock_after_cut: 60       # a real machine's clock runs on across a power cut: the recovery boot starts 60 s after the cut
+  outcomes_after_cut: true  # the checks skip operations whose request got no answer, also after a power cut
+
+data:
+  size_mib: 1536   # the data disk (the fault target); Iggy's directory is a file system of its own on it
+
+errors: true       # Iggy's ERROR lines become findings (hydo/known-errors.yaml)
+
+env:
+  IGGY_DURABILITY: "{{durability}}"   # the client creates the topics with it
+  IGGY_X_EXPIRY_S: "{{expiry_s}}"     # the client creates x with it, and the expiry check reads it
+
+root:
+  files:
+    - {src: ../bin/iggyc-amd64, dst: /bin/iggyc, mode: "0755"}
+
+services:
+  # Compose service iggy
+  # image apache/iggy:0.10.0 = docker.io/apache/iggy@sha256:176125a0580f526b0fee8b98ccf4ed5f77e243066183243d87282abce4851bf3
+  #   linux/amd64: sha256:df58f48fc1cc677355d9961f7bfccfab452acdd1aaee2577c6a69d4193b73fee
+  #   linux/arm64: sha256:79f12228059d89e315da3d546ab0b849c2d18f819bd8223cea252ba9e7d5560d
+  - name: iggy
+    image: {x86_64: images/apache-iggy-0.10.0-amd64.docker.tar, arm64: images/apache-iggy-0.10.0-arm64-oci}
+    image_ref: "apache/iggy:0.10.0"
+    env:
+      IGGY_PATH: "/app/local_data/data"   # a directory of its own: Iggy refuses a data directory that holds anything (the file system's lost+found)
+      IGGY_NODE_ADVERTISED_ADDRESS: "127.0.0.1"
+      IGGY_ROOT_USERNAME: "iggy"
+      IGGY_ROOT_PASSWORD: "iggy"
+      IGGY_TCP_ADDRESS: "127.0.0.1:8090"
+      IGGY_QUIC_ENABLED: "false"
+      IGGY_HTTP_ENABLED: "false"
+      IGGY_WEBSOCKET_ENABLED: "false"
+      IGGY_SHARDING_CPU_ALLOCATION: "1"
+      IGGY_SHARDING_PIN_CORES: "false"
+      IGGY_MEMORY_POOL_SIZE: "512 MiB"
+      IGGY_LOGGING_FILE_ENABLED: "false"
+      IGGY_DATA_MAINTENANCE_MESSAGES_INTERVAL: "5 s"
+      NO_COLOR: "1"
+    port: 8090
+    ready: "timeout 8 /bin/iggyc ready"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/iggy, size_mib: 1024}   # Iggy's local_data: metadata, the WAL, segments, offsets; the target of G= and L=
+    mounts:
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/iggy, dst: /app/local_data}
+
+# the stream s, the topic t (3 partitions) under the messages check, the topic x with the message
+# expiry, and the consumer group g on t, before the window under test
+provision: /bin/iggyc create
+
+# 60 rounds of 500 ms: 30 s of guest time
+workload:
+  steps: 60
+  timeout: 300    # also the drain's limit: it gives up after 230 s
+
+test:
+  parallel: 3
+  per_round: 2
+  round_ms: 500
+  command_timeout: 60
+  drain_timeout: 30
+
+checks:
+  - id: ig
+    type: messages
+    history: ig
+    msg: what Iggy promises its producers and consumer groups on a topic with durability persisted
+    final: /bin/iggyc drain
+    acknowledgement: explicit       # the group g stores its offsets
+    claims:
+      delivery: at-least-once       # every acknowledged message is read back (no-loss)
+      duplicates: forbidden         # a message is stored once: every delivery of it has one offset
+      order: {kind: log, scope: key}  # one message per offset of a partition, reads go up without skipping
+      fan_out: every-group          # the full read (-) and the group g both receive every message
+      after_ack: no-redelivery      # after an acknowledged offset store, g does not receive the messages again
+
+faults: [kill, pause, cut, clock, disk, corrupt, powerloss]

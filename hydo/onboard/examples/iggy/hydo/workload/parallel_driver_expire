@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo: timeout=20
+# 16 messages of 8 KiB to the topic x, whose segments are 1 MiB and whose messages expire after
+# IGGY_X_EXPIRY_S seconds. An acknowledged batch appends one line per message to $HYDO_ACKED
+# with the wall clock before the send and after the answer (checks/final_expiry reads them).
+exec /bin/iggyc expire "$HYDO_CMD_ID" "$HYDO_SEED"

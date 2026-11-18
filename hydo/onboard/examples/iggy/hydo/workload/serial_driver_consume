@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: timeout=30
+# One member of the consumer group g: it joins, reads up to 10..49 messages from its stored
+# offsets, stores the offset of the last message it read of each partition, and leaves. A serial
+# driver, so one member at a time: after an acknowledged store, no later member may receive those
+# messages again, and none may skip a message.
+exec /bin/iggyc consume "$HYDO_CMD_ID" "$HYDO_SEED"

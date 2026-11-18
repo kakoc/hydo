@@ -1,0 +1,30 @@
+# Apache Iggy server 0.10.0 as its repository's docker-compose.yml starts one server, with the
+# released image instead of a local build. The released image's working directory is /app, so
+# its data directory local_data is /app/local_data (the repository's own Dockerfile has none, and
+# its compose file mounts /local_data); here it is on a volume. The root user comes from the
+# environment. Only the TCP transport is on (the Go SDK speaks it); QUIC, HTTP and WebSocket
+# are off. One shard without pinning (the guest has one vCPU), a 512 MiB memory pool, logs to
+# stdout only, and the segment cleaner every 5 s instead of every minute, so that a short run sees
+# the message expiry work.
+services:
+  iggy:
+    image: apache/iggy:0.10.0
+    environment:
+      IGGY_NODE_ADVERTISED_ADDRESS: 127.0.0.1
+      IGGY_ROOT_USERNAME: iggy
+      IGGY_ROOT_PASSWORD: iggy
+      IGGY_TCP_ADDRESS: 0.0.0.0:8090
+      IGGY_QUIC_ENABLED: "false"
+      IGGY_HTTP_ENABLED: "false"
+      IGGY_WEBSOCKET_ENABLED: "false"
+      IGGY_SHARDING_CPU_ALLOCATION: "1"
+      IGGY_SHARDING_PIN_CORES: "false"
+      IGGY_MEMORY_POOL_SIZE: 512 MiB
+      IGGY_LOGGING_FILE_ENABLED: "false"
+      IGGY_DATA_MAINTENANCE_MESSAGES_INTERVAL: 5 s
+    ports:
+      - "8090:8090"
+    volumes:
+      - iggy-data:/app/local_data
+volumes:
+  iggy-data:

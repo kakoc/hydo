@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo-msg: the topic x deletes no acknowledged message before its expiry, and keeps no sealed segment long after it
+# The check waits up to 40 s for a late cleaner pass (test.command_timeout limits it).
+exec /bin/iggyc check-expiry

@@ -291,7 +291,9 @@ Three findings hold for every type of system:
 - **What it misses.** NATS's 3.3 and 3.5 need faults in a narrow order on chosen nodes, and the
   explorer did not draw them; they were written by hand. `G=` picks its file and offset from its
   seed, so one token damages other files on another image. The explorer never draws
-  `L=...:strict`.
+  `L=...:strict`. On one Iggy server, 7 of 20 schedules damaged a segment, WAL or frontier file
+  that Iggy detects. Each fenced its partition, as Iggy documents, and each ended in an ERROR
+  because the drain could not read that partition. None lost data silently.
 - **Cost.** A file system per service. The explorer shrinks detected damage too. In SurrealDB the
   shrink of seed 3 took an hour. hvx and the Mac engine ran it.
 
@@ -353,7 +355,11 @@ Three findings hold for every type of system:
   30 s to a year broke nothing in 50 blind schedules. In Restate it found 8 places that read
   `SystemTime::now`, and none was the finding's: the scheduler reads the wall clock through the
   project's own `WallClock`. Its first place, a retry's `next_retry_at`, is only reported. A
-  step of a year lets retention delete the evidence (Redpanda seed 25, River's cleaner).
+  step of a year lets retention delete the evidence (Redpanda seed 25, River's cleaner). In Iggy
+  the audit found one place, in a connector: the server reads the wall clock through its own
+  `IggyTimestamp`. A step back of a day there stopped a partition's message expiry for a day,
+  because the cleaner deletes the oldest segments first by timestamp. That follows the
+  documented rule, so it is a clock effect and no bug.
 - **Cost.** The shrinker spends hours on clock steps; stop an exploration once its failures are
   understood. It runs on every engine.
 
@@ -659,6 +665,12 @@ Three findings hold for every type of system:
   - NATS 2.12.1's `sync_interval` (the same seeds): `always` passed all 20. The
     default of two minutes and 10 s lost acknowledged messages in all 5 power-cut schedules
     (Jepsen's 3.4), labeled by design. Seeds 1-6 drew no power cut, so start with 20 seeds.
+  - Iggy 0.10.0's topic option `durability` (hvx, seeds 1-12, kills and power cuts):
+    `persisted` passed all 12 schedules. Iggy's default `replicated` lost acknowledged messages
+    in 7. A kill of the server alone did it, shrunk to `K=iggy@15+1`, and so did a power cut
+    alone, `C=30`. The table labeled both the documented trade-off. Iggy's README says that
+    `replicated` acknowledges before the copy reaches the disk, and its issue 4631 measured the
+    loss after a `kill -9`.
   - Before it, each such finding came from one setting tried by hand. Examples are the write
     caching of Redpanda, the SQLite mode `synchronous=NORMAL` of Vikunja, and the durability
     default of libSQL.

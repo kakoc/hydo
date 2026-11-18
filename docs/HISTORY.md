@@ -17359,3 +17359,78 @@ of a missing notes file. Run 44380177675 then ran the example's 14 schedules twi
 7763 and two Xeon 6975P-C hosts. Every schedule gave the Mac engine's verdict and one fingerprint
 over its two runs; the two Intel hosts agree (for example the careless store's torn write,
 `8442b56bf4c79e4d`, and its misdirected write, `60696e6e8dc9d09a`), and AMD has its own values.
+
+### Milestone 314 (tentative number) - DONE (Apache Iggy server 0.10.0, one server from its image and a client on its Go SDK v0.10.0, on hvx; with `durability: persisted` no acknowledged message was lost, stored twice or read out of order, no stored group offset was lost, and no message of the expiring topic was gone before its time, in 112 blind schedules and 30 directed runs; with the default `replicated` a kill alone loses acknowledged messages, which `hydo explore --configs` labels the documented trade-off (known as issue #4631); a backward clock step stops a partition's message expiry for the step's length, a clock effect by design; no new bug; nothing recorded moved; 2026-11-18)
+
+**The example.** `hydo/onboard/examples/iggy` (RESULTS.md) runs one Iggy server from its official
+image `apache/iggy:0.10.0` (index `sha256:176125a0…`), imported with `hydo compose` from a
+one-service Compose file. Only TCP is on, with one shard, a 512 MiB memory pool, and the segment
+cleaner every 5 s. Its data directory is a file system of its own (`storage:`). Iggy refuses a
+data directory that holds anything it did not write, so `IGGY_PATH` names a folder inside the
+mount, beside the file system's `lost+found`. The client `iggyc` is one static Go program on
+Iggy's Go SDK v0.10.0, built on the bare-metal machine; the Rust SDK needs Rust 1.95. `provision:`
+creates the topic `t` (3 partitions), the topic `x` (1 partition, an expiry of 20 s, 1 MiB
+segments) and the consumer group `g`. Both topics take the build parameter `durability`, by
+default `persisted` in `hydo.yaml`. Producers send batches with unique message ids to `t`; one
+group member at a time joins `g`, reads with the SDK's partition reader, stores its offsets by
+hand and leaves; others send 128 KiB batches to `x`, and a probe reads `x` during the run.
+
+**The checks.** A messages check over `t` claims at-least-once delivery, no duplicates, the log's
+order per partition, delivery to both the full read and `g` (`fan_out: every-group`), and no
+redelivery after an acknowledged offset store. Its drain reads every partition from offset 0, then
+`g` from its stored offsets. The expiry check and the probe judge `x` by Iggy's rule
+(`core/partitions/src/segment.rs`, `is_expired`). A message is gone early if it was sent less than
+the expiry before the latest wall clock that the run showed. A sealed segment of the leading run of
+expired segments must not stay 30 s past its expiry. The latest clock is the uptime plus the
+largest offset of the wall clock from the uptime that a command recorded, so a step back never
+makes a deletion look early. Two clean runs give one fingerprint on each image, `a23c4e632bba0742`
+on the final one.
+
+**What held.** With `persisted`, under kills, pauses, power cuts at steps, the server's power loss,
+clock steps of 30 s to 30 days both ways, and on the image with the client's console events, power
+cuts and kills at the moment of an acknowledged send or offset store (`A=ig.send_acked`,
+`A=ig.commit_acked`, 25 schedules, 10 with `kill-now-iggy`). 9 power cuts at disk flushes
+`cf=50` to `cf=1500`, and 6 kills at 0 to 3 ms after an acknowledgement, held too. Exploration 1
+(process, storage faults, seeds 1-20) had 7 ERRORs, each a damaged file that Iggy detects and
+fences. Exploration 2 (process, seeds 1-40) and exploration 3 (process, `--more-faults`,
+reactions, `--kill-now`, seeds 41-80) had none. Exploration 4 (swarm, seeds 81-120) stopped after
+24 schedules, when the host's out-of-memory killer ended one of its engines; its 11 schedules
+with disk I/O errors or a lying disk failed, the disk's loss, and the other 13 passed.
+
+**The setting.** `hydo/hydo-configs.yaml` explores `durability` from Iggy's default: `hydo explore
+--configs`, seeds 1-12, kills and power cuts. `replicated` failed 7 of 12, shrunk to `C=30` and to
+`K=iggy@15+1`; `persisted` passed 12. The table labels both failures the documented trade-off
+(the server's README, "Replication factor": `replicated` "acknowledges a write before that copy
+reaches disk"). Issue #4631 (closed) has the cause, the truncation to the last published WAL
+frontier at recovery, and a comment that measured the loss after one `kill -9` of a single node.
+After the kill the next offset was 65537, the next block of the offset reservation lease, so no
+offset held two messages.
+
+**The clock effect.** The cleaner walks a partition's sealed segments from the oldest and stops at
+the first one that has not expired (`leading_expired_end`), by its newest message's timestamp, the
+wall clock at the append (`IggyTimestamp::now()`, `SystemTime`). After a step back, the oldest
+segment's timestamps lie ahead of the clock, so `disk=none | run T=15:-86400` kept all 4 sealed
+segments, 512 messages, to the end; without the step 512 of 544 were deleted. The code and the
+documentation delete the oldest sealed segments by timestamp, so this is by design. No issue
+names it; #4650 (an idle partition's active segment never seals) is another cause. Not reported.
+
+Retro: Apache Iggy server 0.10.0, hvx, 2026-11-18
+- Time to the first clean run: 35 minutes of wall time (20 of them scouting), none of it waiting
+  for machines.
+- Schedules run before the first finding: no new finding. The configuration run's first schedule
+  showed the documented loss of `replicated`. 3 ERRORs of exploration 1 were the expiry check's
+  own mistake, a wait of 60 s inside a command timeout of 60 s; its rule for kept segments was too
+  strict after a step back, and both were rewritten before exploration 2.
+- The findings: 0 new, 1 known and documented (the loss with `replicated`, #4631), 1 clock effect
+  by design (the expiry after a step back), 1 documented (detected damage fences a partition).
+- What took the most time: the expiry check (40 minutes: a rule for the latest clock that a step
+  back cannot fool, and the cleaner's leading run); the configuration exploration's shrinks (14
+  minutes); the setup on a shared machine (scripts for one remote job at a time, 15 minutes).
+- What hydo lacked: a check cannot read the guest's clock steps or the clock at the moment of an
+  event (open item 159); a new `storage:` file system holds `lost+found`, which Iggy refuses (a row
+  of the playbook's setup problems).
+- Strategies: `hydo explore --configs` showed the documented loss of the default at the first
+  seeds; the entries "Settings that trade durability", "Clock steps and the clock audit" and "One
+  node's storage faults" of `hydo guide strategies` are updated.
+
+**What is left.** Open item 159.

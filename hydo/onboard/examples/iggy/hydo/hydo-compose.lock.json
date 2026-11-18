@@ -1,0 +1,57 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "apache/iggy:0.10.0": {
+   "index_digest": "sha256:176125a0580f526b0fee8b98ccf4ed5f77e243066183243d87282abce4851bf3",
+   "name": "apache/iggy",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "iggy-server"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:df58f48fc1cc677355d9961f7bfccfab452acdd1aaee2577c6a69d4193b73fee",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "iggy-server"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:79f12228059d89e315da3d546ab0b849c2d18f819bd8223cea252ba9e7d5560d",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "apache/iggy:0.10.0",
+   "registry": "docker.io",
+   "repo": "apache/iggy",
+   "tag": "0.10.0"
+  }
+ }
+}

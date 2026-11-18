@@ -529,6 +529,7 @@ and the fix that worked.
 
 | problem | how it showed | fix | example |
 |---|---|---|---|
+| a service refuses a data directory that holds files it did not write | Iggy stopped at start with `storage at local_data does not match this build's storage format`: the new file system of `storage:` holds `lost+found` | point the service's data path at a folder inside the mount (`IGGY_PATH=/app/local_data/data`) | Iggy |
 | a program writes into the image's read-only root | Celery's beat stopped at start with `Read-only file system`, and the service counted as ready | point the file at `/run` or the data disk, or set `writable: true` on the image service | Saleor, Medusa |
 | the import misses links through a one-shot job or a service without `depends_on` | the explorer drew no network fault between a worker and its database | name the dependencies in the service's `depends_on` by hand | Blnk, River, Hatchet |
 | the import takes a port from the image's `EXPOSE` | a readiness check that never passes, and network faults aimed at a port without traffic | set the real port and a readiness check such as `celery inspect ping` | Saleor, Hatchet |

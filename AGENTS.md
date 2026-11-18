@@ -700,6 +700,24 @@ back), not posted yet:
 Durable timers that follow the wall clock are documented. The explorer reads an image's manifest
 with its parameter values now, so a `guest:` key can name a parameter.
 
+**Apache Iggy (M314, tentative number).** Iggy server 0.10.0 runs as one server from its image in
+`hydo/onboard/examples/iggy` (RESULTS.md), imported with `hydo compose`, with its data on a file
+system of its own, on hvx. A client on Iggy's Go SDK v0.10.0 sends messages with unique ids to a
+topic of 3 partitions. A consumer group reads them with a partition reader and stores its offsets
+by hand. A messages check judges no loss, no duplicate, the log's order, both readers'
+deliveries, and no redelivery after an acknowledged offset store. A check of a second topic
+judges its message expiry: no message gone before its time, and no expired leading segment kept.
+With the durable setting `durability: persisted`, no promise broke in 112 blind schedules and 30
+directed runs. The faults were kills, pauses, power cuts at steps, at the client's
+acknowledgements and at disk flushes, the server's power loss, damaged files, and clock steps.
+No new bug:
+- With Iggy's default `replicated`, `hydo explore --configs` lost acknowledged messages after a
+  kill alone (`K=iggy@15+1`) and after a power cut alone. It labeled both the documented
+  trade-off (Iggy's README; issue #4631).
+- A clock effect: after a backward step, the oldest segment's timestamps lie ahead of the clock.
+  The cleaner stops there, so a partition keeps all its data for the step's length.
+- Detected damage of a segment, WAL, or frontier file fences the partition, as documented.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -2454,6 +2472,22 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       only, because no sharded run watches them: only the Mac engine does. The CI page does not
       show them. A declaration that a place must run in an exploration, which fails it, is not
       built.
+159. The Iggy example (M314, tentative number). What is left:
+    - The example runs one server. Iggy also replicates partitions over a cluster with its own
+      consensus, and no cluster of three nodes ran under the cluster faults of `groups:`.
+    - The example ran on hvx only. The Mac engine and KVM did not run it.
+    - The expiry check needs the wall clock at the moment of each deletion, which no check can
+      read. The client records the clock's offset from the uptime at every send and probe, and
+      the check takes the latest clock that a command saw. A step forward that no command saw
+      before a deletion would make a deletion on time look early; the check allows 2 s for it.
+    - The expiry probe cannot tell a lost message of the expiring topic from one deleted early.
+      With `replicated` it reports the loss as an early deletion.
+    - Timestamp polls after a backward clock step were not tested: a partition's message
+      timestamps then go down.
+    - The client is on the Go SDK: the Rust SDK needs Rust 1.95, and the bare-metal machine has
+      an older Rust.
+    - The swarm exploration ran 24 of its 40 schedules: the host's out-of-memory killer ended one
+      of its engines on the shared machine. Seeds 105-120 did not run.
 160. Faults of the disk's blocks (M313, tentative number; `docs/design/block-faults.md`). What is
     left:
     - KVM ran the example's 14 schedules twice in a one-off workflow (run 44380177675). Each gave
@@ -3329,6 +3363,12 @@ build machine, before 2026-10-13.
   `G=<svc>@<at>:bad|rot` under a file), and a request without an answer (`hang=`), with
   `hydo explore --block-faults`. Each broke the careless store of the `disk-faults` example and
   not the careful one, one fingerprint per schedule. hvx refuses them. Nothing recorded moved
+- M314 (tentative number): the onboarding of Apache Iggy server 0.10.0 on hvx: one server, and
+  a client on the Go SDK. With `durability: persisted`, no acknowledged message was lost, stored
+  twice or read out of order, and no stored group offset was lost, in 112 blind schedules. With
+  the default `replicated`, a kill alone loses acknowledged messages, which `hydo explore
+  --configs` labels the documented trade-off. A backward clock step stops a partition's message
+  expiry for the step's length, a clock effect by design. Nothing new. Nothing recorded moved
 
 ## Where to look
 

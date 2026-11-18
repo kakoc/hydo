@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo: timeout=20
+# One batch of 1 to 3 messages to the partition of t that the seed picks. The client records the
+# send in the history ig: ok with the batch's base offset, or info when no certain answer came
+# (the SDK's retry may still have stored it).
+exec /bin/iggyc produce "$HYDO_CMD_ID" "$HYDO_SEED"

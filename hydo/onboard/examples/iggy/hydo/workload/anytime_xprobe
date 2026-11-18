@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo: timeout=20
+# Read the topic x during the run. Exit 100 (a violation) when an acknowledged message of x is gone
+# before its expiry, judged against the latest wall clock the commands recorded (iggyc judgeEarly).
+# The server being down is no judgment (exit 1).
+exec /bin/iggyc xprobe
