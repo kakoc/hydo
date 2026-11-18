@@ -2278,9 +2278,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       example.
 
 153. Explorations on many KVM runners (M304, tentative number). What is left:
-    - `ci/remote-explore.sh` and the workflow's `workflow_dispatch` never ran. GitHub starts a
-      dispatch only for a workflow on the default branch. The proof called `explore.yml` through
-      `workflow_call` from the one-off workflow of the branch `tmp-explore-test`.
+    - `ci/remote-explore.sh` ran once from `main` (2026-11-18): the Redis example's seeds 1-40
+      in 8 parts gave 8 failures in 3 problems, as one runner does. The merged report's "Next"
+      lines print the runner's paths (`/mnt/w/merged`), not the downloaded folder.
     - Each part shrinks its own failures, so a key that several parts find is shrunk in each of
       them and only the earliest shrink is kept. The same holds for the shrinks of new error
       kinds. In Redpanda's part of seeds 27 and 28 such shrinks took most of its 9,469 s. One
