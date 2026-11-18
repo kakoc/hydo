@@ -1,0 +1,1 @@
+{"query": "SELECT i.target_service_key AS key, i.id, i.status, i.created_at, i.modified_at, e.stage, e.status AS vq_status, e.next_at, e.has_lock FROM sys_invocation i LEFT JOIN sys_vqueue_entry_status e ON e.entry_id = i.id WHERE i.target_handler_name = 'run' AND i.target_service_name = 'Job' ORDER BY i.created_at"}

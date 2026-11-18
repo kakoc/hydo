@@ -660,8 +660,9 @@ Restate's Rust SDK 0.13.0, one static musl program. Each journaled step appends 
 effects file, so the rules see a step that runs again. A messages check and four rules judge
 calls and sends with idempotency keys, delayed sends, durable sleeps, adds to virtual objects,
 awakeables, and workflow promises. They held under kills, pauses, network faults, and power cuts at
-steps, at events, and at 49 disk flushes on hvx. One new candidate, found blind on the Mac engine
-and confirmed on hvx, not posted:
+steps, at events, and at 49 disk flushes on hvx. One new candidate, found blind on the Mac engine,
+confirmed on hvx, and reproduced with Docker (`native/`, a shim that sets the server's wall clock
+back), not posted yet:
 - After a backward clock step, a restart of the server holds accepted invocations until the wall
   clock reaches their creation time. The vqueue scheduler starts an inbox entry only when its
   `run_at` is not later than the wall clock, and a failover keeps the creation time as `run_at`.

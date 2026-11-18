@@ -1,5 +1,5 @@
 #!/bin/sh
-# Build rsv (service/: the Restate deployment on restate-sdk 0.12.1 and the test client) as static
+# Build rsv (service/: the Restate deployment on restate-sdk 0.13.0 and the test client) as static
 # musl programs: bin/rsv-amd64 (hvx and KVM) and bin/rsv-arm64 (the Mac engine). The Restate
 # server itself comes from its official image (hydo/fetch-images.sh).
 # Needs Rust 1.90.0 with the targets x86_64-unknown-linux-musl and aarch64-unknown-linux-musl

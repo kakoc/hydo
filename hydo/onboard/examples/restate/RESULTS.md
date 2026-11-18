@@ -148,7 +148,9 @@ The final arm64 image (`sha256(explore-ob-restate-arm64.cpio.gz)=f0b30e75…`) g
 
 The regression `hydo/regressions/held-after-a-clock-step-and-a-restart.schedule` is finding 1's
 minimal schedule; it expects a violation. `hydo repro --regressions` on the final image gives it
-(`PASS ... expect violation`, `fp=116e4f494c03df6b`, 5 jobs never completed). hydo warns that
+(`PASS ... expect violation`, 5 jobs never completed). On the image built from `main` at
+`1442a6d5` (the fingerprint epoch 4) `hydo run` of its schedule gives `fp=8b211024ba849447` on
+every run; the images before gave other values. hydo warns that
 its `W=` is in the seed form, so the composition comes from the current command list; a change
 of the commands changes the run.
 
@@ -243,8 +245,28 @@ run "exactly once regardless of failures". A run without the restart was not sho
 because new records after the step get the new time; an invocation that waits in an inbox, such
 as one queued behind a virtual object's lock, was not tested.
 
-Native reproduction: none. The cause is plain in the code above, and a step of a Docker host's
-clock is a change of the machine, not of the container (the playbook's rule). The regression is
+Native reproduction: with Docker, in `native/`. The server runs from the official image
+`restate:1.8.1-hotfix.2`, with an `LD_PRELOAD` shim (`native/shiftback.c`) that makes
+`clock_gettime(CLOCK_REALTIME)`, `gettimeofday` and `time` read `SHIFT_BACK_SECS` seconds earlier.
+The monotonic clocks are unchanged. The shim sets the clock of one process, not of the Docker
+host. libfaketime made `restate-server` hang at start. `native/Dockerfile` adds the shim and the
+example's `rsv` (`bin/rsv-arm64` or `bin/rsv-amd64` of `build.sh`, copied as `rsv`) to the image.
+The steps, run by hand with `docker` and `curl` on a Mac (Colima, arm64):
+
+1. Start the deployment (`rsv serve`) and the server, with the server's environment of
+   `docker-compose.yaml` and a volume for its data, and register the deployment.
+2. `docker pause` the deployment, so that the next invocations stay running in the invoker.
+3. Send `POST /Job/k1/run/send` twice and `POST /Job/k2/run/send` once; each answers `202`.
+4. `docker kill` the server, start it again on the same volume with
+   `LD_PRELOAD=/usr/local/lib/shiftback.so SHIFT_BACK_SECS=300`, and `docker unpause` the
+   deployment.
+5. Query the admin API with `native/q.json` (`POST :9070/query`).
+
+50 s and 3 minutes after the restart, every invocation was `ready` or `pending` in the inbox,
+`yielded` with `next_at` equal to its creation time and `has_lock: true`, and the server logged
+no warning. They ran exactly 300 s after their creation. The second invocation of `k1` ran right
+after the first, so it waited behind the lock for the same time. The same restart without the
+shim ran all three 0.25 s after the server's start. Each was run once. The regression is
 `hydo/regressions/held-after-a-clock-step-and-a-restart.schedule`.
 
 ### Documented: durable timers follow the wall clock
