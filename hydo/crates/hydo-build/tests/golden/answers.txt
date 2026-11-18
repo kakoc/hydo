@@ -575,9 +575,9 @@ R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/n8n-postgres/docker
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/n8n-postgres/lock.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
-R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted/docker-compose.images.yml --set version=zz --print-shell	run	1	""	"hydo-build: docker-compose.images.yml:2: unexpected indentation\n"
+R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted/docker-compose.images.yml --set version=zz --print-shell	run	1	""	"hydo-build: docker-compose.images.yml:30: unexpected indentation\n"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
-R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted/docker-compose.yml --set version=zz --print-shell	run	1	""	"hydo-build: docker-compose.yml:2: unexpected indentation\n"
+R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted/docker-compose.yml --set version=zz --print-shell	run	1	""	"hydo-build: docker-compose.yml:30: unexpected indentation\n"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted/lock.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
@@ -745,7 +745,7 @@ R	^	<root>/hydo/onboard/examples/glibc-cache/hydo-nocache.yaml --set version=zz 
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/glibc-cache/hydo.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
-R	^	<root>/hydo/onboard/examples/hatchet/docker-compose.yaml --set version=zz --print-shell	run	1	""	"hydo-build: docker-compose.yaml:7: unexpected indentation\n"
+R	^	<root>/hydo/onboard/examples/hatchet/docker-compose.yaml --set version=zz --print-shell	run	1	""	"hydo-build: docker-compose.yaml:59: unexpected indentation\n"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/hatchet/hydo/hydo-compose.lock.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
@@ -765,7 +765,7 @@ R	^	<root>/hydo/onboard/examples/k3s-lease/hydo.yaml --set version=zz --print-sh
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/k3s-lease/manifests/elect.yaml --set version=zz --print-shell	run	1	""	"hydo-build: elect.yaml:9: expected 'key: value', got '---'\n"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
-R	^	<root>/hydo/onboard/examples/lago/docker-compose.yaml --set version=zz --print-shell	run	1	""	"hydo-build: docker-compose.yaml:15: unexpected indentation\n"
+R	^	<root>/hydo/onboard/examples/lago/docker-compose.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/lago/hydo/hydo-compose.lock.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
@@ -775,7 +775,7 @@ R	^	<root>/hydo/onboard/examples/lago/hydo/hydo.yaml --set version=zz --print-sh
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/lago/native/compose.hold.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
-R	^	<root>/hydo/onboard/examples/lago/native/compose.yaml --set version=zz --print-shell	run	1	""	"hydo-build: compose.yaml:19: unexpected indentation\n"
+R	^	<root>/hydo/onboard/examples/lago/native/compose.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/libsql-replica/docker-compose.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
@@ -899,7 +899,7 @@ R	^	<root>/hydo/onboard/examples/redpanda/conf/n2.yaml --set version=zz --print-
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/redpanda/conf/n3.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
-R	^	<root>/hydo/onboard/examples/redpanda/docker-compose.yaml --set version=zz --print-shell	run	1	""	"hydo-build: docker-compose.yaml:5: unexpected indentation\n"
+R	^	<root>/hydo/onboard/examples/redpanda/docker-compose.yaml --set version=zz --print-shell	run	1	""	"hydo-build: docker-compose.yaml:7: unterminated [\n"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/redpanda/hydo/hydo.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#5ac060810fddcc48"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
@@ -921,7 +921,7 @@ R	^	<root>/hydo/onboard/examples/river/hydo/hydo.yaml --set version=zz --print-s
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/rust-kv/hydo.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
-R	^	<root>/hydo/onboard/examples/saleor/docker-compose.yaml --set version=zz --print-shell	run	1	""	"hydo-build: docker-compose.yaml:19: unexpected indentation\n"
+R	^	<root>/hydo/onboard/examples/saleor/docker-compose.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/saleor/hydo/hydo-compose.lock.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
@@ -10651,13 +10651,13 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted/docker-compose.images.yml --arch x86_64 --check	run	1	""	"hydo-build: docker-compose.images.yml:2: unexpected indentation\n"
+R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted/docker-compose.images.yml --arch x86_64 --check	run	1	""	"hydo-build: docker-compose.images.yml:30: unexpected indentation\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted/docker-compose.yml --arch x86_64 --check	run	1	""	"hydo-build: docker-compose.yml:2: unexpected indentation\n"
+R	^	<root>/hydo/crates/hydo-compose/tests/fixtures/realworld/sentry-self-hosted/docker-compose.yml --arch x86_64 --check	run	1	""	"hydo-build: docker-compose.yml:30: unexpected indentation\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -11161,7 +11161,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	"hydo-build: guest.cpu: v3 (AVX/AVX2) is an x86_64 option; --…#b2d519f950a5ac0e"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<root>/hydo/onboard/examples/hatchet/docker-compose.yaml --arch x86_64 --check	run	1	""	"hydo-build: docker-compose.yaml:7: unexpected indentation\n"
+R	^	<root>/hydo/onboard/examples/hatchet/docker-compose.yaml --arch x86_64 --check	run	1	""	"hydo-build: docker-compose.yaml:59: unexpected indentation\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -11221,7 +11221,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<root>/hydo/onboard/examples/lago/docker-compose.yaml --arch x86_64 --check	run	1	""	"hydo-build: docker-compose.yaml:15: unexpected indentation\n"
+R	^	<root>/hydo/onboard/examples/lago/docker-compose.yaml --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) volumes (known: brow…#ac31ce0aa6f6140a"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -11251,7 +11251,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<root>/hydo/onboard/examples/lago/native/compose.yaml --arch x86_64 --check	run	1	""	"hydo-build: compose.yaml:19: unexpected indentation\n"
+R	^	<root>/hydo/onboard/examples/lago/native/compose.yaml --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) volumes (known: brow…#ac31ce0aa6f6140a"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -11623,7 +11623,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<root>/hydo/onboard/examples/redpanda/docker-compose.yaml --arch x86_64 --check	run	1	""	"hydo-build: docker-compose.yaml:5: unexpected indentation\n"
+R	^	<root>/hydo/onboard/examples/redpanda/docker-compose.yaml --arch x86_64 --check	run	1	""	"hydo-build: docker-compose.yaml:7: unterminated [\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -11689,7 +11689,7 @@ R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	^ --arch arm64 --check	run	0	#e2e1bc44ab406890/261	^
 R	^	^ --arch arm64 --print-shell	run	0	#ce21dafea4398355/1287	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<root>/hydo/onboard/examples/saleor/docker-compose.yaml --arch x86_64 --check	run	1	""	"hydo-build: docker-compose.yaml:19: unexpected indentation\n"
+R	^	<root>/hydo/onboard/examples/saleor/docker-compose.yaml --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) volumes (known: brow…#ac31ce0aa6f6140a"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
