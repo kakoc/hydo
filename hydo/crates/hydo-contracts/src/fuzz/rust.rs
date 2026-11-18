@@ -217,6 +217,9 @@ pub struct Sig {
     pub ret: Option<TyAst>,
     /// The `{` of the body.
     pub body_open: usize,
+    /// Whether the function has a body (a trait's required method has none; `body_open` is
+    /// then its `;`).
+    pub has_body: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -238,7 +241,8 @@ pub fn signature(text: &str, m: &[u8], decl: usize) -> Result<Sig, String> {
             b'(' | b'[' => p += 1,
             b')' | b']' => p -= 1,
             b'{' if p == 0 => break j,
-            b';' if p == 0 => return Err("the function has no body (a declaration)".into()),
+            // a declaration without a body: a trait's required method (Milestone 307)
+            b';' if p == 0 => break j,
             _ => {}
         }
         j += 1;
@@ -330,6 +334,7 @@ pub fn signature(text: &str, m: &[u8], decl: usize) -> Result<Sig, String> {
             _ => None,
         },
         body_open: body,
+        has_body: m[body] == b'{',
     })
 }
 
@@ -548,6 +553,40 @@ pub struct StructDef {
     pub module: Vec<String>,
 }
 
+/// How a variant of an enumeration is written: `A`, `A(u8, u8)` or `A { x: u8 }`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VKind {
+    Unit,
+    Tuple,
+    Named,
+}
+
+/// A variant of an enumeration of the crate, as written.
+#[derive(Clone, Debug)]
+pub struct VariantDef {
+    pub name: String,
+    pub kind: VKind,
+    /// The fields: `0`, `1`, ... for a tuple variant.
+    pub fields: Vec<(String, TyAst)>,
+}
+
+/// An enumeration of the crate (Milestone 307).
+#[derive(Clone, Debug)]
+pub struct EnumDef {
+    pub name: String,
+    /// The type parameters (`T` of `Status<T>`), without lifetimes.
+    pub params: Vec<String>,
+    pub variants: Vec<VariantDef>,
+    pub module: Vec<String>,
+}
+
+/// A `build` line (Milestone 307): the constructor's path and its arguments.
+#[derive(Clone, Debug)]
+pub struct BuildDef {
+    pub ctor: String,
+    pub args: Vec<(String, TyAst)>,
+}
+
 /// The structures and type aliases of a crate's sources.
 #[derive(Clone, Debug, Default)]
 pub struct Items {
@@ -555,6 +594,101 @@ pub struct Items {
     pub aliases: BTreeMap<String, TyAst>,
     /// `const N: usize = 64;`: the crate's integer constants, for array lengths.
     pub consts: BTreeMap<String, usize>,
+    /// The enumerations, by name (Milestone 307).
+    pub enums: BTreeMap<String, EnumDef>,
+    /// The type aliases with type parameters (`type Result<T> = ...`), by name: the parameters
+    /// and the type (Milestone 307).
+    pub generic_aliases: BTreeMap<String, (Vec<String>, TyAst)>,
+    /// The `build` lines of the crate's contracts, by the type's name (Milestone 307).
+    pub builds: BTreeMap<String, BuildDef>,
+    /// The `read` lines of the crate's contracts, by the type's name: the type to read a value
+    /// as, and the method that gives it (Milestone 307).
+    pub reads: BTreeMap<String, (TyAst, String)>,
+}
+
+/// The name a `build` or `read` line keys its type by: the last segment of its path, without
+/// type arguments (`Bytes` for `bytes::Bytes`).
+pub fn type_key(t: &str) -> String {
+    let t = t.split('<').next().unwrap_or(t).trim();
+    t.rsplit("::").next().unwrap_or(t).trim().to_string()
+}
+
+/// The names of the type parameters in a generics list's inside (`T: Copy, 'a, U`), lifetimes
+/// left out; a const parameter keeps its `const`.
+pub fn generic_names(inner: &str) -> Vec<String> {
+    split_top(inner, ',')
+        .iter()
+        .map(|g| g.trim())
+        .filter(|g| !g.is_empty() && !g.starts_with('\''))
+        .map(|g| {
+            if g.starts_with("const ") {
+                return g.split(':').next().unwrap_or(g).trim().to_string();
+            }
+            g.split([':', '=']).next().unwrap_or(g).trim().to_string()
+        })
+        .collect()
+}
+
+/// The fields of a structure's or a variant's body, with whether each is `pub`; `None` when a
+/// field does not parse.
+#[allow(clippy::type_complexity)]
+fn parse_fields(body: &str, tuple: bool) -> Option<(Vec<(String, TyAst)>, Vec<bool>)> {
+    let mut fields = Vec::new();
+    let mut public = Vec::new();
+    for (k, f) in split_top(body, ',').into_iter().enumerate() {
+        let f = strip_attrs(f.trim());
+        if f.is_empty() {
+            continue;
+        }
+        let is_pub = (f.starts_with("pub ") || f.starts_with("pub("))
+            && !f.replace(' ', "").starts_with("pub(self)");
+        let f = strip_vis(&f);
+        let (fname, fty) = if tuple {
+            (k.to_string(), f.as_str())
+        } else {
+            let c = top_colon(&f)?;
+            (f[..c].trim().to_string(), f[c + 1..].trim())
+        };
+        fields.push((fname, parse_ty(fty).ok()?));
+        public.push(is_pub);
+    }
+    Some((fields, public))
+}
+
+/// The variants of an enumeration's body.
+fn parse_variants(body: &str) -> Option<Vec<VariantDef>> {
+    let mut out = Vec::new();
+    for v in split_top(body, ',') {
+        let v = strip_attrs(v.trim());
+        if v.is_empty() {
+            continue;
+        }
+        let name: String = v
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        if name.is_empty() {
+            return None;
+        }
+        let rest = v[name.len()..].trim();
+        let (kind, fields) = if rest.is_empty() || rest.starts_with('=') {
+            (VKind::Unit, vec![])
+        } else if rest.starts_with('(') && rest.ends_with(')') {
+            (
+                VKind::Tuple,
+                parse_fields(&rest[1..rest.len() - 1], true)?.0,
+            )
+        } else if rest.starts_with('{') && rest.ends_with('}') {
+            (
+                VKind::Named,
+                parse_fields(&rest[1..rest.len() - 1], false)?.0,
+            )
+        } else {
+            return None;
+        };
+        out.push(VariantDef { name, kind, fields });
+    }
+    Some(out)
 }
 
 /// Add the structures and type aliases of one source file of the crate's root module.
@@ -639,6 +773,51 @@ pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
             }
         }
     }
+    // `enum Name<T> { A, B(u8), C { x: u8 } }` (Milestone 307)
+    let mut from = 0;
+    while let Some(p) = ms[from..].find("enum ") {
+        let at = from + p;
+        from = at + 5;
+        if at > 0 && id(b[at - 1]) {
+            continue;
+        }
+        let rest = ms[at + 5..].trim_start();
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        if name.is_empty() {
+            continue;
+        }
+        let mut after = rest[name.len()..].trim_start();
+        let mut params = Vec::new();
+        if after.starts_with('<') {
+            let Some(e) = matching(after, 0, '<', '>') else {
+                continue;
+            };
+            params = generic_names(&after[1..e]);
+            after = after[e + 1..].trim_start();
+        }
+        let Some(o) = after.find('{') else { continue };
+        if !after[..o].trim().is_empty() && find_word(after, "where") != Some(0) {
+            continue;
+        }
+        let after = &after[o..];
+        let Some(e) = matching(after, 0, '{', '}') else {
+            continue;
+        };
+        let Some(variants) = parse_variants(&after[1..e]) else {
+            continue;
+        };
+        let mut module = module.to_vec();
+        module.extend(inline_modules(&m, at));
+        items.enums.entry(name.clone()).or_insert(EnumDef {
+            name,
+            params,
+            variants,
+            module,
+        });
+    }
     for kw in ["struct", "type"] {
         let mut from = 0;
         while let Some(p) = ms[from..].find(kw) {
@@ -658,6 +837,23 @@ pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
             }
             let after = rest.trim_start()[name.len()..].trim_start();
             if kw == "type" {
+                // `type Result<T> = result::Result<Status<T>, Error>;` (Milestone 307)
+                if after.starts_with('<') {
+                    let Some(e) = matching(after, 0, '<', '>') else {
+                        continue;
+                    };
+                    let params = generic_names(&after[1..e]);
+                    let rest = after[e + 1..].trim_start();
+                    if let (Some(r), true) = (rest.strip_prefix('='), !params.is_empty()) {
+                        if let Some(e) = r.find(';') {
+                            let t = r[..e].split_whitespace().collect::<Vec<_>>().join(" ");
+                            if let Ok(t) = parse_ty(&t) {
+                                items.generic_aliases.entry(name).or_insert((params, t));
+                            }
+                        }
+                    }
+                    continue;
+                }
                 // `type X = T;` (not an associated type without `=`)
                 if let Some(r) = after.strip_prefix('=') {
                     if let Some(e) = r.find(';') {
@@ -701,40 +897,7 @@ pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
             } else {
                 continue;
             };
-            let mut fields = Vec::new();
-            let mut public = Vec::new();
-            let mut ok = true;
-            for (k, f) in split_top(body, ',').into_iter().enumerate() {
-                let f = strip_attrs(f.trim());
-                if f.is_empty() {
-                    continue;
-                }
-                let is_pub = (f.starts_with("pub ") || f.starts_with("pub("))
-                    && !f.replace(' ', "").starts_with("pub(self)");
-                let f = strip_vis(&f);
-                let (fname, fty) = if tuple {
-                    (k.to_string(), f.as_str())
-                } else {
-                    match top_colon(&f) {
-                        Some(c) => (f[..c].trim().to_string(), f[c + 1..].trim()),
-                        None => {
-                            ok = false;
-                            break;
-                        }
-                    }
-                };
-                match parse_ty(fty) {
-                    Ok(t) => {
-                        fields.push((fname, t));
-                        public.push(is_pub);
-                    }
-                    Err(_) => {
-                        ok = false;
-                        break;
-                    }
-                }
-            }
-            if ok {
+            if let Some((fields, public)) = parse_fields(body, tuple) {
                 let mut module = module.to_vec();
                 module.extend(inline_modules(&m, at));
                 items.structs.entry(name.clone()).or_insert(StructDef {
@@ -789,6 +952,22 @@ pub enum FTy {
         tuple: bool,
         fields: Vec<(String, FTy)>,
     },
+    /// An enumeration (Milestone 307).
+    Enum {
+        /// The name as the function's module writes it (`Status`, `self::std::cmp::Ordering`).
+        path: String,
+        /// The type arguments (`(usize, u64)` of `Status<(usize, u64)>`).
+        args: Vec<FTy>,
+        variants: Vec<Variant>,
+    },
+    /// A type that a `build` line builds, a `read` line reads, or both (Milestone 307).
+    Built {
+        /// The type as the harness writes it.
+        ty: String,
+        build: Option<Ctor>,
+        /// The type a value is read as, and the method that gives it.
+        read: Option<(Box<FTy>, String)>,
+    },
     /// A type fuzzing cannot generate: its text.
     Opaque(String),
     /// A field that the harness's module cannot name (a private field of a structure of
@@ -809,6 +988,25 @@ impl FTy {
             FTy::Res(a, b) => a.generable().and(b.generable()),
             FTy::Tuple(v) => v.iter().try_for_each(FTy::generable),
             FTy::Struct { fields, .. } => fields.iter().try_for_each(|(_, t)| t.generable()),
+            FTy::Enum { path, variants, .. } => {
+                let mut why = None;
+                for v in variants {
+                    match v.fields.iter().try_for_each(|(_, t)| t.generable()) {
+                        Ok(()) => return Ok(()),
+                        Err(e) => {
+                            why.get_or_insert(e);
+                        }
+                    }
+                }
+                Err(why.unwrap_or_else(|| format!("`{path}` has no variant")))
+            }
+            FTy::Built { ty, build, .. } => match build {
+                Some(c) => c.args.iter().try_for_each(|(_, t, _)| t.generable()),
+                None => Err(format!(
+                    "hydo cannot generate a value of `{ty}`: a `// hydo: build {ty} from \
+                     <constructor>(<name>: <type>, ...)` line names how to build one"
+                )),
+            },
             _ => Ok(()),
         }
     }
@@ -831,9 +1029,50 @@ impl FTy {
             ),
             FTy::Boxed(k, x) => format!("{k}<{}>", x.rust()),
             FTy::Struct { path, .. } => path.clone(),
+            FTy::Enum { path, args, .. } if args.is_empty() => path.clone(),
+            FTy::Enum { path, args, .. } => format!(
+                "{path}<{}>",
+                args.iter().map(FTy::rust).collect::<Vec<_>>().join(", ")
+            ),
+            FTy::Built { ty, .. } => ty.clone(),
             FTy::Opaque(t) => t.clone(),
             FTy::Hidden(_) => "_".into(),
         }
+    }
+}
+
+/// A variant of an enumeration as fuzzing sees it (Milestone 307).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Variant {
+    pub name: String,
+    pub kind: VKind,
+    pub fields: Vec<(String, FTy)>,
+}
+
+/// How a `build` line builds a value (Milestone 307): the constructor's path as written, and its
+/// arguments with the way each is passed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ctor {
+    pub path: String,
+    pub args: Vec<(String, FTy, Pass)>,
+}
+
+/// `t` with each type parameter that `s` names replaced by its type.
+pub fn subst_ty(t: &TyAst, s: &BTreeMap<String, TyAst>) -> TyAst {
+    match t {
+        TyAst::Path(segs, args)
+            if segs.len() == 1 && args.is_empty() && s.contains_key(&segs[0]) =>
+        {
+            s[&segs[0]].clone()
+        }
+        TyAst::Path(segs, args) => {
+            TyAst::Path(segs.clone(), args.iter().map(|a| subst_ty(a, s)).collect())
+        }
+        TyAst::Ref(m, x) => TyAst::Ref(*m, Box::new(subst_ty(x, s))),
+        TyAst::Slice(x) => TyAst::Slice(Box::new(subst_ty(x, s))),
+        TyAst::Array(x, n) => TyAst::Array(Box::new(subst_ty(x, s)), n.clone()),
+        TyAst::Tuple(v) => TyAst::Tuple(v.iter().map(|x| subst_ty(x, s)).collect()),
+        TyAst::Other(o) => TyAst::Other(o.clone()),
     }
 }
 
@@ -889,6 +1128,28 @@ impl Resolver<'_> {
                     Some(a) => self.res(a, stack),
                     None => FTy::Opaque("_".into()),
                 };
+                // the crate's own alias with type parameters, also over a standard name
+                // (`Result<usize>` as httparse writes it; Milestone 307)
+                let own = segs.len() == 1 || matches!(segs[0].as_str(), "crate" | "self" | "super");
+                if let Some((params, a)) = self
+                    .items
+                    .generic_aliases
+                    .get(last)
+                    .filter(|(p, _)| own && p.len() == args.len())
+                {
+                    if stack.iter().any(|s| s == last) {
+                        return FTy::Opaque(t.text());
+                    }
+                    let map: BTreeMap<String, TyAst> = params
+                        .iter()
+                        .cloned()
+                        .zip(args.iter().map(|x| subst_ty(x, self.subst)))
+                        .collect();
+                    stack.push(last.to_string());
+                    let r = self.res(&subst_ty(a, &map), stack);
+                    stack.pop();
+                    return r;
+                }
                 match (last, args.len()) {
                     ("u8", 0) => int("u8", false, 8),
                     ("u16", 0) => int("u16", false, 16),
@@ -920,8 +1181,15 @@ impl Resolver<'_> {
                         }
                         _ => FTy::Opaque("Self".into()),
                     },
-                    (name, 0) => {
-                        if let Some(a) = self.items.aliases.get(name) {
+                    (name, n) => {
+                        // a `build` or `read` line names how to make or read the type, also
+                        // one whose fields hydo could read (Milestone 307)
+                        if self.items.builds.contains_key(name)
+                            || self.items.reads.contains_key(name)
+                        {
+                            return self.built(name, t, stack);
+                        }
+                        if let Some(a) = self.items.aliases.get(name).filter(|_| n == 0) {
                             if stack.iter().any(|s| s == name) {
                                 return FTy::Opaque(t.text());
                             }
@@ -930,7 +1198,13 @@ impl Resolver<'_> {
                             stack.pop();
                             return r;
                         }
-                        let Some(d) = self.items.structs.get(name) else {
+                        let Some(d) = self.items.structs.get(name).filter(|_| n == 0) else {
+                            if let Some(e) = self.items.enums.get(name) {
+                                return self.enumeration(e, segs, args, t, stack);
+                            }
+                            if name == "Ordering" && n == 0 && !segs.iter().any(|s| s == "atomic") {
+                                return ordering();
+                            }
                             return FTy::Opaque(t.text());
                         };
                         if d.generic || stack.iter().any(|s| s == name) {
@@ -964,10 +1238,101 @@ impl Resolver<'_> {
                             fields,
                         }
                     }
-                    _ => FTy::Opaque(t.text()),
                 }
             }
         }
+    }
+
+    /// A type that a `build` or `read` line names (Milestone 307).
+    fn built(&self, name: &str, t: &TyAst, stack: &mut Vec<String>) -> FTy {
+        if stack.iter().any(|s| s == name) {
+            return FTy::Opaque(t.text());
+        }
+        stack.push(name.into());
+        let build = self.items.builds.get(name).map(|b| Ctor {
+            path: b.ctor.clone(),
+            args: b
+                .args
+                .iter()
+                .map(|(n, a)| (n.clone(), self.res(a, stack), pass_of(a)))
+                .collect(),
+        });
+        let read = self
+            .items
+            .reads
+            .get(name)
+            .map(|(v, m)| (Box::new(self.res(v, stack)), m.clone()));
+        stack.pop();
+        let ty = match t {
+            TyAst::Ref(_, x) => x.text(),
+            o => o.text(),
+        };
+        FTy::Built { ty, build, read }
+    }
+
+    /// An enumeration of the crate, with its type parameters given (Milestone 307).
+    fn enumeration(
+        &self,
+        e: &EnumDef,
+        segs: &[String],
+        args: &[TyAst],
+        t: &TyAst,
+        stack: &mut Vec<String>,
+    ) -> FTy {
+        if stack.contains(&e.name) || e.params.iter().any(|p| p.starts_with("const ")) {
+            return FTy::Opaque(t.text());
+        }
+        let targs: Vec<TyAst> = args.iter().map(|a| subst_ty(a, self.subst)).collect();
+        let map: BTreeMap<String, TyAst> = e
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let a = targs.get(i).cloned();
+                (p.clone(), a.unwrap_or_else(|| TyAst::Other(p.clone())))
+            })
+            .collect();
+        let inner = Resolver {
+            items: self.items,
+            self_ty: self.self_ty,
+            module: self.module,
+            subst: &map,
+        };
+        stack.push(e.name.clone());
+        let variants = e
+            .variants
+            .iter()
+            .map(|v| Variant {
+                name: v.name.clone(),
+                kind: v.kind,
+                fields: v
+                    .fields
+                    .iter()
+                    .map(|(n, ft)| (n.clone(), inner.res(ft, stack)))
+                    .collect(),
+            })
+            .collect();
+        let args = targs.iter().map(|a| self.res(a, stack)).collect();
+        stack.pop();
+        FTy::Enum {
+            path: segs.join("::"),
+            args,
+            variants,
+        }
+    }
+}
+
+/// The standard library's `Ordering`, which comparisons return (Milestone 307).
+fn ordering() -> FTy {
+    let unit = |n: &str| Variant {
+        name: n.into(),
+        kind: VKind::Unit,
+        fields: vec![],
+    };
+    FTy::Enum {
+        path: "self::std::cmp::Ordering".into(),
+        args: vec![],
+        variants: vec![unit("Less"), unit("Equal"), unit("Greater")],
     }
 }
 
@@ -994,6 +1359,63 @@ pub fn pass_of(t: &TyAst) -> Pass {
         }
         _ => Pass::Value,
     }
+}
+
+/// An `impl` block's header read in full (Milestone 307): the type, the trait of `impl Trait
+/// for Type`, and the names of the block's type parameters.
+pub fn impl_parts(header: &str) -> Option<(TyAst, Option<TyAst>, Vec<String>)> {
+    let h = header.strip_prefix("unsafe ").unwrap_or(header);
+    let h = h.strip_prefix("impl")?;
+    if !h.starts_with([' ', '<']) {
+        return None;
+    }
+    let h = h.trim_start();
+    let (params, h) = if h.starts_with('<') {
+        let e = matching(h, 0, '<', '>')?;
+        (generic_names(&h[1..e]), h[e + 1..].trim_start())
+    } else {
+        (vec![], h)
+    };
+    let h = match find_word(h, "where") {
+        Some(w) => h[..w].trim(),
+        None => h.trim(),
+    };
+    let (tr, ty) = match find_word(h, "for") {
+        Some(f) => (Some(h[..f].trim()), h[f + 3..].trim()),
+        None => (None, h),
+    };
+    let tr = match tr {
+        Some(t) => Some(parse_ty(t.trim_start_matches('!')).ok()?),
+        None => None,
+    };
+    Some((parse_ty(ty).ok()?, tr, params))
+}
+
+/// A trait's header read (Milestone 307): its name and the names of its type parameters
+/// (`pub trait ReadBytesExt: io::Read`, `trait Foo<T>`).
+pub fn trait_parts(header: &str) -> Option<(String, Vec<String>)> {
+    let mut h = strip_vis(header);
+    for q in ["unsafe ", "auto "] {
+        if let Some(r) = h.strip_prefix(q) {
+            h = r.trim_start().to_string();
+        }
+    }
+    let r = h.strip_prefix("trait ")?.trim_start();
+    let name: String = r
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_')
+        .collect();
+    if name.is_empty() {
+        return None;
+    }
+    let after = r[name.len()..].trim_start();
+    let params = if after.starts_with('<') {
+        let e = matching(after, 0, '<', '>')?;
+        generic_names(&after[1..e])
+    } else {
+        vec![]
+    };
+    Some((name, params))
 }
 
 /// The type of an `impl` block's header (`impl<T> Foo<T>`, `impl Trait for Foo`).

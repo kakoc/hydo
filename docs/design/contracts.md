@@ -72,7 +72,8 @@ Since Milestone 255 an expression also has these:
 | `nil` | Go's nil: `err == nil` reads whether an `error` holds a value. |
 
 These forms only read. An element past the length, and the value of the other variant, leave
-the clause undecided for that call.
+the clause undecided for that call. Function fuzzing also reads `matches(e, <pattern>)` and
+`sorted(v)` (Milestone 307, `hydo guide fuzz`); a run refuses them with the reason.
 
 - A parameter in `ensures` is its value at entry. A field read through a pointer parameter is
   read at return, unless it is inside `old()`. So are the elements of a borrowed string or slice

@@ -5,7 +5,7 @@
 //! call, or the panic's location and message. The module is one line, so every line of the file
 //! keeps its number and a panic's location is the original file's.
 
-use super::rust::{FTy, Pass, Receiver};
+use super::rust::{FTy, Pass, Receiver, VKind};
 use std::fmt::Write as _;
 
 /// A parameter as the harness passes it.
@@ -13,6 +13,52 @@ pub struct Param {
     pub name: String,
     pub pass: Pass,
     pub ty: FTy,
+    /// For a parameter whose type is itself a reference (`input: &mut &[u8]`, or `&mut self`
+    /// when `Self` is `&[u8]`; Milestone 307): how the reference that the parameter refers to is
+    /// made from the generated value. The harness then passes that reference with `pass`, and a
+    /// `&mut` parameter's value after the call is what the reference refers to then.
+    pub inner: Option<Pass>,
+}
+
+/// `base` passed as `pass`: `base`, `&base`, `&base[..]`, `&mut base` or `&mut base[..]`.
+fn passed(pass: Pass, base: &str) -> String {
+    match pass {
+        Pass::Value => base.to_string(),
+        Pass::Ref { unsized_ref: false } => format!("&{base}"),
+        Pass::Ref { unsized_ref: true } => format!("&{base}[..]"),
+        Pass::RefMut { unsized_ref: false } => format!("&mut {base}"),
+        Pass::RefMut { unsized_ref: true } => format!("&mut {base}[..]"),
+    }
+}
+
+/// Whether a parameter's value is built by a `build` line and read by a `read` line: the
+/// harness then answers its read value before the call too, after the values after the call
+/// (Milestone 307).
+pub fn is_read_built(t: &FTy) -> bool {
+    matches!(
+        t,
+        FTy::Built {
+            build: Some(_),
+            read: Some(_),
+            ..
+        }
+    )
+}
+
+/// Whether building a value of `t` calls a constructor of the crate (a `build` line), which
+/// can panic.
+fn builds(t: &FTy) -> bool {
+    match t {
+        FTy::Built { build: Some(_), .. } => true,
+        FTy::List(x) | FTy::Array(x, _) | FTy::Opt(x) | FTy::Boxed(_, x) => builds(x),
+        FTy::Res(a, b) => builds(a) || builds(b),
+        FTy::Tuple(v) => v.iter().any(builds),
+        FTy::Struct { fields, .. } => fields.iter().any(|(_, t)| builds(t)),
+        FTy::Enum { variants, .. } => variants
+            .iter()
+            .any(|v| v.fields.iter().any(|(_, t)| builds(t))),
+        _ => false,
+    }
 }
 
 /// What the harness of one function needs.
@@ -72,6 +118,10 @@ fn rty(t: &FTy) -> String {
         FTy::Tuple(v) if v.len() == 1 => format!("({},)", rty(&v[0])),
         FTy::Tuple(v) => format!("({})", v.iter().map(rty).collect::<Vec<_>>().join(", ")),
         FTy::Str => "self::std::string::String".into(),
+        FTy::Enum { path, args, .. } if !args.is_empty() => format!(
+            "{path}<{}>",
+            args.iter().map(rty).collect::<Vec<_>>().join(", ")
+        ),
         other => other.rust(),
     }
 }
@@ -134,7 +184,56 @@ fn dec(t: &FTy) -> String {
                 format!("{path} {{ {} }}", p.join(", "))
             }
         }
-        FTy::Opaque(_) | FTy::Hidden(_) => "unreachable!()".into(),
+        FTy::Enum { path, variants, .. } => {
+            let mut arms = String::new();
+            for v in variants {
+                let ctor = format!("{path}::{}", v.name);
+                let value = match v.kind {
+                    VKind::Unit => ctor,
+                    VKind::Tuple => {
+                        let p: Vec<String> = v.fields.iter().map(|(_, x)| dec(x)).collect();
+                        format!("{ctor}({})", p.join(", "))
+                    }
+                    VKind::Named => {
+                        let p: Vec<String> = v
+                            .fields
+                            .iter()
+                            .map(|(n, x)| format!("{n}: {}", dec(x)))
+                            .collect();
+                        format!("{ctor} {{ {} }}", p.join(", "))
+                    }
+                };
+                let _ = write!(arms, "\"V{}\" => {value}, ", v.name);
+            }
+            format!("match r.w() {{ {arms}_ => self::std::process::abort() }}")
+        }
+        // the constructor's arguments, then the constructor (Milestone 307)
+        FTy::Built { build: Some(c), .. } => {
+            let parts: Vec<String> = c.args.iter().map(|(_, x, _)| dec(x)).collect();
+            // an argument passed by reference lives as long as the process, so that the built
+            // value may borrow it (httparse's `Bytes::new(slice: &[u8])`)
+            let args: Vec<String> = c
+                .args
+                .iter()
+                .enumerate()
+                .map(|(i, (_, _, p))| match p {
+                    Pass::Value => format!("c.{i}"),
+                    _ => passed(
+                        *p,
+                        &format!(
+                            "(*self::std::boxed::Box::leak(self::std::boxed::Box::new(c.{i})))"
+                        ),
+                    ),
+                })
+                .collect();
+            format!(
+                "{{ let mut c = ({},); {}({}) }}",
+                parts.join(", "),
+                c.path,
+                args.join(", ")
+            )
+        }
+        FTy::Opaque(_) | FTy::Hidden(_) | FTy::Built { .. } => "unreachable!()".into(),
     }
 }
 
@@ -185,7 +284,57 @@ fn enc(t: &FTy, v: &str, d: usize) -> String {
             })
             .collect::<Vec<_>>()
             .join(" "),
-        FTy::Opaque(_) | FTy::Hidden(_) => format!("{{ let _ = {v}; o.push_str(\"X \"); }}"),
+        // each variant by its name, then its fields (Milestone 307)
+        FTy::Enum { path, variants, .. } => {
+            let mut arms = String::new();
+            for v in variants {
+                let ctor = format!("{path}::{}", v.name);
+                let bind = |i: usize, t: &FTy| match t {
+                    FTy::Opaque(_) | FTy::Hidden(_) => "_".to_string(),
+                    _ => format!("{x}_{i}"),
+                };
+                let pat = match v.kind {
+                    VKind::Unit => ctor,
+                    VKind::Tuple => {
+                        let p: Vec<String> =
+                            v.fields.iter().enumerate().map(|(i, (_, t))| bind(i, t)).collect();
+                        format!("{ctor}({})", p.join(", "))
+                    }
+                    VKind::Named => {
+                        let p: Vec<String> = v
+                            .fields
+                            .iter()
+                            .enumerate()
+                            .map(|(i, (n, t))| format!("{n}: {}", bind(i, t)))
+                            .collect();
+                        format!("{ctor} {{ {} }}", p.join(", "))
+                    }
+                };
+                let body: Vec<String> = v
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (_, t))| match t {
+                        FTy::Opaque(_) | FTy::Hidden(_) => "o.push_str(\"X \");".to_string(),
+                        _ => enc(t, &format!("{x}_{i}"), d + 1),
+                    })
+                    .collect();
+                let _ = write!(
+                    arms,
+                    "{pat} => {{ o.push_str(\"V{} \"); {} }} ",
+                    v.name,
+                    body.join(" ")
+                );
+            }
+            format!("match {v} {{ {arms}}}")
+        }
+        // through the `read` line's method, or not read (Milestone 307)
+        FTy::Built {
+            read: Some((t, m)), ..
+        } => format!("{{ let {x} = ({v}).{m}(); {} }}", enc(t, &format!("&{x}"), d + 1)),
+        FTy::Opaque(_) | FTy::Hidden(_) | FTy::Built { .. } => {
+            format!("{{ let _ = {v}; o.push_str(\"X \"); }}")
+        }
     }
 }
 
@@ -236,6 +385,9 @@ const COMMON: &str = concat!(
     "use self::std::io::Write as _; let _ = out.write_all(o.as_bytes()); let _ = out.flush(); } } ",
 );
 
+/// What the harness writes for a call that panicked: the panic's location and message.
+const PANICKED: &str = "let (loc, msg) = LAST.lock().unwrap_or_else(|e| e.into_inner()).take().unwrap_or_default(); o.push_str(\"P \"); hx(&loc, o); hx(&msg, o);";
+
 /// A one-line module that only names the function, so that it is in use in the copy's tests
 /// when the run fuzzes other functions (Milestone 289): a property function that only hydo
 /// calls is otherwise dead code, which a crate that denies warnings in its tests refuses.
@@ -261,15 +413,34 @@ pub fn module(s: &Spec) -> String {
     );
     b.push_str("fn one(line: &str, o: &mut self::std::string::String) { let mut r = R { w: line.split_ascii_whitespace() }; ");
     let mut args = Vec::new();
+    if s.params.iter().any(|p| builds(&p.ty)) {
+        // a constructor of the crate can panic: such a panic is the call's (Milestone 307)
+        let names: Vec<String> = (0..s.params.len()).map(|i| format!("mut a{i}")).collect();
+        let tys: Vec<String> = s.params.iter().map(|p| rty(&p.ty)).collect();
+        let decs: Vec<String> = s.params.iter().map(|p| dec(&p.ty)).collect();
+        let _ = write!(
+            b,
+            "*LAST.lock().unwrap_or_else(|e| e.into_inner()) = self::std::option::Option::None; \
+             let ({},): ({},) = match self::std::panic::catch_unwind(self::std::panic::AssertUnwindSafe(|| ({},))) {{ \
+             self::std::result::Result::Ok(t) => t, self::std::result::Result::Err(_) => {{ {PANICKED} return; }} }}; ",
+            names.join(", "),
+            tys.join(", "),
+            decs.join(", ")
+        );
+    } else {
+        for (i, p) in s.params.iter().enumerate() {
+            let _ = write!(b, "let mut a{i}: {} = {}; ", rty(&p.ty), dec(&p.ty));
+        }
+    }
     for (i, p) in s.params.iter().enumerate() {
-        let _ = write!(b, "let mut a{i}: {} = {}; ", rty(&p.ty), dec(&p.ty));
-        args.push(match p.pass {
-            Pass::Value => format!("a{i}"),
-            Pass::Ref { unsized_ref: false } => format!("&a{i}"),
-            Pass::Ref { unsized_ref: true } => format!("&a{i}[..]"),
-            Pass::RefMut { unsized_ref: false } => format!("&mut a{i}"),
-            Pass::RefMut { unsized_ref: true } => format!("&mut a{i}[..]"),
-        });
+        let base = match p.inner {
+            Some(inner) => {
+                let _ = write!(b, "let mut b{i} = {}; ", passed(inner, &format!("a{i}")));
+                format!("b{i}")
+            }
+            None => format!("a{i}"),
+        };
+        args.push(passed(p.pass, &base));
     }
     let call = format!("{}({})", s.call, args.join(", "));
     let call = if s.is_unsafe {
@@ -277,6 +448,22 @@ pub fn module(s: &Spec) -> String {
     } else {
         call
     };
+    // a built value's read value before the call, for the clauses' entry values (Milestone 307)
+    let pre: Vec<usize> = s
+        .params
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| is_read_built(&p.ty))
+        .map(|(i, _)| i)
+        .collect();
+    if !pre.is_empty() {
+        b.push_str("let mut pre = self::std::string::String::new(); { let o = &mut pre; ");
+        for &i in &pre {
+            b.push_str(&enc(&s.params[i].ty, &format!("&a{i}"), 0));
+            b.push(' ');
+        }
+        b.push_str("} ");
+    }
     b.push_str(
         "*LAST.lock().unwrap_or_else(|e| e.into_inner()) = self::std::option::Option::None; ",
     );
@@ -290,11 +477,18 @@ pub fn module(s: &Spec) -> String {
     b.push_str(" let _ = v; ");
     for (i, p) in s.params.iter().enumerate() {
         if matches!(p.pass, Pass::RefMut { .. }) {
+            let base = if p.inner.is_some() { "b" } else { "a" };
             b.push(' ');
-            b.push_str(&enc(&p.ty, &format!("&a{i}"), 0));
+            b.push_str(&enc(&p.ty, &format!("&{base}{i}"), 0));
         }
     }
-    b.push_str(" } self::std::result::Result::Err(_) => { let (loc, msg) = LAST.lock().unwrap_or_else(|e| e.into_inner()).take().unwrap_or_default(); o.push_str(\"P \"); hx(&loc, o); hx(&msg, o); } } } }");
+    if !pre.is_empty() {
+        b.push_str(" o.push_str(&pre);");
+    }
+    let _ = write!(
+        b,
+        " }} self::std::result::Result::Err(_) => {{ {PANICKED} }} }} }} }}"
+    );
     debug_assert!(!b.contains('\n'));
     b
 }

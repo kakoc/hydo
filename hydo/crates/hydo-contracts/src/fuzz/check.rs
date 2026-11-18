@@ -5,7 +5,7 @@
 //! integers are exact.
 
 use super::value::{Hints, Val};
-use crate::lang::{Ast, Builtin};
+use crate::lang::{Ast, Builtin, Pat};
 use crate::plan::BinOp;
 
 /// The values one clause reads.
@@ -34,7 +34,25 @@ pub fn value(a: &Ast, env: &Env) -> Result<Val, Undecided> {
     eval(a, env, false)
 }
 
+/// The value of `a`, a value that a `build` line built read through its `read` line.
 fn eval(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
+    match eval_raw(a, env, old)? {
+        Val::Built(Some(v), _) => Ok(*v),
+        Val::Built(None, args) => Err(format!(
+            "`{a}` is a value that a `build` line built: it is read through its `read` line, \
+             in `ensures` only; name its constructor's arguments instead ({})",
+            args.iter()
+                .map(|(n, _)| format!("`{a}.{n}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+        v => Ok(v),
+    }
+}
+
+/// The value of `a`, a built value as it is (Milestone 307), so that a field can name a
+/// constructor's argument.
+fn eval_raw(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
     Ok(match a {
         Ast::Int(x) => Val::Int(*x),
         Ast::Float(f) => Val::Float(f.to_bits()),
@@ -53,9 +71,20 @@ fn eval(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
                 .map(|(_, v)| v.clone())
                 .ok_or_else(|| format!("`{n}` is not a parameter"))?
         }
-        Ast::Old(x) => eval(x, env, true)?,
+        Ast::Old(x) => eval_raw(x, env, true)?,
         Ast::Field(x, f) => {
-            let v = eval(x, env, old)?;
+            let v = eval_raw(x, env, old)?;
+            // a constructor's argument, else a field of the value that the `read` line gives
+            let v = match v {
+                Val::Built(view, args) => match args.into_iter().find(|(n, _)| n == f) {
+                    Some((_, a)) => return Ok(a),
+                    None => match view {
+                        Some(v) => *v,
+                        None => return Err(format!("no argument `{f}`")),
+                    },
+                },
+                v => v,
+            };
             match v {
                 Val::Struct(fs) => fs
                     .into_iter()
@@ -67,6 +96,9 @@ fn eval(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
                     .ok()
                     .and_then(|i| t.into_iter().nth(i))
                     .ok_or_else(|| format!("no field `{f}`"))?,
+                // `m.Complete.0`: the fields of the variant that the value is (Milestone 307)
+                Val::Enum(n, fs) if n == *f => Val::Struct(fs),
+                Val::Enum(n, _) => return Err(format!("the value is `{n}`, not `{f}`")),
                 Val::Opaque => return Err(format!("`.{f}` reads a value of a type not read")),
                 _ => return Err(format!("`.{f}` of a value without fields")),
             }
@@ -100,10 +132,12 @@ fn eval(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
                 (Builtin::Ok | Builtin::Err, Val::Res(_)) => {
                     return Err("the value is the other variant".into())
                 }
+                (Builtin::Sorted, Val::List(l)) => Val::Bool(sorted(&l)?),
                 (_, Val::Opaque) => return Err("a value of a type not read".into()),
                 (b, _) => return Err(format!("`{}()` of a value of another type", b.name())),
             }
         }
+        Ast::Matches(x, p) => Val::Bool(matches_pat(&eval(x, env, old)?, p)?),
         Ast::Not(x) => Val::Bool(!truth(&eval(x, env, old)?)?),
         Ast::Neg(x) => match eval(x, env, old)? {
             Val::Float(b) => Val::Float((-f64::from_bits(b)).to_bits()),
@@ -125,6 +159,11 @@ fn eval(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
                 BinOp::Eq | BinOp::Ne => {
                     if l == Val::Opaque || r == Val::Opaque {
                         return Err("a comparison with a value of a type not read".into());
+                    }
+                    if matches!(l, Val::Enum(..)) || matches!(r, Val::Enum(..)) {
+                        return Err(
+                            "a variant is compared with `matches(<value>, <pattern>)`".into()
+                        );
                     }
                     let eq = match (&l, &r) {
                         (Val::Int(_) | Val::Bool(_), Val::Int(_) | Val::Bool(_)) => {
@@ -156,6 +195,74 @@ fn eval(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
             }
         }
     })
+}
+
+/// Whether each element of a list is at most the next (Milestone 307): integers, floating-point
+/// values and strings compare as values; a NaN is in order with nothing.
+fn sorted(l: &[Val]) -> Result<bool, Undecided> {
+    for w in l.windows(2) {
+        let le = match (&w[0], &w[1]) {
+            (Val::Str(a), Val::Str(b)) => a <= b,
+            (Val::Opaque, _) | (_, Val::Opaque) => return Err("a value of a type not read".into()),
+            (a, b) => matches!(float_op(BinOp::Le, a, b)?, Val::Bool(true)),
+        };
+        if !le {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Whether a value has the shape of a pattern (Milestone 307).
+pub fn matches_pat(v: &Val, p: &Pat) -> Result<bool, Undecided> {
+    let all = |vs: &[&Val], ps: &[Pat], what: &str| -> Result<bool, Undecided> {
+        if vs.len() != ps.len() {
+            return Err(format!(
+                "the pattern gives {} fields, and {what} has {}",
+                ps.len(),
+                vs.len()
+            ));
+        }
+        for (v, p) in vs.iter().zip(ps) {
+            if !matches_pat(v, p)? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    };
+    match (p, v) {
+        (Pat::Any, _) => Ok(true),
+        (_, Val::Opaque) => Err("a value of a type not read".into()),
+        (Pat::Int(k), Val::Int(x)) => Ok(x == k),
+        (Pat::Int(k), Val::Float(b)) => Ok(f64::from_bits(*b) == *k as f64),
+        (Pat::Bool(k), Val::Bool(x)) => Ok(x == k),
+        (Pat::Str(k), Val::Str(x)) => Ok(x == k),
+        (Pat::Tuple(ps), Val::Tuple(vs)) => all(&vs.iter().collect::<Vec<_>>(), ps, "the tuple"),
+        (Pat::Variant(n, sub), _) => {
+            let (name, fields): (&str, Vec<&Val>) = match v {
+                Val::Opt(None) => ("None", vec![]),
+                Val::Opt(Some(x)) => ("Some", vec![&**x]),
+                Val::Res(Ok(x)) => ("Ok", vec![&**x]),
+                Val::Res(Err(x)) => ("Err", vec![&**x]),
+                Val::Enum(n, f) => (n.as_str(), f.iter().map(|(_, x)| x).collect()),
+                // a structure: its name was checked against the type before the run
+                Val::Struct(f) => (n.as_str(), f.iter().map(|(_, x)| x).collect()),
+                _ => {
+                    return Err(format!(
+                        "`{p}` is a pattern of a variant, and the value is not one"
+                    ))
+                }
+            };
+            if name != n {
+                return Ok(false);
+            }
+            match sub {
+                None => Ok(true),
+                Some(ps) => all(&fields, ps, &format!("`{n}`")),
+            }
+        }
+        (p, _) => Err(format!("the pattern `{p}` does not fit the value's type")),
+    }
 }
 
 /// A number of a side of an operation with a floating-point value: an integer exactly, or the
@@ -275,10 +382,31 @@ fn paths_in(a: &Ast, out: &mut Vec<String>, consts: &mut Vec<i128>) {
                 paths_in(x, out, consts);
             }
         }
-        Ast::Not(x) | Ast::Old(x) | Ast::Call(_, x) | Ast::Field(x, _) => paths_in(x, out, consts),
+        Ast::Not(x) | Ast::Old(x) | Ast::Call(_, x) | Ast::Field(x, _) | Ast::Matches(x, _) => {
+            paths_in(x, out, consts)
+        }
         Ast::Bin(_, x, y) | Ast::Index(x, y) => {
             paths_in(x, out, consts);
             paths_in(y, out, consts);
+        }
+        _ => {}
+    }
+}
+
+/// The lists that a `requires` clause wants sorted: each `sorted(v)` among its conjuncts
+/// (Milestone 307).
+pub fn sorted_hints(a: &Ast, h: &mut Hints) {
+    match a {
+        Ast::Bin(BinOp::And, x, y) => {
+            sorted_hints(x, h);
+            sorted_hints(y, h);
+        }
+        Ast::Call(Builtin::Sorted, x) => {
+            if let Some(p) = path_of(x) {
+                if !h.sorted.contains(&p) {
+                    h.sorted.push(p);
+                }
+            }
         }
         _ => {}
     }

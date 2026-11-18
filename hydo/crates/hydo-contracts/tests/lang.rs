@@ -180,3 +180,75 @@ fn spaced() {}
     assert!(errs[0].message.contains("one `durable` line"), "{errs:?}");
     assert!(errs[1].message.contains("durable <function>"), "{errs:?}");
 }
+
+// ---------------------------------------------------------------- Milestone 307
+
+#[test]
+fn matches_takes_a_pattern_of_variants_tuples_and_literals() {
+    use hydo_contracts::lang::Pat;
+    let a = parse_expr("!matches(result, Ok(Status::Complete((_, 0))))").unwrap();
+    let Ast::Not(m) = a else { panic!("{a:?}") };
+    let Ast::Matches(x, p) = *m else {
+        panic!("{m:?}")
+    };
+    assert_eq!(*x, Ast::Name("result".into()));
+    assert_eq!(
+        p,
+        Pat::Variant(
+            "Ok".into(),
+            Some(vec![Pat::Variant(
+                "Complete".into(),
+                Some(vec![Pat::Tuple(vec![Pat::Any, Pat::Int(0)])])
+            )])
+        )
+    );
+    assert_eq!(p.to_string(), "Ok(Complete((_, 0)))");
+    // a bare name, a negative integer, a string and `old()`
+    assert!(parse_expr("matches(op, Neg)").is_ok());
+    assert!(parse_expr("matches(some(o), -1) || matches(old(s), \"x\")").is_ok());
+    // a field of a variant reads like a field
+    assert!(parse_expr("ok(result).Complete.0.1 == 0").is_ok());
+    // what is refused
+    assert!(parse_expr("matches(result)")
+        .unwrap_err()
+        .contains("matches(<value>, <pattern>)"));
+    assert!(parse_expr("matches(1 + 2, _)")
+        .unwrap_err()
+        .contains("not an expression"));
+    assert!(parse_expr("matches(r, Ok(+))")
+        .unwrap_err()
+        .contains("a pattern is"));
+    // `sorted` is a function of the language
+    assert!(parse_expr("sorted(v) && sorted(result)").is_ok());
+}
+
+#[test]
+fn build_and_read_lines_name_a_constructor_and_a_method() {
+    let src = "\
+// hydo: build Bytes from Bytes::from(v: Vec<u8>)
+// hydo: build Pair from Pair::new(a: &[u8], b: HashMap<u8, u8>)
+// hydo: read Bytes as Vec<u8> by to_vec()
+// hydo: with Self = i64
+// hydo: with Self = u8, T = (usize, u64)
+fn f() {}
+// hydo: build Bytes
+fn g() {}
+// hydo: read Bytes as Vec<u8>
+fn h() {}
+";
+    let (cs, errs) = scan(src);
+    let c = &cs[0];
+    assert_eq!(c.builds[0].ty, "Bytes");
+    assert_eq!(c.builds[0].ctor, "Bytes::from");
+    assert_eq!(c.builds[0].args, [("v".into(), "Vec<u8>".into())]);
+    assert_eq!(c.builds[1].args[1], ("b".into(), "HashMap<u8, u8>".into()));
+    assert_eq!(
+        (c.reads[0].view.as_str(), c.reads[0].method.as_str()),
+        ("Vec<u8>", "to_vec")
+    );
+    assert_eq!(c.with.len(), 3);
+    assert_eq!(c.with[2], ("T".into(), "(usize, u64)".into()));
+    assert_eq!(errs.len(), 2, "{errs:?}");
+    assert!(errs[0].message.contains("build <Type> from"), "{errs:?}");
+    assert!(errs[1].message.contains("read <Type> as"), "{errs:?}");
+}

@@ -45,6 +45,40 @@ pub enum Ast {
     Not(Box<Ast>),
     Neg(Box<Ast>),
     Bin(BinOp, Box<Ast>, Box<Ast>),
+    /// `matches(e, <pattern>)` (Milestone 307): whether a value has the shape of a pattern, such
+    /// as `matches(result, Ok(Complete(_)))`. Read by function fuzzing only.
+    Matches(Box<Ast>, Pat),
+}
+
+/// A pattern of `matches(e, <pattern>)` (Milestone 307): `_`, a literal, a variant's name with
+/// its fields' patterns (`Complete(_)`, `Some(0)`), or a tuple (`(_, 0)`). A variant's name may
+/// carry its enumeration's path (`Status::Complete`); a bare name matches the variant whatever
+/// its fields are.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Pat {
+    Any,
+    Int(i128),
+    Bool(bool),
+    Str(String),
+    /// A variant's name (the path's last segment) and, when written, its fields' patterns.
+    Variant(String, Option<Vec<Pat>>),
+    Tuple(Vec<Pat>),
+}
+
+impl fmt::Display for Pat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let list = |v: &[Pat]| v.iter().map(Pat::to_string).collect::<Vec<_>>().join(", ");
+        match self {
+            Pat::Any => write!(f, "_"),
+            Pat::Int(v) => write!(f, "{v}"),
+            Pat::Bool(b) => write!(f, "{b}"),
+            Pat::Str(s) => write!(f, "{s:?}"),
+            Pat::Variant(n, None) => write!(f, "{n}"),
+            Pat::Variant(n, Some(v)) => write!(f, "{n}({})", list(v)),
+            Pat::Tuple(v) if v.len() == 1 => write!(f, "({},)", v[0]),
+            Pat::Tuple(v) => write!(f, "({})", list(v)),
+        }
+    }
 }
 
 /// The functions an expression may call (Milestone 255). Each reads the value it is given; none
@@ -63,6 +97,10 @@ pub enum Builtin {
     Some,
     Ok,
     Err,
+    /// Whether a list's elements are in order, each at most the next (Milestone 307): the
+    /// quantifier that a sorted input needs (`requires sorted(v)`). Read by function fuzzing
+    /// only.
+    Sorted,
 }
 
 impl Builtin {
@@ -76,6 +114,7 @@ impl Builtin {
             "some" => Builtin::Some,
             "ok" => Builtin::Ok,
             "err" => Builtin::Err,
+            "sorted" => Builtin::Sorted,
             _ => return None,
         })
     }
@@ -90,6 +129,7 @@ impl Builtin {
             Builtin::Some => "some",
             Builtin::Ok => "ok",
             Builtin::Err => "err",
+            Builtin::Sorted => "sorted",
         }
     }
 }
@@ -109,6 +149,7 @@ impl fmt::Display for Ast {
             Ast::Not(x) => write!(f, "!{x}"),
             Ast::Neg(x) => write!(f, "-{x}"),
             Ast::Bin(..) => write!(f, "(...)"),
+            Ast::Matches(x, p) => write!(f, "matches({x}, {p})"),
         }
     }
 }
@@ -236,6 +277,35 @@ pub struct SrcContract {
     /// machine"): the property function that `hydo fuzz --vm` calls after a power cut for each
     /// call of this function, with the call's input and its result; with its line.
     pub durable: Option<(String, u32)>,
+    /// `build <Type> from <constructor>(<name>: <type>, ...)` (Milestone 307): how function
+    /// fuzzing builds a value of a type that it cannot generate field by field.
+    pub builds: Vec<SrcBuild>,
+    /// `read <Type> as <type> by <method>()` (Milestone 307): how function fuzzing reads such a
+    /// value after a call.
+    pub reads: Vec<SrcRead>,
+}
+
+/// A `build` line (Milestone 307): `build Bytes from Bytes::from(v: Vec<u8>)`. hydo generates
+/// the constructor's arguments and passes the value that the constructor returns.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SrcBuild {
+    /// The type as written (`Bytes`).
+    pub ty: String,
+    /// The constructor's path as written (`Bytes::from`).
+    pub ctor: String,
+    /// The constructor's arguments: each name and type as written.
+    pub args: Vec<(String, String)>,
+    pub line: u32,
+}
+
+/// A `read` line (Milestone 307): `read Bytes as Vec<u8> by to_vec()`. hydo reads a value of
+/// the type through the method, as a value of the second type.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SrcRead {
+    pub ty: String,
+    pub view: String,
+    pub method: String,
+    pub line: u32,
 }
 
 /// A mistake in a contract, with its line.
@@ -329,6 +399,8 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
         let mut records: Vec<SrcRecord> = Vec::new();
         let mut keeps: Vec<SrcKeep> = Vec::new();
         let mut durable: Option<(String, u32)> = None;
+        let mut builds: Vec<SrcBuild> = Vec::new();
+        let mut reads: Vec<SrcRead> = Vec::new();
         while i < lines.len() {
             let l = lines[i].trim_start();
             if let Some(t) = contract_text(l) {
@@ -349,6 +421,8 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
                         message: "a function has one `durable` line".into(),
                     }),
                     Ok(Line::Durable(n, l)) => durable = Some((n, l)),
+                    Ok(Line::Build(b)) => builds.push(b),
+                    Ok(Line::Read(r)) => reads.push(r),
                     Err(e) => errs.push(e),
                 }
             } else if !(l.starts_with("//") || l.starts_with("#[") || l.starts_with("#![")) {
@@ -366,6 +440,8 @@ pub fn scan(text: &str) -> (Vec<SrcContract>, Vec<LangError>) {
                 records,
                 keeps,
                 durable,
+                builds,
+                reads,
             }),
             None => errs.push(LangError {
                 line: first as u32 + 1,
@@ -387,6 +463,81 @@ enum Line {
     Keep(SrcKeep),
     /// `durable <check>`: the check's name and the line.
     Durable(String, u32),
+    Build(SrcBuild),
+    Read(SrcRead),
+}
+
+/// `build <Type> from <constructor>(<name>: <type>, ...)` (Milestone 307).
+fn parse_build(t: &str, line: u32) -> Result<SrcBuild, String> {
+    let usage = "write `build <Type> from <constructor>(<name>: <type>, ...)`, for example \
+                 `build Bytes from Bytes::from(v: Vec<u8>)`";
+    let (ty, rest) = t
+        .split_once(" from ")
+        .ok_or_else(|| format!("`build {t}`: {usage}"))?;
+    let (ty, rest) = (ty.trim(), rest.trim());
+    let open = rest
+        .find('(')
+        .ok_or_else(|| format!("`build {t}`: {usage}"))?;
+    if !rest.ends_with(')') || ty.is_empty() {
+        return Err(format!("`build {t}`: {usage}"));
+    }
+    let ctor = rest[..open].trim();
+    let ok_path = |p: &str| {
+        !p.is_empty()
+            && p.chars()
+                .all(|c| c.is_alphanumeric() || c == '_' || c == ':' || c == '<' || c == '>')
+    };
+    if !ok_path(ctor) || !ok_path(ty) {
+        return Err(format!("`build {t}`: {usage}"));
+    }
+    let mut args = Vec::new();
+    for a in crate::fuzz::rust::split_top(&rest[open + 1..rest.len() - 1], ',') {
+        let a = a.trim();
+        if a.is_empty() {
+            continue;
+        }
+        let (n, ty) = a
+            .split_once(':')
+            .ok_or_else(|| format!("`build {t}`: the argument `{a}` has no type; {usage}"))?;
+        let n = n.trim();
+        if n.is_empty() || !n.chars().all(|c| c.is_alphanumeric() || c == '_') {
+            return Err(format!("`build {t}`: `{n}` is not a name; {usage}"));
+        }
+        args.push((n.to_string(), ty.trim().to_string()));
+    }
+    Ok(SrcBuild {
+        ty: ty.to_string(),
+        ctor: ctor.to_string(),
+        args,
+        line,
+    })
+}
+
+/// `read <Type> as <type> by <method>()` (Milestone 307).
+fn parse_read(t: &str, line: u32) -> Result<SrcRead, String> {
+    let usage = "write `read <Type> as <type> by <method>()`, for example \
+                 `read Bytes as Vec<u8> by to_vec()`";
+    let (ty, rest) = t
+        .split_once(" as ")
+        .ok_or_else(|| format!("`read {t}`: {usage}"))?;
+    let (view, method) = rest
+        .rsplit_once(" by ")
+        .ok_or_else(|| format!("`read {t}`: {usage}"))?;
+    let method = method.trim();
+    let method = method.strip_suffix("()").unwrap_or(method);
+    if ty.trim().is_empty()
+        || view.trim().is_empty()
+        || method.is_empty()
+        || !method.chars().all(|c| c.is_alphanumeric() || c == '_')
+    {
+        return Err(format!("`read {t}`: {usage}"));
+    }
+    Ok(SrcRead {
+        ty: ty.trim().to_string(),
+        view: view.trim().to_string(),
+        method: method.to_string(),
+        line,
+    })
 }
 
 /// `keep <name> [once set] [from <function>] [to <function>] [across boots]` (Milestone 291).
@@ -522,7 +673,8 @@ fn parse_line(t: &str, line: u32) -> Result<Line, LangError> {
         "input" => parse_input(rest, line).map(Line::Input).map_err(err),
         "with" => {
             let mut out = Vec::new();
-            for part in rest.split(',') {
+            // commas inside a type (`with T = (usize, u64)`) do not split it (Milestone 307)
+            for part in crate::fuzz::rust::split_top(rest, ',') {
                 let (n, t) = part.split_once('=').ok_or_else(|| {
                     err(format!(
                         "`with {rest}`: write `with <type parameter> = <type>`, for example \
@@ -546,6 +698,8 @@ fn parse_line(t: &str, line: u32) -> Result<Line, LangError> {
             .map(Line::Record)
             .map_err(err),
         "keep" => parse_keep(rest, line).map(Line::Keep).map_err(err),
+        "build" => parse_build(rest, line).map(Line::Build).map_err(err),
+        "read" => parse_read(rest, line).map(Line::Read).map_err(err),
         "durable" => {
             let ok = !rest.is_empty()
                 && rest
@@ -562,7 +716,8 @@ fn parse_line(t: &str, line: u32) -> Result<Line, LangError> {
         _ => Err(err(format!(
             "`// hydo: {kw}`: a contract line is `requires <expr>`, `ensures <expr>`, \
              `input <path> ...`, `with <type parameter> = <type>`, `record <expr> [as <name>] \
-             [at entry|at return]`, `key <expr>`, `keep <name> ...` or `durable <function>`"
+             [at entry|at return]`, `key <expr>`, `keep <name> ...`, `durable <function>`, `build <Type> from \
+             <constructor>(...)` or `read <Type> as <type> by <method>()`"
         ))),
     }
 }
@@ -855,6 +1010,7 @@ pub fn mentions(a: &Ast, name: &str) -> bool {
         Ast::Field(x, _) | Ast::Call(_, x) => mentions(x, name),
         Ast::Old(x) | Ast::Not(x) | Ast::Neg(x) => mentions(x, name),
         Ast::Bin(_, x, y) | Ast::Index(x, y) => mentions(x, name) || mentions(y, name),
+        Ast::Matches(x, _) => mentions(x, name),
         Ast::Int(_) | Ast::Float(_) | Ast::Bool(_) | Ast::Str(_) => false,
     }
 }
@@ -862,7 +1018,9 @@ pub fn mentions(a: &Ast, name: &str) -> bool {
 fn has_old(a: &Ast) -> bool {
     match a {
         Ast::Old(_) => true,
-        Ast::Not(x) | Ast::Neg(x) | Ast::Field(x, _) | Ast::Call(_, x) => has_old(x),
+        Ast::Not(x) | Ast::Neg(x) | Ast::Field(x, _) | Ast::Call(_, x) | Ast::Matches(x, _) => {
+            has_old(x)
+        }
         Ast::Bin(_, x, y) | Ast::Index(x, y) => has_old(x) || has_old(y),
         _ => false,
     }
@@ -877,9 +1035,9 @@ enum Tok {
     Op(&'static str),
 }
 
-const OPS: [&str; 20] = [
-    "||", "&&", "==", "!=", "<=", ">=", "<", ">", "+", "-", "*", "/", "%", "!", "(", ")", ".", ",",
-    "[", "]",
+const OPS: [&str; 21] = [
+    "::", "||", "&&", "==", "!=", "<=", ">=", "<", ">", "+", "-", "*", "/", "%", "!", "(", ")",
+    ".", ",", "[", "]",
 ];
 
 fn lex(s: &str) -> Result<Vec<Tok>, String> {
@@ -1144,6 +1302,28 @@ impl Parser<'_> {
                 }
                 Ok(Ast::Old(Box::new(e)))
             }
+            Some(Tok::Ident(n)) if n == "matches" && self.peek_op() == Some("(") => {
+                self.i += 1;
+                let e = self.expr(0)?;
+                if self.peek_op() != Some(",") {
+                    return Err(format!(
+                        "`{}`: write `matches(<value>, <pattern>)`, for example \
+                         `matches(result, Ok(Complete(_)))`",
+                        self.src
+                    ));
+                }
+                self.i += 1;
+                let p = self.pattern()?;
+                self.expect(")")?;
+                if e.root().is_none() && !matches!(e, Ast::Old(_)) {
+                    return Err(format!(
+                        "`{}`: `matches()` reads a value named by a parameter or `result`, not \
+                         an expression",
+                        self.src
+                    ));
+                }
+                Ok(Ast::Matches(Box::new(e), p))
+            }
             Some(Tok::Ident(n)) => {
                 if self.peek_op() == Some("(") {
                     let Some(b) = Builtin::of(&n) else {
@@ -1182,11 +1362,87 @@ impl Parser<'_> {
     }
 }
 
+impl Parser<'_> {
+    /// A pattern of `matches()`: `_`, an integer (also negative), a string, `true`, `false`, a
+    /// variant's path with its fields' patterns in parentheses, or a tuple of patterns.
+    fn pattern(&mut self) -> Result<Pat, String> {
+        let t = self.t.get(self.i).cloned();
+        self.i += 1;
+        match t {
+            Some(Tok::Int(v)) => Ok(Pat::Int(v)),
+            Some(Tok::Op("-")) => match self.t.get(self.i).cloned() {
+                Some(Tok::Int(v)) => {
+                    self.i += 1;
+                    Ok(Pat::Int(-v))
+                }
+                _ => Err(format!("`{}`: `-` in a pattern takes an integer", self.src)),
+            },
+            Some(Tok::Str(s)) => Ok(Pat::Str(s)),
+            Some(Tok::Ident(n)) if n == "_" => Ok(Pat::Any),
+            Some(Tok::Ident(n)) if n == "true" || n == "false" => Ok(Pat::Bool(n == "true")),
+            Some(Tok::Ident(mut n)) => {
+                // `Status::Complete`: the variant is the last segment
+                while self.peek_op() == Some("::") {
+                    self.i += 1;
+                    match self.t.get(self.i).cloned() {
+                        Some(Tok::Ident(x)) => {
+                            n = x;
+                            self.i += 1;
+                        }
+                        _ => return Err(format!("`{}`: a name after `::` in a pattern", self.src)),
+                    }
+                }
+                if self.peek_op() != Some("(") {
+                    return Ok(Pat::Variant(n, None));
+                }
+                self.i += 1;
+                Ok(Pat::Variant(n, Some(self.patterns()?)))
+            }
+            Some(Tok::Op("(")) => {
+                let v = self.patterns()?;
+                Ok(Pat::Tuple(v))
+            }
+            _ => Err(format!(
+                "`{}`: a pattern is `_`, a literal, a variant such as `Some(_)` or \
+                 `Status::Complete(_)`, or a tuple such as `(_, 0)`; found `{}`",
+                self.src,
+                self.show(self.i - 1)
+            )),
+        }
+    }
+
+    /// The patterns up to the closing `)`, separated by commas.
+    fn patterns(&mut self) -> Result<Vec<Pat>, String> {
+        let mut v = Vec::new();
+        if self.peek_op() == Some(")") {
+            self.i += 1;
+            return Ok(v);
+        }
+        loop {
+            v.push(self.pattern()?);
+            match self.peek_op() {
+                Some(",") => {
+                    self.i += 1;
+                    if self.peek_op() == Some(")") {
+                        self.i += 1;
+                        return Ok(v);
+                    }
+                }
+                Some(")") => {
+                    self.i += 1;
+                    return Ok(v);
+                }
+                _ => return Err(format!("`{}`: expected `,` or `)` in a pattern", self.src)),
+            }
+        }
+    }
+}
+
 fn no_calls(src: &str, name: &str) -> String {
     format!(
         "`{src}`: `{name}(...)` is a call of the program's code, which a check never runs: a \
          check reads values. Read the field the function would return instead. The functions a \
-         contract may use are len, is_some, is_none, is_ok, is_err, some, ok, err and old \
-         (docs/design/contracts.md, \"The language\")"
+         contract may use are len, is_some, is_none, is_ok, is_err, some, ok, err and old; \
+         `hydo fuzz` also reads matches and sorted (docs/design/contracts.md, \"The language\")"
     )
 }

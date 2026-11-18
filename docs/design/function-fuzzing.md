@@ -75,10 +75,16 @@ It resolves each type to a type that it can generate. These are the integer type
 `Box`, `Rc` and `Arc`. It also resolves the crate's structures with named or tuple fields and
 the crate's type aliases. hydo refuses a function with one reason each:
 
-- a generic function or a method of a generic `impl` block;
-- an `async` function, a method of a trait, or a function inside another function;
-- a parameter of a type it cannot generate: enumerations, references inside structures, a
-  recursive structure, `impl Trait`. Floating-point values are generated since Milestone 289.
+- a generic function or a method of a generic `impl` block, without a `with` line for each type
+  parameter;
+- an `async` function, or a function inside another function;
+- a parameter of a type it cannot generate: references inside structures, a recursive
+  structure, `impl Trait`. Floating-point values are generated since Milestone 289.
+
+Since Milestone 307 (section "Enumerations, trait methods and built values") hydo also resolves
+the crate's enumerations, generic ones and generic type aliases included. It fuzzes a trait's
+method on the type that a `with Self` line names, and it builds a value of another type through
+a constructor that a `build` line names.
 
 `hydo fuzz --list` prints each contracted function and whether it can be fuzzed. A result or a
 field of a type that hydo cannot read is shown as not read, and a clause that reads it is
@@ -510,15 +516,48 @@ The run with faults is a prototype (open item 139):
   `cf=` values are drawn without the run's count of flushes.
 - The rs-snowflake candidate is not posted.
 
+## Enumerations, trait methods and built values
+
+Milestone 307 added the parts of a Rust API that both evaluations found refused. `hydo guide
+fuzz` is the reference; this section records the decisions.
+
+- Enumerations. The textual reading finds each `enum` with its variants and type parameters. A
+  value goes over the wire as `V<variant>` and its fields. The language gained one form,
+  `matches(e, <pattern>)`, after Rust's `matches!`, with literals, `_`, tuples and variants. A
+  variant's fields read as fields (`ok(result).Complete.0`), as a structure's do. `==` on a
+  variant is undecided, so that a clause never compares a variant with a number by accident. A
+  pattern is checked against the type before the run: a misspelt variant refuses the function.
+- Trait methods. `with Self = <type>` reuses the `with` line, so a trait's method is fuzzed as
+  a generic function is: once per named type, through `<Type as Trait>::method`. A required
+  method without a body is fuzzed too, since the call goes to the type's implementation. A
+  `Self` that is a reference (`&[u8]`) is passed as a reference to a local slice, which the
+  harness reads back after the call.
+- Built values. `build` names a constructor instead of a new syntax for values. The harness
+  generates the constructor's arguments and calls it under `catch_unwind`, so a panic there is
+  the call's panic. An argument passed by reference is leaked, so that the built value may
+  borrow it for the rest of the process. `read` names a method whose result hydo reads.
+  `requires` reads only the constructor's arguments, because hydo judges it before any call;
+  `ensures` reads the value through `read`, at the entry too, from the harness's answer.
+- `sorted(v)` is a built-in function, not a general quantifier. In a `requires` clause it makes
+  the generator sort the list, so a sorted precondition rejects no input.
+- A `build` or `read` line holds for the whole crate, because a type such as `Bytes` is the
+  receiver of dozens of methods.
+
+The proof is the fixture `hydo/crates/hydo-contracts/tests/fuzz-m307`, with a planted bug for
+each part, and the re-run of the second evaluation's crates in
+docs/design/function-fuzzing-evaluation-2.md, section "After Milestone 307".
+
 ## Limits
 
 - Rust only: hydo reads only `.rs` files for fuzzing. A Go harness would be a `_test.go` file
   in the function's package, by the same design.
-- The language has no quantifier, so `delta_pack`'s "the input is sorted" cannot be stated. A
-  property function that sorts its input first is the way around it.
-- No enumerations; floating-point values are fuzzed since Milestone 289. A generic function
-  needs a `with T = <type>` line for each type parameter (Milestone 282), and a method of a
-  trait is not fuzzed.
+- The language has one quantifier, `sorted(v)` (Milestone 307). "Every element is unique" or
+  "every element keeps a rule" cannot be stated.
+- A generic function needs a `with T = <type>` line for each type parameter (Milestone 282), and
+  a trait's method a `with Self = <type>` line (Milestone 307). A generic structure, `char` and
+  maps are not fuzzed.
+- A `build` line's constructor must return the value. One that returns an `Option`, as chrono's
+  `NaiveDate::from_ymd_opt`, is not used; its panicking twin and `input` lines are.
 - A result that borrows from a `&mut` parameter was not tried.
 - The reading of the sources is textual. A structure defined by a macro is not found, and a
   field type of a structure in another module is written as that module writes it.

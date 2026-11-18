@@ -1285,21 +1285,7 @@ impl Ctx<'_> {
 
     fn parse<'w>(&self, f: &Fn, w: &mut impl Iterator<Item = &'w str>) -> Outcome {
         match w.next() {
-            Some("R") => {
-                let Ok(result) = value::decode(&f.ret, w) else {
-                    return Outcome::Ended;
-                };
-                let mut after = Vec::new();
-                for p in &f.params {
-                    if matches!(p.pass, Pass::RefMut { .. }) {
-                        match value::decode(&p.ty, w) {
-                            Ok(v) => after.push(v),
-                            Err(_) => return Outcome::Ended,
-                        }
-                    }
-                }
-                Outcome::Returned { result, after }
-            }
+            Some("R") => f.returned(w).unwrap_or(Outcome::Ended),
             Some("P") => {
                 let mut s = || match value::decode(&FTy::Str, w) {
                     Ok(Val::Str(s)) => s,

@@ -45,15 +45,137 @@ holds the whole report.
 - `// hydo: ensures <expr>`: what must hold after the call. `result` is the returned value.
 - `// hydo: input <path> ...`: the values that hydo generates for a parameter, a field
   (`l.balance`), or the elements of a list (`v[]`).
-- `// hydo: with T = i64`: the type that a generic function's type parameter takes.
+- `// hydo: with T = i64`: the type that a type parameter takes. It names the parameters of a
+  generic function, of a generic `impl` block, and of a trait. `with Self = i64` names the type
+  that a trait's method is fuzzed on (section "Trait methods").
+- `// hydo: build <Type> from <constructor>(<name>: <type>, ...)` and `// hydo: read <Type> as
+  <type> by <method>()`: how hydo makes and reads a value of a type that it cannot generate
+  field by field (section "Values built by a constructor").
 
 An expression reads parameters, fields, `result`, integers, floating-point numbers (`0.5`),
 strings, `old(e)` (the value at the call's entry), and the functions `len`, `is_some`, `is_none`,
-`is_ok`, `is_err`, `some`, `ok` and `err`. The operators are `||`, `&&`, the comparisons,
-`+ - * / %`, `!` and unary `-`. Integers are exact, with no overflow. A comparison of an integer
-with an `f32` or `f64` value is exact too. Arithmetic on such a value is the program's own `f64`
-arithmetic, and a NaN is unequal to everything, itself included. A call of the program's own code
-is refused.
+`is_ok`, `is_err`, `some`, `ok` and `err`. `hydo fuzz` also reads `matches(e, <pattern>)` and
+`sorted(v)` (sections "Enumerations" and "Sorted inputs"). The operators are `||`, `&&`, the
+comparisons, `+ - * / %`, `!` and unary `-`. Integers are exact, with no overflow. A comparison
+of an integer with an `f32` or `f64` value is exact too. Arithmetic on such a value is the
+program's own `f64` arithmetic, and a NaN is unequal to everything, itself included. A call of
+the program's own code is refused.
+
+A type that a `with` line names is written as the function's module writes it. byteorder's
+`io.rs` does not import `BigEndian`, so its contracts write `with T = crate::BigEndian`.
+
+## Enumerations
+
+hydo generates and reads the values of an enumeration of the crate, and of the standard
+library's `Ordering`. A variant's fields are generated like a structure's. `matches(e,
+<pattern>)` is true when the value has the pattern's shape:
+
+| Pattern | Matches |
+|---|---|
+| `_` | any value |
+| `0`, `-1`, `"text"`, `true` | that value |
+| `Complete`, `Status::Complete` | the variant, whatever its fields are |
+| `Complete(_)`, `Ok(Complete((_, 0)))` | the variant, with a pattern for each field |
+| `(_, 0)` | a tuple |
+
+`Some`, `None`, `Ok` and `Err` are variants too. A variant's field reads like a field:
+`ok(result).Complete.0` is the field of `Complete` inside `Ok`. On a call where the value is
+another variant, the read is undecided, as `some(o)` is on `None`. httparse's
+`parse_chunk_size` returns `Result<Status<(usize, u64)>, InvalidChunkSize>`, and this contract
+states the rule `chunk-size = 1*HEXDIG` of RFC 9112:
+
+```rust
+// hydo: input buf like b"4\r\nRust\r\n", b"0\r\n\r\n", b"1a;ext=1\r\n", b"ff \r\n"
+// hydo: ensures !matches(result, Ok(Complete(_))) || (buf[0] >= 48 && buf[0] <= 57) || (buf[0] >= 65 && buf[0] <= 70) || (buf[0] >= 97 && buf[0] <= 102)
+pub fn parse_chunk_size(buf: &[u8]) -> result::Result<Status<(usize, u64)>, InvalidChunkSize> {
+```
+
+```text
+hydo: contract broken: httparse::parse_chunk_size ensures !matches(result, Ok(Complete(_))) || ... on 28 of 1000 calls
+hydo:   smallest input (0 shrink steps): buf = b"\r\n"
+hydo:   the call gave: result = Ok(Complete((2, 0)))
+```
+
+A variant that the type does not have is refused before the run, with the variants it has. A
+variant is never compared with `==`: write `matches()`. An `input` line names a variant's field
+as `op.Clamp.lo`.
+
+## Trait methods
+
+A contract on a trait's method names the type to fuzz it on with `with Self = <type>`. The
+method can be required or have a default body. Each `with Self` line gives one run of the
+method, named `<i64 as CheckedAdd>::checked_add`:
+
+```rust
+pub trait CheckedAdd: Sized + Add<Self, Output = Self> {
+    // hydo: with Self = i64
+    // hydo: with Self = u8
+    // hydo: ensures is_none(result) || some(result) == self + v
+    fn checked_add(&self, v: &Self) -> Option<Self>;
+}
+```
+
+`Self` can be a reference. byteorder's `read_uint` is a default method of `ReadBytesExt`, and
+with `with Self = &[u8]` its `&mut self` is a slice that the call advances.
+`len(self)` is the length after the call, and `old(len(self))` before it:
+
+```rust
+// hydo: with Self = &[u8]
+// hydo: with T = crate::BigEndian
+// hydo: input nbytes in 0..=10
+// hydo: ensures is_err(result) || len(self) == old(len(self)) - nbytes
+fn read_uint<T: ByteOrder>(&mut self, nbytes: usize) -> Result<u64> {
+```
+
+```text
+hydo: byteorder::io::<&[u8] as ReadBytesExt>::read_uint panicked at src/lib.rs:1966 on 290 of 1000 calls
+hydo:   smallest input (0 shrink steps): self = b"", nbytes = 0
+```
+
+A method of `impl Trait for Type` is called as `<Type as Trait>::method`, and a method of a
+generic `impl` block takes `with` lines for the block's type parameters. A trait method without
+a `with Self` line is refused with what to write. A parameter of the form `&mut &[u8]` is
+generated as a slice too.
+
+## Values built by a constructor
+
+A type with a pointer or with private fields of another module cannot be generated field by
+field. A `build` line names a function that builds it: hydo generates the function's arguments
+and passes the value it returns. A `read` line names a method that turns the value into one
+that hydo reads. The two lines hold for the whole crate, so write them once, on any contracted
+function:
+
+```rust
+// hydo: build Bytes from Bytes::copy_from_slice(v: &[u8])
+// hydo: read Bytes as Vec<u8> by to_vec()
+// hydo: requires at <= len(self.v)
+// hydo: ensures len(result) == at && len(self) == old(len(self)) - at
+pub fn split_to(&mut self, at: usize) -> Self {
+```
+
+- A clause names the constructor's arguments as fields: `self.v` is the `v` that built `self`.
+  An `input` line narrows them the same way (`input self.v len 0..=300`).
+- `requires` reads only the arguments, because hydo judges it before the call.
+- `ensures` reads the value through the `read` line: at the entry with `old(self)`, and after
+  the call with `self` for a `&mut` parameter or with `result`.
+- A report shows a built input as its constructor's call, `self = Bytes::copy_from_slice(b"ab")`.
+
+A constructor that panics on an input ends the call with a panic at the constructor. Narrow its
+arguments with `input` lines: chrono's `NaiveDate::from_ymd(year: i32, month: u32, day: u32)`
+needs `input self.month in 1..=12` and `input self.day in 1..=28`. A type without a `build` line
+is refused with the line to write.
+
+## Sorted inputs
+
+`sorted(v)` is true when each element of a list is at most the next. Integers and
+floating-point numbers compare as numbers, and strings by their bytes. In a `requires` clause,
+hydo generates the list in order, so no input is thrown away for it:
+
+```rust
+// hydo: requires sorted(v)
+// hydo: ensures is_none(result) || v[some(result)] == x
+pub fn search(v: &[u32], x: u32) -> Option<usize> {
+```
 
 ## The `input` line
 
@@ -99,7 +221,7 @@ of bytes takes text examples too, as their bytes, and a report shows it as a byt
 | `vacuous` | A clause held without being checked: see below. | 3 |
 
 A clause is undecided on a call when it reads a value of a type that hydo does not read, such as
-an enumeration. Such a value shows as `<not read>`. A clause that is decided on fewer than
+a structure of another crate without a `read` line. Such a value shows as `<not read>`. A clause that is decided on fewer than
 `--min-reach` calls (default 1 % of `--cases`) gives `not judged`, with the reason.
 
 A clause `a || ... || z` holds without checking `z` when a part before it is true. The report
@@ -132,11 +254,12 @@ pub fn display_roundtrip(text: &str) -> Option<bool> {
 
 `hydo fuzz --list` prints each contracted function and why it is not fuzzed. These are refused:
 
-- a method of a trait, and a method of a generic `impl` block;
-- a generic function without a `with` line for each type parameter;
-- a parameter of an enumeration, or of a type that holds a pointer;
-- a parameter whose structure has a private field of another module. Fuzz its constructor, or a
-  function that takes the parts.
+- a method of a trait without a `with Self` line;
+- a generic function, or a method of a generic `impl` block or trait, without a `with` line for
+  each type parameter;
+- a parameter of a type that holds a pointer, or whose structure has a private field of another
+  module, without a `build` line;
+- a parameter of a generic structure, a `char`, or a map.
 
 A result of such a type is read in part, and a clause that reads the rest is undecided. A
 function whose test module does not build is reported with the compiler's first error, and the

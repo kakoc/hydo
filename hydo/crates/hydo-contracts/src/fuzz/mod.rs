@@ -158,6 +158,52 @@ pub fn find_all(
         }
     }
     let (mut fns, mut skipped, mut errors) = (Vec::new(), Vec::new(), Vec::new());
+    // the `build` and `read` lines hold for the whole crate (Milestone 307)
+    for (f, text) in &texts {
+        if !text.contains("// hydo: build") && !text.contains("// hydo: read") {
+            continue;
+        }
+        let rel = f.strip_prefix(pkg_dir).unwrap_or(f).to_path_buf();
+        for c in lang::scan(text).0 {
+            for b in &c.builds {
+                let mut args = Vec::new();
+                for (n, t) in &b.args {
+                    match rust::parse_ty(t) {
+                        Ok(t) => args.push((n.clone(), t)),
+                        Err(e) => errors.push(format!(
+                            "{}:{}: `build {}`: the type of `{n}`: {e}",
+                            rel.display(),
+                            b.line,
+                            b.ty
+                        )),
+                    }
+                }
+                items
+                    .builds
+                    .entry(rust::type_key(&b.ty))
+                    .or_insert(rust::BuildDef {
+                        ctor: b.ctor.clone(),
+                        args,
+                    });
+            }
+            for r in &c.reads {
+                match rust::parse_ty(&r.view) {
+                    Ok(v) => {
+                        items
+                            .reads
+                            .entry(rust::type_key(&r.ty))
+                            .or_insert((v, r.method.clone()));
+                    }
+                    Err(e) => errors.push(format!(
+                        "{}:{}: `read {}`: {e}",
+                        rel.display(),
+                        r.line,
+                        r.ty
+                    )),
+                }
+            }
+        }
+    }
     let mut forbidden: Vec<String> = Vec::new();
     for (_, text) in &texts {
         for l in forbidden_lints(text) {
@@ -210,16 +256,90 @@ pub fn find_all(
                 line: c.line,
                 why,
             };
-            match read_fn(text, &m, &c, &items, pkg, &module, &rel) {
-                Ok(mut f) => {
-                    f.forbidden = forbidden.clone();
-                    fns.push(f)
+            // a trait's method is fuzzed once for each `with Self = <type>` line (Milestone 307)
+            let selves: Vec<&(String, String)> = c.with.iter().filter(|(n, _)| n == SELF).collect();
+            let each: Vec<SrcContract> = if selves.len() > 1 {
+                selves
+                    .iter()
+                    .map(|s| {
+                        let mut one = c.clone();
+                        one.with.retain(|(n, _)| n != SELF);
+                        one.with.push((*s).clone());
+                        one
+                    })
+                    .collect()
+            } else {
+                vec![c.clone()]
+            };
+            for c in &each {
+                match read_fn(text, &m, c, &items, pkg, &module, &rel) {
+                    Ok(mut f) => {
+                        f.forbidden = forbidden.clone();
+                        fns.push(f)
+                    }
+                    Err(why) => skipped.push(skip(why)),
                 }
-                Err(why) => skipped.push(skip(why)),
             }
         }
     }
     (fns, skipped, errors)
+}
+
+/// The type parameter that a `with Self = <type>` line names: the type a trait's method is
+/// fuzzed on (Milestone 307).
+pub const SELF: &str = "Self";
+
+/// The block a contracted function stands in, as fuzzing needs it.
+enum Owner {
+    /// A free function.
+    None,
+    /// A method of `impl Type` or `impl Trait for Type`: the type, the trait, and the block's
+    /// type parameters.
+    Impl(TyAst, Option<TyAst>, Vec<String>),
+    /// A method of a trait: its name and type parameters (Milestone 307).
+    Trait(String, Vec<String>),
+}
+
+/// How a parameter whose type is `t` is passed: the pass, and for a reference to a reference
+/// (`&mut &[u8]`) how the inner reference is made (Milestone 307).
+fn passes(t: &TyAst) -> (Pass, Option<Pass>) {
+    match t {
+        TyAst::Ref(m, inner) if matches!(**inner, TyAst::Ref(..)) => {
+            let outer = if *m {
+                Pass::RefMut { unsized_ref: false }
+            } else {
+                Pass::Ref { unsized_ref: false }
+            };
+            (outer, Some(rust::pass_of(inner)))
+        }
+        _ => (rust::pass_of(t), None),
+    }
+}
+
+/// A parameter's refusal, with what to write when the type needs a `build` line: the
+/// parameter's own type, or for a list the type that the reason names.
+fn refusal(what: &str, t: &TyAst, why: String) -> String {
+    let mut base = t;
+    while let TyAst::Ref(_, x) = base {
+        base = x;
+    }
+    let named = matches!(base, TyAst::Path(..))
+        .then(|| base.text())
+        .or_else(|| {
+            why.strip_prefix("hydo cannot generate a value of `")
+                .and_then(|r| r.split('`').next())
+                .map(str::to_string)
+        })
+        .filter(|n| !n.is_empty() && !why.contains("// hydo: build"));
+    if let Some(n) = named {
+        let ty = rust::type_key(&n);
+        format!(
+            "{what}: {why}; a `// hydo: build {ty} from <constructor>(<name>: <type>, ...)` line \
+             names a function that builds one"
+        )
+    } else {
+        format!("{what}: {why}")
+    }
 }
 
 fn read_fn(
@@ -233,19 +353,17 @@ fn read_fn(
 ) -> Result<Fn, String> {
     let decl = rust::line_start(text, c.line);
     let blocks = rust::enclosing(m, decl);
-    let mut impl_ty: Option<TyAst> = None;
+    let mut owner = Owner::None;
     let mut insert_at = None;
     for b in blocks.iter().rev() {
         let h = &b.header;
-        if h.starts_with("trait ") || h.contains(" trait ") {
-            return Err("a method of a trait: fuzz a function of a type that implements it".into());
+        if let Some((name, params)) = rust::trait_parts(h) {
+            owner = Owner::Trait(name, params);
+            insert_at = Some(b.close + 1);
+            break;
         }
-        if rust::impl_type(h).is_some() && impl_ty.is_none() {
-            let (t, generic) = rust::impl_type(h).ok_or("an `impl` block hydo cannot read")?;
-            if generic {
-                return Err("a method of a generic `impl` block: not fuzzed yet".into());
-            }
-            impl_ty = Some(t);
+        if let Some((t, tr, params)) = rust::impl_parts(h) {
+            owner = Owner::Impl(t, tr, params);
             insert_at = Some(b.close + 1);
             break;
         }
@@ -257,10 +375,37 @@ fn read_fn(
     if sig.is_async {
         return Err("an `async` function: not fuzzed yet".into());
     }
-    // a generic function: each type parameter takes the type that a `with` line names
+    if !sig.has_body && !matches!(owner, Owner::Trait(..)) {
+        return Err("the function has no body (a declaration)".into());
+    }
+    // each type parameter takes the type that a `with` line names: the function's own, the
+    // `impl` block's, and the trait's (Milestone 307)
     let mut subst: BTreeMap<String, TyAst> = BTreeMap::new();
     let mut turbofish = Vec::new();
     let mut missing = Vec::new();
+    let with_ty = |name: &str| -> Option<Result<TyAst, String>> {
+        c.with
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, t)| rust::parse_ty(t).map_err(|e| format!("`with {name} = {t}`: {e}")))
+    };
+    let outer: Vec<String> = match &owner {
+        Owner::Impl(_, _, p) | Owner::Trait(_, p) => p.clone(),
+        Owner::None => vec![],
+    };
+    for name in &outer {
+        if name.starts_with("const ") {
+            return Err(format!(
+                "a const generic parameter (`{name}`): not fuzzed yet"
+            ));
+        }
+        match with_ty(name) {
+            Some(t) => {
+                subst.insert(name.clone(), t?);
+            }
+            None => missing.push(name.clone()),
+        }
+    }
     for g in &sig.generics {
         if g == "where" {
             continue;
@@ -269,9 +414,9 @@ fn read_fn(
             return Err(format!("a const generic parameter (`{g}`): not fuzzed yet"));
         }
         let name = g.split([':', '=']).next().unwrap_or("").trim().to_string();
-        match c.with.iter().find(|(n, _)| *n == name) {
-            Some((_, t)) => {
-                let ty = rust::parse_ty(t).map_err(|e| format!("`with {name} = {t}`: {e}"))?;
+        match with_ty(&name) {
+            Some(t) => {
+                let ty = t?;
                 turbofish.push(ty.text());
                 subst.insert(name, ty);
             }
@@ -279,49 +424,92 @@ fn read_fn(
         }
     }
     if let Some(m) = missing.first() {
+        let mut all: Vec<String> = outer.clone();
+        all.extend(sig.generics.iter().filter(|g| *g != "where").cloned());
         return Err(format!(
             "a generic function (`{}`): name the type to fuzz it with, for example \
              `// hydo: with {m} = i64`, or write the contract on a function of concrete types \
              that calls it",
-            sig.generics.join(", ")
+            all.join(", ")
         ));
     }
+    // the type `Self` stands for, and the path of the call
+    let (self_ty, call_base, owner_name) = match &owner {
+        Owner::None => (None, None, None),
+        Owner::Impl(t, tr, _) => {
+            let t = rust::subst_ty(t, &subst);
+            let base = match tr {
+                Some(tr) => format!("<{} as {}>", t.text(), rust::subst_ty(tr, &subst).text()),
+                None => format!("<{}>", t.text()),
+            };
+            let name = t.text();
+            (Some(t), Some(base), Some(name))
+        }
+        Owner::Trait(name, params) => {
+            let Some(t) = with_ty(SELF) else {
+                return Err(format!(
+                    "a method of the trait `{name}`: name the type to fuzz it on, for example \
+                     `// hydo: with Self = i64`; the type must implement `{name}`"
+                ));
+            };
+            let t = t?;
+            let tr = if params.is_empty() {
+                name.clone()
+            } else {
+                format!(
+                    "{name}<{}>",
+                    params
+                        .iter()
+                        .map(|p| subst[p].text())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            let base = format!("<{} as {tr}>", t.text());
+            (Some(t), Some(base.clone()), Some(base))
+        }
+    };
     let res = rust::Resolver {
         items,
-        self_ty: impl_ty.as_ref(),
+        self_ty: self_ty.as_ref(),
         module,
         subst: &subst,
     };
     let mut params = Vec::new();
     if let Some(r) = sig.receiver {
-        let t = impl_ty
+        let t = self_ty
             .as_ref()
             .ok_or("a `self` parameter outside an `impl` block")?;
         let ty = res.resolve(t);
-        ty.generable().map_err(|why| format!("`self`: {why}"))?;
+        let what = match &owner {
+            Owner::Trait(..) => format!("`self` (`with Self = {}`)", t.text()),
+            _ => "`self`".to_string(),
+        };
+        ty.generable().map_err(|why| refusal(&what, t, why))?;
+        let inner = matches!(t, TyAst::Ref(..)).then(|| rust::pass_of(t));
+        let pass = match r {
+            Receiver::Value => rust::pass_of(t),
+            Receiver::Ref => Pass::Ref { unsized_ref: false },
+            Receiver::RefMut => Pass::RefMut { unsized_ref: false },
+        };
+        let inner = if r == Receiver::Value { None } else { inner };
         params.push(harness::Param {
             name: "self".into(),
-            pass: match r {
-                Receiver::Value => Pass::Value,
-                Receiver::Ref => Pass::Ref { unsized_ref: false },
-                Receiver::RefMut => Pass::RefMut { unsized_ref: false },
-            },
+            pass,
             ty,
+            inner,
         });
     }
     for (n, t) in &sig.params {
         let ty = res.resolve(t);
         ty.generable()
-            .map_err(|why| format!("the parameter `{n}`: {why}"))?;
-        if let TyAst::Ref(_, inner) = t {
-            if matches!(**inner, TyAst::Ref(..)) {
-                return Err(format!("the parameter `{n}` is a reference to a reference"));
-            }
-        }
+            .map_err(|why| refusal(&format!("the parameter `{n}`"), t, why))?;
+        let (pass, inner) = passes(t);
         params.push(harness::Param {
             name: n.clone(),
-            pass: rust::pass_of(t),
+            pass,
             ty,
+            inner,
         });
     }
     let (ret, ret_ref) = match &sig.ret {
@@ -341,10 +529,14 @@ fn read_fn(
                 ));
             }
         }
+        check_patterns(&cl.ast, &params, &ret).map_err(|e| format!("line {}: {e}", cl.line))?;
     }
     let mut hints = Hints::default();
     for cl in &c.clauses {
         check::hints_of(&cl.ast, &mut hints);
+        if cl.kind == ClauseKind::Requires {
+            check::sorted_hints(&cl.ast, &mut hints);
+        }
     }
     for x in &c.inputs {
         input_hints(x, &params, &mut hints)
@@ -359,12 +551,12 @@ fn read_fn(
         .chain(module.iter().cloned())
         .collect::<Vec<_>>()
         .join("::");
-    let (call, name) = match &impl_ty {
-        Some(t) => (
-            format!("<{}>::{}{}", t.text(), sig.name, fish(&turbofish)),
-            format!("{prefix}::{}::{}", t.text(), sig.name),
+    let (call, name) = match (call_base, owner_name) {
+        (Some(base), Some(owner)) => (
+            format!("{base}::{}{}", sig.name, fish(&turbofish)),
+            format!("{prefix}::{owner}::{}", sig.name),
         ),
-        None => (
+        _ => (
             format!("super::{}{}", sig.name, fish(&turbofish)),
             format!("{prefix}::{}", sig.name),
         ),
@@ -388,6 +580,184 @@ fn read_fn(
         hints,
         forbidden: Vec::new(),
     })
+}
+
+/// The type of a place that a clause names (a parameter, `result`, their fields, a variant's
+/// fields, `some()`, `ok()`, `err()` and elements), when hydo knows it.
+fn type_of(a: &Ast, params: &[harness::Param], ret: &FTy) -> Option<FTy> {
+    let t = match a {
+        Ast::Name(n) if n == "result" => ret.clone(),
+        Ast::Name(n) => params.iter().find(|p| p.name == *n)?.ty.clone(),
+        Ast::Old(x) => type_of(x, params, ret)?,
+        Ast::Field(x, f) => match plain(type_of(x, params, ret)?) {
+            FTy::Struct { fields, .. } => fields.into_iter().find(|(n, _)| n == f)?.1,
+            FTy::Tuple(v) => v.into_iter().nth(f.parse().ok()?)?,
+            FTy::Enum { variants, .. } => {
+                let v = variants.into_iter().find(|v| v.name == *f)?;
+                FTy::Struct {
+                    path: v.name,
+                    tuple: v.kind != rust::VKind::Named,
+                    fields: v.fields,
+                }
+            }
+            _ => return None,
+        },
+        Ast::Index(x, _) => match plain(type_of(x, params, ret)?) {
+            FTy::List(e) | FTy::Array(e, _) => *e,
+            _ => return None,
+        },
+        Ast::Call(lang::Builtin::Some, x) => match plain(type_of(x, params, ret)?) {
+            FTy::Opt(e) => *e,
+            _ => return None,
+        },
+        Ast::Call(b @ (lang::Builtin::Ok | lang::Builtin::Err), x) => {
+            match plain(type_of(x, params, ret)?) {
+                FTy::Res(o, e) => {
+                    if *b == lang::Builtin::Ok {
+                        *o
+                    } else {
+                        *e
+                    }
+                }
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+    Some(plain(t))
+}
+
+/// A type without its box, and a type that a `read` line reads as the type it is read as.
+fn plain(t: FTy) -> FTy {
+    match t {
+        FTy::Boxed(_, x) => plain(*x),
+        FTy::Built {
+            read: Some((v, _)), ..
+        } => plain(*v),
+        o => o,
+    }
+}
+
+/// Check the patterns of a clause's `matches()` and the variants it names against the types
+/// (Milestone 307), so that a misspelt variant is refused before the run, not undecided on
+/// every call.
+fn check_patterns(a: &Ast, params: &[harness::Param], ret: &FTy) -> Result<(), String> {
+    match a {
+        Ast::Matches(x, p) => {
+            check_patterns(x, params, ret)?;
+            if let Some(t) = type_of(x, params, ret) {
+                check_pat(p, &t).map_err(|e| format!("`matches({x}, {p})`: {e}"))?;
+            }
+        }
+        Ast::Field(x, f) => {
+            check_patterns(x, params, ret)?;
+            if let Some(FTy::Enum { path, variants, .. }) = type_of(x, params, ret) {
+                if !variants.iter().any(|v| v.name == *f) {
+                    return Err(format!(
+                        "`{a}`: `{}` has no variant `{f}`; its variants are {}",
+                        path.trim_start_matches("self::"),
+                        variant_names(&variants)
+                    ));
+                }
+            }
+        }
+        Ast::Call(_, x) | Ast::Old(x) | Ast::Not(x) | Ast::Neg(x) => {
+            check_patterns(x, params, ret)?
+        }
+        Ast::Index(x, y) | Ast::Bin(_, x, y) => {
+            check_patterns(x, params, ret)?;
+            check_patterns(y, params, ret)?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn variant_names(v: &[rust::Variant]) -> String {
+    v.iter()
+        .map(|v| format!("`{}`", v.name))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Whether a pattern fits a type, else why not.
+fn check_pat(p: &lang::Pat, t: &FTy) -> Result<(), String> {
+    use lang::Pat;
+    let t = plain(t.clone());
+    let fields = |ps: &[Pat], ts: &[&FTy], what: &str| -> Result<(), String> {
+        if ps.len() != ts.len() {
+            return Err(format!(
+                "the pattern gives {} fields, and {what} has {}",
+                ps.len(),
+                ts.len()
+            ));
+        }
+        ps.iter().zip(ts).try_for_each(|(p, t)| check_pat(p, t))
+    };
+    match (p, &t) {
+        (Pat::Any, _) => Ok(()),
+        (_, FTy::Opaque(o)) => Err(format!("hydo does not read a value of `{o}`")),
+        (Pat::Int(_), FTy::Int { .. } | FTy::Float { .. })
+        | (Pat::Bool(_), FTy::Bool)
+        | (Pat::Str(_), FTy::Str) => Ok(()),
+        (Pat::Tuple(ps), FTy::Tuple(ts)) => fields(ps, &ts.iter().collect::<Vec<_>>(), "the tuple"),
+        (Pat::Variant(n, sub), FTy::Opt(x)) => match (n.as_str(), sub) {
+            ("None", None) => Ok(()),
+            ("Some", None) => Ok(()),
+            ("Some", Some(ps)) => fields(ps, &[x], "`Some`"),
+            _ => Err(format!("an `Option` is `Some(_)` or `None`, not `{p}`")),
+        },
+        (Pat::Variant(n, sub), FTy::Res(o, e)) => match (n.as_str(), sub) {
+            ("Ok" | "Err", None) => Ok(()),
+            ("Ok", Some(ps)) => fields(ps, &[o], "`Ok`"),
+            ("Err", Some(ps)) => fields(ps, &[e], "`Err`"),
+            _ => Err(format!("a `Result` is `Ok(_)` or `Err(_)`, not `{p}`")),
+        },
+        (Pat::Variant(n, sub), FTy::Enum { path, variants, .. }) => {
+            let Some(v) = variants.iter().find(|v| v.name == *n) else {
+                return Err(format!(
+                    "`{}` has no variant `{n}`; its variants are {}",
+                    path.trim_start_matches("self::"),
+                    variant_names(variants)
+                ));
+            };
+            match (sub, v.kind) {
+                (None, _) => Ok(()),
+                (Some(ps), rust::VKind::Named) if !ps.is_empty() => Err(format!(
+                    "`{n}` has named fields: write `{n}` in the pattern, and read a field with \
+                     `.{n}.<field>`"
+                )),
+                (Some(ps), _) => fields(
+                    ps,
+                    &v.fields.iter().map(|(_, t)| t).collect::<Vec<_>>(),
+                    &format!("`{n}`"),
+                ),
+            }
+        }
+        (
+            Pat::Variant(n, sub),
+            FTy::Struct {
+                path, fields: fs, ..
+            },
+        ) => {
+            let name = path.rsplit("::").next().unwrap_or(path);
+            if n != name {
+                return Err(format!("the value is a `{name}`, not a `{n}`"));
+            }
+            match sub {
+                None => Ok(()),
+                Some(ps) => fields(
+                    ps,
+                    &fs.iter().map(|(_, t)| t).collect::<Vec<_>>(),
+                    &format!("`{n}`"),
+                ),
+            }
+        }
+        (p, t) => Err(format!(
+            "the pattern `{p}` does not fit a value of `{}`",
+            t.rust()
+        )),
+    }
 }
 
 /// The lints that a source's attributes forbid: `#![forbid(unsafe_code)]`, `#[forbid(...)]`,
@@ -458,13 +828,39 @@ fn input_ty<'a>(path: &str, params: &'a [harness::Param]) -> Result<&'a FTy, Str
         Ok(t)
     };
     let mut t = elems(&p.ty, first)?;
+    let mut variant: Option<&'a [(String, FTy)]> = None;
     for s in segs {
         let f = s.trim_end_matches("[]");
         let inner = match t {
             FTy::Boxed(_, b) => &**b,
             o => o,
         };
+        // a variant's field (`op.Clamp.lo`; Milestone 307)
+        if let Some(fields) = variant.take() {
+            t = fields
+                .iter()
+                .find(|(n, _)| n == f)
+                .map(|(_, t)| t)
+                .ok_or_else(|| format!("no field `{f}`"))?;
+            t = elems(t, s)?;
+            continue;
+        }
         t = match inner {
+            FTy::Enum { path, variants, .. } => {
+                let v = variants
+                    .iter()
+                    .find(|v| v.name == f)
+                    .ok_or_else(|| format!("`{path}` has no variant `{f}`"))?;
+                variant = Some(&v.fields);
+                continue;
+            }
+            // a constructor's argument (`self.v`; Milestone 307)
+            FTy::Built { build: Some(c), .. } => c
+                .args
+                .iter()
+                .find(|(n, _, _)| n == f)
+                .map(|(_, t, _)| t)
+                .ok_or_else(|| format!("no argument `{f}`"))?,
             FTy::Struct { fields, .. } => fields
                 .iter()
                 .find(|(n, _)| n == f)
@@ -478,6 +874,11 @@ fn input_ty<'a>(path: &str, params: &'a [harness::Param]) -> Result<&'a FTy, Str
             _ => return Err(format!("`.{f}` of a value without fields")),
         };
         t = elems(t, s)?;
+    }
+    if variant.is_some() {
+        return Err(format!(
+            "`{path}` names a variant: name one of its fields (`{path}.0`, `{path}.<field>`)"
+        ));
     }
     Ok(match t {
         FTy::Boxed(_, b) => b,
@@ -553,9 +954,12 @@ fn input_hints(x: &lang::SrcInput, params: &[harness::Param], h: &mut Hints) -> 
 fn roots_of(a: &Ast, out: &mut Vec<String>) {
     match a {
         Ast::Name(n) => out.push(n.clone()),
-        Ast::Field(x, _) | Ast::Call(_, x) | Ast::Old(x) | Ast::Not(x) | Ast::Neg(x) => {
-            roots_of(x, out)
-        }
+        Ast::Field(x, _)
+        | Ast::Call(_, x)
+        | Ast::Old(x)
+        | Ast::Not(x)
+        | Ast::Neg(x)
+        | Ast::Matches(x, _) => roots_of(x, out),
         Ast::Index(x, y) | Ast::Bin(_, x, y) => {
             roots_of(x, out);
             roots_of(y, out);
@@ -674,6 +1078,7 @@ impl Fn {
                     name: p.name.clone(),
                     pass: p.pass,
                     ty: p.ty.clone(),
+                    inner: p.inner,
                 })
                 .collect(),
             ret: self.ret.clone(),
@@ -683,18 +1088,64 @@ impl Fn {
         }
     }
 
-    fn entry_env(&self, args: &[Val]) -> Vec<(String, Val)> {
+    /// The values at entry. A value that a `build` line builds is its constructor's arguments,
+    /// and with `pre` (the harness's answer) also what its `read` line gave before the call.
+    fn entry_env(&self, args: &[Val], pre: Option<&[Val]>) -> Vec<(String, Val)> {
+        let mut pre = pre.map(|p| p.iter());
         self.params
             .iter()
             .zip(args)
-            .map(|(p, v)| (p.name.clone(), v.clone()))
+            .map(|(p, v)| {
+                let v = match (v, &p.ty) {
+                    (Val::Struct(a), FTy::Built { build: Some(_), .. }) => {
+                        let read = if harness::is_read_built(&p.ty) {
+                            pre.as_mut().and_then(|it| it.next()).cloned().map(Box::new)
+                        } else {
+                            None
+                        };
+                        Val::Built(read, a.clone())
+                    }
+                    _ => v.clone(),
+                };
+                (p.name.clone(), v)
+            })
             .collect()
+    }
+
+    /// How many values after the call the harness answers before the read values at entry:
+    /// one for each `&mut` parameter.
+    fn n_after(&self) -> usize {
+        self.params
+            .iter()
+            .filter(|p| matches!(p.pass, Pass::RefMut { .. }))
+            .count()
+    }
+
+    /// The answer of a call that returned, from the harness's words after `R` (Milestone 307:
+    /// the read values at entry of the built parameters follow the values after the call).
+    pub(crate) fn returned<'w>(
+        &self,
+        w: &mut impl Iterator<Item = &'w str>,
+    ) -> Result<Outcome, String> {
+        let result = value::decode(&self.ret, w)?;
+        let mut after = Vec::new();
+        for p in &self.params {
+            if matches!(p.pass, Pass::RefMut { .. }) {
+                after.push(value::decode(&p.ty, w)?);
+            }
+        }
+        for p in &self.params {
+            if harness::is_read_built(&p.ty) {
+                after.push(value::decode(&p.ty, w)?);
+            }
+        }
+        Ok(Outcome::Returned { result, after })
     }
 
     /// The first `requires` clause (by index) that the input does not keep, an undecided one
     /// included.
     pub fn unmet(&self, args: &[Val]) -> Option<usize> {
-        let e = self.entry_env(args);
+        let e = self.entry_env(args, None);
         let env = check::Env {
             entry: &e,
             after: &e,
@@ -713,14 +1164,19 @@ impl Fn {
 
     /// The values after the call: each `&mut` parameter's from the answer, the others' from
     /// the input.
-    fn after_env(&self, args: &[Val], after: &[Val]) -> Vec<(String, Val)> {
+    fn after_env(&self, entry: &[(String, Val)], after: &[Val]) -> Vec<(String, Val)> {
         let mut it = after.iter();
         self.params
             .iter()
-            .zip(args)
-            .map(|(p, v)| {
+            .zip(entry)
+            .map(|(p, (_, v))| {
                 let v = if matches!(p.pass, Pass::RefMut { .. }) {
-                    it.next().cloned().unwrap_or(Val::Opaque)
+                    let now = it.next().cloned().unwrap_or(Val::Opaque);
+                    match v {
+                        // a built value keeps its constructor's arguments
+                        Val::Built(_, a) => Val::Built(Some(Box::new(now)), a.clone()),
+                        _ => now,
+                    }
                 } else {
                     v.clone()
                 };
@@ -738,8 +1194,9 @@ impl Fn {
         };
         match o {
             Outcome::Returned { result, after } => {
-                let e = self.entry_env(args);
-                let a = self.after_env(args, after);
+                let n = self.n_after().min(after.len());
+                let e = self.entry_env(args, Some(&after[n..]));
+                let a = self.after_env(&e, &after[..n]);
                 let env = check::Env {
                     entry: &e,
                     after: &a,
@@ -880,6 +1337,15 @@ impl Fn {
                         *slot = Val::Int(nv);
                     }
                 }
+            }
+        }
+        // a list that `requires sorted(v)` names is generated in order (Milestone 307)
+        for p in &self.hints.sorted {
+            let Some((i, rest)) = self.split_path(p) else {
+                continue;
+            };
+            if let Some(Val::List(l)) = value::at_mut(&mut args[i], &rest) {
+                value::sort(l);
             }
         }
         args
@@ -1097,16 +1563,7 @@ impl<'a> Runner<'a> {
     fn parse_answer(&self, rest: &str) -> Result<Outcome, String> {
         let mut w = rest.split_ascii_whitespace();
         match w.next() {
-            Some("R") => {
-                let result = value::decode(&self.f.ret, &mut w)?;
-                let mut after = Vec::new();
-                for p in &self.f.params {
-                    if matches!(p.pass, Pass::RefMut { .. }) {
-                        after.push(value::decode(&p.ty, &mut w)?);
-                    }
-                }
-                Ok(Outcome::Returned { result, after })
-            }
+            Some("R") => self.f.returned(&mut w),
             Some("P") => {
                 let mut s = || match value::decode(&FTy::Str, &mut w) {
                     Ok(Val::Str(s)) => s,

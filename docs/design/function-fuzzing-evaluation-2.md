@@ -288,3 +288,62 @@ metadata`, or its harness), not the crate. The first error: error[unexpected_cfg
 
 Still open: frictions 1, 7, 10 and 12, and problem 3 of the verdict. Methods of types
 that hold pointers, trait methods and enumeration results are still refused or not read.
+
+## After Milestone 307
+
+Milestone 307 built the three parts of problem 3: enumerations, trait methods, and values built
+by a constructor. It also added `sorted(v)`. The runs below used fresh copies of the six crates,
+unpacked from their crates.io archives, and byteorder 1.5.0 of the first evaluation. Each run
+used seed 1 and 1,000 inputs, on the Mac, without a change to any crate's code.
+
+The contracts were written for this milestone, on the parts that the evaluations found refused.
+"Before" is `main` at `d0159ad0`, given the same contracts without the lines its language
+lacks: `build`, `read`, `with Self`, and the clauses with `matches()` or `sorted()`. A refused
+function is one that `hydo fuzz --list` reports as not fuzzed.
+
+| Crate | Contracts | Refused before | Refused after | Functions fuzzed after | Verdicts after |
+|---|---|---|---|---|---|
+| strsim 0.11.1 | 2 | 0 | 0 | 2 | 2 held |
+| hex 0.4.3 | 4 | 3 | 0 | 5 | 5 held |
+| httparse 1.10.1 | 7 | 6 | 2 | 5 | 4 held, 1 broken |
+| bytes 1.12.1 | 23 | 20 | 0 | 23 | 23 held |
+| num-traits 0.2.19 | 15 | 15 | 0 | 19 | 17 held, 2 broken |
+| chrono 0.4.45 | 11 | 11 | 0 | 11 | 11 held |
+| byteorder 1.5.0 | 4 | 4 | 0 | 5 | 4 held, 1 broken |
+
+A trait's method with two `with Self` lines is fuzzed twice, so a crate can fuzz more functions
+than it has contracts. What each crate shows:
+
+- strsim: `hamming`'s error is the variant `DifferentLengthArgs`, which hydo reads now.
+  `matches(result, Err(StrSimError::DifferentLengthArgs)) == (len(a) != len(b))` held on 1,000
+  calls of ASCII text. Before, `err(result)` was not read.
+- hex: `FromHex::from_hex` ran on `Vec<u8>` and `[u8; 4]`, and `ToHex::encode_hex` on
+  `Vec<u8>`. `decode`'s clause `err(result).InvalidHexCharacter.index < len(data)` decided 275
+  calls. The variant's `c` is a `char`, which hydo does not read, so finding 5 still needs a
+  property function.
+- httparse: `parse_chunk_size`'s result reads as `Ok(Complete((2, 0)))`, where it read
+  `Ok(<not read>)`. The contract on the parser states the RFC's `chunk-size = 1*HEXDIG` and
+  breaks on 28 of 1,000 calls at `buf = b"\r\n"`, which is finding 2 without a property
+  function. `Error::description_str` takes an enumeration, and three methods of `impl<T>
+  Status<T>` ran with `with T` lines. `Request::parse` and `parse_headers` stay refused, because
+  a `Header` borrows the buffer it describes.
+- bytes: with `build Bytes from Bytes::copy_from_slice(v: &[u8])`, `build BytesMut from
+  BytesMut::from(v: &[u8])` and a `read` line for each, every contracted method of `Bytes` and
+  `BytesMut` ran. `Buf::get_u8`, `get_u16` and `get_uint` ran on `&[u8]`, and `BufMut::put_uint`
+  and `put_slice` on `Vec<u8>`. Every clause held.
+- num-traits: 12 traits' methods ran on the types that `with Self` lines name, with no wrapper.
+  `Signed::abs` on `i32` panics at `self = -2147483648`, and `Signed::abs_sub` on `i64` at
+  `self = 0, other = -9223372036854775808`, which are findings 4 and 3. With `--release`,
+  `abs_sub` breaks its contract with `result = -9223372036854775808`.
+- chrono: `Weekday` and `Month` values are generated, and their methods' contracts name variants.
+  `NaiveDate` is built by `NaiveDate::from_ymd(year: i32, month: u32, day: u32)` and read by
+  `num_days_from_ce()`. `succ_opt`, `checked_add_days`, `leap_year` and `Datelike::weekday` held,
+  among them `matches(result, Mon) == ((self + 700000000) % 7 == 1)`.
+- byteorder: `ReadBytesExt::read_uint::<BigEndian>` on `&[u8]` panics at `nbytes = 0` and at
+  `nbytes = 9`, the candidate of the first evaluation, now on the trait method itself.
+  `ByteOrder::read_uint` held on `BigEndian` and `LittleEndian`.
+
+Nothing new was found: each broken contract is a finding of an earlier evaluation. Nothing was
+posted upstream. Problem 3 of the verdict is fixed for these crates, and friction 7 and 10 are
+fixed. Still open: friction 1 and 12, a `char`, a map, a generic structure such as httparse's
+`Header`, and a constructor that returns an `Option`, such as `NaiveDate::from_ymd_opt`.

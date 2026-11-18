@@ -686,9 +686,11 @@ Three findings hold for every type of system:
   `requires` and `input` lines, and judges each call by `ensures` (`hydo guide fuzz`).
 - **What to write.** The contract's comments, then `hydo fuzz path/to/crate --fn find`. Add
   `--vm` to make the calls inside hydo's VM under faults.
-- **When it fits.** A library function over integers, strings, bytes, or lists, such as a
-  parser, an encoder, or a distance. Inside the VM: a function that writes files, measures a
-  timeout, or waits for a thread that it starts.
+- **When it fits.** A library function over integers, strings, bytes, lists, or enumerations,
+  such as a parser, an encoder, or a distance. Also a trait's method on a
+  type that `with Self` names, and a method of a type that a `build` line constructs, such as
+  bytes' `Bytes`. Inside the VM: a function that writes files, measures a timeout, or waits for a
+  thread that it starts.
 - **What it found.**
   - contracts-ledger: the planted bug from the contract alone, on 96 of 1,000
     inputs.
@@ -698,6 +700,9 @@ Three findings hold for every type of system:
   - num-integer's `gcd` gives the known rust-num/num-integer#55.
   - strsim's `sorensen_dice` divides by byte lengths. httparse's
     `parse_chunk_size` accepts `\r\n` as size 0. num-traits' `abs_sub` panics in a debug build.
+  - A contract states httparse's chunk size rule on the
+    parser's `Status` result. num-traits' `Signed` methods and byteorder's `read_uint` break
+    on the trait methods themselves, with no wrapper function.
   - Inside the VM with `hydo fuzz --vm` (on hvx and the Mac engine), a
     save by rename without a sync lost its text at every power cut. redb's commits held.
   - A fault inside one call: a planted wait whose deadline reads `SystemTime`
@@ -705,8 +710,8 @@ Three findings hold for every type of system:
     waits for its worker with a timeout broke under a pause drawn 2 ms after it. rs-snowflake 0.6.0's
     `real_time_generate` gave a smaller id after a backward step of 30 s. Each twin held, and
     so did crossbeam-channel's `recv_timeout`.
-- **What it misses.** Trait methods, types that hold pointers, and enumeration results are
-  refused or not read. None of the candidates was posted. Inside the VM, one
+- **What it misses.** Generic structures, `char`, maps, and constructors that return an
+  `Option` are not fuzzed. None of the candidates was posted. Inside the VM, one
   call per run gets a fault inside it, so a function of time or threads needs `--fn` and
   `--faults`.
 - **Cost.** 1 to 15 s per build and run, with no VM. Inside the VM, 76 to 251 s for 16 to 24

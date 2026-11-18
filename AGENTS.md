@@ -824,6 +824,20 @@ the harness failed on `#![forbid(unsafe_code)]` and lost the `[lints]` table. M2
 
 strsim's `jaro` is judged on all 1,000 calls, and strsim and httparse build unchanged.
 
+Since M307 `hydo fuzz` covers the parts of a Rust API that both evaluations found refused:
+- Enumerations of the crate and `Ordering` are generated and read. `matches(e, <pattern>)`
+  names a variant (`matches(result, Ok(Complete(_)))`), and `ok(result).Complete.0` reads its
+  field.
+- `with Self = <type>` fuzzes a trait's method on that type, once per line, required methods
+  and default ones. `with` lines also name a generic `impl` block's parameters.
+- `build <Type> from <constructor>(<name>: <type>, ...)` and `read <Type> as <type> by
+  <method>()` make and read a type with pointers or private fields, such as bytes' `Bytes`.
+- `requires sorted(v)` makes the generator sort the list.
+
+On fresh copies of the second evaluation's six crates and byteorder, 59 of 66 contracted
+functions were refused before and 2 after (`docs/design/function-fuzzing-evaluation-2.md`,
+"After Milestone 307"). The broken contracts were earlier findings, now stated on the API itself.
+
 **Function fuzzing inside the VM (M292 and M296, tentative numbers; a prototype on hvx and on
 the Mac engine).** `hydo fuzz --vm [CRATE_DIR]` makes the calls inside hydo's VM under faults: power
 cuts (`C=`, `cf=` on hvx), disk errors, clock steps, pauses, and since M296 kills. It builds the harness as a static musl program and writes a
@@ -1990,7 +2004,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A fault of a stepped instruction other than #DE, #UD, #GP and #PF leaves the trap flag in
       its frame. Only user mode is counted, so a loop in the guest kernel stays the observer's.
     - The k3s example is not in `hydo/onboard/recorded.json`.
-139. Function fuzzing (M275, M280, M282, M289, M292, M296). What is left:
+139. Function fuzzing (M275, M280, M282, M289, M292, M296, M307). What is left:
     - The run inside the VM (`hydo fuzz --vm`, M292, M296) is a prototype that ran on hvx and
       on the Mac engine, not on KVM. What is left of it:
       - A fault inside a call comes 1 to 13 ms after its drawn delay, at the controller's next
@@ -2009,16 +2023,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       - The timer's freeze of `P=workload/<thread>` can take a session of busybox's `timeout`
         watcher instead of the workload's, and fails on a thread that ended (open item 80). The
         reaction's freeze of M296 fixes both for itself only.
-    - Rust only, natively. Go, enumerations, `char` and maps are not fuzzed. Floating-point
-      values are since M289, but a clause cannot name a NaN or an infinity, and the shrink of a
+    - Rust only, natively. Go, `char`, maps and generic structures (httparse's `Header`) are not
+      fuzzed; enumerations are since M307. Floating-point values are since M289, but a clause cannot name a NaN or an infinity, and the shrink of a
       floating-point value only halves it.
-    - Trait methods and methods of generic `impl` blocks are refused; `with T = <type>` covers
-      generic free functions and methods of plain `impl` blocks only. Most of base64's engine
-      API, byteorder's `ReadBytesExt` and num-integer's `Integer` still need property functions.
-    - Values built by a named constructor are not built: a structure with a pointer field
-      (`FixedBitSet`) or a private field of another module is refused as a parameter.
-    - The language has no quantifier, so a precondition such as "the input is sorted" cannot be
-      stated (Qdrant's `delta_pack`).
+    - A `build` line's constructor must return the value: one that returns an `Option`
+      (chrono's `NaiveDate::from_ymd_opt`) is not used, so its panicking twin and `input` lines
+      stand in. A built value is read only through its `read` line, and `requires` reads only
+      the constructor's arguments.
+    - A `with Self` line names one type per line; a trait method with an associated type in a
+      parameter (`Self::Output`) is refused.
+    - The language has one quantifier, `sorted(v)` (M307). "Every element is unique" or "every
+      element keeps a rule" cannot be stated.
     - The textual reading takes the first structure of a name; two of one name in two modules
       make one harness fail to build (reported, the others run). `--list` cannot tell a build
       failure in advance.
@@ -2036,8 +2051,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `docs/design/function-fuzzing-evaluation-2.md`) found three candidates and two gaps in
       documentation, none posted. M289 fixed its first two problems and the smaller ones of
       `like` and of the inputs that a run shows. What is left of it:
-      - Methods of types that hold pointers (bytes' `Bytes`), trait methods, and enumeration
-        results (httparse's `Status`) are still refused or not read.
       - A workspace member without a lock file cannot be built apart, so a failing copy's
         message cannot name the cause there.
       - A panic inside a macro-generated implementation is placed at the macro's call.
@@ -3094,6 +3107,12 @@ build machine, before 2026-10-13.
   builds once, explores up to 20 parts and merges them; `ci/remote-explore.sh` starts it. Redis
   in 8 parts gave one runner's verdicts; Dragonfly in 20 parts found its finding in 31 minutes
   against 75; Redpanda found findings 1 and 2. Nothing recorded moved
+- M307 (tentative number): `hydo fuzz` covers enumerations, trait methods, and types built by a
+  constructor. `matches(e, <pattern>)` names a variant, `with Self = <type>` fuzzes a trait's
+  method on a type, and `build` and `read` lines make and read a type with pointers, such as
+  bytes' `Bytes`. `requires sorted(v)` sorts the generated list. On the second evaluation's six
+  crates and byteorder, refused contracted functions fell from 59 of 66 to 2; no new finding.
+  Nothing recorded moved
 
 ## Where to look
 

@@ -2,7 +2,7 @@
 //! (the wire form), the form a report shows and `--input` reads back, generation from a seed,
 //! and the simpler values a shrink tries.
 
-use super::rust::FTy;
+use super::rust::{FTy, VKind};
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
@@ -21,6 +21,11 @@ pub enum Val {
     Tuple(Vec<Val>),
     /// A structure's fields by name (a tuple structure's are `0`, `1`, ...).
     Struct(Vec<(String, Val)>),
+    /// A variant of an enumeration and its fields by name (Milestone 307).
+    Enum(String, Vec<(String, Val)>),
+    /// A value that a `build` line built, as a clause reads it (Milestone 307): what its `read`
+    /// line gives (none before the call), and the constructor's arguments by name.
+    Built(Option<Box<Val>>, Vec<(String, Val)>),
     /// A value of a type fuzzing does not read.
     Opaque,
 }
@@ -45,7 +50,8 @@ pub fn int_range(signed: bool, bits: u32) -> (i128, i128) {
 /// digits, a boolean `t` or `f`, a string `s` and its bytes in hexadecimal, a list `L<n>` and its
 /// elements, a floating-point value `F` and the hexadecimal bits of its `f64`, an option `N` or
 /// `S` and the value, a result `O` or `E` and the value, a tuple or a
-/// structure its fields in order, and an opaque value `X`.
+/// structure its fields in order, a variant `V` and its name and then its fields, and an opaque
+/// value `X`. A value that a `build` line builds is its constructor's arguments in order.
 pub fn encode(v: &Val, o: &mut String) {
     match v {
         Val::Int(x) => {
@@ -83,6 +89,11 @@ pub fn encode(v: &Val, o: &mut String) {
         }
         Val::Tuple(v) => v.iter().for_each(|x| encode(x, o)),
         Val::Struct(f) => f.iter().for_each(|(_, x)| encode(x, o)),
+        Val::Enum(n, f) => {
+            let _ = write!(o, "V{n} ");
+            f.iter().for_each(|(_, x)| encode(x, o));
+        }
+        Val::Built(_, f) => f.iter().for_each(|(_, x)| encode(x, o)),
         Val::Opaque => o.push_str("X "),
     }
 }
@@ -162,11 +173,60 @@ pub fn decode<'a>(t: &FTy, w: &mut impl Iterator<Item = &'a str>) -> Result<Val,
                 .map(|(n, x)| Ok((n.clone(), decode(x, w)?)))
                 .collect::<Result<_, String>>()?,
         ),
-        FTy::Opaque(_) | FTy::Hidden(_) => {
+        FTy::Enum { path, variants, .. } => {
+            let x = word()?;
+            if x == "X" {
+                return Ok(Val::Opaque);
+            }
+            let n = x
+                .strip_prefix('V')
+                .ok_or_else(|| format!("`{x}` is not a variant"))?;
+            let v = variants
+                .iter()
+                .find(|v| v.name == n)
+                .ok_or_else(|| format!("`{n}` is not a variant of `{path}`"))?;
+            Val::Enum(
+                v.name.clone(),
+                v.fields
+                    .iter()
+                    .map(|(n, x)| Ok((n.clone(), decode(x, w)?)))
+                    .collect::<Result<_, String>>()?,
+            )
+        }
+        // a value the harness answers: through its `read` line, or not read
+        FTy::Built {
+            read: Some((v, _)), ..
+        } => decode(v, w)?,
+        FTy::Opaque(_) | FTy::Hidden(_) | FTy::Built { .. } => {
             word()?;
             Val::Opaque
         }
     })
+}
+
+/// The fields of a variant as a report shows them: `(a, b)`, ` { x: a }`, or nothing for a
+/// unit variant.
+fn show_fields(fv: &[(String, Val)], fields: &[(String, FTy)], kind: VKind) -> String {
+    match kind {
+        VKind::Unit => String::new(),
+        VKind::Tuple => {
+            let p: Vec<String> = fv
+                .iter()
+                .zip(fields)
+                .map(|((_, x), (_, t))| show(x, t))
+                .collect();
+            format!("({})", p.join(", "))
+        }
+        VKind::Named if fv.is_empty() => " {}".into(),
+        VKind::Named => {
+            let p: Vec<String> = fv
+                .iter()
+                .zip(fields)
+                .map(|((n, x), (_, t))| format!("{n}: {}", show(x, t)))
+                .collect();
+            format!(" {{ {} }}", p.join(", "))
+        }
+    }
 }
 
 /// The value as a report shows it, close to a Rust literal.
@@ -234,6 +294,26 @@ pub fn show(v: &Val, t: &FTy) -> String {
                 format!("{name} {{ {} }}", p.join(", "))
             }
         }
+        (Val::Enum(n, fv), FTy::Enum { variants, .. }) => {
+            match variants.iter().find(|v| v.name == *n) {
+                Some(v) => format!("{n}{}", show_fields(fv, &v.fields, v.kind)),
+                None => n.clone(),
+            }
+        }
+        (Val::Struct(fv), FTy::Built { build: Some(c), .. }) if fv.len() == c.args.len() => {
+            let p: Vec<String> = fv
+                .iter()
+                .zip(&c.args)
+                .map(|((_, x), (_, t, _))| show(x, t))
+                .collect();
+            format!("{}({})", c.path, p.join(", "))
+        }
+        (
+            _,
+            FTy::Built {
+                read: Some((t, _)), ..
+            },
+        ) => show(v, t),
         _ => "<not read>".into(),
     }
 }
@@ -543,6 +623,69 @@ impl Reader<'_> {
                 }
                 Ok(Val::Struct(fv))
             }
+            FTy::Enum { path, variants, .. } => {
+                // `Complete(..)`, also with the enumeration's path (`Status::Complete(..)`)
+                let mut name = self.ident();
+                while self.s[self.i..].starts_with("::") {
+                    self.i += 2;
+                    name = self.ident();
+                }
+                let Some(v) = variants.iter().find(|v| v.name == name) else {
+                    return Err(format!("`{name}` is not a variant of `{path}`"));
+                };
+                let mut fv = Vec::new();
+                match v.kind {
+                    VKind::Unit => {}
+                    VKind::Tuple => {
+                        self.expect("(")?;
+                        for (k, (n, x)) in v.fields.iter().enumerate() {
+                            if k > 0 {
+                                self.expect(",")?;
+                            }
+                            fv.push((n.clone(), self.val(x)?));
+                        }
+                        self.eat(",");
+                        self.expect(")")?;
+                    }
+                    VKind::Named => {
+                        self.expect("{")?;
+                        for (k, (n, x)) in v.fields.iter().enumerate() {
+                            if k > 0 {
+                                self.expect(",")?;
+                            }
+                            let got = self.ident();
+                            if got != *n {
+                                return Err(format!("expected the field `{n}`, found `{got}`"));
+                            }
+                            self.expect(":")?;
+                            fv.push((n.clone(), self.val(x)?));
+                        }
+                        self.eat(",");
+                        self.expect("}")?;
+                    }
+                }
+                Ok(Val::Enum(v.name.clone(), fv))
+            }
+            FTy::Built {
+                ty, build: Some(c), ..
+            } => {
+                // `Bytes::from(b"ab")`: the constructor and its arguments
+                if !self.eat(&c.path) {
+                    return Err(format!("a `{ty}` is written `{}(...)`", c.path));
+                }
+                self.expect("(")?;
+                let mut fv = Vec::new();
+                for (k, (n, x, _)) in c.args.iter().enumerate() {
+                    if k > 0 {
+                        self.expect(",")?;
+                    }
+                    fv.push((n.clone(), self.val(x)?));
+                }
+                self.eat(",");
+                self.expect(")")?;
+                Ok(Val::Struct(fv))
+            }
+            FTy::Built { ty, .. } => Err(format!("a value of `{ty}` cannot be given")),
             FTy::Opaque(o) => Err(format!("a value of `{o}` cannot be given")),
             FTy::Hidden(why) => Err(format!("{why}: its value cannot be given")),
         }
@@ -618,6 +761,20 @@ pub struct Hints {
     /// Pairs of paths that a clause relates (`req_id > old(l.last_req)`): the generator sometimes
     /// makes them equal or one apart.
     pub pairs: Vec<(String, String)>,
+    /// The lists that a `requires sorted(v)` names: the generator puts their elements in order
+    /// (Milestone 307).
+    pub sorted: Vec<String>,
+}
+
+/// Put a list's elements in order: integers and floating-point values by value (a NaN last),
+/// strings by their bytes (Milestone 307).
+pub fn sort(l: &mut [Val]) {
+    l.sort_by(|a, b| match (a, b) {
+        (Val::Int(x), Val::Int(y)) => x.cmp(y),
+        (Val::Float(x), Val::Float(y)) => f64::from_bits(*x).total_cmp(&f64::from_bits(*y)),
+        (Val::Str(x), Val::Str(y)) => x.cmp(y),
+        _ => std::cmp::Ordering::Equal,
+    });
 }
 
 /// How a generated value grows: lists and strings are short in the first cases and longer later.
@@ -750,7 +907,34 @@ impl Gen<'_> {
                     .map(|(n, x)| (n.clone(), self.val(x, &format!("{path}.{n}"))))
                     .collect(),
             ),
-            FTy::Opaque(_) | FTy::Hidden(_) => Val::Opaque,
+            FTy::Enum { variants, .. } => {
+                // a variant whose fields hydo can generate: the first, the last, or any
+                let ok: Vec<&super::rust::Variant> = variants
+                    .iter()
+                    .filter(|v| v.fields.iter().all(|(_, t)| t.generable().is_ok()))
+                    .collect();
+                let v = match (self.mode, ok.len()) {
+                    (_, 0) => return Val::Opaque,
+                    (0, _) => ok[0],
+                    (1, n) => ok[n - 1],
+                    (_, n) => ok[self.rng.below(n as u64) as usize],
+                };
+                let vp = format!("{path}.{}", v.name);
+                Val::Enum(
+                    v.name.clone(),
+                    v.fields
+                        .iter()
+                        .map(|(n, x)| (n.clone(), self.val(x, &format!("{vp}.{n}"))))
+                        .collect(),
+                )
+            }
+            FTy::Built { build: Some(c), .. } => Val::Struct(
+                c.args
+                    .iter()
+                    .map(|(n, x, _)| (n.clone(), self.val(x, &format!("{path}.{n}"))))
+                    .collect(),
+            ),
+            FTy::Opaque(_) | FTy::Hidden(_) | FTy::Built { .. } => Val::Opaque,
         }
     }
 
@@ -1117,6 +1301,13 @@ pub fn at<'a>(v: &'a Val, path: &[&str]) -> Option<&'a Val> {
             .iter()
             .find(|(n, _)| n == first)
             .and_then(|(_, x)| at(x, rest)),
+        // `m.Complete.0`: a field of the variant that the value is
+        Val::Enum(n, f) if n == first => {
+            let (field, rest) = rest.split_first()?;
+            f.iter()
+                .find(|(n, _)| n == field)
+                .and_then(|(_, x)| at(x, rest))
+        }
         Val::Tuple(t) => first
             .parse::<usize>()
             .ok()
@@ -1136,6 +1327,12 @@ pub fn at_mut<'a>(v: &'a mut Val, path: &[&str]) -> Option<&'a mut Val> {
             .iter_mut()
             .find(|(n, _)| n == first)
             .and_then(|(_, x)| at_mut(x, rest)),
+        Val::Enum(n, f) if n == first => {
+            let (field, rest) = rest.split_first()?;
+            f.iter_mut()
+                .find(|(n, _)| n == field)
+                .and_then(|(_, x)| at_mut(x, rest))
+        }
         Val::Tuple(t) => first
             .parse::<usize>()
             .ok()
@@ -1161,6 +1358,19 @@ pub fn ty_at<'a>(t: &'a FTy, path: &[&str]) -> Option<&'a FTy> {
             .and_then(|i| v.get(i))
             .and_then(|x| ty_at(x, rest)),
         FTy::Boxed(_, x) => ty_at(x, path),
+        FTy::Enum { variants, .. } => {
+            let v = variants.iter().find(|v| v.name == *first)?;
+            let (field, rest) = rest.split_first()?;
+            v.fields
+                .iter()
+                .find(|(n, _)| n == field)
+                .and_then(|(_, x)| ty_at(x, rest))
+        }
+        FTy::Built { build: Some(c), .. } => c
+            .args
+            .iter()
+            .find(|(n, _, _)| n == first)
+            .and_then(|(_, x, _)| ty_at(x, rest)),
         _ => None,
     }
 }
@@ -1316,6 +1526,33 @@ pub fn simpler(v: &Val, t: &FTy, path: &str, hints: &Hints) -> Vec<Val> {
                     let mut d = fv.clone();
                     d[i].1 = s;
                     out.push(Val::Struct(d));
+                }
+            }
+        }
+        (Val::Struct(fv), FTy::Built { build: Some(c), .. }) => {
+            for (i, ((n, x), (_, t, _))) in fv.iter().zip(&c.args).enumerate() {
+                for s in simpler(x, t, &format!("{path}.{n}"), hints) {
+                    let mut d = fv.clone();
+                    d[i].1 = s;
+                    out.push(Val::Struct(d));
+                }
+            }
+        }
+        (Val::Enum(name, fv), FTy::Enum { variants, .. }) => {
+            // an earlier variant without fields, then the fields made simpler
+            for v in variants.iter().take_while(|v| v.name != *name) {
+                if v.fields.is_empty() {
+                    out.push(Val::Enum(v.name.clone(), vec![]));
+                }
+            }
+            if let Some(v) = variants.iter().find(|v| v.name == *name) {
+                let vp = format!("{path}.{name}");
+                for (i, ((n, x), (_, t))) in fv.iter().zip(&v.fields).enumerate() {
+                    for s in simpler(x, t, &format!("{vp}.{n}"), hints) {
+                        let mut d = fv.clone();
+                        d[i].1 = s;
+                        out.push(Val::Enum(name.clone(), d));
+                    }
                 }
             }
         }

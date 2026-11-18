@@ -263,11 +263,13 @@ fn the_harness_is_one_line_that_calls_the_function() {
                 name: "self".into(),
                 pass: Pass::RefMut { unsized_ref: false },
                 ty: ledger_ty(),
+                inner: None,
             },
             harness::Param {
                 name: "ids".into(),
                 pass: Pass::Ref { unsized_ref: true },
                 ty: FTy::List(Box::new(u64t())),
+                inner: None,
             },
         ],
         ret: FTy::Opt(Box::new(u64t())),
@@ -861,6 +863,282 @@ fn a_crate_that_forbids_unsafe_code_fuzzes_with_floats_bytes_and_honest_verdicts
     let (code, _) = fuzz_m289(
         t.path(),
         &["--fn", "chunk_len", "--input", "buf = b\"4\\r\\n\""],
+    );
+    assert_eq!(code, 0);
+}
+
+// ---------------------------------------------------------------- Milestone 307
+
+#[test]
+fn enumerations_resolve_go_through_the_wire_and_match_patterns() {
+    use hydo_contracts::fuzz::check::matches_pat;
+    use hydo_contracts::lang::Pat;
+    let mut items = Items::default();
+    read_items(
+        "pub enum Status<T> { Complete(T), Partial }\n\
+         #[derive(Debug)]\n\
+         enum Op { Neg = 3, Add(i32), Clamp { lo: i32, #[allow(x)] hi: i32 } }\n\
+         pub type Result<T> = result::Result<Status<T>, u8>;\n",
+        &mut items,
+    );
+    let r = Resolver {
+        items: &items,
+        self_ty: None,
+        module: &[],
+        subst: &Default::default(),
+    };
+    let t = |s: &str| r.resolve(&hydo_contracts::fuzz::rust::parse_ty(s).unwrap());
+    let st = t("Result<Status<(usize, u64)>, u8>");
+    let v = Val::Res(Ok(Box::new(Val::Enum(
+        "Complete".into(),
+        vec![("0".into(), Val::Tuple(vec![Val::Int(2), Val::Int(0)]))],
+    ))));
+    let mut w = String::new();
+    encode(&v, &mut w);
+    assert_eq!(w, "O VComplete 2 0 ");
+    assert_eq!(decode(&st, &mut w.split_whitespace()).unwrap(), v);
+    assert_eq!(show(&v, &st), "Ok(Complete((2, 0)))");
+    assert_eq!(parse("Ok(Status::Complete((2, 0)))", &st).unwrap(), v);
+    let op = t("Op");
+    assert!(op.generable().is_ok());
+    let c = Val::Enum(
+        "Clamp".into(),
+        vec![("lo".into(), Val::Int(0)), ("hi".into(), Val::Int(-1))],
+    );
+    assert_eq!(show(&c, &op), "Clamp { lo: 0, hi: -1 }");
+    assert_eq!(parse("Clamp { lo: 0, hi: -1 }", &op).unwrap(), c);
+    assert_eq!(parse("Neg", &op).unwrap(), Val::Enum("Neg".into(), vec![]));
+    // patterns
+    let pat = |s: &str| {
+        let Ok(hydo_contracts::lang::Ast::Matches(_, p)) = parse_expr(&format!("matches(x, {s})"))
+        else {
+            panic!("{s}")
+        };
+        p
+    };
+    assert_eq!(matches_pat(&v, &pat("Ok(Complete(_))")), Ok(true));
+    assert_eq!(matches_pat(&v, &pat("Ok(Complete((_, 0)))")), Ok(true));
+    assert_eq!(matches_pat(&v, &pat("Ok(Complete((_, 1)))")), Ok(false));
+    assert_eq!(matches_pat(&v, &pat("Ok(Partial)")), Ok(false));
+    assert_eq!(matches_pat(&v, &pat("Err(_)")), Ok(false));
+    assert_eq!(matches_pat(&c, &pat("Op::Clamp")), Ok(true));
+    assert!(matches_pat(&Val::Opaque, &pat("Ok(_)")).is_err());
+    assert_eq!(matches_pat(&Val::Opaque, &Pat::Any), Ok(true));
+    // a variant's field reads like a field, and a variant is not compared with `==`
+    let env_v = vec![("x".to_string(), c.clone())];
+    let env = Env {
+        entry: &env_v,
+        after: &env_v,
+        result: None,
+    };
+    assert_eq!(
+        holds(&parse_expr("x.Clamp.hi == -1").unwrap(), &env),
+        Ok(true)
+    );
+    assert!(holds(&parse_expr("x.Add.0 == 1").unwrap(), &env)
+        .unwrap_err()
+        .contains("not `Add`"));
+    assert!(holds(&parse_expr("x == 1").unwrap(), &env).is_err());
+    // the crate's own alias with a type parameter, over the standard name
+    let a = t("Result<usize>");
+    assert!(
+        matches!(&a, FTy::Res(ok, _) if matches!(**ok, FTy::Enum { .. })),
+        "{a:?}"
+    );
+    assert!(matches!(t("io::Result<usize>"), FTy::Res(ok, _) if matches!(*ok, FTy::Int { .. })));
+    // the standard library's Ordering
+    let o = t("std::cmp::Ordering");
+    assert_eq!(o.rust(), "self::std::cmp::Ordering");
+    assert!(matches!(t("atomic::Ordering"), FTy::Opaque(_)));
+    // generation keeps to the variants, and a shrink tries an earlier variant without fields
+    let mut rng = Rng::new(3);
+    let hints = Hints::default();
+    let mut seen = std::collections::BTreeSet::new();
+    for _ in 0..50 {
+        let mut g = Gen {
+            rng: &mut rng,
+            hints: &hints,
+            mode: 2,
+            max_len: 4,
+            budget: 1 << 16,
+        };
+        if let Val::Enum(n, _) = g.val(&op, "op") {
+            seen.insert(n);
+        }
+    }
+    assert_eq!(seen.len(), 3, "{seen:?}");
+    assert_eq!(
+        simpler(&c, &op, "op", &hints)[0],
+        Val::Enum("Neg".into(), vec![])
+    );
+}
+
+#[test]
+fn the_harness_builds_enumerations_constructed_values_and_references_to_references() {
+    use hydo_contracts::fuzz::rust::{Ctor, VKind, Variant};
+    let st = FTy::Enum {
+        path: "Status".into(),
+        args: vec![u64t()],
+        variants: vec![
+            Variant {
+                name: "Complete".into(),
+                kind: VKind::Tuple,
+                fields: vec![("0".into(), u64t())],
+            },
+            Variant {
+                name: "Partial".into(),
+                kind: VKind::Unit,
+                fields: vec![],
+            },
+        ],
+    };
+    let blob = FTy::Built {
+        ty: "Blob".into(),
+        build: Some(Ctor {
+            path: "Blob::from_vec".into(),
+            args: vec![(
+                "v".into(),
+                FTy::List(Box::new(u64t())),
+                Pass::Ref { unsized_ref: true },
+            )],
+        }),
+        read: Some((Box::new(FTy::List(Box::new(u64t()))), "to_vec".into())),
+    };
+    let s = harness::Spec {
+        module: "__hydo_fuzz_0".into(),
+        call: "<&[u8] as Take>::take".into(),
+        receiver: Some(Receiver::RefMut),
+        params: vec![
+            harness::Param {
+                name: "self".into(),
+                pass: Pass::RefMut { unsized_ref: false },
+                ty: FTy::List(Box::new(u64t())),
+                inner: Some(Pass::Ref { unsized_ref: true }),
+            },
+            harness::Param {
+                name: "s".into(),
+                pass: Pass::Value,
+                ty: st.clone(),
+                inner: None,
+            },
+            harness::Param {
+                name: "b".into(),
+                pass: Pass::RefMut { unsized_ref: false },
+                ty: blob,
+                inner: None,
+            },
+        ],
+        ret: st,
+        ret_ref: false,
+        is_unsafe: false,
+        forbidden: vec![],
+    };
+    let m = harness::module(&s);
+    assert!(!m.contains('\n'));
+    // a constructor's panic is the call's: the values are built under catch_unwind
+    assert!(
+        m.contains("let (mut a0, mut a1, mut a2,): (self::std::vec::Vec<u64>, Status<u64>, Blob,)"),
+        "{m}"
+    );
+    assert!(
+        m.contains("\"VComplete\" => Status::Complete(r.int())"),
+        "{m}"
+    );
+    assert!(
+        m.contains(
+            "Blob::from_vec(&(*self::std::boxed::Box::leak(self::std::boxed::Box::new(c.0)))[..])"
+        ),
+        "{m}"
+    );
+    assert!(m.contains("let mut b0 = &a0[..];"), "{m}");
+    assert!(
+        m.contains("<&[u8] as Take>::take(&mut b0, a1, &mut a2)"),
+        "{m}"
+    );
+    assert!(
+        m.contains("Status::Partial => { o.push_str(\"VPartial \");"),
+        "{m}"
+    );
+    assert!(m.contains("(&a2).to_vec()"), "{m}");
+}
+
+/// The fourth fixture's report: the parts of a Rust API refused before (Milestone 307).
+fn fuzz_m307(dir: &Path, extra: &[&str]) -> (i32, Report) {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fuzz-m307");
+    let out = dir.join("out");
+    let mut args: Vec<String> = vec![
+        fixture.to_string_lossy().into(),
+        "--out".into(),
+        out.to_string_lossy().into(),
+        "--cases".into(),
+        "500".into(),
+    ];
+    args.extend(extra.iter().map(|s| s.to_string()));
+    let code = hydo_contracts::fuzz::main(&args);
+    let text = std::fs::read_to_string(out.join("fuzz.json")).unwrap_or_default();
+    (code, serde_json::from_str(&text).unwrap_or_default())
+}
+
+#[test]
+fn enumerations_trait_methods_built_values_and_sorted_inputs_are_fuzzed() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m307");
+    let (code, rep) = fuzz_m307(t.path(), &[]);
+    assert_eq!(code, 1, "{rep:?}");
+    let f = |n: &str| {
+        rep.functions
+            .iter()
+            .find(|f| f.function.ends_with(n))
+            .unwrap_or_else(|| panic!("{n}: {rep:?}"))
+    };
+    // an enumeration result: the RFC's rule on the parser itself
+    let chunk = f("::chunk_size");
+    assert_eq!(chunk.broken[0].input, "buf = b\"\\r\\n\"");
+    assert_eq!(chunk.broken[0].after, "result = Ok(Complete((2, 0)))");
+    assert_eq!(chunk.held.len(), 1);
+    // an enumeration parameter with fields of each kind
+    let apply = f("::apply");
+    assert_eq!(apply.broken[0].input, "op = Clamp { lo: 0, hi: -1 }, x = 0");
+    assert_eq!(apply.held.len(), 2);
+    assert_eq!(f("::compare").verdict, "held");
+    // a trait's method on each type its `with Self` lines name
+    assert_eq!(f("::<u8 as Halve>::halve").verdict, "held");
+    assert_eq!(f("::<i64 as Halve>::halve").broken[0].input, "self = -3");
+    // a generic default method on `&[u8]`, whose `&mut self` advances the slice
+    let take = f("::<&[u8] as Take>::take_uint");
+    assert_eq!(take.broken[0].input, "self = b\"\\x00\", n = 0");
+    assert_eq!(take.broken[0].after, "self = b\"\", result = Some(0)");
+    // a type with a pointer, built by its constructor and read through a method
+    assert_eq!(f("::Blob::from_vec").verdict, "held");
+    assert_eq!(f("::Blob::split_to").verdict, "held");
+    let trunc = f("::Blob::truncate");
+    assert_eq!(
+        trunc.broken[0].input,
+        "self = Blob::from_vec(b\"\\x00\\x00\\x00\\x00\\x00\"), len = 3"
+    );
+    // sorted inputs keep `requires sorted(v)` from the generator
+    let search = f("::search");
+    assert_eq!(search.verdict, "held");
+    assert_eq!(search.rejected, 0, "{search:?}");
+    assert_eq!(f("::roundtrip").verdict, "held");
+    // what is refused says what to write
+    let why = |n: &str| {
+        rep.skipped
+            .iter()
+            .find(|s| s.contains(n))
+            .unwrap_or_else(|| panic!("{n}: {:?}", rep.skipped))
+    };
+    assert!(why("::Size::size").contains("with Self = i64"));
+    assert!(why("::Raw::len").contains("// hydo: build Raw from"));
+    assert!(why("::compare_typo").contains("no variant `Greatr`"));
+    // a finding replays alone
+    let (code, _) = fuzz_m307(
+        t.path(),
+        &["--fn", "<i64 as Halve>::halve", "--input", "self = -3"],
+    );
+    assert_eq!(code, 1);
+    let (code, _) = fuzz_m307(
+        t.path(),
+        &["--fn", "<i64 as Halve>::halve", "--input", "self = 4"],
     );
     assert_eq!(code, 0);
 }

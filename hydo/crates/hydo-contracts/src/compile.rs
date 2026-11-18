@@ -2244,6 +2244,12 @@ impl Reads<'_> {
                 Box::new(self.compile(x, kind, old)?),
                 Box::new(self.compile(y, kind, old)?),
             ),
+            Ast::Call(Builtin::Sorted, _) | Ast::Matches(..) => {
+                return Err(format!(
+                    "`{a}`: `matches()` and `sorted()` are read by `hydo fuzz` only; a run reads \
+                     `is_some`, `is_ok` and the other functions"
+                ))
+            }
             Ast::Call(Builtin::Len, x) => {
                 let pv = self.place(x, kind, old)?;
                 self.len(pv)?

@@ -1,0 +1,11 @@
+# The fourth fixture of tests/fuzz.rs (Milestone 307): enumerations, trait methods, values built
+# by a constructor, and sorted inputs, the parts of a Rust API that `hydo fuzz` refused before.
+[package]
+name = "fuzz-m307"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# its own workspace (not part of the repository root's)
+[workspace]

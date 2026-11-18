@@ -16589,3 +16589,99 @@ quads of the text files are loopback and guest addresses.
 **The skill release** `skill-v2.3.3`: `build-skill-release.sh` packed `hydo-skill-2.3.3.tar.gz`
 twice with the same bytes, `e131c4b1723a5da1012f0c4ac415df389839f9ff1087559001d059d1376eae9f`
 (in `hydo/dist/out/skill/2.3.3/` of the main checkout).
+
+## Milestone 307 (tentative number): enumerations, trait methods, and values built by a constructor in `hydo fuzz`
+
+Both evaluations of `hydo fuzz` (M280, M288) found that most of a real Rust API could not carry a
+contract: enumerations were refused as parameters and not read as results, trait methods were
+refused, and types that hold pointers could not be generated. This milestone builds the three
+parts, and `sorted(v)`, in the crate `hydo-contracts`. `hydo guide fuzz` is the reference, and
+`docs/design/function-fuzzing.md`, section "Enumerations, trait methods and built values", has
+the decisions.
+
+**Enumerations.**
+
+- The textual reading finds each `enum` of the crate with its variants, their fields, and its
+  type parameters, and the standard library's `Ordering`. A crate's type alias with type
+  parameters, such as httparse's `type Result<T> = result::Result<Status<T>, Error>`, resolves
+  too.
+- A variant goes over the wire as `V<variant>` and its fields. The generator picks a variant
+  whose fields it can generate, and a shrink tries an earlier variant without fields.
+- The language has `matches(e, <pattern>)`. A pattern is `_`, a literal, a tuple, or a variant
+  with its path and its fields' patterns: `matches(result, Ok(Status::Complete((_, 0))))`. A
+  variant's field reads as a field (`ok(result).Complete.0`), and an `input` line names one as
+  `op.Clamp.lo`. A misspelt variant refuses the function before the run, with the variants that
+  the type has. `==` on a variant is undecided.
+
+**Trait methods.**
+
+- `with Self = <type>` names the type that a trait's method is fuzzed on, once for each such
+  line, through `<Type as Trait>::method`. A required method without a body is fuzzed too.
+- `with` lines also name the type parameters of a generic `impl` block and of a trait. A comma
+  inside a type no longer splits a `with` line (`with T = (usize, u64)`).
+- A method of `impl Trait for Type` is called as `<Type as Trait>::method`.
+- A `Self` or a parameter that is a reference to a reference (`&mut &[u8]`) is generated as the
+  value it refers to. The harness passes a reference to a local slice and reads it after the
+  call, so `len(self) == old(len(self)) - n` judges a reader that advances.
+
+**Values built by a constructor.**
+
+- `// hydo: build <Type> from <constructor>(<name>: <type>, ...)` makes hydo generate the
+  arguments and pass the value that the constructor returns. `// hydo: read <Type> as <type> by
+  <method>()` reads such a value. Both lines hold for the whole crate.
+- A clause names the arguments as fields (`self.v`). `requires` reads only them. `ensures` reads
+  the value through `read`, at the entry too: the harness answers the read value before the call
+  after the values after it.
+- The harness builds the values under `catch_unwind`, so a panic of the constructor is the
+  call's panic. An argument passed by reference is leaked, so that the built value may borrow
+  it.
+- A refused parameter's reason names the `build` line to write.
+
+**Sorted inputs.** `sorted(v)` is true when each element is at most the next. In a `requires`
+clause the generator puts the list in order, so the fixture's `search` rejected none of 1,000
+inputs.
+
+**A whole-system run.** `contracts:` refuses a clause with `matches()` or `sorted()` with its
+reason. Nothing of the run's plan changed.
+
+**Proof.** The fixture `hydo/crates/hydo-contracts/tests/fuzz-m307` has a function for each
+part, five with a planted bug. With 1,000 inputs and seed 1:
+
+| Function | What it shows | Smallest input |
+|---|---|---|
+| `chunk_size` | an `Ok(Status::Complete(..))` result and the RFC rule | `buf = b"\r\n"`, result `Ok(Complete((2, 0)))` |
+| `apply` | an enumeration parameter with unit, tuple, and named variants | `op = Clamp { lo: 0, hi: -1 }, x = 0` |
+| `<i64 as Halve>::halve` | a required trait method, on `u8` (held) and `i64` | `self = -3` |
+| `<&[u8] as Take>::take_uint` | a generic default method on `&[u8]` | `self = b"\x00", n = 0` |
+| `Blob::truncate` | a type with a `NonNull` field, built and read | `self = Blob::from_vec(b"\x00\x00\x00\x00\x00"), len = 3` |
+
+`compare`, `Blob::split_to`, `search` and `roundtrip` held. `compare_typo`, a trait method
+without `with Self`, and a pointer type without a `build` line were refused, each with what to
+write.
+
+The re-run of the second evaluation's six crates and byteorder is the section "After Milestone
+307" of `docs/design/function-fuzzing-evaluation-2.md`. Fresh copies from the crates.io
+archives, unchanged, with seed 1 and 1,000 inputs:
+
+| Crate | Contracts | Refused before | Refused after | Functions fuzzed |
+|---|---|---|---|---|
+| strsim 0.11.1 | 2 | 0 | 0 | 2 |
+| hex 0.4.3 | 4 | 3 | 0 | 5 |
+| httparse 1.10.1 | 7 | 6 | 2 | 5 |
+| bytes 1.12.1 | 23 | 20 | 0 | 23 |
+| num-traits 0.2.19 | 15 | 15 | 0 | 19 |
+| chrono 0.4.45 | 11 | 11 | 0 | 11 |
+| byteorder 1.5.0 | 4 | 4 | 0 | 5 |
+
+"Before" is `main` at `d0159ad0` with the same contracts less the lines it lacks. The broken
+contracts were earlier findings, now stated on the API itself: httparse's chunk size line
+without a digit, num-traits' `Signed::abs` and `abs_sub` on the trait, and byteorder's
+`read_uint` with `nbytes` of 0 or 9. Nothing new was found, and nothing was posted.
+
+**Tests.** `cargo test -p hydo-contracts`: the parse of `matches`, patterns, `build`, `read` and
+`with` lines with tuples (`lang::`); enumerations through the wire, the shown form, patterns,
+generation and the shrink; the harness of an enumeration, a built value and a reference to a
+reference; and the fixture end to end (`fuzz::`). The merge checklist of `AGENTS.md` passes.
+Nothing recorded moved: no engine, guest program or image changed.
+
+**What is left.** Open item 139.
