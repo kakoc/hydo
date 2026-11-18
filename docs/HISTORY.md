@@ -17130,3 +17130,15 @@ One run of hydo-explore's `--test it` did not end while the example's git-ignore
 passed in 102 s. The cause was not traced.
 
 **What is left.** Open item 154.
+
+### The 0.4.0 release — published (2026-11-18)
+
+The user created the GitHub release `v0.4.0` on the release commit `75db9ff9` with the six files
+of `hydo/dist/out/0.4.0/`, whose sums matched `SHA256SUMS`. The tag started `release.yml` (run
+44359880259), and every job passed: crates.io (`hydo` 0.4.0 and `hydo-assert` 0.4.0), PyPI and
+npm (`hydo-assert` 0.4.0, npm with provenance), and the Go tag `sdk/go/v0.4.0`. The Homebrew tap
+points at `hydo-mac-0.4.0.tar.gz` (`c06ed315…`, checked against the published archive), and the
+release index `hydo/dist/releases.txt` has the 0.4.0 lines. Before the release, an agent ran the
+Meilisearch and Restate reports' steps on the signed Mac archive: each failing schedule gave its
+recorded fingerprint twice (`44a749b10aeef55b`, `8b211024ba849447`). Both reports were posted
+with 0.4.0's steps (meilisearch/meilisearch#6743, restatedev/restate#5951).

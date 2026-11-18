@@ -215,16 +215,18 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.3.4 was published on 2026-11-15 from the release commit `dee7da68`, in
+**Releases.** hydo 0.4.0 was published on 2026-11-18 from the release commit `75db9ff9`, in
 these places:
 
-- The GitHub release `v0.3.4`: both tarballs, their sources archives, and the Mac signatures.
+- The GitHub release `v0.4.0`: both tarballs, their sources archives, and the Mac signatures.
 - The Homebrew tap: `brew install kakoc/tap/hydo`.
-- crates.io: the 21 crates of `cargo install hydo` (`hydo-contracts` is new, its first version
-  published by hand, open item 63), and `hydo-assert`.
-- PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.3.4`.
-- The skill release `skill-v2.3.1` (the plugin `hydo`, command `/hydo:onboard`).
+- crates.io: the crates of `cargo install hydo`, and `hydo-assert`.
+- PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.4.0`.
 
+0.4.0 adds Milestones 254 to 256 and 258 to 303 to 0.3.4, with the fingerprint epoch 4
+(`docs/HISTORY.md` "The 0.4.0 release"). Milestones 304 to 310 came after it. Its files and
+prepared material are in `hydo/dist/out/0.4.0/` of the main checkout. hydo 0.3.4 was published
+on 2026-11-15 from `dee7da68`, with the skill release `skill-v2.3.1`.
 The registries are published by `release.yml` on the tag. 0.3.4 adds Milestones 231, 233–253
 and 257 to 0.3.3, as `docs/HISTORY.md` "The 0.3.4 release" says. The fingerprint epoch is 3. Both
 releases ship M234's guest kernels with cgroups next to the old ones. 0.3.3 (`dad45fc9`) added
