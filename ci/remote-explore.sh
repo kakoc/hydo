@@ -82,6 +82,12 @@ if ! gh run download "$run" -R "$repo" -n "explore-$id-merged" -D "$out"; then
   echo "remote-explore.sh: run $run left no merged exploration ($url)" >&2
   exit 1
 fi
+# the runner wrote the report's commands with its own paths: write them again here, where the
+# folder is (the hydo on PATH; without one the runner's text stays)
+if command -v hydo > /dev/null; then
+  hydo report "$out" > "$out/summary.txt" 2>&1 || true
+  hydo report --html "$out" -o "$out/report.html" > /dev/null 2>&1 || true
+fi
 echo "remote-explore.sh: the merged exploration is in $out"
 cat "$out/inputs.txt" 2>/dev/null || true
 echo

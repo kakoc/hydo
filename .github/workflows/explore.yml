@@ -197,6 +197,11 @@ jobs:
           # the image and the files beside it that runs read (its build record, its saved
           # regressions, its contracts' plan), not the build's root trees
           for f in "/mnt/w/img/${img%.img}"*; do [ -f "$f" ] && cp "$f" /mnt/w/up/img/; done
+          # the project's reviewed list of expected error kinds, which hydo explore reads from
+          # the project's folder; the parts run without the checkout
+          for k in "$(dirname "$M")/known-errors.yaml" "$(dirname "$M")/hydo/known-errors.yaml"; do
+            [ -f "$k" ] && cp "$k" /mnt/w/up/known-errors.yaml && break
+          done
           sha256sum "/mnt/w/up/img/$img" | tee /mnt/w/up/image.txt
           ls -l /mnt/w/up/img
           echo "image=$img" >> "$GITHUB_OUTPUT"
@@ -258,6 +263,7 @@ jobs:
         run: |
           set -- --backend kvm --image "/mnt/w/up/img/$IMAGE" --seeds "$SEEDS" --shard "$I/$SHARDS" --out /mnt/w/part
           [ -z "$VCPUS" ] || set -- "$@" --vcpus "$VCPUS"
+          [ ! -f /mnt/w/up/known-errors.yaml ] || set -- "$@" --known-errors /mnt/w/up/known-errors.yaml
           # a time limit cuts the exploration at a seed boundary, so the part still writes its
           # documents and re-runs and shrinks what it found before the job's own limit
           case " $EXPLORE " in *" --time-limit"*) ;; *) set -- "$@" --time-limit 15000;; esac

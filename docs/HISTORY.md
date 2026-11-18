@@ -16958,3 +16958,32 @@ most schedules, and a reaction never kills or stops the `K=` or `P=` service, so
 reaction was a power cut. Its 11 failures were finding 3.
 
 **What is left.** Open item 154.
+
+## Milestone 310 (tentative number): three fixes of explorations on many runners
+
+Open item 153 named three gaps of M304's sharded explorations. A part's commands and an error
+path count were lost on the way to the user.
+
+**What changed.**
+
+- `hydo explore --merge` adds up the parts' error paths (M306): the run counts and each place's
+  runs add up, and a place's first run is that of the earliest part that ran it. Before, the
+  merged exploration kept the first part's paths only. A unit test in `merge.rs` checks the sums
+  and the first run. No sharded run watches error paths yet, because only the Mac engine watches
+  them and the parts run on KVM.
+- The report's command for more runs (`hydo report`, its page, and `report.md`'s "Next") names
+  the image by its file name when the project has no folder, as the replay lines already did.
+  A merged exploration's image path is the runner's (`/mnt/w/up/img/...`).
+- `ci/remote-explore.sh` runs `hydo report` and `hydo report --html` again on the downloaded
+  folder, so their commands name that folder. Without a `hydo` on `PATH` the runner's text stays.
+- `explore.yml` copies the example's `known-errors.yaml` (next to its manifest, or in its
+  `hydo/` folder) into the build's files, and each part passes it with `--known-errors`. The
+  Dragonfly and Redpanda runs of M304 had reported their expected error kinds as new.
+
+**Evidence.** On the downloaded merge of M304's Redis run (seeds 1-40 in 8 parts), `hydo report`
+now ends with `More runs: hydo explore --image explore-ob-redis-disk.img --seeds 41-140` and the
+local folder in the page's command; before, both named the runner's paths. The workflow passed
+actionlint and the script shellcheck. No workflow run used the changes yet. Nothing recorded
+moved.
+
+**What is left.** Open item 153.

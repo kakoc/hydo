@@ -174,7 +174,7 @@ Ideas that would answer more:
 | What is the history of each finding? | `hydo ci record` keeps a store, and `hydo ci page` writes it as one web page. Its headline counts the open findings of every branch, and each run shows when it started. | built; M286, M301; not run on GitHub |
 | Can the pull request show only what it changed? | `hydo ci run` writes `comment.md`, which the GitHub action posts and edits. | built; M286 |
 | Which commit introduced a finding? | `hydo versions --git A..B` replays it per commit, by hand. | partly built; M221 |
-| Can a long exploration run on many machines at once? | `hydo explore --shard I/N` explores one part of the seeds, and `hydo explore --merge` makes one exploration of the parts. hydo's workflow `explore.yml` runs up to 20 parts on GitHub's KVM runners. | built; M304 (Redis, Redpanda, and Dragonfly on GitHub's runners) |
+| Can a long exploration run on many machines at once? | `hydo explore --shard I/N` explores one part of the seeds, and `hydo explore --merge` makes one exploration of the parts. hydo's workflow `explore.yml` runs up to 20 parts on GitHub's KVM runners. | built; M304 (Redis, Redpanda, and Dragonfly on GitHub's runners), M310 |
 
 Ideas that would answer more:
 

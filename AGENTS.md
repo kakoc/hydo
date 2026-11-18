@@ -2326,8 +2326,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 
 153. Explorations on many KVM runners (M304, tentative number). What is left:
     - `ci/remote-explore.sh` ran once from `main` (2026-11-18): the Redis example's seeds 1-40
-      in 8 parts gave 8 failures in 3 problems, as one runner does. The merged report's "Next"
-      lines print the runner's paths (`/mnt/w/merged`), not the downloaded folder.
+      in 8 parts gave 8 failures in 3 problems, as one runner does. Since M310 the script
+      writes the report's commands again where the folder is downloaded, with the `hydo` on
+      `PATH`; without one they keep the runner's paths.
     - Each part shrinks its own failures, so a key that several parts find is shrunk in each of
       them and only the earliest shrink is kept. The same holds for the shrinks of new error
       kinds. In Redpanda's part of seeds 27 and 28 such shrinks took most of its 9,469 s. One
@@ -2344,8 +2345,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - On Dragonfly the first runs' fingerprints of the Xeon Platinum 8573C differed from the Xeon
       6975P-C's, at the fingerprint epoch 4 (0 of 6 seeds equal). Open item 102's proof did not
       cover that model. The cause was not looked for.
-    - The `known-errors.yaml` of an example's `hydo/` folder is not passed to the explorer, so the
-      Dragonfly and Redpanda runs reported their expected error kinds as new.
+    - The workflow passes the example's `known-errors.yaml` to the parts since M310; no run on
+      GitHub used it yet.
 154. The kill at the moment of a console event (M305, tentative number). What is left:
     - The relay sees only the records of a process that opens the console after the reaction
       is armed. A record written through a file descriptor opened before reaches the host but
@@ -2373,8 +2374,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A function named for a recovery that runs at every start (Blnk's `recoverPanic` and
       `logrusRecovery`) runs in every run that restarts the program, without an error.
     - The runs record from the workload's start, so the services' start-up is not watched.
-    - `hydo explore --merge` does not merge the parts' error paths, and the CI page does not show
-      them. A declaration that a place must run in an exploration, which fails it, is not built.
+    - `hydo explore --merge` adds up the parts' error paths since M310 (tested on records only, as
+      no sharded run watches them: only the Mac engine does). The CI page does not show them. A declaration that a place must run in an exploration, which fails it, is not built.
 
 ## Milestone index
 
@@ -3188,6 +3189,10 @@ build machine, before 2026-10-13.
   --kill-now` draws it. Meilisearch's swap runs twice at 13 and 14 ms after its `202` on the Mac
   engine and at 34 to 40 ms on hvx, where `kill-<svc>` never did. Old schedules keep their
   fingerprints on the Mac and hvx. Nothing recorded moved
+- M310 (tentative number): fixes of explorations on many runners. `hydo explore --merge` adds
+  up the parts' error paths. The report's command for more runs names the image without its
+  folder. `ci/remote-explore.sh` writes the report again where it downloads it, and `explore.yml`
+  passes the example's `known-errors.yaml` to the parts. Nothing recorded moved
 
 ## Where to look
 

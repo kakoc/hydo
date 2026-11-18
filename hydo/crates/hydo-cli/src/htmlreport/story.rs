@@ -347,7 +347,7 @@ pub fn glossary(schedule: &str, pr: &Project) -> String {
 /// The image argument of a command: none when the image is the one `hydo build` wrote in the
 /// project's folder, else the image's path when it is relative, else its file name (the full
 /// path is machine-specific and stays in the details).
-fn image_arg(pr: &Project, image: Option<&str>) -> Option<String> {
+pub(crate) fn image_arg(pr: &Project, image: Option<&str>) -> Option<String> {
     if pr.folder.is_some() {
         return None;
     }

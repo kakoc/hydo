@@ -32,8 +32,8 @@ use crate::py::round1;
 use crate::run::fault_kinds;
 use hydo_errors::Aggregate;
 use hydo_results::{
-    role, End, ErrorKind, ErrorKinds, Exploration, Failure, Liveness, MergedShard, Property,
-    PropertyTable, Run, Shrink, Start, Summary, TimeLimit,
+    role, End, ErrorKind, ErrorKinds, Exploration, Failure, Liveness, MergedShard, PathCoverage,
+    Property, PropertyTable, Run, Shrink, Start, Summary, TimeLimit,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
@@ -436,6 +436,30 @@ fn merge_properties(tables: &[&PropertyTable]) -> Option<PropertyTable> {
         .count() as u64;
     t.properties = props;
     Some(t)
+}
+
+/// The error paths of the parts as one exploration's (Milestone 306): the counts add up, and
+/// a place's first run is that of the earliest part that ran it (the parts are in seed order).
+/// The parts explored one image, so their places are the same, in the same order.
+fn merge_paths(parts: &[Option<&PathCoverage>]) -> Option<PathCoverage> {
+    let mut it = parts.iter().flatten();
+    let mut out = (*it.next()?).clone();
+    for p in it {
+        out.runs += p.runs;
+        out.runs_without_faults += p.runs_without_faults;
+        for (o, q) in out.places.iter_mut().zip(&p.places) {
+            if o.id != q.id {
+                continue;
+            }
+            o.runs += q.runs;
+            o.runs_without_faults += q.runs_without_faults;
+            o.unwatched_runs += q.unwatched_runs;
+            if o.first.is_none() {
+                o.first = q.first.clone();
+            }
+        }
+    }
+    Some(out)
 }
 
 fn max_opt(a: Option<f64>, b: Option<f64>) -> Option<f64> {
@@ -912,6 +936,12 @@ pub fn merge(dirs: &[PathBuf], out: &Path) -> Result<Exploration, String> {
         error_kinds,
         properties: merge_properties(&tables),
         liveness: merge_liveness(&lv),
+        paths: merge_paths(
+            &parts
+                .iter()
+                .map(|p| p.doc.paths.as_ref())
+                .collect::<Vec<_>>(),
+        ),
         shards,
         missing_seeds: (!missing.is_empty()).then(|| ranges_text(&missing)),
         ..parts[0].doc.clone()
@@ -1044,5 +1074,46 @@ mod tests {
         assert_eq!(slowest(a.clone(), b.clone()).1.as_deref(), Some("seed-10"));
         assert_eq!(slowest(b.clone(), a.clone()).1.as_deref(), Some("seed-10"));
         assert_eq!(slowest((Some(3.0), Some("seed-9".into())), b).0, Some(3.0));
+    }
+
+    #[test]
+    fn the_error_paths_add_up_and_keep_the_earliest_first_run() {
+        use hydo_results::{PathFirst, PathPlaceCoverage};
+        let place = |runs, first: Option<i64>| PathPlaceCoverage {
+            id: 7,
+            kind: "err".into(),
+            file: "a.go".into(),
+            line: 3,
+            function: "f".into(),
+            runs,
+            runs_without_faults: 0,
+            first: first.map(|seed| PathFirst {
+                seed,
+                tag: format!("seed-{seed}"),
+                schedule: "disk=none | run K=s@1+1".into(),
+                at: 9,
+            }),
+            unwatched_runs: 1,
+        };
+        let a = PathCoverage {
+            runs: 5,
+            runs_without_faults: 1,
+            places: vec![place(0, None)],
+        };
+        let b = PathCoverage {
+            runs: 4,
+            runs_without_faults: 2,
+            places: vec![place(2, Some(8))],
+        };
+        let c = PathCoverage {
+            runs: 3,
+            runs_without_faults: 0,
+            places: vec![place(1, Some(12))],
+        };
+        let m = merge_paths(&[Some(&a), None, Some(&b), Some(&c)]).unwrap();
+        assert_eq!((m.runs, m.runs_without_faults), (12, 3));
+        assert_eq!((m.places[0].runs, m.places[0].unwatched_runs), (3, 3));
+        assert_eq!(m.places[0].first.as_ref().unwrap().seed, 8);
+        assert!(merge_paths(&[None, None]).is_none());
     }
 }

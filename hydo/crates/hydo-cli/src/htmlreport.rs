@@ -663,8 +663,9 @@ fn next_seeds(seeds: Option<&str>) -> String {
 /// The `hydo explore` command for more runs, from the project's folder when it has one.
 fn explore_more(pr: &story::Project, image: &str, seeds: Option<&str>) -> String {
     let mut w = vec!["hydo explore".to_string()];
-    if pr.folder.is_none() {
-        w.push(format!("--image {}", quote(image)));
+    // by the image's file name, as the replay lines: a merged exploration's path is a runner's
+    if let Some(i) = story::image_arg(pr, Some(image)) {
+        w.push(format!("--image {}", quote(&i)));
     }
     w.push(format!("--seeds {}", next_seeds(seeds)));
     w.join(" ")
