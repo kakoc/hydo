@@ -996,7 +996,10 @@ the reaction is armed, as a workload's client does. A record of a process that o
 such as a service started at boot, reaches the host but not the relay. With several vCPUs the
 service's other threads run until the kill's interrupt reaches their CPU. `hydo explore
 --reactive fault --kill-now` draws `kill-now-<svc>` where it would draw `kill-<svc>`, with delays
-of 0 to 50 ms.
+of 0 to 50 ms. Since Milestone 309 half of its fault reactions, drawn from a stream of their own,
+are a `kill-now-` of any service, and the schedule's `K=` or `P=` on that service is left out
+(with the heal of that pause). So a manifest with one service, whose `K=` and `P=` the process
+strategy puts on that service in most schedules, still gets these kills.
 
 ### Freeze at a call (stop a service at an exact point of its traffic)
 

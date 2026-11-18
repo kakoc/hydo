@@ -396,7 +396,9 @@ Three findings hold for every type of system:
   - Meilisearch (finding 1 again): `A=meili.swap_acked@20+14:kill-now-meilisearch`
     runs the swap twice on every run on the Mac engine, and `+13` too. On hvx
     `A=meili.swap_acked@30+<ms>:kill-now-meilisearch` does it at 34 to 40 ms. The plain kill at
-    the same delays passes on both.
+    the same delays passes on both. Blind, `hydo explore --strategy process --reactive fault
+    --kill-now` ran the swap twice at 6 of 360 seeds on the Mac engine, the first at seed 101.
+    The shrink left one reaction, `A=meili.edit_acked:kill-now-meilisearch`.
   - SWUpdate: two of the five minimal schedules of its hvx exploration carry a
     reaction.
 - **What it misses.** Restate held under cuts and kills at six events of the client and the

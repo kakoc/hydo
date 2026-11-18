@@ -176,14 +176,40 @@ fn the_reactive_stream_is_pinned() {
     assert_eq!(got, want);
 }
 
-/// Milestone 305: `--kill-now` changes only the drawn kills. A schedule with it is the schedule
-/// without it, except that each `kill-<svc>` reaction is `kill-now-<svc>` with a delay from
-/// `REACT_NOW_DELAYS`; every other reaction, and every other field, is the same. Its schedules
-/// are canonical, and no shrink candidate turns the kill at the event's moment into a plain kill.
+/// Whether `--kill-now` takes the schedule's fault reaction (Milestone 309), and the service it
+/// kills: the draw of [`hydo_explore::gen::NOW_SALT`]'s stream, as `add_reactive` makes it.
+fn now_taken(e: &Ex, seed: u64, has_cf: bool) -> Option<String> {
+    use hydo_explore::gen::{NOW_SALT, NOW_TAKE_PCT};
+    let mut n = hydo_explore::rng::SplitMix::new(seed ^ NOW_SALT);
+    if n.below(100) >= NOW_TAKE_PCT {
+        return None;
+    }
+    let r = n.next();
+    let all: Vec<&String> = e
+        .pause_svcs
+        .iter()
+        .filter(|v| !has_cf || *v == "front")
+        .collect();
+    (!all.is_empty()).then(|| all[(r % all.len() as u64) as usize].clone())
+}
+
+/// Milestones 305 and 309: `--kill-now` changes only the drawn kills. A schedule with it is the
+/// schedule without it, with two kinds of change:
+///
+/// - A schedule whose fault reaction `--kill-now` does not take: each `kill-<svc>` reaction is
+///   `kill-now-<svc>` with a delay from `REACT_NOW_DELAYS`; every other reaction, and every other
+///   field, is the same.
+/// - A schedule whose fault reaction it takes: the fault reaction, with the same event and step,
+///   is `kill-now-<v>` of the drawn service `v`. A `K=` or `P=` on `v` is left out, and with the
+///   pause its heal; every other field is the same.
+///
+/// Its schedules are canonical, and no shrink candidate turns the kill at the event's moment
+/// into a plain kill.
 #[test]
 fn kill_now_changes_only_the_drawn_kills() {
     use hydo_explore::gen::REACT_NOW_DELAYS;
     let mut now = 0;
+    let mut taken = 0;
     for st in ["random", "process"] {
         for more in [false, true] {
             let e = ex(true, true, more);
@@ -194,23 +220,61 @@ fn kill_now_changes_only_the_drawn_kills() {
             for seed in 1..=800u64 {
                 let a = e.compose_seed(st, seed, false);
                 let b = k.compose_seed(st, seed, false);
-                assert_eq!(a.a.len(), b.a.len(), "{st} {seed}");
-                for (x, y) in a.a.iter().zip(&b.a) {
-                    if x.action.starts_with("kill-") {
-                        assert_eq!(y.action, format!("kill-now-{}", x.svc().unwrap()));
-                        assert_eq!(y.svc(), x.svc());
+                let fault_a = a.a.iter().find(|r| r.kind() != "cont");
+                let fault_b = b.a.iter().find(|r| r.kind() != "cont");
+                match (fault_b, now_taken(&k, seed, a.cf.is_some())) {
+                    (Some(y), Some(v)) => {
+                        assert_eq!(y.action, format!("kill-now-{v}"), "{st} {seed}");
                         assert!(REACT_NOW_DELAYS.contains(&y.delay), "{st} {seed}");
-                        assert_eq!((&y.event, y.at), (&x.event, x.at));
-                        now += 1;
-                    } else {
-                        assert_eq!(x, y, "{st} {seed}");
+                        if let Some(x) = fault_a {
+                            assert_eq!((&y.event, y.at), (&x.event, x.at), "{st} {seed}");
+                        }
+                        let mut want = a.clone();
+                        if want.k.as_ref().is_some_and(|x| x.0 == v) {
+                            want.k = None;
+                        }
+                        if want.p.as_ref().is_some_and(|p| p.svc() == v) {
+                            want.p = None;
+                            want.a.retain(|r| r.action != format!("cont-{v}"));
+                        }
+                        assert!(b.k.as_ref().is_none_or(|x| x.0 != v), "{st} {seed}");
+                        assert!(b.p.as_ref().is_none_or(|p| p.svc() != v), "{st} {seed}");
+                        want.a.retain(|r| r.kind() == "cont");
+                        let mut got = b.clone();
+                        got.a.retain(|r| r.kind() == "cont");
+                        // a reaction's power cut made the disk `cut`; a taken one does not
+                        if fault_a.is_some_and(|x| x.action == "cut") {
+                            want.disk = got.disk.clone();
+                        }
+                        assert_eq!(got, want, "{st} {seed}");
+                        taken += 1;
+                    }
+                    _ => {
+                        assert_eq!(a.a.len(), b.a.len(), "{st} {seed}");
+                        for (x, y) in a.a.iter().zip(&b.a) {
+                            if x.action.starts_with("kill-") {
+                                assert_eq!(y.action, format!("kill-now-{}", x.svc().unwrap()));
+                                assert_eq!(y.svc(), x.svc());
+                                assert!(REACT_NOW_DELAYS.contains(&y.delay), "{st} {seed}");
+                                assert_eq!((&y.event, y.at), (&x.event, x.at));
+                                now += 1;
+                            } else {
+                                assert_eq!(x, y, "{st} {seed}");
+                            }
+                        }
+                        let mut ra = a.clone();
+                        let mut rb = b.clone();
+                        ra.a.clear();
+                        rb.a.clear();
+                        assert_eq!(ra, rb, "{st} {seed}");
                     }
                 }
-                let mut ra = a.clone();
-                let mut rb = b.clone();
-                ra.a.clear();
-                rb.a.clear();
-                assert_eq!(ra, rb, "{st} {seed}");
+                assert!(
+                    b.a.iter()
+                        .filter(|r| r.action.starts_with("kill-now-"))
+                        .count()
+                        <= 1
+                );
                 let text = k.render(&b);
                 assert!(Schedule::is_canonical(&text), "{text}");
                 if b.a.iter().any(|r| r.action.starts_with("kill-now-")) && seed % 10 == 0 {
@@ -228,4 +292,54 @@ fn kill_now_changes_only_the_drawn_kills() {
         }
     }
     assert!(now > 100, "{now} kills at the event's moment");
+    assert!(taken > 300, "{taken} reactions taken");
+}
+
+/// Milestone 309: on a manifest with one service, `--kill-now` still draws kills at the event's
+/// moment. Without the take, the process strategy's `K=` and `P=` on the only service left a
+/// reaction nothing to kill, so 24 seeds of the Meilisearch example drew none (Milestone 305).
+/// Now about 30% of the schedules carry one (60% have a fault reaction, half of them taken),
+/// and none of them also has a `K=` or `P=` on the service.
+#[test]
+fn kill_now_reaches_the_only_service() {
+    let one = vec!["meilisearch".to_string()];
+    let e = Ex {
+        react_fault: true,
+        react_kill_now: true,
+        svcs: one.clone(),
+        net_svcs: one.clone(),
+        pause_svcs: one,
+        react_events: vec!["meili.swap_acked".into(), "meili.add_acked".into()],
+        ..Ex::default()
+    };
+    let old = Ex {
+        react_kill_now: false,
+        ..e.clone()
+    };
+    for st in ["random", "swarm", "process"] {
+        let n = 1000u64;
+        let mut with = 0;
+        let mut before = 0;
+        for seed in 1..=n {
+            let s = e.compose_seed(st, seed, false);
+            if s.a.iter().any(|r| r.action == "kill-now-meilisearch") {
+                with += 1;
+                assert!(
+                    s.k.as_ref().is_none_or(|k| k.0 != "meilisearch"),
+                    "{st} {seed}"
+                );
+                assert!(
+                    s.p.as_ref().is_none_or(|p| p.svc() != "meilisearch"),
+                    "{st} {seed}"
+                );
+            }
+            let o = old.compose_seed(st, seed, false);
+            if o.a.iter().any(|r| r.kind() == "kill") {
+                before += 1;
+            }
+        }
+        eprintln!("{st}: {with} of {n} with a kill at the event's moment, {before} kills before");
+        assert!(with * 100 >= n * 25, "{st}: {with} of {n}");
+        assert!(with > before, "{st}: {with} against {before}");
+    }
 }

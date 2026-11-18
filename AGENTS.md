@@ -1368,8 +1368,12 @@ changed, so the code is the same on hvx, the Mac, and KVM. `hydo explore --react
 (finding 1), and so does `+13`. `kill-meilisearch` at the same delays passes. On hvx
 `A=meili.swap_acked@30+<ms>:kill-now-meilisearch` runs the swap twice at 34 to 40 ms, and
 `kill-meilisearch` at 30 to 40 ms passes.
-Old schedules gave their fingerprints and control transcripts on both engines. The reference is
-MANIFEST.md "Reactions"; the details are in `docs/HISTORY.md` Milestone 305 (open item 154).
+Old schedules gave their fingerprints and control transcripts on both engines. Since M309 half
+of `--kill-now`'s fault reactions, drawn from a stream of their own, kill any service, and the
+schedule's `K=` or `P=` on that service is left out. On Meilisearch, which has one service, 101 of
+360 schedules carried such a kill. The exploration found finding 1 blind at seed 101 and shrank
+it to `A=meili.edit_acked:kill-now-meilisearch` with no other fault. The reference is MANIFEST.md
+"Reactions"; the details are in `docs/HISTORY.md` Milestones 305 and 309 (open item 154).
 
 **Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 64 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
@@ -2370,7 +2374,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       cover that model. The cause was not looked for.
     - The workflow passes the example's `known-errors.yaml` to the parts since M310; no run on
       GitHub used it yet.
-154. The kill at the moment of a console event (M305, tentative number). What is left:
+154. The kill at the moment of a console event (M305 and M309, tentative numbers). What is left:
     - The relay sees only the records of a process that opens the console after the reaction
       is armed. A record written through a file descriptor opened before reaches the host but
       not the relay, and the reaction does not fire. An SDK in a service started at boot writes
@@ -2380,9 +2384,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - One `kill-now-` reaction per schedule, because one relay sits over the console.
     - The delay is in whole milliseconds. Meilisearch's swap window on the Mac engine is 2 ms
       wide on that grid; a window narrower than 1 ms can fall between two delays.
-    - The explorer draws a reaction's kill only on a service without the schedule's `K=` and
-      `P=`. On a manifest with one service the process strategy puts both on it in most
-      schedules, so 24 seeds of Meilisearch with `--kill-now` drew no `kill-now-` reaction.
+    - Since M309 `--kill-now` takes half of the fault reactions for a kill of any service and
+      leaves out that service's `K=` and `P=`. So such a schedule never also kills or pauses
+      that service by a step. A take is not tried with `cf=`. The blind exploration ran on the
+      Mac engine only, with the process strategy.
     - KVM did not run it. The mechanism is the same controller code as on the Mac and hvx, with
       no engine change.
 155. Error paths (M306, tentative number; `docs/design/error-paths.md`). What is left:
@@ -3221,6 +3226,12 @@ build machine, before 2026-10-13.
   functions and reproduced 9 known upstream bugs, none new. A list of built values gives a false
   `broken`; `Self::Owned` results, a name used by two enumerations, const generics, `&'static`
   parameters and closures stop contracts on the API. Nothing recorded moved
+- M309 (tentative number): `--kill-now` on a project with one service. Half of its fault
+  reactions, drawn from a stream of their own, kill any service at the event's moment, and the
+  schedule's `K=` or `P=` on that service is left out. Explorations without `--kill-now` draw the
+  same schedules. On Meilisearch 101 of 360 schedules carried such a kill, against none of 24
+  before. Finding 1, the swap that runs twice, was found blind at seed 101 and shrunk to one
+  reaction. Nothing recorded moved
 
 ## Where to look
 

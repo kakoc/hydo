@@ -448,7 +448,9 @@ done
 On the Meilisearch example on the Mac engine the swap runs twice at 13 and 14 ms, and every other
 delay passes. On hvx the window is 34 to 40 ms after the first swap from step 30.
 `--kill-now` makes `hydo explore --reactive fault` draw `kill-now-<svc>` instead of `kill-<svc>`.
-A schedule has at most one `kill-now-` reaction.
+Half of its fault reactions are such a kill of any service, and the schedule then has no `K=`
+or `P=` on that service. So a project with one service gets these kills too. A schedule has at
+most one `kill-now-` reaction.
 
 A reaction can also act inside the workload's own work:
 

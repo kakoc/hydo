@@ -297,6 +297,17 @@ with only `parallel_driver_add`. No minimal schedule kept a clock step, a kill, 
 The blind explorations did not reach finding 1: the explorer draws a reaction's delay from
 fixed values, and none of them came between the swap's two commits.
 
+Since Milestone 309 a blind exploration reaches it with the kill at the event's moment. With
+`--strategy process --reactive fault --react-events
+meili.swap_acked,meili.edit_acked,meili.add_acked --kill-now`, without `--new-faults` and
+`--storage-faults`, on the default image:
+
+- 101 of the seeds 1 to 360 drew a `kill-now-meilisearch` reaction.
+- The swap ran twice at 6 seeds, the first at seed 101, and an edit ran twice at 5 seeds.
+- Seed 101 shrank in 88 runs to one reaction, `A=meili.edit_acked:kill-now-meilisearch`, with
+  no other fault and three of the client's commands left out of the composition
+  (`fp=e8098215bf80d4e0`). `docs/HISTORY.md` Milestone 309 has the whole schedule.
+
 Directed runs, before the explorations:
 
 | schedules | result |
@@ -316,7 +327,8 @@ None of these is fixed here; open item 148 in AGENTS.md lists them.
    the server stopped between two LMDB commits. A plain SIGKILL does it in Docker, and in hydo
    only a power cut did. `kill-<svc>` reaches the server through the guest agent, so the
    server's threads run on until the agent is scheduled. 18 kill delays passed. Fixed in
-   Milestone 305: `kill-now-<svc>` broke the swap at 13 and 14 ms.
+   Milestone 305: `kill-now-<svc>` broke the swap at 13 and 14 ms. Since Milestone 309 `hydo
+   explore --kill-now` draws such kills on this one service, and it found the swap blind.
 2. **One schedule's first violation hides the others.** Every power cut within 30 s of a dump
    breaks `final_dumps`, so most failing schedules of the explorations carry finding 3, and
    the verdict line of finding 1's schedule names finding 2. The swap shows only in

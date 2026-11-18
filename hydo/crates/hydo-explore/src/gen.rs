@@ -106,6 +106,14 @@ pub const REACT_DELAYS: [i64; 7] = [0, 0, 10, 50, 200, 1000, 5000];
 /// guest time. A kill at the event's moment meets a window of a few milliseconds that the work
 /// the event announced opens, so the delays are short and dense.
 pub const REACT_NOW_DELAYS: [i64; 10] = [0, 1, 2, 3, 5, 8, 13, 20, 30, 50];
+/// Milestone 309: the stream of `--kill-now`'s own choice. In [`NOW_TAKE_PCT`] percent of the
+/// schedules with a fault reaction, the reaction is `kill-now-<svc>` of a service drawn from all
+/// the services, and a `K=` or `P=` on that service is left out of the schedule. Without
+/// `--kill-now` nothing is drawn from it.
+pub const NOW_SALT: u64 = 0x4B11_1A0F_C0FF_EE09;
+/// The share, in percent, of the fault reactions that `--kill-now` takes for a kill at the
+/// event's moment.
+pub const NOW_TAKE_PCT: i64 = 50;
 /// A heal reaction's delay after its event.
 pub const HEAL_DELAYS: [i64; 5] = [0, 100, 500, 2000, 10000];
 /// How long a `stop-<svc>-<ms>` reaction stops its service.
@@ -1051,6 +1059,9 @@ impl Ex {
     ///   faults, with an action of three kinds: a power cut (only without `cf=`, with an honest
     ///   disk, which becomes `cut`), a kill or a stop of a service (not the `K=` or `P=` one; with
     ///   `cf=` only the order service, as for `X=`).
+    /// - `--kill-now` (Milestones 305 and 309): the kills are `kill-now-<svc>`, and half of the
+    ///   fault reactions, drawn from [`NOW_SALT`], kill any service at the event's moment, with
+    ///   the `K=` or `P=` of that service left out.
     pub fn add_reactive(&self, mut s: S, seed: u64) -> S {
         if !self.react_fault && !self.react_heal {
             return s;
@@ -1070,6 +1081,12 @@ impl Ex {
         // Milestone 305: the last draw, made only with --kill-now, so that every draw before it
         // stays as it was
         let f_now_delay = self.react_kill_now.then(|| t.pick(&REACT_NOW_DELAYS));
+        // Milestone 309: whether --kill-now takes this schedule's fault reaction, and which
+        // service it kills, from a stream of its own
+        let now_take = self.react_kill_now.then(|| {
+            let mut n = SplitMix::new(seed ^ NOW_SALT);
+            (n.below(100) < NOW_TAKE_PCT, n.next())
+        });
         let pick = |l: &[String], r: u64| -> Option<String> {
             (!l.is_empty()).then(|| l[(r % l.len() as u64) as usize].clone())
         };
@@ -1131,7 +1148,36 @@ impl Ex {
                 } else {
                     "kill"
                 };
+                // Milestone 309: a taken reaction kills a service drawn from all of them (with
+                // `cf=` only the order service, as above). The schedule's `K=` and `P=` on that
+                // service are left out, with the heal of that pause, and the reaction stays armed
+                // where it was drawn. So a manifest with one service, which the process strategy
+                // gives a `K=` or `P=` in most schedules, still gets kills at the event's moment.
+                let taken = match now_take {
+                    Some((true, r)) => {
+                        let all: Vec<String> = self
+                            .pause_svcs
+                            .iter()
+                            .filter(|v| s.cf.is_none() || *v == "front")
+                            .cloned()
+                            .collect();
+                        pick(&all, r)
+                    }
+                    _ => None,
+                };
+                if let Some(v) = &taken {
+                    let names = |target: &str| target.split(',').any(|x| x == v);
+                    if s.k.as_ref().is_some_and(|k| names(&k.0)) {
+                        s.k = None;
+                    }
+                    if s.p.as_ref().is_some_and(|p| names(p.svc())) {
+                        s.p = None;
+                        let heal = format!("cont-{v}");
+                        s.a.retain(|r| r.action != heal);
+                    }
+                }
                 let action = match (f_kind, pick(&svcs, f_svc)) {
+                    _ if taken.is_some() => taken.map(|v| format!("kill-now-{v}")),
                     (0, _) if cut_ok => Some("cut".to_string()),
                     (1, Some(v)) => Some(format!("{kill}-{v}")),
                     (2, Some(v)) => Some(format!("stop-{v}-{f_ms}")),

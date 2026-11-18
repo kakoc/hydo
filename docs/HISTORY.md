@@ -17029,3 +17029,104 @@ The worst problems, in order:
 
 A bug planted in arrayvec's `swap_pop` broke the evaluator's model property on 4 of 1,000 calls,
 and the shrink gave 11 operations. Open item 139 lists the fixes. Nothing recorded moved.
+
+### Milestone 309 (tentative number) - DONE (open item 154's fourth point: with `--kill-now`, half of the fault reactions, drawn from a stream of their own, kill any service at the event's moment, and the schedule's `K=` or `P=` on that service is left out; on Meilisearch, which has one service, 101 of 360 schedules carried a `kill-now-` reaction against none of 24 before, and finding 1, the index swap that runs twice, was found blind at seed 101 and shrunk to one reaction without other faults; explorations without `--kill-now` draw the same schedules; nothing recorded moved; 2026-11-18)
+
+**What was asked.** Open item 154's fourth point. `hydo explore --reactive fault --kill-now`
+drew a `kill-now-<svc>` reaction only on a service that the schedule's `K=` and `P=` did not
+name, as the plain `kill-<svc>` reactions do since M139. On a manifest with one service the
+process strategy puts a `K=` or a `P=` on that service in most schedules. So 24 seeds of the
+Meilisearch example with `--kill-now` drew no `kill-now-` reaction (Milestone 305), and a blind
+exploration could not reach finding 1: an index swap that runs twice when the server dies
+between its two commits. The task was a fair share of `kill-now-` reactions also on such a
+manifest, without a change to any schedule that an exploration without `--kill-now` draws.
+
+**The design.** With `--kill-now`, the reactions take one more draw from a stream of their own
+(`NOW_SALT`, in `hydo_explore::gen`): a coin with a probability of 50 % (`NOW_TAKE_PCT`) and a
+service. When the coin is up and the schedule has a fault reaction (60 % of the schedules), the
+reaction is `kill-now-<v>` of the drawn service `v`, with these rules:
+
+- `v` is drawn from all the services, as for a pause. With `cf=` it is only the bug benchmark's
+  order service, as before, and a manifest has no such service, so no reaction is taken there.
+- The schedule's `K=` on `v` (also a list that names `v`) is left out. The schedule's `P=` on
+  `v` is left out, and with it a heal reaction `cont-<v>` of that pause.
+- The reaction keeps the event, the step it is armed at and the delay that the reaction stream
+  drew. A reaction armed at the start of the `K=` or `P=` that it replaces stays armed there.
+- A taken reaction is never a power cut or a stop, so the disk stays as the strategy drew it.
+
+When the coin is down, the schedule is the one of Milestone 305: each drawn kill is
+`kill-now-<svc>`. Without `--kill-now` the new stream is not read, so every other draw keeps its
+value: `reactive::the_reactive_stream_is_pinned` and every golden of `hydo-explore` pass
+unchanged.
+
+**Why not the other options.**
+
+- Draw the reaction first and the process faults on the rest of the services: on a manifest
+  with one service there is no rest, so the strategy's faults would all go. The take leaves the
+  other half of the schedules as the strategy drew them.
+- Keep the `K=` and `P=` and kill the service anyway: a kill-now reaction on a service that a
+  `K=` already keeps down, or that a `P=` stops, is a schedule with two meanings. The rule of
+  M139 that a reaction does not act on the `K=` or `P=` service stays true.
+- Change the process strategy itself: its draws are pinned by the identity goldens, and the
+  change is for `--kill-now` only.
+
+**Tests.** hydo-explore's `reactive::kill_now_changes_only_the_drawn_kills` now checks both
+kinds of schedule. When the coin is down, the schedule is the one without `--kill-now` with each
+kill made `kill-now-`. When it is up, the schedule is the one without `--kill-now` with the fault
+reaction replaced by `kill-now-<v>` at the same event and step, the `K=` and `P=` on `v` left
+out, and nothing else changed. The new `reactive::kill_now_reaches_the_only_service` draws 1,000
+seeds on one service. With the process strategy, 306 schedules carry a `kill-now-` reaction,
+against 11 with the rule of Milestone 305. The random strategy gives 377, and swarm gives 380.
+No such schedule also has a `K=` or `P=` on the service.
+
+**Meilisearch on the Mac engine.** The example's image built with this tree (`--set
+arch=arm64`, initramfs `dddbbcab…`, the image of Milestone 305), 0.4.0's guest files, one
+worker. The command was the one of Milestone 305 over more seeds:
+
+```sh
+hydo explore --seeds 1-60 --strategy process --reactive fault \
+  --react-events meili.swap_acked,meili.edit_acked,meili.add_acked --kill-now
+```
+
+The seeds 61 to 360 ran as a second exploration with the same options.
+
+| seeds | schedules with a `kill-now-` reaction | the swap ran twice | an edit ran twice |
+|---|---|---|---|
+| 1-60 | 15 | none | none |
+| 61-360 | 86 | seeds 101, 138, 158, 160, 183 and 307 | seeds 117, 123, 185, 198 and 318 |
+
+So 101 of the 360 schedules (28 %) carried a `kill-now-` reaction: 33 after a swap's event, 34
+after an edit's and 34 after an addition's. None of them had a `K=` or `P=`. Milestone 305's 24
+seeds drew none.
+
+Finding 1 was found blind at seed 101, with `A=meili.edit_acked@4+1:kill-now-meilisearch`, and
+shrunk in 88 runs to:
+
+```text
+disk=none dseed=3cedbc552f4569f1 | run W=40833e4f,p3,q4,r600,oparallel_driver_add2+parallel_driver_del+parallel_driver_upd A=meili.edit_acked:kill-now-meilisearch
+```
+
+The minimal schedule kills the server at the moment of the first edit's `202`, without other
+faults. Its two confirmations and one `hydo run` gave `fp=e8098215bf80d4e0` and `VIOLATION
+[swap] sa and sb are swapped otherwise than 7 succeeded swaps say`. The swap tasks 19 and 20,
+enqueued at 5.96 s of the guest's clock, ran after the restart at 38.8 s. So the kill at the
+edit's event came while a swap was between its two commits. The edits that ran twice are the
+same split of two commits (Milestone 305), and seed 117 shrank to
+`A=meili.edit_acked+5:kill-now-meilisearch` with `fp=5c6653ae6e4ba172`. Every other failure of
+the explorations followed a power cut: findings 2 and 3, and at seed 244 a first snapshot that
+was missing (`data.ms.snapshot`), the case that the example's finding 3 names as possible. The
+exploration of the seeds 61 to 360 took 21 minutes.
+
+`cargo fmt --all --check`, workspace clippy with `-D warnings`, `cargo test -p hydo --test it`
+(the CLI golden of `hydo guide manifest` re-recorded for the text of MANIFEST.md),
+`public_content::`, hydo-explore's `--test it` and `--test fake_engine` with every golden
+unchanged, `test_tiers`, `sh ci/consolidate-tests.sh --check` and `sh ci/vale.sh` pass. Nothing
+recorded moved: no engine, agent, kernel or image changed, and no schedule without `--kill-now`
+changed.
+
+One run of hydo-explore's `--test it` did not end while the example's git-ignored build outputs
+(3.5 GB in `.hydo/`, `images/` and `hydo-out/`) were in the tree. Its two `git check-ignore -z
+--stdin` children waited with no CPU for 15 minutes. With the outputs moved out, the 54 tests
+passed in 102 s. The cause was not traced.
+
+**What is left.** Open item 154.
