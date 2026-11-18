@@ -514,6 +514,55 @@ that a milestone builds moves into the tables of this page with its new status.
 - **What it needs.** A `txn` operation with send and commit parts in the history format.
 - **Where it came from.** The section "Left open" of `docs/design/messaging.md`.
 
+### A fleet that hydo runs
+
+- **What it is.** Machines that build images, cache them, and explore a project without a stop, with a time budget per project.
+- **Why it matters.** A team needs KVM or bare metal today, and GitHub's runners stop a job at 6 hours with 2 to 4 CPUs.
+- **What it needs.** A queue, workers on bare-metal hosts with KVM, and an image cache by input key. A KVM fingerprint holds within one CPU vendor, and on Intel within one model (open item 102), so the fleet needs one CPU model or fingerprints per model.
+- **Where it came from.** The user, 2026-11-18: what hydo lacks to be a hosted service end to end.
+
+### An app for GitHub instead of a workflow file
+
+- **What it is.** An app that a team installs on its repositories instead of a workflow file. hydo gets the pushes and pull requests and answers with checks and comments.
+- **Why it matters.** The action needs a workflow file and its inputs in the team's repository, and its examples never ran with a pull request from a fork (open item 67).
+- **What it needs.** The app's webhooks, the check runs API, and the comment of `hydo ci run` (M286).
+- **Where it came from.** The user, 2026-11-18: what hydo lacks to be a hosted service end to end.
+
+### Onboarding as a pull request
+
+- **What it is.** The onboarding skill runs on hydo's side against a team's repository and opens a pull request with a `hydo/` folder whose clean runs pass.
+- **Why it matters.** An onboarding of a real project takes an expert hours (`docs/ONBOARDING-PLAYBOOK.md`), and a team stops at it.
+- **What it needs.** The skill in a sandbox with the fleet's engines, and a check that the plan's clean runs pass before the pull request opens.
+- **Where it came from.** The user, 2026-11-18: what hydo lacks to be a hosted service end to end.
+
+### A web app of findings for a team
+
+- **What it is.** Accounts, teams, each finding across branches, triage (accept, assign, link to an issue), notifications in Slack or email, and a link to a finding that anyone on the team opens.
+- **Why it matters.** `hydo ci page` (M286) is one static page of a directory store that one person reads.
+- **What it needs.** A hosted store of `hydo ci record`'s runs, the page's views as a web app, and the accept file written back as a pull request.
+- **Where it came from.** The user, 2026-11-18: what hydo lacks to be a hosted service end to end.
+
+### A replay in one click
+
+- **What it is.** A button on a finding that replays it on the fleet and opens an `hydo inspect` session in the browser, or downloads the image and the schedule for a local replay.
+- **Why it matters.** A developer who did not run the exploration needs the image and the engine to see the failure.
+- **What it needs.** `hydo inspect` sessions on the fleet and a browser terminal, or [An MCP server for hydo inspect](#an-mcp-server-for-hydo-inspect).
+- **Where it came from.** The user, 2026-11-18: what hydo lacks to be a hosted service end to end.
+
+### From a finding to a proven fix
+
+- **What it is.** A coding agent gets a finding's deterministic replay and writes a fix. hydo proves it with the replay, the saved regressions, and a new exploration before the pull request opens.
+- **Why it matters.** A deterministic replay is the input that an agent needs to fix a bug, and the proof that the fix holds.
+- **What it needs.** The parts exist: `hydo ci` decides `fixed` by replay, `hydo versions` names the version that brought a finding, and `hydo inspect` explains it. A loop joins them.
+- **Where it came from.** The user, 2026-11-18: what hydo lacks to be a hosted service end to end.
+
+### Billing by deterministic work
+
+- **What it is.** Metering of a project's runs by a unit that is exact and the same on every run.
+- **Why it matters.** A hosted service needs a unit that a team can predict and check.
+- **What it needs.** The work counts of M198 (`docs/design/cost-tracking.md`) or the guest's retired branches of `perf:` (M237), and quotas per organization.
+- **Where it came from.** The user, 2026-11-18: what hydo lacks to be a hosted service end to end.
+
 ## How to keep this page current
 
 Every milestone that builds or changes a capability updates its rows here: the status, the
