@@ -112,8 +112,8 @@ In your repository, run:
 hydo onboard
 ```
 
-`hydo onboard` looks for a Docker Compose file and starts a `hydo/` folder from it, or an empty
-one when there is none. It installs the onboarding skill, the instructions that teach an AI coding
+`hydo onboard` looks for a Docker Compose file and starts a `hydo/` folder from it. When there is
+none, it writes a skeleton with placeholders that fail every run until you fill them in. It installs the onboarding skill, the instructions that teach an AI coding
 tool to set up hydo, for the tools it finds, such as Claude Code. Then it prints the next step. In Claude Code, that step is `/hydo:onboard`. The skill asks about your system and writes
 the client and the rules with you. Then `hydo explore` looks for failures, and `hydo report`
 lists each one with the command that replays it.
@@ -141,7 +141,7 @@ To install the skill as a Claude Code plugin without `hydo onboard`, type these 
   more.
 - [How hydo is built](docs/ARCHITECTURE.md) and [how to contribute](CONTRIBUTING.md).
 
-The current release is hydo 0.3.4. It is experimental: formats and commands can change between
+The current release is hydo 0.4.0. It is experimental: formats and commands can change between
 versions.
 
 ## License

@@ -19,6 +19,8 @@ Words this page uses:
   disk that loses unflushed writes at a power cut) or `dseed=<hex>` (the seed of the disk's
   faults). The guest part places faults before steps of the workload, for example `C=12` (a power
   cut before step 12). Each such word of a schedule is a token; `hydo guide faults` lists them.
+- Seed: a number from which hydo draws a schedule. `hydo explore --seeds 1-20` draws one schedule
+  from each of the seeds 1 to 20, the same ones on every machine.
 - Fingerprint: a hash of the guest's whole final state. The same schedule on the same image
   gives the same fingerprint.
 - Verdict: the run's outcome: `OK`, `VIOLATION` (an invariant, a property that must always hold,
@@ -48,11 +50,11 @@ its installer. The installer copies hydo into `~/.hydo` and runs `hydo setup` th
 `hydo doctor`.
 
 ```sh
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.4/hydo-mac-0.3.4.tar.gz
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.3.4/SHA256SUMS
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.0/hydo-mac-0.4.0.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.0/SHA256SUMS
 shasum -a 256 -c --ignore-missing SHA256SUMS
-tar xzf hydo-mac-0.3.4.tar.gz
-./hydo-mac-0.3.4/install.sh
+tar xzf hydo-mac-0.4.0.tar.gz
+./hydo-mac-0.4.0/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -118,8 +120,8 @@ hydo run "disk=cut | run C=12 R=everysec"
 is such a setting of the system that a guest token changes; the example's `hydo.yaml` lists its
 knobs under `knobs:`. Each command prints a `RESULT` line. Its `verdict=` field is the outcome,
 and `HYDO-ORACLE:` marks the verdict of the invariants. `fp=` is the fingerprint; the other
-fields are hydo's own counters. The first ends `verdict=HYDO-ORACLE: OK` (fingerprint
-`05f433ee427f8e3c`). The second prints a violation: an acknowledged key is gone after the power
+fields are hydo's own counters and hashes. The first ends `verdict=HYDO-ORACLE: OK invariants=1
+held (redis.acked_writes_survive: acked=20 all present)` (fingerprint `05f433ee427f8e3c`). The second prints a violation: an acknowledged key is gone after the power
 cut (`key k:0 lost`, fingerprint `2174995ebfb4d2d6`; the check stops at the first lost key).
 That is Redis's documented `everysec` window, and the run reproduces it every time. Run either command again and the fingerprint
 (`fp=`) is the same. With the default `appendfsync always`, the same cut loses nothing:
@@ -200,7 +202,8 @@ hydo report
 
 hydo runs one virtual machine per free performance core at once, and fewer when the Mac is
 busy; its `pool:` line names the number. `--workers N` sets it. In a terminal, `hydo explore` ends with how many runs failed,
-in how many ways, and whether each failing run failed again when hydo replayed it.
+in how many ways, and whether each failing run failed again when hydo replayed it. Outside a
+terminal (a log file, CI) it ends with one JSON summary line instead.
 
 `hydo report` prints each problem it found:
 
@@ -214,7 +217,8 @@ in how many ways, and whether each failing run failed again when hydo replayed i
   repeats the whole failing run, and the report says so;
 - `If it is expected: hydo ci accept <key>`: this line is for `hydo ci run`, which runs hydo in
   your continuous integration (`hydo guide ci`). It changes nothing in `hydo report`. A key names
-  the failing check, so two problems that fail the same check share one key.
+  the failing check, so two problems that fail the same check share one key. A problem whose runs
+  failed in several ways has one key for each way.
 
 `hydo report --html` writes the same problems as one web page, with each failure's timeline.
 `hydo report --details` prints the technical report. It gives each failure's class (the cause),
@@ -241,8 +245,7 @@ and check of a `hydo.yaml` is. `fault.*` properties are hydo's own: one for each
 (a pause, a clock step, a one-way network fault). `NOT EXERCISED` means that no run reached it; in
 this exploration no run paused Redis or stepped its clock, so all six show it. The last line
 counts the runs (`runs=`). `setup-complete seen in` counts the runs whose program said through
-an SDK that its setup was done: 0 here, because the example uses no SDK. The run's timeline
-still shows hydo's own `HYDO-SETUP-COMPLETE` event. A run that stopped with an error before the
+an SDK that its setup was done: 0 here, because the example uses no SDK. A run that stopped with an error before the
 invariants ran counts in neither the passed nor the failed column. So for this example's
 invariant the two add up to fewer runs than `runs=`.
 
@@ -315,11 +318,13 @@ List each file under `root.files:` with a path relative to `hydo.yaml`. `root.ni
 from a Nix store, the folder where the Nix package manager keeps its packages) is not supported
 by the Mac build yet.
 
-Then the same three commands as in section 2: `hydo build hydo/hydo.yaml` (or `hydo build hydo.yaml`
-for a single file), `hydo run "disk=none | run"`, `hydo explore`. The image of a `hydo/` folder
-goes to `.hydo/` instead of `hydo-out/`. `hydo build hydo/hydo.yaml --check` checks the folder's
-format without building. It warns while the two placeholder files of `hydo init` are still
-there; with them, every run fails.
+`hydo build hydo/hydo.yaml --check` checks the folder's format without building. It warns while
+the two placeholder files of `hydo init` are still there; with them, every run fails, and `hydo
+explore` would report those failures as problems. When it warns about no placeholder any more,
+run the same three commands as in section 2: `hydo build hydo/hydo.yaml` (or `hydo build
+hydo.yaml` for a single file), `hydo run "disk=none | run"`, `hydo explore`. The image of a
+`hydo/` folder goes to `.hydo/` instead of `hydo-out/`; the runs and explorations still go to
+`hydo-out/`.
 
 The release carries every guest file the arm64 build stages, so these work from it as well:
 - `network: bridge`, `addr:` and `faults: [freeze]`. With them each service runs in its own
@@ -354,7 +359,7 @@ third-party software:
 `THIRD-PARTY.md` lists each one with its version, its license, the files it is in, and where its
 source is. `licenses/` holds the full text of every license.
 
-The archive `hydo-mac-0.3.4-sources.tar.gz` accompanies this release; it is published next to
+The archive `hydo-mac-0.4.0-sources.tar.gz` accompanies this release; it is published next to
 the tarball, with the same `SHA256SUMS`. It contains the corresponding source:
 
 - the exact upstream source archives of every third-party component, including every GPL- and

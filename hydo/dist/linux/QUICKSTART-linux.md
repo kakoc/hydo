@@ -22,7 +22,7 @@ Words this page uses:
 - Verdict: the run's outcome: `OK`, `VIOLATION` (an invariant, a property that must always hold,
   failed), or `ERROR` (the run could not finish its workload).
 - Fingerprint epoch: the generation of hydo's fingerprints. A change that moves recorded
-  fingerprints raises it; this release's is 3. Runs of different epochs compare only verdicts.
+  fingerprints raises it; this release's is 4. Runs of different epochs compare only verdicts.
 - Recovery: after a power cut, hydo boots the guest again on what the disk kept and runs the
   invariants there.
 - Engine: the program that runs the virtual machine: hvx (hydo's kernel module) or KVM.
@@ -47,7 +47,7 @@ hydo has two engines on Linux, and each needs different things:
 For the kernel module:
 
 - An x86_64 Linux machine with an Intel CPU and VT-x (Intel's hardware support for virtual
-  machines) enabled in the firmware. Bare metal is best.
+  machines) enabled in the firmware.
 - A CPU with a performance-monitoring unit that is not a hybrid (P-core/E-core) design gives hydo
   its PMU branch clock. The unit counts the guest's conditional branches, so a timer tick lands at
   an exact instruction. Without one, hydo uses the exit-count clock. Runs are still
@@ -69,8 +69,8 @@ Download the tarball and check it as [docs/INSTALL.md](https://github.com/kakoc/
 shows (`curl` and `sha256sum -c`), then:
 
 ```sh
-tar xzf hydo-linux-0.3.4.tar.gz
-./hydo-linux-0.3.4/install.sh                 # or: --prefix DIR (default ~/.hydo), --add-to-path
+tar xzf hydo-linux-0.4.0.tar.gz
+./hydo-linux-0.4.0/install.sh                 # or: --prefix DIR (default ~/.hydo), --add-to-path
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -96,7 +96,7 @@ The run engine needs no compiling: it runs inside `hydo` itself when you can ope
 `/dev/hvx` (as root, or after `hydo module udev install`), or as the program `bin/hydo-hvx` under
 `sudo` when you cannot. The installer writes nothing outside `~/.hydo` except your shell startup
 file (only with `--add-to-path`) and the udev rule (only with `--udev`). If the module is already
-loaded (a machine where someone else manages it), `./hydo-linux-0.3.4/install.sh --no-module`
+loaded (a machine where someone else manages it), `./hydo-linux-0.4.0/install.sh --no-module`
 skips `hydo module install`; `hydo doctor` then warns that `hvx.ko` was not built by this
 release. In that case run `hydo module build`, not `hydo module install`: it builds this
 release's module without loading it, and `hydo module status` then says whether the loaded module
@@ -199,9 +199,9 @@ RESULT one fp=d299dc487ceb5e3c wfp=ffe9697f49bd79e3 secs=1.0 stops=24050 typed=3
   looked at the guest and the commands it typed. `inh=` is a hash of that typed input: each
   command's bytes and the guest time at which it was typed.
 - `secs=` is how long the run took.
-- When checks that run on the host after the guest (history and messages checks, error logs)
-  change the outcome, `hydo run` prints one more line, `hydo: VERDICT ...`, and that line is the
-  run's verdict.
+- Some checks run on the host after the guest: checks of a recorded history or of messages, and
+  new error lines in the services' logs (`hydo guide checks`). When they change the outcome, `hydo
+  run` prints one more line, `hydo: VERDICT ...`, and that line is the run's verdict.
 
 With this example's default setting, `appendfsync always`, the same cut loses nothing:
 
@@ -225,8 +225,8 @@ Run either command again: the fingerprint is the same. Each run leaves a directo
   `one.recovery.agent.log`;
 - the engine's logs (`one.engine.err`, `engine.log`), after a power cut the agent's events
   (`agent-events.jsonl`), and `result.json` (the run's result in hydo's results format);
-- for a failed run, `logs/<service>.log`: the end of each service's own log, which the
-  `hydo: diagnosis:` line points to.
+- for a failed run, `logs/<service>.log`: the end of each service's own log. When a service
+  failed, the `hydo: diagnosis:` line that `hydo run` prints names this file.
 
 `hydo repro <that directory>` runs it again from a fresh boot and compares the fingerprint:
 
@@ -254,13 +254,15 @@ hydo report
 the machine's CPUs and free memory. Each worker boots the guest once and starts every schedule
 from a snapshot of it. A snapshot is a saved copy of the whole machine after the boot; hvx
 keeps the snapshots in memory, the KVM engine in files. The strategy
-decides how schedules are drawn. `swarm` switches whole kinds of faults on and off per schedule.
-`process` puts two to four faults (a kill, a pause, a network fault, a clock step) one after
-another, each in its own part of the run. `hydo guide faults` lists the other
-options and explains them.
+decides how schedules are drawn. `swarm` switches whole kinds of faults on and off per schedule,
+so 20 schedules reach this example's disk faults and power cuts. For a system of several
+services, try `process`. It puts two to four faults one after another, each in its own part of
+the run: a kill, a pause, a network fault, or a clock step. `hydo guide strategies` says which strategy
+found what. `hydo guide faults` lists the other options and explains them.
 
 In a terminal, `hydo explore` ends with how many runs failed, in how many ways, and whether
-each failing run failed again when hydo replayed it. `hydo report` prints each problem it found:
+each failing run failed again when hydo replayed it. Outside a terminal (a log file, CI) it ends
+with one JSON summary line instead. `hydo report` prints each problem it found:
 
 - the problem in one line, how often it happened, and a label. `Worth a look` means that it may
   be a bug in your system. `Expected for this setting` means that it comes from a setting you
@@ -272,7 +274,8 @@ each failing run failed again when hydo replayed it. `hydo report` prints each p
   repeats the whole failing run, and the report says so;
 - `If it is expected: hydo ci accept <key>`: this line is for `hydo ci run`, which runs hydo in
   your continuous integration (`hydo guide ci`). It changes nothing in `hydo report`. A key names
-  the failing check, so two problems that fail the same check share one key.
+  the failing check, so two problems that fail the same check share one key. A problem whose runs
+  failed in several ways has one key for each way.
 
 `hydo report --html` writes the same problems as one web page, with each failure's timeline.
 `hydo report --details` prints the technical report. It gives each failure's class (the cause,
@@ -285,8 +288,7 @@ and JavaScript (the SDKs, `hydo guide sdks`). This example has none. Its invaria
 properties are one for each fault that the guest reports when it happens (a pause, a clock step,
 a one-way network fault). `NOT EXERCISED` means that no run reached it. The last line counts the
 runs (`runs=`). `setup-complete seen in` counts the runs whose program said through an SDK that
-its setup was done: 0 here, because the example uses no SDK. The run's timeline still shows
-hydo's own `HYDO-SETUP-COMPLETE` event. A run that stopped with an error before the invariants
+its setup was done: 0 here, because the example uses no SDK. A run that stopped with an error before the invariants
 ran counts in neither the passed nor the failed column. So for this example's invariant the two
 add up to fewer runs than `runs=`.
 
@@ -301,7 +303,8 @@ With the default settings and an honest disk, Redis loses nothing (the `disk=cut
 run of section 2). On the machine of section 2 it found 9 failures (io-errors 4, lying-disk 3, unsafe-knob 2), and all
 of them reproduced. The two minimal schedules were
 `disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no` (`ec087a21903279d8`) and
-`disk=lying:2 dseed=17144527b62d669c | run C=17` (`b9ba9497e29887aa`).
+`disk=lying:2 dseed=17144527b62d669c | run C=17` (`b9ba9497e29887aa`). The number after
+`lying:` or `ioerr:` is the fault's rate (`hydo guide faults`).
 
 To re-run every failure of an exploration from a fresh boot and compare the fingerprints:
 
@@ -358,23 +361,27 @@ Review the checks it proposes: that is the one step that needs your judgement.
 Your programs must be x86_64 Linux programs. Each can be a static build, the files of a package
 with the shared libraries the program loads, or a Docker/OCI image saved with `docker save`
 (`services[].image:`, see MANIFEST.md). List files under `root.files:` with paths relative to
-`hydo.yaml`. `root.nix:` (a Nix closure) needs `nix-store` on the machine that runs `hydo build`;
-everything else builds without Nix. Then: `hydo build hydo/hydo.yaml`, `hydo run "disk=none |
-run"`, `hydo explore`. The image of a `hydo/` folder goes to `.hydo/` instead of `hydo-out/`.
+`hydo.yaml`. `root.nix:` (a Nix closure: a Nix package with everything it needs at run time)
+needs `nix-store` on the machine that runs `hydo build`; everything else builds without Nix.
+When `--check` warns about no placeholder any more: `hydo build hydo/hydo.yaml`, `hydo run
+"disk=none | run"`, `hydo explore`. Before that every run fails because of the placeholders, and
+`hydo report` lists those failures as problems. The image of a `hydo/` folder goes to `.hydo/`
+instead of `hydo-out/`; the runs and explorations still go to `hydo-out/`.
 
 ## 6. Run without the kernel module (KVM)
 
 hydo has a second engine for Linux that needs no kernel module and no root: it runs the same
 images on the KVM that comes with Linux (`/dev/kvm`). Use it on a machine where you cannot load
-`hvx` (no root, a cloud VM with nested virtualization, a machine that runs other KVM virtual
-machines). It needs x86_64 Linux 5.10 or later with `/dev/kvm` usable by your user. Run
+`hvx`: no root, a cloud VM with nested virtualization, or a machine that runs other KVM virtual
+machines. hydo's release checks run it on GitHub's hosted runners, which are such VMs. It needs x86_64
+Linux 5.10 or later with `/dev/kvm` usable by your user. Run
 `hydo doctor --backend kvm` first. Add yourself to the group `kvm` only if it says that
 `/dev/kvm` is not usable (`sudo usermod -aG kvm "$USER"`, then log in again). It runs on Intel
-and AMD CPUs. Its fingerprints differ between CPU vendors, and on Intel between CPU models; its
+and AMD CPUs. Its fingerprints differ between Intel and AMD CPUs; its
 verdicts do not.
 
 ```sh
-./hydo-linux-0.3.4/install.sh --no-module     # nothing to build or load
+./hydo-linux-0.4.0/install.sh --no-module     # nothing to build or load
 export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor --backend kvm
 cp -R ~/.hydo/examples/redis ~/hydo-redis && cd ~/hydo-redis
@@ -393,7 +400,8 @@ the KVM engine by itself, so `--backend kvm` is needed only on a machine that ha
 `HYDO_BACKEND=kvm` selects it for every command instead of `--backend kvm`. The engine runs inside
 `hydo` (or as `bin/hydo-kvm` with `HYDO_KVM=process`) and boots its own build of the guest kernel,
 `guest/bzImage-kvm-cg`, which takes all its time from the engine's clock. An image built by a hydo
-before the fingerprint epoch 3 boots the build it was made for, `guest/bzImage-kvm`. Runs are deterministic, with
+before the fingerprint epoch 3 (hydo 0.3.3 and earlier) boots the build it was made for,
+`guest/bzImage-kvm`. Runs are deterministic, with
 the same verdicts as with hvx, but they are counted differently:
 
 - Guest time advances with the virtual machine's exits to the engine; there is no PMU branch
@@ -451,7 +459,7 @@ this third-party software:
 `THIRD-PARTY.md` lists each one with its version, its license, the files it is in, and where its
 source is. `licenses/` holds the full text of every license.
 
-The archive `hydo-linux-0.3.4-sources.tar.gz` accompanies this release; it is published next to
+The archive `hydo-linux-0.4.0-sources.tar.gz` accompanies this release; it is published next to
 the tarball, with the same `SHA256SUMS`. It contains the corresponding source:
 
 - the exact upstream source archives of every third-party component, including every GPL- and

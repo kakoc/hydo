@@ -274,7 +274,13 @@ pub fn run(dir: &Path, run: &Run, shown: &str) -> String {
     o.push_str("\nWhat hydo saw:\n");
     o.push_str(&seen(&story::seen(run, &evs, &what, &pr), INDENT));
     o.push('\n');
-    o.push_str(&wrap(&story::needs_first_words(&pr, image), ""));
+    let words = story::needs_first_words(&pr, image);
+    let words = if failed {
+        words
+    } else {
+        story::of_a_pass(&words)
+    };
+    o.push_str(&wrap(&words, ""));
     o.push_str(&format!(
         "{INDENT}{}\n",
         story::replay_command(&pr, image, run.engine.as_ref(), &run.schedule)

@@ -48,8 +48,10 @@ First: copy the images in once (needs network): sh hydo/fetch-images.sh
 
 **No Compose file.** `hydo onboard` runs `hydo init`, which writes a `hydo/hydo.yaml` with
 `TODO` marks and two placeholder files. The placeholders make every run fail until you replace
-them, so an empty test never passes by accident. Your programs run inside a Linux guest, so build
-them as static Linux binaries: arm64 on a Mac, x86_64 on Linux (`hydo guide minimum-path`).
+them, so an empty test never passes by accident. Your programs run inside a Linux guest: arm64 on
+a Mac, x86_64 on Linux. A static Linux binary is the simplest form (`hydo guide minimum-path`);
+the quickstart of your platform lists the other forms, such as a package's files with their
+shared libraries, or a Docker image.
 
 **An AI coding tool.** `hydo onboard` installs hydo's onboarding skill for each tool it finds: a
 `.claude/`, `.codex/`, `.cursor/` or `.gemini/` folder, or the tool's command on your `PATH`.
@@ -109,7 +111,8 @@ When the first run fails, the cause is usually your own folder, not your system:
   guest, `/tmp/hydo/compose/log.<entry>`, where `<entry>` is the command's filename. Read it with
   `hydo inspect` (`hydo guide inspect`).
 - A check that is too strict, or that reads its data before the system wrote it.
-- A service that never becomes ready. The `hydo: diagnosis:` lines name it.
+- A service that never becomes ready. After a failed run, `hydo run` prints `hydo: diagnosis:`
+  lines that name the service and the end of its log.
 
 Fix the folder until the run without faults passes. Only then do faults mean something.
 
@@ -218,8 +221,8 @@ hydo run "disk=none | run"
 hydo run "disk=none | run"
 ```
 
-On the Mac engine both runs printed `fp=1b5da9cd7de7df13` and the verdict `OK`. `hydo report`
-with the run directory shows each claim and how many cases it judged:
+On the Mac engine both runs printed `fp=1b5da9cd7de7df13` and the verdict `OK`. `hydo report
+--details` with the run directory shows each claim and how many cases it judged:
 
 ```text
 messages check queue (history queue):
@@ -246,7 +249,10 @@ hydo report --details
 
 The exploration ran 20 schedules on the Mac engine and found one failure, which reproduced. It
 shrank the failure (cut it down to the fewest faults that still cause it) to one producer and a
-power cut, and named its class `unsafe-knob`.
+power cut, and named its class `unsafe-knob`. A class is hydo's name for the cause of a failure.
+It also prints `hydo: warning: 2 passing first runs may have checked nothing`: in those two runs
+the client recorded no acknowledged message, so their checks had nothing to judge. The warning
+says nothing about the failure.
 `hydo report` says the same in words; `--details` shows the minimal schedule and the verdict.
 `dseed=` is the seed of the disk's faults. The schedule's last word, `W=...`, is written by hydo: it records which client commands ran and in
 which order, so that a replay runs the same ones. Copy it as it is.
@@ -275,8 +281,17 @@ messages check runs on the host after the guest's own checks. `hydo run` prints 
 whenever the host's checks change the verdict.
 In your own system the same report points at a real bug: a claim names the rule that broke, and
 the minimal schedule replays it. `hydo save hydo-out/explore` keeps the schedule in
-`hydo/regressions/` as a regression test: `hydo repro --regressions` runs it again after each
-change of your system and says whether the failure came back.
+`hydo/regressions/` as a regression test. `hydo build` writes the saved regressions beside the
+image, so build again before you replay them:
+
+```sh
+hydo save hydo-out/explore
+hydo build hydo/hydo.yaml
+hydo repro --regressions
+```
+
+After each change of your system, `hydo repro --regressions` runs them again and says whether the
+failure came back.
 
 ## Where to read more
 

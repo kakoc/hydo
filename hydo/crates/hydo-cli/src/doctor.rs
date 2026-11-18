@@ -407,11 +407,18 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
         srcversion_file(&module_ko(ctx, "hvx")),
         srcversion_loaded("hvx"),
     );
+    // a module that is loaded already may be someone else's: build only, and compare (0.4.0's
+    // docs review: the install advice would reload a module that another user manages)
+    let fix = if live.is_some() {
+        "hydo module build (it builds without loading; hydo module status then compares it with the loaded one)"
+    } else {
+        "hydo module install (or only build it: hydo module build)"
+    };
     c.check_found(
         built.is_some(),
         "hvx.ko built by this release",
         "hvx.ko is not built by this release yet",
-        "hydo module install (or only build it: hydo module build)",
+        fix,
         true,
     );
     c.check_found(
