@@ -48,6 +48,18 @@
     },
     {
       "$ref": "#/$defs/CiLedger"
+    },
+    {
+      "description": "`hydo inspect values` (added in Milestone 285).",
+      "$ref": "#/$defs/ValueHistory"
+    },
+    {
+      "description": "`hydo compare-versions` (added in Milestone 298).",
+      "$ref": "#/$defs/CompareDoc"
+    },
+    {
+      "description": "`hydo explore --configs` (added in Milestone 299).",
+      "$ref": "#/$defs/ConfigsDoc"
     }
   ],
   "$defs": {
@@ -3699,7 +3711,7 @@
           "minimum": 0
         },
         "kind": {
-          "description": "An open set: `command` (the host typed an agent command), `exit` (a process the host\nstarted ended), `probe` (a readiness check ended), `done` (a command ended), `fault` (a\nfault applied or healed), `note` (the host controller's note), `report` (a line of the\nrun's report), `assertion`, `guest` (a line the guest printed), `snapshot`, `engine`,\n`end` (the end of a conversation), `verdict`, `preempt` (a forced preemption point,\nplaced at the stop that follows it, `at` its exit count; added in Milestone 208).",
+          "description": "An open set: `command` (the host typed an agent command), `exit` (a process the host\nstarted ended), `probe` (a readiness check ended), `done` (a command ended), `fault` (a\nfault applied or healed), `note` (the host controller's note), `report` (a line of the\nrun's report), `assertion`, `guest` (a line the guest printed), `snapshot`, `engine`,\n`end` (the end of a conversation), `verdict`, `preempt` (a forced preemption point,\nplaced at the stop that follows it, `at` its exit count; added in Milestone 208), `value`\n(a call's entry or return with the values its `// hydo: record` lines name, `details` a\n[`ValuePoint`]; added in Milestone 285).",
           "type": "string"
         },
         "text": {
@@ -4308,6 +4320,13 @@
           "description": "`<system>:<run id>` (`github:11873625`), or `local:<time>`.",
           "type": "string"
         },
+        "started": {
+          "description": "When the run started, in UTC (`2026-11-17T16:52:40Z`; added in Milestone 301). `hydo ci\npage` shows it; a run made before has only the time `hydo ci record` recorded it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "ci": {
           "$ref": "#/$defs/CiSystem"
         },
@@ -4580,6 +4599,13 @@
             "string",
             "null"
           ]
+        },
+        "set": {
+          "description": "The `hydo build --set KEY=VALUE` values it was built with, as `KEY=VALUE` (added in\nMilestone 286, so that a report made later from `ci-run.json` alone names them).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
@@ -4680,6 +4706,44 @@
             "string",
             "null"
           ]
+        },
+        "explore_s": {
+          "description": "The wall seconds of this commit's exploration, and of the base's when it was explored\nhere: what a later run's budget reads as the measured seconds per seed (added in\nMilestone 286).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "base_explore_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "seeds_from": {
+          "description": "Where the seed count came from when the run was asked to fit its seeds to the budget\n(`seeds_from: history`; added in Milestone 286): `history` when the history store's\nrecorded runs gave the seconds per seed and `seeds` is the count that fits, `range` when\nno recorded run measured it and the run kept its seed range with the time limit. Absent\nwhen the run was not asked.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seconds_per_seed": {
+          "description": "The seconds per seed the count was made from (this commit's exploration and, when the\nbase is explored too, the base's), and the recorded runs that measured it (added in\nMilestone 286).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "measured_runs": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
         }
       },
       "required": [
@@ -5685,6 +5749,13 @@
           "format": "uint64",
           "minimum": 0,
           "default": 0
+        },
+        "recorded": {
+          "description": "The recorded runs in the order they were recorded (added in Milestone 286; a store\nwritten before has none, and `hydo ci page` then orders the run files by name).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CiLedgerRun"
+          }
         }
       }
     },
@@ -5753,6 +5824,1163 @@
         "title",
         "state",
         "minimal"
+      ]
+    },
+    "CiLedgerRun": {
+      "description": "One recorded run of a branch (`hydo ci record`; added in Milestone 286).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The CI run's `id`.",
+          "type": "string"
+        },
+        "file": {
+          "description": "Its file, relative to the project's directory of the store (`runs/<id>.json`).",
+          "type": "string"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recorded": {
+          "description": "When it was recorded (UTC, `2026-11-17T10:04:00Z`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "report": {
+          "description": "The run's report page in the store (`hydo ci record --report`), relative to the project's\ndirectory of the store (`reports/<id>.html`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "file"
+      ]
+    },
+    "ValueHistory": {
+      "description": "`hydo inspect values <run dir>`: how the values that functions' `// hydo: record` lines name\nchanged through a run, per key (added in Milestone 285, docs/design/value-history.md).",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/ValuesType"
+        },
+        "run_dir": {
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict"
+        },
+        "plan": {
+          "description": "The record plan (`<image>.contracts.json`).",
+          "type": "string"
+        },
+        "functions": {
+          "description": "The functions with `record` lines, by name.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "calls": {
+          "description": "Calls of those functions the run recorded.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "total": {
+          "description": "Keys matching the filters (before paging).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "changed": {
+          "description": "Of those, the keys with a change.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "offset": {
+          "description": "The index of the first key shown among them.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "keys": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueKey"
+          },
+          "default": []
+        },
+        "truncated": {
+          "description": "More keys match than are shown.",
+          "type": "boolean"
+        },
+        "next": {
+          "description": "The command that shows the next page.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "properties": {
+          "description": "The plan's value properties (`// hydo: keep` lines) as the whole run judged them, before\nthe filters (added in Milestone 291).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueProperty"
+          }
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "run_dir",
+        "verdict",
+        "plan",
+        "calls",
+        "total",
+        "offset",
+        "truncated"
+      ]
+    },
+    "ValuesType": {
+      "description": "The `type` of this record: always `\"values\"`.",
+      "type": "string",
+      "enum": [
+        "values"
+      ]
+    },
+    "ValueKey": {
+      "description": "One key's history: every stop of a recording function whose call had this key (or a copy's\nkey), in the run's order, and each change of a value.",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "The key's value (`d17`); absent for the values of functions without a `key` line.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "copies": {
+          "description": "Keys that extend this one after `_`, `-`, `.`, `:`, `/` or `#` (a queue copy `d17_q`):\ntheir stops are in this history.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "names": {
+          "description": "The values' names, in the order first recorded.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValuePoint"
+          },
+          "default": []
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueChange"
+          },
+          "default": []
+        },
+        "breaks": {
+          "description": "The value properties (`// hydo: keep` lines) this key's history broke, each at its first\nbreak (added in Milestone 291).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ValueBreak"
+          }
+        }
+      }
+    },
+    "ValuePoint": {
+      "description": "One stop of a recording function: a call's entry or its return.",
+      "type": "object",
+      "properties": {
+        "function": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "description": "The function's declaration line.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "call": {
+          "description": "The call's number among the function's recorded calls (1 is the first).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "when": {
+          "description": "`entry` or `return`.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The call's own key when it is a copy's (`d17_q` in the history of `d17`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "caller": {
+          "description": "The function that made the call, by its return address.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "point": {
+          "description": "`<conversation>:<stop>`: the first recorded stop at or after the call, the form `hydo\ninspect start --at` takes.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "conversation": {
+          "type": "string"
+        },
+        "at": {
+          "description": "The engine's clock at the stop (VM exits on the Mac and KVM engines).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "step": {
+          "description": "Where the run was: `workload steps 0..29`, `after the workload`, `the recovery boot`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "values": {
+          "description": "The values recorded here, by name (`50.0`, `true`, `absent`, `\"d17\"`, `unreadable (...)`).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        }
+      },
+      "required": [
+        "function",
+        "file",
+        "line",
+        "call",
+        "when",
+        "conversation",
+        "at"
+      ]
+    },
+    "ValueChange": {
+      "description": "One change of a value between two stops of a key's history.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "point": {
+          "description": "The index of the stop where the new value is seen, in the key's `points`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "before": {
+          "description": "The index of the stop with the value before.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "name",
+        "from",
+        "to",
+        "point",
+        "before"
+      ]
+    },
+    "ValueBreak": {
+      "description": "Where a key's history broke a value property (added in Milestone 291).",
+      "type": "object",
+      "properties": {
+        "property": {
+          "description": "The property as written after `// hydo:` (`keep overdraft_limit from ...`).",
+          "type": "string"
+        },
+        "name": {
+          "description": "The value's name.",
+          "type": "string"
+        },
+        "point": {
+          "description": "The index of the stop that broke it, in the key's `points`.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reference": {
+          "description": "The index of the stop whose value it was compared with.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "changed": {
+          "description": "The index of the first stop after the reference whose value broke the property: the\nfirst changing call.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "value": {
+          "description": "The value at the stop that broke it, and the reference's.",
+          "type": "string"
+        },
+        "expected": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "property",
+        "name",
+        "point",
+        "reference",
+        "changed",
+        "value",
+        "expected"
+      ]
+    },
+    "ValueProperty": {
+      "description": "A value property of the plan and how a run judged it (added in Milestone 291).",
+      "type": "object",
+      "properties": {
+        "property": {
+          "description": "The property as written after `// hydo:`.",
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "words": {
+          "description": "What it says, in words.",
+          "type": "string"
+        },
+        "keys": {
+          "description": "Keys with at least one judged stop.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "stops": {
+          "description": "Stops judged.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "broken": {
+          "description": "Keys that broke it.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "property",
+        "file",
+        "line",
+        "words",
+        "keys",
+        "stops",
+        "broken"
+      ]
+    },
+    "CompareDoc": {
+      "description": "`compare.json`: schedules run on two versions of the system, and what differs between the two\nruns of each (`hydo compare-versions`; added in Milestone 298). Both runs of a schedule repeat\nexactly, so every difference comes from the versions, not from noise.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/CompareType"
+        },
+        "hydo_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epoch": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "engine": {
+          "description": "The engine every run ran on.",
+          "$ref": "#/$defs/Engine"
+        },
+        "source": {
+          "description": "How the versions were made: `param <KEY>`, `git` or `images` (as `hydo versions`).",
+          "type": "string"
+        },
+        "a": {
+          "$ref": "#/$defs/CompareVersion"
+        },
+        "b": {
+          "$ref": "#/$defs/CompareVersion"
+        },
+        "levels": {
+          "description": "The levels compared ([`compare_level`]).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "normalize": {
+          "description": "The normalization rules, as given (`regex <pattern> => <text>`, `json <path>`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "search": {
+          "description": "The search, when the schedules were drawn from seeds.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CompareSearch"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "schedules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CompareSchedule"
+          },
+          "default": []
+        },
+        "summary": {
+          "description": "The answer in one sentence.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "engine",
+        "source",
+        "a",
+        "b",
+        "summary"
+      ]
+    },
+    "CompareType": {
+      "description": "The `type` of this record: always `\"compare\"`.",
+      "type": "string",
+      "enum": [
+        "compare"
+      ]
+    },
+    "CompareVersion": {
+      "description": "One version of a comparison (`hydo compare-versions`; added in Milestone 298).",
+      "type": "object",
+      "properties": {
+        "version": {
+          "description": "The version as given: a manifest parameter's value, a git revision, or an image's name.",
+          "type": "string"
+        },
+        "commit": {
+          "description": "A git revision's commit.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_sha256": {
+          "description": "SHA-256 of the version's image.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_reused": {
+          "description": "The image came from the image cache by its input key, not from a build.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "why": {
+          "description": "Why the version has no image (it did not build).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "version"
+      ]
+    },
+    "CompareSearch": {
+      "description": "The search of `hydo compare-versions --seeds` (added in Milestone 298).",
+      "type": "object",
+      "properties": {
+        "seeds": {
+          "description": "The seed range, as given (`1-20`).",
+          "type": "string"
+        },
+        "options": {
+          "description": "The explorer's options the schedules were drawn with.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "drawn": {
+          "description": "Schedules drawn and run on both versions.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "differ": {
+          "description": "Of them, the schedules whose runs differ.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cannot_run": {
+          "description": "Of them, the schedules a side could not run.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "seeds",
+        "drawn",
+        "differ",
+        "cannot_run"
+      ]
+    },
+    "CompareSchedule": {
+      "description": "One schedule run on both versions (added in Milestone 298).",
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "description": "The schedule both versions ran.",
+          "type": "string"
+        },
+        "from": {
+          "description": "Where it came from: `given`, `regression <name>`, `seed-<n>`, or `shrunk from seed-<n>`.",
+          "type": "string"
+        },
+        "identical": {
+          "description": "No difference at the levels compared. Absent: a side could not run.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "verdict_a": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict_b": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fingerprint_a": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fingerprint_b": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dir_a": {
+          "description": "The run directories, relative to the directory of `compare.json`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "dir_b": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replay_a": {
+          "description": "The commands that run the schedule again on each version's image.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replay_b": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "first": {
+          "description": "The first difference in the run's order (the observations by workload step, then the\nstored state, then the verdicts): an index into `differences`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "differences": {
+          "description": "The first difference of every stream that differs.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CompareDifference"
+          },
+          "default": []
+        },
+        "compared": {
+          "description": "How many records of each level run A and run B had together.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "default": {}
+        },
+        "summary": {
+          "description": "The first difference in words, or why a side could not run.",
+          "type": "string"
+        },
+        "shrunk_from": {
+          "description": "The schedule this one was shrunk from (the search's minimal schedules).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shrink_runs": {
+          "description": "Shrink candidates run (each on both versions).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "why": {
+          "description": "Why a side gave no run.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "schedule",
+        "from",
+        "summary"
+      ]
+    },
+    "CompareDifference": {
+      "description": "One place where the two versions' runs of one schedule differ (added in Milestone 298): the\nfirst record of one stream that is not the same in both runs, after the normalization rules.",
+      "type": "object",
+      "properties": {
+        "level": {
+          "description": "See [`compare_level`].",
+          "type": "string"
+        },
+        "stream": {
+          "description": "The stream: `verdict`, `findings`, `outcomes`, `acked`, `history <name> <process>`,\n`state <service>` or `check <id>`.",
+          "type": "string"
+        },
+        "conversation": {
+          "description": "The conversation it is in (`run`, `recovery`; absent for the verdicts).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "index": {
+          "description": "The record's position in its stream (0 for the first).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "step_a": {
+          "description": "The workload steps the record belongs to in run A and in run B (`0..11`), when known.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "step_b": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "a": {
+          "description": "The record in run A, as normalized. Absent: run A has no record there.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "b": {
+          "description": "The record in run B, as normalized. Absent: run B has no record there.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "before": {
+          "description": "The record before it, which both runs have.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "only_a": {
+          "description": "How many records of the stream run A has and run B does not, and the other way round\n(counted as multisets).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "only_b": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "level",
+        "stream",
+        "index",
+        "only_a",
+        "only_b"
+      ]
+    },
+    "ConfigsDoc": {
+      "description": "`configs.json` (`hydo explore --configs`; added in Milestone 299): the manifest's settings,\none exploration per combination of values with the same seeds, the classes of failure each\nfound, and each failure across the combinations.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/ConfigsType"
+        },
+        "hydo_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epoch": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "engine": {
+          "description": "The engine every exploration ran on.",
+          "$ref": "#/$defs/Engine"
+        },
+        "manifest": {
+          "description": "The manifest the images were built from.",
+          "type": "string"
+        },
+        "mode": {
+          "description": "How the combinations were chosen: `all` (every combination), `one` (the defaults, then\none setting changed at a time) or `pairs` (a set that covers every pair of values of two\nsettings).",
+          "type": "string"
+        },
+        "seeds": {
+          "description": "The seeds each combination was explored with.",
+          "type": "string"
+        },
+        "explore_args": {
+          "description": "The explorer's options, the same for every combination.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "settings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigSettingInfo"
+          }
+        },
+        "combinations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigCombination"
+          }
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigFinding"
+          },
+          "default": []
+        },
+        "summary": {
+          "description": "The answer in one or two sentences.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "engine",
+        "manifest",
+        "mode",
+        "seeds",
+        "settings",
+        "combinations",
+        "summary"
+      ]
+    },
+    "ConfigsType": {
+      "description": "The `type` of this record: always `\"configs\"`.",
+      "type": "string",
+      "enum": [
+        "configs"
+      ]
+    },
+    "ConfigSettingInfo": {
+      "description": "One build parameter that `hydo explore --configs` explored (added in Milestone 299).",
+      "type": "object",
+      "properties": {
+        "param": {
+          "description": "The parameter (a key of the manifest's `params:`).",
+          "type": "string"
+        },
+        "default": {
+          "description": "The parameter's default in `params:`.",
+          "type": "string"
+        },
+        "values": {
+          "description": "The values explored, the default first.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "services": {
+          "description": "The services whose configuration it is.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "doc": {
+          "description": "Where the project documents it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tradeoffs": {
+          "description": "The values whose documentation says they weaken a promise (`tradeoff:`), with the note.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigTradeoff"
+          }
+        }
+      },
+      "required": [
+        "param",
+        "default",
+        "values"
+      ]
+    },
+    "ConfigTradeoff": {
+      "description": "A value of a setting with its documented trade-off (added in Milestone 299).",
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "note"
+      ]
+    },
+    "ConfigCombination": {
+      "description": "One combination of values, its image and what its exploration found (added in Milestone\n299).",
+      "type": "object",
+      "properties": {
+        "label": {
+          "description": "`param=value` for each setting, in the order of the settings.",
+          "type": "string"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigValue"
+          }
+        },
+        "defaults": {
+          "description": "Every value is the parameter's default.",
+          "type": "boolean"
+        },
+        "status": {
+          "description": "See [`config_status`].",
+          "type": "string"
+        },
+        "why": {
+          "description": "Why the combination was not explored.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image": {
+          "description": "The combination's image.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_reused": {
+          "description": "The image came from the image cache by its input key, not from a build.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "dir": {
+          "description": "The exploration's directory, relative to the directory of `configs.json`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schedules": {
+          "description": "Schedules run (first runs).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "failed": {
+          "description": "Schedules that failed.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "default": 0
+        },
+        "classes": {
+          "description": "Each class of failure with its minimal schedule.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigClass"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "label",
+        "values",
+        "status"
+      ]
+    },
+    "ConfigValue": {
+      "description": "One parameter's value in a combination (added in Milestone 299).",
+      "type": "object",
+      "properties": {
+        "param": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "param",
+        "value"
+      ]
+    },
+    "ConfigClass": {
+      "description": "One class of failure that an exploration of a combination found, with its minimal schedule\n(added in Milestone 299).",
+      "type": "object",
+      "properties": {
+        "class": {
+          "description": "The failure's class (`lost-acked-writes`, ...), as the exploration names it.",
+          "type": "string"
+        },
+        "key": {
+          "description": "The finding key (`f1:<kind>:<10 hex>`), the same for one failure on every combination.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "description": "The finding's normalized statement (numbers as `#`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schedule": {
+          "description": "The minimal schedule.",
+          "type": "string"
+        },
+        "replay": {
+          "description": "The command that replays it on the combination's image.",
+          "type": "string"
+        },
+        "runs": {
+          "description": "Schedules of the exploration that failed this way.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "class",
+        "schedule",
+        "replay"
+      ]
+    },
+    "ConfigFinding": {
+      "description": "One failure across the combinations (added in Milestone 299): where it appeared, which values\nit needs, and whether a documented trade-off explains it.",
+      "type": "object",
+      "properties": {
+        "class": {
+          "type": "string"
+        },
+        "key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "found_with": {
+          "description": "The labels of the combinations whose exploration found it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "not_found_with": {
+          "description": "The labels of the explored combinations that did not find it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "only_with": {
+          "description": "The values it appeared with, per setting whose explored values it did not appear with\nall of: the values the failure needs. Empty: it appeared with every value explored.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigValue"
+          },
+          "default": []
+        },
+        "by_design": {
+          "description": "Every combination that found it has a value with a documented trade-off, and no\ncombination without one did: the setting's documented trade-off, not a bug.",
+          "type": "boolean",
+          "default": false
+        },
+        "tradeoffs": {
+          "description": "The trade-off notes of those values.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConfigTradeoff"
+          }
+        },
+        "schedule": {
+          "description": "The smallest minimal schedule of the combinations that found it, and its replay.",
+          "type": "string"
+        },
+        "replay": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "class",
+        "found_with",
+        "schedule",
+        "replay"
       ]
     }
   }

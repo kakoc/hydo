@@ -45,6 +45,13 @@
               "type": "null"
             }
           ]
+        },
+        "kernel_variant": {
+          "description": "The guest kernel variant the manifest asked for with `guest.kernel` (Milestone 256):\n`containers`, a kernel with what containers and Kubernetes need, on the Mac and KVM\nengines (`hydo_image::kernels::CONTAINERS`). Absent: the kernel of the image's epoch. On\narm64 `kernel` names the variant's file too; on x86_64 `kernel` names hvx's kernel, which\nhas those options already, and the KVM engine picks its build of the variant by this\nfield. An image without the key has no field, so its record keeps its bytes.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
