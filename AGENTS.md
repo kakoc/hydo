@@ -839,6 +839,12 @@ On fresh copies of the second evaluation's six crates and byteorder, 59 of 66 co
 functions were refused before and 2 after (`docs/design/function-fuzzing-evaluation-2.md`,
 "After Milestone 307"). The broken contracts were earlier findings, now stated on the API itself.
 
+A third evaluation by a fresh user on six other crates (M308,
+`docs/design/function-fuzzing-evaluation-3.md`) found the tool worth keeping for property
+functions and simple contracts. hydo fuzzed 57 of 73 contracted library functions and reproduced
+9 bugs already reported upstream, none new. One verdict was hydo's own false `broken`, and open
+item 139 lists what stopped the rest.
+
 **Function fuzzing inside the VM (M292 and M296, tentative numbers; a prototype on hvx and on
 the Mac engine).** `hydo fuzz --vm [CRATE_DIR]` makes the calls inside hydo's VM under faults: power
 cuts (`C=`, `cf=` on hvx), disk errors, clock steps, pauses, and since M296 kills. It builds the harness as a static musl program and writes a
@@ -2038,7 +2044,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A fault of a stepped instruction other than #DE, #UD, #GP and #PF leaves the trap flag in
       its frame. Only user mode is counted, so a loop in the guest kernel stays the observer's.
     - The k3s example is not in `hydo/onboard/recorded.json`.
-139. Function fuzzing (M275, M280, M282, M289, M292, M296, M307). What is left:
+139. Function fuzzing (M275, M280, M282, M289, M292, M296, M307, M308). What is left:
     - The run inside the VM (`hydo fuzz --vm`, M292, M296) is a prototype that ran on hvx and
       on the Mac engine, not on KVM. What is left of it:
       - A fault inside a call comes 1 to 13 ms after its drawn delay, at the controller's next
@@ -2073,8 +2079,25 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       failure in advance.
     - A list's shrink keeps a length that the bug needs: memchr's input kept 80 bytes. A panic
       inside code that a macro generates is still placed at the harness's line.
-    - The M282 re-run used contracts written by the one who fixed the tool. A fresh evaluator,
-      as in M280, should run it before 0.4.0.
+    - A third evaluation by a fresh user (M308, `docs/design/function-fuzzing-evaluation-3.md`)
+      on six other crates reproduced 9 known upstream bugs and found none new. It found these,
+      none fixed:
+      - An element of a list of built values compares as its constructor's arguments, so
+        `result[0] == self[0]` gives a false `broken` verdict (half's `reinterpret_cast`).
+      - A trait method's `Self::Owned` result is not read, and the verdict is `vacuous` with a
+        `to fix:` line about the inputs (heck's eight conversions).
+      - Two enumerations of one name in two modules: hydo reads the other one, a full path does
+        not help, and the harness does not build (humantime's `parse_duration`).
+      - Const generic parameters are refused (every method of arrayvec), and the guide does not
+        say so. A `&'static` parameter does not build (percent-encoding's encoders). A closure
+        parameter is refused with advice (`with F = i64`) that cannot work.
+      - The default strings hold three characters outside ASCII, so heck's known title case bug
+        held for 50,000 calls until a `chars` line named `ß`, `İ` and `ﬄ`.
+      - A `read` line by `to_string()` does not build in a `#![no_std]` crate, `by collect()`
+        needs a type, and a turbofish or a generic type name (`ArrayVec<u8, 8>`) is refused.
+      - A harness that does not build reports only the compiler's first line, and `build.log`
+        can hold another build's output. The refusal for a private field does not name the
+        `build` line.
     - Qdrant's `decompress_sequence` accepts a header of more than 64 bits per value. What
       `decode_untrusted_bytes` returns for such a blob in a release build was not checked, and
       nothing was posted.
@@ -3193,6 +3216,11 @@ build machine, before 2026-10-13.
   up the parts' error paths. The report's command for more runs names the image without its
   folder. `ci/remote-explore.sh` writes the report again where it downloads it, and `explore.yml`
   passes the example's `known-errors.yaml` to the parts. Nothing recorded moved
+- M308 (tentative number): a third evaluation of `hydo fuzz` by a new user, on heck, half,
+  either, humantime, percent-encoding and arrayvec. hydo fuzzed 57 of 73 contracted library
+  functions and reproduced 9 known upstream bugs, none new. A list of built values gives a false
+  `broken`; `Self::Owned` results, a name used by two enumerations, const generics, `&'static`
+  parameters and closures stop contracts on the API. Nothing recorded moved
 
 ## Where to look
 

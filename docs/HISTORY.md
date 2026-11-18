@@ -16987,3 +16987,45 @@ actionlint and the script shellcheck. No workflow run used the changes yet. Noth
 moved.
 
 **What is left.** Open item 153.
+
+## Milestone 308 (tentative number): a third evaluation of `hydo fuzz` by a new user
+
+A fresh evaluator, a coding agent that played a Rust developer new to hydo, tried `hydo fuzz`
+natively after Milestone 307. The evaluator learned the tool only from `hydo guide fuzz` and
+`hydo fuzz --help`, read the two earlier evaluations (M280, M288) only for their method and their
+crates, and did not read hydo's source. The binary came from `main` at `bc91ab75`. The page is
+`docs/design/function-fuzzing-evaluation-3.md`. No code of hydo changed.
+
+The crates were heck 0.5.0, half 2.7.1, either 1.19.0, humantime 2.4.0, percent-encoding 2.3.2
+(a member of the `rust-url` workspace) and arrayvec 0.7.8, each from its latest release. The
+evaluator contracted 73 library functions and 54 property functions. hydo fuzzed 57 of the
+library functions. It refused 13: 12 methods of arrayvec for their const generic parameter, and
+one method of either that takes a closure. It could not build the harness of 3: humantime's
+`parse_duration`, and percent-encoding's two encoders, which take a `&'static AsciiSet`. Each
+crate's first useful run came 1 to 2.5 minutes after the first look at its source.
+
+hydo reproduced 9 bugs that were already reported upstream, and found no new candidate:
+
+- heck: issues 36, 70 and 71 (case conversions that are not idempotent, at `"a_a"`, `"ﬄ"` and
+  `"İ"`);
+- humantime: issues 67, 68, 69, 78 and 82 (an offset read as UTC, a panic in the year 10000, a
+  space inside a number, bytes after `Z`, a refused fraction of an hour);
+- percent-encoding: `rust-url` issue 1132 (`AsciiSet::add` panics at `byte = 128`).
+
+The worst problems, in order:
+
+1. A false `broken` verdict: an element of a list of built values compares as its constructor's
+   arguments, so half's `result[0] == self[0]` broke with `self = [f16::from_bits(7)]` and
+   `result = [7]`.
+2. heck's eight trait methods return `Self::Owned`, which hydo does not read. Each was `vacuous`,
+   with a `to fix:` line about the inputs.
+3. humantime has two enumerations named `Error`. hydo read `duration::Error` as `date::Error`, so
+   `parse_duration` could not be fuzzed.
+4. Const generics, `&'static` parameters and closures are refused or do not build.
+5. The default strings hold three characters outside ASCII. heck's title case bug held for 50,000
+   calls until the evaluator named `ß`, `İ`, `ﬄ` and a combining mark with `chars`.
+6. A `read` line by `to_string()` does not build in a `#![no_std]` crate, `by collect()` needs a
+   type, and a turbofish or a generic type name is refused.
+
+A bug planted in arrayvec's `swap_pop` broke the evaluator's model property on 4 of 1,000 calls,
+and the shrink gave 11 operations. Open item 139 lists the fixes. Nothing recorded moved.
