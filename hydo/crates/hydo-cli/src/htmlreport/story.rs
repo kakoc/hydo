@@ -407,6 +407,14 @@ pub fn needs_first_words(pr: &Project, image: Option<&str>) -> String {
     }
 }
 
+/// [`needs_first_words`] for a run that passed: the run repeats, and there is no failure to name
+/// (0.4.0's docs review: a passing run read "this failure repeats exactly").
+pub fn of_a_pass(words: &str) -> String {
+    words
+        .replace("this failure repeats", "this run repeats")
+        .replace("This failure repeats", "This run repeats")
+}
+
 /// The line before a replay command.
 pub fn needs_first(pr: &Project, image: Option<&str>) -> String {
     format!("<p>{}</p>\n", md(&needs_first_words(pr, image)))

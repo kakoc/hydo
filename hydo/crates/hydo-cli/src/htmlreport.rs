@@ -1817,12 +1817,12 @@ fn run_page(
     }
     // see it again
     body.push_str(&h2("again", "See it again"));
-    body.push_str(&story::see_again(
-        &pr,
-        image,
-        run.engine.as_ref(),
-        &run.schedule,
-    ));
+    let again = story::see_again(&pr, image, run.engine.as_ref(), &run.schedule);
+    body.push_str(&if failed {
+        again
+    } else {
+        story::of_a_pass(&again)
+    });
     if failed {
         let folder = pr.results_rel.clone().unwrap_or_else(|| shown.clone());
         body.push_str(&format!(

@@ -997,3 +997,18 @@ fn hydo_s_own_commands_are_details() {
         .2
     );
 }
+
+/// 0.4.0's docs review: the report of a run that passed read "this failure repeats exactly".
+#[test]
+fn a_passing_run_repeats_as_a_run() {
+    let w =
+        "In your project folder (`redis`), this failure repeats exactly, every time you run it:";
+    assert_eq!(
+        story::of_a_pass(w),
+        "In your project folder (`redis`), this run repeats exactly, every time you run it:"
+    );
+    assert_eq!(
+        story::of_a_pass("This failure repeats exactly, every time you run it:"),
+        "This run repeats exactly, every time you run it:"
+    );
+}

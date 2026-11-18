@@ -602,7 +602,9 @@ fn agent_images_carry_the_composer() {
         hydo_composer::stage(&m2, &root, None).unwrap();
         let cj = std::fs::read_to_string(root.join("etc/hydo/compose.json")).unwrap();
         let text = std::fs::read_to_string(top().join(&rel)).unwrap();
-        let from_image = hydo_control::agent::plan_of_embedded(&text, Some(&cj));
+        // an image carries its parameter values (`/etc/hydo/params`); here the defaults of `params:`,
+        // which the explorer's reading applies too (Restate's `guest.cpu: "{{cpu}}"`, Milestone 303)
+        let from_image = hydo_control::agent::plan_of_embedded_params(&text, Some(&cj), &[]);
         let from_explorer = support::plan_of(&rel);
         match (&from_image, &from_explorer) {
             (Ok(a), Ok(b)) => {
