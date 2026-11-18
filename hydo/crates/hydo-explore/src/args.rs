@@ -10,7 +10,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--shrink-causes N]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...] [--kill-now]]
-       [--storage-faults [--corrupt-several]] [--upgrades] [--pause-workload] [--pause-thread NAME[,NAME...]] [--pause-min MS] [--pause-max MS]
+       [--storage-faults [--corrupt-several]] [--block-faults] [--upgrades] [--pause-workload] [--pause-thread NAME[,NAME...]] [--pause-min MS] [--pause-max MS]
        [--pause-lengths MS[,MS...]]
        [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
         [--steer-batch N] [--steer-corpus N] [--steer-stop]]
@@ -62,6 +62,11 @@ pub struct Args {
     /// `--corrupt-several` (Milestone 245, with `--storage-faults`): a drawn G= on several
     /// services at once, a list or a group's selector.
     pub corrupt_several: bool,
+    /// `--block-faults` (Milestone 313, docs/design/block-faults.md): draw a torn write at a
+    /// power cut (`torn=`), a misdirected write (`mis=`), a request that never completes or
+    /// completes late with an error (`hang=`), or a latent sector error under a file of a
+    /// service's storage (`G=...:bad|rot`). The Mac and KVM engines only.
+    pub block_faults: bool,
     /// `--cluster-faults` (M195): draw kills, pauses and partitions of the manifest's `groups:`.
     pub cluster_faults: bool,
     /// `--upgrades` (Milestone 238): draw upgrades (`U=`) of the services with `versions:`.
@@ -201,6 +206,7 @@ impl Default for Args {
             more_faults: false,
             storage_faults: false,
             corrupt_several: false,
+            block_faults: false,
             cluster_faults: false,
             workload_pauses: false,
             upgrades: false,
@@ -258,7 +264,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 26] = [
+const FLAGS: [&str; 27] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -269,6 +275,7 @@ const FLAGS: [&str; 26] = [
     "more-faults",
     "storage-faults",
     "corrupt-several",
+    "block-faults",
     "cluster-faults",
     "upgrades",
     "pause-workload",
@@ -437,6 +444,7 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "more-faults" => a.more_faults = true,
             "storage-faults" => a.storage_faults = true,
             "corrupt-several" => a.corrupt_several = true,
+            "block-faults" => a.block_faults = true,
             "cluster-faults" => a.cluster_faults = true,
             "pause-workload" => a.workload_pauses = true,
             "upgrades" => a.upgrades = true,

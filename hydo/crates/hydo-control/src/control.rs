@@ -113,19 +113,34 @@ pub enum EngineAction {
     /// `hydo-explore-workload-done` (it then types `go`). The engine side for agent images is
     /// step C1's.
     DiskFaultsOff,
+    /// Milestone 313 (docs/design/block-faults.md): bad sectors from this stop on, the text of
+    /// an `lse=` host token (the sectors under a file of a service's storage that a `G=...:bad`
+    /// or `G=...:rot` names). The engine's `DISK` command; the Mac and KVM engines.
+    BadSectors(String),
 }
 
 impl EngineAction {
     pub fn name(&self) -> &'static str {
         match self {
             EngineAction::DiskFaultsOff => "disk-faults-off",
+            EngineAction::BadSectors(_) => "disk",
+        }
+    }
+
+    /// The action as the transcript writes it: the name, and for `disk` its tokens.
+    pub fn text(&self) -> String {
+        match self {
+            EngineAction::BadSectors(t) => format!("disk {t}"),
+            a => a.name().to_string(),
         }
     }
 
     pub fn from_name(s: &str) -> Option<EngineAction> {
         match s {
             "disk-faults-off" => Some(EngineAction::DiskFaultsOff),
-            _ => None,
+            _ => s
+                .strip_prefix("disk ")
+                .map(|t| EngineAction::BadSectors(t.to_string())),
         }
     }
 }

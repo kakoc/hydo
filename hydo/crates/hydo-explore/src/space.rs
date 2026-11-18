@@ -51,6 +51,8 @@ pub struct Drawn {
     pub thread_pauses: bool,
     /// `--upgrades`.
     pub upgrades: bool,
+    /// `--block-faults` (Milestone 313).
+    pub block: bool,
 }
 
 /// A group of the manifest's `groups:` (Milestone 195): its members in order, whether it has a
@@ -460,7 +462,7 @@ impl Space {
             }
         }
         // the kinds that options draw: (on, the words, the option, a kind of `faults:` it draws)
-        let opts: [(bool, &str, &str, &[&str]); 7] = [
+        let opts: [(bool, &str, &str, &[&str]); 8] = [
             (
                 o.protocol,
                 "faults of the outside services",
@@ -488,6 +490,12 @@ impl Space {
                 &[],
             ),
             (o.upgrades, "upgrades", "--upgrades", &[]),
+            (
+                o.block,
+                "faults of the disk's blocks",
+                "--block-faults",
+                &[],
+            ),
         ];
         let mut ask: Vec<(&str, &str)> = Vec::new();
         for (on_, w, opt, kinds) in opts {
@@ -735,6 +743,17 @@ impl Space {
         }) {
             s.l = None;
         }
+        // Milestone 313: a torn write needs the cut disk and the kind `cut`; the other block
+        // faults are the kind `disk`
+        let cut_ok = s.disk == "cut" && self.has_fault("cut");
+        let disk_ok = self.has_fault("disk");
+        s.blk.retain(|b| {
+            if b.starts_with("torn=") {
+                cut_ok
+            } else {
+                disk_ok
+            }
+        });
         if (s.disk_is("lying") || s.disk_is("ioerr")) && !self.has_fault("disk") {
             s.disk = if s.disk_is("lying") && self.has_fault("cut") {
                 "cut".into()

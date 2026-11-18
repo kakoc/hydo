@@ -960,6 +960,26 @@ PostgreSQL, queue errors, and the recovery of queued transactions. Every schedul
 fingerprint with the plan and without it, and a run's search of guest RAM took 10 ms. The design is
 `docs/design/error-paths.md`, the how-to `hydo guide error-paths` (open item 155).
 
+**Faults of the disk's blocks (M313, tentative number; the Mac and KVM engines).** Four host
+tokens make faults that a real disk makes, on the data disk, decided from `dseed=` and from the
+requests counted from the workload's start:
+- `torn=<p>[:any]` (with `disk=cut`) keeps a prefix or a subset of the sectors of unflushed
+  writes at a power cut;
+- `mis=<k>[:<sectors>]` sends the k-th write to another place;
+- `lse=<sector>+<count>[:rot]` makes reads of sectors fail or return damaged bytes;
+- `hang=<k>[+<ms>]` leaves the k-th request without an answer, or fails it after `<ms>`.
+
+`G=<svc>@<at>:bad|rot` puts bad sectors under a range of a file of a service's storage. The
+controller maps the file's ext4 extents through the agent's `read` and sends the engine's new
+command `DISK lse=...`; no agent or image changed. A workload that times out in a run with
+`hang=<k>` ends it with `VIOLATION [disk.hang]`, and a guest that waits 120 s on such a request
+ends it with an ERROR. The faults' state joins a fingerprint only when a token armed it, so the
+release's Redis example gave its 7 recorded values. `hydo explore --block-faults` draws them
+(class `damaged-disk`); hvx refuses them before any VM. The example
+`hydo/onboard/examples/disk-faults` (RESULTS.md) shows each fault breaking a careless record
+store and a careful one passing. The design is `docs/design/block-faults.md`, the how-to `hydo
+guide faults`, "Faults of the disk's blocks" (open item 160).
+
 **Fakes from OpenAPI descriptions (M249).** `hydo fake from-openapi <spec>` writes a `fakes:`
 entry from an OpenAPI 3.0 or 3.1 description (the module `openapi` of `hydo-compose`). It writes
 one route per operation, with the spec's example or a body made from the schema, and no random
@@ -2434,6 +2454,26 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       only, because no sharded run watches them: only the Mac engine does. The CI page does not
       show them. A declaration that a place must run in an exploration, which fails it, is not
       built.
+160. Faults of the disk's blocks (M313, tentative number; `docs/design/block-faults.md`). What is
+    left:
+    - KVM ran the example's 14 schedules twice in a one-off workflow (run 44380177675). Each gave
+      the Mac's verdict and one fingerprint on an AMD EPYC 7763 and two Xeon 6975P-C hosts, and
+      the two Intel hosts agree. No test of CI runs the faults on a real KVM host.
+    - hvx refuses them: its disk is in the kernel module. The design page lists what the module
+      would need, first on a side module.
+    - The added disks (`guest.disks`) have none of them, and `G=...:bad|rot` maps only ext4 files
+      with extents on the data disk `/dev/vda`.
+    - `mis=` and `hang=` count every request of the disk, the journal's and other services' too,
+      so a project finds its `<k>` in a run's `one.block-faults.txt`. The explorer draws `<k>`
+      from 1 to 200, and the example's workload makes about 24 requests, so most drawn `hang=`
+      and `mis=` tokens of a short workload do nothing.
+    - The explorer draws no raw `lse=`, and draws `G=...:bad|rot` only when `--storage-faults`
+      drew no `G=`. A torn write needs a schedule that already has `disk=cut` and a power cut.
+    - On Redis, `hang=30+1000` made Redis stop after a failed flush, and its restart stopped at
+      `FATAL AOF MANIFEST FILE ERROR`; the file system's state after the failed flush was not
+      traced.
+    - The engine's notes of what a fault did are in a file of the run directory only; `hydo
+      report` and its page do not show them.
 161. `hydo update` (M315, tentative number). What is left:
     - It ships with the first release after 0.4.0. Versions 0.4.0 and older lack it, so their
       users upgrade once by hand, as the section "Upgrading" of `docs/INSTALL.md` and the skill's
@@ -3284,6 +3324,11 @@ build machine, before 2026-10-13.
   and the marketplace install through `claude plugin update`. Only this platform's archive is fetched,
   checked by sha256. `--check` exits 0 or 3, and `hydo doctor` names a newer release once a
   day. Skill 2.4.0 runs `hydo update --check` first. Nothing recorded moved
+- M313 (tentative number): faults of the disk's blocks on the Mac and KVM engines. A torn write
+  at a power cut (`torn=`), a misdirected write (`mis=`), bad sectors (`lse=`, and
+  `G=<svc>@<at>:bad|rot` under a file), and a request without an answer (`hang=`), with
+  `hydo explore --block-faults`. Each broke the careless store of the `disk-faults` example and
+  not the careful one, one fingerprint per schedule. hvx refuses them. Nothing recorded moved
 
 ## Where to look
 

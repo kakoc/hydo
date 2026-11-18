@@ -12,6 +12,7 @@
 //! | `unsafe-knob` | anything | expected for this setting: a setting that trades safety for speed |
 //! | `refused` | anything | expected: hydo cannot run the faults on this machine |
 //! | `io-errors` | anything | worth a look: decide whether the system must survive a failing disk |
+//! | `damaged-disk` | anything | worth a look: decide whether the system must detect or survive a disk that tears or misplaces writes, has bad sectors, or stops answering (Milestone 313) |
 //! | `corrupted-files` | anything | worth a look: decide whether the system must detect damaged files |
 //! | `test-failed` | the test program | worth a look |
 //! | `durable-defaults` and the rest | the user's own check | worth a look: hydo says that the user's rule failed and quotes it, and does not guess whether the rule must hold |
@@ -186,6 +187,10 @@ pub fn class_of(s: &Schedule, knobs: &[KnobInfo], test: bool) -> &'static str {
         Disk::IoErr(_) => return "io-errors",
         _ => {}
     }
+    // Milestone 313: the block faults
+    if !s.block_faults().is_empty() {
+        return "damaged-disk";
+    }
     if s.guest
         .iter()
         .any(|t| matches!(t, GuestToken::Corrupt { .. }))
@@ -242,6 +247,10 @@ pub fn context(class: &str, s: &Schedule, knobs: &[KnobInfo]) -> String {
         "lying-disk" => of(&|t| t.starts_with("disk=lying")).unwrap_or_default(),
         "io-errors" => of(&|t| t.starts_with("disk=ioerr")).unwrap_or_default(),
         "corrupted-files" => of(&|t| t.starts_with("G=")).unwrap_or_default(),
+        "damaged-disk" => {
+            let blocks = s.block_faults();
+            of(&|t| blocks.iter().any(|b| b == t)).unwrap_or_default()
+        }
         "upgrade" => of(&|t| t.starts_with("U=")).unwrap_or_default(),
         "unsafe-knob" => {
             let setting = match relaxed(s, knobs) {
@@ -465,6 +474,16 @@ pub fn problem(
              service's log in the run; if not, accept this finding."
                 .to_string(),
         ),
+        ("damaged-disk", _) => (
+            Attention::Look,
+            "hydo made the disk fail as real disks can: a write torn at a power cut, a write \
+             that went to the wrong place, sectors that cannot be read, or a request that got no \
+             answer."
+                .to_string(),
+            "Decide whether your system must detect or survive such a disk, for example with \
+             checksums of its records and a careful commit. If it need not, accept this finding."
+                .to_string(),
+        ),
         ("corrupted-files", _) => (
             Attention::Look,
             "hydo damaged one of the system's files on purpose, and the system read the damaged \
@@ -550,6 +569,10 @@ pub fn problem(
             .unwrap_or(&todo)
             .to_string(),
         ("io-errors", _) => "Decide whether your system must survive a failing disk.".into(),
+        ("damaged-disk", _) => "Decide whether your system must detect or survive a disk that \
+                                tears or misplaces writes, cannot read some sectors, or stops \
+                                answering."
+            .into(),
         ("corrupted-files", _) => {
             "Decide whether your system must detect damaged files, for example with checksums."
                 .into()
@@ -732,6 +755,12 @@ mod tests {
                 Attention::ExpectedForSetting,
             ),
             ("io-errors", "disk=ioerr:5 | run", Attention::Look),
+            ("damaged-disk", "disk=none mis=7 | run", Attention::Look),
+            (
+                "damaged-disk",
+                "disk=none | run G=redis@3:bad",
+                Attention::Look,
+            ),
             (
                 "corrupted-files",
                 "disk=none | run G=redis@3:flip",

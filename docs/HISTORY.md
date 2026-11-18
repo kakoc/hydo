@@ -17263,3 +17263,99 @@ behind, and no copy is in the known folders. Nothing was updated: the user's Cla
 and `~/.hydo` were not changed. Nothing recorded moved.
 
 **What is left.** Open item 161.
+
+## Milestone 313 (tentative number): faults of the disk's blocks on the Mac and KVM engines
+
+A team that tests its own storage engine with its own simulator said that hydo's disk faults act
+on whole requests and whole files. Its storage engine's rules are about sectors. This milestone
+adds four faults that a real disk makes, on the data disk of the Mac engine and of the KVM engine,
+which share the virtio block device (`hydo/crates/hydo-hvm/src/virtio/block.rs`). The design is
+`docs/design/block-faults.md`; the how-to is `hydo guide faults`, "Faults of the disk's blocks".
+
+The host tokens, each decided from `dseed=` and from the requests counted from the workload's
+start:
+
+- `torn=<p>[:any]` (needs `disk=cut`): at a power cut, `<p>` percent of the unflushed writes of
+  two or more sectors keep a seeded prefix of their sectors, or with `:any` a seeded subset,
+  never none and never all;
+- `mis=<k>[:<sectors>]`: the k-th write goes `<sectors>` away, or 1 to 16 blocks of 4 KiB away in
+  a seeded direction, and the place it was meant for keeps its old bytes;
+- `lse=<sector>+<count>[,...][:rot]`: reads of the sectors fail with an I/O error, or with `:rot`
+  return 16 seeded damaged bytes per sector; a write of a whole sector repairs it; the sectors stay
+  bad across a power cut;
+- `hang=<k>[+<ms>]`: the k-th request gets no completion, or with `+<ms>` an I/O error after that
+  many milliseconds of guest time.
+
+The guest token `G=<svc>@<at>[+<down>]:bad|rot[,len=][,range=][,file=][,seed=]` aims a latent
+sector error at a range of a file of a service's storage. At the fault's stop the controller runs
+`sync`, asks busybox `stat` for the file's inode and device, and reads the partition's start from
+sysfs. It then reads the ext4 superblock, the group descriptor, the inode and the extent tree
+through the agent's existing `read` of the partition's device (`hydo-control`'s
+`schedule/sectors.rs`). It sends the engine the new command `DISK lse=...` and drops the guest's
+clean page cache. No agent and no image changed, so the agent pin stays.
+
+What makes each fault inert when absent: the faults' state is outside the device state whose C
+layout every recorded fingerprint hashes, and it joins a fingerprint only when a token armed it.
+A `dseed=` alone arms nothing. The engine writes what the faults did to
+`<run dir>/one.block-faults.txt` only when they did something.
+
+A request that never completes: the guest kernel's virtio block driver renews its 30 s timer without
+end, and the program waits in an uninterruptible sleep. A workload that times out in a run with
+`hang=<k>` ends the run with `VIOLATION [disk.hang]`. When the guest has waited 120 s of its time
+on the request, the engine ends the run with `ERROR <phase>: the data disk never answered a
+request (hang=), and the guest waited 120 s of its time for it`. `hydo explore --block-faults`
+draws one block fault in 60% of the schedules, from its own stream (`BLOCK_SALT`), and a failure
+with one has the class `damaged-disk`. hvx refuses every block fault before any VM
+(`hydo_hvx::sched::refusal`), and the design page says what its module would need.
+
+**Evidence.** The example `hydo/onboard/examples/disk-faults` (RESULTS.md) runs recs, a small
+record store with a careless and a careful variant, on the Mac engine. Every new fault broke the
+careless variant: a torn record after `torn=100`, a stale record after `mis=5`, an I/O error and
+damaged bytes after `G=...:bad` and `:rot`, an ignored write error after `hang=10+1000`, and
+`VIOLATION [disk.hang]` after `hang=10`. The careful variant passed each one. Each of the 21
+schedules ran twice with one fingerprint and one control transcript. `hydo explore --seeds 1-20
+--block-faults` drew a block fault in 10 of 20 schedules. It found `hang=4` and `mis=3` on the
+careless image, and nothing on the careful one.
+
+The old schedules keep their values. The release's Redis example built from this tree to its
+recorded sha256 `31e90668…`, and its 7 recorded schedules of `hvm/release-redis` gave their
+recorded fingerprints and control hashes on the Mac engine (from `05f433ee427f8e3c` and
+`f8953914130df454` for `disk=none | run` to `9e2ce885165b1bc1` and `3a704aaf23b5fa14` for
+`disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no`). The tests of hydo-hvm, hydo-kvm, hydo-control
+(its recorded transcripts), hydo-engine, hydo-engine-proto and hydo-hvx passed, and so did the
+explorer's `fake_engine`. The explorer's identity goldens (`identity-quick.txt`,
+`corpus-full.txt`) and the controller's `corpus-quick.txt` held byte for byte with the example's
+two manifests moved aside. They are re-recorded with the manifests in, because every example
+manifest is an input of them; the controller's golden only gained the two manifests' lines. The CLI
+golden of `hydo guide manifest` is re-recorded for the new text of MANIFEST.md.
+
+On Redis 7.2.4 (the release's example, `appendfsync always`) each schedule ran twice with one
+fingerprint:
+
+- `disk=cut dseed=1 torn=100 | run C=12` passed: no write of several sectors was unflushed at
+  the cut, because Redis syncs each one.
+- `torn=100:any` with `C=12 R=everysec` lost `k:0`, as the run without it does: Redis's unsynced
+  data was in the guest's page cache, which a torn write does not reach.
+- `mis=10` and `mis=30`, also with a kill and restart at step 15, passed: the misdirected writes
+  did not hit the append-only file.
+- `hang=30+1000` failed one flush with an I/O error. Redis stopped, as its `always` setting says
+  it does, and its restart then stopped at `FATAL AOF MANIFEST FILE ERROR` (`Read AOF manifest
+  failed`). The state of the guest's file system after the failed flush was not traced.
+- `hang=30` ended `ERROR check: the data disk never answered a request (hang=), and the guest
+  waited 120 s of its time for it`: the check's read waited on the disk.
+
+The KVM engine did not run the faults on this Mac. The one-off workflow
+`.github/workflows/tmp-disk-faults-kvm.yml` on the branch `tmp-disk-faults-kvm` runs the scripted
+tests and the example's schedules twice on three of GitHub's KVM runners; it is committed and not
+pushed. No fingerprint epoch change, and nothing recorded moved.
+
+**What is left.** Open item 160.
+
+**On KVM (after the milestone's commit).** The lead pushed the one-off workflow
+`tmp-disk-faults-kvm`. Its first run found that `hydo-kvm` named a constant of `hydo-hvm`'s
+module `serve`, which only the Mac builds, so the KVM engine did not compile on Linux; the
+constant moved to `hydo_hvm::virtio`. Two later runs fixed the workflow's own image name and a read
+of a missing notes file. Run 44380177675 then ran the example's 14 schedules twice on an AMD EPYC
+7763 and two Xeon 6975P-C hosts. Every schedule gave the Mac engine's verdict and one fingerprint
+over its two runs; the two Intel hosts agree (for example the careless store's torn write,
+`8442b56bf4c79e4d`, and its misdirected write, `60696e6e8dc9d09a`), and AMD has its own values.

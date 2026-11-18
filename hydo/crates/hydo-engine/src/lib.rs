@@ -743,6 +743,32 @@ mod thread_pause_tests {
             assert_eq!(refusal_on(k, 1, 2, &w), None);
         }
     }
+
+    /// Milestone 313: hvx refuses every block fault before any VM; the Mac and KVM engines run
+    /// them.
+    #[test]
+    fn hvx_refuses_the_block_faults() {
+        for s in [
+            "disk=cut dseed=1 torn=50 | run C=3",
+            "disk=none mis=7 | run",
+            "disk=none lse=2048+8:rot | run",
+            "disk=none hang=12+1000 | run",
+            "disk=none | run G=db@3:bad",
+            "disk=none | run G=db@3+1:rot,len=512",
+        ] {
+            let t = hydo_schedule::Schedule::parse(s).unwrap();
+            let why = refusal(EngineKind::Hvx, &t).unwrap_or_else(|| panic!("{s}: not refused"));
+            assert!(
+                why.contains("Mac and KVM engines") && why.ends_with("(on hvx)"),
+                "{why}"
+            );
+            for k in [EngineKind::Hvm, EngineKind::Kvm] {
+                assert_eq!(refusal(k, &t), None, "{s}");
+            }
+        }
+        let flip = hydo_schedule::Schedule::parse("disk=none | run G=db@3:flip").unwrap();
+        assert_eq!(refusal(EngineKind::Hvx, &flip), None);
+    }
 }
 
 #[cfg(test)]

@@ -7,7 +7,9 @@
 //!   `at+down` (its files are changed while it is down); without it the files change under the
 //!   running service. Kinds: `flip` (`n` single-bit flips, default 1), `zero` (`len` bytes set to
 //!   zero, default 4096), `trunc` (the file shortened by `len` bytes; without `len` by a seeded
-//!   number of bytes). `range=` keeps the places within bytes [from, to) of the file (a file no
+//!   number of bytes), and since Milestone 313 `bad` and `rot` (the disk sectors under `len`
+//!   bytes of the file, default 4096, fail every read or return damaged bytes; the Mac and KVM
+//!   engines, docs/design/block-faults.md). `range=` keeps the places within bytes [from, to) of the file (a file no
 //!   longer than `from` does not qualify). `file=` keeps only files whose path (relative to the
 //!   storage directory) contains the text; `seed=` chooses the file and the places (default 0).
 //!   The choice is a pure
@@ -38,6 +40,13 @@ pub enum CorruptKind {
     Zero,
     /// The file shortened.
     Trunc,
+    /// Milestone 313 (docs/design/block-faults.md): a latent sector error under a range of the
+    /// file. The controller finds the disk sectors that hold it and the engine fails every read
+    /// of them with an I/O error (the host token `lse=`). The Mac and KVM engines only.
+    Bad,
+    /// Milestone 313: as `bad`, but a read of the sectors returns seeded damaged bytes instead
+    /// of an error (`lse=...:rot`).
+    Rot,
 }
 
 impl CorruptKind {
@@ -46,7 +55,15 @@ impl CorruptKind {
             CorruptKind::Flip => "flip",
             CorruptKind::Zero => "zero",
             CorruptKind::Trunc => "trunc",
+            CorruptKind::Bad => "bad",
+            CorruptKind::Rot => "rot",
         }
+    }
+
+    /// A latent sector error (`bad`, `rot`): the engine damages the disk's sectors under the
+    /// file, where the other kinds change the file's bytes through the guest.
+    pub fn is_sectors(self) -> bool {
+        matches!(self, CorruptKind::Bad | CorruptKind::Rot)
     }
 }
 
@@ -100,9 +117,11 @@ impl Corruption {
             "flip" => CorruptKind::Flip,
             "zero" => CorruptKind::Zero,
             "trunc" => CorruptKind::Trunc,
+            "bad" => CorruptKind::Bad,
+            "rot" => CorruptKind::Rot,
             k => {
                 return Err(err(format!(
-                    "{what}: the corruption {k:?} is flip, zero or trunc"
+                    "{what}: the corruption {k:?} is flip, zero, trunc, bad or rot"
                 )))
             }
         };
@@ -152,7 +171,7 @@ impl Corruption {
                 }
                 "len" => {
                     if kind == CorruptKind::Flip {
-                        return Err(err(format!("{what}: len= is for zero and trunc")));
+                        return Err(err(format!("{what}: len= is for zero, trunc, bad and rot")));
                     }
                     let n = dec(v, what)?;
                     if n == 0 || n > MAX_LEN {
@@ -230,6 +249,9 @@ pub enum Edit {
     Zero { off: u64, len: u64 },
     /// Shorten the file to `size` bytes.
     Trunc { size: u64 },
+    /// Milestone 313: make the disk sectors under bytes [off, off+len) of the file fail
+    /// (`rot: false`) or return damaged bytes (`rot: true`) on every read.
+    Sectors { off: u64, len: u64, rot: bool },
 }
 
 impl Corruption {
@@ -286,6 +308,16 @@ impl Corruption {
                     None => 1 + next() % span,
                 };
                 vec![Edit::Trunc { size: end - cut }]
+            }
+            CorruptKind::Bad | CorruptKind::Rot => {
+                // as zero: len bytes (default 4096, one file system block) at a seeded place
+                let len = self.len.unwrap_or(4096).min(span);
+                let off = from + next() % (span - len + 1);
+                vec![Edit::Sectors {
+                    off,
+                    len,
+                    rot: self.kind == CorruptKind::Rot,
+                }]
             }
         };
         Some((path.clone(), edits))

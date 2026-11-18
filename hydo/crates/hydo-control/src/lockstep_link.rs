@@ -114,6 +114,12 @@ impl Link for LockstepLink<'_, '_> {
                 self.cut = d.cut;
                 Ok(())
             }
+            EngineAction::BadSectors(t) => self
+                .ls
+                .disk(t)
+                .map_err(err)?
+                .map(|_| ())
+                .map_err(|e| LinkError(format!("the engine refused DISK: {e}"))),
         }
     }
 

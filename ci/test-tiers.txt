@@ -88,6 +88,7 @@ hydo-contracts::values                   fast
 hydo-errors                              fast
 hydo-errors::equivalence                 fast
 hydo-explore                             fast
+hydo-explore::block_faults               fast
 hydo-explore::cluster_faults             fast
 hydo-explore::corpus                     full
 hydo-explore::emulators                  fast

@@ -21,7 +21,7 @@ call`, `Clock steps to a time`, `Clock after a power cut`, `Link faults`, `One-s
 | `disk` | I/O errors, a lying disk that drops acknowledged writes | host `disk=ioerr:<p>`, `disk=lying:<p>` |
 | `freeze` | stop a service at the n-th packet it sends to or receives from a peer (on a Mac: a release with the second guest kernel) | `F=<svc>><peer>@<step>#<n>:<ms>` |
 | `protocol` | faults on fakes and proxies (`hydo guide outside-services`) | `H=...` |
-| `corrupt` | bit flips, zeroed ranges or truncation of one file in a service's `storage:` directory, while the service runs or while it is down | `G=<svc>@<step>[+<down>]:flip\|zero\|trunc[,n=][,len=][,file=][,seed=]` |
+| `corrupt` | bit flips, zeroed ranges or truncation of one file in a service's `storage:` directory, while the service runs or while it is down. On the Mac and KVM it also makes bad disk sectors under a range of the file. | `G=<svc>@<step>[+<down>]:flip\|zero\|trunc\|bad\|rot[,n=][,len=][,range=][,file=][,seed=]` |
 | `powerloss` | a power loss of one service: what it had not written back to its own file system (`storage: {dir:, size_mib:}`) is lost, the others run on | `L=<svc>@<step>+<down>[:strict]` |
 
 `<step>` counts the workload's steps: a step is one numbered part of `workload.run`, or one round
@@ -56,11 +56,49 @@ The host tokens set up the machine the guest runs on. Each is one `key=value` wo
 | `tj=<hex>` | Seeded tick jitter: some timer ticks come late, which changes thread interleavings. On hvx a delay counts guest branches; on the Mac and on KVM it counts VM exits. |
 | `tjpm=<n>` | With `tj=`: how many ticks per 1,000 are delayed (default 10). |
 | `tjmax=<n>` | With `tj=`: the longest delay (default 500,000 branches on hvx, 1,000 exits on the Mac and KVM). |
+| `torn=<p>[:any]` | The Mac and KVM, with `disk=cut`: at a power cut, `<p>` percent of the unflushed writes of several sectors keep only a part of their sectors (section "Faults of the disk's blocks"). |
+| `mis=<k>[:<sectors>]` | The Mac and KVM: the k-th write of the workload goes to another place on the disk. |
+| `lse=<sector>+<count>[:rot]` | The Mac and KVM: reads of these sectors fail, or with `:rot` return damaged bytes. |
+| `hang=<k>[+<ms>]` | The Mac and KVM: the k-th disk request of the workload gets no answer, or an error after `<ms>`. |
 | `pct=<hex>`, `pctn=<n>` | The Mac and KVM: `<n>` forced preemption points at seeded VM exits. |
 | `spin=rewind` | The Mac and KVM: run the schedule in rewind mode, which ends busy waits that make no VM exits deterministically. hydo switches to it by itself when a run needs it. |
 
 The explorer and `hydo explore --sweep` write the other host tokens themselves (inserted ticks
 `pp=` and `xt…` on hvx, vCPU turns `q=` with several vCPUs, the run budget `rb=`).
+
+## Faults of the disk's blocks
+
+A storage engine's own rules are about sectors, and a real disk breaks them in four ways that
+the faults of the preceding table do not make. The Mac and KVM engines make each one on the
+data disk. hvx refuses them before any VM. Each is decided from `dseed=` and from the requests
+counted from the workload's start, so a schedule repeats exactly:
+
+| token | what the disk does |
+|---|---|
+| `torn=<p>[:any]` | With `disk=cut`, at the power cut: `<p>` percent of the unflushed writes of two or more sectors are torn. A torn write keeps its first sectors, or with `:any` some of them, and the rest keep their old bytes. |
+| `mis=<k>[:<sectors>]` | The k-th write goes to another place: `<sectors>` away (`+16`, `-8`), or 1 to 16 blocks of 4 KiB away. The place it was meant for keeps its old bytes. |
+| `lse=<sector>+<count>[,...][:rot]` | Reads of these sectors fail with an I/O error, or with `:rot` return damaged bytes. A write of a whole sector repairs it. |
+| `hang=<k>[+<ms>]` | The k-th request (a read, a write or a flush) gets no answer, or with `+<ms>` an I/O error after that many milliseconds. |
+
+`G=<svc>@<step>[+<down>]:bad` and `:rot` put a latent sector error under a range of one file of
+the service's `storage:`. hydo finds the file's sectors on the ext4 data disk itself and drops
+the guest's page cache, so the next read of the range goes to the disk:
+
+```sh
+hydo run "disk=none | run G=recs@6:bad,range=114688-118784,file=records"
+```
+
+The console says which sectors it chose: `BAD SECTORS under recs's /data/recs/records.dat bytes
+114688..118784: lse=45792+8`. Each run with a block fault writes what the disk did to
+`<run dir>/one.block-faults.txt` (`write 5 meant for sector 45792 went to sector 45688`). Use that
+file to choose `<k>`: the requests are numbered from 1 at the workload's start.
+
+A program that waits on a request that never completes waits without end. When the workload times
+out in a run with `hang=<k>`, the run ends with `VIOLATION [disk.hang]`. When the guest waits
+120 s of its time on such a request, the run ends with `ERROR workload: the data disk never
+answered a request`. A system that sets its own deadline for disk calls and fails the request
+passes. The example `hydo/onboard/examples/disk-faults` has a careless and a careful record store
+under every fault (its RESULTS.md); `hydo explore --block-faults` draws the faults.
 
 ## Pause the workload
 
@@ -378,6 +416,8 @@ Useful options of `hydo explore`:
   route of every fake and proxy in every step (section "Reach every route in every step").
 - `--storage-faults`: `G=` and `L=` for services with `storage:`. Add `--corrupt-several` to
   make half of the `G=` tokens hit several services: a group's selector, or a list of two.
+- `--block-faults`: on the Mac and KVM, one fault of the disk's blocks in 60% of the schedules
+  (section "Faults of the disk's blocks").
 - `--cluster-faults`: kills, pauses, and partitions of the services of `groups:`.
 - `--pause-workload`: pauses of the workload's own processes (section "Pause the workload").
 - `--pause-thread <name>`: pauses of named threads of the workload, with `--pause-min` and

@@ -74,6 +74,8 @@ mod react;
 pub mod reboot;
 // the storage faults of one service, G= and L= (docs/design/storage-faults.md)
 mod storage;
+// Milestone 313: G=...:bad|rot, the sectors under a file (docs/design/block-faults.md)
+mod sectors;
 // Milestone 195: targets beyond one service (lists, group selectors, the primary's probe)
 mod targets;
 // work counters of a run, HYDO_COST (an experiment, docs/design/cost-tracking.md)
@@ -188,6 +190,9 @@ struct RunCfg {
     /// part (timing tokens are no faults). A service that stops in such a run stopped on its own
     /// (open item 86).
     no_faults: bool,
+    /// Milestone 313: `hang=<k>` without a release, the request of the data disk that never
+    /// completes. A workload that times out in such a run ends it with `VIOLATION [disk.hang]`.
+    hang: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -661,6 +666,9 @@ fn no_faults(s: &Schedule) -> bool {
     );
     disk_ok
         && s.host_token("cf").is_none()
+        // Milestone 313: a block fault is a fault (a service that stops after the disk failed
+        // a request it waited on is not a stop "in a run without faults")
+        && s.block_faults().is_empty()
         && s.guest.iter().all(|t| {
             matches!(
                 t,
@@ -674,6 +682,10 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
         guest_text: s.guest_text(),
         cf: matches!(s.host_token("cf"), Some(hydo_schedule::HostToken::Cf(_))),
         no_faults: no_faults(s),
+        hang: match s.host_token("hang") {
+            Some(hydo_schedule::HostToken::Hang { k, ms: None }) => Some(*k),
+            _ => None,
+        },
         ..RunCfg::default()
     };
     // (a token naming what the image does not have is refused before, by ScheduleController::run
@@ -2408,6 +2420,23 @@ fn step_range_run(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
         );
     }
     log(fx, format!("workload steps {a}..{} rc={st}", b - 1));
+    // Milestone 313 (docs/design/block-faults.md): with a disk request that never completes, a
+    // workload that times out waited on the disk. A process in such a wait does not end on
+    // SIGKILL, and a check that reads the same data would wait too, so the run ends here.
+    if st == 143 {
+        if let Some(k) = ctx.run.hang {
+            return die_oracle(
+                fx,
+                format!(
+                    "HYDO-ORACLE: VIOLATION [disk.hang] workload steps {a}..{} did not end within \
+                     their timeout of {}s, and the data disk never answers its request {k} \
+                     (hang={k}): the system waited on the disk without a deadline of its own",
+                    b - 1,
+                    ctx.plan.workload_timeout
+                ),
+            );
+        }
+    }
     Ok(())
 }
 

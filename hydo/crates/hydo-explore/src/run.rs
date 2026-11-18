@@ -497,6 +497,7 @@ fn setup(a: Args, env: &Env) -> Cx {
                 workload_pauses: a.workload_pauses && a.pause_threads.is_none(),
                 thread_pauses: a.pause_threads.is_some(),
                 upgrades: a.upgrades,
+                block: a.block_faults,
             }),
             if saved {
                 format!(" The whole fault space: {}", file.display())
@@ -644,6 +645,11 @@ fn setup(a: Args, env: &Env) -> Cx {
         );
     }
     cx.ex.corrupt_several = a.corrupt_several;
+    // Milestone 313: the block faults are the Mac and KVM engines' virtio disk
+    if a.block_faults && cx.ex.backend == Backend::Hvx {
+        die("hydo explore: --block-faults draws torn=, mis=, hang= and G=...:bad|rot, which run on the Mac and KVM engines; hvx's disk is in its kernel module, which does not have them (use --backend kvm, or the Mac)");
+    }
+    cx.ex.block_faults = a.block_faults;
     // M195: kills, pauses and partitions of the manifest's groups
     let has_groups = m
         .as_ref()

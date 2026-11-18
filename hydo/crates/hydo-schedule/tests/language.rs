@@ -730,10 +730,13 @@ fn storage_faults() {
         "the only word after : is strict",
     );
     refused("disk=none | run L=n1,n2@4+1", "not a service name");
-    refused("disk=none | run G=n1@4:melt", "flip, zero or trunc");
+    refused(
+        "disk=none | run G=n1@4:melt",
+        "flip, zero, trunc, bad or rot",
+    );
     refused(
         "disk=none | run G=n1@4:flip,len=3",
-        "len= is for zero and trunc",
+        "len= is for zero, trunc, bad and rot",
     );
     refused("disk=none | run G=n1@4:zero,n=3", "n= is for flip only");
     refused("disk=none | run G=n1@4:flip,n=0", "n= is 1 to");
@@ -754,6 +757,93 @@ fn storage_faults() {
     refused("disk=none | run G=N1@4:flip", "not a service name");
     refused("disk=none | run L=n1@4", "<svc>@<at>+<n>");
     refused("disk=none | run L=n1", "<svc>@<at>+<n>");
+}
+
+/// The block faults (Milestone 313, docs/design/block-faults.md): a torn write at a power cut
+/// (`torn=`), a misdirected write (`mis=`), latent sector errors on raw sectors (`lse=`) or under
+/// a file of a service's storage (`G=...:bad`, `G=...:rot`), and a request that never completes
+/// (`hang=`). The Mac and KVM engines apply them; hvx refuses them.
+#[test]
+fn block_faults() {
+    for s in [
+        "disk=cut dseed=4 torn=50 | run C=3",
+        "disk=cut dseed=4 torn=100:any | run C=3",
+        "disk=none dseed=0 mis=7 | run",
+        "disk=none dseed=0 mis=7:+16 | run",
+        "disk=none dseed=0 mis=7:-2048 | run",
+        "disk=none lse=2048+8 | run",
+        "disk=none lse=2048+8,9000+1:rot | run",
+        "disk=none hang=12 | run",
+        "disk=none hang=12+5000 | run",
+        "disk=cut dseed=1 torn=25 mis=3 lse=1+1 hang=40+100 | run C=5",
+        "disk=none dseed=0 | run G=db@3:bad",
+        "disk=none dseed=0 | run G=db@3+1:rot,len=512,range=8192-8193,file=records,seed=2",
+        "disk=none dseed=0 | run G=n1,n2@3:bad,len=8192",
+    ] {
+        round_trip(s);
+    }
+    // the host side normalises its numbers
+    let s = Schedule::parse("disk=cut torn=050 mis=07:16 lse=010+02 hang=03+0100 | run").unwrap();
+    assert_eq!(
+        s.to_string(),
+        "disk=cut torn=50 mis=7:+16 lse=10+2 hang=3+100 | run"
+    );
+    assert!(matches!(
+        s.host_token("torn"),
+        Some(HostToken::Torn {
+            pct: 50,
+            any: false
+        })
+    ));
+    assert!(matches!(
+        s.host_token("mis"),
+        Some(HostToken::Mis {
+            k: 7,
+            delta: Some(16)
+        })
+    ));
+    assert!(matches!(
+        s.host_token("hang"),
+        Some(HostToken::Hang {
+            k: 3,
+            ms: Some(100)
+        })
+    ));
+    assert_eq!(
+        s.block_faults(),
+        vec!["torn=50", "mis=7:+16", "lse=10+2", "hang=3+100"]
+    );
+    let g = Schedule::parse("disk=none | run K=db@4+1 G=db@6:rot,len=512").unwrap();
+    assert_eq!(g.block_faults(), vec!["G=db@6:rot,len=512"]);
+    assert!(Schedule::parse("disk=none | run G=db@6:flip")
+        .unwrap()
+        .block_faults()
+        .is_empty());
+    // what is refused
+    refused("disk=none torn=50 | run C=3", "torn= needs disk=cut");
+    refused("disk=cut torn=0 | run", "1 to 100");
+    refused("disk=cut torn=101 | run", "1 to 100");
+    refused("disk=cut torn=50:all | run", "only mode");
+    refused("disk=none mis=0 | run", "counted from 1");
+    refused("disk=none mis=3:0 | run", "the distance is 1 to");
+    refused("disk=none mis=3:-4194304 | run", "the distance is 1 to");
+    refused("disk=none lse=5 | run", "<sector>+<count>");
+    refused("disk=none lse=5+0 | run", "the count is 1 to");
+    refused("disk=none lse=5+2049 | run", "the count is 1 to");
+    refused("disk=none lse=5+1:err | run", "only mode");
+    refused(
+        "disk=none lse=1+1,2+1,3+1,4+1,5+1,6+1,7+1,8+1,9+1,10+1,11+1,12+1,13+1,14+1,15+1,16+1,17+1 | run",
+        "at most 16",
+    );
+    refused("disk=none hang=0 | run", "counted from 1");
+    refused("disk=none hang=3+0 | run", "the delay is 1 to");
+    refused("disk=none hang=3+3600001 | run", "the delay is 1 to");
+    refused("disk=none hang=3 hang=4 | run", "twice");
+    refused("disk=none | run G=db@3:bad,n=2", "n= is for flip only");
+    refused(
+        "disk=none | run G=db@3:wipe",
+        "flip, zero, trunc, bad or rot",
+    );
 }
 
 /// Upgrades (Milestone 238, docs/design/upgrades.md): `U=<target>@<at>[/<gap>][+<back>]:<version>`

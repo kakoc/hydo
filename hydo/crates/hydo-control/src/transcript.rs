@@ -329,7 +329,7 @@ impl Record {
                 ("snap", n)
             }
             Record::Engine { n, action } => {
-                m.insert("action".into(), s(action.name()));
+                m.insert("action".into(), s(&action.text()));
                 ("engine", n)
             }
             Record::End { n, end } => {

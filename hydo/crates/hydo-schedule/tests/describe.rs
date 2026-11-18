@@ -114,6 +114,15 @@ fn every_token_has_plain_words() {
         "pctk=100",
         "spin=rewind",
         "br=900",
+        "torn=50",
+        "torn=100:any",
+        "mis=7",
+        "mis=7:+16",
+        "mis=7:-8",
+        "lse=2048+8",
+        "lse=2048+8,9000+1:rot",
+        "hang=12",
+        "hang=12+5000",
     ];
     let mut seen_host = std::collections::BTreeSet::new();
     for h in host {
@@ -124,7 +133,7 @@ fn every_token_has_plain_words() {
         plain(&s);
     }
     // every key of the host part (a new token needs words here)
-    assert_eq!(seen_host.len(), 30, "host keys seen: {seen_host:?}");
+    assert_eq!(seen_host.len(), 34, "host keys seen: {seen_host:?}");
     let guest = [
         "K=redis@5+2",
         "K=n1,n2@5+2",
@@ -193,6 +202,8 @@ fn every_token_has_plain_words() {
         "G=redis@5:zero,len=512,range=0-4096",
         "G=redis@5:trunc",
         "G=redis@5:trunc,len=10,seed=2",
+        "G=redis@5:bad,file=aof",
+        "G=redis@5+1:rot,len=512,range=8192-8193",
         "L=redis@3+2",
         "U=redis@5:7.2",
         "U=nodes.all@4/3+10:3.6.0-rc.2",

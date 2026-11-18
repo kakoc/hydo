@@ -149,6 +149,10 @@ pub fn read_command(ln: &[u8]) -> Cmd {
     if let Some(r) = ln.strip_prefix(b"TIME ") {
         return Cmd::Host(HostCmd::Time(lossy(r)));
     }
+    // Milestone 313: bad sectors from this stop on (the Mac and KVM engines; hvx refuses it)
+    if let Some(r) = ln.strip_prefix(b"DISK ") {
+        return Cmd::Host(HostCmd::Disk(lossy(r)));
+    }
     let mut l = "unknown command ".to_string();
     ctl::esc(ln, &mut l);
     Cmd::Bad(l)
@@ -243,6 +247,7 @@ mod tests {
             "DISKOFF",
             "CUT",
             "REBOOT",
+            "DISK lse=2048+8:rot",
         ] {
             assert_eq!(c(l.as_bytes()), l);
         }

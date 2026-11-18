@@ -28,7 +28,16 @@ use crate::machine::{mix, GOLDEN};
 use hydo_hvx::cstr;
 use std::sync::Arc;
 
+mod block;
 mod extra;
+
+/// The words of a run that the stop `STOP_HUNG` ended (Milestone 313, `hang=` without a
+/// release): the guest waited [`hydo_schedule::HANG_LIMIT_S`] seconds of its time on a request
+/// of the data disk that never completes. It is in this module, which both engines build, so
+/// that the KVM engine on Linux says the same.
+pub const HUNG_WORDS: &str = "the data disk never answered a request (hang=), and the guest \
+                              waited 120 s of its time for it";
+pub use block::{disk_cmd_ranges, BlkCfg, BlkFaults, Held};
 pub use extra::{Extra, ExtraCfg};
 
 /// device i at MMIO_BASE + i * MMIO_SIZE
@@ -270,9 +279,18 @@ pub struct Save {
     tx: Option<Arc<Vec<u8>>>,
     cache: Vec<Unsync>,
     extra: Vec<Extra>,
+    bx: BlkFaults,
 }
 
 pub struct Virtio {
+    /// Milestone 313: the block faults' state (docs/design/block-faults.md), outside
+    /// [`VState`] so that a run without them hashes exactly as before
+    pub bx: BlkFaults,
+    /// The guest clock's ticks per second, for `hang=<k>+<ms>` (0: the Mac engine's CNTFRQ;
+    /// the KVM engine's clock counts nanoseconds)
+    pub ticks_per_s: u64,
+    /// What the block faults did, for the engine's diagnostics (at most 64 lines)
+    pub bnotes: Vec<String>,
     pub v: VState,
     pub vs: VStats,
     /// the stable-media image (flushed bytes), copy-on-write ([`crate::disk`])
@@ -450,6 +468,9 @@ impl Virtio {
     /// `virtio_setup`: the devices from the configuration (errors as the C engine's, status 1).
     pub fn setup(c: &Config) -> Result<Virtio, String> {
         let mut x = Virtio {
+            bx: BlkFaults::default(),
+            ticks_per_s: 0,
+            bnotes: Vec::new(),
             v: VState::default(),
             vs: VStats::default(),
             disk: None,
@@ -567,6 +588,8 @@ impl Virtio {
         };
         if i as i32 == self.blk_idx {
             self.cache_clear();
+            // a reset device answers nothing it held (Milestone 313)
+            self.bx.held.clear();
         }
     }
 
@@ -716,6 +739,9 @@ impl Virtio {
         if self.net_idx >= 0 {
             self.net_poll(ram, now);
         }
+        if !self.bx.held.is_empty() {
+            self.blk_release(ram, now);
+        }
         let ndev = self.v.ndev as usize;
         let extra = self.extra.iter_mut().map(|e| &mut e.dev);
         for d in self.v.dev[..ndev].iter_mut().chain(extra) {
@@ -745,6 +771,14 @@ impl Virtio {
                 best = n;
             }
         }
+        // Milestone 313: a held request that completes later (`hang=<k>+<ms>`)
+        for h in &self.bx.held {
+            if let Some(r) = h.release {
+                if r != 0 && (best == 0 || r < best) {
+                    best = r;
+                }
+            }
+        }
         best
     }
 
@@ -771,7 +805,8 @@ impl Virtio {
         for e in &self.extra {
             h = e.hash(h, self.disk_tree);
         }
-        h
+        // Milestone 313: nothing while no block fault was armed
+        self.bx.hash(h)
     }
 
     pub fn save(&self) -> Save {
@@ -781,6 +816,7 @@ impl Virtio {
             tx: self.net_tx.clone(),
             cache: self.cache[..self.v.blk.n_unsync as usize].to_vec(),
             extra: self.extra.clone(),
+            bx: self.bx.clone(),
         }
     }
 
@@ -794,6 +830,153 @@ impl Virtio {
         }
         self.cache = s.cache.clone();
         self.extra = s.extra.clone();
+        self.bx = s.bx.clone();
+    }
+
+    // ---------------- the block faults (Milestone 313) ----------------
+
+    fn bnote(&mut self, s: String) {
+        if self.bnotes.len() < 64 {
+            self.bnotes.push(s);
+        }
+    }
+
+    /// Arm a workload's block faults (the host tokens `torn=`, `mis=`, `hang=` and `lse=`).
+    pub fn set_block(&mut self, cfg: BlkCfg, lse: &[(Vec<(u64, u64)>, bool)]) {
+        self.bnotes.clear();
+        if self.blk_idx < 0 {
+            return;
+        }
+        self.bx.arm(cfg);
+        for (r, rot) in lse {
+            self.add_bad(r, *rot);
+        }
+    }
+
+    /// Write what the block faults did in this run to `<dir>/<tag>.block-faults.txt` (nothing
+    /// when they did nothing, so a run without them writes no file).
+    pub fn write_block_notes(&mut self, dir: &str, tag: &str) {
+        if self.bnotes.is_empty() {
+            return;
+        }
+        let mut t = self.bnotes.join("\n");
+        t.push('\n');
+        let _ = std::fs::write(format!("{dir}/{tag}.block-faults.txt"), t);
+        self.bnotes.clear();
+    }
+
+    /// The workload's end: the faults on requests go off; bad sectors and held requests stay.
+    pub fn block_off(&mut self) {
+        self.bx.off();
+    }
+
+    /// Bad sectors from now on (the host's `DISK lse=...` at a stop, Milestone 313).
+    pub fn add_bad(&mut self, ranges: &[(u64, u64)], rot: bool) {
+        if self.blk_idx < 0 {
+            return;
+        }
+        self.bx.add_bad(ranges, rot);
+        let n: u64 = ranges.iter().map(|r| r.1).sum();
+        self.bnote(format!(
+            "{n} bad sectors from sector {}{}",
+            ranges.first().map_or(0, |r| r.0),
+            if rot { " (damaged bytes)" } else { "" }
+        ));
+    }
+
+    /// What a power cut or a reboot keeps of the block faults: everything but the requests the
+    /// disk held, which a new VM never sees.
+    pub fn block_carry(&self) -> BlkFaults {
+        let mut b = self.bx.clone();
+        b.held.clear();
+        b
+    }
+
+    pub fn set_block_carry(&mut self, b: BlkFaults) {
+        self.bx = b;
+    }
+
+    /// How long, in guest ticks, a request the disk will never answer has waited.
+    pub fn hung_for(&self, now: u64) -> Option<u64> {
+        if self.bx.held.is_empty() {
+            return None;
+        }
+        self.bx.hung_for(now)
+    }
+
+    /// The guest ticks of the hang limit ([`hydo_schedule::HANG_LIMIT_S`]).
+    pub fn hang_limit(&self) -> u64 {
+        BlkFaults::ticks(self.ticks_per_s, hydo_schedule::HANG_LIMIT_S * 1000)
+    }
+
+    /// `torn=` at a power cut: the kept sectors of each torn write in the volatile cache reach
+    /// the disk before only the flushed bytes are carried into the recovery boot.
+    pub fn tear_at_cut(&mut self) {
+        if self.bx.cfg.torn.is_none() || self.disk.is_none() {
+            return;
+        }
+        let n = self.v.blk.n_unsync as usize;
+        let mut notes = Vec::new();
+        let mut i = 0u64;
+        for c in self.cache.iter().take(n) {
+            if c.valid == 0 {
+                continue;
+            }
+            let len = c.len as u64;
+            if let Some(keep) = self.bx.torn_keep(i, len) {
+                let disk = self.disk.as_mut().unwrap();
+                let mut kept = 0;
+                for (j, k) in keep.iter().enumerate() {
+                    if !*k {
+                        continue;
+                    }
+                    let s = j as u64 * SECTOR;
+                    let e = (s + SECTOR).min(len);
+                    disk.write((c.doff + s) as usize, &c.data[s as usize..e as usize]);
+                    kept += 1;
+                }
+                notes.push(format!(
+                    "torn write at sector {}: {kept} of {} sectors kept",
+                    c.doff / SECTOR,
+                    keep.len()
+                ));
+            }
+            i += 1;
+        }
+        for s in notes {
+            self.bnote(s);
+        }
+    }
+
+    /// Complete the held requests whose time came (`hang=<k>+<ms>`), with an I/O error.
+    fn blk_release(&mut self, ram: &mut Ram, now: u64) {
+        if self.blk_idx < 0 {
+            return;
+        }
+        let i = self.blk_idx as usize;
+        let q = self.v.dev[i].q[0];
+        let mut done = Vec::new();
+        self.bx.held.retain(|h| match h.release {
+            Some(r) if r <= now => {
+                done.push(*h);
+                false
+            }
+            _ => true,
+        });
+        if done.is_empty() || q.num == 0 {
+            return;
+        }
+        for h in &done {
+            if h.status_gpa != 0 {
+                ram.write(h.status_gpa, &[S_IOERR]);
+            }
+            if let Some(ui) = ram.r16(q.used + 2) {
+                ram.used(&q, ui, h.head as u32, h.used_len);
+                ram.w16(q.used + 2, ui.wrapping_add(1));
+            }
+            self.bnote(format!("held request {} completed with an I/O error", h.n));
+        }
+        self.complete(i, now, 0);
     }
 
     /// `virtio_finish`: HVM_DISK_OUT (stable media only) and HVM_NET_TX_OUT.
@@ -817,9 +1000,15 @@ impl Virtio {
             return None;
         }
         let vs = &self.vs;
+        // Milestone 313: what the block faults did, after the counts
+        let notes = if self.bnotes.is_empty() {
+            String::new()
+        } else {
+            format!("; block faults: {}", self.bnotes.join("; "))
+        };
         Some(format!(
             "{tag}: virtio kicks {}, blk requests {} (reads {}, writes {}, flushes {}), faults {}, \
-             writes held in the volatile cache {} (committed by flush {}, still held {}), net rx {} tx {}",
+             writes held in the volatile cache {} (committed by flush {}, still held {}), net rx {} tx {}{}",
             vs.kicks,
             vs.reqs,
             vs.reads,
@@ -830,7 +1019,8 @@ impl Virtio {
             vs.committed,
             self.v.blk.n_unsync,
             vs.rx,
-            vs.tx
+            vs.tx,
+            notes
         ))
     }
 
@@ -1025,6 +1215,8 @@ impl Virtio {
             let mut have_status = false;
             let mut first = true;
             let mut fc = Bf::None;
+            // Milestone 313: hang= and mis= for this request (nothing without them)
+            let mut rf = block::ReqFault::default();
             let mut di = head;
             let mut g = 0u32;
             while g < q.num.wrapping_add(2) {
@@ -1061,7 +1253,28 @@ impl Virtio {
                             kick_extra += extra as u64;
                         }
                     }
-                    if ty == T_FLUSH && fc != Bf::Error {
+                    if self.bx.cfg.any() {
+                        rf = self.bx.decide(ty == T_OUT);
+                        if rf.hold {
+                            self.bnote(format!(
+                                "request {} ({}) held{}",
+                                rf.n,
+                                match ty {
+                                    T_IN => format!("a read at sector {sector}"),
+                                    T_OUT => format!("a write at sector {sector}"),
+                                    T_FLUSH => "a flush".to_string(),
+                                    t => format!("type {t}"),
+                                },
+                                match self.bx.cfg.hang {
+                                    Some((_, Some(ms))) => format!(", an I/O error after {ms} ms"),
+                                    _ => ", never answered".to_string(),
+                                }
+                            ));
+                        }
+                    }
+                    if rf.hold {
+                        // the disk took the request and does nothing with it
+                    } else if ty == T_FLUSH && fc != Bf::Error {
                         self.cache_commit();
                     } else if ty != T_IN && ty != T_OUT && ty != T_FLUSH && status == S_OK {
                         status = S_UNSUPP;
@@ -1069,17 +1282,39 @@ impl Virtio {
                 } else if !has_next {
                     status_gpa = addr;
                     have_status = true;
+                } else if rf.hold && (ty == T_IN || ty == T_OUT) {
+                    if ty == T_IN {
+                        used_len = used_len.wrapping_add(len);
+                    }
+                    doff = doff.wrapping_add(len as u64);
                 } else if ty == T_IN || ty == T_OUT {
                     let mut ok = true;
+                    // Milestone 313: a misdirected write goes to `wdoff`, and the sectors it was
+                    // meant for keep their old bytes
+                    let mut wdoff = doff;
+                    if let (T_OUT, Some(d)) = (ty, rf.mis) {
+                        if let Some(t) =
+                            BlkFaults::mis_target(doff, len as u64, d, self.v.blk.disk_size)
+                        {
+                            wdoff = t;
+                            self.bnote(format!(
+                                "write {} meant for sector {} went to sector {}",
+                                self.bx.nwrite,
+                                doff / SECTOR,
+                                t / SECTOR
+                            ));
+                        }
+                    }
                     if fc == Bf::Error {
                         status = S_IOERR;
                     } else if ty == T_OUT && fc == Bf::Drop {
-                        self.cache_invalidate(doff, len);
+                        self.cache_invalidate(wdoff, len);
                     } else if ty == T_OUT && fc == Bf::Unflush {
-                        if !self.cache_stash(ram, doff, addr, len) {
-                            ok = self.disk_rw(ram, addr, doff, len, false);
-                            self.cache_invalidate(doff, len);
+                        if !self.cache_stash(ram, wdoff, addr, len) {
+                            ok = self.disk_rw(ram, addr, wdoff, len, false);
+                            self.cache_invalidate(wdoff, len);
                         }
+                        self.bx.repair(wdoff, len as u64);
                     } else if ty == T_OUT && fc == Bf::Torn {
                         let torn_end = sector.wrapping_mul(SECTOR).wrapping_add(SECTOR);
                         if doff < torn_end {
@@ -1094,11 +1329,23 @@ impl Virtio {
                         ok = self.disk_rw(ram, addr, doff, len, true);
                         if ok {
                             self.cache_overlay(ram, addr, doff, len);
+                            // Milestone 313: a latent sector error under the read
+                            let (bad, rotten) = self.bx.bad_in(doff, len as u64);
+                            if bad {
+                                status = S_IOERR;
+                            } else if rotten {
+                                let mut buf = vec![0u8; len as usize];
+                                if ram.read(addr, &mut buf) {
+                                    self.bx.rot(doff, &mut buf);
+                                    ram.write(addr, &buf);
+                                }
+                            }
                         }
                         used_len = used_len.wrapping_add(len);
                     } else {
-                        ok = self.disk_rw(ram, addr, doff, len, false);
-                        self.cache_invalidate(doff, len);
+                        ok = self.disk_rw(ram, addr, wdoff, len, false);
+                        self.cache_invalidate(wdoff, len);
+                        self.bx.repair(wdoff, len as u64);
                     }
                     if !ok {
                         status = S_IOERR;
@@ -1111,11 +1358,31 @@ impl Virtio {
                 }
                 di = next;
             }
-            if have_status {
+            if rf.hold {
+                // Milestone 313 (hang=): no status and no used-ring entry until the release,
+                // if any; the queue goes on with the next request
+                let release = match self.bx.cfg.hang {
+                    Some((_, Some(ms))) => Some(
+                        now.wrapping_add(BlkFaults::ticks(self.ticks_per_s, ms))
+                            .max(1),
+                    ),
+                    _ => None,
+                };
+                self.bx.held.push(Held {
+                    n: rf.n,
+                    head,
+                    used_len: used_len.wrapping_add(have_status as u32),
+                    status_gpa: if have_status { status_gpa } else { 0 },
+                    since: now,
+                    release,
+                });
+            } else if have_status {
                 ram.write(status_gpa, &[status]);
                 used_len = used_len.wrapping_add(1);
             }
-            if do_reorder && pend.len() < REORDER_MAX {
+            if rf.hold {
+                // held: its completion comes from blk_release
+            } else if do_reorder && pend.len() < REORDER_MAX {
                 pend.push((head as u32, used_len));
             } else if let Some(ui) = ram.r16(q.used + 2) {
                 ram.used(&q, ui, head as u32, used_len);

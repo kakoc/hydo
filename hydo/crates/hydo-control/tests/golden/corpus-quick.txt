@@ -12,6 +12,8 @@ input	hydo/onboard/examples/contracts-ledger/hydo-local.yaml	aaa170b3aac2a5ab0a0
 input	hydo/onboard/examples/contracts-ledger/hydo-types-go.yaml	5cac08a1fbf2e6705c78423ca0c72ba2a1f95a6722da93afab6c2868cfa1ed5a
 input	hydo/onboard/examples/contracts-ledger/hydo-types.yaml	3f5f174e7b2b7fbda41c85ea2466bc189fc2c8b5b0efbd5ae0c7dbcf68649c9d
 input	hydo/onboard/examples/contracts-ledger/hydo.yaml	5aec315b481af00ea65b7c6c5ffa7afefd73495cfd4a0614c0946dc21e3c6998
+input	hydo/onboard/examples/disk-faults/hydo-careful.yaml	92ef1285e22a0ae3a01d09f95a8a9e09b3b26a123d4ca031bcca730333639239
+input	hydo/onboard/examples/disk-faults/hydo.yaml	3e4910d57068e8731ed031f260b7be57093f5545954bbc9fcc7f842642cb1725
 input	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml	b81ec8dccb68aee7cab782a49e3bc119e9bd9ef2aea98f8771b1473799a8bdc8
 input	hydo/onboard/examples/etcd-upgrade/hydo.yaml	0dd3e22c9d885900450dbe52dd5a934d3008bb04eb7d549eba3066d250b235b6
 input	hydo/onboard/examples/etcd/hydo-hist.yaml	3ba821683b206d5ec9bf8a83f7879198bb3fb99ec2163700ceeb4ed8b7e027b2
@@ -845,6 +847,20 @@ chunk	hydo/onboard/examples/contracts-ledger/hydo.yaml	29	500	d6d8fbbbb11e05e59a
 chunk	hydo/onboard/examples/contracts-ledger/hydo.yaml	30	500	ade3eb7c1f8173a063aa9bfe004f8f03caf8996cda6c11fd2f57dfcdceae7e57
 chunk	hydo/onboard/examples/contracts-ledger/hydo.yaml	31	500	5bab65afe0166a1e2f5a753d3d6e7c64051e4d499e7616b7f78aa60e777d9620
 chunk	hydo/onboard/examples/contracts-ledger/hydo.yaml	32	65	d786944d6d036a49d7a02285552a4079d561fc78e3f462c2773fc9902c521a65
+manifest	hydo/onboard/examples/disk-faults/hydo-careful.yaml	core
+boot	hydo/onboard/examples/disk-faults/hydo-careful.yaml	hydo/onboard/examples/disk-faults/hydo-careful.yaml#0	snapshot	c013646c602d7053
+counts	hydo/onboard/examples/disk-faults/hydo-careful.yaml	identity=13 recovery:ok=14 recovery:violation=1 refused=1 run:cut=15 run:ok=7 run:violation=1 token:C=15 token:K=3 token:P=4 token:Q=1 token:X=4 token:Z=1 written=10
+boot-transcript	hydo/onboard/examples/disk-faults/hydo-careful.yaml	c013646c602d7053
+chunk	hydo/onboard/examples/disk-faults/hydo-careful.yaml	0	500	e4c80347d3fa3061d5b91328a627c0cf6661bed309bc4ae8cf03e3dbbae26435
+chunk	hydo/onboard/examples/disk-faults/hydo-careful.yaml	1	500	11290e8389a11a274e6d363a3f664a4a300daff98361b60893e8a20c40d9532f
+chunk	hydo/onboard/examples/disk-faults/hydo-careful.yaml	2	347	6d06be4ad5849d48ba6354f00f43cc3258800864055bab7c5914cca2b5814013
+manifest	hydo/onboard/examples/disk-faults/hydo.yaml	core
+boot	hydo/onboard/examples/disk-faults/hydo.yaml	hydo/onboard/examples/disk-faults/hydo.yaml#0	snapshot	6e80c591fd54077e
+counts	hydo/onboard/examples/disk-faults/hydo.yaml	identity=13 recovery:error=1 recovery:ok=12 recovery:violation=2 refused=1 run:cut=15 run:error=1 run:ok=6 run:violation=1 token:C=15 token:K=3 token:P=4 token:Q=1 token:X=4 token:Z=1 written=10
+boot-transcript	hydo/onboard/examples/disk-faults/hydo.yaml	6e80c591fd54077e
+chunk	hydo/onboard/examples/disk-faults/hydo.yaml	0	500	9880f61ae7080984a5a9898885e9302d98a054ac558ef2d5f350d9d8a831f40b
+chunk	hydo/onboard/examples/disk-faults/hydo.yaml	1	500	923b86a75ae7ee8918af400c7368befece4aed8e6b3696be3981e80584b33503
+chunk	hydo/onboard/examples/disk-faults/hydo.yaml	2	349	27e1cef5e3b39f256112ddd225eef86629f657eff7336dee955185b7b9727d59
 manifest	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml	core
 boot	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml#0	snapshot	356507e5b53589ab
 counts	hydo/onboard/examples/etcd-flaky-22796/hydo.yaml	identity=1 recovery:ok=3 refused=1 run:cut=3 run:error=1 run:ok=7 run:violation=1 token:C=4 token:K=3 token:P=4 token:Q=1 token:X=4 token:Z=1 written=11
@@ -8328,4 +8344,4 @@ chunk	hydo/onboard/examples-mac/redis/hydo.yaml	53	500	f2bf8f98c9629fa6b8d45bcbd
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	54	500	5cf61ec38f3e010d9a42f26df58707533cae9b4627515e4e121648dbe6bbb663
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	55	500	2b8d95ff39036743ea03c9c1f547c7467526c0539b7dd35c08ebae98eccba1bb
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	56	491	2059fe37977a60502545de88616464b7109da8a5a2e579bf6b926a2ad0799a02
-refused	other=64
+refused	other=66

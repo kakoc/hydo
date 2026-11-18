@@ -125,7 +125,49 @@ pub enum HostToken {
     /// at least `<clock>`. The host controller takes it and what follows out of the engine's
     /// schedule and sends the engine `TIME` at that stop.
     Br(u64),
+    /// `torn=<p>[:any]` (Milestone 313, docs/design/block-faults.md): at a power cut, each
+    /// write of two or more sectors that the disk took and nobody flushed is torn with
+    /// probability `p` percent: a seeded part of its sectors reaches the disk, a prefix, or
+    /// with `:any` any subset (never none and never all). Needs `disk=cut`. The Mac and KVM
+    /// engines; hvx refuses it.
+    Torn { pct: u64, any: bool },
+    /// `mis=<k>[:<sectors>]` (Milestone 313): the k-th write request of the data disk from
+    /// the workload's start (from 1) is written `<sectors>` away (signed), or without it a seeded
+    /// distance of 1 to 16 blocks of 4 KiB in either direction; the sectors it was meant for
+    /// keep their old bytes.
+    Mis { k: u64, delta: Option<i64> },
+    /// `lse=<sector>+<count>[,<sector>+<count>...][:rot]` (Milestone 313): latent sector
+    /// errors on the data disk. A read that touches one of the sectors fails with an I/O error,
+    /// or with `:rot` returns seeded damaged bytes for it; a write of the sector repairs it, as
+    /// a disk remaps a sector it can write. They last for the whole run, across a power cut.
+    Lse { ranges: Vec<(u64, u64)>, rot: bool },
+    /// `hang=<k>[+<ms>]` (Milestone 313): the k-th request (read, write or flush) of the data
+    /// disk from the workload's start (from 1) gets no completion, or with `+<ms>` completes
+    /// with an I/O error after that many milliseconds of guest time. A guest that waits on a
+    /// request that never completes for [`HANG_LIMIT_S`] seconds of guest time ends the run
+    /// with a verdict that says so.
+    Hang { k: u64, ms: Option<u64> },
 }
+
+/// The keys of the block faults of Milestone 313 (docs/design/block-faults.md): the Mac and
+/// KVM engines apply them, hvx refuses them.
+pub const BLOCK_KEYS: [&str; 4] = ["torn", "mis", "lse", "hang"];
+
+/// The guest seconds a request of `hang=` without `+<ms>` may stay open before the engine ends
+/// the run (Linux's own hung-task report comes after 120 s).
+pub const HANG_LIMIT_S: u64 = 120;
+
+/// The most ranges of one `lse=` token.
+pub const LSE_MAX_RANGES: usize = 16;
+
+/// The most sectors of one `lse=` range (1 MiB).
+pub const LSE_MAX_COUNT: u64 = 2048;
+
+/// The farthest a `mis=` write may be sent, in sectors (1 GiB).
+pub const MIS_MAX_DELTA: u64 = 1 << 21;
+
+/// The longest delay of a `hang=<k>+<ms>` completion (one hour of guest time).
+pub const HANG_MAX_MS: u64 = 3_600_000;
 
 /// The keys a branch point's segment may hold: the timing an engine changes at a stop.
 pub const BRANCH_KEYS: [&str; 9] = [
@@ -169,6 +211,10 @@ impl HostToken {
             HostToken::Pctk(_) => "pctk",
             HostToken::SpinRewind => "spin",
             HostToken::Br(_) => "br",
+            HostToken::Torn { .. } => "torn",
+            HostToken::Mis { .. } => "mis",
+            HostToken::Lse { .. } => "lse",
+            HostToken::Hang { .. } => "hang",
         }
     }
 
@@ -292,6 +338,103 @@ impl HostToken {
             "pctn" => HostToken::Pctn(host_dec(v, "pctn=")?),
             "pctk" => HostToken::Pctk(host_dec(v, "pctk=")?),
             "br" => HostToken::Br(host_dec(v, "br=")?),
+            "torn" => {
+                let (p, any) = match v.split_once(':') {
+                    Some((p, "any")) => (p, true),
+                    Some((_, m)) => {
+                        return Err(err(format!(
+                            "torn={v}: the only mode after ':' is any (got {m:?})"
+                        )))
+                    }
+                    None => (v, false),
+                };
+                let pct = host_dec(p, "torn=")?;
+                if pct == 0 || pct > 100 {
+                    return Err(err(format!("torn={v}: the percentage is 1 to 100")));
+                }
+                HostToken::Torn { pct, any }
+            }
+            "mis" => {
+                let (k, d) = match v.split_once(':') {
+                    Some((k, d)) => (k, Some(d)),
+                    None => (v, None),
+                };
+                let k = host_dec(k, "mis=")?;
+                if k == 0 {
+                    return Err(err("mis=0: the writes are counted from 1"));
+                }
+                let delta = match d {
+                    None => None,
+                    Some(d) => {
+                        let (neg, digits) = match d.strip_prefix('-') {
+                            Some(x) => (true, x),
+                            None => (false, d.strip_prefix('+').unwrap_or(d)),
+                        };
+                        let n = host_dec(digits, "mis= distance")?;
+                        if n == 0 || n > MIS_MAX_DELTA {
+                            return Err(err(format!(
+                                "mis={v}: the distance is 1 to {MIS_MAX_DELTA} sectors, with a sign"
+                            )));
+                        }
+                        Some(if neg { -(n as i64) } else { n as i64 })
+                    }
+                };
+                HostToken::Mis { k, delta }
+            }
+            "lse" => {
+                let (l, rot) = match v.split_once(':') {
+                    Some((l, "rot")) => (l, true),
+                    Some((_, m)) => {
+                        return Err(err(format!(
+                            "lse={v}: the only mode after ':' is rot (got {m:?})"
+                        )))
+                    }
+                    None => (v, false),
+                };
+                let mut ranges = Vec::new();
+                for e in l.split(',') {
+                    let (a, n) = e
+                        .split_once('+')
+                        .ok_or_else(|| err(format!("lse=: entry {e:?} is not <sector>+<count>")))?;
+                    let (a, n) = (host_dec(a, "lse= sector")?, host_dec(n, "lse= count")?);
+                    if n == 0 || n > LSE_MAX_COUNT {
+                        return Err(err(format!(
+                            "lse=: entry {e:?}: the count is 1 to {LSE_MAX_COUNT} sectors"
+                        )));
+                    }
+                    ranges.push((a, n));
+                }
+                if ranges.len() > LSE_MAX_RANGES {
+                    return Err(err(format!(
+                        "lse=: {} ranges, at most {LSE_MAX_RANGES}",
+                        ranges.len()
+                    )));
+                }
+                HostToken::Lse { ranges, rot }
+            }
+            "hang" => {
+                let (k, ms) = match v.split_once('+') {
+                    Some((k, m)) => (k, Some(m)),
+                    None => (v, None),
+                };
+                let k = host_dec(k, "hang=")?;
+                if k == 0 {
+                    return Err(err("hang=0: the requests are counted from 1"));
+                }
+                let ms = match ms {
+                    None => None,
+                    Some(m) => {
+                        let n = host_dec(m, "hang= delay")?;
+                        if n == 0 || n > HANG_MAX_MS {
+                            return Err(err(format!(
+                                "hang={v}: the delay is 1 to {HANG_MAX_MS} ms"
+                            )));
+                        }
+                        Some(n)
+                    }
+                };
+                HostToken::Hang { k, ms }
+            }
             "spin" => {
                 if v != "rewind" {
                     return Err(err(format!("spin={v}: the only value is rewind")));
@@ -359,6 +502,31 @@ impl fmt::Display for HostToken {
             HostToken::Cfn => f.write_str("cfn"),
             HostToken::Qb { len, q, permille } => write!(f, "qb={len}:{q}:{permille}"),
             HostToken::SpinRewind => f.write_str("spin=rewind"),
+            HostToken::Torn { pct, any } => {
+                write!(f, "torn={pct}{}", if *any { ":any" } else { "" })
+            }
+            HostToken::Mis { k, delta } => match delta {
+                None => write!(f, "mis={k}"),
+                Some(d) if *d > 0 => write!(f, "mis={k}:+{d}"),
+                Some(d) => write!(f, "mis={k}:{d}"),
+            },
+            HostToken::Lse { ranges, rot } => {
+                f.write_str("lse=")?;
+                for (i, (a, n)) in ranges.iter().enumerate() {
+                    if i > 0 {
+                        f.write_str(",")?;
+                    }
+                    write!(f, "{a}+{n}")?;
+                }
+                if *rot {
+                    f.write_str(":rot")?;
+                }
+                Ok(())
+            }
+            HostToken::Hang { k, ms } => match ms {
+                None => write!(f, "hang={k}"),
+                Some(m) => write!(f, "hang={k}+{m}"),
+            },
         }
     }
 }

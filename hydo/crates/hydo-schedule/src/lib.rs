@@ -68,7 +68,10 @@ pub use guest::{
     React, ReactAction, ResetKind, Rule, Status, ThreadSel, RESERVED, THREAD_NAME_MAX,
     THREAD_TARGET,
 };
-pub use host::{Disk, HostToken, BRANCH_KEYS, MAX_EXPLICIT};
+pub use host::{
+    Disk, HostToken, BLOCK_KEYS, BRANCH_KEYS, HANG_LIMIT_S, HANG_MAX_MS, LSE_MAX_COUNT,
+    LSE_MAX_RANGES, MAX_EXPLICIT, MIS_MAX_DELTA,
+};
 pub use storage::{mix, CorruptKind, Corruption, Edit, MAX_FLIPS, MAX_LEN};
 pub use target::{binomial, component_links, subset, Selector, Shape, Target};
 pub use upgrade::{version_name_ok, Switch, Upgrade, VERSION_NAME_MAX};
@@ -230,6 +233,13 @@ impl Schedule {
                 ));
             }
         }
+        // Milestone 313: a torn write is a write the disk took and nobody flushed, which only
+        // the volatile write cache keeps
+        if has("torn") && self.disk() != Disk::Cut {
+            return Err(err(
+                "torn= needs disk=cut (a torn write is a write in the disk's volatile cache at a power cut)",
+            ));
+        }
         // parse_turns: qbs= without qb= returns -1
         if has("qbs") && !has("qb") {
             return Err(err("qbs= (the burst seed) needs qb="));
@@ -354,6 +364,26 @@ impl Schedule {
             matches!(t, GuestToken::Cut(_))
                 || matches!(t, GuestToken::React(r) if r.action == ReactAction::Cut)
         }) || self.host_token("cf").is_some()
+    }
+
+    /// The block faults of Milestone 313 in this schedule (docs/design/block-faults.md): the
+    /// host tokens `torn=`, `mis=`, `lse=` and `hang=`, and a `G=` whose corruption is a latent
+    /// sector error (`bad`, `rot`), each as written. hvx refuses each of them before any VM.
+    pub fn block_faults(&self) -> Vec<String> {
+        let mut out: Vec<String> = self
+            .main_host()
+            .iter()
+            .filter(|t| host::BLOCK_KEYS.contains(&t.key()))
+            .map(ToString::to_string)
+            .collect();
+        for t in &self.guest {
+            if let GuestToken::Corrupt { how, .. } = t {
+                if how.kind.is_sectors() {
+                    out.push(t.to_string());
+                }
+            }
+        }
+        out
     }
 
     /// True when `text` is a schedule in its canonical form (`parse(text)` prints it back).

@@ -74,7 +74,7 @@ use crate::fnv::{fnv, fnv_u64, mix64, OFFSET};
 use crate::layout::*;
 use crate::machine::{Mach, Pct, Tjit};
 use crate::mem::Mem;
-use crate::virtio::{self, F_DROP, F_ERROR, F_UNFLUSHED};
+use crate::virtio::{self, disk_cmd_ranges, BlkCfg, F_DROP, F_ERROR, F_UNFLUSHED};
 use crate::vmm::{now_s, VSnap, VmOpts, Vmm, NSR, SR};
 use crate::{catch_fatal, fatal, say, Diag};
 use hydo_engine_proto::{
@@ -538,6 +538,24 @@ impl Host {
     }
 
     /// TIME: the timing from this stop on (the state search's branch point, as on KVM).
+    /// `DISK <host tokens>` (Milestone 313): bad sectors from this stop on, where the host found
+    /// a file of a service's storage (`G=...:bad|rot`).
+    fn ctl_disk_cmd(&mut self, vm: &mut Vmm, tokens: &str) {
+        match disk_cmd_ranges(tokens) {
+            Err(e) => self.refuse(format!("disk {e}")),
+            Ok(_) if !vm.vio.attached() || vm.vio.blk_idx < 0 => {
+                self.refuse("disk without the data disk (HVM_DISK)".into())
+            }
+            Ok(l) => {
+                for (r, rot) in &l {
+                    vm.vio.add_bad(r, *rot);
+                }
+                let at = self.c.at;
+                self.answer(Answer::Disk { at });
+            }
+        }
+    }
+
     fn ctl_time_cmd(&mut self, vm: &mut Vmm, tokens: &str) {
         if self.c.phase != Phase::Workload || self.c.wdone != 0 {
             self.refuse("time only in the workload phase".into());
@@ -686,6 +704,7 @@ impl Host {
                 }
                 HostCmd::Snap { name, retype } => self.ctl_snap_cmd(vm, &name, retype),
                 HostCmd::Time(tokens) => self.ctl_time_cmd(vm, &tokens),
+                HostCmd::Disk(tokens) => self.ctl_disk_cmd(vm, &tokens),
                 HostCmd::Reboot => {
                     let no = if !matches!(self.c.phase, Phase::Workload | Phase::Recovery) {
                         Some("only in the workload and recovery phases")
@@ -804,6 +823,7 @@ fn stop_name(s: i32) -> &'static str {
         STOP_IDLE => "guest idle with no timer",
         STOP_LIMIT => "exit budget exhausted",
         STOP_SPIN => "SPIN (guest loops without exits; run invalid)",
+        STOP_HUNG => crate::virtio::HUNG_WORDS,
         _ => "?",
     }
 }
@@ -1205,6 +1225,13 @@ impl Engine {
         if !att && s.host_token("disk").is_some() && s.disk() != Disk::None {
             return Some("disk faults and power cuts need the data disk (HVM_DISK)");
         }
+        if (!att || self.vm.vio.blk_idx < 0)
+            && s.main_host()
+                .iter()
+                .any(|t| hydo_schedule::BLOCK_KEYS.contains(&t.key()))
+        {
+            return Some("block faults (torn=, mis=, lse=, hang=) need the data disk (HVM_DISK)");
+        }
         None
     }
 
@@ -1231,6 +1258,9 @@ impl Engine {
         let from = self.vm.m.console_len as usize;
         self.vm.trace_line(&format!("RUN {tag}"));
         self.vm.vio.set_fault(dseed, dcl, dpr);
+        // Milestone 313: the block faults (inert without their tokens)
+        let (bcfg, lse) = BlkCfg::from_schedule(s);
+        self.vm.vio.set_block(bcfg, &lse);
         let mut rs = RunSt {
             tag: lossy(&ccap(tag.as_bytes().to_vec(), 64)),
             t0,
@@ -1279,6 +1309,8 @@ impl Engine {
             self.save_log(&format!("{tag}.boot{n}"), *from);
             let durable = self.vm.vio.disk.clone();
             let extra = self.vm.vio.extra_durable();
+            // Milestone 313: the block faults go on in the new boot (not a held request)
+            let blk = self.vm.vio.block_carry();
             let Some(s0) = self.h.g_s0 else {
                 fatal(3, "hvmx: a reboot without the host's S0 snapshot");
             };
@@ -1291,6 +1323,7 @@ impl Engine {
             }
             self.vm.vio.set_extra_durable(extra);
             self.vm.vio.set_fault(dpol.0, dpol.1, dpol.2);
+            self.vm.vio.set_block_carry(blk);
             *from = self.vm.m.console_len as usize;
             self.h.ctl_drop_pending();
             self.h.c.start = 1;
@@ -1371,6 +1404,7 @@ impl Engine {
             if !cut {
                 // same boot: faults off, heal, check
                 self.vm.vio.set_fault(0, 0, 0);
+                self.vm.vio.block_off();
                 if self.h.c.on {
                     self.h.c.phase = Phase::Check;
                     self.h.c.start = 1;
@@ -1387,8 +1421,12 @@ impl Engine {
                 break 'out;
             }
             // power cut: only the flushed disk bytes survive; recover from the host's S0
+            // (Milestone 313: with torn=, the kept sectors of the torn writes first)
+            self.vm.vio.tear_at_cut();
             let durable = self.vm.vio.disk.clone();
             let extra = self.vm.vio.extra_durable();
+            let mut blk = self.vm.vio.block_carry();
+            blk.off();
             self.save_log(&tag, from);
             let check = self.h.o.check_restore;
             let Some(s0) = self.h.g_s0 else {
@@ -1403,6 +1441,7 @@ impl Engine {
             }
             self.vm.vio.set_extra_durable(extra);
             self.vm.vio.set_fault(0, 0, 0);
+            self.vm.vio.set_block_carry(blk);
             from = self.vm.m.console_len as usize;
             if self.h.c.on {
                 // a new VM with its own clock: queued input does not carry over
@@ -1429,6 +1468,8 @@ impl Engine {
             log_tag = format!("{tag}.recovery");
         }
         self.save_log(&log_tag, from);
+        // Milestone 313: what the block faults did, beside the logs
+        self.vm.vio.write_block_notes(&self.h.outdir, &tag);
         if rewound {
             self.h.say(&format!(
                 "hydo-hvm: {tag}: the first run ended at a counter loop (a busy wait with no VM \

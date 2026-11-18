@@ -1246,6 +1246,14 @@ impl Vmm {
             if self.m.exits >= self.max_exits {
                 return STOP_LIMIT;
             }
+            // Milestone 313: a request of hang= that never completes, waited on long enough
+            if self
+                .vio
+                .hung_for(self.m.vtime)
+                .is_some_and(|w| w >= self.vio.hang_limit())
+            {
+                return STOP_HUNG;
+            }
             if hook(self) {
                 return STOP_MARKER;
             }

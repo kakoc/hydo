@@ -98,6 +98,9 @@ pub const STOP_HALT: i32 = 2;
 pub const STOP_IDLE: i32 = 3;
 pub const STOP_LIMIT: i32 = 4;
 pub const STOP_SPIN: i32 = 5;
+/// Milestone 313: a data disk request of `hang=` without a release waited `HANG_LIMIT_S` of
+/// guest time.
+pub const STOP_HUNG: i32 = 6;
 
 // the low block never reaches the devices, the devices never reach KVM's pages, and those stay
 // below the high block

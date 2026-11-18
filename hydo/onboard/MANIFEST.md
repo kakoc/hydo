@@ -771,10 +771,11 @@ verdict rules are in `hydo/HISTORIES.md`.
 | `F=<svc>><peer>@<step>[#<n>][:<match>]:<dur>` | freeze `<svc>` at the n-th packet it **sends** to `<peer>` (`<` = **receives** from) at/after step `<step>`, for `<dur>` ms; only with `freeze` in `faults:` (see "Freeze at a call") |
 | `H=<target>@<from>-<to>:<rule>[,<rule>...]` | a protocol fault on a fake or proxy for steps `[from,to)`: an error, slow, missing or reset answer, or a duplicated / reordered / late / lost webhook; see "Fake outside services" |
 | `A=<event>[@<step>][+<ms>]:<action>` | a reaction (M139): from before step `step` (0 when not written) the host watches the console for the first SDK assertion record of `event` (`ok:true` of a `sometimes`/`reachable`, `ok:false` of the others), waits `ms` of guest time and does `<action>`: `cut` (a power cut at that instant: the workload and every service frozen, then the recovery boot), `kill-<svc>` (down until the heal), `kill-now-<svc>` (Milestone 305: the same kill, at the moment the record is written or `ms` after it, before the service runs on; see "Reactions" below), `stop-<svc>-<ms>` or `cont-<svc>` (resume a paused service: a pause healed at the first sign of no progress); since Milestone 296 also `clock+<s>` or `clock-<s>` (a clock step at that instant), `stop-workload-<ms>` (a stop of the workload's own tree), `stop-workload/<thread>[#<k>]-<ms>` (a freeze of the workload's threads of that name) and `kill-workload/<name>[#<k>]` (a kill of the workload's processes of that name, the workload going on); reactions live during the steps only; see "Reactions" below |
-| `G=<target>@<at>[+<down>]:<kind>[,...]` | corrupt one file in the service's `storage:` directory before step `at` (`flip`, `zero` or `trunc`); with `+<down>` while the service is killed, started again before step `at+down`; the target is a service, a list or a group's selector, as for `K=`; see "Storage faults of one service" |
+| `G=<target>@<at>[+<down>]:<kind>[,...]` | corrupt one file in the service's `storage:` directory before step `at` (`flip`, `zero` or `trunc`), or on the Mac and KVM engines make the disk sectors under a range of it bad (`bad`: reads fail; `rot`: reads return damaged bytes; Milestone 313); with `+<down>` while the service is killed, started again before step `at+down`; the target is a service, a list or a group's selector, as for `K=`; see "Storage faults of one service" |
 | `L=<svc>@<at>+<down>[:strict]` | a power loss of one service before step `at`: its own file system shut down (what was not written back is lost), the service killed and started again before step `at+down`; `:strict` loses every write it had not synced and cuts its links while it is down; see "Storage faults of one service" |
 | `<X>=<value>` | a knob from `knobs:` |
 | host side: `disk=ioerr:<p>` / `lying:<p>` | disk I/O errors / a disk that drops acknowledged writes |
+| host side: `torn=<p>[:any]`, `mis=<k>[:<sectors>]`, `lse=<sector>+<count>[:rot]`, `hang=<k>[+<ms>]` | the Mac and KVM engines (Milestone 313): a write torn at a power cut, a write that goes to another place, bad sectors, a request without an answer; see `hydo guide faults`, "Faults of the disk's blocks" |
 
 Lifting a network fault (`N=`/`O=`, at `to` or at the end of the workload) does not drop
 the packets still waiting in netem's delay queue: hydo first changes the netem to no
@@ -832,6 +833,15 @@ faults: [kill, cut, corrupt, powerloss]
   4096 (5a->52), ...`). The keys are written in this order, each at most once. A service that
   does not start again after the corruption is `ERROR <svc> restart failed (its files were
   corrupted)`.
+- **Bad sectors under a file, `G=<svc>@<at>[+<down>]:bad|rot[,len=][,range=][,file=][,seed=]`**
+  (Milestone 313, the Mac and KVM engines; hvx refuses it). The file and its range are chosen as
+  for `zero` (`len=` default 4096). hydo finds the disk sectors under the range from the file's
+  ext4 extents, through the agent's `read` of the partition, and the engine makes them bad from
+  then on: with `bad` every read of them fails with an I/O error, with `rot` it returns damaged
+  bytes. Then hydo drops the guest's page cache, so the next read goes to the disk. The console
+  names the sectors (`BAD SECTORS under recs's /data/recs/records.dat bytes 114688..118784:
+  lse=45792+8 ...`). A file that hydo cannot map (not ext4, no extents, a hole) is logged and
+  left alone. docs/design/block-faults.md has the reasons.
 - **Corruption of several services, `G=n1,n3@<at>[+<down>]:...` or `G=<group>.<selector>@...`**
   (Milestone 245). The target is a list or a selector over `groups:`, as for `K=` ("Groups of
   services and partitions"); every service it can name needs `storage:`. With `+<down>` every

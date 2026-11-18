@@ -65,6 +65,8 @@ pub const REACT_SALT: u64 = 0xA5EAC7C0FFEEA5EA;
 pub const STORAGE_SALT: u64 = 0x5701A6EC0FFEE570;
 /// The stream of `--corrupt-several` (Milestone 245): G= on several services at once.
 pub const CORRUPT_SEVERAL_SALT: u64 = 0xC0BB5E7E2A1C0FFE;
+/// The block faults' own stream (`--block-faults`, Milestone 313, docs/design/block-faults.md).
+pub const BLOCK_SALT: u64 = 0xB10C_FA17_5EC7_0313;
 /// The workload pauses' own stream (`--pause-workload`, Milestone 216).
 pub const WP_SALT: u64 = 0x57A11C0FFEE57A11;
 /// How long a drawn pause stops the workload, ms of guest time.
@@ -182,6 +184,9 @@ pub struct Ex {
     /// `--corrupt-several` (Milestone 245): a drawn G= on several services, from its own stream
     /// (CORRUPT_SEVERAL_SALT).
     pub corrupt_several: bool,
+    /// `--block-faults` (Milestone 313): one block fault per drawn schedule, from its own
+    /// stream (BLOCK_SALT).
+    pub block_faults: bool,
     /// `--cluster-faults` (M195): kills and pauses of a group's members and partitions of a
     /// group, from their own stream (CLUSTER_SALT).
     pub cluster_faults: bool,
@@ -272,6 +277,7 @@ impl Default for Ex {
             more_faults: false,
             storage_faults: false,
             corrupt_several: false,
+            block_faults: false,
             cluster_faults: false,
             workload_pauses: false,
             upgrades: false,
@@ -1264,6 +1270,72 @@ impl Ex {
         s
     }
 
+    /// `--block-faults` (Milestone 313, docs/design/block-faults.md): in 60% of the schedules one
+    /// block fault, from its own stream (BLOCK_SALT), so every other field of a seed's schedule
+    /// stays as it was and an exploration without the flag draws exactly as before. Every draw
+    /// is made whether it is used or not. The kinds, one each, equally likely:
+    ///
+    /// - a torn write at the schedule's power cut (`torn=25|50|100`, a prefix or `:any`), only
+    ///   when the schedule has `disk=cut` and a power cut; otherwise a misdirected write;
+    /// - a misdirected write (`mis=<k>`, the k-th write of the workload, 1 to 200);
+    /// - a request that never completes, or completes after 100 ms, 1 s or 5 s with an error
+    ///   (`hang=<k>[+<ms>]`, 1 to 200);
+    /// - a latent sector error under a file of a service with `storage:` (`G=<svc>@<at>[+1]:bad`
+    ///   or `:rot`, 4 KiB at a drawn place), when the schedule has no `G=` yet; otherwise a
+    ///   request that never completes.
+    pub fn add_block_faults(&self, mut s: S, seed: u64) -> S {
+        if !self.block_faults {
+            return s;
+        }
+        let mut t = SplitMix::new(seed ^ BLOCK_SALT);
+        let on = t.below(100) < 60;
+        let mut kind = t.below(4);
+        let torn_pct = t.pick(&[25i64, 50, 100]);
+        let torn_any = t.below(2) == 1;
+        let mis_k = t.rng(1, 200);
+        let hang_k = t.rng(1, 200);
+        let hang_ms = t.pick(&[0i64, 0, 100, 1000, 5000]);
+        let g_svc = t.next();
+        let g_at = t.rng(1, (self.norders - 1).max(1));
+        let g_down = t.below(100) < 50;
+        let g_rot = t.below(2) == 1;
+        let g_seed = t.next() & 0xffff_ffff;
+        if !on {
+            return s;
+        }
+        let cut = s.disk == "cut" && (s.c.is_some() || s.a.iter().any(|a| a.kind() == "cut"));
+        if kind == 0 && !cut {
+            kind = 1;
+        }
+        let svcs: &[String] = self
+            .space
+            .as_ref()
+            .map(|sp| sp.storage_svcs.as_slice())
+            .unwrap_or(&[]);
+        if kind == 3 && (svcs.is_empty() || s.g.is_some()) {
+            kind = 2;
+        }
+        match kind {
+            0 => s.blk.push(format!(
+                "torn={torn_pct}{}",
+                if torn_any { ":any" } else { "" }
+            )),
+            1 => s.blk.push(format!("mis={mis_k}")),
+            2 if hang_ms == 0 => s.blk.push(format!("hang={hang_k}")),
+            2 => s.blk.push(format!("hang={hang_k}+{hang_ms}")),
+            _ => {
+                let svc = svcs[(g_svc % svcs.len() as u64) as usize].clone();
+                s.g = Some(crate::sched::Gz {
+                    svc,
+                    at: g_at,
+                    down: g_down.then_some(1),
+                    how: format!("{},seed={g_seed:x}", if g_rot { "rot" } else { "bad" }),
+                });
+            }
+        }
+        s
+    }
+
     /// `--corrupt-several` (Milestone 245, with `--storage-faults`): in half of the schedules
     /// whose `G=` was drawn, the corruption hits several services at once, from its own stream
     /// (CORRUPT_SEVERAL_SALT), so every other field stays as it was and only `G=`'s target
@@ -1594,6 +1666,7 @@ impl Ex {
         s = self.add_reactive(s, seed);
         s = self.add_storage_faults(s, seed);
         s = self.add_corrupt_several(s, seed);
+        s = self.add_block_faults(s, seed);
         s = self.add_cluster_faults(s, seed);
         s = self.add_workload_pauses(s, seed);
         s = self.add_freeze_call(s, seed);
@@ -1721,6 +1794,10 @@ impl Ex {
         if self.backend == Backend::Hvm {
             s = self.hvm_supported(&s);
         }
+        // Milestone 313: a torn write needs the cut disk (a shrink candidate may drop it)
+        if s.disk != "cut" {
+            s.blk.retain(|b| !b.starts_with("torn="));
+        }
         let mut g = vec!["run".to_string()];
         if let Some((svc, at, down)) = &s.k {
             g.push(format!("K={svc}@{at}+{down}"));
@@ -1795,7 +1872,7 @@ impl Ex {
             g.push(format!("I={i}"));
         }
         format!(
-            "disk={} dseed={:x}{}{}{} | {}",
+            "disk={} dseed={:x}{}{}{}{} | {}",
             s.disk,
             s.dseed,
             s.tj.as_ref().map(render_tj).unwrap_or_default(),
@@ -1803,6 +1880,8 @@ impl Ex {
                 + &s.cf.map(|c| format!(" cf={c}")).unwrap_or_default()
                 + &render_turns(&s),
             s.rb.map(|r| format!(" rb={r}")).unwrap_or_default(),
+            // Milestone 313: the block faults (nothing without --block-faults)
+            s.blk.iter().map(|b| format!(" {b}")).collect::<String>(),
             g.join(" ")
         )
     }
@@ -1893,6 +1972,14 @@ impl Ex {
                 lo: g("tjlo", 0)?,
                 hi: g("tjhi", 0)?,
             });
+        }
+        // Milestone 313: the block faults, in the order written
+        for w in host.split_whitespace() {
+            if w.split_once('=')
+                .is_some_and(|(k, _)| hydo_schedule::BLOCK_KEYS.contains(&k))
+            {
+                s.blk.push(w.to_string());
+            }
         }
         let pint = |x: &str| py_int(x).ok_or_else(|| format!("invalid literal for int(): {x:?}"));
         let digits_of = |x: &str| -> Result<i64, String> {
@@ -2042,6 +2129,15 @@ impl Ex {
         }
         if s.disk_is("ioerr") {
             return "io-errors";
+        }
+        // Milestone 313: a disk that tears, misplaces or loses writes, has bad sectors, or stops
+        // answering (torn=, mis=, lse=, hang=, G=...:bad|rot)
+        if !s.blk.is_empty()
+            || s.g
+                .as_ref()
+                .is_some_and(|g| g.how.starts_with("bad") || g.how.starts_with("rot"))
+        {
+            return "damaged-disk";
         }
         // a service's files corrupted on purpose (G=): the system's own checks are under test
         if s.g.is_some() {
@@ -2229,6 +2325,16 @@ impl Ex {
             }
             if n > 2 {
                 var(&|t| t.cq = Some((fdiv(n, 2), dup)));
+            }
+        }
+        // Milestone 313: a block fault goes, and a torn subset becomes a prefix
+        for (i, b) in s.blk.iter().enumerate() {
+            var(&|t| {
+                t.blk.remove(i);
+            });
+            if let Some(p) = b.strip_suffix(":any") {
+                let p = p.to_string();
+                var(&|t| t.blk[i] = p.clone());
             }
         }
         if let Some(cf) = s.cf {

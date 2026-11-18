@@ -1826,6 +1826,8 @@ impl Core {
                 // the state search's timing switch (docs/design/state-search.md) is built on
                 // KVM only; hydo_engine::refusal refuses br= schedules for hvx before any VM
                 HostCmd::Time(_) => refuse(self, "time not on hvx".into()),
+                // Milestone 313: the block faults are the Mac and KVM engines'
+                HostCmd::Disk(_) => refuse(self, "disk not on hvx".into()),
                 HostCmd::Reboot => {
                     let sc = &self.c.sc;
                     let no = if self.c.phase != "workload" && self.c.phase != "recovery" {

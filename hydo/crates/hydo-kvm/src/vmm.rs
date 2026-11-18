@@ -431,6 +431,8 @@ impl Vmm {
             Err(e) => fatal(1, &e),
         }
         vm.vio.bind(o.step);
+        // Milestone 313: hang=<k>+<ms> counts milliseconds of the guest clock, in nanoseconds here
+        vm.vio.ticks_per_s = 1_000_000_000;
         let h = vm.hv.describe();
         vm.say(&h);
         vm.fresh_vm();
@@ -1106,6 +1108,14 @@ impl Vmm {
             }
             if self.m.exits >= self.max_exits {
                 return STOP_LIMIT;
+            }
+            // Milestone 313: a request of hang= that never completes, waited on long enough
+            if self
+                .vio
+                .hung_for(self.m.vtime)
+                .is_some_and(|w| w >= self.vio.hang_limit())
+            {
+                return STOP_HUNG;
             }
             // a replay of the rewind mode: the host saw these exits' stops already
             let replaying = self.rw.replay_to.is_some_and(|x| self.m.exits <= x);

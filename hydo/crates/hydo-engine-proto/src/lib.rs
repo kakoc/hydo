@@ -34,6 +34,7 @@
 //!                             SNAP <name> [retype]               -> OK snap <name> at=<n> retype=<ids>|-
 //!                             DISKOFF                            -> OK diskoff at=<n> cut=<0|1>
 //!                             CUT                                -> OK cut at=<n>
+//!                             DISK <host tokens>                 -> OK disk at=<n>
 //!                             CONT | END [<verdict>]             (refusals: ERR <reason>)
 //! ```
 //!
@@ -258,6 +259,11 @@ pub enum HostCmd {
     /// docs/design/state-search.md): tick jitter and forced preemption points, the points drawn
     /// among the next `pctk` exits. Empty tokens switch the timing off. Answer `OK time at=<n>`.
     Time(String),
+    /// `DISK <host tokens>` (Milestone 313, docs/design/block-faults.md): block faults from this
+    /// stop on. Only `lse=` (bad sectors) for now: the host found the sectors under a file of a
+    /// service's storage (`G=...:bad`). The Mac and KVM engines; hvx refuses it. Answer `OK
+    /// disk at=<n>`.
+    Disk(String),
     Cont,
     End(Option<String>),
 }
@@ -276,6 +282,7 @@ impl HostCmd {
             HostCmd::Reboot => "REBOOT".into(),
             HostCmd::Time(t) if t.is_empty() => "TIME".into(),
             HostCmd::Time(t) => format!("TIME {t}"),
+            HostCmd::Disk(t) => format!("DISK {t}"),
             HostCmd::Cont => "CONT".into(),
             HostCmd::End(None) => "END".into(),
             HostCmd::End(Some(v)) => format!("END {v}"),
@@ -299,6 +306,9 @@ impl HostCmd {
         }
         if let Some(v) = line.strip_prefix("TIME ") {
             return Some(HostCmd::Time(v.to_string()));
+        }
+        if let Some(v) = line.strip_prefix("DISK ") {
+            return Some(HostCmd::Disk(v.to_string()));
         }
         if let Some(r) = line.strip_prefix("SEND at=") {
             let (at, text) = r.split_once(' ')?;
@@ -435,6 +445,11 @@ pub enum Answer {
     Time {
         at: u64,
     },
+    /// `OK disk at=<n>` (Milestone 313): the block faults of `DISK` are in force from the stop
+    /// at `at`.
+    Disk {
+        at: u64,
+    },
     /// `ERR <reason>`: the command was refused (the reason starts with the command's word, for
     /// example `snap s unacked=1,2`).
     Refused(String),
@@ -453,6 +468,7 @@ impl Answer {
             Answer::Cut { at } => format!("OK cut at={at}"),
             Answer::Reboot { at } => format!("OK reboot at={at}"),
             Answer::Time { at } => format!("OK time at={at}"),
+            Answer::Disk { at } => format!("OK disk at={at}"),
             Answer::Refused(r) => format!("ERR {r}"),
         }
     }
@@ -512,6 +528,9 @@ impl Answer {
                 at: kv(w.next(), "at=")?,
             },
             "time" => Answer::Time {
+                at: kv(w.next(), "at=")?,
+            },
+            "disk" => Answer::Disk {
                 at: kv(w.next(), "at=")?,
             },
             _ => return None,
@@ -882,6 +901,7 @@ mod tests {
             HostCmd::Reboot,
             HostCmd::Time(String::new()),
             HostCmd::Time("pct=5 pctn=3 pctk=100".into()),
+            HostCmd::Disk("lse=2048+8:rot".into()),
             HostCmd::Cont,
             HostCmd::End(None),
             HostCmd::End(Some("HYDO-ORACLE: OK".into())),

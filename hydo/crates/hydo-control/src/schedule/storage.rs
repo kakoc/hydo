@@ -249,10 +249,23 @@ pub(super) fn corrupt(fx: &mut F<'_>, ctx: &Ctx, svc: &str, how: &Corruption, p:
         return Ok(());
     };
     let path = format!("{}/{rel}", st.dir);
+    // Milestone 313: a latent sector error under the file (bad, rot) is the engine's
+    if let [Edit::Sectors { off, len, rot }] = edits.as_slice() {
+        let why = super::sectors::arm(fx, ctx, svc, &path, (*off, *len, *rot))?;
+        if !why.is_empty() {
+            log(
+                fx,
+                format!("G: no bad sectors under {svc}'s {path} before step {p}: {why}"),
+            );
+        }
+        return Ok(());
+    }
     let b = bb(ctx);
     let mut done: Vec<String> = Vec::new();
     for e in &edits {
         match e {
+            // (one Sectors edit is the whole plan of bad and rot, above)
+            Edit::Sectors { .. } => {}
             Edit::Flip { off, bit } => {
                 let Some(r) = read_byte(fx, ctx, &path, *off)? else {
                     done.push(format!("byte {off} unreadable"));

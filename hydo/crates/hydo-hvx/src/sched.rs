@@ -252,6 +252,16 @@ pub const HVX_XT_MAX_RATE: u32 = 64;
 
 /// [`Sched::refusal`] of a typed schedule: what hvx refuses in it, before any VM.
 pub fn refusal(s: &Schedule) -> Option<String> {
+    // Milestone 313: the block faults live in the virtio disk of the Mac and KVM engines; hvx's
+    // disk is the module's (docs/design/block-faults.md, "What hvx would need")
+    if let Some(t) = s.block_faults().first() {
+        let t = &t[..t.len().min(60)];
+        return Some(format!(
+            "{t}: the block faults (torn=, mis=, lse=, hang=, G=...:bad and G=...:rot) run on \
+             the Mac and KVM engines; hvx's disk is in its kernel module, which does not have \
+             them"
+        ));
+    }
     Sched::from_schedule(s).refusal()
 }
 

@@ -1,0 +1,47 @@
+# The block faults of Milestone 313 (docs/design/block-faults.md, hydo guide faults "Faults of the
+# disk's blocks") on recs, a tiny record store that writes 4 KiB records in place with O_DIRECT.
+# This manifest runs its careless variant: one copy of each record, no checksum, and the errors
+# of pwrite and fdatasync ignored. hydo-careful.yaml runs the careful one (two copies with a
+# CRC-32 each, acknowledged only after both were synced without an error).
+# Build: ./build.sh puts the static arm64 recs in bin/recs (./build.sh x86_64: for KVM). Then:
+#   hydo build hydo.yaml --out <dir>
+# Try (RESULTS.md has what each did):
+#   hydo run <image> "disk=cut dseed=1 | run C=8"                    -> OK: a whole write is lost
+#   hydo run <image> "disk=cut dseed=1 torn=100 | run C=8"           -> VIOLATION: a torn record
+#   hydo run <image> "disk=none dseed=1 mis=5 | run"                   -> VIOLATION: a write went elsewhere
+#   hydo run <image> "disk=none dseed=1 | run G=recs@6:bad,range=114688-118784,file=records"
+#   hydo run <image> "disk=none dseed=1 | run G=recs@6:rot,range=114688-118784,file=records"
+#   hydo run <image> "disk=none dseed=1 hang=10+1000 | run"           -> VIOLATION: an error ignored
+#   hydo run <image> "disk=none dseed=1 hang=10 | run"                -> VIOLATION [disk.hang]
+name: disk-faults
+description: recs (Rust), careless variant; every acknowledged record reads back whole under the disk's own faults.
+
+root:
+  files:
+    - {src: bin/recs, dst: /bin/recs, mode: "0755"}   # ./build.sh [x86_64]
+
+data:
+  size_mib: 64
+
+services:
+  - name: recs
+    cmd: /bin/recs serve /data/recs
+    ready: /bin/recs ready /data/recs
+    storage: recs
+
+faults: [cut, disk, corrupt]
+
+workload:
+  steps: 12                         # step i: sync and acknowledge step i-1, then write step i
+  timeout: 60
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      a=$(/bin/recs step /data/recs $i) && [ -n "$a" ] && echo $a >> $HYDO_ACKED
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: recs.read_back
+    msg: every key reads back whole, with its acknowledged value or one written after it
+    cmd: /bin/recs check /data/recs $HYDO_ACKED

@@ -212,6 +212,9 @@ pub struct S {
     pub u: Vec<String>,
     /// I= (Milestone 258): the walk of `browser.explore`, the text after `I=`.
     pub i: Option<String>,
+    /// The block faults' host tokens (Milestone 313: `torn=`, `mis=`, `lse=`, `hang=`), each as
+    /// written, in order; printed after `rb=`.
+    pub blk: Vec<String>,
 }
 
 /// A G= token: (target, step, steps down or None for in place, the corruption's text). The

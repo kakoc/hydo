@@ -80,7 +80,7 @@ at release, and after release. The tables below take the chart's techniques in i
 | Teeing | Not hydo's job. It copies production traffic. | not hydo's job | |
 | Profiling | `perf:` gives the exact work of each step on hvx. The experiment `HYDO_COST` counted flushes, writes, and branches per phase. Exact profiles per function are the idea [Exact profiles](#exact-profiles). | partly built | M198, M237 |
 | Logs and events | Each run keeps its control transcript and the services' logs (`<run>/logs/`). `hydo inspect events` shows the timeline, and `hydo report --html` shows a failure as one web page. | built | M178, M220, M228, M239 |
-| Chaos tests | `hydo explore` draws kills, pauses, partitions, power cuts, disk faults, clock steps, storage faults, and upgrades, and shrinks each failure to a replayable schedule. hydo does it in a VM before release, not in production. | built | M38, M102, M195, M238, M245; every example |
+| Chaos tests | `hydo explore` draws kills, pauses, partitions, power cuts, disk faults, clock steps, storage faults, faults of the disk's blocks, and upgrades, and shrinks each failure to a replayable schedule. hydo does it in a VM before release, not in production. | built | M38, M102, M195, M238, M245, M313; every example |
 | Monitoring | Not hydo's job. | not hydo's job | |
 | A/B tests | Not hydo's job. They need real users. | not hydo's job | |
 | Tracing | Value history (`// hydo: record`) records chosen values at every call without a change of the run. `HYDO_PREEMPT_RECORD=1` records each forced preemption point. `hydo diff` names where two runs first differ. | partly built | M165, M208, M285; open items 77 and 146 |
@@ -100,6 +100,7 @@ last line names the ideas that would answer more.
 |---|---|---|
 | Does an acknowledged write survive a power cut? | `C=` cuts the whole guest's power, and `cf=` cuts it at the k-th disk flush (hvx only). History checks and the messages check judge what survived. | built; `nats-jetstream`, `vikunja`, `yugabyte`, `saleor`, `restate` |
 | Does one node's damage lose data or stop the cluster? | `G=` damages one file of a service's storage, and `L=` cuts one service's power. `hydo explore --storage-faults` draws both. | built; `nats-jetstream/blocks`, `redpanda`, `surrealdb` |
+| Does the storage engine survive a disk that tears or misplaces a write, cannot read a sector, or stops answering? | `torn=`, `mis=`, `lse=` and `hang=` on the data disk, and `G=<svc>@<at>:bad\|rot` under a file of a service's storage. `hydo explore --block-faults` draws them. | partly built; `disk-faults` on the Mac engine and on KVM (AMD and Intel); hvx refuses them (M313; open item 160) |
 | Does a backward clock step break a lease or a timeout? | `T=` steps the guest's wall clock. `hydo rules scan --kind clock` proposes the steps. | built; `valkey`, `temporal`, `dragonfly`, `river`, `restate` |
 | Does an acknowledged job run, and run once? | A `type: messages` check declares the claims. Kills of the process that holds the work test them. A durable execution's journaled steps append to an effects file, and a rule finds a step that runs again. | built; `hatchet`, `river`, `redpanda`, `restate` |
 | Does a crash between two commits of one operation run it twice? | `A=<event>+<ms>:kill-now-<svc>` kills the service at the moment the client writes an event, or a number of milliseconds later, before any thread of the service runs on. A shell loop over the delay finds the window, and `hydo explore --reactive fault --kill-now` draws such kills, also on a project with one service. | built; `meilisearch` finding 1 on the Mac engine and hvx, found blind on the Mac engine (M305, M309; open item 154) |
@@ -115,7 +116,8 @@ Ideas that would answer more:
 - [Value properties over two values and over call order](#value-properties-over-two-values-and-over-call-order);
 - [Clocks per service](#clocks-per-service);
 - [Repeated fault windows and membership changes](#repeated-fault-windows-and-membership-changes);
-- [Resource limits per service](#resource-limits-per-service); and
+- [Resource limits per service](#resource-limits-per-service);
+- [Faults of the disk's blocks on hvx and on added disks](#faults-of-the-disks-blocks-on-hvx-and-on-added-disks); and
 - [Transactions across messages](#transactions-across-messages).
 
 ### A team with a web app
@@ -417,6 +419,18 @@ that a milestone builds moves into the tables of this page with its new status.
 - **What it needs.** A second block device in the module with its own PCI function, queue, cache,
   snapshot, and fingerprint part; first on a side module.
 - **Where it came from.** Open item 128.
+
+### Faults of the disk's blocks on hvx and on added disks
+
+- **What it is.** `torn=`, `mis=`, `lse=`, `hang=` and `G=...:bad|rot` on hvx, and on the disks
+  of `guest.disks` on every engine. The Mac engine and KVM have them on the data disk since M313.
+- **Why it matters.** A storage engine on hvx, or a device model whose storage chips are added
+  disks, meets no torn write, misdirected write, bad sector, or stuck request.
+- **What it needs.** On hvx, the faults in the module's virtio block device, with their part of
+  the snapshot and the fingerprint, first on a side module (`docs/design/block-faults.md`, "What
+  hvx would need"). On added disks, the same state per disk in the engines, and a disk name in
+  the tokens.
+- **Where it came from.** Open item 160.
 
 ### A built-in search of a reaction's delay
 

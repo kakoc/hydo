@@ -296,6 +296,17 @@ impl<'a> Lockstep<'a> {
         }
     }
 
+    /// Block faults from this stop on (`DISK`, Milestone 313: bad sectors as `lse=` tokens).
+    /// Err(reason) when the engine refuses.
+    pub fn disk(&mut self, tokens: &str) -> Result<Result<u64, String>, EngineError> {
+        self.cmd(HostCmd::Disk(tokens.to_string()))?;
+        match self.answer()? {
+            Answer::Refused(e) => Ok(Err(e)),
+            Answer::Disk { at } => Ok(Ok(at)),
+            a => Err(EngineError::Protocol(a.line())),
+        }
+    }
+
     /// Run on to the next stop.
     pub fn cont(&mut self) -> Result<(), EngineError> {
         self.cmd(HostCmd::Cont)

@@ -527,6 +527,14 @@ fn corruption_words(c: &Corruption, plural: bool) -> String {
             Some(n) => format!("cuts {n} bytes off the end of"),
             None => "cuts a piece off the end of".into(),
         },
+        CorruptKind::Bad => format!(
+            "makes the disk fail every read of {} bytes under",
+            c.len.unwrap_or(4096)
+        ),
+        CorruptKind::Rot => format!(
+            "makes the disk return damaged bytes for {} bytes under",
+            c.len.unwrap_or(4096)
+        ),
     };
     s.push_str(if plural {
         " one file of each"
@@ -647,6 +655,18 @@ pub fn host(t: &HostToken, s: &Schedule) -> Said {
                      the same requests.",
                 "which disk requests the fault hits",
             ),
+            // Milestone 313: the block faults draw from it too
+            _ if s
+                .main_host()
+                .iter()
+                .any(|t| crate::host::BLOCK_KEYS.contains(&t.key())) =>
+            {
+                q(
+                    "This number picks how the disk fault goes (which sectors, which bytes); \
+                     the same number picks the same.",
+                    "how the disk fault goes",
+                )
+            }
             _ => q(
                 "This number would pick which disk requests a disk fault hits. This run has no \
                  disk fault; the number is kept so that the run is exactly the same.",
@@ -805,6 +825,79 @@ pub fn host(t: &HostToken, s: &Schedule) -> Said {
         HostToken::Br(_) => q(
             "From a moment of the run on, the timing changes as the next settings say.",
             "from here on, other timing",
+        ),
+        HostToken::Torn { pct, any } => setup(
+            format!(
+                "At a power cut, some writes that the disk had taken but not yet saved are torn \
+                 ({pct} in 100 of those that span several sectors): only {} of their sectors \
+                 reach the disk, and the rest keep their old bytes.",
+                if *any { "some" } else { "the first" }
+            ),
+            "a power cut tears unsaved writes",
+        )
+        .noun("a disk that tears unsaved writes at a power cut".into())
+        .fault("torn writes", "after a torn write".into()),
+        HostToken::Mis { k, delta } => setup(
+            format!(
+                "The {} write the system sends to the disk goes to the wrong place: {}, and \
+                 the place it was meant for keeps its old bytes.",
+                ordinal(*k),
+                match delta {
+                    Some(d) => format!(
+                        "{} sectors {} the right one",
+                        d.unsigned_abs(),
+                        if *d > 0 { "after" } else { "before" }
+                    ),
+                    None => "a few blocks away from the right one".into(),
+                }
+            ),
+            "a write goes to the wrong place on the disk",
+        )
+        .noun("a disk that writes one block to the wrong place".into())
+        .fault("a misdirected write", "after a misdirected write".into()),
+        HostToken::Lse { ranges, rot } => {
+            let n: u64 = ranges.iter().map(|r| r.1).sum();
+            setup(
+                format!(
+                    "{} of the disk's sectors {}: every read of them {}.",
+                    n,
+                    if n == 1 { "is bad" } else { "are bad" },
+                    if *rot {
+                        "returns damaged bytes"
+                    } else {
+                        "fails with an error"
+                    }
+                ),
+                if *rot {
+                    "bad sectors return damaged bytes"
+                } else {
+                    "bad sectors fail every read"
+                },
+            )
+            .noun("a disk with bad sectors".into())
+            .fault("bad sectors", "with bad sectors".into())
+        }
+        HostToken::Hang { k, ms } => setup(
+            match ms {
+                None => format!(
+                    "The disk never answers the {} request the system sends it. A run whose \
+                     system waits {} on it ends there.",
+                    ordinal(*k),
+                    duration(crate::HANG_LIMIT_S)
+                ),
+                Some(m) => format!(
+                    "The disk answers the {} request the system sends it only after {} ms, \
+                     and then with an error.",
+                    ordinal(*k),
+                    m
+                ),
+            },
+            "a disk request never gets an answer",
+        )
+        .noun("a disk that does not answer a request".into())
+        .fault(
+            "a disk that stops answering",
+            "after a disk request that never came back".into(),
         ),
     }
 }
