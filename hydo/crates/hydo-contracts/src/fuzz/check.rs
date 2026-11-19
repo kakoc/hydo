@@ -451,6 +451,16 @@ pub fn sorted_hints(a: &Ast, h: &mut Hints) {
                 }
             }
         }
+        // two lists of one length (Milestone 326): `len(self) == len(src)`
+        Ast::Bin(BinOp::Eq, x, y) => {
+            if let (Ast::Call(Builtin::Len, x), Ast::Call(Builtin::Len, y)) = (&**x, &**y) {
+                if let (Some(a), Some(b)) = (path_of(x), path_of(y)) {
+                    if a != b && !h.same_len.iter().any(|(p, q)| (p, q) == (&a, &b)) {
+                        h.same_len.push((a, b));
+                    }
+                }
+            }
+        }
         _ => {}
     }
 }

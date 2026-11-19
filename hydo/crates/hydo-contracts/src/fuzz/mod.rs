@@ -1734,6 +1734,33 @@ impl Fn {
                 }
             }
         }
+        // two lists that `requires len(a) == len(b)` names get one length: the second is cut
+        // or grown with new elements (Milestone 326)
+        for (a, b) in &self.hints.same_len {
+            let (Some((ia, pa)), Some((ib, pb))) = (self.split_path(a), self.split_path(b)) else {
+                continue;
+            };
+            let Some(n) = value::at(&args[ia], &pa).and_then(|v| match v {
+                Val::List(l) => Some(l.len()),
+                _ => None,
+            }) else {
+                continue;
+            };
+            let Some(FTy::List(e)) = value::ty_at(&self.params[ib].ty, &pb) else {
+                continue;
+            };
+            let path = format!("{b}[]");
+            let grown: Vec<Val> = match value::at(&args[ib], &pb) {
+                Some(Val::List(l)) if l.len() < n => {
+                    (l.len()..n).map(|_| g.val(e, &path)).collect()
+                }
+                _ => vec![],
+            };
+            if let Some(Val::List(l)) = value::at_mut(&mut args[ib], &pb) {
+                l.truncate(n);
+                l.extend(grown);
+            }
+        }
         // a list that `requires sorted(v)` names is generated in order (Milestone 307)
         for p in &self.hints.sorted {
             let Some((i, rest)) = self.split_path(p) else {
@@ -1809,6 +1836,44 @@ impl Fn {
             for s in value::simpler(&args[i], &p.ty, &p.name, &self.hints) {
                 let mut c = args.to_vec();
                 c[i] = s;
+                if self.admits(&c) && !out.contains(&c) {
+                    out.push(c);
+                }
+            }
+        }
+        // two lists of one length shrink together: both cut to half, by their last element, or
+        // without the same element (Milestone 326)
+        for (a, b) in &self.hints.same_len {
+            let (Some((ia, pa)), Some((ib, pb))) = (self.split_path(a), self.split_path(b)) else {
+                continue;
+            };
+            let Some(Val::List(l)) = value::at(&args[ia], &pa) else {
+                continue;
+            };
+            let n = l.len();
+            for keep in [n / 2, n.saturating_sub(1)] {
+                if keep >= n {
+                    continue;
+                }
+                let mut c = args.to_vec();
+                for (i, p) in [(ia, &pa), (ib, &pb)] {
+                    if let Some(Val::List(l)) = value::at_mut(&mut c[i], p) {
+                        l.truncate(keep);
+                    }
+                }
+                if self.admits(&c) && !out.contains(&c) {
+                    out.push(c);
+                }
+            }
+            for k in 0..n.min(64) {
+                let mut c = args.to_vec();
+                for (i, p) in [(ia, &pa), (ib, &pb)] {
+                    if let Some(Val::List(l)) = value::at_mut(&mut c[i], p) {
+                        if k < l.len() {
+                            l.remove(k);
+                        }
+                    }
+                }
                 if self.admits(&c) && !out.contains(&c) {
                     out.push(c);
                 }

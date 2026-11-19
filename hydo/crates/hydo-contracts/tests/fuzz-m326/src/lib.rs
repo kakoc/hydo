@@ -160,6 +160,29 @@ pub fn both(a: bool, b: bool) -> bool {
     a && b
 }
 
+// ---------------------------------------------------------------- two lists of one length
+
+/// As half's `convert_from_f32_slice`: the lists must have one length.
+// hydo: requires len(dst) == len(src)
+// hydo: ensures len(dst) == len(src)
+// hydo: ensures len(src) == 0 || dst[len(src) - 1] == src[len(src) - 1] / 2
+pub fn halve_into(dst: &mut [u16], src: &[u16]) {
+    assert_eq!(dst.len(), src.len());
+    for (d, s) in dst.iter_mut().zip(src) {
+        *d = s / 2;
+    }
+}
+
+/// The same with a planted bug from the third element on.
+// hydo: requires len(dst) == len(src)
+// hydo: ensures len(src) == 0 || dst[len(src) - 1] == src[len(src) - 1] / 2
+pub fn halve_into_bad(dst: &mut [u16], src: &[u16]) {
+    assert_eq!(dst.len(), src.len());
+    for (i, (d, s)) in dst.iter_mut().zip(src).enumerate() {
+        *d = if i >= 2 && *s > 1 { 0 } else { s / 2 };
+    }
+}
+
 /// A planted mask that drops bits 8 to 11.
 // hydo: ensures result == x & 0x0fff
 pub fn low_bits(x: u16) -> u16 {

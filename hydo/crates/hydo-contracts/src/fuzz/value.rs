@@ -834,6 +834,9 @@ pub struct Hints {
     /// The lists that a `requires sorted(v)` names: the generator puts their elements in order
     /// (Milestone 307).
     pub sorted: Vec<String>,
+    /// The pairs of lists that a `requires len(a) == len(b)` names: the generator gives the
+    /// second the first's length, and the shrink shortens both (Milestone 326).
+    pub same_len: Vec<(String, String)>,
 }
 
 /// Put a list's elements in order: integers and floating-point values by value (a NaN last),

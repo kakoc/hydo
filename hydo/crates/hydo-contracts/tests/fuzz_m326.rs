@@ -102,6 +102,23 @@ fn the_bit_operators_read_as_in_rust() {
     assert_eq!(eval(&e, &[Some(0xfc01)], None), Ok(V::Int(0x7c00)));
 }
 
+#[test]
+fn two_lists_of_one_length_are_generated_and_shrunk_together() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m326-lens");
+    let (_, rep) = fuzz_m326(t.path(), &["--fn", "halve_into", "--fn", "halve_into_bad"]);
+    // half's `requires len(self) == len(src)` turned away 99 % of the inputs
+    let ok = one(&rep, "::halve_into");
+    assert_eq!(ok.verdict, "held", "{ok:?}");
+    assert_eq!(ok.rejected, 0, "{ok:?}");
+    assert!(ok.calls >= 300, "{ok:?}");
+    // the shrink shortens both lists to the third element that the bug needs
+    let bad = one(&rep, "::halve_into_bad");
+    assert_eq!(bad.verdict, "broken", "{bad:?}");
+    assert_eq!(bad.rejected, 0, "{bad:?}");
+    let input = &bad.broken[0].input;
+    assert_eq!(input, "dst = [0, 0, 0], src = [0, 0, 2]", "{bad:?}");
+}
+
 /// A copy of the fixture at `dir/crate`, with `edit` applied to its `src/lib.rs`.
 fn fixture_copy(dir: &Path, edit: &dyn Fn(String) -> String) -> std::path::PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fuzz-m326");
