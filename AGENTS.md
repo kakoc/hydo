@@ -2268,7 +2268,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 142. The Redpanda example (M279). What is left:
     - Findings 3 and 4 are reported upstream as redpanda-data/community#395 and #396
       (2026-11-17; the redpanda-data/redpanda repository is archived, and its issues moved
-      there). Findings 1 and 2 are not reported.
+      there). A Redpanda engineer confirmed both on 2026-11-18: #395 is fixed for v26.3.1, and
+      a fix of #396 is in progress. Findings 1 and 2 are not reported.
     - Finding 4 (a produce answer with an earlier transaction's offset) ran on KVM only, from
       the one-off workflow of the branch `tmp-redpanda-kvm`. hvx did not run its schedule, and it
       is no saved regression. The example's client writes one record per partition in a

@@ -401,6 +401,9 @@ stable offset has reached its high watermark (`rpclient lso`). A hanging transac
 
 ## Finding 3 (new candidate): a committed transaction visible on one partition only
 
+Reported as redpanda-data/community#395 (2026-11-17). A Redpanda engineer answered on 2026-11-18
+that it is fixed for the release v26.3.1, and closed the issue.
+
 **What happens.** Transaction 169 wrote `m169a` to partition 1 and `m169b` to partition 2 and
 committed: franz-go's `EndTransaction(TryCommit)` returned no error, and the client recorded both
 records as acknowledged. Every `read_committed` reader then read `m169b` (partition 2, offset
@@ -616,6 +619,9 @@ With the cause known, five more searches of the issues and pull requests found n
 Issue 3278 ("Support KIP-360") added the epoch bump of a producer that retries after an error.
 
 ## Finding 4 (new candidate): after a change of leader, a produce answer names an earlier transaction's offset
+
+Reported as redpanda-data/community#396 (2026-11-17). A Redpanda engineer answered on 2026-11-18
+that a fix is in progress, and closed the issue.
 
 **What happens.** A transactional producer writes a record and gets the offset of another
 record as the answer. That record is the one that the same transactional id wrote at the same
