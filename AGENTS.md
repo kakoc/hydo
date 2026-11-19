@@ -168,7 +168,7 @@ These rules are in force. Do not break them.
 - Keep existing fingerprints stable. A new module feature must be opt-in and inert when off, so
   that every recorded baseline stays the same. Check this with `deploy-metal.sh` and the pinned
   reproducers before and after the change.
-- The fingerprint epoch rule. `hydo_image::EPOCH` (now 4, since M269; 3 from M234, 2 from M204, 1 from M155) names the
+- The fingerprint epoch rule. `hydo_image::EPOCH` (now 5, since M317; 4 from M269, 3 from M234, 2 from M204, 1 from M155) names the
   generation of fingerprints. Raise it by one in the same commit as any change that moves a
   recorded fingerprint. Such changes are changes of an engine, the host controller, the agent pin
   or the guest kernels, or of a default that an image's run depends on. Add a section of
@@ -270,8 +270,11 @@ this way. Other tags, such as the action's moving tag `v1`, do not start it. `pa
 dry-runs the packages on every pull request that changes one. The details are in
 `docs/PUBLISHING.md`, section "Publishing from GitHub Actions" (M186).
 
-**Fingerprints.** The fingerprint epoch is 4 (M269; 3 from M234, 2 from M204, 1 from M155). An
-image built at epoch 3 or later boots the Mac and KVM guest kernels with cgroups. An image built
+**Fingerprints.** The fingerprint epoch is 5 (M317; 4 from M269, 3 from M234, 2 from M204, 1
+from M155). An image built at epoch 5 has the image services' launchers of M317, which mount the
+system folders once per boot. Nothing else changed at epoch 5. The recorded values are still
+epoch 4's (open item 105). An image built at epoch 3 or later boots the Mac and KVM guest kernels
+with cgroups. An image built
 at epoch 4 carries no saved regression: `hydo build` writes them beside it, as
 `<image>.regressions.json`, so saving or editing one leaves the image's bytes and the other
 regressions' runs alone. An image built before keeps them inside and is replayed from them. An
@@ -427,8 +430,20 @@ release 0.4.1, each its own commit; none moves a recorded value, and the epoch s
 - MANIFEST.md no longer says that `hydo compose` passes `--no-addr` on a Mac. The explorer's
   memory warning on the Mac and KVM no longer counts the image beside the guest's RAM.
 
-The user's tmpfs that was missing in a recovery boot was not reproduced. A race in the launcher
-explains the symptom, and its fix changes every image service's bytes (open item 162).
+The user's tmpfs that was missing in a recovery boot was not reproduced then. Milestone 317 fixes
+the race that hid it, at the fingerprint epoch 5.
+
+**An image service's system folders mounted once (M317, tentative number; fingerprint epoch
+5).** An image service's launcher and each of its `hydo-oci` helpers bound `/proc`, `/sys`,
+`/dev`, `/tmp` and `/data` into the service's root on every start, outside the lock of its
+`mounts:`. A readiness check that started with the service could bind `/dev` a second time over
+the service's `/dev/shm` tmpfs, as in the user's recovery boot (open item 162). From the
+fingerprint epoch 5 the launcher and the helpers bind the shared tree, the system folders and the
+`mounts:` in one block per boot under that lock, and `/proc/mounts` decides each
+(`hydo_image::defaults`, `oci_mounts_once`). An image built before keeps its launcher and its
+values. On hvx a project of seven PostgreSQL image services showed the race before the fix and
+not after it. Every image built at epoch 5 has new bytes, and the values wait for the pass before
+0.5.0 (open item 105). The details are in `docs/HISTORY.md` Milestone 317.
 
 **One command updates everything (M315, tentative number).** `hydo update [--check] [--yes]
 [--version V]` takes the newest `v<x>.<y>.<z>` release of the release list and updates hydo the
@@ -1875,8 +1890,13 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
     milestone and the values it moves; the pass removes the lines.
-    No value of the list waits. Milestone 302 re-recorded the whole list at the fingerprint
-    epoch 4.
+    - Milestone 317 raised the fingerprint epoch to 5. Every image of the list gets new bytes
+      when it is built (its record says epoch 5): hvm 21, kvm 6 and hvx 43. The image services'
+      images also get the new launcher: `hvm/voting` and `hvm/redis-oci` (7 runs), and
+      `hvx/redis-oci`, `hvx/restate-oci`, `hvx/voting`, `hvx/voting-generated` and
+      `hvx/voting-loopback` (14 runs). On hvx those 14 runs are expected to move; the 76 Mac and
+      19 KVM runs are likely to move. The pass records the list at epoch 5 and fills
+      docs/REBASELINE.md section 28.
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -2637,20 +2657,16 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       is reported and skipped.
     - Homebrew installs the formula's version only, so `--version V` with Homebrew is refused
       unless V is the formula's version.
-162. The fixes of a user's onboarding with 0.4.0 (M316, tentative number). What is left:
-    - The missing `/dev/shm` of the user's recovery boot did not reproduce here. PostgreSQL 16.4
-      ran on the Mac engine: in first boots, three power cuts, and 24 explored schedules.
-      In the guest, 70 tries of the launcher ran beside three `hydo-oci` helpers.
-    - A race fits the symptom. The launcher binds `/dev` and the other system folders into the
-      service's root outside the lock of its `mounts:`. So a `hydo-oci` helper, such as a
-      readiness check, can bind `/dev` a second time over the tmpfs. The fix puts the binds under
-      the lock and decides by `/proc/mounts`. It changes every image service's launcher, so every
-      such image gets new bytes, recorded ones too. It waits for the release after 0.4.1.
-    - The user's failing run confirms the second bind (2026-11-19, `/proc/self/mountinfo` of
-      the recovery boot). The shm tmpfs is mounted on the service's `/dev`. Then a second
-      devtmpfs is mounted on the same `/dev` and hides the tmpfs. It comes after the service's
-      other binds and before its volume. In the user's run without a power cut that second `/dev` is
-      absent. So the tmpfs line is in `/proc/mounts`, under the later `/dev`.
+162. The fixes of a user's onboarding with 0.4.0 (M316, M317, tentative numbers). What is left:
+    - The missing `/dev/shm` of the user's recovery boot has its cause since M317. An image
+      service's launcher and its `hydo-oci` helpers bound the system folders outside the lock of
+      its `mounts:`. So a readiness check could bind `/dev` again over the tmpfs, and the user's
+      `/proc/self/mountinfo` shows that order. On hvx a project of seven PostgreSQL image
+      services gave second binds of `/tmp` and `/data` in first and recovery boots before the
+      fix, and none after it. No run here gave the user's exact case, a second `/dev` over the
+      tmpfs; a test forces that order. The fix is in images built at the fingerprint epoch 5
+      (0.5.0), so an image built by 0.4.x keeps the race until it is built again. The user's own
+      project did not run with the fix.
     - The diagnosis's environment rule reads the last log lines only. A service whose log names
       both a permission error and a damaged file keeps the claim of lost data, and a service
       that logs nothing gets no sentence.
@@ -3581,6 +3597,12 @@ build machine, before 2026-10-13.
   never print a secret. A 401 says where hydo looked. `hydo compose --from-docker` saves an image
   that hydo cannot fetch from the local Docker and pins its digest. Proven with a registry in the
   test process and with `registry:2`. Nothing recorded moved
+- M317 (tentative number): the fingerprint epoch 5. An image service's launcher and its `hydo-oci`
+  helpers mount the shared tree, the system folders and the service's `mounts:` in one block per
+  boot under one lock. So a readiness check no longer binds `/dev` again over the `/dev/shm`
+  tmpfs. On hvx seven PostgreSQL image services showed the race before
+  the fix and not after it. Images built at epoch 4 keep their launchers and values. Every
+  recorded value waits for the pass before 0.5.0 (open item 105)
 
 ## Where to look
 
@@ -3588,7 +3610,7 @@ build machine, before 2026-10-13.
 - `docs/USE-CASES.md`: every use case with its status, by testing stage and by who asks, and the
   ideas not built yet.
 - `docs/REBASELINE.md`: the recorded fingerprints by section; section 13 is epoch 1, section 19
-  is epoch 2, section 24 is epoch 3, section 26 is epoch 4.
+  is epoch 2, section 24 is epoch 3, section 26 is epoch 4, section 28 is epoch 5.
 - `docs/BUILD-PINS.md`: the pinned toolchain and guest programs.
 - `docs/CI.md`: what CI runs, where, and how long it takes.
 - `docs/RELEASING.md` and `docs/PUBLISHING.md`: the release and publishing steps.

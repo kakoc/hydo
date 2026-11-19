@@ -64,7 +64,9 @@ pub const VERSION: u64 = 1;
 /// ([`regressions_path`]), so saving or editing one no longer changes the image's bytes, and
 /// (Milestone 283) the host controller mounts cgroup2 on `/sys/fs/cgroup` at every boot, and
 /// (Milestone 290) the Mac and KVM engines' fingerprints hash the disks by a tree of block hashes.
-pub const EPOCH: u64 = 4;
+/// Epoch 5 (Milestone 317): an image service's launcher mounts its system folders once per boot,
+/// under the lock of its `mounts:` ([`EpochDefaults::oci_mounts_once`]).
+pub const EPOCH: u64 = 5;
 
 /// The epoch of a run, exploration or cache entry that recorded none (written before M155).
 pub const EPOCH_BEFORE_RECORDS: u64 = 1;
@@ -107,6 +109,15 @@ pub struct EpochDefaults {
     /// every byte. The KVM engine gives the pages it did not write since its base their known
     /// hashes. From epoch 4 (Milestone 294). hvx's RAM hash is in the kernel module.
     pub ram_tree: bool,
+    /// hydo-build writes each image service's launcher (`/etc/hydo/oci/<service>/run`) and its
+    /// `hydo-oci` helper (`exec`) so that they bind `/proc`, `/sys`, `/dev`, `/tmp` and `/data`
+    /// into the service's root once per boot, under the lock that guards the service's
+    /// `mounts:`, deciding by `/proc/mounts`, before the `mounts:`. Before, each bound them on
+    /// every start outside the lock when busybox's `mountpoint` said no, so a readiness check
+    /// that started with the launcher could bind `/dev` a second time over the service's
+    /// `/dev/shm` tmpfs (open item 162). From epoch 5 (Milestone 317). It decides the bytes of a
+    /// new image only: an image built before keeps its launcher inside it.
+    pub oci_mounts_once: bool,
 }
 
 /// The defaults of an image built at `epoch` for `arch` (`x86_64` or `arm64`).
@@ -121,6 +132,7 @@ pub fn defaults(epoch: u64, arch: &str) -> EpochDefaults {
         cgroup2: epoch >= 4,
         disk_tree: epoch >= 4,
         ram_tree: epoch >= 4,
+        oci_mounts_once: epoch >= 5,
     }
 }
 
@@ -464,7 +476,7 @@ mod tests {
     fn canonical_sorts_and_reads_back() {
         let r = kernels::record_for("x86_64", false);
         let t = canonical(&r);
-        assert!(t.starts_with("{\"arch\":\"x86_64\",\"epoch\":4,\"initrd\":{"));
+        assert!(t.starts_with("{\"arch\":\"x86_64\",\"epoch\":5,\"initrd\":{"));
         assert!(t.ends_with("}\n") && !t.contains(": "));
         assert_eq!(parse_record(&t).unwrap(), r);
         let mut v: Value = serde_json::from_str(&t).unwrap();
@@ -543,7 +555,20 @@ mod tests {
         assert!(defaults(4, "arm64").ram_tree);
         assert!(defaults(4, "arm64").cgroup2);
         assert!(!defaults(4, "arm64").regressions_in_image);
-        assert_eq!(defaults(EPOCH, "x86_64"), four);
+        assert!(!one.oci_mounts_once && !two.oci_mounts_once && !three.oci_mounts_once);
+        assert!(!four.oci_mounts_once);
+        // epoch 5 (M317): the image services' launchers mount the system folders once; the rest
+        // as at epoch 4
+        let five = defaults(5, "x86_64");
+        assert_eq!(
+            five,
+            EpochDefaults {
+                oci_mounts_once: true,
+                ..four
+            }
+        );
+        assert!(defaults(5, "arm64").oci_mounts_once);
+        assert_eq!(defaults(EPOCH, "x86_64"), five);
     }
 
     #[test]

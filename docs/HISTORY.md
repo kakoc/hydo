@@ -17919,3 +17919,142 @@ none logged in to a real registry.
 Nothing recorded moved: no image, schedule, or fingerprint depends on the registry client.
 
 **What is left.** Open item 165.
+
+## Milestone 317 (tentative number): an image service's system folders mounted once (fingerprint epoch 5)
+
+Open item 162 left one problem of a user's onboarding with 0.4.0 (Milestone 316) without a cause
+in hydo. In the user's recovery boot after a power cut, PostgreSQL's `/dev/shm` tmpfs (`mounts: -
+{tmpfs: true, dst: /dev/shm, size: 64m}`, which `hydo compose` writes for Compose's `shm_size`)
+was hidden. The service's `/proc/self/mountinfo` showed the order. Mount 35 was the service's
+`/dev`, 42 the tmpfs on it, 43 the bind of a seed folder at `/docker-entrypoint-initdb.d`, then 44
+a second devtmpfs on the same `/dev`, and 45 the service's volume. PostgreSQL then found
+devtmpfs's `/dev/shm` (mode 755, owned by root) and stopped with `could not open shared memory
+segment ... Permission denied`. This milestone finds the code that mounts `/dev` the second time,
+fixes it for images built from now on, and keys the fix on a new fingerprint epoch, 5. It is for
+the release after 0.4.1 (0.5.0).
+
+**The cause.** Every image service has a launcher, `/etc/hydo/oci/<service>/run`, and a helper,
+`/etc/hydo/oci/<service>/exec`, which `hydo-oci <service> <command>` runs. hydo-build writes both
+(`hydo/crates/hydo-build/src/oci.rs`, `scripts`). Before this milestone each began with one line
+that bound `/proc`, `/sys`, `/dev`, `/tmp` and `/data` into the service's root:
+
+```sh
+for d in proc sys dev tmp data; do $BB mountpoint -q $R/$d || $BB mount --bind /$d $R/$d || exit 125; done
+```
+
+Only the service's `mounts:` came after it, in a block that runs once per boot under a lock
+(`/tmp/hydo/oci-mnt.<service>.lock`) and that `/proc/mounts` decides. The line ran on every start
+of the launcher and of every helper, outside the lock. A readiness check that `hydo compose` makes
+from a healthcheck (`timeout 5 hydo-oci db pg_isready ...`) is such a helper, and the controller
+runs it as soon as it has started the service. So two processes ran the line at the same time.
+When one of them had looked at `$R/dev` before the other bound it, and bound it after the other
+had taken the lock and mounted the `mounts:`, its bind went over the first `/dev` and hid
+everything mounted on it. That is the user's order: the late bind came after the seed folder's
+bind and before the volume's, because the process that held the lock was between those two
+entries. A run without a power cut has the same race, but its moments differ, as the user's run
+without a cut showed.
+
+**The reproduction.** hvx on the bare-metal machine, with public images only. The project
+(`devshm`) has seven image services from the official `postgres:16.16-alpine3.24` image on service
+networks (`network: bridge`), as `hydo compose` writes them. PostgreSQL has a `/run` tmpfs with
+`copy_up`, the `/dev/shm` tmpfs, a seed folder on `/docker-entrypoint-initdb.d`, a volume and a
+`pg_isready` readiness check. The six other services run `sleep` with readiness checks through
+`hydo-oci`, and some start together (`start_after: started`). The workload inserts rows with
+`psql`, and a check, `mounts.once`, counts each service's mounts in `/proc/mounts` and asks
+`hydo-oci db stat -f -c %T /dev/shm`. A second form, `devshm2`, starts PostgreSQL first and alone,
+so its readiness check runs as soon as the launcher has started, and draws power cuts only. A
+third form, `devshm3`, adds a service that runs `hydo-oci db true` in a loop. With this tree before
+the fix (the launcher of epoch 4):
+
+- `devshm` (PostgreSQL started with others, after two services) passed `disk=none | run` and
+  `disk=none | run C=6`, and an exploration of 80 schedules found nothing.
+- In an exploration of `devshm2` (`hydo explore --seeds 1-300`), every schedule failed
+  `mounts.once`. The explorer's first boot, which every schedule starts from, had `app3`'s
+  `/data` bound twice. In 87 of the 116 recovery boots PostgreSQL's `/tmp` was bound twice, and
+  in 54 its `/data`.
+- With `devshm3`, eight runs `disk=none | run C=2` to `C=9` failed `mounts.once`. Two recovery
+  boots had a second `/dev` on `app3`. `hydo inspect exec <run> --at end` showed it below `app3`'s `/dev/shm`
+  tmpfs, so the tmpfs stayed visible there.
+- An exploration of `devshm3` with tick jitter (`--timing`) failed 79 of its first 204
+  schedules: every one of its 79 recovery boots. In 9 of them PostgreSQL's `/dev` was bound
+  twice, and in 21 `app3`'s. In seed 42 (`disk=cut | run C=11`) PostgreSQL's second `/dev`
+  came after its `/tmp` and before its `/dev/shm` tmpfs.
+- No run here gave the user's exact order, a second `/dev` after the tmpfs. The late bind needs
+  one process to stop between its look at `$R/dev` and its bind for as long as the other takes
+  for the whole lock block. The double binds show the same race with shorter stops.
+
+**The fix.** From the fingerprint epoch 5 the launcher and the helper share one block, under the
+service's lock and once per boot (its done file):
+
+```sh
+if [ ! -f /tmp/hydo/oci-mnt.db.done ]; then
+  $BB mkdir -p /tmp/hydo; exec 9> /tmp/hydo/oci-mnt.db.lock; $BB flock 9
+  hmnt() { $BB grep -q " $1 " /proc/mounts; }
+  if [ ! -f /tmp/hydo/oci-mnt.db.done ]; then
+    for d in proc sys dev tmp data; do hmnt $R/$d || $BB mount --bind /$d $R/$d || exit 125; done
+    ... the service's mounts:, in their order ...
+    : > /tmp/hydo/oci-mnt.db.done
+  fi
+  exec 9>&-
+fi
+```
+
+The shared tree of `root.share_images` is bound first inside the block (it had the same race), and
+a `writable: true` layer is still bound before it, under its own lock. A service without
+`mounts:` gets the block too, with the system folders only. A process that finds the done file
+mounts nothing, and one that waits for the lock tests the done file again under it. The storage
+faults' power loss of one service (`L=`) removes the done file after it has unmounted the
+service's file system, as before: the next start binds what is missing and leaves the system
+folders, which `/proc/mounts` still lists.
+
+**The epoch.** The launcher is inside the image, so the fix decides the bytes of an image that is
+built, never the run of an image that exists. An image built at epoch 4 or before keeps its
+launcher. Every image service's image built now gets new bytes, so every recorded run of an image
+service is expected to move. By the epoch rule (AGENTS.md) such a change raises `hydo_image::EPOCH`:
+it is 5, and `hydo_image::EpochDefaults::oci_mounts_once` says which launcher an epoch builds
+(true from 5). hydo-build takes it from the epoch it builds at, as Milestone 269's
+`regressions_in_image` does. So "two hydo versions of one epoch build the same image bytes"
+(`hydo-image`'s documentation) still holds. Every image built at epoch 5 also has a new record,
+`/etc/hydo/image.json` with `"epoch":5`. Nothing changes at run time: no engine, controller, agent
+or kernel changed, and an image of epoch 5 runs with the defaults of epoch 4.
+
+**What moves.** The values are not re-recorded here (the batch rule, AGENTS.md open item 105).
+Every image of `hydo/onboard/recorded.json` gets new bytes when it is built at epoch 5: hvm 21,
+kvm 6 and hvx 43. The images with image services also get the new launcher: `hvm/voting` and
+`hvm/redis-oci` (7 runs), and `hvx/redis-oci`, `hvx/restate-oci`, `hvx/voting`,
+`hvx/voting-generated` and `hvx/voting-loopback` (14 runs). On hvx the record alone moved none of
+the 141 runs at epoch 4, so the 14 runs of the image services are the ones expected to move there;
+on the Mac and KVM engines, which hash the image's disk and the guest's RAM, the 76 and 19 runs
+are likely to move. docs/REBASELINE.md section 28 names the epoch.
+
+**Evidence.** On hvx, with this tree's programs in a copy of the 0.4.0 Linux release:
+
+- The explorations of `devshm2` and `devshm3` with this tree's hydo, on the projects built at
+  epoch 5 with the same seeds: no schedule failed. In the first 55 schedules of `devshm2`
+  (22 recovery boots), which all failed before, and the first 230 of `devshm3` with tick jitter
+  (87 recovery boots), every system folder and every tmpfs of every service was mounted once,
+  and PostgreSQL's `/dev/shm` was a tmpfs. The explorations were stopped there, because the
+  shared machine had slowed to minutes per schedule.
+- The pinned reproducers gave `a76d7fe857fdb37c` and `efbde7b57264be0f` on their epoch-2 images
+  in `~/hydo/build/m204`, and `e153f376096a072c` and `6a5c2fe208174af3` on their epoch-4 images
+  in `~/hydo/build/m302`, before and after the fix.
+- Images built at epoch 4 keep their values under this hydo with the fix. The release's Redis
+  example, built at epoch 4 by this tree before the fix, gave the recorded hvx values
+  `2f9186af5e3be2b1` (`disk=none | run`) and `d299dc487ceb5e3c` (`disk=cut | run C=12
+  R=everysec`, `k:1` lost) before and after the fix. `devshm` built at epoch 4 gave
+  `d6e4551b652cedf6` (`disk=none | run`) and `ce147468e60d12d9` (`disk=none | run C=6`) before
+  and after the fix.
+- Tests: hydo-build's `oci::tests::a_helper_beside_the_launcher_never_hides_the_shm_tmpfs` runs a
+  helper and then the launcher of a PostgreSQL-like service with a stand-in for busybox that
+  records the mounts and holds the helper's bind of `/dev` until the launcher has mounted
+  `/dev/shm` or waits for the lock. The launcher of epoch 4 ends with two `/dev` mounts, the second
+  over the tmpfs; the launcher of epoch 5 binds each system folder once, before the `mounts:`, and
+  every mount stays visible. `oci::tests::the_launchers_of_each_epoch` checks the block's order in
+  both scripts, with a shared tree, and the launcher of epoch 4 as it was. The OCI staging golden
+  (`tests/golden/oci/answers.json`) changed in the 16 launchers and helpers only, and
+  `oci_share` checks the shared tree's bind inside the block. `hydo-image`'s `epoch_defaults`
+  covers the new default. hydo-build's equivalence corpus keeps its six mismatches from Milestone
+  306; this change adds none.
+
+**What is left.** Open item 162 (the user's own project was not run) and open item 105 (the
+values of epoch 5).

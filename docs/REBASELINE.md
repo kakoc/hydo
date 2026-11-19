@@ -3721,3 +3721,40 @@ generated-driver stack). The Mac (`hvm`, 691 s, `--jobs 1`): 9 of 21 images and 
 demo's two images). These are the images and runs that moved at 0.3.1 to 0.3.4. Every verdict is
 unchanged, every moved run gave the same values twice, and every worker-pool run gave its fresh
 boot's values. KVM's images carry none of these programs, so no KVM value moves.
+
+## 28. The fingerprint epoch 5 (M317, 2026-11-19)
+
+Open item 162 found a race in the launcher of every image service. The launcher and each of its
+`hydo-oci` helpers (a readiness check, for example) bound `/proc`, `/sys`, `/dev`, `/tmp` and
+`/data` into the service's root on every start, outside the lock that guards the service's
+`mounts:`, when busybox's `mountpoint` said they were not there. A helper that started with the
+launcher could bind one of them a second time, and a second `/dev` over the service's `/dev/shm`
+tmpfs hid the tmpfs (docs/HISTORY.md Milestone 317). The fix changes the launcher, which
+hydo-build writes into every image with an image service, so it is a change of the images' bytes.
+This section records the decision. Under the rule "Re-recording runs in batches" (AGENTS.md),
+the values are not re-recorded with the change: `hydo/onboard/recorded.json` keeps its epoch-4
+values and its `epoch` 4 until the re-recording pass before the 0.5.0 release (AGENTS.md open
+item 105).
+
+**The fingerprint epoch is 5.** An image built at epoch 5 has the new launcher: one block per
+boot under the service's lock binds the shared tree (`root.share_images`), the system folders and
+the service's `mounts:`, in that order, and `/proc/mounts` decides each
+(`hydo_image::defaults`, `oci_mounts_once`). An image built at epoch 4 or before keeps the
+launcher inside it, and this hydo runs it as before: the release's Redis example and an image
+service example built at epoch 4, and the pinned reproducers, gave their values under this hydo
+on hvx (docs/HISTORY.md Milestone 317).
+
+**What moves.** Every image built at epoch 5 has new bytes, because its record
+`/etc/hydo/image.json` says epoch 5: hvm 21 images, kvm 6 and hvx 43. The images with image
+services also get the new launcher: hvm 2 (`hvm/voting`, `hvm/redis-oci`, 7 runs) and hvx 5
+(`hvx/redis-oci`, `hvx/restate-oci`, `hvx/voting`, `hvx/voting-generated`,
+`hvx/voting-loopback`, 14 runs). Until the pass, `hydo-bench rebaseline --check` reports every
+image as moved. On hvx the record's new bytes alone moved none of the 141 runs at epoch 4 (section
+26), so the 14 runs of the image services are the ones expected to move there. The Mac and KVM
+engines hash the image's disk and the guest's RAM, so their 76 and 19 runs are likely to move.
+The pass shows which runs move, and whether a verdict or a recorded `ctl` value moves.
+
+**The pinned reproducers** keep their images and values: this hydo boots the epoch-2 images in
+`~/hydo/build/m204` (`a76d7fe857fdb37c`, `efbde7b57264be0f`) and the epoch-4 images in
+`~/hydo/build/m302` (`e153f376096a072c`, `6a5c2fe208174af3`) as before. They have no image
+service.

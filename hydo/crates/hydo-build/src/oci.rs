@@ -1416,21 +1416,53 @@ fn under_binds(dst: &str) -> bool {
     BINDS.contains(&first)
 }
 
-/// `_mount_lines(o)`: the launcher head's mounts, once per boot, under a flock.
+/// `_mount_lines(o)`: the launcher head's mounts, once per boot, under a flock (the launcher of an
+/// image built before the fingerprint epoch 5; [`once_lines`] from epoch 5).
 fn mount_lines(o: &OciService) -> String {
     mount_lines_of(&o.svc, &o.mounts)
 }
 
 fn mount_lines_of(svc: &str, mounts: &[Mount]) -> String {
-    let mut l = vec![
+    let mut l = lock_open(svc);
+    l.extend(fd_links());
+    l.extend(mount_body(svc, mounts));
+    l.extend(lock_close(svc));
+    l.join("\n") + "\n"
+}
+
+/// The start of the block that runs once per boot, under the service's lock: the done file is
+/// tested again under the lock, because another start may have finished it while this one waited.
+fn lock_open(svc: &str) -> Vec<String> {
+    vec![
         format!("if [ ! -f /tmp/hydo/oci-mnt.{svc}.done ]; then"),
         format!("  $BB mkdir -p /tmp/hydo; exec 9> /tmp/hydo/oci-mnt.{svc}.lock; $BB flock 9"),
         "  hmnt() { $BB grep -q \" $1 \" /proc/mounts; }".to_string(),
         format!("  if [ ! -f /tmp/hydo/oci-mnt.{svc}.done ]; then"),
+    ]
+}
+
+/// The end of [`lock_open`]'s block: the done file, then the lock released.
+fn lock_close(svc: &str) -> Vec<String> {
+    vec![
+        format!("    : > /tmp/hydo/oci-mnt.{svc}.done"),
+        "  fi".into(),
+        "  exec 9>&-".into(),
+        "fi".into(),
+    ]
+}
+
+/// `/dev/fd`, `/dev/stdin`, `/dev/stdout` and `/dev/stderr` where devtmpfs lacks them.
+fn fd_links() -> Vec<String> {
+    vec![
         "    for l in fd:/proc/self/fd stdin:/proc/self/fd/0 stdout:/proc/self/fd/1 stderr:/proc/self/fd/2; do".to_string(),
         "      [ -e /dev/${l%%:*} ] || $BB ln -s ${l#*:} /dev/${l%%:*}".to_string(),
         "    done".to_string(),
-    ];
+    ]
+}
+
+/// The service's own `mounts:`, in their order, each unless `/proc/mounts` has it already.
+fn mount_body(svc: &str, mounts: &[Mount]) -> Vec<String> {
+    let mut l = Vec::new();
     for (k, mt) in mounts.iter().enumerate() {
         let d = format!("$R{}", mt.dst);
         if under_binds(&mt.dst) {
@@ -1479,10 +1511,36 @@ fn mount_lines_of(svc: &str, mounts: &[Mount]) -> String {
             l.push("    fi".into());
         }
     }
-    l.push(format!("    : > /tmp/hydo/oci-mnt.{svc}.done"));
-    l.push("  fi".into());
-    l.push("  exec 9>&-".into());
-    l.push("fi".into());
+    l
+}
+
+/// The launcher's mounts from the fingerprint epoch 5 (Milestone 317,
+/// [`hydo_image::EpochDefaults::oci_mounts_once`]): one block per boot under the service's lock,
+/// the same block in the launcher and in every `hydo-oci` helper. It binds the shared tree
+/// (`root.share_images`, the owner's tree), then `/proc`, `/sys`, `/dev`, `/tmp` and `/data`,
+/// then the service's `mounts:`, and `/proc/mounts` decides each. Before epoch 5 the launcher and
+/// each helper bound the shared tree and the system folders outside the lock on every start,
+/// when busybox's `mountpoint` said no. A readiness check that started with the launcher could
+/// then look at `$R/dev` before the launcher bound it, and bind it after the launcher had mounted
+/// the service's tmpfs on `$R/dev/shm`: a second `/dev` over the first hid the tmpfs, and
+/// PostgreSQL found devtmpfs's `/dev/shm` (open item 162).
+fn once_lines(svc: &str, shares: Option<&str>, mounts: &[Mount]) -> String {
+    let mut l = lock_open(svc);
+    if let Some(owner) = shares {
+        // the shared tree first, then the binds and mounts on this service's own mount of it
+        l.push(format!(
+            "    hmnt $R || $BB mount --bind /oci/{owner} $R || exit 125"
+        ));
+    }
+    l.push(format!(
+        "    for d in {}; do hmnt $R/$d || $BB mount --bind /$d $R/$d || exit 125; done",
+        BINDS.join(" ")
+    ));
+    if !mounts.is_empty() {
+        l.extend(fd_links());
+        l.extend(mount_body(svc, mounts));
+    }
+    l.extend(lock_close(svc));
     l.join("\n") + "\n"
 }
 
@@ -1509,7 +1567,8 @@ fn layer_lines(svc: &str) -> String {
 
 /// `_scripts(o, home)`: the launcher (run) and `hydo-oci`'s helper (exec). `shares`: the service
 /// whose tree this one uses (`root.share_images`): it is bind-mounted on this service's root first.
-fn scripts(o: &OciService, home: &str, shares: Option<&str>) -> (String, String) {
+/// `once`: the launcher of the fingerprint epoch 5 ([`once_lines`]); false: the launcher before.
+fn scripts(o: &OciService, home: &str, shares: Option<&str>, once: bool) -> (String, String) {
     let svc = &o.svc;
     let r = format!("/oci/{svc}");
     let mut env: Vec<String> = o
@@ -1528,6 +1587,42 @@ fn scripts(o: &OciService, home: &str, shares: Option<&str>) -> (String, String)
     } else {
         String::new()
     };
+    let chroot = format!(
+        "exec $BB chroot $R /.hydo/busybox env -i {} /.hydo/busybox sh -c",
+        env.join(" ")
+    );
+    let user = if o.user.is_empty() {
+        String::new()
+    } else {
+        format!("/.hydo/busybox chpst -u {} ", shq(&o.user))
+    };
+    let run_tail = format!(
+        "{chroot} {}\n",
+        shq(&format!(
+            "cd {} || exit 127; exec {user}{}",
+            shq(&o.workdir),
+            o.final_cmd
+        ))
+    );
+    let ex_tail = format!(
+        "{chroot} {} {} \"$@\"\n",
+        shq("cd \"$0\" || exit 127; exec \"$@\""),
+        shq(&o.workdir)
+    );
+    let usage = format!(
+        "[ $# -gt 0 ] || {{ echo \"usage: hydo-oci {svc} <command> [args]\" >&2; exit 2; }}\n"
+    );
+    if once {
+        let top = format!(
+            "#!/bin/busybox sh\n# generated by hvx/onboard/hydo_oci.py -- service {svc} from {}\nBB=/bin/busybox R={r}\n",
+            o.img.config_digest
+        );
+        let mounts = once_lines(svc, shares, &o.mounts);
+        return (
+            format!("{top}{layer}{mounts}{run_tail}"),
+            format!("{top}{usage}{layer}{mounts}{ex_tail}"),
+        );
+    }
     let mut head = format!(
         "#!/bin/busybox sh\n# generated by hvx/onboard/hydo_oci.py -- service {svc} from {}\nBB=/bin/busybox R={r}\n{layer}for d in {}; do $BB mountpoint -q $R/$d || $BB mount --bind /$d $R/$d || exit 125; done\n",
         o.img.config_digest,
@@ -1549,34 +1644,8 @@ fn scripts(o: &OciService, home: &str, shares: Option<&str>) -> (String, String)
     if !o.mounts.is_empty() {
         head.push_str(&mount_lines(o));
     }
-    let chroot = format!(
-        "exec $BB chroot $R /.hydo/busybox env -i {} /.hydo/busybox sh -c",
-        env.join(" ")
-    );
-    let user = if o.user.is_empty() {
-        String::new()
-    } else {
-        format!("/.hydo/busybox chpst -u {} ", shq(&o.user))
-    };
-    let run = format!(
-        "{head}{chroot} {}\n",
-        shq(&format!(
-            "cd {} || exit 127; exec {user}{}",
-            shq(&o.workdir),
-            o.final_cmd
-        ))
-    );
-    let ex = head.replacen(
-        "for d in",
-        &format!(
-            "[ $# -gt 0 ] || {{ echo \"usage: hydo-oci {svc} <command> [args]\" >&2; exit 2; }}\nfor d in"
-        ),
-        1,
-    ) + &format!(
-        "{chroot} {} {} \"$@\"\n",
-        shq("cd \"$0\" || exit 127; exec \"$@\""),
-        shq(&o.workdir)
-    );
+    let run = format!("{head}{run_tail}");
+    let ex = head.replacen("for d in", &format!("{usage}for d in"), 1) + &ex_tail;
     (run, ex)
 }
 
@@ -1963,7 +2032,9 @@ pub fn stage_with(
                 meta.insert(key, *v);
             }
         }
-        let (run, ex) = scripts(o, &home, shared.map(|_| owner.as_str()));
+        // Milestone 317: the launcher of the fingerprint epoch this hydo builds at
+        let once = hydo_image::defaults(hydo_image::EPOCH, "x86_64").oci_mounts_once;
+        let (run, ex) = scripts(o, &home, shared.map(|_| owner.as_str()), once);
         let d = root.join("etc/hydo/oci").join(&o.svc);
         fsx::makedirs(&d)?;
         for (n, c) in [("run", &run), ("exec", &ex)] {
@@ -2510,5 +2581,208 @@ mod tests {
             "{lines}"
         );
         assert!(!lines.contains("hmnt $R/data"), "{lines}");
+    }
+
+    /// An image service like PostgreSQL's after `hydo compose` (open item 162): a /run tmpfs
+    /// with copy_up, Compose's shm_size as a tmpfs on /dev/shm, a seed folder and a volume.
+    fn postgres_like() -> OciService {
+        let mounts = mounts_of(
+            Some(json!([
+                {"tmpfs": true, "dst": "/run", "copy_up": true},
+                {"tmpfs": true, "dst": "/dev/shm", "size": "64m"},
+                {"src": "/etc/seed", "dst": "/docker-entrypoint-initdb.d"},
+                {"src": "/data/vol/pgdata", "dst": "/var/lib/postgresql/data", "copy_up": true}
+            ])),
+            "db",
+        )
+        .unwrap_or_else(|e| panic!("refused: {}", e.message()));
+        OciService {
+            svc: "db".into(),
+            path: String::new(),
+            img: Image {
+                path: String::new(),
+                src: Source::Dir(PathBuf::new()),
+                manifest_digest: None,
+                config_digest: "sha256:0".into(),
+                config: Value::Null,
+                layers: Vec::new(),
+                ref_names: Vec::new(),
+                diff_ids: Vec::new(),
+            },
+            final_cmd: "postgres".into(),
+            env: Vec::new(),
+            workdir: "/".into(),
+            user: String::new(),
+            mounts,
+            writable: false,
+        }
+    }
+
+    /// A stand-in for busybox that records mounts in `$FAKE_T/mounts` (the test's
+    /// `/proc/mounts`) and holds a helper's bind of `$FAKE_GATE` until the launcher has mounted
+    /// the tmpfs under it or waits for the lock: the order of open item 162, forced.
+    const FAKE_BB: &str = r#"#!/bin/sh
+T=$FAKE_T
+a=$1; shift
+case $a in
+mountpoint) [ "$1" = -q ] && shift; grep -q " $1 " "$T/mounts" ;;
+grep) exec grep "$@" ;;
+mount)
+  if [ "$1" = --bind ]; then src=$2; dst=$3; typ=bind
+  else shift 2; if [ "$1" = -o ]; then shift 2; fi; src=$1; dst=$2; typ=tmpfs; fi
+  if [ -n "$FAKE_GATE" ] && [ "$dst" = "$FAKE_GATE" ]; then
+    : > "$T/at-gate"; n=0
+    until grep -q " $FAKE_GATE/shm " "$T/mounts" || [ -e "$T/waiting" ]; do
+      sleep 0.01; n=$((n + 1)); [ $n -lt 1000 ] || break
+    done
+  fi
+  echo "$src $dst $typ rw 0 0" >> "$T/mounts" ;;
+mkdir) for x in "$@"; do case $x in "$T"/*) mkdir -p "$x" ;; esac; done ;;
+lock) n=0; until mkdir "$1.d" 2>/dev/null; do : > "$T/waiting"; sleep 0.01; n=$((n + 1)); [ $n -lt 1000 ] || exit 1; done ;;
+unlock) rmdir "$1.d" ;;
+*) : ;;
+esac
+"#;
+
+    /// Runs a helper (`exec`) and then the launcher (`run`) of `scripts(.., once)` with
+    /// [`FAKE_BB`]: the helper starts first and is held at its bind of `/dev` until the
+    /// launcher has mounted `/dev/shm` or waits for the lock. Returns the mounts in their order
+    /// as (source, mount point).
+    fn helper_then_launcher(once: bool) -> Vec<(String, String)> {
+        let t = std::env::temp_dir().join(format!("hydo-oci-once-{}-{once}", std::process::id()));
+        let _ = fs::remove_dir_all(&t);
+        fs::create_dir_all(&t).unwrap();
+        let ts = t.to_string_lossy().into_owned();
+        fs::write(t.join("bb"), FAKE_BB).unwrap();
+        fsx::chmod(&t.join("bb"), 0o755).unwrap();
+        fs::write(t.join("mounts"), "").unwrap();
+        let (run, ex) = scripts(&postgres_like(), "/root", None, once);
+        let lock = format!("{ts}/hydo/oci-mnt.db.lock");
+        let fake = |s: &str| {
+            s.replace("BB=/bin/busybox", &format!("BB={ts}/bb"))
+                .replace("/tmp/hydo", &format!("{ts}/hydo"))
+                .replace("/proc/mounts", &format!("{ts}/mounts"))
+                .replace(
+                    &format!("exec 9> {lock}; $BB flock 9"),
+                    &format!("$BB lock {lock}"),
+                )
+                .replace("exec 9>&-", &format!("$BB unlock {lock}"))
+        };
+        fs::write(t.join("run"), fake(&run)).unwrap();
+        fs::write(t.join("exec"), fake(&ex)).unwrap();
+        let mut helper = std::process::Command::new("sh")
+            .arg(t.join("exec"))
+            .arg("true")
+            .env("FAKE_T", &t)
+            .env("FAKE_GATE", "/oci/db/dev")
+            .spawn()
+            .unwrap();
+        let mut n = 0;
+        while !t.join("at-gate").exists() {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            n += 1;
+            assert!(n < 1000, "the helper never reached its bind of /dev");
+        }
+        let st = std::process::Command::new("sh")
+            .arg(t.join("run"))
+            .env("FAKE_T", &t)
+            .env("FAKE_GATE", "")
+            .status()
+            .unwrap();
+        assert!(st.success(), "the launcher: {st}");
+        assert!(helper.wait().unwrap().success(), "the helper failed");
+        let mounts = fs::read_to_string(t.join("mounts")).unwrap();
+        let _ = fs::remove_dir_all(&t);
+        mounts
+            .lines()
+            .map(|l| {
+                let w: Vec<&str> = l.split(' ').collect();
+                (w[0].to_string(), w[1].to_string())
+            })
+            .collect()
+    }
+
+    /// Whether the mount at `at` (its last one) is visible: no mount comes after it on its own
+    /// place or on a folder above it.
+    fn visible(m: &[(String, String)], at: &str) -> bool {
+        let Some(i) = m.iter().rposition(|(_, d)| d == at) else {
+            return false;
+        };
+        !m[i + 1..]
+            .iter()
+            .any(|(_, d)| at == d || at.starts_with(&format!("{d}/")))
+    }
+
+    /// Open item 162 (Milestone 317): a readiness check's `hydo-oci` helper that looked at the
+    /// service's `/dev` before the launcher bound it, and binds it after the launcher mounted
+    /// the service's `/dev/shm` tmpfs. The launcher before the fingerprint epoch 5 puts a second
+    /// `/dev` over the tmpfs; from epoch 5 the system folders are bound once, under the lock,
+    /// before the `mounts:`, and the tmpfs stays visible.
+    #[test]
+    fn a_helper_beside_the_launcher_never_hides_the_shm_tmpfs() {
+        let before = helper_then_launcher(false);
+        let devs = before.iter().filter(|(_, d)| d == "/oci/db/dev").count();
+        assert_eq!(devs, 2, "{before:?}");
+        assert!(!visible(&before, "/oci/db/dev/shm"), "{before:?}");
+
+        let after = helper_then_launcher(true);
+        for d in BINDS {
+            let at = format!("/oci/db/{d}");
+            let n = after.iter().filter(|(_, x)| *x == at).count();
+            assert_eq!(n, 1, "{at}: {after:?}");
+        }
+        for at in [
+            "/oci/db/run",
+            "/oci/db/dev/shm",
+            "/oci/db/docker-entrypoint-initdb.d",
+            "/oci/db/var/lib/postgresql/data",
+        ] {
+            assert!(visible(&after, at), "{at}: {after:?}");
+        }
+        // the system folders first, then the mounts: in their order
+        let pos = |at: &str| after.iter().position(|(_, d)| d == at).unwrap();
+        assert!(pos("/oci/db/data") < pos("/oci/db/run"), "{after:?}");
+        assert!(pos("/oci/db/dev/shm") < pos("/oci/db/docker-entrypoint-initdb.d"));
+    }
+
+    /// The launcher and the helper of the fingerprint epoch 5 share one block under the lock
+    /// (the helper adds only its usage line), and the shared tree of `root.share_images` is
+    /// bound inside it; an image built before keeps the launcher it was built with.
+    #[test]
+    fn the_launchers_of_each_epoch() {
+        let o = postgres_like();
+        let (run, ex) = scripts(&o, "/root", Some("app"), true);
+        let lock = "  $BB mkdir -p /tmp/hydo; exec 9> /tmp/hydo/oci-mnt.db.lock; $BB flock 9\n";
+        let share = "    hmnt $R || $BB mount --bind /oci/app $R || exit 125\n";
+        let binds =
+            "    for d in proc sys dev tmp data; do hmnt $R/$d || $BB mount --bind /$d $R/$d || exit 125; done\n";
+        for s in [&run, &ex] {
+            let (l, sh, b) = (
+                s.find(lock).unwrap(),
+                s.find(share).unwrap(),
+                s.find(binds).unwrap(),
+            );
+            assert!(l < sh && sh < b && b < s.find("/dev/shm").unwrap(), "{s}");
+            assert!(!s.contains("mountpoint"), "{s}");
+            assert_eq!(s.matches(binds).count(), 1, "{s}");
+        }
+        let usage =
+            "[ $# -gt 0 ] || { echo \"usage: hydo-oci db <command> [args]\" >&2; exit 2; }\n";
+        assert_eq!(
+            ex.find(usage),
+            ex.find("BB=/bin/busybox R=/oci/db\n").map(|i| i + 26)
+        );
+        assert_eq!(
+            run[..run.rfind("exec $BB chroot").unwrap()],
+            ex[..ex.rfind("exec $BB chroot").unwrap()].replacen(usage, "", 1)
+        );
+        // before epoch 5: the binds on every start, outside the lock, as built until Milestone 317
+        let (run4, ex4) = scripts(&o, "/root", Some("app"), false);
+        let head4 = "BB=/bin/busybox R=/oci/db\n$BB grep -q \" $R \" /proc/mounts || $BB mount --bind /oci/app $R || exit 125\nfor d in proc sys dev tmp data; do $BB mountpoint -q $R/$d || $BB mount --bind /$d $R/$d || exit 125; done\nif [ ! -f /tmp/hydo/oci-mnt.db.done ]; then\n";
+        assert!(run4.contains(head4), "{run4}");
+        assert!(
+            ex4.contains(&head4.replacen("for d in", &format!("{usage}for d in"), 1)),
+            "{ex4}"
+        );
     }
 }

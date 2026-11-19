@@ -107,9 +107,10 @@ fn one_tree_for_two_services_of_one_image() {
             .filter(|k| k.starts_with("oci/primary") && *k != "oci/primary/var/lib/replica")
             .collect();
         assert_eq!(only_primary, shared_primary, "{arch}");
-        // the replica's launcher mounts the shared tree first; the primary's is unchanged
+        // the replica's launcher mounts the shared tree first, under its lock (the fingerprint
+        // epoch 5, Milestone 317); the primary's is unchanged
         let run = std::fs::read_to_string(rr.join("etc/hydo/oci/replica/run")).unwrap();
-        let bind = "$BB grep -q \" $R \" /proc/mounts || $BB mount --bind /oci/primary $R || exit 125\nfor d in";
+        let bind = "    hmnt $R || $BB mount --bind /oci/primary $R || exit 125\n    for d in";
         assert!(run.contains(bind), "{run}");
         assert!(run.contains("R=/oci/replica"), "{run}");
         let ex = std::fs::read_to_string(rr.join("etc/hydo/oci/replica/exec")).unwrap();

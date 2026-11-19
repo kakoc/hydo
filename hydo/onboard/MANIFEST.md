@@ -2946,8 +2946,11 @@ an EMPTY directory from the image's `dst` (content, owner, mode) before mounting
 copies the image's directory in. A `dst` the image lacks is created in the image root at build time
 (below `/proc`, `/sys`, `/dev`, `/tmp`, `/data` at run time); a `dst` that is a symlink in the image
 is resolved inside the image root, never through to the guest's own directory. Paths use
-`[A-Za-z0-9._@+=,:/-]` only. An image service without `mounts:` gets exactly the launcher it had
-before. `dst: /data` is allowed only for a `src:` below `/data` and without `copy_up` (Milestone
+`[A-Za-z0-9._@+=,:/-]` only. From the fingerprint epoch 5 (Milestone 317) the launcher binds the
+guest's `/proc`, `/sys`, `/dev`, `/tmp` and `/data` into the service's root in the same block,
+under the same lock and before the entries, so a `hydo-oci` call that starts with the service,
+such as its readiness check, never binds one of them again over an entry such as the `/dev/shm`
+tmpfs. An image built before keeps the launcher it was built with. `dst: /data` is allowed only for a `src:` below `/data` and without `copy_up` (Milestone
 141): that data-disk directory becomes the service's `/data`, so the nodes of a cluster, each with
 its own volume on `/data`, do not share one directory (`{src: /data/vol/n1-data, dst: /data}`).
 
