@@ -28,6 +28,7 @@ pub const KNOWN: &[&str] = &[
     "ref",
     "tls",
     "buckets",
+    "addr",
     "description",
 ];
 
@@ -202,8 +203,10 @@ pub fn image_file(e: &Entry, arch: &str) -> String {
     format!("emulators/{}-{}.docker.tar", e.file, oci_arch(arch))
 }
 
-/// The command line the emulator runs (the image's entrypoint is replaced).
-fn entrypoint(e: &Entry, inner: i64, name: &str) -> Vec<String> {
+/// The command line the emulator runs (the image's entrypoint is replaced). `host` is where it
+/// listens: 127.0.0.1, or with network: bridge every address of its own network namespace, so
+/// that its proxy (on the bridge's address) and its readiness check reach it at its `addr:`.
+fn entrypoint(e: &Entry, inner: i64, name: &str, host: &str) -> Vec<String> {
     let v: Vec<String> = match e.id {
         "stripe" => vec![
             "/bin/stripe-mock".into(),
@@ -213,9 +216,9 @@ fn entrypoint(e: &Entry, inner: i64, name: &str) -> Vec<String> {
         "smtp" => vec![
             "/mailpit".into(),
             "--smtp".into(),
-            format!("127.0.0.1:{inner}"),
+            format!("{host}:{inner}"),
             "--listen".into(),
-            format!("127.0.0.1:{SMTP_API_PORT}"),
+            format!("{host}:{SMTP_API_PORT}"),
             "--smtp-auth-accept-any".into(),
             "--smtp-auth-allow-insecure".into(),
             "--disable-version-check".into(),
@@ -225,7 +228,7 @@ fn entrypoint(e: &Entry, inner: i64, name: &str) -> Vec<String> {
             "serve".into(),
             "s3".into(),
             "--addr".into(),
-            format!("127.0.0.1:{inner}"),
+            format!("{host}:{inner}"),
             format!("/data/{name}"),
         ],
     };
@@ -261,11 +264,27 @@ pub fn expand(m: &mut Value) -> R<()> {
         ));
     };
     let bridge = m.get("network").and_then(Value::as_str) == Some("bridge");
+    // network: bridge gives every service an address (Milestone 316): an emulator's service
+    // takes its entry's `addr:`, or the first free one of 10.89.1.1, 10.89.1.2, ... that no
+    // service, fake or proxy of the manifest and no other emulator has
+    let mut used: Vec<String> = Vec::new();
+    for kind in ["services", "fakes", "proxies"] {
+        if let Some(Value::Array(a)) = m.get(kind) {
+            used.extend(a.iter().filter_map(|x| get(x, "addr")).map(str_of));
+        }
+    }
+    used.extend(
+        list.iter()
+            .filter_map(|x| get(x, "addr"))
+            .filter(|v| v.is_string())
+            .map(str_of),
+    );
     let mut services: Vec<Value> = Vec::new();
     let mut proxies: Vec<Value> = Vec::new();
     let mut dirs: Vec<Value> = Vec::new();
     let mut env: Vec<(String, String)> = Vec::new();
     let mut meta: Vec<Value> = Vec::new();
+    let mut hosts: Vec<(String, String)> = Vec::new();
     let mut per_kind: Vec<&str> = Vec::new();
     for (i, x) in list.iter().enumerate() {
         let wh = format!("emulators[{i}]");
@@ -341,6 +360,12 @@ pub fn expand(m: &mut Value) -> R<()> {
                 buckets.push(s);
             }
         }
+        let addr = match get(x, "addr") {
+            Some(Value::String(a)) => Some(a.clone()),
+            Some(v) => return Err(err(format!("{wh}: addr {}: an address", py::repr(v)))),
+            None if bridge => Some(free_addr(&mut used)),
+            None => None,
+        };
         let svc = format!("{name}_emulator");
         let mut images = Map::new();
         let mut pins = Map::new();
@@ -354,11 +379,18 @@ pub fn expand(m: &mut Value) -> R<()> {
         let mut s = json!({
             "name": svc,
             "image": Value::Object(images),
-            "entrypoint": entrypoint(e, inner, &name),
+            "entrypoint": entrypoint(e, inner, &name, if bridge { "0.0.0.0" } else { "127.0.0.1" }),
             "ready": format!("tcp:{inner}"),
             "port": inner,
             "description": format!("the {id} emulator: {} ({}), pinned by hydo", e.project, e.license),
         });
+        if let Some(a) = &addr {
+            s["addr"] = Value::String(a.clone());
+            if bridge {
+                hosts.push((a.clone(), svc.clone()));
+                hosts.push((crate::validate::NET_GW.to_string(), name.clone()));
+            }
+        }
         if e.id == "s3" {
             let mut cmd = format!("mkdir -p /data/{name}");
             for b in &buckets {
@@ -475,8 +507,59 @@ pub fn expand(m: &mut Value) -> R<()> {
             eo.entry(k).or_insert(Value::String(v));
         }
     }
+    add_hosts(o, &hosts);
     o.insert(META.into(), Value::Array(meta));
     Ok(())
+}
+
+/// The first address of 10.89.1.1, 10.89.1.2, ... (then 10.89.2.1, ...) that is not in `used`,
+/// marked used.
+fn free_addr(used: &mut Vec<String>) -> String {
+    for n in 257..65534u32 {
+        let (hi, lo) = (n / 256, n % 256);
+        if lo == 0 || lo == 255 {
+            continue;
+        }
+        let a = format!("10.89.{hi}.{lo}");
+        if !used.contains(&a) {
+            used.push(a.clone());
+            return a;
+        }
+    }
+    // the bridge's /16 is full; the validator then names the address that two services share
+    used.first().cloned().unwrap_or_default()
+}
+
+/// A manifest that writes its own /etc/hosts (`root.text`, as `hydo compose` writes it for
+/// network: bridge) gets a line for each name an emulator adds that it does not name yet: the
+/// emulator's service at its address and the proxy at the bridge's address, where hydo's proxies
+/// listen. Without such a file the default /etc/hosts names every service and proxy already.
+fn add_hosts(o: &mut Map<String, Value>, hosts: &[(String, String)]) {
+    let Some(Value::String(h)) = o
+        .get_mut("root")
+        .and_then(|r| r.get_mut("text"))
+        .and_then(|t| t.get_mut("/etc/hosts"))
+    else {
+        return;
+    };
+    let named = |h: &str, n: &str| {
+        h.lines().any(|l| {
+            l.split('#')
+                .next()
+                .unwrap_or("")
+                .split_whitespace()
+                .skip(1)
+                .any(|w| w == n)
+        })
+    };
+    for (a, n) in hosts {
+        if !named(h, n) {
+            if !h.is_empty() && !h.ends_with('\n') {
+                h.push('\n');
+            }
+            h.push_str(&format!("{a} {n}\n"));
+        }
+    }
 }
 
 /// The services that stand for the outside world (the expanded emulators' services) of a
@@ -658,6 +741,56 @@ mod tests {
             refused(json!({"use": "stripe"})),
             "emulators: a list of {use: stripe | smtp | s3, name:, port:, ref:, ...}"
         );
+    }
+
+    /// Milestone 316: with network: bridge every service needs an address, and an emulator's
+    /// service got none, so such a manifest was refused (`services[0]: ... addr: required`).
+    #[test]
+    fn with_a_bridge_each_emulator_gets_a_free_address_and_its_names() {
+        let mut m = base(json!([
+            {"use": "s3", "buckets": ["media"]},
+            {"use": "smtp", "name": "mail"},
+            {"use": "stripe", "addr": "10.89.0.40"}
+        ]));
+        m["network"] = json!("bridge");
+        m["services"][0]["addr"] = json!("10.89.1.1");
+        m["root"] = json!({"text": {"/etc/hosts": "127.0.0.1 localhost\n10.89.1.1 app\n"}});
+        crate::validate_data(&mut m).unwrap();
+        let addr = |n: &str| {
+            m["services"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|s| s["name"] == n)
+                .map(|s| s["addr"].clone())
+                .unwrap()
+        };
+        // 10.89.1.1 is the app's, so the first emulator takes the next one
+        assert_eq!(addr("s3_emulator"), "10.89.1.2");
+        assert_eq!(addr("mail_emulator"), "10.89.1.3");
+        assert_eq!(addr("stripe_emulator"), "10.89.0.40");
+        assert_eq!(addr("app"), "10.89.1.1");
+        assert_eq!(m["env"]["AWS_ENDPOINT_URL_S3"], "http://10.89.0.1:9000");
+        // each emulator listens where its proxy and its readiness check reach it
+        assert_eq!(m["services"][0]["entrypoint"][4], "0.0.0.0:19000");
+        assert_eq!(m["services"][1]["entrypoint"][2], "0.0.0.0:11025");
+        assert_eq!(m["services"][1]["entrypoint"][4], "0.0.0.0:8025");
+        assert_eq!(
+            m["root"]["text"]["/etc/hosts"],
+            "127.0.0.1 localhost\n10.89.1.1 app\n10.89.1.2 s3_emulator\n10.89.0.1 s3\n\
+             10.89.1.3 mail_emulator\n10.89.0.1 mail\n10.89.0.40 stripe_emulator\n10.89.0.1 stripe\n"
+        );
+        // an address another service has is refused, as for any two services
+        let mut m = base(json!([{"use": "s3", "addr": "10.89.1.1"}]));
+        m["network"] = json!("bridge");
+        m["services"][0]["addr"] = json!("10.89.1.1");
+        assert!(crate::validate_data(&mut m)
+            .unwrap_err()
+            .message
+            .contains("addr 10.89.1.1 is used by two services"));
+        // without the bridge nothing changes: no address, no host names
+        let m = expanded(json!([{"use": "s3"}]));
+        assert!(m["services"][0].get("addr").is_none());
     }
 
     #[test]
