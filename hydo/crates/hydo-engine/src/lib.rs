@@ -401,6 +401,31 @@ pub fn guest_fits(ram_mib: u64) -> Result<(), String> {
     }
 }
 
+/// The standard output of a short command, through a temporary file instead of a pipe. A pipe's
+/// write end that another thread's child inherits (macOS marks a new pipe close-on-exec only
+/// after it is made) keeps a read of the pipe waiting until that child ends: an explorer once
+/// waited hours in `host_cpu` for the scripted engine it had started. `wait` returns when the
+/// command ends, whoever else holds the file. None when it cannot run or fails.
+fn stdout_of(mut c: std::process::Command) -> Option<Vec<u8>> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static N: AtomicU64 = AtomicU64::new(0);
+    let path = std::env::temp_dir().join(format!(
+        "hydo-cmd-{}-{}.out",
+        std::process::id(),
+        N.fetch_add(1, Ordering::Relaxed)
+    ));
+    let file = std::fs::File::create(&path).ok()?;
+    let st = c
+        .stdin(std::process::Stdio::null())
+        .stdout(file)
+        .stderr(std::process::Stdio::null())
+        .status();
+    let out = std::fs::read(&path);
+    let _ = std::fs::remove_file(&path);
+    st.ok().filter(|s| s.success())?;
+    out.ok()
+}
+
 /// Memory available for new work, in MiB: `MemAvailable` on Linux; on macOS the free,
 /// speculative, inactive and purgeable pages (`vm_stat`). `Pages free` leaves out the
 /// speculative pages, files read ahead that macOS gives back at once and `top` counts as free
@@ -416,8 +441,8 @@ pub fn available_mib() -> Option<u64> {
             .ok()?;
         return Some(kb / 1024);
     }
-    let out = std::process::Command::new("vm_stat").output().ok()?;
-    let t = String::from_utf8_lossy(&out.stdout);
+    let out = stdout_of(std::process::Command::new("vm_stat"))?;
+    let t = String::from_utf8_lossy(&out);
     let page: u64 = t
         .lines()
         .next()?
@@ -452,11 +477,10 @@ pub fn host_cpu() -> Option<(String, String)> {
     if let Ok(t) = std::fs::read_to_string("/proc/cpuinfo") {
         return host_cpu_of_cpuinfo(&t);
     }
-    let out = std::process::Command::new("sysctl")
-        .args(["-n", "machdep.cpu.brand_string"])
-        .output()
-        .ok()?;
-    let model = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let mut c = std::process::Command::new("sysctl");
+    c.args(["-n", "machdep.cpu.brand_string"]);
+    let out = stdout_of(c)?;
+    let model = String::from_utf8_lossy(&out).trim().to_string();
     if model.is_empty() {
         return None;
     }
@@ -799,5 +823,26 @@ mod host_cpu_tests {
         let arm = "processor\t: 0\nBogoMIPS\t: 48.00\nCPU implementer\t: 0x41\n";
         assert_eq!(host_cpu_of_cpuinfo(arm), Some(("ARM".into(), "".into())));
         assert_eq!(host_cpu_of_cpuinfo("nothing here\n"), None);
+    }
+}
+
+#[cfg(test)]
+mod stdout_tests {
+    use super::stdout_of;
+
+    /// The output comes through the file, a failing command gives None, and a child that keeps
+    /// running in the background (as an engine another thread started would) does not keep the
+    /// read waiting: the old pipe waited for it.
+    #[test]
+    fn a_command_s_output_comes_through_a_file() {
+        let mut c = std::process::Command::new("sh");
+        c.args(["-c", "echo one; (sleep 30 &) ; echo two"]);
+        let t0 = std::time::Instant::now();
+        assert_eq!(stdout_of(c).as_deref(), Some(&b"one\ntwo\n"[..]));
+        assert!(t0.elapsed() < std::time::Duration::from_secs(10));
+        let mut f = std::process::Command::new("sh");
+        f.args(["-c", "echo x; exit 3"]);
+        assert_eq!(stdout_of(f), None);
+        assert!(super::host_cpu().is_some());
     }
 }

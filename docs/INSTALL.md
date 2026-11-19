@@ -115,6 +115,11 @@ the release's `SHA256SUMS`, checks the sha256, and runs the new `install.sh`. It
 skill in Claude Code's plugin and in every folder where hydo installed it. `hydo guide update`
 says what it changes and what it reads.
 
+`hydo update` reads the list of releases from GitHub's API. Without a login, GitHub allows 60
+requests an hour from one address. When `GH_TOKEN` is set, or `gh auth login` was done, hydo
+sends that token to GitHub's API, and the limit does not apply. When the limit is reached, `hydo
+update` says so and when it resets, and exits with status 4.
+
 hydo 0.4.0 and older have no `hydo update`. Upgrade such a hydo once by hand, the way you
 installed it:
 

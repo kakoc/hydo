@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-61 user-facing and 95 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 37 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+63 user-facing and 96 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 37 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -172,6 +172,9 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_OFFLINE` | user | flag: set and not `0` | - | hydo-cli | Set and not `0`: never use the network (`hydo setup`, the kernel lookup of runs, `hydo skill update`); what the install cache does not have is refused with its URL (`--offline` does the same). |
 | `HYDO_UPDATE_CHECK` | user | flag: not `0` | on | hydo-cli | `0`: `hydo doctor` does not look for a newer hydo release (Milestone 315). Otherwise it asks the release list at most once a day, with a timeout of 3 s, keeps the answer in `~/.hydo/update-check.json`, and prints one line with `hydo update` when a newer release exists. `HYDO_OFFLINE` also turns the look off. |
 | `CLAUDE_CONFIG_DIR` | user | path | ~/.claude | hydo-cli | Claude Code's own variable: the folder Claude Code reads its settings, skills and plugins from (Claude Code's default is `~/.claude`). `hydo update` (Milestone 315) updates the hydo skill and the hydo plugin in this folder, in `~/.claude`, and in every other `~/.claude*` folder that holds `plugins/` or `settings.json`; it reads nothing else there. |
+| `GH_TOKEN` | user | secret: a GitHub token | - | hydo-cli | A GitHub token (the variable of GitHub's own `gh` command). `hydo update`, `hydo skill update` and `hydo doctor`'s look for a newer release send it as `Authorization: Bearer` to `https://api.github.com` only, never to another host or in a redirect, so GitHub's limit of 60 requests an hour from one address without a login does not apply (Milestone 322). hydo never prints, logs or writes it. When neither it nor `GITHUB_TOKEN` is set, hydo asks `gh auth token --hostname github.com` when `gh` is on `PATH`. An empty value means unset. |
+| `GITHUB_TOKEN` | user | secret: a GitHub token | - | hydo-cli | A GitHub token, used as `GH_TOKEN` when `GH_TOKEN` is not set (GitHub Actions sets it). An empty value means unset. |
+| `HYDO_GITHUB_API_STANDIN` | developer | URL: http://127.0.0.1:<port> | - | hydo-cli | The origin `http://<loopback host>:<port>` of a fake release list that hydo treats as GitHub's API for the token of `GH_TOKEN` (Milestone 322): the tests check with it which requests carry the token. A value that is not plain HTTP to a loopback host is ignored, so the token cannot go to another machine. |
 
 ## Image builds (`hydo_config::build::Build`)
 

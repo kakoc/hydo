@@ -228,9 +228,9 @@ The release 0.4.1 is 0.4.0 with `hydo update` (M315), the five fixes of M316, an
 2.4.0. It came early, so that the manual upgrade from 0.4.0 is the last one (user, 2026-11-18).
 Its fingerprint epoch is 4. It was cut from 0.4.0's release commit on the branch
 `release-0.4.1`, which is merged into `main` (`docs/HISTORY.md` "The 0.4.1 release, published").
-The rest of `main` after 0.4.0 waits for 0.5.0, that is Milestones 304 to 314 and 317 to 320,
-and the fingerprint epoch 5. The release 0.4.0 was published on 2026-11-18 from `75db9ff9`, with the
-skill release `skill-v2.3.3`. It adds Milestones 254 to 256 and 258 to 303 to 0.3.4, with the
+The rest of `main` after 0.4.0 waits for 0.5.0, that is Milestones 304 to 314 and 317 to 322,
+and the fingerprint epoch 5. The release 0.4.0 was published on 2026-11-18 from `75db9ff9`,
+with the skill release `skill-v2.3.3`. It adds Milestones 254 to 256 and 258 to 303 to 0.3.4, with the
 fingerprint epoch 4. The files and prepared material of both releases are in
 `hydo/dist/out/0.4.0/` and `hydo/dist/out/0.4.1/` of the main checkout. hydo 0.3.4 was
 published on 2026-11-15 from `dee7da68`, with the skill release `skill-v2.3.1`.
@@ -483,7 +483,12 @@ plugin's entries and the skill's version are read in those folders. The plan nam
 with its versions and the "Before you upgrade" notes. `--check` exits 0 or 3, and without
 `--yes` a non-terminal gets the plan and the exit status 3. `hydo doctor` names a newer release
 once a day (`HYDO_UPDATE_CHECK=0` turns it off). The reference is `hydo guide update`; the skill
-2.4.0 runs `hydo update --check` in its step 0.
+2.4.0 runs `hydo update --check` in its step 0. Since M322 the release list is read once per
+command, kept for 10 minutes in `~/.hydo/update-check.json` (a day for `hydo doctor`), and
+asked with `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token` when one is there. The token goes to
+`https://api.github.com` only. At GitHub's limit for requests without a login, `hydo update` and
+`hydo skill update` say so in one line with the reset time. They exit 4 (could not check), and
+the doctor stays quiet until the reset.
 
 **Rules nobody wrote (M236, first version).** The skill proposes a project's business rules from
 its own sources instead of a list per domain, and hydo validates them before the owner sees
@@ -2677,6 +2682,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       is reported and skipped.
     - Homebrew installs the formula's version only, so `--version V` with Homebrew is refused
       unless V is the formula's version.
+    - GitHub's rate limit (M322). The line at the limit, the exit status 4, the token, and the
+      kept answer ran against the fake release server only. GitHub's limit was not reached in
+      the real check. GitHub's secondary limit (a 403 with `retry-after` and requests left) is
+      reported as a plain HTTP 403. A command does not fall back to an older kept answer at the
+      limit. The skill's `references/install.md` does not name the exit status 4.
 162. The fixes of a user's onboarding with 0.4.0 (M316, M317, tentative numbers). What is left:
     - The missing `/dev/shm` of the user's recovery boot has its cause since M317. An image
       service's launcher and its `hydo-oci` helpers bound the system folders outside the lock of
@@ -3646,6 +3656,17 @@ build machine, before 2026-10-13.
   periodic tick sets ticks 1 ms apart. So a tick is due 19 ms ahead after 2 minutes, and a busy
   guest's clock nearly stopped. `guest.exact_tick: true` boots it with `clocksource=jiffies`;
   seed 20 then ends with finding 1's verdict. Nothing recorded moved
+- M321 (tentative number): two tests that only Linux ran, and command output without a pipe. On
+  Linux the launcher test of M317 replaced its own folder's path with the scripts' `/tmp/hydo`.
+  The registry test of M320 left image files that let a wrong password pass. Both
+  tests are fixed; hydo's code was right. `host_cpu` and `available_mib` read `sysctl` and
+  `vm_stat` through a file, so a pipe that another child inherits no longer keeps them waiting.
+  Nothing recorded moved
+- M322 (tentative number): `hydo update`, `hydo skill update` and `hydo doctor` under GitHub's
+  rate limit. They send `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token` to `https://api.github.com`
+  only, and never show it. At the limit the commands say so in one line, with the reset time
+  and how to lift it, and exit 4; the doctor stays quiet. One request per command, and a kept
+  answer of 10 minutes. Nothing recorded moved
 - The 0.4.1 release (no milestone number): 0.4.0 with Milestones 315 and 316, cut from 0.4.0's
   release commit on the branch `release-0.4.1`. The version raised, `hydo-world`,
   `hydo-world-tls` and `hydo-grpc` re-pinned, and the released project schema is the current

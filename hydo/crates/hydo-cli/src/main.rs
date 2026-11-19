@@ -37,6 +37,7 @@ mod onboard;
 mod perf;
 mod preempt;
 mod pyjson;
+mod releaselist;
 mod rules;
 mod runs;
 mod setup;

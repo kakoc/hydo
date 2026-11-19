@@ -13,9 +13,14 @@
 //! skill folder in it. Nothing outside the target folders is written, except two short-lived
 //! siblings `.<name>.new-<pid>` and `.<name>.old-<pid>` that are deleted again. The command uses
 //! the network only when the user runs it; nothing it fetches is executed.
+//!
+//! The release list is read once, with a GitHub token when one is known, or taken from the
+//! answer `hydo update` or `hydo doctor` kept in the last 10 minutes ([`crate::releaselist`],
+//! Milestone 322). When it cannot be read, also at GitHub's rate limit, the exit status is 4.
 
 use crate::ctx::Ctx;
 use crate::fetch::{Fetcher, Options};
+use crate::releaselist::{self, Auth};
 use hydo_agents::release::{archive_name, unpack, TAG_PREFIX};
 use hydo_agents::{readers_of, replace_dir, version_at, version_lt, Where, PLUGIN, SKILL};
 use std::path::{Path, PathBuf};
@@ -111,6 +116,10 @@ pub struct Source {
     pub base: String,
     pub api_fetch: Fetcher,
     pub fetch: Fetcher,
+    /// The token for GitHub's API (Milestone 322); [`Auth::none`] by default.
+    pub auth: Auth,
+    /// The kept answer of the release list (`~/.hydo/update-check.json`); none by default.
+    pub cache: Option<PathBuf>,
 }
 
 impl Source {
@@ -120,6 +129,8 @@ impl Source {
             base: base.trim_end_matches('/').to_string(),
             api_fetch: Fetcher::new(opts(api))?,
             fetch: Fetcher::new(opts(base))?,
+            auth: Auth::none(),
+            cache: None,
         })
     }
 
@@ -127,16 +138,15 @@ impl Source {
         format!("{}/{TAG_PREFIX}{version}/{file}", self.base)
     }
 
-    /// The newest skill release.
-    pub fn newest(&self) -> Result<String, String> {
-        let url = format!("{}?per_page=100", self.api);
-        let body = self.api_fetch.get_small(&url, 8 << 20)?;
-        newest_in(&body)?.ok_or_else(|| {
-            format!(
-                "{}: no skill release (no tag {TAG_PREFIX}<version>) in the project's releases",
-                self.api
-            )
-        })
+    /// The release list: one request, or a kept answer of the last minutes.
+    pub fn list(&self, now: u64) -> Result<releaselist::List, releaselist::Fail> {
+        releaselist::read(
+            &self.api,
+            &self.api_fetch,
+            &self.auth,
+            self.cache.as_deref(),
+            now,
+        )
     }
 
     /// Download release `version`, check it by sha256 and unpack its plugin folder into `dir/hydo`.
@@ -185,7 +195,7 @@ pub fn run_with(
             return 2;
         }
     };
-    match update(&a, source, tmp, out) {
+    match update(&a, source, tmp, out, err) {
         Ok(rc) => rc,
         Err(e) => {
             let _ = writeln!(err, "hydo: {e}");
@@ -199,6 +209,7 @@ fn update(
     source: Option<&Source>,
     tmp: &Path,
     out: &mut dyn std::io::Write,
+    err: &mut dyn std::io::Write,
 ) -> Result<i32, String> {
     let targets = if a.w.named() {
         a.w.targets().map_err(|e| e.0)?
@@ -228,7 +239,28 @@ fn update(
         };
     let wanted = match &a.version {
         Some(v) => v.clone(),
-        None => source.newest()?,
+        None => {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let list = match source.list(now) {
+                Ok(l) => l,
+                Err(f) => {
+                    let _ = writeln!(err, "hydo: {}", f.line(now));
+                    return Ok(releaselist::COULD_NOT_CHECK);
+                }
+            };
+            if let Some(l) = list.kept_line(source.cache.as_deref()) {
+                let _ = writeln!(out, "hydo: {l}");
+            }
+            list.skill.ok_or_else(|| {
+                format!(
+                    "{}: no skill release (no tag {TAG_PREFIX}<version>) in the project's releases",
+                    source.api
+                )
+            })?
+        }
     };
     let say = |out: &mut dyn std::io::Write, s: String| {
         let _ = writeln!(out, "{s}");
@@ -329,7 +361,11 @@ pub fn cmd_skill_update(ctx: &Ctx, argv: &[String]) -> i32 {
         None
     } else {
         match Source::new(&c.release_api, &c.release_url, Options::standard) {
-            Ok(s) => Some(s),
+            Ok(mut s) => {
+                s.auth = Auth::from_config(c, std::time::Duration::from_secs(5));
+                s.cache = Some(c.home.join(releaselist::CHECK_FILE));
+                Some(s)
+            }
             Err(e) => {
                 eprintln!("hydo: {e}");
                 return 1;

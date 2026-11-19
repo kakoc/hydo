@@ -61,7 +61,7 @@ impl Options {
 }
 
 /// Whether a URL is plain HTTP to the loopback.
-fn loopback_http(url: &str) -> bool {
+pub(crate) fn loopback_http(url: &str) -> bool {
     let Some(rest) = url.strip_prefix("http://") else {
         return false;
     };
@@ -109,6 +109,26 @@ fn retryable(status: u16) -> bool {
     status == 408 || status == 429 || status >= 500
 }
 
+/// Why a small GET failed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GetError {
+    /// GitHub's rate limit: the status (403 or 429) and `x-ratelimit-reset` (Unix seconds).
+    Limited { status: u16, reset: Option<u64> },
+    /// Anything else, in words (with the URL).
+    Failed(String),
+}
+
+impl GetError {
+    fn text(self, url: &str) -> String {
+        match self {
+            GetError::Limited { status, .. } => {
+                format!("{url}: HTTP {status} (GitHub's rate limit was reached)")
+            }
+            GetError::Failed(e) => e,
+        }
+    }
+}
+
 /// What one attempt ended with.
 enum Attempt {
     /// The part file holds the whole body.
@@ -129,6 +149,8 @@ impl Fetcher {
             .timeout_connect(Some(Duration::from_secs(30)))
             .timeout_per_read(Some(Duration::from_secs(60)))
             .timeout_global(opts.timeout)
+            // an Authorization header never goes along a redirect (Milestone 322)
+            .redirect_auth_headers(ureq::config::RedirectAuthHeaders::Never)
             .user_agent(format!("hydo/{}", hydo_image::hydo_version()))
             .build();
         Ok(Fetcher {
@@ -146,15 +168,46 @@ impl Fetcher {
 
     /// A small file (at most `limit` bytes), with retries.
     pub fn get_small(&self, url: &str, limit: u64) -> Result<Vec<u8>, String> {
+        self.get_with(url, limit, None).map_err(|e| e.text(url))
+    }
+
+    /// A small answer of GitHub's API (Milestone 322): as [`Fetcher::get_small`], with the
+    /// header `Authorization: Bearer <token>` when a token is given (the caller decides that
+    /// the URL may have it; a redirect never carries it). An answer of GitHub's rate limit (403
+    /// or 429 with `x-ratelimit-remaining: 0`) is [`GetError::Limited`] at once, without
+    /// retries.
+    pub fn get_api(&self, url: &str, limit: u64, token: Option<&str>) -> Result<Vec<u8>, GetError> {
+        self.get_with(url, limit, token)
+    }
+
+    fn get_with(&self, url: &str, limit: u64, token: Option<&str>) -> Result<Vec<u8>, GetError> {
         let mut last = String::new();
         for attempt in 1..=self.opts.attempts.max(1) {
             if attempt > 1 {
                 self.pause(attempt - 1);
             }
-            match self.agent.get(url).call() {
+            let mut req = self.agent.get(url);
+            if let Some(t) = token {
+                req = req.header("Authorization", format!("Bearer {t}"));
+            }
+            match req.call() {
                 Err(e) => last = e.to_string(),
                 Ok(mut r) => {
                     let st = r.status().as_u16();
+                    let header = |n: &str| {
+                        r.headers()
+                            .get(n)
+                            .and_then(|v| v.to_str().ok())
+                            .map(|v| v.trim().to_string())
+                    };
+                    if matches!(st, 403 | 429)
+                        && header("x-ratelimit-remaining").as_deref() == Some("0")
+                    {
+                        return Err(GetError::Limited {
+                            status: st,
+                            reset: header("x-ratelimit-reset").and_then(|v| v.parse().ok()),
+                        });
+                    }
                     if st == 200 {
                         match r.body_mut().with_config().limit(limit).read_to_vec() {
                             Ok(b) => return Ok(b),
@@ -163,15 +216,15 @@ impl Fetcher {
                     } else if retryable(st) {
                         last = format!("HTTP {st}");
                     } else {
-                        return Err(format!("{url}: HTTP {st}"));
+                        return Err(GetError::Failed(format!("{url}: HTTP {st}")));
                     }
                 }
             }
         }
-        Err(format!(
+        Err(GetError::Failed(format!(
             "{url}: {last} (after {} attempts)",
             self.opts.attempts.max(1)
-        ))
+        )))
     }
 
     /// Download `url` into `part` until the whole file is there and its sha256 is `sha256`.

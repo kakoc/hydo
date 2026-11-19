@@ -2649,7 +2649,9 @@ esac
     /// launcher has mounted `/dev/shm` or waits for the lock. Returns the mounts in their order
     /// as (source, mount point).
     fn helper_then_launcher(once: bool) -> Vec<(String, String)> {
-        let t = std::env::temp_dir().join(format!("hydo-oci-once-{}-{once}", std::process::id()));
+        // not `hydo-...`: the scripts' `/tmp/hydo` is replaced below, and on Linux the temporary
+        // folder is `/tmp`, so a name that starts with `hydo` would be replaced too
+        let t = std::env::temp_dir().join(format!("oci-once-{}-{once}", std::process::id()));
         let _ = fs::remove_dir_all(&t);
         fs::create_dir_all(&t).unwrap();
         let ts = t.to_string_lossy().into_owned();

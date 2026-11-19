@@ -18156,6 +18156,131 @@ release that raises the middle number, as M316's launcher fix does (open item 16
 
 **What is left.** Open item 164.
 
+## Milestone 321 (tentative number): two tests that only Linux ran, and command output without a pipe
+
+CI on `main` failed on Linux after Milestones 317 and 320 were merged. Both failures were in new
+tests that the Mac skips or passes, and a third problem was a hang of four hours.
+
+**The launcher test of Milestone 317.** `oci::tests::a_helper_beside_the_launcher_never_hides_the_shm_tmpfs`
+named its folder `hydo-oci-once-...` in the temporary folder. It replaces the scripts' `/tmp/hydo`
+with that folder, and on Linux the temporary folder is `/tmp`. So the stand-in busybox's own path
+was replaced too, and the helper never ran ("the helper never reached its bind of /dev").
+`TMPDIR=/tmp` reproduces it on a Mac. The folder is `oci-once-...` now, and the test passes with
+`TMPDIR=/tmp`. The launcher's code was right.
+
+**The registry test of Milestone 320.** On Linux an import with a wrong password passed. The test
+now prints the registry's log and what the credential helper was asked when that happens. The
+log showed no request of the import at all: with only the lock file removed, the import pinned
+the image files that `fetch-images.sh` had saved in the project folder. The test now removes
+the whole project folder before the wrong password, so the import must ask the registry. hydo's
+code was right.
+
+**A read that waited for hours.** A run of `cargo test -p hydo --test it` waited about four hours
+in `configs::`: an explorer was in `hydo_engine::host_cpu`, reading the output of `sysctl` from a
+pipe that a child of another thread held open (the scripted engine `engine.sh serve`). macOS marks
+a new pipe close-on-exec only after it is made, so a child started in that moment inherits its
+write end. `host_cpu` and `available_mib` now read the output of `sysctl` and `vm_stat` through a
+temporary file, and `wait` ends when the command ends. A unit test runs a command that leaves a
+child running: it returns at once, where the pipe waited for the child.
+
+Nothing recorded moved.
+
+
+## Milestone 322 (tentative number): the release list under GitHub's rate limit
+
+On 2026-11-19, after a day of tests and checks on one Mac, GitHub's API answered every request
+without a login with HTTP 403. GitHub allows 60 such requests an hour from one address, and the
+answers had `x-ratelimit-remaining: 0`. `hydo skill update --check` then printed only `hydo:
+https://api.github.com/repos/kakoc/hydo/releases?per_page=100: HTTP 403` and exited 1. A user
+could not tell from that line what happened or what to do. `hydo update` and the daily look of
+`hydo doctor` read the same list and had the same problem.
+
+**What changed.** The new module `hydo/crates/hydo-cli/src/releaselist.rs` reads the release
+list for all three:
+
+- A token. hydo takes `GH_TOKEN`, else `GITHUB_TOKEN`, else the output of `gh auth token
+  --hostname github.com` when `gh` is on `PATH`. It asks `gh` only when a request may carry a
+  token, waits at most 5 seconds (2 for `hydo doctor`), and reads the answer through a new file
+  of mode 0600 that it removes at once, not through a pipe (Milestone 321 says why a pipe can
+  wait for another thread's child). The token goes as `Authorization: Bearer` only to a URL
+  whose origin is exactly `https://api.github.com` (`token_may_go`). The download host, another
+  port, `http://`, and a host such as `api.github.com@example.org` get none. The fetcher drops
+  the header on every redirect (`RedirectAuthHeaders::Never`).
+- No token is shown. `hydo_config::run::Secret` holds the value, and its `Debug` prints
+  `<hidden>`. `hydo_config::Env`'s `Debug` hides `GH_TOKEN` and `GITHUB_TOKEN` too.
+- GitHub's limit. A 403 or 429 answer with `x-ratelimit-remaining: 0` is not retried (a 429 was
+  retried four times before). The commands print one line and exit with status 4, which means
+  that the release list could not be read; 3 still means that something is newer. Any other
+  failure to read the list exits with 4 too, where it exited with 1. Offline stays 1.
+- The daily look of `hydo doctor`. At the limit it prints nothing about it, keeps its earlier
+  answer as it was, and records `limited_until` from `x-ratelimit-reset`. It makes no look
+  before that time.
+- Fewer requests. Each command reads the list once, and the newest hydo and skill releases come
+  from it. Every successful read keeps the list in `~/.hydo/update-check.json`: the versions,
+  each release's "Before you upgrade" section, and the newest skill release. The file keeps the
+  fields `checked`, `api` and `newest`, so an older hydo's doctor still reads it. A command
+  takes a kept answer of the last 10 minutes and says so in its first line, for example `hydo:
+  the release list as read less than a minute ago, kept in ...; it is read again after 10
+  minutes`. `hydo doctor` takes one of the last day, so the doctor that `hydo update` runs after
+  an update makes no request.
+- `HYDO_GITHUB_API_STANDIN`, a developer variable, names a loopback origin that hydo treats as
+  GitHub's API for the token. A value that is not plain HTTP to a loopback host is ignored. The
+  tests check with it which requests carry the token.
+
+The line at the limit:
+
+```text
+hydo update: GitHub's limit for requests without a login (60 an hour from one address) was reached, so the release list could not be read; the limit resets in 38 minutes. Set GH_TOKEN to a GitHub token, or log in with `gh auth login`, to lift it. Nothing was changed
+```
+
+When the request had a token, the line says that the limit of requests with the token was
+reached, and gives no advice to log in.
+
+**Tests.** `hydo-cli`'s `tests/update.rs` has four new cases against its local fake release
+server, each with a temporary home. None calls GitHub.
+
+- `at_github_s_limit_the_commands_say_so_and_change_nothing`: a 403 and then a 429 with the
+  rate-limit headers. `hydo update --check`, `hydo update --yes`, `hydo skill update --check`
+  and `hydo skill update` print the one line with `resets in 38 minutes` and exit 4. Each makes
+  one request, and no skill copy, program or download changes. `hydo doctor` then prints
+  nothing about it and makes no request, also after the list is readable again. A command reads
+  it, and the doctor prints its note from that answer.
+- `a_token_goes_to_the_api_host_only_and_is_never_shown`: the API on its own server. A `hydo
+  update --yes` with `GH_TOKEN` sent `Bearer <token>` to the API and nothing to the download
+  host. A redirect of the API to the other server did not carry it. Without the stand-in, the
+  API got no token. The token is in no output and in no file under the case's folder.
+- `gh_auth_token_gives_the_token_when_no_variable_does`: a fake `gh` gave the token once, with
+  the arguments `auth token --hostname github.com`. With `GH_TOKEN`, `gh` was not asked. For a
+  request that may not carry a token, `gh` was not asked either.
+- `one_request_for_the_release_list_per_command`: `hydo update --yes` updated hydo and a skill
+  copy with one request. The next `hydo skill update --check` and `hydo update --check` took the
+  kept answer. Without the file, `hydo skill update` made one request.
+
+The unit tests of `src/releaselist/tests.rs` cover `token_may_go`, the line, `gh_token` (an
+error, no output, two words, and a `gh` that hangs and is killed after 300 ms), and the doctor's
+look at the limit. The first start of a new script took up to 1.7 s on this Mac while the other
+cases ran, longer than hydo waited for `gh` in one run. So the `gh` case starts its fake once
+before the command.
+
+**The real check.** One `hydo update --check` against GitHub, with a temporary home, from this
+tree's build (version 0.4.0) on this Mac, where `gh` is on `PATH`:
+
+```text
+hydo update: hydo 0.4.0, this hydo was built in the checkout <the worktree>
+  hydo: 0.4.0 -> 0.4.1: nothing (see the commands below)
+  ...
+rc=3
+```
+
+A `hydo skill update --check --to <folder>` right after it printed `hydo: the release list as
+read less than a minute ago, kept in <home>/.hydo/update-check.json; it is read again after 10
+minutes` and `onboard: not installed (release 2.4.0)`, with no second request. The kept file had
+the keys `api`, `checked`, `newest` (`0.4.1`), `releases` and `skill` (`2.4.0`). GitHub's limit
+was not reached during the check, so the line at the limit ran against the fake server only.
+
+Nothing recorded moved. `hydo update --help`, `hydo skill --help` and `hydo guide update` have
+new text.
+
 ### The 0.4.1 release — prepared for publication (2026-11-19)
 
 The user's decision of 2026-11-18: 0.4.1 is 0.4.0 plus `hydo update` (Milestone 315) and the five
@@ -18355,7 +18480,7 @@ install of 2.3.3 reported 2.4.0 as newer, and `hydo skill update` installed it.
 the tag `v0.4.1` names a commit of main's history, as at 0.4.0. `main` has the version 0.4.1, the
 re-pinned `hydo-world`, `hydo-world-tls` and `hydo-grpc`, and 0.4.1's re-recorded epoch-4 values
 in `hydo/onboard/recorded.json`. It keeps its own later work: Milestones 304 to 314 and 317 to
-320, and the fingerprint epoch 5 of Milestone 317. The conflicts were resolved so:
+322, and the fingerprint epoch 5 of Milestone 317. The conflicts were resolved so:
 
 - docs/REBASELINE.md keeps both sections: section 28 is hydo 0.4.1, the number that the release's
   own pages give it, and the epoch-5 section of Milestone 317 is section 29.
@@ -18371,3 +18496,8 @@ in `hydo/onboard/recorded.json`. It keeps its own later work: Milestones 304 to 
 - hydo-build's equivalence corpus has the mismatches it had on `main` before the merge: six from
   Milestone 306 (`error_paths`) and 21 from Milestone 319, whose key `exact_tick` is now in the
   list of the `guest:` keys of a refusal. None names the version.
+- Two tests depend on where the build's target folder is. hydo-manifest's
+  `equivalence::same_as_hydo_build` and `update::every_copy_of_the_skill_and_every_marketplace_install_is_updated`
+  read the version from the `hydo/VERSION` of the checkout above the program. With a target
+  folder of another checkout, still at 0.4.0, both failed; with this tree's own target folder
+  both passed.

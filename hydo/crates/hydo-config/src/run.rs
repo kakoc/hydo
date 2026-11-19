@@ -141,6 +141,32 @@ pub struct Cache {
     /// `CLAUDE_CONFIG_DIR`: Claude Code's configuration folder, which `hydo update` also
     /// updates; None (unset or empty): only the folders found in the home directory.
     pub claude_config_dir: Option<PathBuf>,
+    /// `GH_TOKEN`, else `GITHUB_TOKEN`: a GitHub token for GitHub's API (Milestone 322); None
+    /// (both unset or empty).
+    pub github_token: Option<Secret>,
+    /// `HYDO_GITHUB_API_STANDIN`: a loopback origin that stands for GitHub's API in tests.
+    pub github_api_standin: Option<String>,
+}
+
+/// A value that is never shown: its `Debug` prints `<hidden>`, and it has no `Display`.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct Secret(String);
+
+impl Secret {
+    pub fn new(s: impl Into<String>) -> Secret {
+        Secret(s.into())
+    }
+
+    /// The value itself, for the one place that sends it.
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<hidden>")
+    }
 }
 
 impl Cache {
@@ -158,6 +184,12 @@ impl Cache {
             offline: e.set_not_0(HYDO_OFFLINE),
             update_check: e.not_0(HYDO_UPDATE_CHECK),
             claude_config_dir: e.path_nonempty(CLAUDE_CONFIG_DIR),
+            github_token: e
+                .nonempty(GH_TOKEN)
+                .or_else(|| e.nonempty(GITHUB_TOKEN))
+                .map(|t| Secret(t.trim().to_string()))
+                .filter(|t| !t.0.is_empty()),
+            github_api_standin: e.nonempty(HYDO_GITHUB_API_STANDIN),
         }
     }
 }

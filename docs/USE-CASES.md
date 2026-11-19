@@ -216,7 +216,7 @@ Ideas that would answer more:
 
 | The question | What hydo answers today | Status |
 |---|---|---|
-| Is a newer hydo or a newer onboarding skill out? | `hydo update --check` names each part with its version and the newest release's (exit status 3 when one is newer). `hydo doctor` prints one line about a newer hydo, at most once a day. | built; M315 (a fake release in tests; the real `--check` against GitHub) |
+| Is a newer hydo or a newer onboarding skill out? | `hydo update --check` names each part with its version and the newest release's (exit status 3 when one is newer). `hydo doctor` prints one line about a newer hydo, at most once a day. With a GitHub token (`GH_TOKEN`, `GITHUB_TOKEN` or `gh auth login`), GitHub's limit for requests without a login does not apply. At that limit the commands say so with the reset time, and they exit with status 4. | built; M315 (a fake release in tests; the real `--check` against GitHub), M322 (the limit and the token against the fake release only) |
 | Can one command update hydo and every copy of the skill? | `hydo update --yes` updates hydo the way it was installed (Homebrew, cargo, the release archive, the install cache). It updates the skill in the known folders, in every Claude Code configuration folder, and in every folder where hydo wrote it, and Claude Code's plugin `hydo@hydo`. | partly built; M315; only fake brew, cargo and claude programs ran it (open item 161) |
 
 ## The ideas
