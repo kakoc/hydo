@@ -3146,6 +3146,12 @@ build machine, before 2026-10-13.
   service's environment stopped it. The text about the Mac's service networks and memory is
   true. The missing tmpfs was not reproduced; its race fix waits for 0.5.0. Nothing recorded
   moved
+- The 0.4.1 release (no milestone number, prepared, not published): 0.4.0 with Milestones 315 and
+  316 on the branch `release-0.4.1`. The version is raised, and `hydo-world`, `hydo-world-tls`
+  and `hydo-grpc` are re-pinned. The released project schema is the current one. The examples
+  are re-recorded at epoch 4: 9 images on hvx and 9 on the Mac moved, as at 0.4.0. Release step
+  6a checked the changed pages. Both releases are built twice to the same bytes, the Mac one
+  signed and notarized, and verified on hvx and the Mac; the KVM run is the lead's
 
 ## Where to look
 
