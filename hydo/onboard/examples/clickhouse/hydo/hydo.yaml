@@ -44,6 +44,7 @@ guest:
   cpu: v3   # the official x86_64 binaries stop with SIGILL on the x86-64-v2 guest (RESULTS.md, "The setup")
   clock_start: 1794960000   # 2026-11-18 00:00 UTC, the day of the import
   outcomes_after_cut: true  # the checks in a recovery boot read the failed blocks too
+  exact_tick: true   # hvx: the guest's clock keeps up while a Keeper's threads keep the CPU busy (RESULTS.md, "What hydo lacked")
 
 data:
   size_mib: 1024   # the data disk: every volume lives here (the fault target); hvx takes at most 4 GiB of root and data together

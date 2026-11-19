@@ -231,6 +231,11 @@ impl BootSpec {
             a.push("--cpu-cache".to_string());
             a.push("on".to_string());
         }
+        // Milestone 319: the image's exact timer tick (`guest.exact_tick`), hvx only
+        if matches!(kind, EngineKind::Hvx) && crate::image::exact_tick(&self.image) {
+            a.push("--exact-tick".to_string());
+            a.push("on".to_string());
+        }
         // an image of an older fingerprint epoch runs as at its epoch (the KVM engine since M204;
         // since Milestone 290 both engines, whose fingerprints hash the disks by a tree from
         // epoch 4 on): the in-process engines take the epoch as a value

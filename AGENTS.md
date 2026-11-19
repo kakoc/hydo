@@ -352,6 +352,15 @@ overflow reach the count, and the timer comes there as at an idle HLT. It needs 
 guest; of GitHub's runners only the Xeon 6975P-C hosts do. The Mac engine refuses the key, and
 hvx ignores it. The design and the measurements are in `docs/design/exit-free-loops.md`.
 
+**The guest's timer tick on hvx (M319, tentative number).** hvx's guest kernel keeps time with
+`refined-jiffies`, which counts a tick as 999,848 ns, while its periodic tick sets each next tick
+1 ms after the one before. After t seconds of uptime a tick is due 1 ms + 0.152 ms × t ahead on
+the virtual TSC. A busy guest late in a long run then needs that much virtual time per tick. Its
+clock nearly stops, as in the ClickHouse runs that ended `TIMEOUT workload` at 900 s (open item
+157). `guest.exact_tick: true` (a format-1 addition, opt-in) boots the guest with
+`clocksource=jiffies`, 1 ms a tick. The reference is the section "The guest's timer tick on hvx"
+of MANIFEST.md.
+
 **The cgroup2 mount (M283, tentative number).** From the fingerprint epoch 4 the host controller
 mounts the cgroup2 file system on `/sys/fs/cgroup` at the start of every boot, before the S0
 snapshot, with the agent's existing `mount` primitive. So the agent and its pin stay, and an
@@ -2577,10 +2586,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - `hydo compose` took the Keeper's port from the image's `EXPOSE` (2181; it listens on 9181)
       and kept the images' `entrypoint.sh`, which changes owners in the read-only root. The
       import does not propose `guest.cpu: v3`, without which the programs stop with SIGILL.
-    - In four schedules the guest agent stopped answering after the Keepers lost their quorum.
-      Three had a ring partition of the Keepers, and one a kill of two of them and a forward
-      clock step. Each run ended `TIMEOUT workload` after 900 s, and seven runs did so. `hydo
-      inspect` cannot start where the agent does not answer, so the cause was not traced.
+    - The four schedules that ended `TIMEOUT workload` after 900 s were the guest's clock, not
+      the agent (M319). With `guest.exact_tick` seed 20 ends with a verdict and seed 33 passes.
+      Seeds 27 and 40 did not run again (open item 164).
     - `hydo explore --configs` with `--no-shrink` or `--schedule` lists no class of failure and
       says that no combination failed, although 6 of 24 and 2 of 3 runs failed. An exploration's
       failures are recorded only when they are shrunk.
@@ -2702,6 +2710,24 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       tool, on the crates.io archives. percent-encoding needed two helpers of its own
       (`AsciiSet::hydo_set`, `hydo_bytes`), because its set has a private field and no
       constructor from bytes. A fresh evaluator should run `hydo fuzz` again before 0.5.0.
+
+164. The guest's timer tick on hvx (M319, tentative number). What is left:
+    - `guest.exact_tick` is opt-in. Every other hvx image keeps the gap of 152 ns a tick, so a
+      busy guest after some minutes of uptime still runs its clock slowly. As the default it
+      moves every hvx fingerprint: it belongs to a new fingerprint epoch, keyed on the image's
+      epoch (`hydo_image::defaults`), in a release that raises the middle number.
+    - The Mac and KVM guest kernels were not checked for the same gap.
+    - Seeds 27 and 40 of the ClickHouse explorations did not run with the key. Seed 33 ran once
+      with it and passed, but not without it on the same image.
+    - Two `KeeperHandler` threads of a Keeper stayed runnable, mostly in the kernel, while its
+      client port held a connection in `CLOSE_WAIT` after the Keepers lost their quorum. The
+      cause in ClickHouse was not traced, and nothing was reported.
+    - A run whose guest clock falls far behind the virtual TSC still ends only at the engine's
+      wall limit, as `TIMEOUT workload`. Neither the verdict nor the diagnosis says that the
+      guest's clock fell behind.
+    - The controller's `run` commands of `tc` and the agent's own `qlen` (which runs `tc` and
+      waits for it) carry no deadline of their own. No run showed one of them blocking: in M319
+      the agent answered every command.
 
 165. Images in private registries (M320, tentative number). What is left:
     - No real private registry ran. The proof used a registry in the test process (the token
@@ -3603,6 +3629,11 @@ build machine, before 2026-10-13.
   tmpfs. On hvx seven PostgreSQL image services showed the race before
   the fix and not after it. Images built at epoch 4 keep their launchers and values. Every
   recorded value waits for the pass before 0.5.0 (open item 105)
+- M319 (tentative number): the ClickHouse runs that ended `TIMEOUT workload` after 900 s were
+  the guest's clock on hvx, not its agent. `refined-jiffies` counts a tick as 999,848 ns, and the
+  periodic tick sets ticks 1 ms apart. So a tick is due 19 ms ahead after 2 minutes, and a busy
+  guest's clock nearly stopped. `guest.exact_tick: true` boots it with `clocksource=jiffies`;
+  seed 20 then ends with finding 1's verdict. Nothing recorded moved
 
 ## Where to look
 

@@ -298,6 +298,15 @@ that a milestone builds moves into the tables of this page with its new status.
   structures.
 - **Where it came from.** The section "Next steps" of `docs/design/contracts.md`.
 
+### The exact timer tick by default on hvx
+
+- **What it is.** `guest.exact_tick` (M319) on for every image built at a new fingerprint epoch.
+- **Why it matters.** Without it hvx's guest clock falls behind by 152 ns a tick. A busy guest
+  late in a long run then nearly stops its clock, and the run ends at the engine's wall limit.
+- **What it needs.** A new fingerprint epoch, the key's default in `hydo_image::defaults`, and a
+  re-recording of the hvx values.
+- **Where it came from.** Open item 164; the ClickHouse example's runs of open item 157.
+
 ### A guest counter for loops without exits on the Mac engine
 
 - **What it is.** A counter of the guest's branches on the Mac, so that the engine can stop a

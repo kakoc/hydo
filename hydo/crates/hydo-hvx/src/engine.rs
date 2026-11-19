@@ -3533,22 +3533,25 @@ pub struct Start {
     pub cpu_v3: bool,
     /// `--cpu-cache on` (M203: `guest.cpu_cache`, the CPUID cache leaves).
     pub cpu_cache: bool,
+    /// `--exact-tick on` (Milestone 319: `guest.exact_tick`): the guest kernel boots with
+    /// `clocksource=jiffies`, which counts each timer tick as exactly 1 ms.
+    pub exact_tick: bool,
 }
 
 /// The program's command line (`[--ram-mib N] [--vcpus N] [--cpu v2|v3] [--cpu-cache on|off]
-/// --control boot serve|one <bzImage> <initramfs> <disk.img> <outdir> ["<schedule>"]`, read as
-/// hvx_explore read
-/// it), then [`run`] over the text port (requests and commands on `io.input`, reports on
+/// [--exact-tick on|off] --control boot serve|one <bzImage> <initramfs> <disk.img> <outdir>
+/// ["<schedule>"]`, read as hvx_explore read it), then [`run`] over the text port (requests and commands on `io.input`, reports on
 /// `io.out`). The plain `one`/`serve` modes and `--control one` (the shell-init images') are
 /// refused since M145.
 pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
     let mut a: Vec<String> = args.to_vec();
     let (mut control_one, mut control_boot) = (false, false);
     let (mut ram_mib, mut vcpus, mut cpu_v3, mut cpu_cache) = (None, None, false, false);
+    let mut exact_tick = false;
     while a.len() > 2
         && matches!(
             a[1].as_str(),
-            "--ram-mib" | "--vcpus" | "--cpu" | "--cpu-cache" | "--control"
+            "--ram-mib" | "--vcpus" | "--cpu" | "--cpu-cache" | "--exact-tick" | "--control"
         )
     {
         if a[1] == "--control" && a[2] == "boot" {
@@ -3582,6 +3585,14 @@ pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
                     return 2;
                 }
             },
+            "--exact-tick" => match a[2].as_str() {
+                "on" => exact_tick = true,
+                "off" => exact_tick = false,
+                v => {
+                    let _ = writeln!(io.diag, "hydo-hvx: --exact-tick {v}: expected on or off");
+                    return 2;
+                }
+            },
             _ => match vcpus_parse(&a[2], "--vcpus", &mut io.diag) {
                 Some(n) => vcpus = Some(n),
                 None => return 2,
@@ -3590,7 +3601,7 @@ pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
         a.drain(1..3);
     }
     if a.len() < 6 {
-        let _ = writeln!(io.diag, "usage: {} [--ram-mib N] [--vcpus N] [--cpu v2|v3] [--cpu-cache on|off] --control boot serve|one <bzImage> <initramfs> <disk.img> <outdir> [\"<schedule>\"]", a.first().map(String::as_str).unwrap_or("hydo-hvx"));
+        let _ = writeln!(io.diag, "usage: {} [--ram-mib N] [--vcpus N] [--cpu v2|v3] [--cpu-cache on|off] [--exact-tick on|off] --control boot serve|one <bzImage> <initramfs> <disk.img> <outdir> [\"<schedule>\"]", a.first().map(String::as_str).unwrap_or("hydo-hvx"));
         return 2;
     }
     if !control_boot || control_one {
@@ -3633,6 +3644,7 @@ pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
         vcpus,
         cpu_v3,
         cpu_cache,
+        exact_tick,
     };
     let port = Box::new(crate::text::TextPort::new(io.input, io.out));
     run(start, o, port, io.diag)
@@ -3724,6 +3736,16 @@ pub fn run(
         }
     };
     let mut cmdbase = boot::ROOTFS_CMDLINE.to_string();
+    // Milestone 319 (`guest.exact_tick`): the TSC fails the kernel's clocksource watchdog at boot,
+    // so the guest keeps time with refined-jiffies, which counts a tick as 999,848 ns, while the
+    // periodic tick on the one-shot TSC-deadline timer sets each next tick 1,000,000 ns after the
+    // one before. The tick is then programmed 152 ns later per tick that passed: 18 ms late after
+    // 2 minutes of uptime. An idle guest does not notice (a HLT jumps to the deadline), but a busy
+    // one needs that much virtual time per tick, and its clock nearly stops. The plain jiffies
+    // clocksource counts a tick as 1,000,000 ns, the tick's own period.
+    if start.exact_tick {
+        cmdbase.push_str(" clocksource=jiffies");
+    }
     if let Some(x) = &o.cmdline_extra {
         cmdbase = format!("{cmdbase} {x}");
         ccap(&mut cmdbase, 1024);

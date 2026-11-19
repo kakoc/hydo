@@ -319,6 +319,12 @@ pub fn branch_tick(image: &Path) -> Option<String> {
     (!t.is_empty()).then(|| t.to_string())
 }
 
+/// Milestone 319: whether the image asks for the exact timer tick on hvx (`guest.exact_tick`, its
+/// `/etc/hydo/exact-tick`; the file is written only with the key).
+pub fn exact_tick(image: &Path) -> bool {
+    embedded_file(image, "etc/hydo/exact-tick").is_ok_and(|t| t.trim() == "jiffies")
+}
+
 pub fn embedded_manifest(image: &Path) -> Result<String, ImageError> {
     embedded_file(image, "etc/hydo/hydo.yaml")
 }

@@ -18058,3 +18058,100 @@ are likely to move. docs/REBASELINE.md section 28 names the epoch.
 
 **What is left.** Open item 162 (the user's own project was not run) and open item 105 (the
 values of epoch 5).
+
+## Milestone 319 (tentative number): the guest's timer tick on hvx, and the ClickHouse runs that never ended
+
+In the ClickHouse onboarding (Milestone 311) four schedules ended `TIMEOUT workload` after the
+engine's limit of 900 s of host time, seven runs in all (open item 157). Three had a ring
+partition of the three Keepers, and one a kill of two Keepers and a forward clock step. The
+control transcript of each ended at an answered `clock_get`, and the guest printed nothing more.
+The report then was that the guest agent stopped answering. It did not: the guest's clock nearly
+stopped, and every timeout in the guest waited with it.
+
+**The reproduction.** Seed 20 of exploration E2, `disk=cut dseed=6711e6dcb424bc7a | run
+K=keepers.minority.7@36+3 N=keepers.ring@12-21:loss,100% C=40 P=replicas.all@6+3
+W=9580664b,p4,q2,r250`, ran with `hydo run` on hvx on the onboarding's image `img-i2`
+(`fsync=insert`), from a tree of its own on the bare-metal machine. Two runs ended `TIMEOUT
+workload` at a wall limit of 700 s and 500 s (`HVX_EXPLORE_WALL_SECS`, to save time), each with
+243 typed commands and the same input hash `inh=109d022965b67fca` and transcript hash
+`ctl=805e43e8de53b972`. The last command was the composer's `clock_get` (id 243) at stop 180146,
+and the agent answered it. The client's last line came at 126.2 s of guest time.
+
+**Where the time went.** A temporary diagnostic of the engine sampled the vCPU every few seconds
+of host time while the run went on. It read the snapshot, the PMU branch clock's counters and,
+by the kernel's `System.map`, the guest's `jiffies`:
+
+- Before the partition the run went from 9 s to 120.8 s of guest time in about 5 s of host time.
+- After it, the guest retired about 575 million conditional branches in each 5 s of host time.
+  So 555 ticks of the branch clock moved the virtual TSC 1.1 s. The guest's own clock moved 60 to
+  85 timer ticks of 1 ms: 0.06 to 0.085 s. In 489 s of host time it moved 5.7 s.
+- The host's time went into the module's run calls, which run the guest. The engine and the
+  controller took almost none.
+
+`hydo inspect start` at stop 180146 showed the guest in that state, and its calls answered (7.5 s
+to 110 s of host time each, so the agent ran). An advance of 20 s took 18 s of host time and the
+next one of 8 s took 764 s. At 128.9 s of uptime:
+
+- `/sys/devices/system/clocksource/clocksource0/current_clocksource` was `refined-jiffies`. The
+  kernel log has `Marking clocksource 'tsc-early' as unstable because the skew is too large` at
+  6.27 s and `Switched to clocksource refined-jiffies` at 10.04 s: hvx's virtual TSC counts guest
+  work, and the clocksource watchdog compares it with the timer ticks.
+- `/proc/timer_list` showed the tick in periodic mode (`tick_handle_periodic`) on the one-shot
+  `lapic-deadline` device, `now at 128916129504 nsecs` and `next_event: 128936000000 nsecs`: the
+  next tick was set 19.9 ms ahead.
+- In 60 ms of guest time two `KeeperHandler` threads of `keeper3` ran 14.2 ms and 13.9 ms. Both
+  were runnable all the time and mostly in the kernel (58 user and 153 system ticks). `keeper3`'s
+  client port 9181 held a connection from `ch2` in `CLOSE_WAIT`.
+
+**The cause.** `refined-jiffies` counts each tick as 999,848 ns (its rate comes from the PIT's
+1,193,182 Hz: 1,193 cycles a tick). The periodic tick on a one-shot device sets each next tick
+`TICK_NSEC`, 1,000,000 ns, after the one before, and programs it as the difference from the
+clock's present time. The two counts part by 152 ns a tick. After t seconds of uptime the next
+tick is due 1 ms + 0.152 ms × t ahead of the virtual TSC: at 128,935 ticks, 19.6 ms, as the
+timer list showed. An idle guest does not notice, because the module moves the virtual TSC to
+the deadline at a HLT. A busy guest has to run through that virtual time: here about 10 million
+branches for each 1 ms of its clock. Two Keeper threads kept the CPU busy after the Keepers lost
+their quorum, and the guest's clock ran about 1.2 s in 100 s of host time. The step's timer, each
+command's `busybox timeout 50`, and the client's 12 s deadlines were all in guest time. None of
+them ended before the engine's limit. The controller waited for those ends and had nothing to
+send.
+
+The kernel's command line is built in `run` of `hydo/crates/hydo-hvx/src/engine.rs` (`cmdbase`,
+from `boot::ROOTFS_CMDLINE`). Nothing on it named a clocksource, so the guest kernel picked
+`refined-jiffies` itself.
+
+**The fix.** `guest.exact_tick: true` (a format-1 addition) makes hvx boot the guest kernel with
+`clocksource=jiffies`. The plain jiffies clocksource counts a tick as 1,000,000 ns, the tick's own
+period, so each tick is due 1 ms after the one before at any uptime. `hydo build` writes
+`/etc/hydo/exact-tick` only with the key, the engine layer passes `--exact-tick on` to hvx for
+such an image (`hydo_engine::image::exact_tick`), and `hydo-hvx` adds the parameter. The Mac and
+KVM engines ignore the key. The ClickHouse example's `hydo.yaml` sets it.
+
+- On `img-i2` with `clocksource=jiffies` added through `HVX_EXPLORE_CMDLINE_EXTRA`, seed 20
+  moved 5.8 s of guest time in each 20 s of host time while the Keeper threads were busy. Then it
+  went on quickly. The run ended `HYDO-ORACLE: VIOLATION [converge] the replicas differ in 1
+  blocks after the heal` (finding 1, after the power cut `C=40`) with `fp=56cdb36c4bdaf736`. It
+  took 1,354 s of host time with its recovery boot and checks, on a loaded machine.
+- The image `img-x1`, built from the committed example (`--set fsync=insert`, so with
+  `guest.exact_tick: true`), booted with `clocksource=jiffies` on its command line. Seed 20 gave
+  `VIOLATION [converge] the replicas differ in 2 blocks after the heal`, `fp=2be840e3c29f36dd`, in
+  711 s of host time. A second run gave the same fingerprint, input hash
+  (`inh=50392a9848e8a956`) and transcript hash (`ctl=897572c6272fa6fd`). Both runs ended with
+  their verdict, not at the engine's limit.
+- Seed 33 of E3 (`disk=none dseed=ad03dcc43f85bd09 | run K=keepers.majority.6@21+3 P=keeper1@13+4
+  T=23:86400 W=93234449,p4,q2,r1000`, the kill of two Keepers and the forward clock step) ended
+  `OK` on `img-x1` in 181 s of host time. It did not run on that image without the key, and seeds
+  27 and 40 did not run.
+
+**What moved.** Nothing recorded. An image without the key has the same bytes, the same engine
+arguments and the same kernel command line as before, and the controller sends what it sent.
+The pinned reproducer `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` on the
+epoch-4 old image gave `e153f376096a072c` (VIOLATION, order 11), its recorded value, with this
+tree's engine on hvx. The fingerprint epoch stays 4. The new key changed the list of known
+`guest` keys in 18 refusals of hydo-manifest's equivalence answers, which are re-recorded.
+
+**Why not the default.** The exact tick changes the guest's time from the boot on, so every hvx
+fingerprint of an image with it moves. As the default it belongs to a new fingerprint epoch and a
+release that raises the middle number, as M316's launcher fix does (open item 164).
+
+**What is left.** Open item 164.

@@ -162,6 +162,8 @@ guest:
                                # without VM exits; see "Loops without VM exits"
   cgroup2: false               # optional: no cgroup2 mount on /sys/fs/cgroup at boot (default
                                # true since fingerprint epoch 4); see "The cgroup2 mount"
+  exact_tick: true             # optional (hvx): the guest kernel counts each timer tick as
+                               # exactly 1 ms; see "The guest's timer tick on hvx"
 
 network: bridge                # loopback (default): one network for everything in the guest;
                                # bridge: each service in its own network namespace at its addr:
@@ -1344,6 +1346,34 @@ Who sees what:
 A pause of threads (`P=workload/<thread>@...`, "Pause threads of the workload" in `hydo guide
 faults`) uses the same mount. When the guest kernel has no cgroup2, the boot goes on without the
 mount, and the run's log says so. Every engine's guest kernel for an epoch-4 image has cgroup2.
+
+### The guest's timer tick on hvx (`guest.exact_tick`)
+
+On hvx the guest's clock counts timer ticks. The guest kernel finds the virtual TSC unstable at
+boot and keeps time with its `refined-jiffies` clock, which counts each tick as 999,848 ns. Its
+timer comes once per millisecond: each next tick is set 1,000,000 ns after the one before. The
+two counts differ by 152 ns a tick, and the difference adds up. After t seconds of uptime the
+guest sets its next tick 1 ms plus 0.152 ms for each second of t ahead on the virtual TSC: 19 ms
+ahead after 2 minutes.
+
+An idle guest does not notice, because hvx moves the virtual TSC to the next timer when the guest
+waits. A guest whose CPU stays busy has to run through that virtual time to reach each tick. Late
+in a long run the guest's clock then nearly stops, and every timeout in the guest waits with it:
+a command's `timeout`, the step's timer, a client's deadline. The run ends at the engine's limit
+of 900 s of host time as `TIMEOUT workload`, with nothing in the console after the CPU got busy.
+
+With `guest.exact_tick: true` (Milestone 319) hvx boots the guest kernel with
+`clocksource=jiffies`, which counts a tick as exactly 1,000,000 ns. Each tick is then due 1 ms
+after the one before, however long the guest has run.
+
+- In the ClickHouse example, two threads of a ClickHouse Keeper kept the CPU busy after the
+  Keepers lost their quorum. Without the key the guest's clock ran about 1.2 s in 100 s of host
+  time, and seven runs ended at the 900 s limit. With it the clock kept up: one of those
+  schedules ended with a `VIOLATION` verdict in two runs, with one fingerprint.
+- The key is opt-in. An image without it gets the same bytes and fingerprints as before. An image
+  with it records the key in `/etc/hydo/exact-tick` and has its own fingerprints.
+- The Mac and KVM engines ignore the key. Whether their guest kernels have the same gap was not
+  measured.
 
 ### Link faults (a network fault between two named services)
 

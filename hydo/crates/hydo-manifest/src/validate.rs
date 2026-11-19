@@ -144,6 +144,7 @@ pub(crate) const KNOWN_GUEST: &[&str] = &[
     "disks",
     "branch_tick",
     "cgroup2",
+    "exact_tick",
     "description",
 ];
 pub const KNOWN_KNOB: &[&str] = &[
@@ -962,6 +963,16 @@ pub fn validate(m: &mut Value) -> R<()> {
         if !c.is_boolean() {
             return Err(err(format!(
                 "guest.cgroup2: true (hydo mounts cgroup2 on /sys/fs/cgroup at every boot; the default) or false (got {})",
+                repr(c)
+            )));
+        }
+    }
+    // Milestone 319: hvx's guest kernel counts a timer tick as exactly 1 ms
+    if has(&guest, "exact_tick")? {
+        let c = index(&guest, "exact_tick")?;
+        if !c.is_boolean() {
+            return Err(err(format!(
+                "guest.exact_tick: true (the hvx engine's guest kernel counts each timer tick as exactly 1 ms) or false (the default; got {})",
                 repr(c)
             )));
         }

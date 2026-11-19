@@ -29,9 +29,9 @@ when enough replicas hold it.
   an insert and a merge on, no acknowledged insert was lost under kills, pauses, partitions,
   clock steps and power cuts. Only a lying disk lost some, which is the disk's own loss.
 - **What did hydo lack?** Seven things, in the section "What hydo lacked". The first cost the most
-  machine time: in seven runs the guest agent stopped answering after the Keepers lost their
-  quorum, and each run waited 900 s. hvx's limit of 4 GiB for root and data disk together
-  shaped the example.
+  machine time: in seven runs the guest's clock nearly stopped after the Keepers lost their
+  quorum, and each run waited 900 s (fixed with `guest.exact_tick`, Milestone 319). hvx's limit
+  of 4 GiB for root and data disk together shaped the example.
 
 ## The version
 
@@ -350,8 +350,8 @@ not yet after a fetch. CFG and E4 ran on the committed sources.
 | exploration | image | options | seeds | schedules | failures by cause |
 |---|---|---|---|---|---|
 | E1 | `fsync=insert` | `--strategy process --new-faults --cluster-faults` | 1-8 (stopped) | 8 | finding 1 (seed 5; seed 1 in its first try), a recovery boot without memory for its VM (seed 1, the machine's), a Keeper not ready after a kill of all three (seed 6, hydo's restart order) |
-| E2 | `insert` and merges | the same | 1-20 | 20 | the agent stopped answering after a ring partition of the Keepers (seed 20) |
-| E3 | the same | the same and `--more-faults` | 21-40 | 20, 4 of them with `cf=` | the agent stopped answering: seeds 27 and 40 (a ring partition of the Keepers) and 33 (a kill of two Keepers and a forward clock step) |
+| E2 | `insert` and merges | the same | 1-20 | 20 | the guest's clock nearly stopped after a ring partition of the Keepers (seed 20; Milestone 319) |
+| E3 | the same | the same and `--more-faults` | 21-40 | 20, 4 of them with `cf=` | the guest's clock nearly stopped: seeds 27 and 40 (a ring partition of the Keepers) and 33 (a kill of two Keepers and a forward clock step) |
 | CFG | each value of `fsync` | `--configs`, `--strategy process --new-faults --no-shrink` | 1-8 per value | 24 | `0`: 3 (2 lost blocks, 1 `converge`); `insert`: 3 (finding 1); `1`: none. Then seed 5 alone with shrinks (the section on the settings) |
 | E4 | `fsync=1` | `--strategy swarm --new-faults` | 41-52 | 12 | 6, each with a disk fault: a lying disk lost acknowledged blocks (seeds 42, 46, 51) or left `ch1` without an answer (49), and after disk I/O errors `ch1` did not start again (43, 44). The disk broke its own promise; the 4 power cuts with `disk=cut` passed |
 
@@ -369,14 +369,16 @@ passed.
 
 In the order of the time each gap cost:
 
-1. **The agent stopped answering after the Keepers lost their quorum.** Seed 20 of E2 and seeds
-   27 and 40 of E3, each with a ring partition of the Keepers (`N=keepers.ring`), and seed 33 of
-   E3, with a kill of two Keepers and a forward clock step, ended `TIMEOUT workload` after 900
-   s. Seed 20 did it in three runs and seed 27 in two, seven runs in all. The control transcript
-   ends at a `clock_get` that the guest agent never answered. A `hydo inspect` session at the
-   last stop where the agent answered showed 2.6 GB of the guest's memory free, and an advance of
-   60 s from there did not end. `hydo inspect` starts only at stops where the agent answers, so
-   the cause was not traced. Open item 157.
+1. **The guest's clock nearly stopped after the Keepers lost their quorum.** Seed 20 of E2 and
+   seeds 27 and 40 of E3, each with a ring partition of the Keepers (`N=keepers.ring`), and seed
+   33 of E3, with a kill of two Keepers and a forward clock step, ended `TIMEOUT workload` after
+   900 s. Seed 20 did it in three runs and seed 27 in two, seven runs in all. The agent had
+   answered its last command, and nothing in the guest ended. Milestone 319 found the cause in
+   hvx's guest kernel: its clock counts a tick as 999,848 ns while its timer sets ticks 1 ms
+   apart, so after two minutes each tick was due 19 ms ahead on the virtual TSC. Two
+   `KeeperHandler` threads of `keeper3` kept the CPU busy, and the guest's clock ran about 1.2 s
+   in 100 s of host time. With `guest.exact_tick: true`, now in `hydo/hydo.yaml`, seed 20 ends
+   with finding 1's verdict. Open item 164.
 2. **The hvx engine's disk limit.** The first run stopped at `HVX_SET_DISK: Invalid argument`:
    hvx takes at most 4 GiB of root and data disk together (`HVX_DISK_MAX`). The server's program
    is 894 MB and the Keeper's 566 MB. The example shares each image between its services

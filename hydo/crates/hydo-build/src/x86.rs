@@ -461,7 +461,21 @@ pub fn write_compiled(
             &format!("{BRANCH_TICK_PERIOD}\n"),
         )?;
     }
+    // Milestone 319: `guest.exact_tick`, the hvx engine's guest kernel with `clocksource=jiffies`
+    // (MANIFEST.md, "The guest's timer tick on hvx"); nothing is written without it, so other
+    // images keep their bytes
+    if exact_tick(&p.data) {
+        fsx::write_text(&r.join("etc/hydo/exact-tick"), "jiffies\n")?;
+    }
     Ok(())
+}
+
+/// Whether the manifest asks for the exact timer tick on hvx (`guest.exact_tick: true`).
+pub fn exact_tick(data: &Value) -> bool {
+    data.get("guest")
+        .and_then(|g| g.get("exact_tick"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
 }
 
 /// The branch tick's period, in the guest's user-mode conditional branches without an exit, that
