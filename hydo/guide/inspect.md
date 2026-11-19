@@ -34,7 +34,22 @@ sessions. When `hydo run` refuses for lack of memory, it names the sessions that
 ```sh
 hydo inspect diagnose <run dir>              # the host-side part only, instantly
 hydo inspect diagnose <run dir> --evidence   # plus the evidence (one replay of the run)
+hydo inspect diagnose <explore dir> [--problem N] [--run]   # problem N of `hydo report`
 ```
+
+An exploration keeps no run directory of its own. `hydo report <explore dir>` and `report.md`
+print, for each problem, the command that makes one:
+`hydo run [--backend kvm|hvx] --image <image> "<schedule>" --out <explore dir>/runs/seed-<n>`,
+with the minimal schedule when hydo shrank it. `hydo inspect diagnose <explore dir> --problem N`
+(default 1) reads, in this order:
+
+1. that run directory, when the command made it;
+2. the replay that `hydo explore` made of a run that stopped with an error (`replays/<tag>/`);
+3. the exploration's own control transcripts of the run (`consoles/<tag>.control.jsonl`), the
+   host-side part only.
+
+When none is there, it prints the command, and `--run` runs it once and reads the result. The
+other `hydo inspect` commands and `--evidence` take the run directory.
 
 What to read in it:
 

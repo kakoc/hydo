@@ -3778,6 +3778,15 @@ image as moved. On hvx the record's new bytes alone moved none of the 141 runs a
 engines hash the image's disk and the guest's RAM, so their 76 and 19 runs are likely to move.
 The pass shows which runs move, and whether a verdict or a recorded `ctl` value moves.
 
+**The guest's clock on hvx (Milestone 323).** An x86_64 image built at epoch 5 also records
+`tsc` in `/etc/hydo/exact-tick`, and hvx boots it with `tsc=reliable` and a virtual TSC step of
+1 µs, so the guest's clocks follow the virtual TSC (`docs/design/guest-clock.md`). So all 43 hvx
+images of the list, and every run of them, move at the pass, not only the 14 runs of the image
+services; a verdict that depends on the guest's timeouts can move too. The KVM images get the
+file as new bytes, which the KVM engine ignores. The Mac images do not change with it. An image
+built at epoch 4 boots with the old command line and step: the pinned reproducers and the
+release's Redis example of section 26 gave their values on hvx with M323's engine.
+
 **The pinned reproducers** keep their images and values: this hydo boots the epoch-2 images in
 `~/hydo/build/m204` (`a76d7fe857fdb37c`, `efbde7b57264be0f`) and the epoch-4 images in
 `~/hydo/build/m302` (`e153f376096a072c`, `6a5c2fe208174af3`) as before. They have no image

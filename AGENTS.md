@@ -278,8 +278,8 @@ dry-runs the packages on every pull request that changes one. The details are in
 
 **Fingerprints.** The fingerprint epoch is 5 (M317; 4 from M269, 3 from M234, 2 from M204, 1
 from M155). An image built at epoch 5 has the image services' launchers of M317, which mount the
-system folders once per boot. Nothing else changed at epoch 5. The recorded values are still
-epoch 4's (open item 105). An image built at epoch 3 or later boots the Mac and KVM guest kernels
+system folders once per boot. On hvx an x86_64 image built at epoch 5 keeps time with its TSC
+(M323, `guest.exact_tick`). The recorded values are still epoch 4's (open item 105). An image built at epoch 3 or later boots the Mac and KVM guest kernels
 with cgroups. An image built
 at epoch 4 carries no saved regression: `hydo build` writes them beside it, as
 `<image>.regressions.json`, so saving or editing one leaves the image's bytes and the other
@@ -303,7 +303,9 @@ lost) on KVM (AMD). Every recorded example value is in `hydo/onboard/recorded.js
 **The hvx engine.** The module (`hv/hvx/hvx.c`, ABI `hvx_abi.h`) boots Linux 6.6.35
 deterministically, with guest RAM up to 8 GiB. Its clock counts VM exits, or the guest's retired
 conditional branches with the PMU branch clock. Every module feature is opt-in; the engine turns on the
-host-call port by default (M140), also with several vCPUs since M205. Since M261 a `cf=` power
+host-call port by default (M140), also with several vCPUs since M205. An image built at the
+fingerprint epoch 5 boots with `tsc=reliable` and a virtual TSC step of 1 µs, so the guest's
+clocks follow the virtual TSC exactly (M323). Since M261 a `cf=` power
 cut comes at the first stop after the k-th flush, not at the workload's end. The run engine is the Rust
 crate `hydo-hvx`, which runs inside `hydo` when the process can open `/dev/hvx`. Details:
 `docs/HISTORY.md` Milestones 33, 66–69, 132, 137, 138, 156 and 179; the module's safety net is
@@ -358,14 +360,23 @@ overflow reach the count, and the timer comes there as at an idle HLT. It needs 
 guest; of GitHub's runners only the Xeon 6975P-C hosts do. The Mac engine refuses the key, and
 hvx ignores it. The design and the measurements are in `docs/design/exit-free-loops.md`.
 
-**The guest's timer tick on hvx (M319, tentative number).** hvx's guest kernel keeps time with
-`refined-jiffies`, which counts a tick as 999,848 ns, while its periodic tick sets each next tick
-1 ms after the one before. After t seconds of uptime a tick is due 1 ms + 0.152 ms × t ahead on
-the virtual TSC. A busy guest late in a long run then needs that much virtual time per tick. Its
-clock nearly stops, as in the ClickHouse runs that ended `TIMEOUT workload` at 900 s (open item
-157). `guest.exact_tick: true` (a format-1 addition, opt-in) boots the guest with
-`clocksource=jiffies`, 1 ms a tick. The reference is the section "The guest's timer tick on hvx"
-of MANIFEST.md.
+**The guest's clock on hvx (M319 and M323, tentative numbers).** Without a word on its command
+line, hvx's guest kernel keeps time with `refined-jiffies`, which counts a tick as 999,848 ns.
+Its periodic tick sets each next tick 1 ms after the one before. After t seconds of uptime a tick
+is due 1 ms + 0.152 ms × t ahead on the virtual TSC. A busy guest late in a long run then needs
+that much virtual time per tick. Its clock nearly stops, as in the ClickHouse runs that ended
+`TIMEOUT workload` at 900 s (open item 157). Since M323 `guest.exact_tick` (a format-1 addition)
+is on by default for an x86_64 image built at the fingerprint epoch 5. The hvx engine then boots
+the guest with `tsc=reliable` and a virtual TSC that moves 1 µs per step. The guest's clocks are the
+virtual TSC, 1.000003 s per second of it at every uptime. A clock read costs 2 µs of guest time,
+and a program sees steps of 2 µs.
+
+`tsc=reliable` with the old step of 41 µs made a read cost 82 µs, and ClickHouse then missed its
+readiness deadline. M319's `clocksource=jiffies` stays for images built with its key: exact
+ticks, but a busy guest's clock at 0.44 of the virtual TSC and steps of 1 ms. An image built
+before epoch 5 boots as before. The Mac and KVM guest kernels read one counter for the clock and
+the timer, so they have no gap. The reference is the section "The guest's timer tick on hvx" of
+MANIFEST.md; the comparison of the four ways is in `docs/HISTORY.md` Milestone 323.
 
 **The cgroup2 mount (M283, tentative number).** From the fingerprint epoch 4 the host controller
 mounts the cgroup2 file system on `/sys/fs/cgroup` at the start of every boot, before the S0
@@ -526,6 +537,21 @@ file again with `hydo-fetch-image docker` and stops at another digest until
 `HYDO_ACCEPT_REBUILD=1`. A registry on the loopback is reached over plain HTTP, as Docker does.
 The proof is a registry in the test process and Docker's `registry:2` with htpasswd, never a
 real registry. Reference: `hydo guide workflow`.
+
+**Three gaps of a user's onboarding with 0.4.0 (M324, tentative number).** Each fix is its own
+commit; none moves a recorded value:
+- `hydo compose` writes `root.share_images: true`, commented out, with a comment that says why
+  and when to turn it on, for services of one image (not on by itself because of open item 147).
+  `hydo build` estimates each image's unpacked size from its layers, also with `--check`. It
+  warns when the roots exceed half of `guest.ram_mib` on the Mac. On hvx it warns when the root
+  and the data disk exceed 4096 MiB (MANIFEST.md, "Limits of v1").
+- `report.md` and `hydo report` print, for each problem, the `hydo run` command that makes its
+  run directory, `runs/seed-<n>` of the exploration's folder.
+  `hydo inspect diagnose <explore dir> --problem N` reads that folder, the explorer's replay, or
+  the exploration's own transcripts, and `--run` makes the folder (`hydo guide inspect`).
+- The clock audit leaves out test code inside source files. It ranks first the code of the
+  Cargo and Go programs that the manifest's services run. Its schedules name the one service
+  that runs a place (`hydo guide faults`).
 
 **Business rules: what found what (M215).** On Formance Ledger, rules over the ledger's own
 state (balances, moves, effective volumes, overdraft, reverts, bulks, the audit log) found
@@ -822,8 +848,15 @@ posted:
   replica for good: `disk=cut | run C=40` (ClickHouse #29778, #53143). With every fsync setting
   on it passes.
 
-In four schedules the guest agent stopped answering after the Keepers lost their quorum (open item
-157).
+One new candidate, not posted (M325, tentative number):
+- A Keeper without a quorum spins on a session that its client closed. The client sends `Close`
+  and shuts its socket down. The handler then stops reading the socket, but its `poll()` asks for
+  `POLLIN`, which the unread FIN gives at once (`KeeperTCPHandler.cpp` lines 610 and 192 to 220).
+  So the thread runs until the session timeout of 30 s. On hvx two such threads of `keeper2` took
+  about a third of the guest's CPU after a ring partition of the Keepers.
+
+Four schedules ended `TIMEOUT workload` because hvx's guest clock nearly stopped under that busy
+work (M319, `guest.exact_tick`).
 
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
@@ -1185,7 +1218,9 @@ and parameters. Each place gets three clock-step schedules. The report ranks one
 and shows the 5 most likely; `--all` and `--json` show every place. The audit found the known lines of
 Valkey, Temporal, and River at their tagged versions. On the Mac engine its schedule for Valkey
 gave the fingerprint of the example's regression for valkey-io/valkey#5406. The skill (2.3.0)
-runs the audit during onboarding and offers the first three places. The guide is the section "Find the durations measured on the
+runs the audit during onboarding and offers the first three places. Since M324 it leaves out
+test code inside source files and ranks first the code that the services of `hydo.yaml` run.
+The guide is the section "Find the durations measured on the
 wall clock" of `hydo guide faults`. The design and the precision numbers are in the section
 "The clock audit" of `docs/design/rule-suggestion.md`.
 
@@ -1923,6 +1958,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       runs). No KVM value moved. These values describe images built at epoch 4. At epoch 5 the
       same images carry the programs of 0.4.1, so the re-pin moves nothing more there. The
       release 0.5.0 re-pins these programs again with its version, and the pass runs after that.
+    - Milestone 323 makes every x86_64 image built at epoch 5 keep time with its TSC on hvx
+      (`/etc/hydo/exact-tick` with `tsc`). So every hvx run of the list moves at epoch 5: all
+      43 images and their runs, with a new guest clock, not only new bytes. A verdict can move
+      too, because the guest's timeouts now follow the virtual TSC. The KVM images get the file
+      as new bytes, which the KVM engine ignores; the Mac images do not change.
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -2440,12 +2480,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       after any start of PD reaches it, so explorations with power cuts meet it often until a
       release has the fix.
     - With `root.share_images: true`, TiKV's address lock in `/tmp` was found by the other
-      stores of the same image, although MANIFEST.md gives each service its own `/tmp`. The
-      import does not propose `share_images` when copies of one image pass the engine's disk.
+      stores of the same image, although MANIFEST.md gives each service its own `/tmp`. So
+      `hydo compose` writes `share_images` commented out (M324), and `hydo build` names it only
+      when the roots do not fit. Whether M317's mounts under one lock changed it was not tested.
     - TiKV's gRPC client did not reach PD by service name in the guest; the cause was not
       traced. The example names PD and the stores by address.
     - `hydo rules scan --kind clock` does not see a timestamp compared with a time to live
-      (`lock.ts.physical() + lock.ttl`), and ranked cloud-credential code and a test first.
+      (`lock.ts.physical() + lock.ttl`). Since M324 the test it ranked fifth is left out; the
+      cloud-credential code stays first, because `tikv-server` links it.
     - TiKV logged `monotonic time jumped back, 52.048 -> 45.589` once on tikv1 in seed 4's run
       (the receive delay of a Raft message); whether the guest's clocks or TiKV's comparison
       caused it was not traced.
@@ -2606,6 +2648,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The four schedules that ended `TIMEOUT workload` after 900 s were the guest's clock, not
       the agent (M319). With `guest.exact_tick` seed 20 ends with a verdict and seed 33 passes.
       Seeds 27 and 40 did not run again (open item 164).
+    - The busy `KeeperHandler` threads of those runs are a ClickHouse candidate (M325): a handler
+      polls the socket of a closed session until the session timeout. It is not reported
+      upstream, and nothing was posted. It was not reproduced outside hydo, because the cause is
+      plain in the code. Seeds 27, 33 and 40 were not checked for the same loop.
     - `hydo explore --configs` with `--no-shrink` or `--schedule` lists no class of failure and
       says that no combination failed, although 6 of 24 and 2 of 3 runs failed. An exploration's
       failures are recorded only when they are shrunk.
@@ -2733,17 +2779,21 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       (`AsciiSet::hydo_set`, `hydo_bytes`), because its set has a private field and no
       constructor from bytes. A fresh evaluator should run `hydo fuzz` again before 0.5.0.
 
-164. The guest's timer tick on hvx (M319, tentative number). What is left:
-    - `guest.exact_tick` is opt-in. Every other hvx image keeps the gap of 152 ns a tick, so a
-      busy guest after some minutes of uptime still runs its clock slowly. As the default it
-      moves every hvx fingerprint: it belongs to a new fingerprint epoch, keyed on the image's
-      epoch (`hydo_image::defaults`), in a release that raises the middle number.
-    - The Mac and KVM guest kernels were not checked for the same gap.
-    - Seeds 27 and 40 of the ClickHouse explorations did not run with the key. Seed 33 ran once
-      with it and passed, but not without it on the same image.
-    - Two `KeeperHandler` threads of a Keeper stayed runnable, mostly in the kernel, while its
-      client port held a connection in `CLOSE_WAIT` after the Keepers lost their quorum. The
-      cause in ClickHouse was not traced, and nothing was reported.
+164. The guest's clock on hvx (M319 and M323, tentative numbers; `docs/design/guest-clock.md`).
+    Since M323 an x86_64 image built at epoch 5 keeps time with its TSC. What is left:
+    - An image built before epoch 5 keeps the gap of 152 ns a tick. A busy guest there still
+      runs its clock slowly after some minutes of uptime. Rebuilding the image at epoch 5 fixes
+      it; the re-recording pass rebuilds the examples (open item 105).
+    - The KVM engine's guest kernel was checked by its source only: its clocksource and its timer
+      read one exit clock in nanoseconds. No KVM run measured a long busy run. The Mac engine's
+      probe showed no gap.
+    - The TSC clock ran on the probe, the stack of the pinned reproducers, ClickHouse seed 20,
+      and an epoch-5 Redis image with `T=`, `tj=`, `xt=`, `pp=` and two vCPUs. No exploration ran
+      with it, and the hvx examples' verdicts at epoch 5 come with the pass.
+    - A clock read still costs the guest 2 µs, and every counted exit 1 µs. A program that reads
+      the clock in a tight loop sees its time run 2 µs per read.
+    - Seeds 27 and 40 of the ClickHouse explorations did not run with either clock. Seed 33 ran
+      once with `clocksource=jiffies` and passed, but not without it on the same image.
     - A run whose guest clock falls far behind the virtual TSC still ends only at the engine's
       wall limit, as `TIMEOUT workload`. Neither the verdict nor the diagnosis says that the
       guest's clock fell behind.
@@ -2771,6 +2821,27 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       caught by `hydo compose` and fetch-images.sh only.
     - hydo-build's equivalence corpus has six mismatches from M306 (two mutants with a
       `contracts:` key the recorded answers do not list).
+166. The three gaps of a user's onboarding with 0.4.0 (M324, tentative number). What is left:
+    - The roots' estimate counts the image layers only. It leaves out the rest of the root
+      (the agent, busybox, the tools) and the copies that an image's hard links become in the
+      initramfs (open item 162). So M316's PostgreSQL image in 1,024 MiB, which failed to unpack, may get
+      no warning. The half of the RAM is Linux's default for a tmpfs root, read from the kernel,
+      not measured in a VM. No build or VM ran with the change; only `--check` ran.
+    - `hydo compose` keys an image by its manifest digest, so two manifests of one config (one
+      image pushed twice) are not proposed for sharing; hydo-build would share them.
+    - `hydo inspect diagnose <explore dir> --run` ran only through the scripted engine, and the
+      exploration's own transcripts in the test were the Redis run's, copied in. No real
+      exploration of an agent image was diagnosed. `--evidence` needs the run directory.
+    - The web page of an exploration does not show the run directory's command.
+    - The clock audit maps Cargo binaries and Go main packages only. Valkey's C, and Java,
+      Python and JavaScript projects, are ranked by their words alone. A Go program is named
+      after its folder, so Temporal's `temporal-server` (built from `cmd/server`) was found by
+      the image's name `server` only. Cargo features, optional and target-only dependencies
+      count as dependencies.
+    - A place that several services run (TiKV's three stores) keeps `<service>`, with a line
+      that names them. `<replica>` and `<database>` keep their roles' rules.
+    - The test code of JavaScript is found by `describe(`, `it(` and `test(` at a line's start,
+      so a product function named `test` called there is left out too.
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -3675,6 +3746,23 @@ build machine, before 2026-10-13.
   bytes, and the Mac one is signed and notarized. They are verified on hvx, the Mac and KVM (six of
   GitHub's runners). Published on 2026-11-19 with the skill release `skill-v2.4.0`; the branch
   is merged into `main`
+- M325 (tentative number): the busy Keeper threads of the ClickHouse runs are a ClickHouse
+  candidate. A server that gives up its session sends `Close` and closes its socket. A Keeper
+  without a quorum cannot answer, and its handler polls the closed socket without a pause until
+  the session timeout of 30 s. On hvx with `guest.exact_tick` two such threads of `keeper2` took
+  a third of the guest's CPU. No report found; nothing posted. Nothing recorded moved
+- M324 (tentative number): three gaps of a user's onboarding with 0.4.0, each its own commit.
+  `hydo compose` writes `root.share_images: true` commented out for services of one image, and `hydo build` warns
+  when the roots exceed the Mac's guest RAM or hvx's disk. Each problem of an exploration
+  names the `hydo run --out` of its run directory, and `hydo inspect diagnose` of the
+  exploration reads it. The clock audit leaves out test code and ranks the code of the Cargo and
+  Go programs that the services run first. Nothing recorded moved
+- M323 (tentative number): hvx's guest clock right by default from the fingerprint epoch 5. An
+  x86_64 image built at epoch 5 boots with `tsc=reliable` and a virtual TSC step of 1 µs, so its
+  clocks follow the TSC exactly and read in steps of 2 µs. `clocksource=jiffies` ran a busy
+  guest's clock at 0.44, and `tsc=reliable` alone made a read cost 82 µs and broke ClickHouse's
+  start. Epoch-4 images keep their values; every epoch-5 hvx value waits for the pass (open item
+  105)
 
 ## Where to look
 
@@ -3686,8 +3774,8 @@ build machine, before 2026-10-13.
 - `docs/BUILD-PINS.md`: the pinned toolchain and guest programs.
 - `docs/CI.md`: what CI runs, where, and how long it takes.
 - `docs/RELEASING.md` and `docs/PUBLISHING.md`: the release and publishing steps.
-- `docs/design/`: the design of guest control, the KVM engine, the install cache, signing,
-  `hydo explain`, `hydo inspect`, workloads, and storage faults.
+- `docs/design/`: the design of guest control, the KVM engine, the guest's clock on hvx, the
+  install cache, signing, `hydo explain`, `hydo inspect`, workloads, and storage faults.
 - `hydo/PRODUCT.md`: hydo from a user's point of view, with the known gaps.
 - `hv/hvx/`: the module (`hvx.c`, `hvx_abi.h`, `hvx_boot.h`), its tests and harnesses, and
   `images/` for the hand-written guest images.

@@ -18,6 +18,7 @@
 mod build;
 mod cache;
 mod ci;
+mod clockmap;
 mod clockscan;
 mod compare;
 mod configs;

@@ -10,6 +10,7 @@ mod compare;
 mod configs;
 mod docs;
 mod equivalence;
+mod inspect_explore;
 mod migrate;
 mod onboard;
 mod readme;

@@ -32,6 +32,7 @@
 - verdict: `HYDO-ORACLE: VIOLATION front lost an order order=0`
 - fingerprint, two runs: `cad881312f4e46e3` / `cad881312f4e46e3` (identical)
 - by hand: `hydo run --image <dir>/scripted-disk.img "disk=none dseed=0 | run Q=2 X=front@0~0"`
+- a run directory for `hydo inspect`: `hydo run --backend hvx --image <dir>/scripted-disk.img "disk=none dseed=0 | run Q=2 X=front@0~0" --out <out>/runs/seed-21`
 
 ## Property table over every schedule (hydo guide sdks)
 

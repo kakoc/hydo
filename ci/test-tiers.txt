@@ -32,6 +32,7 @@ hydo-build::netns                        fast
 hydo-build::oci                          fast
 hydo-build::oci_share                    fast
 hydo-build::regressions_beside           fast
+hydo-build::root_fit                     fast
 hydo-build::world_objects                fast
 hydo-compose                             fast
 hydo-compose::equivalence                fast
@@ -171,6 +172,7 @@ hydo::compare                            fast
 hydo::configs                            fast
 hydo::docs                               fast
 hydo::equivalence                        fast
+hydo::inspect_explore                    fast
 hydo::migrate                            fast
 hydo::onboard                            fast
 hydo::readme                             fast

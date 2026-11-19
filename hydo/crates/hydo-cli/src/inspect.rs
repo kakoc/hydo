@@ -1000,6 +1000,12 @@ inspect-error.
 Find where to look (no VM; instant):
   hydo inspect diagnose <run dir> [--evidence]   why the run failed (--evidence: one replay
                                                  reads logs, dmesg and processes in the guest)
+  hydo inspect diagnose <explore dir> [--problem N] [--run]
+                                                 why problem N of `hydo report` failed (default
+                                                 1), from its run directory, the explorer's
+                                                 replay or the exploration's own files; with none,
+                                                 it names the `hydo run ... --out` that makes one,
+                                                 and --run makes it (one run)
   hydo inspect events <run dir> [--kind K,...] [--grep TEXT] [--conversation C]
                       [--from POINT] [--to POINT] [--limit N] [--offset N]
                                                  the run's events, each with its point (boot:172)

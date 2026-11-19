@@ -163,6 +163,15 @@ fn render(st: &ExStory, doc: &Exploration, shown: &str) -> String {
             "See it again"
         };
         o.push_str(&format!("{INDENT}{again}: {}\n", it.command));
+        // Milestone 324: an exploration keeps no run directory of a problem; say how to get one
+        if let Some(c) = &it.run_command {
+            o.push_str(&format!(
+                "{INDENT}Why it failed: hydo inspect diagnose {} --problem {}\n",
+                crate::inspect::work::quote(shown),
+                n + 1
+            ));
+            o.push_str(&format!("{INDENT}A run directory of it: {c}\n"));
+        }
         if let Some(r) = &it.recording {
             o.push_str(&wrap(&r.words(shown), INDENT));
         }

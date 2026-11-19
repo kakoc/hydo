@@ -148,7 +148,9 @@ fn start_of(spec: &BootSpec, mode: hydo_hvx::engine::Mode) -> hydo_hvx::engine::
         vcpus: (spec.vcpus > 1).then_some(spec.vcpus),
         cpu_v3: spec.cpu == crate::CpuLevel::V3,
         cpu_cache: spec.cpu_cache,
-        exact_tick: crate::image::exact_tick(&spec.image),
+        clock: crate::image::guest_clock(&spec.image)
+            .and_then(hydo_hvx::engine::GuestClock::parse)
+            .unwrap_or_default(),
     }
 }
 

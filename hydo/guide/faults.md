@@ -321,7 +321,17 @@ hydo rules scan --kind clock --json          # every place as JSON, each with it
 ```
 
 The audit reads Go, C and C++, Rust, Java and Kotlin, Python, JavaScript and TypeScript, Ruby,
-C# and SQL. It skips tests, examples, and vendored code. A place is one of three shapes:
+C# and SQL. It skips test files, examples, and vendored code. It also skips the test code inside
+a source file, by each language's conventions:
+
+- Rust: a `#[cfg(test)]` module and a `#[test]` function;
+- Go: `func TestX(t *testing.T)`;
+- Python and Ruby: `def test_...` and `class Test...`;
+- Java, Kotlin and C#: a method with `@Test`, `[Fact]` or `[Test]`;
+- JavaScript: a `describe(` or `it(` block;
+- C and C++: googletest's `TEST(`.
+
+The report's head counts what it left out. A place is one of three shapes:
 
 | shape | what the code does | example |
 |---|---|---|
@@ -338,7 +348,22 @@ A place is `high` when the code compares the duration with a limit or keeps a le
 `medium` when only its names suggest a deadline. Only `high` places get schedules. A reading
 that is only logged or kept as a time stamp is not listed.
 
-The report shows one place per function, the most likely first. These come first:
+The report shows one place per function, the most likely first. With `hydo/hydo.yaml` (or
+`--manifest FILE`), the places in the code that the services or the workload run come before
+all others. The audit maps two kinds of program:
+
+- a binary of a Cargo package (`[[bin]]`, `src/main.rs`, `src/bin/`), with the packages of the
+  tree that it depends on (dev-dependencies are left out);
+- a Go main package, named after its folder, with the packages of its module that it imports.
+
+A service runs a program when its `cmd`, `entrypoint`, `setup` or `ready` names it, or when its
+image's entrypoint does (from `hydo-compose.lock.json`), or else when its image has the
+program's name. The workload runs a program that `workload.run` or a file of `hydo/workload/`
+names. The report's head says how it mapped them, for example `tikv1, tikv2 and tikv3 run
+tikv-server (the image's entrypoint), built from cmd/tikv-server and 60 packages it uses`, and
+each place says who runs it. Code in other languages is not mapped: then the places are ranked
+by their words alone, and the head says so. Among the places of the same group, these come
+first:
 
 - a limit that the code states, between 50 ms and one hour;
 - replication and leases, then database connections and request timeouts;
@@ -356,7 +381,10 @@ schedules:
 The fault comes from the words of the code. A replica is killed for replication code, the
 database for a connection pool, the lease holder for a lease, and answers are lost for a
 request timeout. The schedules name the services of `hydo/hydo.yaml` (or `--manifest FILE`)
-when a service has that role, and a placeholder such as `<replica>` when none has. A step back
+when a service has that role, and a placeholder such as `<replica>` when none has. When exactly
+one service runs the place's code, the schedules name it instead of `<service>` or `<leader>`.
+When several do, or none, or the audit cannot tell, a line under the schedules says why the
+placeholder stays. A step back
 is at least 5 minutes and ten times the limit. A step forward is longer than the limit.
 
 Try a schedule with `hydo explore --schedule "<schedule>"`, which runs it and shrinks a

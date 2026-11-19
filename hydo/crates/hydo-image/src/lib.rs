@@ -65,7 +65,8 @@ pub const VERSION: u64 = 1;
 /// (Milestone 283) the host controller mounts cgroup2 on `/sys/fs/cgroup` at every boot, and
 /// (Milestone 290) the Mac and KVM engines' fingerprints hash the disks by a tree of block hashes.
 /// Epoch 5 (Milestone 317): an image service's launcher mounts its system folders once per boot,
-/// under the lock of its `mounts:` ([`EpochDefaults::oci_mounts_once`]).
+/// under the lock of its `mounts:` ([`EpochDefaults::oci_mounts_once`]), and (Milestone 323) hvx
+/// boots an x86_64 image's guest with its TSC as the clock ([`EpochDefaults::exact_tick`]).
 pub const EPOCH: u64 = 5;
 
 /// The epoch of a run, exploration or cache entry that recorded none (written before M155).
@@ -118,6 +119,15 @@ pub struct EpochDefaults {
     /// `/dev/shm` tmpfs (open item 162). From epoch 5 (Milestone 317). It decides the bytes of a
     /// new image only: an image built before keeps its launcher inside it.
     pub oci_mounts_once: bool,
+    /// What an absent `guest.exact_tick` means for an x86_64 image: hydo-build writes
+    /// `/etc/hydo/exact-tick` with `tsc`, and the hvx engine boots the guest kernel with
+    /// `tsc=reliable` and a virtual TSC that moves 1 us per step. The guest's clocks are then the
+    /// virtual TSC, read in steps of 2 us. Before, the kernel found the TSC unstable at boot and
+    /// kept time with refined-jiffies, whose ticks part from the timer by 152 ns each, so a busy
+    /// guest's clock nearly stopped late in a long run (Milestone 319). From epoch 5 (Milestone
+    /// 323). It decides the bytes of a new image only: an image built before has no such file
+    /// and boots as it did. The Mac and KVM engines ignore the file.
+    pub exact_tick: bool,
 }
 
 /// The defaults of an image built at `epoch` for `arch` (`x86_64` or `arm64`).
@@ -133,6 +143,7 @@ pub fn defaults(epoch: u64, arch: &str) -> EpochDefaults {
         disk_tree: epoch >= 4,
         ram_tree: epoch >= 4,
         oci_mounts_once: epoch >= 5,
+        exact_tick: epoch >= 5 && arch == "x86_64",
     }
 }
 
@@ -557,17 +568,21 @@ mod tests {
         assert!(!defaults(4, "arm64").regressions_in_image);
         assert!(!one.oci_mounts_once && !two.oci_mounts_once && !three.oci_mounts_once);
         assert!(!four.oci_mounts_once);
-        // epoch 5 (M317): the image services' launchers mount the system folders once; the rest
-        // as at epoch 4
+        // epoch 5 (M317, M323): the image services' launchers mount the system folders once, and
+        // hvx's guest keeps time with its TSC; the rest as at epoch 4
+        assert!(!one.exact_tick && !two.exact_tick && !three.exact_tick && !four.exact_tick);
         let five = defaults(5, "x86_64");
         assert_eq!(
             five,
             EpochDefaults {
                 oci_mounts_once: true,
+                exact_tick: true,
                 ..four
             }
         );
         assert!(defaults(5, "arm64").oci_mounts_once);
+        // hvx runs x86_64 images only
+        assert!(!defaults(5, "arm64").exact_tick);
         assert_eq!(defaults(EPOCH, "x86_64"), five);
     }
 

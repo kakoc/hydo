@@ -37,7 +37,7 @@ at release, and after release. The tables below take the chart's techniques in i
 | Fuzz tests | `hydo fuzz` calls a Rust function with generated inputs natively. `hydo fuzz --vm` makes the calls inside the VM under power cuts and disk errors, and under clock steps, pauses, and kills inside a call. `hydo explore` draws the faults of each run from a seed. | partly built | M275, M282, M289, M292, M296 (`fuzz-vm`), M307 (enumerations, trait methods, `build` lines), M308 (a third evaluation: 9 known upstream bugs reproduced), M318 (its findings fixed); open items 139 and 163 |
 | Property-based tests | Function contracts (`// hydo: requires` and `ensures`) judge each generated input of `hydo fuzz`, and each call in a whole-system run. Value properties (`// hydo: keep`) judge a recorded value along its history. | partly built | M241, M255, M291 (`blnk`); open items 113 and 146 |
 | Formal verification | Not hydo's job. A proof covers every state of a model, and hydo checks only the runs that it makes. | not hydo's job | |
-| Static analysis | `hydo rules scan` lists a project's promises from its sources. `hydo rules scan --kind clock` lists the code that measures a duration with the wall clock. Both read text, not syntax. | partly built | M236, M248; open items 110, 117, and 122 |
+| Static analysis | `hydo rules scan` lists a project's promises from its sources. `hydo rules scan --kind clock` lists the code that measures a duration with the wall clock. Both read text, not syntax. Since M324 the clock audit leaves out test code inside source files and ranks first the code of the Cargo and Go programs that the services of `hydo.yaml` run. | partly built | M236, M248, M324; open items 110, 117, 122, and 166 |
 | Mutation tests | `hydo rules check --mutate` plants a change of the stored state and says whether each rule catches it. A change of the program is not built. | partly built | M236; open item 110 |
 | Coverage | hvx traces the guest's code with Intel Processor Trace (`HVX_EXPLORE_PT_ELF`). A CI report names the properties that no run reached. Coverage-guided exploration found no bug sooner. `error_paths: true` records which error-handling places of a program ran, on the Mac engine, and `hydo report --paths` lists the places that only faults reached and the places never reached. | partly built | M40, M41, M44, M197, M306 (`blnk`); open item 155 |
 | Benchmarks | `perf:` in the manifest counts the work of each workload step, and `hydo perf compare A B` says each change in words. The work is exact on hvx only. | partly built | M237 (`perf-kv`) |
@@ -56,7 +56,7 @@ at release, and after release. The tables below take the chart's techniques in i
 
 | Technique | What hydo has | Status | Evidence |
 |---|---|---|---|
-| Integration tests | The whole system runs in one VM. `hydo onboard`, `hydo compose`, and `hydo k8s` start the project from a repository, a Compose file, or Kubernetes manifests. `hydo.yaml` reads YAML anchors and `<<` merge keys, and an image's FIFOs reach its root, since M316. Images of a private registry are fetched with the credential of `docker login`, and `--from-docker` takes an image from the local Docker, since M320. Since M317 (the fingerprint epoch 5) an image service mounts its system folders once per boot, so a readiness check cannot hide its `/dev/shm`. | built | M84, M214, M229, M243, M316, M317, M320; every example |
+| Integration tests | The whole system runs in one VM. `hydo onboard`, `hydo compose`, and `hydo k8s` start the project from a repository, a Compose file, or Kubernetes manifests. `hydo.yaml` reads YAML anchors and `<<` merge keys, and an image's FIFOs reach its root, since M316. Images of a private registry are fetched with the credential of `docker login`, and `--from-docker` takes an image from the local Docker, since M320. Since M317 (the fingerprint epoch 5) an image service mounts its system folders once per boot, so a readiness check cannot hide its `/dev/shm`. Since M324 `hydo compose` writes `root.share_images: true` commented out for services of one image, and `hydo build` warns when the roots do not fit in the Mac's guest RAM or hvx's disk. | built | M84, M214, M229, M243, M316, M317, M320, M324; every example |
 | Tap compare | `hydo compare-versions` runs the same schedules on two versions and compares the verdicts, the client's outcomes and histories, and the stored state (`services[].compare`). `hydo versions` replays one finding on several versions. | built | Milestone 298 (Redis settings, Formance Ledger v2.3.24 against v2.4.0); M221 |
 | Load tests | `parallel_driver_` commands run copies of a workload command at once, so races show without faults. Throughput is not hydo's job: time in the VM is virtual, and a guest has at most 8 GiB of RAM. | built for concurrency | M86; `formance-ledger`, `blnk`, `medusa` |
 | Shadowing | Not hydo's job. It sends copies of production traffic to a new version. The nearest command is `hydo compare-versions`, on schedules instead of traffic. | not hydo's job | |
@@ -101,6 +101,7 @@ last line names the ideas that would answer more.
 | Does an acknowledged write survive a power cut? | `C=` cuts the whole guest's power, and `cf=` cuts it at the k-th disk flush (hvx only). History checks and the messages check judge what survived. | built; `nats-jetstream`, `vikunja`, `yugabyte`, `saleor`, `restate`, `iggy`, `clickhouse` |
 | Does one node's damage lose data or stop the cluster? | `G=` damages one file of a service's storage, and `L=` cuts one service's power. `hydo explore --storage-faults` draws both. | built; `nats-jetstream/blocks`, `redpanda`, `surrealdb`, `iggy`, `victoriametrics` (replicas on two nodes) |
 | Does the storage engine survive a disk that tears or misplaces a write, cannot read a sector, or stops answering? | `torn=`, `mis=`, `lse=` and `hang=` on the data disk, and `G=<svc>@<at>:bad\|rot` under a file of a service's storage. `hydo explore --block-faults` draws them. | partly built; `disk-faults` on the Mac engine and on KVM (AMD and Intel); hvx refuses them (M313; open item 160) |
+| Do the guest's timeouts fire on time late in a long, busy run? | On hvx an x86_64 image built at the fingerprint epoch 5 keeps time with its TSC (`guest.exact_tick`). Its clocks follow the virtual TSC at every uptime and read in steps of 2 µs. The Mac and KVM guest kernels read one counter for the clock and the timer. | built; `clickhouse` seed 20 (M319, M323), `docs/design/guest-clock.md` |
 | Does a backward clock step break a lease or a timeout? | `T=` steps the guest's wall clock. `hydo rules scan --kind clock` proposes the steps. | built; `valkey`, `temporal`, `dragonfly`, `river`, `restate`, `iggy` (a topic's message expiry), `victoriametrics` (a step back deletes a month, holds new samples in memory, and leaves one copy) |
 | Does an acknowledged job run, and run once? | A `type: messages` check declares the claims. Kills of the process that holds the work test them. A durable execution's journaled steps append to an effects file, and a rule finds a step that runs again. | built; `hatchet`, `river`, `redpanda`, `restate`, `iggy` |
 | Does a crash between two commits of one operation run it twice? | `A=<event>+<ms>:kill-now-<svc>` kills the service at the moment the client writes an event, or a number of milliseconds later, before any thread of the service runs on. A shell loop over the delay finds the window, and `hydo explore --reactive fault --kill-now` draws such kills, also on a project with one service. | built; `meilisearch` finding 1 on the Mac engine and hvx, found blind on the Mac engine (M305, M309; open item 154) |
@@ -190,7 +191,7 @@ Ideas that would answer more:
 | The question | What hydo answers today | Status |
 |---|---|---|
 | Can the maintainer see it fail? | `hydo run <image> '<schedule>'` repeats the run bit for bit, and `hydo repro` replays a run directory. | built; every example |
-| Why did it fail? | `hydo report --html`, `hydo inspect` at any stop of the run, `hydo diff`, and `hydo explain`. The report names a step by the schedule's number. A service that its environment stopped in a recovery boot is not said to have lost data (M316). | built; M165, M178, M220, M228, M301 |
+| Why did it fail? | `hydo report --html`, `hydo inspect` at any stop of the run, `hydo diff`, and `hydo explain`. The report names a step by the schedule's number. A service that its environment stopped in a recovery boot is not said to have lost data (M316). `hydo inspect diagnose <explore dir> --problem N` diagnoses an exploration's problem, and the report prints the `hydo run ... --out` that makes its run directory (M324). | built; M165, M178, M220, M228, M301, M324 |
 | Is it a bug of the system or of the setup? | Each failure class has a label and advice (`hydo_explore::advice`). A script under Docker in the example's `native/` folder confirms the cause outside hydo. | built; M228; `redpanda/native`, `saleor/native` |
 | Which versions have it? | `hydo versions` bisects over versions, assuming one change point. | built; `formance-ledger` (M221) |
 | Is the fix complete? | The same schedule on the fixed build, and the saved regression in CI. | built; `blnk`, `qdrant-flaky-10200` |
@@ -297,15 +298,6 @@ that a milestone builds moves into the tables of this page with its new status.
 - **What it needs.** A stop in each interpreter's call path, and reads of the interpreter's own
   structures.
 - **Where it came from.** The section "Next steps" of `docs/design/contracts.md`.
-
-### The exact timer tick by default on hvx
-
-- **What it is.** `guest.exact_tick` (M319) on for every image built at a new fingerprint epoch.
-- **Why it matters.** Without it hvx's guest clock falls behind by 152 ns a tick. A busy guest
-  late in a long run then nearly stops its clock, and the run ends at the engine's wall limit.
-- **What it needs.** A new fingerprint epoch, the key's default in `hydo_image::defaults`, and a
-  re-recording of the hvx values.
-- **Where it came from.** Open item 164; the ClickHouse example's runs of open item 157.
 
 ### A guest counter for loops without exits on the Mac engine
 

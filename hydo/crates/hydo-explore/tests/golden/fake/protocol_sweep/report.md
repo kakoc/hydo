@@ -32,6 +32,7 @@
 - verdict: `HYDO-ORACLE: VIOLATION charged twice order=0`
 - fingerprint, two runs: `41947dc896f68534` / `41947dc896f68534` (identical)
 - by hand: `hydo run --image <dir>/scripted-disk.img "disk=none dseed=0 | run H=payments.charge@0-1:drop"`
+- a run directory for `hydo inspect`: `hydo run --backend hvx --image <dir>/scripted-disk.img "disk=none dseed=0 | run H=payments.charge@0-1:drop" --out <out>/runs/seed-37`
 
 ## Property table over every schedule (hydo guide sdks)
 

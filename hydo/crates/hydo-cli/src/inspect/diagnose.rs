@@ -1113,10 +1113,265 @@ fn refine(d: &mut Diagnosis) {
 pub fn cmd(ctx: &Ctx, rest: &[String]) -> Result<Value, Problem> {
     let mut a = Args::new(rest);
     let ev = a.flag("--evidence");
+    let make = a.flag("--run");
+    let problem = a.num("--problem")?;
     let dir = a.one("a run directory")?;
     a.done()?;
-    let rec = Recorded::load(Path::new(&dir))?;
-    let mut d = match host(&rec) {
+    if Path::new(&dir)
+        .join(hydo_results::EXPLORATION_DOC)
+        .is_file()
+    {
+        return explored(ctx, &dir, problem.unwrap_or(1), make, ev);
+    }
+    if problem.is_some() || make {
+        return Err(Problem::new(
+            "usage",
+            format!(
+                "{dir}: --problem and --run take an exploration's folder (with exploration.json)"
+            ),
+            vec![format!("hydo inspect diagnose {dir}")],
+        ));
+    }
+    diagnose_dir(ctx, &dir, ev, Vec::new())
+}
+
+/// The diagnosis of the run directory `dir`, with `notes` before its own next steps.
+fn diagnose_dir(ctx: &Ctx, dir: &str, ev: bool, notes: Vec<String>) -> Result<Value, Problem> {
+    let rec = Recorded::load(Path::new(dir))?;
+    diagnose_rec(ctx, &rec, dir, ev, notes)
+}
+
+/// `hydo inspect diagnose <exploration> [--problem N] [--run]` (Milestone 324): problem N as
+/// `hydo report` numbers it (default 1). An exploration keeps no run directory, so the
+/// diagnosis reads, in this order: the run directory that the problem's `hydo run ... --out
+/// <exploration>/runs/seed-<n>` made; the explorer's fresh replay of its failing run
+/// (`replays/<tag>/`, made for a run that stopped with an error); the exploration's own
+/// transcripts of the run (`consoles/<tag>.control.jsonl`). When none is there, it names the
+/// command that makes the run directory, and `--run` makes it (one VM run) and reads it.
+fn explored(ctx: &Ctx, dir: &str, n: u64, make: bool, ev: bool) -> Result<Value, Problem> {
+    let p = Path::new(dir);
+    let (doc, events) = match hydo_results::read_dir(p) {
+        Ok(hydo_results::Results::Exploration {
+            doc: Some(doc),
+            events,
+            ..
+        }) => (doc, events),
+        Ok(_) => {
+            return Err(Problem::new(
+                "no-run",
+                format!("{dir}: the exploration has not finished"),
+                vec![format!("hydo report {dir}")],
+            ))
+        }
+        Err(e) => return Err(Problem::new("no-run", format!("{dir}: {e}"), vec![])),
+    };
+    let st = crate::htmlreport::exploration_story(p, &doc, events.as_ref(), dir);
+    // the problems as `hydo report` numbers them; the services' error lines have no run
+    let all = &st.items;
+    let failing = all.iter().filter(|i| i.run_dir.is_some()).count();
+    if failing == 0 {
+        return Err(Problem::new(
+            "usage",
+            format!("{dir}: no run of the exploration failed: nothing to diagnose"),
+            vec![format!("hydo report {dir}")],
+        ));
+    }
+    let Some(it) = n.checked_sub(1).and_then(|i| all.get(i as usize)) else {
+        return Err(Problem::new(
+            "usage",
+            format!(
+                "{dir}: problem {n}: the exploration has {} problem{} (hydo report numbers them)",
+                all.len(),
+                if all.len() == 1 { "" } else { "s" }
+            ),
+            vec![
+                format!("hydo report {dir}"),
+                format!("hydo inspect diagnose {dir} --problem 1"),
+            ],
+        ));
+    };
+    let (Some(run_dir), Some(command)) = (it.run_dir.clone(), it.run_command.clone()) else {
+        return Err(Problem::new(
+            "usage",
+            format!(
+                "{dir}: problem {n} has no failing run to diagnose: {}",
+                it.problem.title
+            ),
+            vec![it.command.clone(), format!("hydo report {dir}")],
+        ));
+    };
+    let title = format!("problem {n} ({})", it.problem.title);
+    let others = if all.len() > 1 {
+        vec![format!(
+            "the exploration has {} problems: hydo inspect diagnose {dir} --problem <1-{}>",
+            all.len(),
+            all.len()
+        )]
+    } else {
+        Vec::new()
+    };
+    // 1. the run directory that the problem's command made
+    if Path::new(&run_dir).join(hydo_results::RUN_DOC).is_file() {
+        let mut notes = vec![format!("{title}: its run directory {run_dir}")];
+        notes.extend(others);
+        return diagnose_dir(ctx, &run_dir, ev, notes);
+    }
+    // 2. the explorer's fresh replay of the failing run, with the failure it shows
+    let tag = it.tag.clone().unwrap_or_default();
+    let failure = doc
+        .failures
+        .iter()
+        .find(|f| f.run.tag.as_deref() == Some(tag.as_str()));
+    for t in doc
+        .failures
+        .iter()
+        .filter(|f| f.signature == failure.map(|x| x.signature.clone()).unwrap_or_default())
+        .filter_map(|f| f.run.tag.clone())
+    {
+        let r = p.join(crate::htmlreport::REPLAYS).join(&t);
+        if let Ok(run) = hydo_results::reader::read_run(&r.join(hydo_results::RUN_DOC)) {
+            let same = hydo_explore::report::sig_key(&run.verdict.text)
+                == hydo_explore::report::sig_key(
+                    &failure
+                        .map(|f| f.run.verdict.text.clone())
+                        .unwrap_or_default(),
+                );
+            if same && run.verdict.kind != "ok" {
+                let rd = r.display().to_string();
+                let mut notes = vec![format!(
+                    "{title}: the explorer's replay of run {t} ({rd}), which failed the same way; \
+                     a run directory of the problem's own schedule: {command}"
+                )];
+                notes.extend(others);
+                return diagnose_dir(ctx, &rd, ev, notes);
+            }
+        }
+    }
+    // 3. the exploration's own transcripts of the run
+    let run_doc = st
+        .by_tag
+        .get(&tag)
+        .map(|r| (*r).clone())
+        .or_else(|| failure.map(|f| f.run.clone()));
+    let mut why = format!("{dir} keeps no run directory of {title}");
+    let files = super::drive::RunFiles::explorer(&tag);
+    let kept = p.join(files.transcript(Conv::Run)).is_file()
+        || p.join(files.transcript(Conv::Recovery)).is_file();
+    if !kept {
+        why = format!(
+            "{why}, and no control transcript of its run {tag} ({}; the scripted engine and \
+             shell images keep none)",
+            files.transcript(Conv::Run)
+        );
+    }
+    if let Some(run) = run_doc.filter(|_| kept) {
+        match Recorded::of(p, run, super::drive::RunFiles::explorer(&tag)) {
+            Ok(rec) if !ev => {
+                let mut notes = vec![format!(
+                    "{title}: read from the exploration's own files of run {tag} \
+                     (consoles/{tag}.*); a run directory of it, for hydo inspect start and \
+                     --evidence: {command}"
+                )];
+                notes.extend(others.clone());
+                // the other `hydo inspect` commands take a run directory, which this is not
+                let v = diagnose_rec(ctx, &rec, dir, false, notes)?;
+                let mut doc: DiagnosisDoc = serde_json::from_value(v).unwrap_or_default();
+                doc.diagnosis
+                    .next
+                    .retain(|x| !x.starts_with("hydo inspect"));
+                doc.diagnosis.next.push(format!(
+                    "after that command: hydo inspect diagnose {run_dir} --evidence, hydo inspect \
+                     start {run_dir} --at end"
+                ));
+                return Ok(serde_json::to_value(&doc).unwrap_or(Value::Null));
+            }
+            Ok(_) => {
+                why = format!(
+                    "{why}, and --evidence replays a run directory, which the exploration's own \
+                     files of run {tag} are not"
+                )
+            }
+            Err(e) => {
+                why = format!(
+                    "{why}, and its own files of run {tag} cannot be read: {}",
+                    e.message
+                )
+            }
+        }
+    }
+    // 4. make the run directory (one VM run), or say how
+    if !make {
+        return Err(Problem::new(
+            "no-run",
+            format!("{why}: make one with the command below, or run this again with --run"),
+            vec![
+                command,
+                format!("hydo inspect diagnose {dir} --problem {n} --run"),
+            ],
+        ));
+    }
+    let image = doc
+        .image
+        .resolved
+        .clone()
+        .unwrap_or_else(|| doc.image.path.clone());
+    let mut opts = crate::runs::RunOpts::of_eargs(doc.engine.args.as_deref().unwrap_or(&[]));
+    if opts.vcpus.is_none() {
+        opts.vcpus = doc.engine.vcpus.filter(|n| *n > 1).map(|n| n as u32);
+    }
+    let out = Path::new(&run_dir);
+    let _ = std::fs::create_dir_all(out);
+    if let Some(e) = &ctx.config.pool.scripted_engine {
+        // the tests: the scripted engine's `one` mode leaves the run directory
+        let ok = std::process::Command::new(e)
+            .arg("one")
+            .arg(out)
+            .arg(&it.schedule)
+            .env("HYDO_SCRIPTED_IMAGE", &image)
+            .status()
+            .is_ok_and(|s| s.success());
+        if !ok {
+            return Err(Problem::new(
+                "no-run",
+                format!("{}: the scripted engine failed", e.display()),
+                vec![],
+            ));
+        }
+        let mut notes = vec![format!("{title}: ran {command}")];
+        notes.extend(others);
+        return diagnose_dir(ctx, &run_dir, ev, notes);
+    }
+    match crate::runs::try_run_to_dir(
+        ctx,
+        Path::new(&image),
+        doc.image.sha256.clone(),
+        &it.schedule,
+        out,
+        &opts,
+    ) {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return Err(Problem::new(
+                "no-run",
+                format!("{command}: the run gave no result (engine.log in {run_dir})"),
+                vec![],
+            ))
+        }
+        Err(e) => return Err(Problem::new("no-run", format!("{command}: {e}"), vec![])),
+    }
+    let mut notes = vec![format!("{title}: ran {command}")];
+    notes.extend(others);
+    diagnose_dir(ctx, &run_dir, ev, notes)
+}
+
+fn diagnose_rec(
+    ctx: &Ctx,
+    rec: &Recorded,
+    dir: &str,
+    ev: bool,
+    notes: Vec<String>,
+) -> Result<Value, Problem> {
+    let mut d = match host(rec) {
         Some(d) => d,
         None => {
             return Err(Problem::new(
@@ -1133,8 +1388,14 @@ pub fn cmd(ctx: &Ctx, rest: &[String]) -> Result<Value, Problem> {
         }
     };
     if ev {
-        d = with_evidence(ctx, &rec, d).0;
+        d = with_evidence(ctx, rec, d).0;
         d.next.retain(|n| !n.contains("--evidence"));
+    }
+    // what an exploration's diagnosis read, first (Milestone 324)
+    if !notes.is_empty() {
+        let mut next = notes;
+        next.append(&mut d.next);
+        d.next = next;
     }
     let doc = DiagnosisDoc {
         run_dir: rec.dir.display().to_string(),

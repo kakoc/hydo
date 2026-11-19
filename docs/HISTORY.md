@@ -18501,3 +18501,328 @@ in `hydo/onboard/recorded.json`. It keeps its own later work: Milestones 304 to 
   read the version from the `hydo/VERSION` of the checkout above the program. With a target
   folder of another checkout, still at 0.4.0, both failed; with this tree's own target folder
   both passed.
+
+## Milestone 325 (tentative number): the busy Keeper threads of the ClickHouse runs
+
+Milestone 319 found that two `KeeperHandler` threads of a Keeper kept hvx's guest busy in the
+ClickHouse runs that never ended, while the Keeper's client port held a connection in
+`CLOSE_WAIT`. It did not trace their cause (open items 157 and 164). The threads are ClickHouse
+Keeper's own loop: a candidate, not reported upstream, and not posted.
+
+**The run.** Seed 20 of exploration E2, `disk=cut dseed=6711e6dcb424bc7a | run
+K=keepers.minority.7@36+3 N=keepers.ring@12-21:loss,100% C=40 P=replicas.all@6+3
+W=9580664b,p4,q2,r250`, ran with `hydo run` on hvx from a tree of its own on the bare-metal
+machine. The image was M319's `img-x1`, built from the committed example with `--set
+fsync=insert`, so with `guest.exact_tick`. The run gave M319's `VIOLATION [converge]` with
+`fp=2be840e3c29f36dd`, `inh=50392a9848e8a956` and `ctl=897572c6272fa6fd`, in 419 s of host time.
+
+**What `hydo inspect` showed.** The partition began at stop 292118. Sessions at stops 518232 and
+438127 found every handler asleep. A session at stop 364112 found the loop on `keeper2`:
+
+- `ch1` and `ch2` had sessions 3 and 4 on `keeper2`'s handler threads 333 and 338. Both servers
+  ended them at 00:03:14.02 of the guest's clock, after `Connection loss` answers.
+- Threads 333 and 338 were runnable in every sample and ran 9.2 ms and 8.2 ms in 50 ms of guest
+  time. All 100 samples of each kernel stack had `exit_to_user_mode_prepare` on top.
+- `keeper2`'s port 9181 held both connections in `CLOSE_WAIT`, each with the FIN unread and no
+  data. Each Keeper's port also held 218 to 231 connections in `TIME_WAIT` from the servers'
+  repeated connects.
+- `mntr`, `stat` and `cons` answered `This instance is not currently serving requests`.
+- In steps of 5 s, the loop went on at 00:03:40 and was over at 00:03:46, 30 s after the
+  `Close`. The threads then had 2.90 s and 2.92 s of CPU, 78 % of it system time.
+
+**The cause.** In `src/Server/KeeperTCPHandler.cpp` of v26.10.6.18 the handler reads the socket
+only when `result.has_requests && !close_received` (line 610). After a `Close` request (line 626)
+it waits for the `Close`'s response. Its `poll()` still asks for `POLLIN` on the socket (lines 192
+to 220; Linux builds take the `poll()` branch, because `POCO_HAVE_FD_EPOLL` is private to Poco's
+network library). The client's `ZooKeeper::finalize` sends the `Close` and shuts its socket down
+without waiting (`src/Common/ZooKeeper/ZooKeeperImpl.cpp`, lines 1551 and 1583). The unread FIN
+makes every `poll()` return at once. A Keeper without a quorum cannot answer the `Close`, so the
+loop ends only at the session timeout (line 711). `master` has the same code on 2026-11-19.
+
+**The label.** A ClickHouse candidate. The partition holds only the links between the Keepers,
+and the client closes its own socket, so a real network gives the same loop. The guest's clock was
+not the cause: with the exact tick the loop ended after 30 s of guest time. Without it, the
+loop kept the guest busy past the engine's limit, which M319 described. The cause is plain in the
+code, so it was not reproduced outside hydo. A search of ClickHouse's issues and pull requests
+with 22 phrases found no report. `gh search issues --include-prs` returned nothing for phrases of
+several words on that day, so the search used `gh api search/issues`. The details and the
+searches are in the section "The busy Keeper threads" of the example's RESULTS.md.
+
+Nothing recorded moved, and no tracked code changed.
+
+## Milestone 324 (tentative number): three gaps of a user's onboarding with 0.4.0
+
+A user onboarded a project of their own with hydo 0.4.0 and reported three gaps. The project is
+private, so each gap was reproduced with public sources, made-up images, and the repository's
+examples. Each fix is its own commit. None moves a recorded value, and the fingerprint epoch
+stays 5.
+
+**1. Identical images copied once per service.** Four services of one 1.2 GB image got four
+roots in the initramfs (`image sha256:418c… -> /oci/scheduler`, `/oci/executor_1`, and so on), a
+2.0 GB `cpio.gz`, and roots that did not fit in the Mac's guest RAM. `root.share_images: true`
+shares one tree between services of one image since Milestone 287, but `hydo compose` did not
+propose it (open item 147).
+
+- `hydo compose`, and `hydo k8s` through it, writes `root.share_images: true` when two or more
+  services run one image, commented out. The lead changed it from on to commented out at the
+  merge: services of one shared tree once met one lock file in `/tmp` (open item 147), so
+  turning it on by itself could break a project of replicas without a message. The comment
+  says to turn it on when `hydo build` warns that the roots do not fit. The key is the image's digest for each architecture, because one
+  manifest names one config digest, and hydo-build shares a tree by the config digest. An
+  image not resolved to a digest is keyed by its file. A comment names the services of each
+  image and says why.
+- `hydo build` and `hydo build --check` estimate each image's unpacked size from its layers
+  without unpacking them (`Image::unpacked_bytes`): a plain layer's size, and a gzip layer's own
+  record of its size in its last 4 bytes. They warn, with the estimate in MiB, in two cases. On
+  the Mac, when the roots exceed half of `guest.ram_mib`: the initramfs root is a tmpfs, and
+  Linux gives a tmpfs half of the RAM. On hvx, when the root partition (1.3 times its content,
+  as the build sizes it) and the data disk exceed the 4,096 MiB that the engine takes
+  (`HVX_DISK_MAX`, which the ClickHouse onboarding of Milestone 311 met). The warning names
+  `root.share_images` when services share an image. On the Mac it also names `guest.ram_mib`,
+  or `guest.root: disk` when 8,192 MiB is not enough, and on hvx `data.size_mib`.
+
+The proof on this Mac, with no VM: a `docker save` archive of one image whose gzip layer holds
+1,200 MiB of zeros, and a `hydo.yaml` of four services of it with `guest.ram_mib: 4096`.
+`hydo build hydo.yaml --check` printed:
+
+```text
+hydo-build: warning: the image services' roots need about 4804 MiB unpacked (scheduler,
+executor_1, executor_2 and executor_3: 1201 MiB each), and on the Mac engine the root lives in
+the guest's RAM, where Linux gives it at most half of guest.ram_mib (2048 of 4096 MiB): the
+guest stops at boot with `Initramfs unpacking failed`. To fix it: scheduler, executor_1,
+executor_2 and executor_3 run one image: root.share_images: true unpacks it once, 1201 MiB in all
+```
+
+The test `hydo-build::root_fit` checks both engines' limits with and without sharing, and that a
+48 MiB layer's estimate is its tar's size. The change of `hydo compose`'s output moves no recorded
+value: a manifest that `hydo compose` writes is input, and the examples' Compose-made manifests
+were not written again. The importer's goldens were re-recorded for the new lines only: 28 cases
+of `tests/golden.json` (the unit projects anchors, health, cluster and restart, and Mastodon and
+Sentry) and `tests/golden/k8s-cluster.yaml`. Docker's voting app has no shared image and did not
+change.
+
+**2. An exploration keeps no run directory for its failures.** `hydo inspect diagnose
+hydo-out/explore` said `no-run: ./result.json: No such file`, and the user replayed the minimal
+schedule by hand with `hydo run "<schedule>" --out <dir>`.
+
+- `report.md` gives each minimal schedule the line "a run directory for `hydo inspect`": the
+  "by hand" command, with `--backend hvx` on hvx, and `--out <exploration>/runs/seed-<n>` by the
+  seed the failure came from. The folder comes from the exploration's command line in
+  `exploration.json`, so `hydo report --details` prints the same line.
+- `hydo report`'s problem text gives each failing problem two lines, `Why it failed: hydo
+  inspect diagnose <dir> --problem N` and `A run directory of it: hydo run [--backend kvm|hvx]
+  --image <image> "<schedule>" --out <dir>/runs/seed-<n>`. The command names the image and the
+  engine, so it runs from any folder; the Mac has one engine and takes no `--backend`.
+- `hydo inspect diagnose <explore dir> [--problem N] [--run]` takes problem N as `hydo report`
+  numbers it (default 1). It reads, in this order: the run directory that the command made; the
+  explorer's replay of a run that stopped with an error (`replays/<tag>/`, Milestone 247); and
+  the exploration's own control transcripts of the run (`consoles/<tag>.control.jsonl`, the
+  minimal schedule's first confirmation when hydo shrank it). With none of them it names the
+  command, and `--run` runs it once into that folder and diagnoses the result. A problem of
+  error lines, a number past the last problem, and `--problem` on a run directory are refused
+  with the command to use.
+
+The test `hydo::inspect_explore` runs every path on the scripted exploration of
+`tests/fixtures/report/scripted-explore`, with the Redis run of `tests/fixtures/report/redis` as
+the files a real run leaves, and `--run` through the scripted engine. The explorer's documents
+did not change (`exploration.json` and the event stream). Goldens re-recorded for the new lines
+only:
+
+- `tests/golden/report/exploration.txt`: 4 lines.
+- 4 answers of `tests/golden/cli.jsonl`: `hydo report` of the composed exploration, now longer
+  than 4 KiB and so kept as a digest.
+- `report.md` of 19 scenarios of `hydo-explore`'s `fake_engine`: one line per minimal schedule.
+  `freeze_call` and `protocol_cover` became longer than 4 KiB and are kept as digests.
+
+Before the re-recording, the old goldens matched the code before the change.
+
+**3. The clock audit's noise.** The user's `hydo rules scan --kind clock` ranked a Rust test
+function `[high]` (`test_clean_unpartitioned_table` in a `#[cfg(test)]` module). It also ranked
+places in a program that no service of the manifest runs, and its schedules kept `<service>`
+although `hydo/hydo.yaml` existed.
+
+- Test code inside a source file is left out by each language's conventions:
+  - Rust: an item after `#[cfg(test)]` or `#[cfg(all(test, ...))]`, and a function after
+    `#[test]` or another crate's test attribute (`#[tokio::test]`, `#[rstest]`).
+  - Go: `func TestX(t *testing.T)`, `BenchmarkX` and `FuzzX`.
+  - Python and Ruby: `def test_...` and `class Test...`.
+  - Java, Kotlin and C#: JUnit's and .NET's test annotations.
+  - JavaScript and TypeScript: `describe(`, `it(` and `test(` blocks, and Vitest's
+    `if (import.meta.vitest)`.
+  - C and C++: googletest's `TEST(`.
+  Its lines are neither places nor readings, and the report's head counts what it left out.
+- With a manifest, the audit maps the code to the programs that the services and the workload
+  run (`hydo-cli/src/clockmap.rs`). A Cargo binary comes with the packages of the tree that it
+  depends on, dev-dependencies left out. A Go main package comes with the packages of its module
+  that it imports. A service runs a program that a command of its `entrypoint` and `cmd` starts
+  (with the image's, from `hydo-compose.lock.json`), or its `setup` or `ready`. Failing those, it
+  runs a program named like its image. The places in the mapped code come first. The head says
+  how the audit mapped them, each place says who runs it, and `--json` gives `run_by`.
+- A schedule names the one service that runs a place's code instead of `<service>` or
+  `<leader>`. When several services run it, none does, or the map cannot tell, a line under the
+  schedules says why the placeholder stays.
+
+The proof used the tagged sources of Milestone 248's projects and TiKV v8.5.8, downloaded from
+GitHub, each with its example's `hydo/hydo.yaml`:
+
+| project | the head of the report | the known place, rank before and after |
+|---|---|---|
+| Valkey 9.1.3 | C is not mapped: ranked by words alone | `refreshGoodReplicasCount` 2 and 2, `shouldStartChildReplication` 4 and 4 |
+| Temporal 1.32.2 | `temporal` runs `server` (the image's name), built from `cmd/server` and 293 Go packages | `reconnect` 1 and 1 |
+| River v0.51.2 | the workers run `riverq`, the example's own program, which River's tree does not build | `river_leader.sql` 2 and 2 |
+| TiKV v8.5.8 | `tikv1` to `tikv3` run `tikv-server` (the image's entrypoint), built from `cmd/tikv-server` and 60 packages | `test_from_local_time`, a test, ranked 5 before and left out after |
+
+On TiKV the audit left out 223 test functions and 489 test modules, and 3 of its 7 high places
+went. Two were in `#[cfg(test)]` modules. The third, `check_damaged_files`, measures `Instant`,
+and only a test's assignment had made its field a wall-clock reading. The two functions left are
+Azure's credential code, which `tikv-server` links. On Temporal the schedules of the
+places that `temporal` runs name it, as in `K=temporal@2+3`, where the audit wrote `<leader>` and
+`<service>`. The tests are the unit tests `test_code_inside_a_source_file_is_left_out` and
+`clockmap::tests` (a Cargo workspace, a Go module, and a tree without either), and
+`hydo::rules::the_clock_audit_ranks_the_code_that_the_services_run_first`.
+
+**What is left.** Open item 166.
+
+## Milestone 323 (tentative number): hvx's guest clock right by default from the fingerprint epoch 5
+
+Milestone 319 found why a busy hvx guest's clock nearly stopped late in a long run, and made the
+fix an opt-in key, `guest.exact_tick` (`clocksource=jiffies`). The user approved making a fix the
+default at the fingerprint epoch 5 (2026-11-19). This milestone compares four ways for the guest
+kernel to keep time, makes the best one the default for an x86_64 image built at epoch 5, and
+checks that images of earlier epochs keep their values. The design note is
+`docs/design/guest-clock.md`.
+
+**The four ways.** All ran on the bare-metal machine, from a tree of their own, with the engine's
+`HVX_EXPLORE_CMDLINE_EXTRA` adding the words to the guest kernel's command line:
+
+- (d) today's default: nothing on the command line;
+- (a) `clocksource=jiffies`, M319's key;
+- (b) `tsc=reliable`, which turns the clocksource watchdog off and keeps the TSC as the clock;
+- (c) `clocksource=tsc tsc=reliable`;
+- (e) `tsc=reliable` and a virtual TSC step of 1,600 instead of 65,536 (1 µs instead of 41 µs of
+  the 1.6 GHz TSC), through a temporary engine variable for the comparison.
+
+(e) came from (b)'s result. The module moves the virtual TSC by one step at each `RDTSC` it
+emulates and by one more at the exit while a timer is armed, so with the old step every clock read
+costs the guest 82 µs of its time.
+
+**The probe.** A static C program `clockprobe` in an image without services ran 500 million loop
+passes after each minute of idle time, for 10 steps, and printed how far `CLOCK_MONOTONIC`,
+`CLOCK_REALTIME` and the TSC moved during the work. Step 0 and the last step also printed
+`clock_getres` and what 100,000 calls of `clock_gettime` saw, and the kernel's clocksource lines.
+Each way ran twice with `disk=none | run`:
+
+| | (d) default | (a) jiffies | (b) `tsc=reliable` | (c) both words | (e) (b), step 1 µs |
+|---|---|---|---|---|---|
+| The clock after the boot | `refined-jiffies`, from 10.02 s | `jiffies` | `tsc`, from 11.47 s | `tsc`, from 11.46 s | `tsc`, from 2.25 s |
+| Monotonic clock against the TSC during the work, step 0 | 0.082 | 0.443 | 1.0001 | 1.0003 | 1.000003 |
+| The same, step 9 (10 minutes of uptime) | 0.010 | 0.443 | 1.0001 | 1.0003 | 1.000003 |
+| Uptime against the TSC at the end | 0.021 | 0.787 | 0.990 | 0.990 | 0.998 |
+| `clock_getres`, and the smallest step seen | 1 ms, 999,848 ns | 1 ms, 1 ms | 1 ns, 81,920 ns | 1 ns, 81,920 ns | 1 ns, 2,000 ns |
+| Guest time of 100,000 reads | 6 ms | 6 ms | 18.0 s | 18.0 s | 0.21 s |
+| Fingerprint, both runs | `b7be8240a5b19163` | `cd64262ead35819b` | `44c291ef9bbeb2a1` | `50d435480a3ca259` | `af2c947920e24539` |
+| Host seconds of the two runs | 28, 27 | 27, 27 | 20, 18 | 19, 20 | 24, 22 |
+
+In (d) the kernel log has `Marking clocksource 'tsc-early' as unstable because the skew is too
+large` at 6.25 s and `Switched to clocksource refined-jiffies` at 10.02 s; at the end
+`/proc/timer_list` showed `tick_handle_periodic` and 607,453 local timer interrupts in 607 s. In
+(a) the TSC is marked unstable the same way, and the kernel keeps `jiffies`. A busy guest's clock
+runs at 0.44 of the TSC there, because each tick's next deadline is set 1 ms after the tick's
+handling, which waits for the next tick of the branch clock (2 ms of the TSC). In (b), (c) and (e)
+no watchdog line appears, and the timers run in high-resolution mode (`hrtimer_interrupt`,
+`nohz_mode 2`, 116,870 local timer interrupts in 708 s). (c) behaved as (b): the TSC has the
+highest rating of the guest's clocksources. A step of 6,400 (4 µs) also gave one fingerprint in
+two runs.
+
+**ClickHouse seed 20.** M319's schedule `disk=cut dseed=6711e6dcb424bc7a | run
+K=keepers.minority.7@36+3 N=keepers.ring@12-21:loss,100% C=40 P=replicas.all@6+3
+W=9580664b,p4,q2,r250` ran on the onboarding's image `img-i2` (read only) with each way:
+
+| Way | Verdict | Fingerprint | Host seconds | The workload's TSC | The workload's `RDTSC` exits |
+|---|---|---|---|---|---|
+| (d) | `TIMEOUT workload` at a wall limit of 600 s | none | 626 | n/a | n/a |
+| (a) | `VIOLATION [converge] the replicas differ in 1 blocks after the heal` | `56cdb36c4bdaf736`, M319's | 560 | 654.7 s | 9,372,812 |
+| (b) | `ERROR service start (ch1)`, twice | `3b0869bf667a6985` | 112, 93 | n/a | n/a |
+| (e) | `VIOLATION [converge] the replicas differ in 7 blocks after the heal`, twice | `98ad6346319c3f0a` | 457, 408 | 212.2 s | 28,963,047 |
+
+In (b) `ch1`'s readiness check did not pass in 300 s of guest time: ClickHouse's log ran from
+00:00:29 to 00:05:08 while it started, because every read of its clocks moved them 82 µs. In (e)
+the log's times have microseconds (`00:03:39.887406`); in (a) they end in `000`. Two runs of (e)
+gave one fingerprint, input hash and transcript hash. The runs of (a), (b) and (e) overlapped
+with other runs of this milestone on the machine, so the host seconds compare only roughly.
+
+**The pinned reproducer's stack.** `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` on
+the epoch-4 images in `~/hydo/build/m302` (Kafka on a JVM, MySQL, Redis) gave its two verdicts
+with every way: `VIOLATION [stack.exactly_once] order=11` on the old image and `OK` on the fixed
+one. The host seconds were 79 and 41 with (d), 90 and 62 with (a), 176 and 152 with (b), and 104
+and 60 with (e). With (b) the workload took 45.5 s of guest time and made 722,911 `RDTSC` exits;
+with (a) it took 4.3 s.
+
+**The choice: (e).** It is the only way whose clocks follow the TSC exactly at every uptime and
+read in steps finer than 1 ms, while a read costs little guest time: 2 µs, near the 2,666 ns of a
+read on the Mac engine. (a) keeps the ticks exact but runs a busy guest's clock at 0.44 of the TSC
+and gives programs steps of 1 ms. (b) and (c) are exact but make a clock-heavy program's time run
+82 µs per read, which broke ClickHouse's start. The fine step is used only with the PMU branch
+clock: on the exit-count clock alone the step is all that moves the TSC.
+
+**What was built.**
+
+- `hydo_image::EpochDefaults::exact_tick`: on for an x86_64 image from epoch 5. hydo-build
+  writes `/etc/hydo/exact-tick` with `tsc` when `guest.exact_tick` is `true`, or absent and on by
+  the default (`hydo_build::x86::guest_clock`). `false` writes nothing.
+- `hydo_engine::image::guest_clock` reads the file's word, `jiffies` (M319's images) or `tsc`, and
+  passes `--exact-tick <word>` to hvx or the in-process engine's `Start::clock`.
+- `hydo_hvx::engine::GuestClock`: `Kernel` (no file), `Jiffies` (`clocksource=jiffies`) and
+  `Tsc` (`tsc=reliable` and the TSC step `FINE_TSC_STEP`, 1,600). A VM that falls back to the
+  exit-count clock keeps the old step.
+- The project schema says `"default": true` for the key, and the validator's message names the
+  TSC. MANIFEST.md's section "The guest's timer tick on hvx" describes the new default.
+
+**Images built at epoch 5.** With the change, the release's Redis example and the probe built at
+epoch 5 recorded `tsc`, and the probe with `guest.exact_tick: false` recorded nothing. The probe
+booted with `tsc=reliable` and gave (e)'s values: 233,302 stops, the clock at 1.000003 of the TSC,
+reads in steps of 2,000 ns, `d9b2ce1e7caaca85` in two runs. The probe with `false` booted with the
+old command line and gave (d)'s values (0.010 at step 9). The Redis image ran each schedule twice,
+with one fingerprint each:
+
+| Schedule | Verdict | Fingerprint |
+|---|---|---|
+| `disk=none \| run` | OK | `cce52f9e8565f6e2` |
+| `disk=none dseed=1 \| run K=redis@5+3 P=redis@12+2 T=8:-86400` | OK | `ee3e7b755122e7d3` |
+| `disk=none \| run T=8:3600` | OK | `2ba6fb7c1603fd87` |
+| `disk=none tj=5 tjpm=100 \| run` | OK (`tjn=2`) | `df98ec8fec90d043` |
+| `disk=none xt=1 xtr=4 xtpm=100 \| run` | OK (`xtn=4`) | `7bcd6f5637d071c1` |
+| `disk=none pp=65536 \| run` | OK | `3f9f4cad1ea598e0` |
+| `disk=none \| run`, `--vcpus 2` | OK | `fc9769c78faf58c6` |
+| `disk=cut \| run C=12 R=everysec` | `VIOLATION [redis.acked_writes_survive] key k:1 lost` | `8bee301c59ad1b12` |
+
+The PMU branch clock was on in every run.
+
+**Images of earlier epochs keep their values.** With this tree's engine on hvx, and no developer
+variable set:
+
+- the pinned reproducers gave `e153f376096a072c` and `6a5c2fe208174af3` on the epoch-4 images in
+  `~/hydo/build/m302`, and `a76d7fe857fdb37c` and `efbde7b57264be0f` on the epoch-2 images in
+  `~/hydo/build/m204`;
+- the release's Redis example of the epoch-4 re-recording (`80643bb1…`) gave `2f9186af5e3be2b1`
+  (`disk=none | run`), `d299dc487ceb5e3c` (`C=12 R=everysec`) and `28275db955114140`
+  (`disk=cut | run C=12`), its recorded values.
+
+An empty `HVX_EXPLORE_CMDLINE_EXTRA` still adds a space to the command line and so moves a
+fingerprint: the comparison's runs of (d) set it empty, and their values are not the recorded ones.
+
+**The Mac and KVM engines.** The same probe, built for arm64 with 0.4.1 and run on the Mac engine,
+showed `arch_sys_counter` as the clocksource and the arch timer on the same counter, in
+high-resolution mode, with no watchdog line. The fixed work took 5 µs of guest time at every step
+from 1 to 10 minutes: the engine's clock counts exits, and the loop makes none. A read cost 2,666 ns
+of guest time. So the Mac guest has no gap. The KVM engine's guest kernel reads one exit clock for
+its clocksource `hydo` and its one-shot timer, both in nanoseconds
+(`hv/kvm/linux/hydo-kvm-guest.patch`), with the TSC hidden in CPUID; no KVM run measured it. Neither
+engine changed.
+
+**What moves.** Every hvx image built at epoch 5 gets the TSC clock, so every hvx value of the list
+moves at the re-recording pass, and a verdict can move with the guest's timeouts (open item 105).
+The KVM images get `/etc/hydo/exact-tick` as new bytes; the Mac images do not change. Nothing
+recorded is re-recorded here.
+
+**What is left.** Open item 164.

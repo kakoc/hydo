@@ -2203,6 +2203,16 @@ pub struct Item {
     pub more_lines: usize,
     /// The command that shows it again.
     pub command: String,
+    /// The schedule it shows: the minimal one when hydo shrank it, else the failing run's.
+    pub schedule: String,
+    /// The run of the exploration that ran that schedule: the minimal schedule's first
+    /// confirmation, else the failing run (its files are in `consoles/`).
+    pub tag: Option<String>,
+    /// The run directory that `run_command` makes, `<exploration>/runs/seed-<n>` by the seed the
+    /// failure came from (Milestone 324: an exploration keeps no run directory of its own).
+    pub run_dir: Option<String>,
+    /// `hydo run` with the image, the engine and `--out` of `run_dir`, for `hydo inspect`.
+    pub run_command: Option<String>,
     /// The finding keys `hydo ci accept` takes for it, one per signature, each under the first
     /// problem it covers.
     pub accept: Vec<String>,
@@ -2338,7 +2348,8 @@ pub struct ExStory<'a> {
     /// The problem (from 1) each group of failures is shown as.
     problem_of: Vec<usize>,
     new_kinds: Vec<&'a hydo_results::ErrorKind>,
-    by_tag: BTreeMap<String, &'a Run>,
+    /// The runs of the event stream by tag.
+    pub(crate) by_tag: BTreeMap<String, &'a Run>,
 }
 
 /// "What held" in numbers.
@@ -2692,6 +2703,24 @@ pub fn exploration_story<'a>(
         if !accept.is_empty() {
             problem.todo = problem.decide.clone();
         }
+        // a run directory for `hydo inspect` (Milestone 324): the schedule run once more into
+        // `runs/seed-<n>` of the exploration's folder, by the seed the failure came from
+        let min = shrunk
+            .then(|| doc.shrinks.iter().find(|s| s.minimal == schedule))
+            .flatten();
+        let seed = match min {
+            Some(s) => Some(s.from_seed),
+            None => first.run.seed,
+        };
+        let shown_tag = min
+            .and_then(|s| s.confirmations.first())
+            .and_then(|c| c.tag.clone())
+            .filter(|t| by_tag.contains_key(t))
+            .or_else(|| first.run.tag.clone());
+        let run_dir = seed.map(|n| format!("{}/runs/seed-{n}", shown.trim_end_matches('/')));
+        let run_command = run_dir
+            .as_ref()
+            .map(|d| story::run_dir_command(&doc.image.path, &doc.engine, &schedule, d));
         items.push(Item {
             problem,
             runs: Some((x.failures.len(), total)),
@@ -2702,6 +2731,10 @@ pub fn exploration_story<'a>(
             lines: Vec::new(),
             more_lines: 0,
             command,
+            schedule: schedule.clone(),
+            tag: shown_tag,
+            run_dir,
+            run_command,
             accept,
             accept_note: String::new(),
             replay: if error { first.run.tag.clone() } else { None },
@@ -2764,6 +2797,10 @@ pub fn exploration_story<'a>(
                 .collect(),
             more_lines: new_kinds.len().saturating_sub(5),
             command: format!("hydo errors {}", quote(shown)),
+            schedule: String::new(),
+            tag: None,
+            run_dir: None,
+            run_command: None,
             accept: Vec::new(),
             accept_note: String::new(),
             replay: None,

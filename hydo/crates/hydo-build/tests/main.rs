@@ -12,4 +12,5 @@ mod netns;
 mod oci;
 mod oci_share;
 mod regressions_beside;
+mod root_fit;
 mod world_objects;

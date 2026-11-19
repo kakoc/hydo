@@ -1401,16 +1401,13 @@ fn cmd_scan(argv: &[String]) -> i32 {
     }
     if only.as_deref() == Some("clock") {
         let svcs = crate::clockscan::services_near(root, manifest.as_deref());
-        let (read, matches) = crate::clockscan::audit(root);
+        let a = crate::clockscan::audit(root);
         if as_json {
-            println!(
-                "{}",
-                crate::clockscan::json_report(&dir, read, &matches, &svcs)
-            );
+            println!("{}", crate::clockscan::json_report(&dir, &a, &svcs));
         } else {
             print!(
                 "{}",
-                crate::clockscan::text_report(&dir, read, &matches, &svcs, max, all)
+                crate::clockscan::text_report(&dir, &a, &svcs, max, all)
             );
         }
         return 0;
@@ -1426,7 +1423,7 @@ fn cmd_scan(argv: &[String]) -> i32 {
             .collect();
         let mut doc = json!({"dir": dir, "files_read": read, "evidence": items});
         if only.is_none() {
-            let (_, matches) = crate::clockscan::audit(root);
+            let matches = crate::clockscan::audit(root).matches;
             doc["clock"] = Value::Array(matches.iter().map(crate::clockscan::match_json).collect());
         }
         println!("{}", serde_json::to_string_pretty(&doc).unwrap_or_default());
@@ -1451,7 +1448,7 @@ fn cmd_scan(argv: &[String]) -> i32 {
     }
     if only.is_none() {
         // the clock audit's places, one line each; --kind clock gives the schedules
-        let (_, matches) = crate::clockscan::audit(root);
+        let matches = crate::clockscan::audit(root).matches;
         println!(
             "\nclock ({}): durations measured with the wall clock (--kind clock proposes the schedules that test them)",
             matches.len()

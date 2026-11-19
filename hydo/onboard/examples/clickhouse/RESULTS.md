@@ -20,6 +20,11 @@ when enough replicas hold it.
   2. **The documented trade-off: with the default fsync settings a power cut loses acknowledged
      inserts.** `hydo explore --configs` explored the three values of the build parameter
      `fsync` with the same seeds and labeled the loss by design. It is not reported.
+  3. **A new candidate: a Keeper without a quorum spins on a closed session.** A server that
+     gives up its session sends `Close` and closes its socket. The Keeper's handler then polls
+     the closed socket without a pause until the session timeout, 30 s. In seed 20 two handler
+     threads of one Keeper took about a third of the guest's CPU. No report found names it, and
+     nothing was posted (the section "The busy Keeper threads").
 - **What held?** No retried insert was stored twice: not a retry after an error or a timeout, not
   a deliberate second send of an acknowledged block, not with `insert_deduplication_token`, and
   not with async inserts. Every acknowledged quorum insert (`insert_quorum = 2`, parallel or
@@ -316,6 +321,78 @@ inserted part as an option that costs insert performance. It is not reported. Th
 `insert` are finding 1: the data is not lost, but replication stops for good, which the
 settings' documentation does not say.
 
+## The busy Keeper threads (a new candidate): a handler of a closed session spins until the session times out
+
+**The label.** A ClickHouse Keeper candidate, not reported upstream, and nothing was posted. It
+wastes CPU and ends by itself. It is not the guest's environment and not hydo's faults: the
+partition holds only the links between the Keepers, and the client closes its own socket. It is
+the busy work behind the slow guest clock of Milestone 319 (the section "What hydo lacked").
+
+**What happens.** When a server gives up its Keeper session, its client sends a `Close` request
+and then shuts its socket down without waiting for the answer. A Keeper without a quorum cannot
+answer the `Close`. Its handler thread for that connection then runs without a pause until the
+session timeout ends the session, 30 s here. With one such session per server, two handler
+threads of one Keeper took about a third of the guest's one CPU between them.
+
+**The evidence.** Seed 20's schedule ran on the image built from the committed example with
+`--set fsync=insert`, which sets `guest.exact_tick`. The run gave Milestone 319's verdict,
+fingerprint `2be840e3c29f36dd` and transcript hash `ctl=897572c6272fa6fd`. Milestone 319's run
+on the image without the key found the loop on `keeper3`. In this run it was on `keeper2`. A `hydo inspect` session at stop 364112, 16 s after the
+servers ended their sessions, showed this:
+
+- `keeper2`'s log has `Received session ID 3` on handler thread 333 and `Received session ID 4`
+  on thread 338, at 00:02:33.8 of the guest's clock.
+- At 00:03:14.02, `ch1` logged `Finalizing session 3` after `Received error in heartbeat response:
+  Connection loss`, and `ch2` logged `Finalizing session 4` with `Hardware error: Connection loss`.
+- Threads 333 and 338 were runnable (`R` in `/proc/<pid>/task/<tid>/stat`) in every sample. In
+  50 ms of guest time they ran 9.2 ms and 8.2 ms by `schedstat`. In 100 samples of each
+  thread's kernel stack, every top frame was `exit_to_user_mode_prepare`: the return from a
+  system call or an interrupt.
+- `keeper2`'s client port 9181 held two connections in `CLOSE_WAIT`, one from `ch1` and one from
+  `ch2`. Each had a receive queue of 1, which is the client's FIN and no unread byte.
+- `ruok` answered `imok`. `mntr`, `stat` and `cons` answered `This instance is not currently
+  serving requests`, so the handlers' sessions could not be listed.
+
+The session then went on in steps of 5 s of guest time. At 00:03:40 both connections were still
+in `CLOSE_WAIT` and both threads were runnable. At 00:03:46 both connections were gone and both
+threads slept. That is 30 s after the `Close`. The servers ask for a session timeout of 30 s,
+and the Keepers allow it. From then on thread 333 kept 0.62 s of user time and 2.28 s of system
+time. Thread 338 kept 0.63 s and 2.29 s.
+
+**The cause in the code.** The file is `src/Server/KeeperTCPHandler.cpp` at the tag of
+v26.10.6.18 (commit `68f652e0c1121f4ea60052edd98dc1db889eb4b4`, the hash in the Keeper's log):
+
+- The main loop waits in `poll_wrapper->poll(session_timeout, *in)` (line 598). Linux uses the
+  `::poll()` branch (lines 192 to 220), because `POCO_HAVE_FD_EPOLL` is a private definition of
+  Poco's network library (`base/poco/Net/CMakeLists.txt`, line 7). That branch asks for `POLLIN`
+  on the socket and on the response pipe.
+- The loop reads the socket only when `result.has_requests && !close_received` (line 610). A
+  read that finds the end of the stream ends the session (line 612). After a `Close` request,
+  `close_received` is true (line 626), and the loop waits for the `Close`'s response without
+  reading the socket.
+- A socket with a FIN that nobody read reports `POLLIN` at once on every `poll()`. So each pass
+  returns at once, does nothing, and polls again.
+- Only the response to the `Close` or the session timeout ends the loop (line 711). The timeout
+  counts from the last request, the `Close` (line 636).
+
+The client's side is `ZooKeeper::finalize` in `src/Common/ZooKeeper/ZooKeeperImpl.cpp`: it
+sends the `Close` (line 1551) and shuts the socket down (line 1583) without waiting for the
+answer. A Keeper that has a quorum answers the `Close` when its Raft log commits it, and that
+answer ends the loop. No run measured how long the loop lasts then. The same code is on
+ClickHouse's `master` on 2026-11-19 (line 620 there).
+
+**What would fix it.** After the `Close`, the handler can stop asking for `POLLIN` on the socket,
+or end the session when a read finds the end of the stream.
+
+**Why there was no native run.** The cause is plain in the code, so the candidate was not
+reproduced outside hydo. Such a run needs a Keeper cluster without a quorum and a client that
+ends its session.
+
+**Its part in the runs that never ended.** On the image without `guest.exact_tick`, the 30 s of
+the session timeout are guest time, and the slow clock of Milestone 319 made them last longer than
+the engine's limit. So the loop kept the CPU busy for the whole run. With the exact tick the loop
+ends after 30 s of guest time, and the run goes on to its verdict.
+
 ## The duplicate searches
 
 Each phrase was searched in ClickHouse's issues and pull requests, open and closed, with `gh
@@ -339,6 +416,20 @@ search issues --repo ClickHouse/ClickHouse --include-prs`, on 2026-11-18.
 The changelog of the releases up to 26.10 lists no change to the search for a missing part, and
 the last change of `ReplicatedMergeTreePartCheckThread.cpp` on `master` (2026-09-18) is about
 `CHECK TABLE`.
+
+The phrases of the busy Keeper threads were searched on 2026-11-19 with `gh api search/issues`
+and the query `repo:ClickHouse/ClickHouse <phrase>`. It covers open and closed issues and pull
+requests. On that day `gh search issues --include-prs` returned nothing for any phrase of several words.
+
+| phrase | what it found |
+|---|---|
+| `close_received`, `KeeperHandler CPU` | nothing |
+| `KeeperTCPHandler` (135 results, the first 12 read), `KeeperTCPHandler CPU`, `KeeperTCPHandler close`, `KeeperTCPHandler poll`, `KeeperTCPHandler poll returns` | Other causes. #119393 and #119450: a TLS connection stalls the shutdown. #118014: connections close at the shutdown. #111102: the Keeper ends active sessions of read-only workloads. #114401: a session request is lost at a change of leader |
+| `keeper CLOSE_WAIT` | #55718, #55833 (connection pools of S3 disks), #42295: other components |
+| `keeper busy loop`, `keeper 100% CPU`, `keeper CPU spin`, `keeper busy wait`, `keeper thread spinning`, `keeper high CPU quorum`, `keeper CPU no quorum`, `keeper CPU leader election`, `keeper cpu usage spike`, `keeper epoll`, `keeper half-closed`, `keeper close session CPU`, `keeper Close request response`, `keeper session close hang` | nothing about a handler's loop; #102419 (a refactoring of the dispatcher's sessions, closed without merge) is the nearest |
+
+The last commits to `KeeperTCPHandler.cpp` on `master` (2026-09-11 to 2026-10-31) change timeout
+messages, the handshake of an expired session, statistics, and the shutdown of TLS connections.
 
 ## The explorations
 
@@ -377,8 +468,9 @@ In the order of the time each gap cost:
    hvx's guest kernel: its clock counts a tick as 999,848 ns while its timer sets ticks 1 ms
    apart, so after two minutes each tick was due 19 ms ahead on the virtual TSC. Two
    `KeeperHandler` threads of `keeper3` kept the CPU busy, and the guest's clock ran about 1.2 s
-   in 100 s of host time. With `guest.exact_tick: true`, now in `hydo/hydo.yaml`, seed 20 ends
-   with finding 1's verdict. Open item 164.
+   in 100 s of host time. Those threads are ClickHouse's own loop (the section "The busy Keeper
+   threads"). With `guest.exact_tick: true`, now in `hydo/hydo.yaml`, the loop ends after the
+   session timeout, and seed 20 ends with finding 1's verdict. Open item 164.
 2. **The hvx engine's disk limit.** The first run stopped at `HVX_SET_DISK: Invalid argument`:
    hvx takes at most 4 GiB of root and data disk together (`HVX_DISK_MAX`). The server's program
    is 894 MB and the Keeper's 566 MB. The example shares each image between its services
