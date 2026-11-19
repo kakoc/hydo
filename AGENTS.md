@@ -2622,18 +2622,18 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Homebrew installs the formula's version only, so `--version V` with Homebrew is refused
       unless V is the formula's version.
 162. The fixes of a user's onboarding with 0.4.0 (M316, tentative number). What is left:
-    - The user's recovery boot without the service's `/dev/shm` tmpfs was not reproduced with
-      PostgreSQL 16.4 on the Mac engine. It ran first boots, three power cuts, 24 explored
-      schedules, and 70 tries of the launcher beside three `hydo-oci` helpers in the guest.
+    - The missing `/dev/shm` of the user's recovery boot did not reproduce here. PostgreSQL 16.4
+      ran on the Mac engine: in first boots, three power cuts, and 24 explored schedules.
+      In the guest, 70 tries of the launcher ran beside three `hydo-oci` helpers.
     - A race fits the symptom. The launcher binds `/dev` and the other system folders into the
       service's root outside the lock of its `mounts:`. So a `hydo-oci` helper, such as a
       readiness check, can bind `/dev` a second time over the tmpfs. The fix puts the binds under
       the lock and decides by `/proc/mounts`. It changes every image service's launcher, so every
-      such image gets new bytes, recorded ones too: it waits for 0.5.0.
+      such image gets new bytes, recorded ones too. It waits for the release after 0.4.1.
     - The user's failing run confirms the second bind (2026-11-19, `/proc/self/mountinfo` of
-      the recovery boot). The shm tmpfs is mounted on the service's `/dev`, and then a second
-      devtmpfs is mounted on the same `/dev`, after the service's other binds and before its
-      volume, and hides the tmpfs. In the user's run without a power cut that second `/dev` is
+      the recovery boot). The shm tmpfs is mounted on the service's `/dev`. Then a second
+      devtmpfs is mounted on the same `/dev` and hides the tmpfs. It comes after the service's
+      other binds and before its volume. In the user's run without a power cut that second `/dev` is
       absent. So the tmpfs line is in `/proc/mounts`, under the later `/dev`.
     - The diagnosis's environment rule reads the last log lines only. A service whose log names
       both a permission error and a damaged file keeps the claim of lost data, and a service
