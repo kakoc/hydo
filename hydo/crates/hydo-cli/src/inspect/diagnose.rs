@@ -986,6 +986,60 @@ fn last_lines(text: &str) -> Vec<String> {
     out
 }
 
+/// Words of a service's last log lines that name a cause in its environment: a permission it
+/// lacks, a read-only file system, a program or library that cannot run, memory or an address it
+/// cannot get.
+const ENVIRONMENT_WORDS: &[&str] = &[
+    "permission denied",
+    "operation not permitted",
+    "read-only file system",
+    "exec format error",
+    "error while loading shared libraries",
+    "cannot allocate memory",
+    "out of memory",
+    "address already in use",
+];
+
+/// Words of a service's last log lines that name damaged or lost data, from the file system
+/// (`EUCLEAN`, `EIO`, `EBADMSG`) or from the service's own checks.
+const DATA_WORDS: &[&str] = &[
+    "structure needs cleaning",
+    "input/output error",
+    "bad message",
+    "corrupt",
+    "checksum",
+    "invalid page",
+    "invalid record",
+    "invalid magic",
+    "bad magic",
+    "unexpected end",
+    "truncated",
+    "no such file or directory",
+];
+
+/// Milestone 316: the rule for a service that did not start in the recovery boot after a power
+/// cut, whose verdict is always `VIOLATION service cannot recover (committed data
+/// unrecoverable)`. When its last log lines name a cause in its environment
+/// ([`ENVIRONMENT_WORDS`]) and none of them names damaged or missing data ([`DATA_WORDS`]; a
+/// missing file counts as data, since a lying disk loses files), the diagnosis says so and does
+/// not repeat the claim of lost data: the line with the cause. The verdict and the explorer's
+/// class stay, so every recorded value stays. A user's PostgreSQL that found devtmpfs's
+/// `/dev/shm` in its recovery boot stopped with `could not open shared memory segment ...:
+/// Permission denied`, and the run claimed its committed data unrecoverable.
+fn environment_cause(tail: &[String]) -> Option<String> {
+    let has = |l: &str, words: &[&str]| {
+        let l = l.to_lowercase();
+        words.iter().any(|w| l.contains(w))
+    };
+    if tail.iter().any(|l| has(l, DATA_WORDS)) {
+        return None;
+    }
+    tail.iter()
+        .rev()
+        .find(|l| has(l, ENVIRONMENT_WORDS))
+        .map(|l| l.chars().take(200).collect())
+}
+
 /// Sharpen the summary with what the evidence showed.
 fn refine(d: &mut Diagnosis) {
     if let Some(l) = d.kernel.iter().find(|l| l.contains("Killed process")) {
@@ -1010,6 +1064,17 @@ fn refine(d: &mut Diagnosis) {
                         "; its log ends: {} (the whole log: {LOGS_DIR}/{s}.log in the run directory)",
                         tail.join(" | ")
                     ));
+                }
+                let recovery = d.summary.contains(conv_words(Conv::Recovery));
+                if let Some(cause) = recovery.then(|| environment_cause(&tail)).flatten() {
+                    let why = format!(
+                        "{s} did not start because of its environment, not because of lost data: its \
+                         log ends with `{cause}` and names no damaged file, so this run does not show \
+                         what the verdict's words \"committed data unrecoverable\" say; look at what \
+                         {s} needs at its start (its mounts, owners and modes, programs and memory)"
+                    );
+                    d.summary.push_str(&format!("; {why}"));
+                    d.likely.insert(0, why);
                 }
             }
         }
@@ -1197,6 +1262,59 @@ mod tests {
             ]
         );
         assert!(memory_script("/bin/busybox").contains("/bin/busybox readlink $p/fd/1"));
+    }
+
+    /// Milestone 316: a service that does not start in the recovery boot because of its
+    /// environment is not said to have lost its data; damaged data keeps the verdict's words.
+    #[test]
+    fn a_recovery_start_that_fails_on_its_environment_claims_no_lost_data() {
+        let d = |log: &str, conv: Conv| {
+            let mut d = Diagnosis {
+                summary: format!(
+                    "db exited while it started {}, before its readiness check passed (exit status 1)",
+                    conv_words(conv)
+                ),
+                failure: "service-exited".into(),
+                service: Some("db".into()),
+                evidence: vec![Evidence {
+                    what: "the log of db".into(),
+                    source: "/tmp/hydo/db.log".into(),
+                    text: log.into(),
+                    bytes: log.len() as u64,
+                    truncated: false,
+                    status: None,
+                }],
+                ..Default::default()
+            };
+            refine(&mut d);
+            d
+        };
+        let shm = "LOG:  database system was interrupted\n\
+                   FATAL:  could not open shared memory segment \"/PostgreSQL.1\": Permission denied\n\
+                   LOG:  database system is shut down\n";
+        let got = d(shm, Conv::Recovery);
+        assert!(
+            got.summary.contains(
+                "db did not start because of its environment, not because of lost data: its log \
+                 ends with `FATAL: could not open shared memory segment \"/PostgreSQL.1\": \
+                 Permission denied`"
+            ),
+            "{}",
+            got.summary
+        );
+        assert!(got.likely[0].starts_with("db did not start because of its environment"));
+        // a damaged file: the verdict's words stand
+        let lying = "chown: cannot access '/var/lib/postgresql/data/base/5/2600': Structure needs cleaning\n\
+                     chown: /var/lib/postgresql/data: Permission denied\n";
+        let got = d(lying, Conv::Recovery);
+        assert!(!got.summary.contains("environment"), "{}", got.summary);
+        assert!(got.likely.is_empty());
+        // a missing file counts as lost data (a lying disk loses files)
+        let gone = "open /data/wal/0001: no such file or directory\npermission denied\n";
+        assert!(!d(gone, Conv::Recovery).summary.contains("environment"));
+        // the first boot's start has no claim about data to correct
+        assert!(!d(shm, Conv::Boot).summary.contains("environment"));
+        assert_eq!(environment_cause(&[]), None);
     }
 
     #[test]
