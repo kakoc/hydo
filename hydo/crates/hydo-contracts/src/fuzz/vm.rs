@@ -386,6 +386,8 @@ fn run_all(o: &Opts) -> Result<i32, String> {
         copy.display()
     );
     let t0 = std::time::Instant::now();
+    let _ = std::fs::remove_file(out.join("build.log"));
+    let _ = std::fs::remove_dir_all(out.join("harness"));
     let (exe, active, failed) = super::build_each(
         &cg,
         &pkg,

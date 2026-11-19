@@ -51,6 +51,17 @@ fn find_cargo() -> PathBuf {
     PathBuf::from("cargo")
 }
 
+/// `rustfmt` beside the cargo that builds the harness, else on PATH (Milestone 326).
+pub(crate) fn rustfmt() -> PathBuf {
+    let cargo = std::env::var_os("CARGO")
+        .map(PathBuf::from)
+        .unwrap_or_else(find_cargo);
+    match cargo.parent().map(|d| d.join("rustfmt")) {
+        Some(r) if r.is_file() => r,
+        _ => PathBuf::from("rustfmt"),
+    }
+}
+
 /// A build target of the package.
 #[derive(Clone, Debug)]
 pub struct Target {
@@ -528,10 +539,136 @@ fn abs_paths(line: &str, root: &Path) -> String {
 
 /// One error of the compiler: its first line (`error[E0616]: field ... is private`) and the
 /// places it names (the file as cargo gives it, the line, and the column in characters).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Diag {
     pub message: String,
     pub spans: Vec<(String, u32, u32)>,
+    /// The primary place (Milestone 326).
+    pub primary: Option<Span>,
+    /// The labels of the error's own places (`expected `u16`, found `&u8``).
+    pub labels: Vec<(Span, String)>,
+    /// The compiler's `help:` and `note:` lines, each with its suggested change.
+    pub notes: Vec<String>,
+    /// The error as the compiler printed it.
+    pub rendered: String,
+}
+
+/// A place in a file as the compiler names it (Milestone 326).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Span {
+    pub file: String,
+    pub line: u32,
+    /// The first column and the column after the last, in characters.
+    pub cols: (u32, u32),
+}
+
+impl Span {
+    fn of(s: &Value) -> Option<Span> {
+        Some(Span {
+            file: s["file_name"].as_str()?.to_string(),
+            line: s["line_start"].as_u64()? as u32,
+            cols: (
+                s["column_start"].as_u64()? as u32,
+                s["column_end"].as_u64()? as u32,
+            ),
+        })
+    }
+}
+
+/// The places, labels and notes of one compiler message (Milestone 326).
+fn diag_of(m: &Value, rendered: &str) -> Diag {
+    let code = m["code"]["code"]
+        .as_str()
+        .map(|c| format!("[{c}]"))
+        .unwrap_or_default();
+    let mut spans = Vec::new();
+    spans_of(m, &mut spans);
+    let own = m["spans"].as_array().cloned().unwrap_or_default();
+    let primary = own
+        .iter()
+        .find(|s| s["is_primary"] == true)
+        .or(own.first())
+        .and_then(Span::of);
+    let labels = own
+        .iter()
+        .filter_map(|s| Some((Span::of(s)?, s["label"].as_str()?.to_string())))
+        .collect();
+    let mut notes = Vec::new();
+    for c in m["children"].as_array().into_iter().flatten() {
+        let level = c["level"].as_str().unwrap_or("note");
+        let text = c["message"].as_str().unwrap_or("").trim();
+        if text.is_empty() {
+            continue;
+        }
+        let fixes: Vec<String> = c["spans"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| s["suggested_replacement"].as_str())
+            .filter(|r| !r.trim().is_empty() && r.len() <= 160)
+            .map(|r| format!("`{}`", r.trim()))
+            .collect();
+        if fixes.is_empty() {
+            notes.push(format!("{level}: {text}"));
+        } else {
+            notes.push(format!("{level}: {text}: {}", fixes.join(", ")));
+        }
+    }
+    Diag {
+        message: format!("error{code}: {}", m["message"].as_str().unwrap_or("")),
+        spans,
+        primary,
+        labels,
+        notes,
+        rendered: rendered.to_string(),
+    }
+}
+
+/// A compiler's rendered text with each very long source line cut to the part around its marks
+/// (a harness module is one line), so that a log stays readable (Milestone 326).
+pub fn narrow(rendered: &str) -> String {
+    let lines: Vec<&str> = rendered.lines().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let l = lines[i];
+        if l.chars().count() <= 300 {
+            out.push(l.to_string());
+            i += 1;
+            continue;
+        }
+        // the gutter (`12 | `) and the marks of the next line (`   |      ^^^`)
+        let gutter = l.find('|').map_or(0, |p| p + 1);
+        let marks = lines.get(i + 1).filter(|n| {
+            gutter > 0
+                && n.find('|') == Some(gutter - 1)
+                && n[gutter..].trim_start().starts_with(['^', '-'])
+        });
+        let at = marks.map_or(0, |n| n[gutter..].chars().take_while(|c| *c == ' ').count());
+        let from = at.saturating_sub(80);
+        let cut = |x: &str| -> String {
+            let head: String = x.chars().take(gutter).collect();
+            let body: String = x.chars().skip(gutter + from).take(240).collect();
+            let more = if x.chars().count() > gutter + from + 240 {
+                " ..."
+            } else {
+                ""
+            };
+            let less = if from > 0 { "... " } else { "" };
+            format!("{head}{less}{body}{more}")
+        };
+        out.push(cut(l));
+        if let Some(n) = marks {
+            out.push(cut(n));
+            i += 1;
+        }
+        i += 1;
+    }
+    let mut s = out.join("\n");
+    if rendered.ends_with('\n') {
+        s.push('\n');
+    }
+    s
 }
 
 /// A build that failed: the compiler's errors, and the text to show.
@@ -574,7 +711,10 @@ fn spans_of(m: &Value, out: &mut Vec<(String, u32, u32)>) {
     }
 }
 
-/// Build the copy's test program and return its path.
+/// The builds of this process, for the log's headings.
+static BUILDS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Build the copy's test program and return its path. The compiler's output is added to `log`.
 pub fn build(
     cargo: &Cargo,
     copy: &Path,
@@ -616,24 +756,33 @@ pub fn build(
             continue;
         }
         let m = &v["message"];
-        if let Some(r) = m["rendered"].as_str() {
-            rendered.push_str(r);
-        }
+        let r = m["rendered"].as_str().unwrap_or("");
+        rendered.push_str(r);
         if m["level"] == "error" {
-            let code = m["code"]["code"]
-                .as_str()
-                .map(|c| format!("[{c}]"))
-                .unwrap_or_default();
-            let mut spans = Vec::new();
-            spans_of(m, &mut spans);
-            errors.push(Diag {
-                message: format!("error{code}: {}", m["message"].as_str().unwrap_or("")),
-                spans,
-            });
+            errors.push(diag_of(m, r));
         }
     }
     let stderr = String::from_utf8_lossy(&out.stderr);
-    let _ = std::fs::write(log, format!("{rendered}{stderr}"));
+    // every build of the run stays in the log, after a line that numbers it, so that a later
+    // build does not hide a failed build's output (Milestone 326)
+    let n = BUILDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log)
+    {
+        use std::io::Write as _;
+        let _ = writeln!(
+            f,
+            "==== hydo fuzz: build {n} of the copy: {}",
+            if out.status.success() {
+                "built"
+            } else {
+                "failed"
+            }
+        );
+        let _ = f.write_all(narrow(&format!("{rendered}{stderr}")).as_bytes());
+    }
     if !out.status.success() {
         let all = format!("{rendered}{stderr}");
         let lines: Vec<&str> = all.lines().collect();

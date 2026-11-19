@@ -9,6 +9,7 @@ mod compile;
 mod eval;
 mod fuzz;
 mod fuzz_m318;
+mod fuzz_m326;
 mod keeps;
 mod lang;
 mod paths;

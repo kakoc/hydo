@@ -83,6 +83,7 @@ hydo-contracts::compile                  fast
 hydo-contracts::eval                     fast
 hydo-contracts::fuzz                     fast
 hydo-contracts::fuzz_m318                fast
+hydo-contracts::fuzz_m326                fast
 hydo-contracts::keeps                    fast
 hydo-contracts::lang                     fast
 hydo-contracts::paths                    fast

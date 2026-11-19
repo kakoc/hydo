@@ -16,6 +16,7 @@ pub mod harness;
 pub mod rust;
 pub mod value;
 pub mod vm;
+mod why;
 
 use crate::lang::{self, Ast, SrcContract};
 use crate::plan::ClauseKind;
@@ -31,7 +32,7 @@ pub const USAGE: &str =
     "usage: hydo fuzz [CRATE_DIR] [--fn NAME]... [--cases N] [--seed S] [--out DIR]
                  [--target-dir DIR] [--toolchain TC] [--release] [--timeout SECS]
                  [--min-inputs N] [--min-reach N] [--allow-skipped]
-                 [--show-inputs N] [--json]
+                 [--show-inputs N] [--show-harness] [--json]
        hydo fuzz [CRATE_DIR] --fn NAME --input 'NAME = VALUE, ...'
        hydo fuzz [CRATE_DIR] --list
   tests each Rust function of the crate that has `// hydo: requires` and `ensures` comments on
@@ -61,6 +62,9 @@ pub const USAGE: &str =
                    not build) leaves the exit status as it is; without it the status is 3
   --show-inputs N  prints N of each function's inputs, spread over the run, and keeps them
                    in fuzz.json as `samples`
+  --show-harness   prints the compiler's whole output for each function whose harness did
+                   not build; the run keeps it in DIR/harness/<function>.log either way,
+                   with the harness's text beside it
   --list           lists the contracted functions and whether each can be fuzzed
   --json           prints the report as one JSON line; the progress goes to standard error
   Each function ends with one verdict: `held`, `broken`, `not judged`, `vacuous` or `too few
@@ -87,6 +91,83 @@ pub struct Fn {
     pub hints: Hints,
     /// The lints that the crate forbids anywhere, which the harness must not allow.
     forbidden: Vec<String>,
+    /// The contract lines that shape the function's harness: its own, and the crate's `build`
+    /// and `read` lines, so that a harness that does not build names its cause (Milestone 326).
+    origins: Vec<Origin>,
+}
+
+/// A contract line that shapes a harness (Milestone 326).
+#[derive(Clone, Debug)]
+pub(crate) struct Origin {
+    pub file: PathBuf,
+    pub line: u32,
+    /// The line after `// hydo:`.
+    pub text: String,
+    pub kind: OriginKind,
+}
+
+/// What part of a harness a contract line writes.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum OriginKind {
+    /// `build <Type> from <constructor>(...)`: the constructor's path.
+    Build(String),
+    /// `read <Type> as <type> by <method>()`: the method's name.
+    Read(String),
+    /// `with <name> = <type>`: the name.
+    With(String),
+    Other,
+}
+
+impl Origin {
+    fn new(file: &Path, line: u32, text: &str) -> Origin {
+        let t = text.trim();
+        let kind = if let Some(r) = t.strip_prefix("read ") {
+            let m = r.rsplit(" by ").next().unwrap_or("");
+            OriginKind::Read(m.split(['(', ':']).next().unwrap_or("").trim().to_string())
+        } else if let Some(r) = t.strip_prefix("build ") {
+            let c = r.split_once(" from ").map_or("", |x| x.1);
+            OriginKind::Build(c.split('(').next().unwrap_or("").trim().to_string())
+        } else if let Some(r) = t.strip_prefix("with ") {
+            OriginKind::With(r.split('=').next().unwrap_or("").trim().to_string())
+        } else {
+            OriginKind::Other
+        };
+        Origin {
+            file: file.to_path_buf(),
+            line,
+            text: t.to_string(),
+            kind,
+        }
+    }
+
+    /// `` the line `// hydo: <text>` (<file>:<line>) ``.
+    fn show(&self) -> String {
+        format!(
+            "the line `// hydo: {}` ({}:{})",
+            self.text,
+            self.file.display(),
+            self.line
+        )
+    }
+}
+
+/// The `// hydo:` lines right before the declaration at `line` (1-based), with their lines:
+/// the run of comment lines and attributes that the contract stands in.
+fn contract_lines(text: &str, line: u32) -> Vec<(u32, String)> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = Vec::new();
+    let mut i = line as usize - 1;
+    while i > 0 {
+        i -= 1;
+        let l = lines.get(i).map_or("", |l| l.trim());
+        if let Some(t) = l.strip_prefix("// hydo:") {
+            out.push((i as u32 + 1, t.trim().to_string()));
+        } else if !(l.starts_with("//") || l.starts_with("#[")) {
+            break;
+        }
+    }
+    out.reverse();
+    out
 }
 
 /// Why a contracted function is not fuzzed.
@@ -158,12 +239,22 @@ pub fn find_all(
         }
     }
     let (mut fns, mut skipped, mut errors) = (Vec::new(), Vec::new(), Vec::new());
+    // the crate's `build` and `read` lines, for the cause of a harness that does not build
+    let mut shared: Vec<Origin> = Vec::new();
     // the `build` and `read` lines hold for the whole crate (Milestone 307)
     for (f, text) in &texts {
         if !text.contains("// hydo: build") && !text.contains("// hydo: read") {
             continue;
         }
         let rel = f.strip_prefix(pkg_dir).unwrap_or(f).to_path_buf();
+        for (i, l) in text.lines().enumerate() {
+            if let Some(t) = l.trim().strip_prefix("// hydo:") {
+                let t = t.trim();
+                if t.starts_with("build ") || t.starts_with("read ") {
+                    shared.push(Origin::new(&rel, i as u32 + 1, t));
+                }
+            }
+        }
         for c in lang::scan(text).0 {
             for b in &c.builds {
                 let mut args = Vec::new();
@@ -275,6 +366,17 @@ pub fn find_all(
                 match read_fn(text, &m, c, &items, pkg, &module, &rel) {
                     Ok(mut f) => {
                         f.forbidden = forbidden.clone();
+                        let own: Vec<Origin> = contract_lines(text, c.line)
+                            .into_iter()
+                            .map(|(l, t)| Origin::new(&rel, l, &t))
+                            .collect();
+                        f.origins = own
+                            .iter()
+                            .chain(shared.iter().filter(|s| {
+                                !own.iter().any(|o| o.file == s.file && o.line == s.line)
+                            }))
+                            .cloned()
+                            .collect();
                         fns.push(f)
                     }
                     Err(why) => skipped.push(skip(why)),
@@ -760,6 +862,7 @@ fn read_fn(
         insert_at,
         hints,
         forbidden: Vec::new(),
+        origins: Vec::new(),
     })
 }
 
@@ -2408,6 +2511,7 @@ struct Opts {
     min_reach: Option<u64>,
     allow_skipped: bool,
     show_inputs: usize,
+    show_harness: bool,
 }
 
 fn opts(args: &[String]) -> Result<Opts, String> {
@@ -2428,6 +2532,7 @@ fn opts(args: &[String]) -> Result<Opts, String> {
         min_reach: None,
         allow_skipped: false,
         show_inputs: 0,
+        show_harness: false,
     };
     let mut it = args.iter();
     let mut dir_set = false;
@@ -2458,6 +2563,7 @@ fn opts(args: &[String]) -> Result<Opts, String> {
                     .map_err(|_| "--show-inputs N")?
             }
             "--allow-skipped" => o.allow_skipped = true,
+            "--show-harness" => o.show_harness = true,
             "--list" => o.list = true,
             "--release" => o.release = true,
             "--json" => o.json = true,
@@ -2538,11 +2644,13 @@ pub fn main(args: &[String]) -> i32 {
 
 /// Where each harness module stands in the copy: its function's index, the file, the line and
 /// the first and last columns (1-based characters, as rustc counts).
-struct Placed {
-    k: usize,
-    file: PathBuf,
-    line: u32,
-    cols: (u32, u32),
+pub(crate) struct Placed {
+    pub(crate) k: usize,
+    pub(crate) file: PathBuf,
+    pub(crate) line: u32,
+    pub(crate) cols: (u32, u32),
+    /// The module's text (Milestone 326), for the cause of an error inside it.
+    pub(crate) text: String,
 }
 
 /// The contracted functions that the run builds harnesses for, and the others of the same
@@ -2615,6 +2723,7 @@ fn place(
                 file: file.to_path_buf(),
                 line,
                 cols: (col, col + m.chars().count() as u32),
+                text: m,
             });
             from = at;
         }
@@ -2625,16 +2734,22 @@ fn place(
     Ok(placed)
 }
 
-/// The functions whose harness module an error names, with the error's first line.
-fn blame(errors: &[cargo::Diag], placed: &[Placed], copy: &Path) -> BTreeMap<usize, String> {
-    let mut out = BTreeMap::new();
+/// The functions whose harness module an error names, with every such error.
+fn blame(
+    errors: &[cargo::Diag],
+    placed: &[Placed],
+    copy: &Path,
+) -> BTreeMap<usize, Vec<cargo::Diag>> {
+    let mut out: BTreeMap<usize, Vec<cargo::Diag>> = BTreeMap::new();
     for e in errors {
-        for (file, line, col) in &e.spans {
-            let p = Path::new(file);
-            let rel = p.strip_prefix(copy).unwrap_or(p);
-            for pl in placed {
-                if pl.file == rel && pl.line == *line && (pl.cols.0..=pl.cols.1).contains(col) {
-                    out.entry(pl.k).or_insert_with(|| e.message.clone());
+        for pl in placed {
+            if why::in_module(e, pl, copy).is_some() {
+                let v = out.entry(pl.k).or_default();
+                if !v
+                    .iter()
+                    .any(|x| x.rendered == e.rendered && x.message == e.message)
+                {
+                    v.push(e.clone());
                 }
             }
         }
@@ -2704,14 +2819,16 @@ pub(crate) fn build_each(
         };
         let blamed = blame(&err.errors, &placed, copy);
         if !blamed.is_empty() {
-            for (k, m) in blamed {
+            for (k, ds) in blamed {
                 if !active.contains(&k) {
                     // a use of a function whose harness is not built: left out
                     keeps.retain(|&x| x != k);
                     continue;
                 }
                 active.retain(|&x| x != k);
-                failed.push((k, m));
+                // the error in the user's terms, and the whole output kept apart (Milestone 326)
+                let pl = placed.iter().find(|p| p.k == k);
+                failed.push((k, why::failed(&fns[k], &ds, "", pl, copy, log)));
             }
             if active.is_empty() {
                 return Ok((None, active, failed));
@@ -2736,17 +2853,24 @@ pub(crate) fn build_each(
         }
         if alone_tried || active.len() <= 1 {
             if let Some(&k) = active.first() {
-                failed.push((k, err.first_error()));
+                let pl = placed.iter().find(|p| p.k == k);
+                failed.push((
+                    k,
+                    why::failed(&fns[k], &err.errors, &err.text, pl, copy, log),
+                ));
             }
             return Ok((None, vec![], failed));
         }
         alone_tried = true;
         let mut ok = Vec::new();
         for &k in &active {
-            place(&pkg.dir, copy, set, &[k], &keeps)?;
+            let placed = place(&pkg.dir, copy, set, &[k], &keeps)?;
             match cargo::build(cg, copy, target_dir, target, log) {
                 Ok(_) => ok.push(k),
-                Err(e) => failed.push((k, e.first_error())),
+                Err(e) => {
+                    let pl = placed.iter().find(|p| p.k == k);
+                    failed.push((k, why::failed(&fns[k], &e.errors, &e.text, pl, copy, log)))
+                }
             }
         }
         if ok.is_empty() {
@@ -2959,6 +3083,9 @@ fn run_all(o: &Opts) -> Result<i32, String> {
     std::fs::write(copy.join("Cargo.toml"), cargo::manifest(&pkg, &first))
         .map_err(|e| e.to_string())?;
     let target_dir = o.target_dir.clone().unwrap_or_else(|| out.join("target"));
+    // the logs of this run only (Milestone 326)
+    let _ = std::fs::remove_file(out.join("build.log"));
+    let _ = std::fs::remove_dir_all(out.join("harness"));
     eprintln!(
         "hydo: fuzz: building the harness of {} function{} ({})",
         fns.len(),
@@ -2986,6 +3113,15 @@ fn run_all(o: &Opts) -> Result<i32, String> {
             f.file.display(),
             f.line
         ));
+        if o.show_harness {
+            let log = why::harness_file(&out.join("build.log"), f, "log");
+            say(format!(
+                "hydo: fuzz: the harness of {} did not build ({}):\n{}",
+                f.name,
+                log.display(),
+                std::fs::read_to_string(&log).unwrap_or_default()
+            ));
+        }
         skipped.push(Skipped {
             name: f.name.clone(),
             file: f.file.clone(),

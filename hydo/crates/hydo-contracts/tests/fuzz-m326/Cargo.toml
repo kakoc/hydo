@@ -1,0 +1,11 @@
+# The sixth fixture of the fuzzing tests (tests/fuzz_m326.rs, Milestone 326): what is left of
+# the third evaluation of `hydo fuzz` after Milestone 318.
+[package]
+name = "fuzz-m326"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# its own workspace (not part of the repository root's)
+[workspace]

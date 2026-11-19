@@ -281,6 +281,9 @@ fn dec(t: &FTy) -> String {
         // the constructor's arguments, then the constructor (Milestone 307)
         FTy::Built { build: Some(c), .. } => {
             let parts: Vec<String> = c.args.iter().map(|(_, x, _)| dec(x)).collect();
+            // the arguments have the line's types, so that a type the constructor does not take
+            // is the compiler's error at the line, not a value that does not fit (Milestone 326)
+            let tys: Vec<String> = c.args.iter().map(|(_, x, _)| rty(x)).collect();
             // an argument passed by reference lives as long as the process, so that the built
             // value may borrow it (httparse's `Bytes::new(slice: &[u8])`)
             let args: Vec<String> = c
@@ -298,7 +301,8 @@ fn dec(t: &FTy) -> String {
                 })
                 .collect();
             format!(
-                "{{ let mut c = ({},); {}({}) }}",
+                "{{ let mut c: ({},) = ({},); {}({}) }}",
+                tys.join(", "),
                 parts.join(", "),
                 c.path,
                 args.join(", ")
