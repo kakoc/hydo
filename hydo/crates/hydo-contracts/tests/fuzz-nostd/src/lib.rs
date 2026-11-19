@@ -114,3 +114,23 @@ pub fn zeros(n: usize) -> usize {
 pub fn twice<T: Copy + core::ops::Add<Output = T>>(x: T) -> T {
     x + x
 }
+
+/// A value with `Display`, read by `to_string()`: the harness of a `#![no_std]` crate imports
+/// `ToString` (Milestone 318).
+pub struct Word(u8);
+
+impl core::fmt::Display for Word {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        for _ in 0..self.0 {
+            f.write_str("a")?;
+        }
+        Ok(())
+    }
+}
+
+// hydo: read Word as String by to_string()
+// hydo: input n in 0..=40
+// hydo: ensures len(result) == n
+pub fn word(n: u8) -> Word {
+    Word(n)
+}

@@ -487,11 +487,6 @@ fn parse_build(t: &str, line: u32) -> Result<SrcBuild, String> {
         return Err(format!("`build {t}`: {usage}"));
     }
     let ctor = rest[..open].trim();
-    let ok_path = |p: &str| {
-        !p.is_empty()
-            && p.chars()
-                .all(|c| c.is_alphanumeric() || c == '_' || c == ':' || c == '<' || c == '>')
-    };
     if !ok_path(ctor) || !ok_path(ty) {
         return Err(format!("`build {t}`: {usage}"));
     }
@@ -518,6 +513,24 @@ fn parse_build(t: &str, line: u32) -> Result<SrcBuild, String> {
     })
 }
 
+/// Whether `p` is a path or a type of a `build` or `read` line: names and `::`, with type
+/// arguments in angle brackets that may hold commas, spaces, references and arrays
+/// (`ArrayVec<u8, 8>`, `ArrayVec::<u8, 8>::from_iter`; Milestone 318).
+fn ok_path(p: &str) -> bool {
+    let (mut d, mut ok) = (0i32, !p.is_empty());
+    for c in p.chars() {
+        match c {
+            '<' => d += 1,
+            '>' => d -= 1,
+            ',' | ' ' | '&' | '[' | ']' | ';' | '(' | ')' if d > 0 => {}
+            c if c.is_alphanumeric() || c == '_' || c == ':' => {}
+            _ => ok = false,
+        }
+        ok &= d >= 0;
+    }
+    ok && d == 0
+}
+
 /// `read <Type> as <type> by <method>()` (Milestone 307).
 fn parse_read(t: &str, line: u32) -> Result<SrcRead, String> {
     let usage = "write `read <Type> as <type> by <method>()`, for example \
@@ -530,10 +543,17 @@ fn parse_read(t: &str, line: u32) -> Result<SrcRead, String> {
         .ok_or_else(|| format!("`read {t}`: {usage}"))?;
     let method = method.trim();
     let method = method.strip_suffix("()").unwrap_or(method);
+    // a method's name, also with a turbofish (`collect::<Vec<u8>>`; Milestone 318)
+    let (name, fish) = match method.split_once("::<") {
+        Some((n, f)) => (n, Some(format!("<{f}"))),
+        None => (method, None),
+    };
     if ty.trim().is_empty()
+        || !ok_path(ty.trim())
         || view.trim().is_empty()
-        || method.is_empty()
-        || !method.chars().all(|c| c.is_alphanumeric() || c == '_')
+        || name.is_empty()
+        || !name.chars().all(|c| c.is_alphanumeric() || c == '_')
+        || fish.is_some_and(|f| !f.ends_with('>') || !ok_path(&f[1..f.len() - 1]))
     {
         return Err(format!("`read {t}`: {usage}"));
     }

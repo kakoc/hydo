@@ -228,6 +228,80 @@ pub fn title_is_idempotent(s: &str) -> bool {
     title(&t) == t
 }
 
+// ---------------------------------------------------------------- `read` and `build` lines
+
+/// An iterator over bytes, as percent-encoding's `PercentDecode`: read by `collect()`.
+#[derive(Clone)]
+pub struct Iter<'a> {
+    s: &'a [u8],
+    i: usize,
+}
+
+impl Iterator for Iter<'_> {
+    type Item = u8;
+    fn next(&mut self) -> Option<u8> {
+        let b = self.s.get(self.i).copied();
+        self.i += 1;
+        b
+    }
+}
+
+// hydo: read Iter as Vec<u8> by collect()
+// hydo: ensures len(result) == len(v)
+pub fn iter_of(v: &[u8]) -> Iter<'_> {
+    Iter { s: v, i: 0 }
+}
+
+/// The same, read with a turbofish.
+#[derive(Clone)]
+pub struct Iter2<'a>(Iter<'a>);
+
+impl Iterator for Iter2<'_> {
+    type Item = u8;
+    fn next(&mut self) -> Option<u8> {
+        self.0.next()
+    }
+}
+
+// hydo: read Iter2 as Vec<u8> by collect::<Vec<u8>>()
+// hydo: ensures len(result) == len(v)
+pub fn iter2_of(v: &[u8]) -> Iter2<'_> {
+    Iter2(iter_of(v))
+}
+
+/// A stack of a fixed capacity, as arrayvec's `ArrayVec<T, CAP>`: a generic type in a `build`
+/// line.
+pub struct Ring<T, const CAP: usize> {
+    items: Vec<T>,
+}
+
+impl<T: Copy, const CAP: usize> Ring<T, CAP> {
+    pub fn from_vec(v: Vec<T>) -> Self {
+        assert!(v.len() <= CAP);
+        Ring { items: v }
+    }
+
+    pub fn to_vec(&self) -> Vec<T> {
+        self.items.clone()
+    }
+
+    // hydo: with T = u8
+    // hydo: with CAP = 4
+    // hydo: build Ring<u8, 4> from Ring::<u8, 4>::from_vec(v: Vec<u8>)
+    // hydo: read Ring<u8, 4> as Vec<u8> by to_vec()
+    // hydo: input self.v len 0..=4
+    // hydo: ensures is_err(result) || len(self) == old(len(self)) + 1
+    // hydo: ensures is_ok(result) == (old(len(self)) < 4)
+    pub fn try_push(&mut self, x: T) -> Result<(), T> {
+        if self.items.len() < CAP {
+            self.items.push(x);
+            Ok(())
+        } else {
+            Err(x)
+        }
+    }
+}
+
 // ---------------------------------------------------------------- associated result types
 
 /// heck's conversions return `Self::Owned`, the standard library's `ToOwned::Owned`.

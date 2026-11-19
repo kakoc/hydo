@@ -181,6 +181,20 @@ fn the_default_strings_hold_characters_whose_case_changes_them() {
 }
 
 #[test]
+fn read_lines_collect_take_a_turbofish_and_build_lines_take_a_generic_type() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m318-read");
+    let (_, rep) = fuzz_m318(
+        t.path(),
+        &["--fn", "iter_of", "--fn", "iter2_of", "--fn", "try_push"],
+    );
+    assert!(rep.skipped.is_empty(), "{:?}", rep.skipped);
+    assert_eq!(one(&rep, "::iter_of").verdict, "held");
+    assert_eq!(one(&rep, "::iter2_of").verdict, "held");
+    let push = one(&rep, "::try_push");
+    assert_eq!(push.verdict, "held", "{push:?}");
+}
+
+#[test]
 fn values_of_two_kinds_are_not_compared() {
     use hydo_contracts::fuzz::check::{holds, Env};
     use hydo_contracts::fuzz::value::Val;

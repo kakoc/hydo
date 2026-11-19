@@ -598,6 +598,8 @@ fn a_no_std_crate_fuzzes_function_by_function_with_verdicts() {
     assert!(skipped("::nothing").contains("its harness did not build: error[E0412]"));
     // since Milestone 318 a name that two modules define resolves by the function's module
     assert_eq!(f("::b::get").verdict, "held");
+    // and a `read` line's `to_string()` builds without std's prelude
+    assert_eq!(f("::word").verdict, "held");
     // too few inputs, and a clause that is never checked
     let name = f("::is_name");
     assert_eq!((name.verdict.as_str(), name.calls), ("too few inputs", 0));

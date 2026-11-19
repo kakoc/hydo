@@ -391,7 +391,26 @@ fn enc(t: &FTy, v: &str, d: usize) -> String {
         // through the `read` line's method, or not read (Milestone 307)
         FTy::Built {
             read: Some((t, m)), ..
-        } => format!("{{ let {x} = ({v}).{m}(); {} }}", enc(t, &format!("&{x}"), d + 1)),
+        } => {
+            // a method that takes the value (`collect`, `into`, `into_vec`) reads a clone, and
+            // one whose result type the call does not fix gets the read type (Milestone 318)
+            let name = m.split("::<").next().unwrap_or(m);
+            let takes = name == "collect" || name == "into" || name.starts_with("into_");
+            let call = if takes {
+                format!("self::std::clone::Clone::clone({v}).{m}()")
+            } else {
+                format!("({v}).{m}()")
+            };
+            let ann = if (name == "collect" || name == "into") && !m.contains("::<") {
+                format!(": {}", rty(t))
+            } else {
+                String::new()
+            };
+            format!(
+                "{{ let {x}{ann} = {call}; {} }}",
+                enc(t, &format!("&{x}"), d + 1)
+            )
+        }
         FTy::Opaque(_) | FTy::Hidden(_) | FTy::Built { .. } => {
             format!("{{ let _ = {v}; o.push_str(\"X \"); }}")
         }
@@ -403,6 +422,9 @@ const COMMON: &str = concat!(
     // `extern crate std` and `self::std` paths: a `#![no_std]` crate has no `std` and the core
     // prelude only, and a crate of the 2015 edition reads `use` paths from its root
     "extern crate std; use super::*; use self::std::fmt::Write as _; ",
+    // the traits whose methods a `read` or `build` line names, which the core prelude of a
+    // `#![no_std]` crate and the 2015 and 2018 preludes lack (Milestone 318)
+    "use self::std::string::ToString as _; use self::std::borrow::ToOwned as _; use self::std::iter::FromIterator as _; ",
     "struct R<'a> { w: self::std::str::SplitAsciiWhitespace<'a> } ",
     "impl<'a> R<'a> { ",
     "fn w(&mut self) -> &'a str { self.w.next().unwrap_or(\"\") } ",
