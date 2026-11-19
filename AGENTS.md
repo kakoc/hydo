@@ -2629,8 +2629,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       service's root outside the lock of its `mounts:`. So a `hydo-oci` helper, such as a
       readiness check, can bind `/dev` a second time over the tmpfs. The fix puts the binds under
       the lock and decides by `/proc/mounts`. It changes every image service's launcher, so every
-      such image gets new bytes, recorded ones too: it waits for 0.5.0. The user's report said
-      that `/proc/mounts` had no line for the shm mount, which a second bind does not explain.
+      such image gets new bytes, recorded ones too: it waits for 0.5.0.
+    - The user's failing run confirms the second bind (2026-11-19, `/proc/self/mountinfo` of
+      the recovery boot). The shm tmpfs is mounted on the service's `/dev`, and then a second
+      devtmpfs is mounted on the same `/dev`, after the service's other binds and before its
+      volume, and hides the tmpfs. In the user's run without a power cut that second `/dev` is
+      absent. So the tmpfs line is in `/proc/mounts`, under the later `/dev`.
     - The diagnosis's environment rule reads the last log lines only. A service whose log names
       both a permission error and a damaged file keeps the claim of lost data, and a service
       that logs nothing gets no sentence.
