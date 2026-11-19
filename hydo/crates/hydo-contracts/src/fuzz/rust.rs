@@ -829,7 +829,8 @@ pub struct Items {
     pub all_enums: BTreeMap<String, Vec<EnumDef>>,
     pub all_structs: BTreeMap<String, Vec<StructDef>>,
     /// The `use` lines of each module's file: by the module, each imported name with the paths
-    /// it may stand for, as modules and the item's name (Milestone 318).
+    /// it may stand for, as modules and the item's name (Milestone 318). The name `*` holds the
+    /// modules of the file's glob imports (Milestone 326).
     pub uses: BTreeMap<Vec<String>, BTreeMap<String, Vec<Vec<String>>>>,
     /// The structures with `#[derive(Default)]` (Milestone 326).
     pub defaults: std::collections::BTreeSet<String>,
@@ -879,7 +880,12 @@ fn use_tree(
     let Some(name) = alias.or_else(|| segs.last().cloned()) else {
         return;
     };
-    if name == "*" || name == "_" || segs.is_empty() {
+    // a glob import (`use a::*`) is kept under the name `*` with the module it names
+    // (Milestone 326)
+    if name == "*" {
+        segs.pop();
+    }
+    if name == "_" || segs.is_empty() {
         return;
     }
     let mut paths = Vec::new();
@@ -1866,7 +1872,25 @@ impl Resolver<'_> {
                         }
                         // two definitions of the name: the one that the path or the function's
                         // module names (Milestone 318)
-                        let (s_def, e_def) = match self.pick(name, segs) {
+                        // a name that no item has, or that several have, may reach its item
+                        // through a renaming `use`, a re-export or a glob import (Milestone 326)
+                        let defs = self.items.all_structs.get(name).map_or(0, Vec::len)
+                            + self.items.all_enums.get(name).map_or(0, Vec::len);
+                        let picked = self
+                            .pick(name, segs)
+                            .or_else(|| (defs != 1).then(|| self.through_uses(segs)).flatten());
+                        if let Some(real) = picked.as_ref().map(|d| match d {
+                            Def::S(s) => s.name.as_str(),
+                            Def::E(e) => e.name.as_str(),
+                        }) {
+                            if real != name
+                                && (self.items.builds.contains_key(real)
+                                    || self.items.reads.contains_key(real))
+                            {
+                                return self.built(real, t, stack);
+                            }
+                        }
+                        let (s_def, e_def) = match picked {
                             Some(Def::S(s)) => (Some(s), None),
                             Some(Def::E(e)) => (None, Some(e)),
                             None => (self.items.structs.get(name), self.items.enums.get(name)),
@@ -1979,6 +2003,50 @@ impl Resolver<'_> {
             }
             if let Some(e) = es.iter().find(|d| d.module == m) {
                 return Some(Def::E(e));
+            }
+        }
+        None
+    }
+
+    /// The definition that a type's name reaches through the crate's `use` lines (Milestone
+    /// 326): a renaming import or re-export (`use a::B as C`, `pub use a::B as C`), a
+    /// re-export that a path names (`m::C` where `m` has `pub use a::B as C`), and a glob
+    /// import (`use a::*`), followed a few steps from the modules where the name may be.
+    fn through_uses(&self, segs: &[String]) -> Option<Def<'_>> {
+        let name = segs.last()?;
+        let mut todo: std::collections::VecDeque<(Vec<String>, String)> = self
+            .modules_of(segs)
+            .into_iter()
+            .map(|m| (m, name.clone()))
+            .collect();
+        let mut seen: Vec<(Vec<String>, String)> = Vec::new();
+        while let Some((m, n)) = todo.pop_front() {
+            if seen.contains(&(m.clone(), n.clone())) || seen.len() > 64 {
+                continue;
+            }
+            seen.push((m.clone(), n.clone()));
+            let s = self.items.all_structs.get(&n).into_iter().flatten();
+            if let Some(d) = s.into_iter().find(|d| d.module == m) {
+                return Some(Def::S(d));
+            }
+            let e = self.items.all_enums.get(&n).into_iter().flatten();
+            if let Some(d) = e.into_iter().find(|d| d.module == m) {
+                return Some(Def::E(d));
+            }
+            // the `use` lines of the module, else of the nearest module that encloses it
+            let Some(u) = (0..=m.len())
+                .rev()
+                .find_map(|k| self.items.uses.get(&m[..k]))
+            else {
+                continue;
+            };
+            for p in u.get(&n).into_iter().flatten() {
+                if let Some((last, module)) = p.split_last() {
+                    todo.push_back((module.to_vec(), last.clone()));
+                }
+            }
+            for g in u.get("*").into_iter().flatten() {
+                todo.push_back((g.clone(), n.clone()));
             }
         }
         None

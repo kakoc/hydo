@@ -218,6 +218,67 @@ pub fn bang(s: &'static mut String) -> &'static mut String {
     s
 }
 
+// ---------------------------------------------------------------- glob imports and re-exports
+
+/// A second `Mode`, defined first, so that only the `use` lines tell the two apart.
+pub mod decoy {
+    #[derive(Debug, Clone, Copy)]
+    pub enum Mode {
+        A,
+        B,
+    }
+}
+
+pub mod deep {
+    pub mod inner {
+        #[derive(Debug, Clone, Copy)]
+        pub enum Mode {
+            Fast,
+            Slow(u8),
+        }
+
+        pub struct Point {
+            pub x: u8,
+            pub y: u8,
+        }
+    }
+}
+
+/// A renamed re-export at the root.
+pub use deep::inner::Mode as Speed;
+
+pub mod api {
+    use crate::deep::inner::*;
+
+    /// `Mode` through a glob import.
+    // hydo: ensures matches(m, Slow(_)) == is_some(result)
+    pub fn slow_of(m: Mode) -> Option<u8> {
+        match m {
+            Mode::Slow(x) => Some(x),
+            Mode::Fast => None,
+        }
+    }
+
+    // hydo: ensures result == p.x + p.y
+    pub fn sum(p: Point) -> u16 {
+        p.x as u16 + p.y as u16
+    }
+}
+
+/// `Speed`, a renamed re-export.
+// hydo: ensures result == matches(s, Slow(_))
+pub fn is_slow(s: Speed) -> bool {
+    matches!(s, Speed::Slow(_))
+}
+
+pub mod far {
+    /// The re-export through its path.
+    // hydo: ensures result == matches(s, Fast)
+    pub fn is_fast(s: crate::Speed) -> bool {
+        matches!(s, crate::Speed::Fast)
+    }
+}
+
 // ---------------------------------------------------------------- two lists of one length
 
 /// As half's `convert_from_f32_slice`: the lists must have one length.

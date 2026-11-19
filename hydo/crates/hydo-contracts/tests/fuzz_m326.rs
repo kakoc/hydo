@@ -213,6 +213,23 @@ fn a_static_mut_parameter_builds_and_is_read_after_the_call() {
     assert!(s.why.contains("Box::leak"), "{}", s.why);
 }
 
+#[test]
+fn names_resolve_through_glob_imports_and_renamed_reexports() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m326-uses");
+    let (_, rep) = fuzz_m326(
+        t.path(),
+        &[
+            "--fn", "slow_of", "--fn", "sum", "--fn", "is_slow", "--fn", "is_fast",
+        ],
+    );
+    assert!(rep.skipped.is_empty(), "{:?}", rep.skipped);
+    for f in ["api::slow_of", "api::sum", "::is_slow", "far::is_fast"] {
+        let r = one(&rep, f);
+        assert_eq!(r.verdict, "held", "{r:?}");
+        assert!(r.held.iter().all(|h| h.undecided == 0), "{r:?}");
+    }
+}
+
 /// A copy of the fixture at `dir/crate`, with `edit` applied to its `src/lib.rs`.
 fn fixture_copy(dir: &Path, edit: &dyn Fn(String) -> String) -> std::path::PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fuzz-m326");
