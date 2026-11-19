@@ -478,6 +478,20 @@ digest in the lock file (`local_build: true`). fetch-images.sh builds a missing 
 `hydo-fetch-image build` and stops at a digest other than the pin until `HYDO_ACCEPT_REBUILD=1`.
 `--no-build` leaves the builds to the script. Reference: `hydo guide workflow`.
 
+**Images in private registries (M320, tentative number).** `hydo compose`, `hydo k8s` and
+`hydo-fetch-image` take the credential that `docker login` saved, found as Docker finds it in
+`$DOCKER_CONFIG/config.json` (default `~/.docker/config.json`, `hydo_compose::creds`). The order
+is a `credHelpers` helper for the registry, then the `credsStore` helper, then an `auths` entry
+(a password or an identity token). The registry gets it in its token flow or as basic
+authentication. No secret is printed or written. A 401 names the registry and where hydo
+looked, and suggests `docker login <host>` or `--from-docker`. With `--from-docker`, an image
+whose registry refuses or does not answer is saved from the local Docker (`docker save
+--platform`) and pinned in the lock file (`from_docker: true`). fetch-images.sh saves a missing
+file again with `hydo-fetch-image docker` and stops at another digest until
+`HYDO_ACCEPT_REBUILD=1`. A registry on the loopback is reached over plain HTTP, as Docker does.
+The proof is a registry in the test process and Docker's `registry:2` with htpasswd, never a
+real registry. Reference: `hydo guide workflow`.
+
 **Business rules: what found what (M215).** On Formance Ledger, rules over the ledger's own
 state (balances, moves, effective volumes, overdraft, reverts, bulks, the audit log) found
 nothing. A duplicate from a retry without a key, and a payment lost on a lying disk, showed only
@@ -2650,8 +2664,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       the initramfs did not fit (`Initramfs unpacking failed: write error`), and the run failed
       later with an unrelated message. hydo does not warn of it. An image's hard links (the
       busybox image has 400) each become a whole copy in the initramfs.
-    - hydo-build's equivalence corpus has six mismatches from M306 (two mutants with a
-      `contracts:` key the recorded answers do not list).
 163. What the fixes of the third `hydo fuzz` evaluation left (M318, tentative number;
     `docs/design/function-fuzzing-evaluation-3.md`, "After Milestone 318"). What is left:
     - Fix 7 of the evaluation: a harness that does not build reports only the compiler's first
@@ -2675,6 +2687,26 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       (`AsciiSet::hydo_set`, `hydo_bytes`), because its set has a private field and no
       constructor from bytes. A fresh evaluator should run `hydo fuzz` again before 0.5.0.
 
+165. Images in private registries (M320, tentative number). What is left:
+    - No real private registry ran. The proof used a registry in the test process (the token
+      flow and basic authentication) and Docker's `registry:2` with htpasswd (basic only). The
+      user's registry, behind a credential helper, is still to try.
+    - `registry:2` with a token service was not run; the token flow and the identity token's
+      refresh ran against the test's own token service only.
+    - Plain HTTP goes only to a registry on the loopback. A registry that Docker's
+      `insecure-registries` names, or one with a private certificate authority, is refused.
+    - A credential helper's own messages are not shown, as they may hold a secret. A helper that
+      fails is named with its exit status only.
+    - `--from-docker` applies to every image whose registry fails, not to chosen registries.
+      `hydo k8s` and `hydo onboard` do not take it; the user runs `hydo compose` with it.
+    - A pin made on a Mac has arm64 only. fetch-images.sh on Linux saves amd64 from that
+      machine's Docker, which needs the image pulled there for linux/amd64.
+    - `docker save` without `--platform` (Docker before 28) is tried after an `unknown flag`
+      error, but no run used such a Docker.
+    - `hydo build` compares no image file with the lock file, for any image. A changed file is
+      caught by `hydo compose` and fetch-images.sh only.
+    - hydo-build's equivalence corpus has six mismatches from M306 (two mutants with a
+      `contracts:` key the recorded answers do not list).
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -3543,6 +3575,12 @@ build machine, before 2026-10-13.
   parameters and closures are fuzzed, default strings hold case-changing characters, and `read`
   lines take `to_string()`, `collect()` and turbofishes. On the six crates, 30 refused or wrong
   of 71 became 0. Nothing recorded moved
+- M320 (tentative number): images in private registries. `hydo compose` and `hydo-fetch-image`
+  log in with the credential that `docker login` saved: an `auths` entry, or the helper of
+  `credHelpers` or `credsStore`, in the registry's token flow or as basic authentication, and
+  never print a secret. A 401 says where hydo looked. `hydo compose --from-docker` saves an image
+  that hydo cannot fetch from the local Docker and pins its digest. Proven with a registry in the
+  test process and with `registry:2`. Nothing recorded moved
 
 ## Where to look
 

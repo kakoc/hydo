@@ -6,7 +6,10 @@
 //! pin; the tag can move). Every blob is checked against its digest; the archive's tar headers
 //! are fixed (mode 0644, owner 0, time 0). fetch-images.sh, which `hydo compose` writes, calls it.
 //! `hydo-fetch-image build ...` builds the image of a Compose `build:` service with Docker and
-//! checks it against the lock file's pin (`hydo_compose::localbuild`).
+//! checks it against the lock file's pin (`hydo_compose::localbuild`). `hydo-fetch-image docker
+//! ...` saves an image of the local Docker that `hydo compose --from-docker` pinned, and checks it
+//! the same way (Milestone 320). A private registry's credential comes from Docker's config
+//! (`hydo_compose::creds`).
 
 const USAGE: &str = "fetch_image -- copy ONE image from a Docker registry by manifest digest into a `docker save`
 style archive, without skopeo.
@@ -18,6 +21,13 @@ style archive, without skopeo.
     hydo-fetch-image build ...
                      (builds a Compose `build:` service's image with Docker; `build` alone
                      prints its usage)
+    hydo-fetch-image docker ...
+                     (saves an image that `hydo compose --from-docker` took from the local
+                     Docker; `docker` alone prints its usage)
+
+A registry that asks for a login gets the credential that `docker login` keeps for it, found as
+Docker finds it in $DOCKER_CONFIG/config.json (default ~/.docker/config.json): an auths entry, or
+the credential helper that credHelpers or credsStore names. No secret is printed.
 ";
 
 /// The digest of the platform's manifest that `<repo>:<tag of name_tag>` names now.
@@ -40,6 +50,13 @@ fn main() {
         // a Compose `build:` service's image (M214): hydo_compose::localbuild
         std::process::exit(hydo_compose::localbuild::build_main(&a[1..]));
     }
+    if a.first().map(String::as_str) == Some("docker") {
+        // an image that hydo compose --from-docker took from the local Docker (Milestone 320)
+        std::process::exit(hydo_compose::localbuild::docker_main(&a[1..]));
+    }
+    // a private registry's credential, where Docker keeps it (Milestone 320)
+    let cfg = hydo_config::Config::process();
+    hydo_compose::registry::set_docker_config(cfg.tools.docker_config.clone());
     if a.len() != 4 {
         eprint!("{USAGE}");
         std::process::exit(1);

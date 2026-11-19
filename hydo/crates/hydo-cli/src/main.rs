@@ -210,6 +210,9 @@ fn main() {
             .home
             .join(hydo_agents::copies::REGISTRY),
     ));
+    // Milestone 320: hydo compose and hydo k8s find a private registry's credential where
+    // Docker keeps it
+    hydo_compose::registry::set_docker_config(ctx.config.tools.docker_config.clone());
     // the engine of the commands that run guests (Linux: hvx, or KVM with --backend kvm)
     if matches!(
         argv.get(1).map(String::as_str),

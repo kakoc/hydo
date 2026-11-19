@@ -6,6 +6,10 @@
 //! checks the new file against the pin: a build that gives other bytes stops, and is kept beside
 //! the file, until it is accepted with `HYDO_ACCEPT_REBUILD=1`.
 //!
+//! An image that `hydo compose --from-docker` saved from the local Docker (Milestone 320) is
+//! pinned the same way, with `from_docker: true`: fetch-images.sh saves it again with
+//! `hydo-fetch-image docker` ([`save`], [`docker_main`]) and checks it against the pin.
+//!
 //! A pin is the digest that hydo reads from the file: the image config's digest of a
 //! `docker save` archive, or the manifest's digest of an OCI layout ([`ocilocal`]). The lock
 //! entry of a local build has `local_build: true` and the same fields as a registry image's.
@@ -182,6 +186,131 @@ pub fn place(part: &str, dst: &str) -> Result<(), String> {
     std::fs::rename(part, dst).map_err(|e| format!("{dst}: {e}"))
 }
 
+/// `<docker> save --platform linux/<arch> -o <out>.part <reference>` in `dir` (Milestone 320):
+/// an image of the local Docker, for a registry hydo cannot log in to. Returns the part file's
+/// path and its platform entry (digest, variant, config). A Docker older than 28 has no
+/// `--platform` for `save`: then the image's one platform is saved, and its architecture is
+/// checked.
+pub fn save(
+    who: &str,
+    docker: &str,
+    dir: &str,
+    arch: &str,
+    reference: &str,
+    out: &str,
+) -> Result<(String, Y), String> {
+    let plat = format!("linux/{}", plat_key(arch));
+    eprintln!(
+        "{who}: saving {reference} for {plat} from the local Docker: {docker} save --platform {plat} {}",
+        shlex::quote(reference)
+    );
+    let abs = Path::new(dir).join(out);
+    if let Some(p) = abs.parent() {
+        std::fs::create_dir_all(p).map_err(|e| format!("{}: {e}", p.display()))?;
+    }
+    let part = format!("{}.part", abs.display());
+    let _ = std::fs::remove_file(&part);
+    let _ = std::fs::remove_dir_all(&part);
+    let attempt = |with_platform: bool| -> Result<(), String> {
+        let mut c = Command::new(docker);
+        c.current_dir(dir).arg("save");
+        if with_platform {
+            c.args(["--platform", &plat]);
+        }
+        let o = c
+            .args(["-o", &part, reference])
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| format!("{docker} save: {e}"))?;
+        if o.status.success() {
+            return Ok(());
+        }
+        Err(String::from_utf8_lossy(&o.stderr).trim().to_string())
+    };
+    if let Err(e) = attempt(true) {
+        let old = e.contains("unknown flag") || e.contains("--platform");
+        if !(old && attempt(false).is_ok()) {
+            let _ = std::fs::remove_file(&part);
+            return Err(format!(
+                "`{docker} save --platform {plat} {reference}` failed: {e}. Pull the image first \
+                 (`docker pull --platform {plat} {reference}`, after `docker login`), or build it"
+            ));
+        }
+    }
+    match ocilocal::config_from_file(&part, plat_key(arch)) {
+        Ok(info) => Ok((part, info)),
+        Err(e) => {
+            let _ = std::fs::remove_file(&part);
+            Err(e.0)
+        }
+    }
+}
+
+const DOCKER_USAGE: &str =
+    "hydo-fetch-image docker -- save one image from the local Docker and check it against its pin
+(fetch-images.sh calls it for the images that `hydo compose --from-docker` took from there).
+
+    hydo-fetch-image docker [--docker CLI] [--accept 0|1] <x86_64|arm64> <out> <lock> <ref>
+
+It runs `<cli> save --platform linux/<arch> <ref>`, reads the digest of the saved image, and
+compares it with the lock file's pin for <ref>. The same digest, or no pin yet (then it is
+recorded), puts the file at <out>. Another digest keeps the new file at <out>.rebuilt and exits
+1, unless --accept 1 (fetch-images.sh: HYDO_ACCEPT_REBUILD=1) takes it and re-pins. Exit status
+3: no Docker CLI answered.
+";
+
+/// `hydo-fetch-image docker ...`: the exit status.
+pub fn docker_main(a: &[String]) -> i32 {
+    let mut docker: Option<String> = None;
+    let mut accept = false;
+    let mut pos: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < a.len() {
+        match a[i].as_str() {
+            "--docker" | "--accept" if i + 1 < a.len() => {
+                if a[i] == "--docker" {
+                    docker = Some(a[i + 1].clone());
+                } else {
+                    accept = a[i + 1] == "1";
+                }
+                i += 2;
+            }
+            x => {
+                pos.push(x.to_string());
+                i += 1;
+            }
+        }
+    }
+    if pos.len() != 4 || !matches!(pos[0].as_str(), "x86_64" | "arm64") {
+        eprint!("{DOCKER_USAGE}");
+        return 2;
+    }
+    let (arch, out, lock, rf) = (&pos[0], &pos[1], &pos[2], &pos[3]);
+    let p = "fetch-images.sh";
+    let d = match find_docker(docker.as_deref()) {
+        Docker::Found(d) => d,
+        other => {
+            eprintln!(
+                "{p}: {out} is saved from the local Docker (hydo compose --from-docker), but {}. \
+                 Or make the file yourself: docker save --platform linux/{} -o {} {}",
+                docker_hint(&other),
+                plat_key(arch),
+                shlex::quote(out),
+                shlex::quote(rf)
+            );
+            return 3;
+        }
+    };
+    let (part, info) = match save(p, &d, ".", arch, rf, out) {
+        Ok(x) => x,
+        Err(e) => {
+            eprintln!("{p}: {rf} for {arch}: {e}");
+            return 1;
+        }
+    };
+    check_pin(&SAVED, p, &part, &info, arch, out, rf, lock, rf, accept)
+}
+
 const BUILD_USAGE: &str =
     "hydo-fetch-image build -- build one image of a Compose `build:` service and check it
 against its pin (fetch-images.sh calls it).
@@ -247,6 +376,58 @@ pub fn build_main(a: &[String]) -> i32 {
             return 1;
         }
     };
+    check_pin(&BUILT, p, &part, &info, arch, out, tag, lock, rf, accept)
+}
+
+/// What [`check_pin`] says of a file: how it was made and how its lock entry is marked.
+pub struct Made {
+    /// The lock entry's flag (`local_build`, `from_docker`).
+    flag: &'static str,
+    /// `built`, `saved from the local Docker`.
+    verb: &'static str,
+    /// `built to`, `saved from the local Docker as` (before a digest).
+    to: &'static str,
+    /// Why the bytes can change.
+    why: &'static str,
+    /// What the lock pins when the flag is missing.
+    other: &'static str,
+}
+
+/// A Compose `build:` service's image (M214).
+pub const BUILT: Made = Made {
+    flag: "local_build",
+    verb: "built",
+    to: "built to",
+    why: "its sources, its base image, or a build that is not reproducible",
+    other: "a registry image, not a local build",
+};
+
+/// An image saved from the local Docker (`--from-docker`, Milestone 320).
+pub const SAVED: Made = Made {
+    flag: "from_docker",
+    verb: "saved from the local Docker",
+    to: "saved from the local Docker as",
+    why: "the local Docker holds another image under that name: pulled again, or built again",
+    other: "an image of another kind, not one saved from the local Docker",
+};
+
+/// Compare the made file `part` (its platform entry `info`) with the lock file's pin for `rf`,
+/// and put it at `out`: the same digest, or no pin yet (then recorded). Another digest keeps the
+/// file at `<out>.rebuilt` and gives 1, unless `accept` re-pins it. The exit status.
+#[allow(clippy::too_many_arguments)]
+pub fn check_pin(
+    m: &Made,
+    p: &str,
+    part: &str,
+    info: &Y,
+    arch: &str,
+    out: &str,
+    tag: &str,
+    lock: &str,
+    rf: &str,
+    accept: bool,
+) -> i32 {
+    let (verb, to) = (m.verb, m.to);
     let pk = plat_key(arch);
     let got = pstr(info.getn("digest"));
     let mut doc = std::fs::read(lock)
@@ -262,9 +443,12 @@ pub fn build_main(a: &[String]) -> i32 {
         .unwrap_or(Y::Map(Vec::new()));
     let entry = images.get(rf).cloned();
     if let Some(e) = &entry {
-        if !e.getn("local_build").truthy() {
-            eprintln!("{p}: {lock} pins {rf} as a registry image, not a local build; run hydo compose again");
-            let _ = std::fs::remove_file(&part);
+        if !e.getn(m.flag).truthy() {
+            eprintln!(
+                "{p}: {lock} pins {rf} as {}; run hydo compose again",
+                m.other
+            );
+            let _ = std::fs::remove_file(part);
             return 1;
         }
     }
@@ -276,11 +460,11 @@ pub fn build_main(a: &[String]) -> i32 {
     let mut repin = false;
     match &old {
         Some(o) if pstr(o.getn("digest")) == got => {
-            eprintln!("{p}: {out}: built {tag} for linux/{pk}, {got}, as pinned in {lock}");
+            eprintln!("{p}: {out}: {verb} {tag} for linux/{pk}, {got}, as pinned in {lock}");
         }
         Some(o) => {
             let want = pstr(o.getn("digest"));
-            let same = settings(o) == settings(&info);
+            let same = settings(o) == settings(info);
             let what = if same {
                 "its settings (entrypoint, command, environment, ports, healthcheck, volumes, user) are the same"
             } else {
@@ -290,20 +474,20 @@ pub fn build_main(a: &[String]) -> i32 {
                 let kept = format!("{out}.rebuilt");
                 let _ = std::fs::remove_file(&kept);
                 let _ = std::fs::remove_dir_all(&kept);
-                if let Err(e) = place(&part, &kept) {
+                if let Err(e) = place(part, &kept) {
                     eprintln!("{p}: {e}");
                     return 1;
                 }
                 eprintln!(
-                    "{p}: {tag} for linux/{pk} built to {got}, but {lock} pins {want}: the image's \
-                     bytes changed (its sources, its base image, or a build that is not \
-                     reproducible), and {what}. The new build is {kept}; {out} is not made. To use \
-                     it: HYDO_ACCEPT_REBUILD=1 sh fetch-images.sh (it re-pins {rf} in {lock})"
+                    "{p}: {tag} for linux/{pk} {to} {got}, but {lock} pins {want}: the image's \
+                     bytes changed ({}), and {what}. The new file is {kept}; {out} is not made. To \
+                     use it: HYDO_ACCEPT_REBUILD=1 sh fetch-images.sh (it re-pins {rf} in {lock})",
+                    m.why
                 );
                 return 1;
             }
             eprintln!(
-                "{p}: {tag} for linux/{pk} built to {got}, not the pinned {want}; accepted \
+                "{p}: {tag} for linux/{pk} {to} {got}, not the pinned {want}; accepted \
                  (HYDO_ACCEPT_REBUILD=1) and re-pinned in {lock}; {what}"
             );
             if !same {
@@ -312,14 +496,14 @@ pub fn build_main(a: &[String]) -> i32 {
             repin = true;
         }
         None => {
-            eprintln!("{p}: {out}: built {tag} for linux/{pk}, {got}; pinned in {lock}");
+            eprintln!("{p}: {out}: {verb} {tag} for linux/{pk}, {got}; pinned in {lock}");
             if entry.is_none() {
                 eprintln!("{p}: run hydo compose again, so that hydo.yaml takes the image's settings (its HEALTHCHECK, EXPOSE and VOLUME)");
             }
             repin = true;
         }
     }
-    if let Err(e) = place(&part, out) {
+    if let Err(e) = place(part, out) {
         eprintln!("{p}: {e}");
         return 1;
     }
@@ -330,7 +514,7 @@ pub fn build_main(a: &[String]) -> i32 {
     if repin {
         let mut e = match entry {
             Some(e) => e,
-            None => match crate::local_entry(rf) {
+            None => match crate::file_entry(rf, m.flag) {
                 Ok(e) => e,
                 Err(x) => {
                     eprintln!("{p}: {x}");
@@ -343,7 +527,7 @@ pub fn build_main(a: &[String]) -> i32 {
             .filter(|v| v.is_map())
             .cloned()
             .unwrap_or(Y::Map(Vec::new()));
-        plats.set(Y::s(pk), info);
+        plats.set(Y::s(pk), info.clone());
         e.set(Y::s("platforms"), plats);
         images.set(Y::s(rf), e);
         doc.set(Y::s("images"), images);

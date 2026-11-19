@@ -3,13 +3,15 @@
 //! [`resolve_image`] is hydo_compose.py's `resolve_image`: what `skopeo inspect --raw` (the
 //! manifest or index a tag names, and its sha256) and `skopeo inspect --config --raw` (each
 //! platform's image config) gave, through the registry's HTTP API (the Docker Registry v2 /
-//! OCI distribution API: anonymous pulls from Docker Hub with a token from auth.docker.io, other
-//! registries with no auth or a Bearer challenge). [`fetch_image`] is fetch_image.py: one image
+//! OCI distribution API: pulls from Docker Hub with a token from auth.docker.io, other registries
+//! with no auth, a Bearer challenge, or basic authentication; since Milestone 320 with the
+//! credential that `docker login` keeps, [`crate::creds`]). [`fetch_image`] is fetch_image.py: one image
 //! by manifest digest into a `docker save` archive, every blob checked against its digest.
 //!
 //! [`Registry`] is the seam: [`Http`] talks to the network, [`Recorded`] answers from files
 //! (the tests' recorded registry answers; [`Recording`] writes them).
 
+use crate::creds;
 use crate::pyval::{from_json, Y};
 use crate::{parse_ref, short_name, ComposeError};
 use sha2::{Digest, Sha256};
@@ -42,10 +44,31 @@ pub trait Registry {
 
 // ---------------------------------------------------------------- HTTP
 
-/// The registry's HTTP API.
+/// The Docker config folder that [`Http::new`] reads registry credentials from (Milestone 320).
+/// A program's `main` sets it from hydo-config's `DOCKER_CONFIG` ([`set_docker_config`]); unset,
+/// hydo looks for no credential.
+static DOCKER_CONFIG: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
+
+/// Set the Docker config folder of every later [`Http::new`] (`hydo_config::tools::Tools`'s
+/// `docker_config`). Called once by a program's `main`.
+pub fn set_docker_config(dir: Option<PathBuf>) {
+    if let Ok(mut g) = DOCKER_CONFIG.lock() {
+        *g = dir;
+    }
+}
+
+/// The registry's HTTP API. A registry that asks for a login gets the credential that Docker
+/// keeps for it ([`crate::creds`]), in its token flow (`WWW-Authenticate: Bearer`: the
+/// credential goes to the token service the challenge names, and the token to the registry) or
+/// as plain basic authentication (`WWW-Authenticate: Basic`).
 pub struct Http {
     agent: ureq::Agent,
-    tokens: Vec<(String, String)>,
+    /// `Authorization` values: a bearer token per `<host>/<repo>`, basic authentication per
+    /// `<host>`.
+    auth: Vec<(String, String)>,
+    docker: creds::DockerConfig,
+    /// What the credential lookup found, per registry (looked up once).
+    found: Vec<(String, creds::Found)>,
 }
 
 impl Default for Http {
@@ -62,33 +85,175 @@ fn api_host(registry: &str) -> &str {
     }
 }
 
+/// A host (with its port) on this machine's loopback: `localhost`, `127.x.x.x` or `[::1]`.
+/// Docker reaches such a registry over plain HTTP, and so does hydo; every other one over HTTPS.
+pub fn is_loopback(host_port: &str) -> bool {
+    let h = if let Some(r) = host_port.strip_prefix('[') {
+        r.split(']').next().unwrap_or("")
+    } else {
+        host_port.rsplit_once(':').map(|x| x.0).unwrap_or(host_port)
+    };
+    h.eq_ignore_ascii_case("localhost")
+        || h.parse::<std::net::IpAddr>().is_ok_and(|a| a.is_loopback())
+}
+
+/// The URL's host with its port (`https://a.b:5000/x` -> `a.b:5000`).
+fn url_host(url: &str) -> &str {
+    let rest = url.split_once("://").map(|x| x.1).unwrap_or(url);
+    rest.split(['/', '?']).next().unwrap_or(rest)
+}
+
 impl Http {
+    /// With the Docker config folder of [`set_docker_config`].
     pub fn new() -> Http {
+        let dir = DOCKER_CONFIG.lock().ok().and_then(|g| g.clone());
+        Http::with_docker_config(creds::DockerConfig { dir, path: None })
+    }
+
+    /// With the credentials of `docker` (tests name a folder and a `PATH` of their own).
+    pub fn with_docker_config(docker: creds::DockerConfig) -> Http {
         let cfg = ureq::Agent::config_builder()
             .http_status_as_error(false)
             .timeout_global(Some(std::time::Duration::from_secs(600)))
+            // a redirect (a blob in a storage service) takes no Authorization header along
+            .redirect_auth_headers(ureq::config::RedirectAuthHeaders::Never)
             .build();
         Http {
             agent: cfg.into(),
-            tokens: Vec::new(),
+            auth: Vec::new(),
+            docker,
+            found: Vec::new(),
         }
     }
 
-    fn auth(&mut self, hdr: &str, repo: &str) -> Result<String, String> {
-        let mut m: Vec<(String, String)> = Vec::new();
-        let re = regex::Regex::new(r#"(\w+)="([^"]*)""#).unwrap();
-        for c in re.captures_iter(hdr) {
-            m.push((c[1].to_string(), c[2].to_string()));
+    /// The credential lookup of `registry`, once.
+    fn found(&mut self, registry: &str) -> creds::Found {
+        if let Some((_, f)) = self.found.iter().find(|(r, _)| r == registry) {
+            return f.clone();
         }
-        let get = |k: &str| m.iter().find(|(x, _)| x == k).map(|(_, v)| v.clone());
-        let realm = get("realm").ok_or_else(|| format!("no realm in {hdr}"))?;
-        let scope = get("scope").unwrap_or_else(|| format!("repository:{repo}:pull"));
-        let mut req = self.agent.get(&realm);
-        req = req.query("service", get("service").unwrap_or_default());
-        req = req.query("scope", scope);
-        let mut r = req.call().map_err(|e| format!("{realm}: {e}"))?;
-        if r.status().as_u16() != 200 {
-            return Err(format!("{realm}: HTTP {}", r.status().as_u16()));
+        let f = creds::lookup(&self.docker, registry);
+        self.found.push((registry.to_string(), f.clone()));
+        f
+    }
+
+    fn set_auth(&mut self, key: &str, value: String) {
+        self.auth.retain(|(k, _)| k != key);
+        self.auth.push((key.to_string(), value));
+    }
+
+    /// What to say when a registry refuses: where hydo looked, without any secret, and what to
+    /// do.
+    fn advice(&mut self, registry: &str) -> String {
+        let f = self.found(registry);
+        let login = if registry == "docker.io" {
+            "docker login".to_string()
+        } else {
+            format!("docker login {registry}")
+        };
+        let then = format!(
+            "Log in with `{login}` and run the command again, or take the image from the local Docker with `hydo compose --from-docker`"
+        );
+        match f.cred {
+            Some(_) => format!(
+                "the registry refused the credential from {} (expired, or without access to this repository). {then}",
+                f.how
+            ),
+            None => format!("hydo found no credential for {registry}: {}. {then}", f.how),
+        }
+    }
+
+    /// Answer a 401's challenge `hdr`: a bearer token for `<host>/<repo>`, or basic
+    /// authentication for the host.
+    fn authorize(
+        &mut self,
+        registry: &str,
+        host: &str,
+        repo: &str,
+        hdr: &str,
+    ) -> Result<(), String> {
+        let Some(ch) = creds::parse_challenge(hdr) else {
+            return Err(format!(
+                "the registry sent no challenge hydo understands; {}",
+                self.advice(registry)
+            ));
+        };
+        let f = self.found(registry);
+        match ch.scheme.to_ascii_lowercase().as_str() {
+            "bearer" => {
+                let t = self.token(&ch, registry, repo, &f)?;
+                self.set_auth(&format!("{host}/{repo}"), format!("Bearer {t}"));
+                Ok(())
+            }
+            "basic" => match &f.cred {
+                Some(c) if !c.identity_token => {
+                    self.set_auth(host, c.basic());
+                    Ok(())
+                }
+                _ => Err(self.advice(registry)),
+            },
+            s => Err(format!(
+                "the registry asks for {s} authentication, which hydo does not speak; take the image from the local Docker with `hydo compose --from-docker`"
+            )),
+        }
+    }
+
+    /// A token from the token service of a Bearer challenge: with the registry's credential
+    /// (basic authentication, or an identity token as a refresh token), else anonymous.
+    fn token(
+        &mut self,
+        ch: &creds::Challenge,
+        registry: &str,
+        repo: &str,
+        f: &creds::Found,
+    ) -> Result<String, String> {
+        let realm = ch
+            .get("realm")
+            .ok_or("the registry's Bearer challenge names no realm")?
+            .to_string();
+        let scope = ch
+            .get("scope")
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("repository:{repo}:pull"));
+        let service = ch.get("service").unwrap_or("").to_string();
+        let secure = realm.starts_with("https://")
+            || realm.starts_with("http://") && is_loopback(url_host(&realm));
+        if f.cred.is_some() && !secure {
+            return Err(format!(
+                "the registry's token service {realm} is not HTTPS, so hydo sends it no credential"
+            ));
+        }
+        let r = match &f.cred {
+            Some(c) if c.identity_token => self.agent.post(&realm).send_form([
+                ("grant_type", "refresh_token"),
+                ("service", service.as_str()),
+                ("scope", scope.as_str()),
+                ("client_id", "hydo"),
+                ("refresh_token", c.secret.as_str()),
+            ]),
+            Some(c) => self
+                .agent
+                .get(&realm)
+                .query("service", &service)
+                .query("scope", &scope)
+                .header("Authorization", c.basic())
+                .call(),
+            None => self
+                .agent
+                .get(&realm)
+                .query("service", &service)
+                .query("scope", &scope)
+                .call(),
+        };
+        let mut r = r.map_err(|e| format!("{realm}: {e}"))?;
+        let st = r.status().as_u16();
+        if st == 401 || st == 403 {
+            return Err(format!(
+                "the token service {realm} answered HTTP {st}: {}",
+                self.advice(registry)
+            ));
+        }
+        if st != 200 {
+            return Err(format!("{realm}: HTTP {st}"));
         }
         let body = r
             .body_mut()
@@ -96,16 +261,18 @@ impl Http {
             .limit(1 << 20)
             .read_to_vec()
             .map_err(|e| format!("{realm}: {e}"))?;
-        let j: serde_json::Value =
-            serde_json::from_slice(&body).map_err(|e| format!("{realm}: {e}"))?;
+        // the answer holds the token: an error must not quote it
+        let j: serde_json::Value = serde_json::from_slice(&body)
+            .map_err(|_| format!("{realm}: the answer is not JSON"))?;
         j.get("token")
             .or_else(|| j.get("access_token"))
             .and_then(|t| t.as_str())
+            .filter(|t| !t.is_empty())
             .map(str::to_string)
-            .ok_or_else(|| format!("{realm}: no token"))
+            .ok_or_else(|| format!("{realm}: no token in the answer"))
     }
 
-    /// GET /v2/<repo>/<path>, answering a Bearer challenge once.
+    /// GET /v2/<repo>/<path>, answering an authentication challenge once.
     fn get(
         &mut self,
         registry: &str,
@@ -113,43 +280,50 @@ impl Http {
         path: &str,
         accept: Option<&str>,
     ) -> Result<ureq::http::Response<ureq::Body>, String> {
-        let host = api_host(registry);
+        let host = api_host(registry).to_string();
         let repo = if host == "registry-1.docker.io" && !repo.contains('/') {
             format!("library/{repo}")
         } else {
             repo.to_string()
         };
-        let url = format!("https://{host}/v2/{repo}/{path}");
+        let scheme = if is_loopback(&host) { "http" } else { "https" };
+        let url = format!("{scheme}://{host}/v2/{repo}/{path}");
         let key = format!("{host}/{repo}");
-        for _ in 0..2 {
+        let mut answered = false;
+        loop {
             let mut req = self.agent.get(&url);
             if let Some(a) = accept {
                 req = req.header("Accept", a);
             }
-            if let Some((_, t)) = self.tokens.iter().find(|(k, _)| *k == key) {
-                req = req.header("Authorization", format!("Bearer {t}"));
+            if let Some((_, a)) = self.auth.iter().find(|(k, _)| *k == key || *k == host) {
+                req = req.header("Authorization", a.as_str());
             }
             let r = req.call().map_err(|e| format!("{url}: {e}"))?;
             let st = r.status().as_u16();
-            if st == 401 && !self.tokens.iter().any(|(k, _)| *k == key) {
+            if st == 401 && !answered {
+                answered = true;
                 let h = r
                     .headers()
                     .get("www-authenticate")
                     .and_then(|v| v.to_str().ok())
                     .unwrap_or("")
                     .to_string();
-                if h.contains("Bearer") {
-                    let t = self.auth(&h, &repo)?;
-                    self.tokens.push((key.clone(), t));
-                    continue;
-                }
+                self.authorize(registry, &host, &repo, &h)
+                    .map_err(|m| format!("{url}: HTTP 401 (unauthorized): {m}"))?;
+                continue;
+            }
+            if st == 401 || st == 403 {
+                let what = if st == 401 { "unauthorized" } else { "denied" };
+                return Err(format!(
+                    "{url}: HTTP {st} ({what}): {}",
+                    self.advice(registry)
+                ));
             }
             if st != 200 {
                 return Err(format!("{url}: HTTP {st}"));
             }
             return Ok(r);
         }
-        Err(format!("{url}: unauthorized"))
     }
 
     fn read_all(r: ureq::http::Response<ureq::Body>, what: &str) -> Result<Vec<u8>, String> {

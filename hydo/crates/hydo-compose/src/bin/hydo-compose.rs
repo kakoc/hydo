@@ -3,6 +3,8 @@
 
 fn main() {
     let argv: Vec<String> = std::env::args().skip(1).collect();
-    let cli = hydo_config::run::Cli::from_env(&hydo_config::Env::process());
-    std::process::exit(hydo_compose::main_clock(&argv, cli.init_clock_start));
+    let cfg = hydo_config::Config::process();
+    // a private registry's credential, where Docker keeps it (Milestone 320)
+    hydo_compose::registry::set_docker_config(cfg.tools.docker_config.clone());
+    std::process::exit(hydo_compose::main_clock(&argv, cfg.cli.init_clock_start));
 }

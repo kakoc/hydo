@@ -17812,3 +17812,110 @@ section "After Milestone 318" of the evaluation page. Nothing new was found, and
 posted.
 
 What is left is open item 163.
+
+## Milestone 320 (tentative number): images in private registries
+
+A user onboarded a project of their own with hydo 0.4.0 on a Mac. Its images were in a private
+registry. `docker login` had worked, and Docker kept the credential in the macOS keychain through
+a credential helper. `hydo compose` still stopped with `registry <host>/postgres:
+.../v2/postgres/manifests/18.3: HTTP 401`. hydo asked every registry anonymously, and
+`hydo-fetch-image`, which fetch-images.sh runs, had no way to log in either. The user imported
+with `--no-resolve`, unpacked `docker save --platform linux/arm64` into each image folder by hand,
+and ran `hydo compose` again, which left the images unpinned. The project and the registry are
+private, so everything below ran with registries made for the tests.
+
+**Credentials where Docker finds them.** The module `hydo_compose::creds` reads
+`$DOCKER_CONFIG/config.json`, by default `~/.docker/config.json`. hydo-config registers
+`DOCKER_CONFIG` (`hydo_config::tools::Tools::docker_config`), and every program's `main` hands
+the folder to the registry client (`hydo_compose::registry::set_docker_config`). The lookup
+follows Docker's order:
+
+1. a `credHelpers` entry for the registry;
+2. else `credsStore`;
+3. else an `auths` entry: a base64 `user:password` in `auth`, or an `identitytoken`.
+
+A helper is the program `docker-credential-<name>`. hydo runs `get` with the registry's server
+address on stdin and reads `Username` and `Secret`, as Docker does; Docker Hub's address is
+`https://index.docker.io/v1/`. A helper has 60 s to answer. Its stderr is not shown, and a
+failure is named by its exit status only, because hydo cannot tell what a helper prints.
+
+**The registry's flows.** `hydo_compose::registry::Http` answers a 401 once:
+
+- `WWW-Authenticate: Bearer realm=...,service=...,scope=...`: the credential goes to the realm
+  as basic authentication, or an identity token as a refresh token in a form POST. The registry
+  gets the token. Without a credential the token is anonymous, as before.
+- `WWW-Authenticate: Basic`: the registry gets the credential as basic authentication.
+
+`creds::parse_challenge` reads the header by RFC 7235: quoted values with commas and escaped
+quotes, and only the first of two challenges. A credential goes only to the registry it belongs
+to and to the token service that registry names, and never over plain HTTP to a host that is not
+on the loopback. A redirect, such as a blob in a storage service, takes no `Authorization` header
+along. A registry on the loopback (`localhost`, `127.x.x.x`, `[::1]`) is reached over plain HTTP,
+as Docker reaches it by default. A credential's `Debug` hides its secret, and no error quotes a
+token service's answer.
+
+**Messages.** A refusal names the registry and where hydo looked, without a secret:
+
+```text
+hydo-compose: registry 127.0.0.1:<port>/team/app: http://127.0.0.1:<port>/v2/team/app/manifests/1.0:
+HTTP 401 (unauthorized): hydo found no credential for 127.0.0.1:<port>: <folder>/config.json has no
+credHelpers entry for 127.0.0.1:<port>, no credsStore, and no auths entry for 127.0.0.1:<port>. Log
+in with `docker login 127.0.0.1:<port>` and run the command again, or take the image from the local
+Docker with `hydo compose --from-docker`
+```
+
+A credential that the registry refuses gives "the registry refused the credential from the
+credential helper docker-credential-<name> (credsStore in <folder>/config.json)". A registry that
+does not answer gets the `--from-docker` hint as well.
+
+**`--from-docker`.** For a registry that hydo cannot log in to, `hydo compose --from-docker` saves
+each image whose registry refuses or does not answer from the local Docker. The command is
+`docker save --platform linux/<arch>` for this machine's guest. The file goes where `hydo.yaml`
+names it, and hydo reads the image's settings from it. The lock entry has `from_docker: true` and
+pins the file's digest, as a local build's entry does (M214). A later `hydo compose` reads the pin
+and needs neither the registry nor Docker. fetch-images.sh saves a missing file again with
+`hydo-fetch-image docker`. When the local Docker holds another image under that name, the new
+file is kept as `<file>.rebuilt`, and the script exits 1 until `HYDO_ACCEPT_REBUILD=1` takes it.
+The check against the pin is the local builds' code, now shared (`localbuild::check_pin`). A
+build's message about another digest now says "The new file is" where it said "The new build
+is". A Docker before 28 has no `--platform` for `save`. After an
+`unknown flag` error hydo saves without it and checks the architecture of the saved image.
+
+**Evidence.** The tests are `hydo-compose`'s `private_registry::` (8 tests) and the unit tests
+`creds::tests` (the challenge parser, base64, hostnames, and a `Debug` without the secret).
+Every test writes its own Docker config in a temporary folder and runs every program with that
+`DOCKER_CONFIG` and a `HOME` of its own. No test read this machine's Docker config or keychain, and
+none logged in to a real registry.
+
+- A registry in the test process on 127.0.0.1 serves one image for linux/amd64 and linux/arm64,
+  with the token flow or with basic authentication. Against it:
+  - an `auths` password went to the token service as basic authentication, and the manifests
+    were fetched with the token;
+  - an `auths` identity token went to the token service as a refresh token in a form POST;
+  - a `credHelpers` helper was asked once, for this registry's address only, while a
+    `credsStore` helper and a wrong `auths` entry were present and not used;
+  - a `credsStore` helper served a registry without a `credHelpers` entry;
+  - a wrong password, in both flows, gave the refusal above with the helper's name, and no
+    output held the password, its base64, or the token;
+  - a missing entry, a helper without a credential, a missing config file, and a helper that is
+    not installed each gave a message that says so.
+- `hydo-compose` and fetch-images.sh as programs, with a `credsStore` helper on `PATH`: the lock
+  file pinned the index digest the registry serves, `hydo-fetch-image` fetched the arm64 image
+  (this Mac's), and its config read back. With an empty Docker config both stopped with the
+  advice, and printed no secret.
+- With Docker (Colima, Docker Engine 28.4.0, CLI 29.6.1): the `registry:2` image ran with
+  htpasswd authentication on 127.0.0.1. The test pushed the two-platform image into it over the
+  registry's API, and `hydo-compose` and fetch-images.sh pinned and fetched it with a
+  `credsStore` helper. A wrong password gave the refusal. For `--from-docker` the test loaded an
+  image named `127.0.0.1:1/hydo-test-from-docker-<pid>:1` with `docker load`. That registry does
+  not answer. Without the option the import stopped and named it. With it the file was saved and
+  pinned, and a second import needed neither. fetch-images.sh saved the removed file again "as
+  pinned". After another image was loaded under the name, the script stopped at the pin, and
+  `HYDO_ACCEPT_REBUILD=1` took it. The test removes its container and its image when it ends,
+  and it is skipped where Docker does not answer.
+- The Compose equivalence corpus moved only in the three answers that print `hydo compose
+  --help`. The local builds' tests passed unchanged.
+
+Nothing recorded moved: no image, schedule, or fingerprint depends on the registry client.
+
+**What is left.** Open item 165.

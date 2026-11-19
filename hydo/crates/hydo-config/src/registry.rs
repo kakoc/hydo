@@ -527,6 +527,11 @@ variables! {
     HYDO_GRPC_ARCH: Tools, User, "word: amd64 | arm64 | amd64,arm64", "amd64", "hydo-grpc-gen";
     /// The default of `hydo-grpc-gen -client` (the prebuilt clients).
     HYDO_GRPC_CLIENT: Tools, User, "path", "", "hydo-grpc-gen";
+    /// Docker's own variable: the folder of Docker's `config.json`. `hydo compose`, `hydo k8s`
+    /// and `hydo-fetch-image` read a private registry's credential from it as Docker does
+    /// (Milestone 320): an `auths` entry, or the credential helper that `credHelpers` or
+    /// `credsStore` names. They never print or write a secret. An empty value means the default.
+    DOCKER_CONFIG: Tools, User, "path", "~/.docker", "hydo-compose, hydo-fetch-image";
 
     // ------------------------------------------------------------------ Tests
     /// `1`: rewrite a test's recorded answers (goldens) from this run's output.

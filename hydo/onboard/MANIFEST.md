@@ -2859,14 +2859,22 @@ what the team already runs:
 ```sh
 hydo compose docker-compose.yml [--out hydo.yaml] [--images-dir images]
         [--env-file F ...] [--profile P ...] [--use-env] [--no-resolve] [--lock FILE]
-        [--network bridge|loopback] [--no-addr]
+        [--network bridge|loopback] [--no-addr] [--from-docker]
 sh fetch-images.sh            # written next to hydo.yaml: copies every image by digest with hydo-fetch-image (network, once);
                               #   x86_64 on Linux, arm64 on a Mac; `sh fetch-images.sh all` for both
 # write the workload and the invariants (the generated file marks them TODO), then hydo build
 ```
 
-The importer needs network only to resolve image tags (it asks the registry directly; anonymous
-pulls only, no skopeo). Everything it resolves is written to
+The importer needs network only to resolve image tags (it asks the registry directly, no
+skopeo). A private registry gets the credential that `docker login` saved, found as Docker finds
+it in `$DOCKER_CONFIG/config.json` (default `~/.docker/config.json`): the helper that
+`credHelpers` names for the registry, else the `credsStore` helper, else an `auths` entry.
+hydo-fetch-image uses the same credential, and neither prints or writes a secret. With
+`--from-docker`, an image whose registry refuses or does not answer is saved from the local
+Docker instead (`docker save --platform` for this machine's guest). Its lock entry
+(`from_docker: true`) pins the file's digest, and `fetch-images.sh` saves a missing file again
+with `hydo-fetch-image docker` and stops at another digest (`HYDO_ACCEPT_REBUILD=1` takes it, as
+for a local build). Everything it resolves is written to
 `hydo-compose.lock.json`, so a second run needs no network and writes the same file; an image
 that `fetch-images.sh` already copied is read from the file instead. It reads the Compose file
 as YAML 1.1, as PyYAML's `safe_load` does (anchors, aliases and `<<` merge keys included); the

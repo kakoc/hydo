@@ -17,6 +17,7 @@
 //!   is not a mapping), this prints one `hydo-compose: <reason>` line (the exit status is 1 in
 //!   both).
 
+pub mod creds;
 pub mod interp;
 pub mod k8s;
 pub mod localbuild;
@@ -542,6 +543,16 @@ fn safe_dash(s: &str) -> String {
 /// The lock entry of an image built locally (`local_build: true`), without platforms: the
 /// fields a registry image's entry has (M214).
 pub fn local_entry(r: &str) -> Result<Y, ComposeError> {
+    file_entry(r, "local_build")
+}
+
+/// The lock entry of an image saved from the local Docker (`from_docker: true`, `--from-docker`,
+/// Milestone 320), without platforms.
+pub fn docker_entry(r: &str) -> Result<Y, ComposeError> {
+    file_entry(r, "from_docker")
+}
+
+fn file_entry(r: &str, flag: &str) -> Result<Y, ComposeError> {
     let (reg, repo, tag, digest) = parse_ref(r);
     file_stem(&reg, &repo, tag.as_deref(), digest.as_deref())?;
     Ok(Y::Map(vec![
@@ -552,7 +563,7 @@ pub fn local_entry(r: &str) -> Result<Y, ComposeError> {
         (Y::s("registry"), Y::s(&reg)),
         (Y::s("repo"), Y::s(&repo)),
         (Y::s("platforms"), Y::Map(Vec::new())),
-        (Y::s("local_build"), Y::Bool(true)),
+        (Y::s(flag), Y::Bool(true)),
     ]))
 }
 
@@ -769,6 +780,9 @@ struct Svc {
     /// arguments of `docker build` after `-t <tag>`, relative to the output's folder, where
     /// fetch-images.sh runs (M214).
     build: Option<Vec<String>>,
+    /// Saved from the local Docker (`--from-docker`, a lock entry with `from_docker: true`):
+    /// fetch-images.sh saves it again where its file is missing (Milestone 320).
+    from_docker: bool,
 }
 
 /// The options of one import.
@@ -789,6 +803,9 @@ pub struct Opts {
     pub no_build: bool,
     /// `--docker CLI`: the Docker CLI to build with (else docker, else podman).
     pub docker: Option<String>,
+    /// `--from-docker`: an image whose registry refuses or cannot be reached is saved from the
+    /// local Docker instead, and pinned by the saved file's digest (Milestone 320).
+    pub from_docker: bool,
     /// Set by `hydo k8s` (M243): the document comes from Kubernetes manifests, not from a
     /// Compose file, and its `x-hydo-*` keys carry what Compose cannot say.
     pub origin: Option<Origin>,
@@ -1314,8 +1331,14 @@ impl<'a> Importer<'a> {
         }
     }
 
-    fn image_info(&mut self, r: &str) -> R<Y> {
+    /// The lock entry of a registry image `r`: from the lock, from an image file of the images
+    /// directory, or resolved from the registry. `docker_ok`: with `--from-docker`, an image the
+    /// registry does not give is saved from the local Docker ([`Self::docker_info`]).
+    fn image_info(&mut self, r: &str, docker_ok: bool) -> R<Y> {
         if let Some(i) = self.lock.get(r) {
+            if i.getn("from_docker").truthy() {
+                return self.docker_info(r);
+            }
             return Ok(i.clone());
         }
         let (reg, repo, tag, digest) = parse_ref(r);
@@ -1359,9 +1382,91 @@ impl<'a> Importer<'a> {
             return Ok(info);
         }
         eprintln!("hydo-compose: resolving {r}");
-        let info = registry::resolve_image(self.reg, r)?;
+        let info = match registry::resolve_image(self.reg, r) {
+            Ok(i) => i,
+            Err(e) if docker_ok && self.o.from_docker => {
+                eprintln!("hydo-compose: {e}");
+                eprintln!("hydo-compose: {r}: saving it from the local Docker instead (--from-docker)");
+                return self.docker_info(r);
+            }
+            Err(e) if docker_ok && !e.0.contains("--from-docker") => {
+                return err(format!(
+                    "{e} (an image that the local Docker has: `hydo compose --from-docker` saves it from there)"
+                ))
+            }
+            Err(e) => return Err(e),
+        };
         self.lock.set(Y::s(r), info.clone());
         self.lock_dirty = true;
+        Ok(info)
+    }
+
+    /// The image `r` saved from the local Docker (`--from-docker`, Milestone 320), for a
+    /// registry hydo cannot log in to. When neither this machine's file nor a pin for its
+    /// architecture is there, `docker save --platform` writes the file now. The files there are
+    /// read for their digest and settings, and the lock pins them (`from_docker: true`); a file
+    /// whose digest differs from the pin re-pins it, with a warning. fetch-images.sh saves a
+    /// missing file again and stops at a digest other than the pin.
+    fn docker_info(&mut self, r: &str) -> R<Y> {
+        let (x86, arm) = self.image_files(r)?;
+        let pin = self
+            .lock
+            .get(r)
+            .filter(|e| e.getn("from_docker").truthy())
+            .cloned();
+        let host = localbuild::host_arch();
+        let pk = localbuild::plat_key(host);
+        let host_file = if host == "x86_64" { &x86 } else { &arm };
+        let pinned_here = pin.as_ref().is_some_and(|p| p.getn("platforms").has(pk));
+        if !exists(&join(&self.odir, host_file)) && !pinned_here {
+            let d = self
+                .docker
+                .get_or_insert_with(|| localbuild::find_docker(self.o.docker.as_deref()))
+                .clone();
+            let localbuild::Docker::Found(d) = d else {
+                return err(format!(
+                    "image {r}: --from-docker saves it from the local Docker, but {}",
+                    localbuild::docker_hint(&d)
+                ));
+            };
+            std::fs::create_dir_all(&self.odir).map_err(|e| ComposeError::os(e, &self.odir))?;
+            localbuild::save("hydo-compose", &d, &self.odir, host, r, host_file)
+                .and_then(|(part, _)| localbuild::place(&part, &join(&self.odir, host_file)))
+                .map_err(|e| ComposeError(format!("image {r}: {e}")))?;
+        }
+        let mut plats = pin
+            .as_ref()
+            .and_then(|p| p.get("platforms"))
+            .filter(|p| p.is_map())
+            .cloned()
+            .unwrap_or(Y::Map(Vec::new()));
+        for (a, f) in [("amd64", &x86), ("arm64", &arm)] {
+            let path = join(&self.odir, f);
+            if !exists(&path) {
+                continue;
+            }
+            let p = ocilocal::config_from_file(&path, a)?;
+            if let Some(old) = plats.get(a) {
+                if old.getn("digest") != p.getn("digest") {
+                    self.w.warn(
+                        "image",
+                        format!(
+                            "image {r}: the file {f} is {}, but {} pinned {}: re-pinned to the file",
+                            pstr(p.getn("digest")),
+                            hydo_manifest::py::basename(&self.lock_path),
+                            pstr(old.getn("digest"))
+                        ),
+                    );
+                }
+            }
+            plats.set(Y::s(a), p);
+        }
+        let mut info = docker_entry(r)?;
+        info.set(Y::s("platforms"), plats);
+        if self.lock.get(r) != Some(&info) {
+            self.lock.set(Y::s(r), info.clone());
+            self.lock_dirty = true;
+        }
         Ok(info)
     }
 
@@ -1599,10 +1704,9 @@ impl<'a> Importer<'a> {
             match s.get("image") {
                 Some(img) => {
                     let rf = pstr(img);
-                    let published = self
-                        .lock
-                        .get(&rf)
-                        .is_some_and(|e| !e.getn("local_build").truthy());
+                    let published = self.lock.get(&rf).is_some_and(|e| {
+                        !e.getn("local_build").truthy() && !e.getn("from_docker").truthy()
+                    });
                     if !published {
                         local_build = Some(bargs);
                     }
@@ -1637,7 +1741,7 @@ impl<'a> Importer<'a> {
                     && !self.local_known(&rf)?
                 {
                     // a tag the registry may have; a refusal (401, 404) leaves it a local build
-                    match self.image_info(&rf) {
+                    match self.image_info(&rf, false) {
                         Ok(i) => Some(i),
                         Err(e) => {
                             self.w.warn(
@@ -1662,8 +1766,9 @@ impl<'a> Importer<'a> {
                     }
                 }
             }
-            None => self.image_info(&rf)?,
+            None => self.image_info(&rf, true)?,
         };
+        let from_docker = local_build.is_none() && info.getn("from_docker").truthy();
         if s.has("build") && local_build.is_none() && pstr(info.getn("from")) != "local file" {
             self.w.warn("build", format!("{wh}: build: ignored, the image {rf} is used (build and push it, or `docker save` your local build and point image: at the file)"));
         }
@@ -1710,7 +1815,7 @@ impl<'a> Importer<'a> {
                 self.w.warn("build", text);
             }
         }
-        let image = if plat.has("arm64") || unresolved {
+        let image = if plat.has("arm64") || unresolved || from_docker {
             Img::Two(x86, arm)
         } else {
             Img::One(x86)
@@ -1721,6 +1826,16 @@ impl<'a> Importer<'a> {
             _ => iname.clone(),
         };
         if local_build.is_some() {
+        } else if from_docker {
+            comments.push(format!(
+                "image {rf}: saved from the local Docker (--from-docker), pinned by its content in {}; sh {fetch} saves it again where the file is missing",
+                hydo_manifest::py::basename(&self.lock_path)
+            ));
+            for a in ["amd64", "arm64"] {
+                if let Some(p) = plat.get(a) {
+                    comments.push(format!("  linux/{a}: {}", pstr(p.getn("digest"))));
+                }
+            }
         } else if unresolved {
             comments.push(format!("image {rf}: NOT resolved to a digest (--no-resolve); fetch-images.sh fetches the tag, which can change"));
             self.w.warn(
@@ -1748,7 +1863,7 @@ impl<'a> Importer<'a> {
         }
         // a local build made on a Mac has only its arm64 file: its settings come from there
         let mut info = info;
-        if local_build.is_some() && !plat.has("amd64") && plat.has("arm64") {
+        if (local_build.is_some() || from_docker) && !plat.has("amd64") && plat.has("arm64") {
             let mut p = plat.clone();
             p.set(Y::s("amd64"), plat.getn("arm64").clone());
             info.set(Y::s("platforms"), p);
@@ -1821,6 +1936,7 @@ impl<'a> Importer<'a> {
             setup_pre: None,
             job_kind: None,
             build: local_build.clone(),
+            from_docker,
         };
         if self.o.origin.is_some() {
             // the x-hydo-* keys of a converted document (M243)
@@ -3271,8 +3387,47 @@ impl<'a> Importer<'a> {
         ];
         let mut done: Vec<(&str, String)> = Vec::new();
         let mut local: Vec<String> = Vec::new();
+        let mut saved: Vec<String> = Vec::new();
+        let lock_rel = || {
+            shlex::quote(&relpath(
+                &hydo_manifest::py::abspath(&self.lock_path),
+                &self.odir,
+            ))
+        };
         for s in &self.svcs {
             let info = &s.info;
+            if let (true, Img::Two(x86, arm)) = (s.from_docker, &s.image) {
+                // saved from the local Docker (--from-docker, Milestone 320): `hydo-fetch-image
+                // docker` saves the file of each architecture that is missing and checks it
+                // against the lock's pin
+                if saved.contains(x86) {
+                    continue;
+                }
+                saved.push(x86.clone());
+                let lock = lock_rel();
+                let rf = shlex::quote(&pstr(info.getn("ref")));
+                l.push(format!(
+                    "# {} is saved from the local Docker (hydo compose --from-docker): docker save,",
+                    pstr(info.getn("ref"))
+                ));
+                l.push(format!(
+                    "# checked against the pin in {lock} (HYDO_DOCKER=<cli> names another Docker CLI;"
+                ));
+                l.push(
+                    "# HYDO_ACCEPT_REBUILD=1 takes a save of other bytes and re-pins it).".into(),
+                );
+                for (arch, other, test, path) in [
+                    ("x86_64", "arm64", "-f", x86),
+                    ("arm64", "x86_64", "-e", arm),
+                ] {
+                    l.push(format!(
+                        "[ \"$A\" = {other} ] || [ {test} {} ] || \"$F\" docker --docker \"${{HYDO_DOCKER:-}}\" --accept \"${{HYDO_ACCEPT_REBUILD:-0}}\" {arch} {} {lock} {rf} || SAVED=1",
+                        shlex::quote(path),
+                        shlex::quote(path),
+                    ));
+                }
+                continue;
+            }
             if let (Some(b), Img::Two(x86, arm)) = (&s.build, &s.image) {
                 // built locally (M214): `hydo-fetch-image build` builds the file of each
                 // architecture that is missing and checks it against the lock's pin; the script
@@ -3353,6 +3508,9 @@ impl<'a> Importer<'a> {
         done.sort();
         if !local.is_empty() {
             l.push("[ -z \"${LOCAL:-}\" ] || { echo \"fetch-images.sh: an image built locally is missing (above)\" >&2; exit 1; }".into());
+        }
+        if !saved.is_empty() {
+            l.push("[ -z \"${SAVED:-}\" ] || { echo \"fetch-images.sh: an image saved from the local Docker is missing (above)\" >&2; exit 1; }".into());
         }
         if done.is_empty() {
             return l.join("\n") + "\n";
@@ -3472,6 +3630,9 @@ pub fn main_with_clock(
             i += 1;
         } else if x == "--no-build" {
             o.no_build = true;
+            i += 1;
+        } else if x == "--from-docker" {
+            o.from_docker = true;
             i += 1;
         } else if x.starts_with('-') {
             eprintln!("hydo-compose: unknown option {x}");

@@ -56,7 +56,7 @@ at release, and after release. The tables below take the chart's techniques in i
 
 | Technique | What hydo has | Status | Evidence |
 |---|---|---|---|
-| Integration tests | The whole system runs in one VM. `hydo onboard`, `hydo compose`, and `hydo k8s` start the project from a repository, a Compose file, or Kubernetes manifests. `hydo.yaml` reads YAML anchors and `<<` merge keys, and an image's FIFOs reach its root, since M316. | built | M84, M214, M229, M243, M316; every example |
+| Integration tests | The whole system runs in one VM. `hydo onboard`, `hydo compose`, and `hydo k8s` start the project from a repository, a Compose file, or Kubernetes manifests. `hydo.yaml` reads YAML anchors and `<<` merge keys, and an image's FIFOs reach its root, since M316. Images of a private registry are fetched with the credential of `docker login`, and `--from-docker` takes an image from the local Docker, since M320. | built | M84, M214, M229, M243, M316, M320; every example |
 | Tap compare | `hydo compare-versions` runs the same schedules on two versions and compares the verdicts, the client's outcomes and histories, and the stored state (`services[].compare`). `hydo versions` replays one finding on several versions. | built | Milestone 298 (Redis settings, Formance Ledger v2.3.24 against v2.4.0); M221 |
 | Load tests | `parallel_driver_` commands run copies of a workload command at once, so races show without faults. Throughput is not hydo's job: time in the VM is virtual, and a guest has at most 8 GiB of RAM. | built for concurrency | M86; `formance-ledger`, `blnk`, `medusa` |
 | Shadowing | Not hydo's job. It sends copies of production traffic to a new version. The nearest command is `hydo compare-versions`, on schedules instead of traffic. | not hydo's job | |
@@ -109,6 +109,7 @@ last line names the ideas that would answer more.
 | Where did a wrong value come from? | Value history and value properties on the Mac engine. | partly built; `blnk` (M285, M291) |
 | Did the faults reach the error handling at all? | `error_paths: true` records which `if err != nil` bodies, `Err` returns, `?` branches, panics and retry functions ran in each run. `hydo report --paths` lists what only faults reached, against `hydo explore --no-faults`, and what no run reached. | partly built; `blnk` on the Mac engine (M306; open item 155) |
 | Does the cluster upgrade in place? | `U=` switches a member's version during a run, and `hydo explore --upgrades` draws it. | built; `etcd-upgrade` (M238) |
+| Can hydo run the team's images from a private registry? | `hydo compose` and fetch-images.sh log in with the credential that `docker login` saved: an `auths` entry, or the helper that `credHelpers` or `credsStore` names. `hydo compose --from-docker` saves an image from the local Docker when hydo cannot log in, and pins its digest. | built; tests with a registry in the test process and Docker's `registry:2` (M320; open item 165). No real private registry ran. |
 
 Ideas that would answer more:
 

@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-60 user-facing and 95 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 37 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+61 user-facing and 95 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 37 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -213,6 +213,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_NIX_CACHE` | developer | URL | https://cache.nixos.org | hydo-nix-fetch | The binary cache `hydo-nix-fetch` reads. |
 | `HYDO_GRPC_ARCH` | user | word: amd64 \| arm64 \| amd64,arm64 | amd64 | hydo-grpc-gen | The default of `hydo-grpc-gen -arch`. An empty value means the default. |
 | `HYDO_GRPC_CLIENT` | user | path | - | hydo-grpc-gen | The default of `hydo-grpc-gen -client` (the prebuilt clients). |
+| `DOCKER_CONFIG` | user | path | ~/.docker | hydo-compose, hydo-fetch-image | Docker's own variable: the folder of Docker's `config.json`. `hydo compose`, `hydo k8s` and `hydo-fetch-image` read a private registry's credential from it as Docker does (Milestone 320): an `auths` entry, or the credential helper that `credHelpers` or `credsStore` names. They never print or write a secret. An empty value means the default. |
 
 ## Test switches (read by test code only)
 

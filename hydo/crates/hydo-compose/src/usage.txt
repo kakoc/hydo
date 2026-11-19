@@ -4,6 +4,7 @@ Compose").
     hydo-compose <docker-compose.yaml> [--out hydo.yaml] [--name NAME] [--images-dir DIR]
                  [--env-file FILE ...] [--profile P ...] [--use-env] [--no-resolve] [--lock FILE]
                  [--network bridge|loopback] [--no-addr] [--no-build] [--docker CLI]
+                 [--from-docker]
 
 What it does, per Compose service (the table in MANIFEST.md lists every key):
   * image: resolved to digests from the registry (the index digest and the linux/amd64 +
@@ -12,6 +13,12 @@ What it does, per Compose service (the table in MANIFEST.md lists every key):
     recorded in a lock file (default hydo-compose.lock.json next to the output), so a second run
     needs no network and gives the same manifest. A script fetch-images.sh (next to the output)
     copies the images by digest into --images-dir (default images/) -- hydo-build never pulls.
+    A private registry gets the credential of `docker login`, found as Docker finds it in
+    $DOCKER_CONFIG/config.json (default ~/.docker/config.json): an auths entry, or the credential
+    helper that credHelpers or credsStore names. No secret is printed or written.
+    --from-docker: an image whose registry refuses or cannot be reached is saved from the local
+    Docker instead (docker save for this machine's guest) and pinned by its digest in the lock
+    file; fetch-images.sh saves it again where the file is missing and stops at other bytes.
   * build: (a service built locally) -> built now with Docker for this machine's guest
     (linux/arm64 on a Mac, linux/amd64 elsewhere) with Compose's context, dockerfile, args,
     target and labels, saved to the image file the manifest names, and pinned by its digest in

@@ -98,6 +98,35 @@ image's healthcheck, ports and volumes from the file, and records the file's dig
   28.4 writes a memory address into the history of an `EXPOSE` line, so each build differs.
 - `hydo compose --no-build` leaves every build to fetch-images.sh.
 
+**An image in a private registry** gets the credential that `docker login` saved. `hydo
+compose` and `hydo-fetch-image` (which fetch-images.sh runs) look for it where Docker looks:
+
+1. The file `$DOCKER_CONFIG/config.json`, by default `~/.docker/config.json`.
+2. A `credHelpers` entry for the registry: the helper program `docker-credential-<name>`, for
+   example the helper of a cloud registry.
+3. Else `credsStore`: the helper for every registry, for example the system keychain's.
+4. Else an `auths` entry: a saved user and password, or an identity token.
+
+hydo asks a helper only for the registry that refused, and sends the credential only to that
+registry and to the token service it names. It never prints or writes a secret. When the
+registry still answers HTTP 401, the message names the registry and where hydo looked. Run
+`docker login <registry>` then, and run the command again.
+
+**A registry that hydo cannot log in to.** `hydo compose --from-docker` takes such an image from
+the local Docker. Pull it there first (`docker pull <image>`):
+
+```sh
+hydo compose docker-compose.yaml --out hydo/hydo.yaml --images-dir images --from-docker
+```
+
+- For each image whose registry refuses or does not answer, `docker save --platform` writes the
+  file for this machine's guest. That is linux/arm64 on a Mac and linux/amd64 on Linux.
+- `hydo-compose.lock.json` records the file's digest as the pin, with `from_docker: true`.
+- A later `hydo compose` reads the pin and needs neither the registry nor Docker.
+- `sh hydo/fetch-images.sh` saves the file again where it is missing, for example in a fresh
+  checkout. When the local Docker holds another image under that name, the script stops at the
+  pin. `HYDO_ACCEPT_REBUILD=1` takes the new file and records the new pin.
+
 **From Kubernetes manifests** (a folder of manifests, a Helm chart, or a Kustomize folder):
 
 ```sh
