@@ -88,6 +88,81 @@ fn a_name_that_two_modules_define_resolves_by_the_module_its_use_lines_and_a_ful
 }
 
 #[test]
+fn const_generics_static_references_and_closures_are_fuzzed() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m318-shapes");
+    let fns = [
+        "head",
+        "total",
+        "keep",
+        "tag",
+        "map_left",
+        "left_or_else",
+        "count_if",
+        "tally",
+    ];
+    let mut args: Vec<&str> = Vec::new();
+    for f in &fns {
+        args.extend(["--fn", f]);
+    }
+    let (_, rep) = fuzz_m318(t.path(), &args);
+    // a const generic parameter takes its value from a `with` line
+    assert_eq!(one(&rep, "::head").verdict, "held", "{rep:?}");
+    assert_eq!(one(&rep, "::[u8; 3]::total").verdict, "held");
+    // a `&'static` parameter gets a leaked value
+    assert_eq!(one(&rep, "::keep").verdict, "held");
+    assert_eq!(one(&rep, "::tag").verdict, "held");
+    // a closure parameter takes a generated closure
+    assert_eq!(one(&rep, "::map_left").verdict, "held");
+    assert_eq!(one(&rep, "::left_or_else").verdict, "held");
+    let count = one(&rep, "::count_if");
+    assert_eq!(count.verdict, "held");
+    // a closure whose result hydo cannot generate is refused with advice that works
+    let tally = rep
+        .skipped
+        .iter()
+        .find(|s| s.contains("::tally"))
+        .unwrap_or_else(|| panic!("{:?}", rep.skipped));
+    assert!(tally.contains("property function"), "{tally}");
+    assert!(!tally.contains("with F = i64"), "{tally}");
+}
+
+#[test]
+fn a_generated_closure_shows_and_reads_back_the_same() {
+    use hydo_contracts::fuzz::rust::{fn_bound, Closure, Ctor, FTy, Pass};
+    use hydo_contracts::fuzz::value::{parse, show, Val};
+    let b = fn_bound("FnOnce(i32) -> i64").unwrap();
+    let int = |n: &str, bits| FTy::Int {
+        name: n.into(),
+        signed: true,
+        bits,
+    };
+    let c = Closure::new(&b, Some(&int("i32", 32)), &int("i64", 64));
+    let t = FTy::Built {
+        ty: "_".into(),
+        build: Some(Ctor {
+            path: c.path(),
+            args: vec![
+                ("shape".into(), int("u8", 8), Pass::Value),
+                ("k".into(), int("i64", 64), Pass::Value),
+            ],
+        }),
+        read: None,
+    };
+    for (i, text) in [
+        (0, "|_| 5"),
+        (1, "|x| try_from(x).unwrap_or(5)"),
+        (2, "|x| try_from(x).unwrap_or(5).wrapping_add(1)"),
+    ] {
+        let v = Val::Struct(vec![
+            ("shape".into(), Val::Int(i)),
+            ("k".into(), Val::Int(5)),
+        ]);
+        assert_eq!(show(&v, &t), text);
+        assert_eq!(parse(text, &t), Ok(v));
+    }
+}
+
+#[test]
 fn values_of_two_kinds_are_not_compared() {
     use hydo_contracts::fuzz::check::{holds, Env};
     use hydo_contracts::fuzz::value::Val;

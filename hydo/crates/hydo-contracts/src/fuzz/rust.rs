@@ -152,17 +152,24 @@ pub fn enclosing(m: &[u8], pos: usize) -> Vec<Block> {
     let mut stack: Vec<(usize, usize)> = Vec::new(); // (header start, open)
     let mut item_start = 0;
     let mut i = 0;
+    // a `;` inside brackets is an array type's (`impl<const N: usize> T for [u8; N]`), not an
+    // item's end (Milestone 318)
+    let mut depth = 0i32;
     while i < pos.min(m.len()) {
         match m[i] {
             b'{' => {
                 stack.push((item_start, i));
                 item_start = i + 1;
+                depth = 0;
             }
             b'}' => {
                 stack.pop();
                 item_start = i + 1;
+                depth = 0;
             }
-            b';' => item_start = i + 1,
+            b'[' | b'(' => depth += 1,
+            b']' | b')' => depth -= 1,
+            b';' if depth <= 0 => item_start = i + 1,
             _ => {}
         }
         i += 1;
@@ -220,6 +227,205 @@ pub struct Sig {
     /// Whether the function has a body (a trait's required method has none; `body_open` is
     /// then its `;`).
     pub has_body: bool,
+    /// The bounds of the type parameters, inline and in the `where` clause: the name and the
+    /// bound's text (`F`, `FnOnce(L) -> M`; Milestone 318).
+    pub bounds: Vec<(String, String)>,
+    /// The parameters whose type is a `&'static` reference (Milestone 318).
+    pub statics: Vec<String>,
+}
+
+/// The bounds of a generics list's or a `where` clause's parts: `F: FnOnce(L) -> M` gives
+/// (`F`, `FnOnce(L) -> M`); lifetimes and parts without a bound are left out.
+pub fn bounds_of(parts: &str) -> Vec<(String, String)> {
+    split_top(parts, ',')
+        .iter()
+        .filter_map(|g| {
+            let g = g.trim();
+            if g.starts_with('\'') || g.starts_with("const ") {
+                return None;
+            }
+            let c = top_colon(g)?;
+            let name = g[..c].trim();
+            name.chars()
+                .all(|c| c.is_alphanumeric() || c == '_')
+                .then(|| (name.to_string(), g[c + 1..].trim().to_string()))
+        })
+        .collect()
+}
+
+/// The closure signature in a bound (`FnOnce(L) -> M + Send`): the arguments' types and the
+/// result's (Milestone 318); none for another bound.
+pub fn fn_bound(bound: &str) -> Option<FnBound> {
+    for part in split_top(bound, '+') {
+        let p = part.trim();
+        let p = p.strip_prefix("impl ").unwrap_or(p).trim();
+        let p = p.strip_prefix("dyn ").unwrap_or(p).trim();
+        let Some(k) = ["FnOnce(", "FnMut(", "Fn("]
+            .iter()
+            .find(|k| p.starts_with(**k))
+        else {
+            continue;
+        };
+        let once = *k == "FnOnce(";
+        let inside = &p[k.len() - 1..];
+        let e = matching(inside, 0, '(', ')')?;
+        let args = split_top(&inside[1..e], ',')
+            .iter()
+            .map(|a| a.trim())
+            .filter(|a| !a.is_empty())
+            .map(parse_ty)
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        let rest = inside[e + 1..].trim();
+        let ret = match rest.strip_prefix("->") {
+            Some(t) => parse_ty(t.trim()).ok()?,
+            None => TyAst::Tuple(vec![]),
+        };
+        return Some(FnBound { once, args, ret });
+    }
+    None
+}
+
+/// A closure's signature in a bound (Milestone 318).
+#[derive(Clone, Debug, PartialEq)]
+pub struct FnBound {
+    /// `FnOnce`: the closure may move its captured value out.
+    pub once: bool,
+    pub args: Vec<TyAst>,
+    pub ret: TyAst,
+}
+
+/// What a generated closure does with its first argument (Milestone 318).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Shape {
+    /// `|_| k`: the generated value, whatever the arguments.
+    Const,
+    /// `|x| x`: the argument itself, when the result has its type.
+    Same,
+    /// `|x| try_from(x).unwrap_or(k)`: an integer argument as the integer result.
+    Conv,
+    /// `|x| try_from(x).unwrap_or(k).wrapping_add(1)`.
+    Add,
+    /// `|x| x % 2 == 0`: a predicate on an integer argument.
+    Even,
+    /// `|x| x > 0`.
+    Positive,
+}
+
+/// A closure that hydo generates for a parameter bound by `Fn`, `FnMut` or `FnOnce`
+/// (Milestone 318): its argument and result types as the harness writes them, and the shapes
+/// it takes. A generated closure is a shape's index and a generated value `k`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Closure {
+    pub once: bool,
+    pub args: Vec<String>,
+    /// Whether the first argument is a reference, which the integer shapes read through.
+    pub by_ref: bool,
+    pub ret: String,
+    pub shapes: Vec<Shape>,
+}
+
+/// The mark that starts a closure's `Ctor` path.
+const CLOSURE: &str = "\u{1}closure";
+
+impl Closure {
+    /// The closure for a bound whose types are resolved: the shapes that fit its first
+    /// argument and its result.
+    pub fn new(b: &FnBound, first: Option<&FTy>, ret: &FTy) -> Closure {
+        let int = |t: &FTy| matches!(t, FTy::Int { .. });
+        let mut shapes = vec![Shape::Const];
+        let by_ref = matches!(b.args.first(), Some(TyAst::Ref(..)));
+        match first {
+            Some(a) if int(a) && int(ret) => shapes.extend([Shape::Conv, Shape::Add]),
+            Some(a) if int(a) && *ret == FTy::Bool => shapes.extend([Shape::Even, Shape::Positive]),
+            Some(_) if b.args.first().is_some_and(|a| a.text() == b.ret.text()) => {
+                shapes.push(Shape::Same)
+            }
+            _ => {}
+        }
+        Closure {
+            once: b.once,
+            args: b.args.iter().map(TyAst::text).collect(),
+            by_ref,
+            ret: b.ret.text(),
+            shapes,
+        }
+    }
+
+    /// The closure as a `Ctor`'s path.
+    pub fn path(&self) -> String {
+        let shapes: Vec<String> = self
+            .shapes
+            .iter()
+            .map(|s| format!("{}", *s as u8))
+            .collect();
+        format!(
+            "{CLOSURE}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}",
+            self.once,
+            self.by_ref,
+            self.args.join("\u{1e}"),
+            self.ret,
+            shapes.join(",")
+        )
+    }
+
+    /// The closure a `Ctor`'s path holds, if it holds one.
+    pub fn of(path: &str) -> Option<Closure> {
+        let r = path.strip_prefix(CLOSURE)?.strip_prefix('\u{1f}')?;
+        let p: Vec<&str> = r.split('\u{1f}').collect();
+        let [once, by_ref, args, ret, shapes] = p.as_slice() else {
+            return None;
+        };
+        let all = [
+            Shape::Const,
+            Shape::Same,
+            Shape::Conv,
+            Shape::Add,
+            Shape::Even,
+            Shape::Positive,
+        ];
+        Some(Closure {
+            once: *once == "true",
+            by_ref: *by_ref == "true",
+            args: args
+                .split('\u{1e}')
+                .filter(|a| !a.is_empty())
+                .map(str::to_string)
+                .collect(),
+            ret: ret.to_string(),
+            shapes: shapes
+                .split(',')
+                .filter_map(|s| all.get(s.parse::<usize>().ok()?).copied())
+                .collect(),
+        })
+    }
+
+    /// The shape that a generated index stands for.
+    pub fn shape(&self, i: i128) -> Shape {
+        let n = self.shapes.len().max(1) as i128;
+        self.shapes
+            .get(i.rem_euclid(n) as usize)
+            .copied()
+            .unwrap_or(Shape::Const)
+    }
+
+    /// The closure as a report shows it, with `k` shown.
+    pub fn show(&self, i: i128, k: &str) -> String {
+        let rest = if self.args.len() > 1 {
+            ", _".repeat(self.args.len() - 1)
+        } else {
+            String::new()
+        };
+        let x = if self.args.is_empty() { "" } else { "x" };
+        match self.shape(i) {
+            Shape::Const => format!("|{}{rest}| {k}", if x.is_empty() { "" } else { "_" }),
+            Shape::Same => format!("|{x}{rest}| x"),
+            Shape::Conv => format!("|{x}{rest}| try_from(x).unwrap_or({k})"),
+            Shape::Add => format!("|{x}{rest}| try_from(x).unwrap_or({k}).wrapping_add(1)"),
+            Shape::Even => format!("|{x}{rest}| x % 2 == 0"),
+            Shape::Positive => format!("|{x}{rest}| x > 0"),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -284,6 +490,11 @@ pub fn signature(text: &str, m: &[u8], decl: usize) -> Result<Sig, String> {
     if after.contains("where") {
         generics.push("where".into());
     }
+    let mut bounds = bounds_of(&generics.join(", "));
+    if let Some(w) = find_word(after, "where") {
+        bounds.extend(bounds_of(&after[w + 5..]));
+    }
+    let mut statics = Vec::new();
     let mut receiver = None;
     let mut params = Vec::new();
     for (k, p) in split_top(plist, ',').into_iter().enumerate() {
@@ -319,7 +530,11 @@ pub fn signature(text: &str, m: &[u8], decl: usize) -> Result<Sig, String> {
                 "the parameter `{pat}` is a pattern; only named parameters are fuzzed"
             ));
         }
-        params.push((pat.to_string(), parse_ty(p[colon + 1..].trim())?));
+        let ty = p[colon + 1..].trim();
+        if ty.replace(' ', "").starts_with("&'static") {
+            statics.push(pat.to_string());
+        }
+        params.push((pat.to_string(), parse_ty(ty)?));
     }
     let _ = text;
     Ok(Sig {
@@ -335,6 +550,8 @@ pub fn signature(text: &str, m: &[u8], decl: usize) -> Result<Sig, String> {
         },
         body_open: body,
         has_body: m[body] == b'{',
+        bounds,
+        statics,
     })
 }
 
@@ -1359,7 +1576,11 @@ pub fn subst_ty(t: &TyAst, s: &BTreeMap<String, TyAst>) -> TyAst {
         }
         TyAst::Ref(m, x) => TyAst::Ref(*m, Box::new(subst_ty(x, s))),
         TyAst::Slice(x) => TyAst::Slice(Box::new(subst_ty(x, s))),
-        TyAst::Array(x, n) => TyAst::Array(Box::new(subst_ty(x, s)), n.clone()),
+        // a const generic parameter's value (`[T; CAP]` with `with CAP = 16`; Milestone 318)
+        TyAst::Array(x, n) => TyAst::Array(
+            Box::new(subst_ty(x, s)),
+            s.get(n.trim()).map_or_else(|| n.clone(), TyAst::text),
+        ),
         TyAst::Tuple(v) => TyAst::Tuple(v.iter().map(|x| subst_ty(x, s)).collect()),
         TyAst::Other(o) => TyAst::Other(o.clone()),
     }
@@ -1394,6 +1615,10 @@ impl Resolver<'_> {
                 .parse::<usize>()
                 .ok()
                 .or_else(|| self.items.consts.get(n.trim()).copied())
+                .or_else(|| {
+                    let v = self.subst.get(n.trim())?.text();
+                    v.replace('_', "").parse().ok()
+                })
                 .ok_or(())
             {
                 Ok(n) if n <= 64 => FTy::Array(Box::new(self.res(x, stack)), n),

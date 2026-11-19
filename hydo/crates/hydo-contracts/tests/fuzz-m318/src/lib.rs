@@ -105,6 +105,105 @@ pub fn parse_full(s: &str) -> Result<u64, crate::duration::Error> {
     duration::parse(s)
 }
 
+// ---------------------------------------------------------------- const generic parameters
+
+/// The first `N` bytes, as a const generic function.
+// hydo: with N = 4
+// hydo: ensures is_none(result) || len(some(result)) == 4
+// hydo: ensures is_some(result) == (len(v) >= 4)
+pub fn head<const N: usize>(v: &[u8]) -> Option<[u8; N]> {
+    v.get(..N).map(|s| {
+        let mut a = [0; N];
+        a.copy_from_slice(s);
+        a
+    })
+}
+
+/// A trait implemented for arrays of every length, as a const generic `impl` block.
+pub trait Total {
+    fn total(&self) -> u32;
+}
+
+impl<const N: usize> Total for [u8; N] {
+    // hydo: with N = 3
+    // hydo: ensures result <= 765
+    fn total(&self) -> u32 {
+        self.iter().map(|&b| b as u32).sum()
+    }
+}
+
+// ---------------------------------------------------------------- `&'static` parameters
+
+/// A set of bytes, as percent-encoding's `AsciiSet`, which its encoders take as `&'static`.
+pub struct Set {
+    pub lo: u64,
+}
+
+/// The bytes of `input` below 64 that the set holds.
+// hydo: ensures len(result) <= len(input)
+pub fn keep(input: &[u8], set: &'static Set) -> Vec<u8> {
+    input
+        .iter()
+        .copied()
+        .filter(|&b| b < 64 && set.lo & (1 << b) != 0)
+        .collect()
+}
+
+/// A name that must live as long as the program.
+// hydo: ensures result == len(name)
+pub fn tag(name: &'static str) -> usize {
+    name.len()
+}
+
+// ---------------------------------------------------------------- closures
+
+/// either's `Either`, whose methods take closures.
+pub enum Either<L, R> {
+    Left(L),
+    Right(R),
+}
+
+impl<L, R> Either<L, R> {
+    // hydo: with L = i32
+    // hydo: with R = u8
+    // hydo: with M = i64
+    // hydo: ensures matches(result, Left(_)) == matches(self, Left(_))
+    pub fn map_left<F, M>(self, f: F) -> Either<M, R>
+    where
+        F: FnOnce(L) -> M,
+    {
+        match self {
+            Either::Left(l) => Either::Left(f(l)),
+            Either::Right(r) => Either::Right(r),
+        }
+    }
+
+    // hydo: with L = i32
+    // hydo: with R = u8
+    // hydo: ensures !matches(self, Left(_)) || result == self.Left.0
+    pub fn left_or_else<F>(self, f: F) -> L
+    where
+        F: FnOnce(R) -> L,
+    {
+        match self {
+            Either::Left(l) => l,
+            Either::Right(r) => f(r),
+        }
+    }
+}
+
+/// A predicate given as `impl Fn`.
+// hydo: ensures result <= len(v)
+pub fn count_if(v: &[u8], pred: impl Fn(&u8) -> bool) -> usize {
+    v.iter().filter(|b| pred(b)).count()
+}
+
+/// A closure whose result hydo cannot generate: refused with advice that works.
+// hydo: ensures result == 0
+pub fn tally<F: FnMut(u8) -> std::collections::HashMap<u8, u8>>(mut f: F) -> usize {
+    f(0).len()
+}
+
 // ---------------------------------------------------------------- associated result types
 
 /// heck's conversions return `Self::Owned`, the standard library's `ToOwned::Owned`.

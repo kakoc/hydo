@@ -396,6 +396,60 @@ fn passes(t: &TyAst) -> (Pass, Option<Pass>) {
     }
 }
 
+/// The type of a parameter that takes a closure (Milestone 318): a type parameter bound by
+/// `Fn`, `FnMut` or `FnOnce` (`f: F`, `f: &mut F`), or `impl Fn(...)`. hydo generates such a
+/// closure from a small set of shapes ([`rust::Shape`]), a value of the result's type, and an
+/// integer that chooses the shape. None for another parameter; an error when hydo cannot
+/// generate the closure's result.
+fn closure_param(
+    t: &TyAst,
+    closures: &BTreeMap<String, rust::FnBound>,
+    subst: &BTreeMap<String, TyAst>,
+    res: &rust::Resolver,
+) -> Option<Result<FTy, String>> {
+    let mut base = t;
+    while let TyAst::Ref(_, x) = base {
+        base = x;
+    }
+    let b = match base {
+        TyAst::Path(s, a) if s.len() == 1 && a.is_empty() => closures.get(&s[0])?.clone(),
+        TyAst::Other(o) if o.starts_with("impl ") => rust::fn_bound(o)?,
+        _ => return None,
+    };
+    let b = rust::FnBound {
+        once: b.once,
+        args: b.args.iter().map(|a| rust::subst_ty(a, subst)).collect(),
+        ret: rust::subst_ty(&b.ret, subst),
+    };
+    let ret = res.resolve(&b.ret);
+    if let Err(why) = ret.generable() {
+        return Some(Err(format!(
+            "hydo generates a closure that returns a value it can generate, and the closure's \
+             result `{}` is not one ({why}); write the contract on a property function in the \
+             crate's test module that calls the function with closures of your own",
+            b.ret.text()
+        )));
+    }
+    let first = b.args.first().map(|a| res.resolve(a));
+    let c = rust::Closure::new(&b, first.as_ref(), &ret);
+    let shape = FTy::Int {
+        name: "u8".into(),
+        signed: false,
+        bits: 8,
+    };
+    Some(Ok(FTy::Built {
+        ty: "_".into(),
+        build: Some(rust::Ctor {
+            path: c.path(),
+            args: vec![
+                ("shape".into(), shape, Pass::Value),
+                ("k".into(), ret, Pass::Value),
+            ],
+        }),
+        read: None,
+    }))
+}
+
 /// A parameter's refusal, with what to write when the type needs a `build` line: the
 /// parameter's own type, or for a list the type that the reason names.
 fn refusal(what: &str, t: &TyAst, why: String) -> String {
@@ -473,45 +527,66 @@ fn read_fn(
         Owner::Impl(_, _, p) | Owner::Trait(_, p) => p.clone(),
         Owner::None => vec![],
     };
+    // a const generic parameter takes its value from a `with` line too (`with CAP = 16`;
+    // Milestone 318)
+    let bare = |n: &str| n.strip_prefix("const ").unwrap_or(n).trim().to_string();
     for name in &outer {
-        if name.starts_with("const ") {
-            return Err(format!(
-                "a const generic parameter (`{name}`): not fuzzed yet"
-            ));
-        }
-        match with_ty(name) {
+        let name = bare(name);
+        match with_ty(&name) {
             Some(t) => {
-                subst.insert(name.clone(), t?);
+                subst.insert(name, t?);
             }
-            None => missing.push(name.clone()),
+            None => missing.push(name),
         }
     }
+    // a type parameter bound by `Fn`, `FnMut` or `FnOnce` without a `with` line takes a
+    // generated closure (Milestone 318)
+    let mut closures: BTreeMap<String, rust::FnBound> = BTreeMap::new();
     for g in &sig.generics {
         if g == "where" {
             continue;
         }
-        if g.starts_with("const ") {
-            return Err(format!("a const generic parameter (`{g}`): not fuzzed yet"));
-        }
-        let name = g.split([':', '=']).next().unwrap_or("").trim().to_string();
+        let name = bare(g.split([':', '=']).next().unwrap_or(""));
         match with_ty(&name) {
             Some(t) => {
                 let ty = t?;
                 turbofish.push(ty.text());
                 subst.insert(name, ty);
             }
-            None => missing.push(name),
+            None => {
+                let bound = sig
+                    .bounds
+                    .iter()
+                    .filter(|(n, _)| *n == name)
+                    .find_map(|(_, b)| rust::fn_bound(b));
+                match bound {
+                    Some(b) => {
+                        turbofish.push("_".into());
+                        closures.insert(name, b);
+                    }
+                    None => missing.push(name),
+                }
+            }
         }
     }
     if let Some(m) = missing.first() {
         let mut all: Vec<String> = outer.clone();
         all.extend(sig.generics.iter().filter(|g| *g != "where").cloned());
-        return Err(format!(
-            "a generic function (`{}`): name the type to fuzz it with, for example \
-             `// hydo: with {m} = i64`, or write the contract on a function of concrete types \
-             that calls it",
-            all.join(", ")
-        ));
+        let is_const = all.iter().any(|g| bare(g) == *m && g.starts_with("const "));
+        return Err(if is_const {
+            format!(
+                "a const generic parameter (`{}`): name its value, for example `// hydo: with \
+                 {m} = 16`",
+                all.join(", ")
+            )
+        } else {
+            format!(
+                "a generic function (`{}`): name the type to fuzz it with, for example \
+                 `// hydo: with {m} = i64`, or write the contract on a function of concrete \
+                 types that calls it",
+                all.join(", ")
+            )
+        });
     }
     // the type `Self` stands for, and the path of the call
     let (self_ty, call_base, owner_name) = match &owner {
@@ -593,11 +668,15 @@ fn read_fn(
             pass,
             ty,
             inner,
+            leak: false,
         });
     }
     for (n, t) in &sig.params {
         let t = &fix(t, false);
-        let ty = res.resolve(t);
+        let ty = match closure_param(t, &closures, &subst, &res) {
+            Some(c) => c.map_err(|why| format!("the parameter `{n}`: {why}"))?,
+            None => res.resolve(t),
+        };
         ty.generable()
             .map_err(|why| refusal(&format!("the parameter `{n}`"), t, why))?;
         let (pass, inner) = passes(t);
@@ -606,6 +685,9 @@ fn read_fn(
             pass,
             ty,
             inner,
+            // a `&'static` parameter gets a value that lives as long as the process
+            // (Milestone 318)
+            leak: sig.statics.contains(n),
         });
     }
     let (ret, ret_ref) = match &sig.ret {
@@ -1227,6 +1309,7 @@ impl Fn {
                     pass: p.pass,
                     ty: p.ty.clone(),
                     inner: p.inner,
+                    leak: p.leak,
                 })
                 .collect(),
             ret: self.ret.clone(),

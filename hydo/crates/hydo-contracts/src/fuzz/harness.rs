@@ -5,7 +5,7 @@
 //! call, or the panic's location and message. The module is one line, so every line of the file
 //! keeps its number and a panic's location is the original file's.
 
-use super::rust::{FTy, Pass, Receiver, VKind};
+use super::rust::{Closure, FTy, Pass, Receiver, Shape, VKind};
 use std::fmt::Write as _;
 
 /// A parameter as the harness passes it.
@@ -18,6 +18,9 @@ pub struct Param {
     /// made from the generated value. The harness then passes that reference with `pass`, and a
     /// `&mut` parameter's value after the call is what the reference refers to then.
     pub inner: Option<Pass>,
+    /// A `&'static` parameter (Milestone 318): the harness leaks the generated value, so that
+    /// the reference lives as long as the process, and passes the reference as it is.
+    pub leak: bool,
 }
 
 /// `base` passed as `pass`: `base`, `&base`, `&base[..]`, `&mut base` or `&mut base[..]`.
@@ -50,6 +53,16 @@ pub fn is_read_built(t: &FTy) -> bool {
             .iter()
             .any(|v| v.fields.iter().any(|(_, t)| is_read_built(t))),
         _ => false,
+    }
+}
+
+/// An expression that leaks the value `v` of type `t` and gives a `&'static mut` reference to
+/// it: a string as a `str`, a list as a slice, any other value as itself (Milestone 318).
+fn leaked(t: &FTy, v: &str) -> String {
+    match t {
+        FTy::Str => format!("self::std::boxed::Box::leak({v}.into_boxed_str())"),
+        FTy::List(_) => format!("self::std::boxed::Box::leak({v}.into_boxed_slice())"),
+        _ => format!("self::std::boxed::Box::leak(self::std::boxed::Box::new({v}))"),
     }
 }
 
@@ -214,6 +227,45 @@ fn dec(t: &FTy) -> String {
                 let _ = write!(arms, "\"V{}\" => {value}, ", v.name);
             }
             format!("match r.w() {{ {arms}_ => self::std::process::abort() }}")
+        }
+        // a closure: its shape and its value, then the closure (Milestone 318)
+        FTy::Built { build: Some(c), .. } if Closure::of(&c.path).is_some() => {
+            let cl = Closure::of(&c.path).unwrap_or_else(|| unreachable!());
+            let k_dec = c.args.get(1).map_or("unreachable!()".into(), |(_, t, _)| dec(t));
+            let k = if cl.once {
+                "k".to_string()
+            } else {
+                "self::std::clone::Clone::clone(&k)".to_string()
+            };
+            let params: Vec<String> = cl
+                .args
+                .iter()
+                .enumerate()
+                .map(|(i, t)| format!("x{i}: {t}"))
+                .collect();
+            let x = if cl.by_ref { "(*x0)" } else { "x0" };
+            let ret = &cl.ret;
+            let mut arms = String::new();
+            for (i, s) in cl.shapes.iter().enumerate() {
+                let body = match s {
+                    Shape::Const => k.clone(),
+                    Shape::Same => "x0".to_string(),
+                    Shape::Conv => format!(
+                        "<{ret} as self::std::convert::TryFrom<_>>::try_from({x}).unwrap_or(k)"
+                    ),
+                    Shape::Add => format!(
+                        "<{ret} as self::std::convert::TryFrom<_>>::try_from({x}).unwrap_or(k).wrapping_add(1)"
+                    ),
+                    Shape::Even => format!("({x} as i128) % 2 == 0"),
+                    Shape::Positive => format!("({x} as i128) > 0"),
+                };
+                let _ = write!(arms, "{i} => {body}, ");
+            }
+            format!(
+                "{{ let s: usize = r.int(); let k: {ret} = {k_dec}; move |{}| -> {ret} {{ match s % {} {{ {arms}_ => {k} }} }} }}",
+                params.join(", "),
+                cl.shapes.len().max(1)
+            )
         }
         // the constructor's arguments, then the constructor (Milestone 307)
         FTy::Built { build: Some(c), .. } => {
@@ -440,7 +492,14 @@ pub fn module(s: &Spec) -> String {
             let _ = write!(b, "let mut a{i}: {} = {}; ", rty(&p.ty), dec(&p.ty));
         }
     }
+    // a `&'static` parameter: the value leaked after the read values are taken (Milestone 318)
+    let mut leaks = String::new();
     for (i, p) in s.params.iter().enumerate() {
+        if p.leak {
+            let _ = write!(leaks, "let l{i} = {}; ", leaked(&p.ty, &format!("a{i}")));
+            args.push(format!("l{i}"));
+            continue;
+        }
         let base = match p.inner {
             Some(inner) => {
                 let _ = write!(b, "let mut b{i} = {}; ", passed(inner, &format!("a{i}")));
@@ -472,6 +531,7 @@ pub fn module(s: &Spec) -> String {
         }
         b.push_str("} ");
     }
+    b.push_str(&leaks);
     b.push_str(
         "*LAST.lock().unwrap_or_else(|e| e.into_inner()) = self::std::option::Option::None; ",
     );

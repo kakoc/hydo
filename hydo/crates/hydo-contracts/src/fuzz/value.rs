@@ -2,7 +2,7 @@
 //! (the wire form), the form a report shows and `--input` reads back, generation from a seed,
 //! and the simpler values a shrink tries.
 
-use super::rust::{FTy, VKind};
+use super::rust::{Closure, FTy, Shape, VKind};
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
@@ -300,6 +300,17 @@ pub fn show(v: &Val, t: &FTy) -> String {
                 None => n.clone(),
             }
         }
+        // a generated closure: its shape with its value (Milestone 318)
+        (Val::Struct(fv), FTy::Built { build: Some(c), .. })
+            if fv.len() == 2 && Closure::of(&c.path).is_some() =>
+        {
+            let cl = Closure::of(&c.path).unwrap_or_else(|| unreachable!());
+            let i = match &fv[0].1 {
+                Val::Int(i) => *i,
+                _ => 0,
+            };
+            cl.show(i, &show(&fv[1].1, &c.args[1].1))
+        }
         (Val::Struct(fv), FTy::Built { build: Some(c), .. }) if fv.len() == c.args.len() => {
             let p: Vec<String> = fv
                 .iter()
@@ -316,6 +327,20 @@ pub fn show(v: &Val, t: &FTy) -> String {
         ) => show(v, t),
         _ => "<not read>".into(),
     }
+}
+
+/// The smallest value of a type, for a closure's unused value (Milestone 318).
+fn zero(t: &FTy) -> Option<Val> {
+    Some(match t {
+        FTy::Int { .. } => Val::Int(0),
+        FTy::Bool => Val::Bool(false),
+        FTy::Float { .. } => Val::Float(0),
+        FTy::Str => Val::Str(String::new()),
+        FTy::List(_) => Val::List(vec![]),
+        FTy::Opt(_) => Val::Opt(None),
+        FTy::Tuple(v) => Val::Tuple(v.iter().map(zero).collect::<Option<_>>()?),
+        _ => return None,
+    })
 }
 
 /// Read back the form [`show`] writes, for a value of type `t`.
@@ -665,6 +690,51 @@ impl Reader<'_> {
                     }
                 }
                 Ok(Val::Enum(v.name.clone(), fv))
+            }
+            FTy::Built { build: Some(c), .. } if Closure::of(&c.path).is_some() => {
+                // a closure as `show` writes it: `|_| 5`, `|x| x`, `|x| x > 0` (Milestone 318)
+                let cl = Closure::of(&c.path).unwrap_or_else(|| unreachable!());
+                let kt = &c.args[1].1;
+                self.expect("|")?;
+                let close = self.s[self.i..]
+                    .find('|')
+                    .ok_or("a closure's parameters end with `|`")?;
+                self.i += close + 1;
+                let idx = |s: Shape| cl.shapes.iter().position(|x| *x == s);
+                let (shape, k) = if self.eat("try_from(x).unwrap_or(") {
+                    let k = self.val(kt)?;
+                    self.expect(")")?;
+                    let s = if self.eat(".wrapping_add(1)") {
+                        Shape::Add
+                    } else {
+                        Shape::Conv
+                    };
+                    (s, k)
+                } else if self.eat("x % 2 == 0") {
+                    (Shape::Even, Val::Bool(false))
+                } else if self.eat("x > 0") {
+                    (Shape::Positive, Val::Bool(false))
+                } else if self.eat("x") {
+                    let k = zero(kt).ok_or("this closure is written `|_| <value>`")?;
+                    (Shape::Same, k)
+                } else {
+                    (Shape::Const, self.val(kt)?)
+                };
+                let i = idx(shape).ok_or_else(|| {
+                    format!(
+                        "this closure takes the shapes {}",
+                        cl.shapes
+                            .iter()
+                            .enumerate()
+                            .map(|(i, _)| cl.show(i as i128, "<value>"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                })?;
+                Ok(Val::Struct(vec![
+                    ("shape".into(), Val::Int(i as i128)),
+                    ("k".into(), k),
+                ]))
             }
             FTy::Built {
                 ty, build: Some(c), ..
