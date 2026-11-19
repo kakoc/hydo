@@ -12,7 +12,8 @@ hydo update --check
 
 It prints one line for hydo and one line for each copy of the skill, each with the version it
 has and the version of the newest release. It changes nothing. The exit status is 0 when
-everything is current, and 3 when something is newer.
+everything is current, 3 when something is newer, and 4 when hydo could not read the release
+list. The section "The limit of GitHub's API and a token" explains the most common cause of 4.
 
 When hydo itself is older, the plan also prints the "Before you upgrade" section of the release
 notes of each newer release. Read it before you go on. For example, the notes of 0.4.0 say that
@@ -107,3 +108,34 @@ does all of it.
 It looks at most once a day, waits at most 3 seconds, and keeps the answer in
 `~/.hydo/update-check.json`. Offline it prints nothing and does not fail. `HYDO_OFFLINE=1`, or
 `HYDO_UPDATE_CHECK=0`, turns the look off.
+
+## The limit of GitHub's API and a token
+
+`hydo update`, `hydo skill update` and the look of `hydo doctor` read the list of releases from
+GitHub's API. Without a login, GitHub allows 60 requests an hour from one address. A day of
+scripts that run these commands can use them up. Then the commands print one line like this
+one, and exit with status 4:
+
+```text
+hydo update: GitHub's limit for requests without a login (60 an hour from one address) was reached, so the release list could not be read; the limit resets in 38 minutes. Set GH_TOKEN to a GitHub token, or log in with `gh auth login`, to lift it. Nothing was changed
+```
+
+To lift the limit, give hydo a GitHub token. hydo takes the first that it finds:
+
+1. `GH_TOKEN`;
+2. `GITHUB_TOKEN` (GitHub Actions sets it);
+3. the output of `gh auth token --hostname github.com`, when the `gh` command is on `PATH` and
+   you logged in with `gh auth login`. hydo waits at most 5 seconds for it.
+
+hydo sends the token only to `https://api.github.com`, as the header `Authorization: Bearer`.
+It never sends the token to another host or along a redirect, and it never prints, logs, or
+writes the token. A token needs no scopes: the release list is public.
+
+hydo also makes fewer requests:
+
+- Each command reads the list once. The newest hydo release and the newest skill release come
+  from the same list.
+- The answer is kept in `~/.hydo/update-check.json`. A command in the next 10 minutes takes the
+  kept answer and says so in its first line. `hydo doctor` takes an answer of the last day.
+- At the limit, `hydo doctor` prints nothing about it, keeps its earlier answer, and does not look
+  again until the limit resets.

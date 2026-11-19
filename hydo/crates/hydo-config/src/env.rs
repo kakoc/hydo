@@ -10,10 +10,28 @@ use std::path::PathBuf;
 /// [`Env::process`] at a program's start and passed down. The typed groups of
 /// [`crate::Config`] are read from it; the hvx engine reads its options from it with the
 /// overrides of one engine ([`Env::with`], [`Env::with_words`]).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct Env {
     vals: BTreeMap<&'static str, OsString>,
     home: Option<OsString>,
+}
+
+/// The variables whose values `Debug` never shows (Milestone 322).
+const SECRETS: &[&str] = &[registry::GH_TOKEN, registry::GITHUB_TOKEN];
+
+impl std::fmt::Debug for Env {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut m = f.debug_map();
+        for (k, v) in &self.vals {
+            if SECRETS.contains(k) {
+                m.entry(k, &"<hidden>");
+            } else {
+                m.entry(k, v);
+            }
+        }
+        m.entry(&"HOME", &self.home);
+        m.finish()
+    }
 }
 
 fn registered(name: &str) -> Option<&'static str> {

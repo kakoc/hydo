@@ -1,10 +1,10 @@
 //! The parts of `hydo update` that need no program around them: the release list, the release
-//! notes' section, how an install is recognised from its path, and `hydo doctor`'s daily look.
+//! notes' section, and how an install is recognised from its path. `hydo doctor`'s daily look
+//! is tested in src/releaselist/tests.rs.
 //! The whole command, with a fake release server and fake brew, cargo and claude programs, is
 //! tested in tests/update.rs.
 
 use super::*;
-use std::cell::Cell;
 
 #[test]
 fn the_release_list_gives_the_hydo_releases_oldest_first() {
@@ -15,10 +15,7 @@ fn the_release_list_gives_the_hydo_releases_oldest_first() {
     let r = hydo_releases(l).unwrap();
     let v: Vec<&str> = r.iter().map(|r| r.version.as_str()).collect();
     assert_eq!(v, ["0.3.9", "0.3.10", "0.4.0"]);
-    assert_eq!(
-        before_you_upgrade(&r[2].notes).as_deref(),
-        Some("- new fingerprints")
-    );
+    assert_eq!(r[2].upgrade.as_deref(), Some("- new fingerprints"));
     assert_eq!(before_you_upgrade("# x\n\n## New\n- a\n"), None);
     assert!(hydo_releases(b"{}").is_err());
 }
@@ -75,54 +72,6 @@ fn an_install_is_recognised_by_its_path() {
         kind_of(&bare, None, &home, "0.4.0"),
         Kind::Other { .. }
     ));
-    let _ = std::fs::remove_dir_all(&d);
-}
-
-#[test]
-fn the_doctor_looks_once_a_day_and_keeps_a_failed_look_too() {
-    let d = std::env::temp_dir().join(format!("hydo-update-check-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    let f = d.join(CHECK_FILE);
-    let calls = Cell::new(0);
-    let list = br#"[{"tag_name":"v0.4.0"},{"tag_name":"v0.9.0"}]"#.to_vec();
-    let ok = |_: &str| {
-        calls.set(calls.get() + 1);
-        Ok(list.clone())
-    };
-    let down = |_: &str| -> Result<Vec<u8>, String> {
-        calls.set(calls.get() + 1);
-        Err("offline".into())
-    };
-    assert_eq!(
-        newest_known(&f, "http://a", 1000, &ok).as_deref(),
-        Some("0.9.0")
-    );
-    assert_eq!(
-        newest_known(&f, "http://a", 2000, &ok).as_deref(),
-        Some("0.9.0")
-    );
-    assert_eq!(
-        calls.get(),
-        1,
-        "the second look within a day is the kept answer"
-    );
-    // another list, or a day later: a new look; a failed look is kept as no answer
-    assert_eq!(newest_known(&f, "http://b", 2000, &down), None);
-    assert_eq!(newest_known(&f, "http://b", 3000, &down), None);
-    assert_eq!(
-        calls.get(),
-        2,
-        "a failed look is not repeated within the day"
-    );
-    assert_eq!(
-        newest_known(&f, "http://b", 2000 + DAY, &ok).as_deref(),
-        Some("0.9.0")
-    );
-    // a file that cannot be written is no error
-    assert_eq!(
-        newest_known(Path::new("/nonexistent/x/y.json"), "http://a", 1, &ok).as_deref(),
-        Some("0.9.0")
-    );
     let _ = std::fs::remove_dir_all(&d);
 }
 

@@ -948,7 +948,9 @@ const SKILL_USAGE: &str = "usage: hydo skill install [--agent NAME ...] [--to DI
            check it by sha256 against the release's SHA256SUMS over TLS, and install it; without
            --agent or --to, every copy in this repository's and your home's .claude/skills and
            .agents/skills is updated. --check only reports (exit status 0: up to date, 3: newer
-           available); --version installs that release. It uses the network only when you run it.
+           available, 4: the release list could not be read, also at GitHub's limit for requests
+           without a login, which GH_TOKEN or `gh auth login` lifts); --version installs that
+           release. It uses the network only when you run it.
   --agent claude|codex|cursor|copilot|gemini|all (repeatable, or comma-separated): that tool's
           skill directory of this repository (--user: of your home directory). Claude Code gets
           the plugin folder .claude/skills/hydo, whose command is /hydo:onboard; the other tools

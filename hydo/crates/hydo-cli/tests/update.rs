@@ -43,7 +43,12 @@ fn own() -> String {
 #[derive(Default)]
 struct State {
     files: HashMap<String, Vec<u8>>,
+    /// Answers other than a file: a path's status line and headers (GitHub's limit, a
+    /// redirect).
+    answers: HashMap<String, (String, Vec<(String, String)>)>,
     log: Vec<String>,
+    /// Each request's path and its Authorization header.
+    auth: Vec<(String, Option<String>)>,
 }
 
 struct Server {
@@ -81,6 +86,37 @@ impl Server {
     fn log(&self) -> Vec<String> {
         self.state.lock().unwrap().log.clone()
     }
+
+    fn file(&self, path: &str) -> Vec<u8> {
+        self.state.lock().unwrap().files[path].clone()
+    }
+
+    /// Answer `path` with a status line and headers instead of a file (None: the file again).
+    fn answer(&self, path: &str, it: Option<(&str, &[(&str, &str)])>) {
+        let mut s = self.state.lock().unwrap();
+        match it {
+            Some((status, headers)) => {
+                let h = headers
+                    .iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect();
+                s.answers.insert(path.into(), (status.into(), h));
+            }
+            None => {
+                s.answers.remove(path);
+            }
+        }
+    }
+
+    /// The Authorization headers of the requests, by path.
+    fn auth(&self) -> Vec<(String, Option<String>)> {
+        self.state.lock().unwrap().auth.clone()
+    }
+
+    /// How many requests asked for the release list (`/api/...`).
+    fn api_requests(&self) -> usize {
+        self.log().iter().filter(|p| p.starts_with("/api/")).count()
+    }
 }
 
 fn serve(c: TcpStream, st: Arc<Mutex<State>>) {
@@ -90,19 +126,40 @@ fn serve(c: TcpStream, st: Arc<Mutex<State>>) {
     if r.read_line(&mut first).is_err() {
         return;
     }
+    let mut auth = None;
     loop {
         let mut l = String::new();
         if r.read_line(&mut l).unwrap_or(0) == 0 || l == "\r\n" {
             break;
         }
+        if let Some((k, v)) = l.split_once(':') {
+            if k.eq_ignore_ascii_case("authorization") {
+                auth = Some(v.trim().to_string());
+            }
+        }
     }
     let path = first.split_whitespace().nth(1).unwrap_or("").to_string();
-    let body = {
+    let (body, answer) = {
         let mut s = st.lock().unwrap();
         s.log.push(path.clone());
+        s.auth.push((path.clone(), auth));
         let key = path.split('?').next().unwrap_or("").to_string();
-        s.files.get(&key).cloned()
+        (s.files.get(&key).cloned(), s.answers.get(&key).cloned())
     };
+    if let Some((status, headers)) = answer {
+        let body = b"{\"message\": \"API rate limit exceeded\"}";
+        let mut h = String::new();
+        for (k, v) in headers {
+            h.push_str(&format!("{k}: {v}\r\n"));
+        }
+        let _ = write!(
+            w,
+            "HTTP/1.1 {status}\r\n{h}Connection: close\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        );
+        let _ = w.write_all(body);
+        return;
+    }
     let (status, body) = match body {
         Some(b) => ("200 OK", b),
         None => ("404 Not Found", Vec::new()),
@@ -584,7 +641,7 @@ fn offline_and_an_unreachable_list_change_nothing() {
     };
     let api = format!("http://127.0.0.1:{dead}/api/releases");
     let (rc, out) = c.run(&hydo, &["update", "--check"], &[("HYDO_RELEASE_API", &api)]);
-    assert_eq!(rc, 1, "{out}");
+    assert_eq!(rc, 4, "could not check: {out}");
     assert!(out.contains("cannot read the release list"), "{out}");
     assert!(c.srv.log().is_empty());
     assert_eq!(c.log(), "");
@@ -790,4 +847,247 @@ fn the_doctor_names_a_newer_release_once_a_day() {
             .count(),
         1
     );
+}
+
+// ---------------------------------------------------------------- GitHub's API (Milestone 322)
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+/// Every file under `dir` that holds `needle`.
+fn files_holding(dir: &Path, needle: &str, out: &mut Vec<PathBuf>) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for e in rd.flatten() {
+        let p = e.path();
+        let Ok(md) = std::fs::symlink_metadata(&p) else {
+            continue;
+        };
+        if md.is_dir() {
+            files_holding(&p, needle, out);
+        } else if md.is_file() {
+            let b = std::fs::read(&p).unwrap_or_default();
+            if b.windows(needle.len()).any(|w| w == needle.as_bytes()) {
+                out.push(p);
+            }
+        }
+    }
+}
+
+#[test]
+fn at_github_s_limit_the_commands_say_so_and_change_nothing() {
+    let c = Case::new("limit", NEW);
+    let hydo = release_tree(&c, "home/.hydo");
+    let copy = c.home().join(".agents/skills/onboard");
+    skill_at(&copy, "2.0.0");
+    let reset = (unix_now() + 37 * 60 + 30).to_string();
+    let limit: &[(&str, &str)] = &[
+        ("x-ratelimit-limit", "60"),
+        ("x-ratelimit-remaining", "0"),
+        ("x-ratelimit-reset", &reset),
+    ];
+    c.srv
+        .answer("/api/releases", Some(("403 rate limit exceeded", limit)));
+    let said = |out: &str| {
+        assert!(
+            out.contains(
+                "GitHub's limit for requests without a login (60 an hour from one address) was \
+                 reached"
+            ),
+            "{out}"
+        );
+        assert!(out.contains("the limit resets in 38 minutes"), "{out}");
+        assert!(
+            out.contains("Set GH_TOKEN to a GitHub token, or log in with `gh auth login`"),
+            "{out}"
+        );
+        assert!(!out.contains("HTTP 403"), "{out}");
+        assert_eq!(out.lines().count(), 1, "one line: {out}");
+    };
+    for args in [&["update", "--check"][..], &["update", "--yes"]] {
+        let (rc, out) = c.run(&hydo, args, &[]);
+        assert_eq!(rc, 4, "could not check: {out}");
+        said(&out);
+    }
+    let (rc, out) = c.run(&hydo, &["skill", "update", "--check"], &[]);
+    assert_eq!(rc, 4, "{out}");
+    said(&out);
+    assert!(out.starts_with("hydo: GitHub's limit"), "{out}");
+    assert_eq!(
+        c.srv.api_requests(),
+        3,
+        "one request per command, no retries"
+    );
+    // a 429 is the same, and it is not retried either
+    c.srv
+        .answer("/api/releases", Some(("429 Too Many Requests", limit)));
+    let (rc, out) = c.run(&hydo, &["skill", "update"], &[]);
+    assert_eq!(rc, 4, "{out}");
+    said(&out);
+    assert_eq!(c.srv.api_requests(), 4);
+    // nothing changed
+    assert_eq!(version_in(&copy), "2.0.0");
+    assert_eq!(c.log(), "");
+    assert!(c.fetched().is_empty());
+    // hydo doctor says nothing about it and does not look before the limit resets, also when
+    // the list is readable again
+    let on = [("HYDO_UPDATE_CHECK", "1")];
+    let (_, out) = c.run(&hydo, &["doctor"], &on);
+    assert!(
+        !out.contains("is out") && !out.contains("GitHub's limit"),
+        "{out}"
+    );
+    c.srv.answer("/api/releases", None);
+    let (_, out) = c.run(&hydo, &["doctor"], &on);
+    assert!(!out.contains("is out"), "{out}");
+    assert_eq!(c.srv.api_requests(), 4, "the doctor waits for the reset");
+    // a command looks again, and its answer serves the doctor
+    let (rc, out) = c.run(&hydo, &["update", "--check"], &[]);
+    assert_eq!(rc, 3, "{out}");
+    let (_, out) = c.run(&hydo, &["doctor"], &on);
+    assert!(out.contains(&format!("note: hydo {NEW} is out")), "{out}");
+    assert_eq!(c.srv.api_requests(), 5);
+}
+
+#[test]
+fn a_token_goes_to_the_api_host_only_and_is_never_shown() {
+    let c = Case::new("token", NEW);
+    let hydo = release_tree(&c, "home/.hydo");
+    let copy = c.home().join(".agents/skills/onboard");
+    skill_at(&copy, "2.0.0");
+    // the API on a server of its own; the downloads stay on the case's server
+    let api = Server::start();
+    api.put("/api/releases", &c.srv.file("/api/releases"));
+    let list_url = api.url("/api/releases");
+    let origin = api.url("");
+    let token = "ghp_m322notarealtoken0123456789";
+    let env: [(&str, &str); 3] = [
+        ("HYDO_RELEASE_API", &list_url),
+        ("HYDO_GITHUB_API_STANDIN", &origin),
+        ("GH_TOKEN", token),
+    ];
+    let mut outs = Vec::new();
+    let (rc, out) = c.run(&hydo, &["update", "--yes"], &env);
+    assert_eq!(rc, 0, "{out}");
+    outs.push(out);
+    assert_eq!(version_in(&copy), SKILL_NEW);
+    let bearer = Some(format!("Bearer {token}"));
+    assert_eq!(
+        api.auth(),
+        [("/api/releases?per_page=100".to_string(), bearer.clone())]
+    );
+    assert!(!c.srv.auth().is_empty());
+    assert!(
+        c.srv.auth().iter().all(|(_, a)| a.is_none()),
+        "no token to the download host: {:?}",
+        c.srv.auth()
+    );
+    // a redirect to another host does not carry it
+    let moved_to = c.srv.url("/api/releases");
+    api.answer(
+        "/api/moved",
+        Some(("302 Found", &[("Location", &moved_to)])),
+    );
+    let moved_url = api.url("/api/moved");
+    let moved = [("HYDO_RELEASE_API", moved_url.as_str()), env[1], env[2]];
+    let (rc, out) = c.run(&hydo, &["update", "--check"], &moved);
+    assert_eq!(rc, 3, "{out}");
+    outs.push(out);
+    assert_eq!(api.auth().last().unwrap().1, bearer);
+    assert_eq!(
+        c.srv.auth().last().unwrap(),
+        &("/api/releases".to_string(), None)
+    );
+    // without the stand-in, the fake API is just another host: no token
+    std::fs::remove_file(c.home().join(".hydo/update-check.json")).unwrap();
+    let (rc, out) = c.run(&hydo, &["update", "--check"], &[env[0], env[2]]);
+    assert_eq!(rc, 3, "{out}");
+    outs.push(out);
+    assert_eq!(api.auth().last().unwrap().1, None);
+    // the token is in no output and in no file of the case
+    for o in &outs {
+        assert!(!o.contains(token), "{o}");
+    }
+    let mut found = Vec::new();
+    files_holding(&c.top, token, &mut found);
+    assert!(found.is_empty(), "the token was written: {found:?}");
+}
+
+#[test]
+fn gh_auth_token_gives_the_token_when_no_variable_does() {
+    let c = Case::new("gh", NEW);
+    let hydo = release_tree(&c, "home/.hydo");
+    let token = "gho_m322fromgh0123456789";
+    c.fake(&c.top.join("bin"), "gh", &format!("echo {token}"));
+    // macOS checks a new program at its first start, which took seconds beside the other
+    // cases, longer than hydo waits for gh: start it once first
+    let warm = Command::new(c.top.join("bin/gh")).output().unwrap();
+    assert!(warm.status.success());
+    std::fs::remove_file(c.log_path()).unwrap();
+    let origin = c.srv.url("");
+    let standin = ("HYDO_GITHUB_API_STANDIN", origin.as_str());
+    let (rc, out) = c.run(&hydo, &["update", "--check"], &[standin]);
+    assert_eq!(rc, 3, "{out}");
+    assert!(!out.contains(token), "{out}");
+    assert_eq!(c.log(), "gh auth token --hostname github.com\n");
+    assert_eq!(
+        c.srv.auth().last().unwrap().1,
+        Some(format!("Bearer {token}"))
+    );
+    // GH_TOKEN comes first, and gh is not asked
+    std::fs::remove_file(c.home().join(".hydo/update-check.json")).unwrap();
+    let (rc, out) = c.run(
+        &hydo,
+        &["update", "--check"],
+        &[standin, ("GH_TOKEN", "ghp_fromenv")],
+    );
+    assert_eq!(rc, 3, "{out}");
+    assert_eq!(
+        c.srv.auth().last().unwrap().1.as_deref(),
+        Some("Bearer ghp_fromenv")
+    );
+    // a request that may not have a token does not ask gh either
+    std::fs::remove_file(c.home().join(".hydo/update-check.json")).unwrap();
+    let (rc, out) = c.run(&hydo, &["update", "--check"], &[]);
+    assert_eq!(rc, 3, "{out}");
+    assert_eq!(c.srv.auth().last().unwrap().1, None);
+    assert_eq!(c.log().lines().count(), 1, "{}", c.log());
+    let mut found = Vec::new();
+    files_holding(&c.top, token, &mut found);
+    found.retain(|p| *p != c.top.join("bin/gh"));
+    assert!(found.is_empty(), "the token was written: {found:?}");
+}
+
+#[test]
+fn one_request_for_the_release_list_per_command() {
+    let c = Case::new("requests", NEW);
+    let hydo = release_tree(&c, "home/.hydo");
+    let copy = c.home().join(".agents/skills/onboard");
+    skill_at(&copy, "2.0.0");
+    // hydo and the skill from one list
+    let (rc, out) = c.run(&hydo, &["update", "--yes"], &[]);
+    assert_eq!(rc, 0, "{out}");
+    assert_eq!(version_in(&copy), SKILL_NEW);
+    assert_eq!(c.srv.api_requests(), 1);
+    // the next commands within minutes take the kept answer, and say so
+    let (rc, out) = c.run(&hydo, &["skill", "update", "--check"], &[]);
+    assert_eq!(rc, 0, "{out}");
+    assert!(out.contains("hydo: the release list as read"), "{out}");
+    let (rc, out) = c.run(&hydo, &["update", "--check"], &[]);
+    assert_eq!(rc, 3, "{out}");
+    assert!(
+        out.contains("hydo update: the release list as read"),
+        "{out}"
+    );
+    assert_eq!(c.srv.api_requests(), 1);
+    // without the kept answer, one request again
+    std::fs::remove_file(c.home().join(".hydo/update-check.json")).unwrap();
+    let (rc, out) = c.run(&hydo, &["skill", "update"], &[]);
+    assert_eq!(rc, 0, "{out}");
+    assert_eq!(c.srv.api_requests(), 2);
 }

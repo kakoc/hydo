@@ -458,6 +458,22 @@ variables! {
     /// other `~/.claude*` folder that holds `plugins/` or `settings.json`; it reads nothing else
     /// there.
     CLAUDE_CONFIG_DIR: Cli, User, "path", "~/.claude", "hydo-cli";
+    /// A GitHub token (the variable of GitHub's own `gh` command). `hydo update`, `hydo skill
+    /// update` and `hydo doctor`'s look for a newer release send it as `Authorization: Bearer`
+    /// to `https://api.github.com` only, never to another host or in a redirect, so GitHub's
+    /// limit of 60 requests an hour from one address without a login does not apply (Milestone
+    /// 322). hydo never prints, logs or writes it. When neither it nor `GITHUB_TOKEN` is set,
+    /// hydo asks `gh auth token --hostname github.com` when `gh` is on `PATH`. An empty value
+    /// means unset.
+    GH_TOKEN: Cli, User, "secret: a GitHub token", "", "hydo-cli";
+    /// A GitHub token, used as `GH_TOKEN` when `GH_TOKEN` is not set (GitHub Actions sets it).
+    /// An empty value means unset.
+    GITHUB_TOKEN: Cli, User, "secret: a GitHub token", "", "hydo-cli";
+    /// The origin `http://<loopback host>:<port>` of a fake release list that hydo treats as
+    /// GitHub's API for the token of `GH_TOKEN` (Milestone 322): the tests check with it which
+    /// requests carry the token. A value that is not plain HTTP to a loopback host is ignored,
+    /// so the token cannot go to another machine.
+    HYDO_GITHUB_API_STANDIN: Cli, Developer, "URL: http://127.0.0.1:<port>", "", "hydo-cli";
     /// `warn`: a plan whose `hydo_version:` this hydo does not satisfy builds with a warning.
     HYDO_VERSION_CHECK: Build, User, "word: warn", "refuse", "hydo-build (through hydo-manifest)";
 

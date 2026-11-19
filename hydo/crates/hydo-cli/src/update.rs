@@ -39,10 +39,15 @@
 //! [`doctor_note`] is `hydo doctor`'s line about a newer release: at most one look a day, 3 s at
 //! most, the answer kept in `~/.hydo/update-check.json`; offline, or with `HYDO_UPDATE_CHECK=0`,
 //! nothing is looked up. The command uses the network only when it runs.
+//!
+//! The release list is read once per command, with a GitHub token when one is known, and a
+//! kept answer of the last 10 minutes saves the request ([`crate::releaselist`], Milestone 322).
+//! When it cannot be read, also at GitHub's rate limit, the exit status is 4.
 
 use crate::ctx::{which, Ctx, Platform};
 use crate::fetch::{Fetcher, Options};
-use crate::skillupdate::{self, Source};
+use crate::releaselist::{self, Auth};
+use crate::skillupdate::Source;
 use hydo_agents::copies::{self, PluginInstall, MARKETPLACE, PLUGIN_ID};
 use hydo_agents::{version_at, version_lt, SKILL};
 use std::path::{Component, Path, PathBuf};
@@ -58,7 +63,9 @@ pub const USAGE: &str = "usage: hydo update [--check] [--yes] [--version V] [--o
   every Claude Code configuration folder (CLAUDE_CONFIG_DIR, ~/.claude, ~/.claude-*), in every
   folder where hydo installed it before (~/.hydo/skill-copies.txt), and as Claude Code's plugin
   hydo@hydo (claude plugin update). Start a new session of your AI tool afterwards.
-  --check: only report; exit status 0 when everything is current, 3 when something is newer
+  --check: only report; exit status 0 when everything is current, 3 when something is newer,
+           4 when the release list could not be read (also at GitHub's limit for requests
+           without a login: GH_TOKEN, GITHUB_TOKEN or `gh auth login` lifts it)
   --yes:   do it without asking (without --yes a terminal is asked once; elsewhere hydo update
            prints the plan, changes nothing, and exits with status 3)
   --version V: install hydo V instead of the newest release
@@ -69,8 +76,8 @@ pub const USAGE: &str = "usage: hydo update [--check] [--yes] [--version V] [--o
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Release {
     pub version: String,
-    /// The release notes (the release's body).
-    pub notes: String,
+    /// The "Before you upgrade" section of its release notes, if they have one.
+    pub upgrade: Option<String>,
 }
 
 /// Whether a version is `<major>.<minor>.<patch>`, numbers only.
@@ -103,7 +110,7 @@ pub fn hydo_releases(list: &[u8]) -> Result<Vec<Release>, String> {
         }
         out.push(Release {
             version: v.to_string(),
-            notes: r["body"].as_str().unwrap_or("").to_string(),
+            upgrade: before_you_upgrade(r["body"].as_str().unwrap_or("")),
         });
     }
     out.sort_by(|a, b| {
@@ -452,6 +459,10 @@ pub struct Env {
     pub claude_config_dir: Option<PathBuf>,
     pub api: String,
     pub base: String,
+    /// The token for GitHub's API (Milestone 322).
+    pub auth: Auth,
+    /// The kept answer of the release list (`~/.hydo/update-check.json`), if any.
+    pub cache_file: Option<PathBuf>,
     pub offline: bool,
     pub tmp: PathBuf,
     /// The hvx module is loaded (Linux), and the udev rule's group if its rule is installed.
@@ -843,7 +854,21 @@ pub fn run_with(
         );
         return 1;
     }
-    match update(&a, env, out, answer) {
+    let list = match Fetcher::new(opts(&env.api)).map_err(releaselist::Fail::Other) {
+        Ok(f) => releaselist::read(&env.api, &f, &env.auth, env.cache_file.as_deref(), now()),
+        Err(e) => Err(e),
+    };
+    let list = match list {
+        Ok(l) => l,
+        Err(f) => {
+            let _ = writeln!(err, "hydo update: {}", f.line(now()));
+            return releaselist::COULD_NOT_CHECK;
+        }
+    };
+    if let Some(l) = list.kept_line(env.cache_file.as_deref()) {
+        let _ = writeln!(out, "hydo update: {l}");
+    }
+    match update(&a, env, &list, out, answer) {
         Ok(rc) => rc,
         Err(e) => {
             let _ = writeln!(err, "hydo update: {e}");
@@ -855,18 +880,12 @@ pub fn run_with(
 fn update(
     a: &Args,
     env: &Env,
+    list: &releaselist::List,
     out: &mut dyn std::io::Write,
     answer: &mut dyn FnMut() -> bool,
 ) -> Result<i32, String> {
-    let api = Fetcher::new(opts(&env.api))?;
-    let list = api
-        .get_small(
-            &format!("{}?per_page=100", env.api.trim_end_matches('/')),
-            8 << 20,
-        )
-        .map_err(|e| format!("cannot read the release list: {e}; nothing was changed"))?;
-    let releases = hydo_releases(&list)?;
-    let skill = skillupdate::newest_in(&list)?;
+    let releases = &list.hydo;
+    let skill = list.skill.clone();
     let target = match &a.version {
         Some(v) => {
             if !releases.iter().any(|r| r.version == *v) {
@@ -893,7 +912,7 @@ fn update(
         Some(t) => releases
             .iter()
             .filter(|r| version_lt(&env.own, &r.version) && !version_lt(t, &r.version))
-            .filter_map(|r| before_you_upgrade(&r.notes).map(|n| (r.version.clone(), n)))
+            .filter_map(|r| r.upgrade.clone().map(|n| (r.version.clone(), n)))
             .collect(),
         None => Vec::new(),
     };
@@ -1131,6 +1150,8 @@ pub fn cmd_update(ctx: &Ctx, argv: &[String]) -> i32 {
         claude_config_dir: c.claude_config_dir.clone(),
         api: c.release_api.clone(),
         base: c.release_url.clone(),
+        auth: Auth::from_config(c, std::time::Duration::from_secs(5)),
+        cache_file: Some(c.home.join(releaselist::CHECK_FILE)),
         offline: c.offline,
         tmp: std::env::temp_dir(),
         module: ctx.platform == Platform::Linux
@@ -1150,12 +1171,6 @@ pub fn cmd_update(ctx: &Ctx, argv: &[String]) -> i32 {
 
 // ---------------------------------------------------------------- hydo doctor's line
 
-/// The file of `hydo doctor`'s look for a newer release, in the install cache's folder.
-pub const CHECK_FILE: &str = "update-check.json";
-
-/// Seconds between two looks.
-const DAY: u64 = 24 * 3600;
-
 fn now() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1163,50 +1178,20 @@ fn now() -> u64 {
         .unwrap_or(0)
 }
 
-/// The newest release that the look at `api` found, kept in `file` for a day; a failed look is
-/// kept too (as no answer), so an offline machine looks once a day only. `fetch` makes the
-/// look (it gets the list's URL).
-pub fn newest_known(
-    file: &Path,
-    api: &str,
-    at: u64,
-    fetch: &dyn Fn(&str) -> Result<Vec<u8>, String>,
-) -> Option<String> {
-    let kept: Option<serde_json::Value> = std::fs::read(file)
-        .ok()
-        .and_then(|b| serde_json::from_slice(&b).ok());
-    if let Some(k) = &kept {
-        let checked = k["checked"].as_u64().unwrap_or(0);
-        if k["api"].as_str() == Some(api) && checked <= at && at - checked < DAY {
-            return k["newest"].as_str().map(str::to_string);
-        }
-    }
-    let newest = fetch(&format!("{}?per_page=100", api.trim_end_matches('/')))
-        .ok()
-        .and_then(|b| hydo_releases(&b).ok())
-        .and_then(|r| r.last().map(|r| r.version.clone()));
-    let doc = serde_json::json!({"checked": at, "api": api, "newest": newest});
-    if let Some(d) = file.parent() {
-        let _ = std::fs::create_dir_all(d);
-    }
-    let tmp = file.with_extension(format!("tmp-{}", std::process::id()));
-    if std::fs::write(&tmp, doc.to_string()).is_ok() {
-        let _ = std::fs::rename(&tmp, file);
-    }
-    newest
-}
-
 /// `hydo doctor`'s line when a newer hydo release exists (None: none, offline, the look is off,
-/// or the answer could not be had).
+/// or the answer could not be had, also at GitHub's limit: the doctor says nothing then).
 pub fn doctor_note(ctx: &Ctx) -> Option<String> {
     let c = &ctx.config.cli.cache;
     if !c.update_check || c.offline {
         return None;
     }
     let f = Fetcher::new(Options::quick(&c.release_api, 3)).ok()?;
+    let auth = Auth::from_config(c, std::time::Duration::from_secs(2));
     let own = hydo_image::hydo_version();
-    let newest = newest_known(&c.home.join(CHECK_FILE), &c.release_api, now(), &|u| {
-        f.get_small(u, 8 << 20)
+    let file = c.home.join(releaselist::CHECK_FILE);
+    let newest = releaselist::doctor_newest(&file, &c.release_api, now(), &|u| {
+        let t = auth.for_url(u);
+        f.get_api(u, 8 << 20, t.as_ref().map(|t| t.expose()))
     })?;
     version_lt(own, &newest).then(|| {
         format!(

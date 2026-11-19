@@ -477,7 +477,12 @@ plugin's entries and the skill's version are read in those folders. The plan nam
 with its versions and the "Before you upgrade" notes. `--check` exits 0 or 3, and without
 `--yes` a non-terminal gets the plan and the exit status 3. `hydo doctor` names a newer release
 once a day (`HYDO_UPDATE_CHECK=0` turns it off). The reference is `hydo guide update`; the skill
-2.4.0 runs `hydo update --check` in its step 0.
+2.4.0 runs `hydo update --check` in its step 0. Since M322 the release list is read once per
+command, kept for 10 minutes in `~/.hydo/update-check.json` (a day for `hydo doctor`), and
+asked with `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token` when one is there. The token goes to
+`https://api.github.com` only. At GitHub's limit for requests without a login, `hydo update` and
+`hydo skill update` say so in one line with the reset time. They exit 4 (could not check), and
+the doctor stays quiet until the reset.
 
 **Rules nobody wrote (M236, first version).** The skill proposes a project's business rules from
 its own sources instead of a list per domain, and hydo validates them before the owner sees
@@ -2665,6 +2670,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       is reported and skipped.
     - Homebrew installs the formula's version only, so `--version V` with Homebrew is refused
       unless V is the formula's version.
+    - GitHub's rate limit (M322). The line at the limit, the exit status 4, the token, and the
+      kept answer ran against the fake release server only. GitHub's limit was not reached in
+      the real check. GitHub's secondary limit (a 403 with `retry-after` and requests left) is
+      reported as a plain HTTP 403. A command does not fall back to an older kept answer at the
+      limit. The skill's `references/install.md` does not name the exit status 4.
 162. The fixes of a user's onboarding with 0.4.0 (M316, M317, tentative numbers). What is left:
     - The missing `/dev/shm` of the user's recovery boot has its cause since M317. An image
       service's launcher and its `hydo-oci` helpers bound the system folders outside the lock of
@@ -3640,6 +3650,11 @@ build machine, before 2026-10-13.
   tests are fixed; hydo's code was right. `host_cpu` and `available_mib` read `sysctl` and
   `vm_stat` through a file, so a pipe that another child inherits no longer keeps them waiting.
   Nothing recorded moved
+- M322 (tentative number): `hydo update`, `hydo skill update` and `hydo doctor` under GitHub's
+  rate limit. They send `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token` to `https://api.github.com`
+  only, and never show it. At the limit the commands say so in one line, with the reset time
+  and how to lift it, and exit 4; the doctor stays quiet. One request per command, and a kept
+  answer of 10 minutes. Nothing recorded moved
 
 ## Where to look
 
