@@ -59,3 +59,72 @@ pub fn code_of(c: code::Code) -> u8 {
 pub fn same<T: Copy>(x: T) -> T {
     x
 }
+
+// ---------------------------------------------------------------- a private field
+
+/// Values whose fields the harness cannot set: the refusal names the `build` line with the
+/// crate's public constructors, and a `read` line.
+pub mod bits {
+    #[derive(Clone, Copy)]
+    pub struct B(u16);
+
+    impl B {
+        pub const fn from_bits(bits: u16) -> B {
+            B(bits)
+        }
+
+        pub fn new(x: u8) -> Self {
+            B(x as u16)
+        }
+
+        pub const fn to_bits(self) -> u16 {
+            self.0
+        }
+
+        fn secret() -> B {
+            B(0)
+        }
+    }
+
+    impl From<u8> for B {
+        fn from(x: u8) -> B {
+            B(x as u16 + B::secret().0)
+        }
+    }
+
+    #[derive(Clone, Default)]
+    pub struct D {
+        n: u8,
+    }
+
+    impl D {
+        pub fn n(&self) -> u8 {
+            self.n
+        }
+    }
+
+    pub struct Bare {
+        n: u8,
+    }
+
+    impl Bare {
+        pub fn n(&self) -> u8 {
+            self.n
+        }
+    }
+}
+
+// hydo: ensures len(result) == len(v)
+pub fn widths(v: &[bits::B]) -> Vec<u16> {
+    v.iter().map(|b| b.to_bits()).collect()
+}
+
+// hydo: ensures result == 0 || result > 0
+pub fn d_of(d: bits::D) -> u8 {
+    d.n()
+}
+
+// hydo: ensures result == 0 || result > 0
+pub fn bare_of(b: &bits::Bare) -> u8 {
+    b.n()
+}

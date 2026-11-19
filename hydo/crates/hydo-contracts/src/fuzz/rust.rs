@@ -831,6 +831,8 @@ pub struct Items {
     /// The `use` lines of each module's file: by the module, each imported name with the paths
     /// it may stand for, as modules and the item's name (Milestone 318).
     pub uses: BTreeMap<Vec<String>, BTreeMap<String, Vec<Vec<String>>>>,
+    /// The structures with `#[derive(Default)]` (Milestone 326).
+    pub defaults: std::collections::BTreeSet<String>,
 }
 
 /// Add the names a `use` tree imports (`a::b::{C, d::E as F, self}`) to `out`: each name with
@@ -917,6 +919,12 @@ pub struct ImplDef {
     pub tr: Option<TyAst>,
     pub assoc: Vec<(String, TyAst)>,
     pub rets: Vec<(String, Option<TyAst>)>,
+    /// The block's functions without a receiver, each with whether it is `pub`, for the
+    /// constructor that a refusal proposes (Milestone 326).
+    pub fns: Vec<(bool, Sig)>,
+    /// The block's `pub` methods that take `&self` and nothing else, with their results, for
+    /// the `read` line that a refusal proposes.
+    pub getters: Vec<(String, TyAst)>,
 }
 
 /// Whether two types are written alike, spaces aside.
@@ -985,6 +993,135 @@ pub fn assoc_type(
     None
 }
 
+/// Whether the item that starts after `before` (the text since its block's `{`) is declared
+/// `pub`: also `pub(crate)`, `pub const` and `pub unsafe` (Milestone 326).
+fn is_pub_before(before: &str) -> bool {
+    let tail = &before[before.rfind([';', '}']).map_or(0, |i| i + 1)..];
+    strip_attrs(tail)
+        .split_whitespace()
+        .any(|w| w.starts_with("pub"))
+}
+
+/// What to write for a structure whose fields the harness cannot set (Milestone 326): the
+/// `build` line with a public constructor of the crate and its parameters (`new` first, then
+/// `from_*`, `with_*`, the others, `From` and `Default`), and a `read` line with a public
+/// method that reads the value. `path` is the type as the function writes it.
+pub fn build_advice(items: &Items, path: &str, name: &str) -> String {
+    let is_it = |t: &TyAst| matches!(t, TyAst::Path(s, _) if s.last().is_some_and(|l| l == name));
+    let returns_it = |r: &Option<TyAst>| matches!(r, Some(TyAst::Path(s, _)) if s.last().is_some_and(|l| l == "Self" || l == name));
+    let usable = |t: &TyAst| {
+        let x = t.text();
+        !(x.contains("Self") || x.contains("impl ") || x.contains("dyn ") || x.contains("&mut"))
+    };
+    let mut ctors: Vec<(u8, String)> = Vec::new();
+    for b in items.impls.iter().filter(|b| is_it(&b.ty)) {
+        match &b.tr {
+            None => {
+                for (public, sig) in &b.fns {
+                    let generic = sig.generics.iter().any(|g| g != "where");
+                    if !*public
+                        || generic
+                        || !returns_it(&sig.ret)
+                        || !sig.params.iter().all(|(_, t)| usable(t))
+                    {
+                        continue;
+                    }
+                    let rank = match sig.name.as_str() {
+                        "new" => 0,
+                        n if n.starts_with("from_") => 1,
+                        n if n.starts_with("with_") => 2,
+                        _ => 3,
+                    };
+                    let args: Vec<String> = sig
+                        .params
+                        .iter()
+                        .map(|(n, t)| format!("{n}: {}", t.text()))
+                        .collect();
+                    ctors.push((rank, format!("{path}::{}({})", sig.name, args.join(", "))));
+                }
+            }
+            Some(tr) if trait_name(tr) == "From" => {
+                if let TyAst::Path(_, a) = tr {
+                    if let Some(x) = a.first().filter(|x| usable(x)) {
+                        ctors.push((4, format!("{path}::from(v: {})", x.text())));
+                    }
+                }
+            }
+            Some(tr) if trait_name(tr) == "Default" => {
+                ctors.push((5, format!("{path}::default()")));
+            }
+            _ => {}
+        }
+    }
+    if items.defaults.contains(name) {
+        ctors.push((5, format!("{path}::default()")));
+    }
+    ctors.sort();
+    ctors.dedup_by(|a, b| a.1 == b.1);
+    // a method that reads the value as a type hydo reads
+    let readable = |t: &TyAst| -> Option<String> {
+        let t = match t {
+            TyAst::Ref(false, x) => match &**x {
+                TyAst::Path(s, a) if a.is_empty() && s.last().is_some_and(|l| l == "str") => {
+                    return Some("String".into())
+                }
+                TyAst::Slice(e) => return Some(format!("Vec<{}>", e.text())),
+                x => x,
+            },
+            t => t,
+        };
+        let x = t.text();
+        let plain = [
+            "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize",
+            "bool", "f32", "f64", "String",
+        ];
+        (plain.contains(&x.as_str()) || x.starts_with("Vec<")).then_some(x)
+    };
+    let mut reads: Vec<(u8, String)> = Vec::new();
+    for b in items
+        .impls
+        .iter()
+        .filter(|b| is_it(&b.ty) && b.tr.is_none())
+    {
+        for (m, r) in &b.getters {
+            if let Some(v) = readable(r) {
+                let rank = match m.as_str() {
+                    n if n.starts_with("to_") => 0,
+                    n if n.starts_with("as_") => 1,
+                    "get" => 2,
+                    _ => 3,
+                };
+                reads.push((rank, format!("`// hydo: read {name} as {v} by {m}()`")));
+            }
+        }
+    }
+    reads.sort();
+    let read = match reads.first() {
+        Some((_, r)) => format!(", and {r} for a clause that reads the value"),
+        None => String::new(),
+    };
+    match ctors.as_slice() {
+        [] => format!(
+            "write `// hydo: build {name} from <constructor>(<name>: <type>, ...)` with a public \
+             function of the crate that returns a `{name}`; the crate has none that hydo can \
+             call, so add one that takes the fields' values, or write the contract on a \
+             property function in the crate's test module{read}"
+        ),
+        [(_, c)] => {
+            format!("write `// hydo: build {name} from {c}` (the crate's public constructor){read}")
+        }
+        [(_, c), rest @ ..] => format!(
+            "write `// hydo: build {name} from {c}` (a public constructor of the crate; the \
+             others are {}){read}",
+            rest.iter()
+                .take(3)
+                .map(|(_, c)| format!("`{c}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
 /// `t` with each `Self::<name>` that `f` resolves replaced (Milestone 318).
 pub fn subst_assoc(t: &TyAst, f: &dyn Fn(&str) -> Option<TyAst>) -> TyAst {
     match t {
@@ -1041,6 +1178,8 @@ fn read_impls(text: &str, m: &[u8], items: &mut Items) {
             tr,
             assoc: vec![],
             rets: vec![],
+            fns: vec![],
+            getters: vec![],
         };
         // the items at the block's own depth
         let mut depth = 0;
@@ -1063,7 +1202,18 @@ fn read_impls(text: &str, m: &[u8], items: &mut Items) {
                         }
                     } else if rest.starts_with("fn ") {
                         if let Ok(sig) = signature(text, m, k) {
-                            def.rets.push((sig.name, sig.ret));
+                            def.rets.push((sig.name.clone(), sig.ret.clone()));
+                            let public = is_pub_before(&ms[open + 1..k]);
+                            match (sig.receiver, &sig.ret) {
+                                (None, _) => def.fns.push((public, sig)),
+                                // `&self`, or `self` of a `Copy` type, as half's `to_bits`
+                                (Some(Receiver::Ref | Receiver::Value), Some(r))
+                                    if public && sig.params.is_empty() =>
+                                {
+                                    def.getters.push((sig.name.clone(), r.clone()))
+                                }
+                                _ => {}
+                            }
                         }
                     }
                 }
@@ -1397,6 +1547,11 @@ pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
             } else {
                 continue;
             };
+            // `#[derive(Default)]` before the structure (Milestone 326)
+            let attrs = &ms[ms[..at].rfind([';', '}', '{']).map_or(0, |i| i + 1)..at];
+            if attrs.contains("derive(") && find_word(attrs, "Default").is_some() {
+                items.defaults.insert(name.clone());
+            }
             if let Some((fields, public)) = parse_fields(body, tuple) {
                 let mut module = module.to_vec();
                 module.extend(inline_modules(&m, at));
@@ -1486,10 +1641,7 @@ impl FTy {
     pub fn generable(&self) -> Result<(), String> {
         match self {
             FTy::Opaque(t) => Err(format!("hydo cannot generate a value of `{t}`")),
-            FTy::Hidden(why) => Err(format!(
-                "{why}, so the harness cannot build the value (fuzz a function that takes its \
-                 parts and builds it, such as its constructor)"
-            )),
+            FTy::Hidden(why) => Err(why.clone()),
             FTy::List(x) | FTy::Array(x, _) | FTy::Opt(x) | FTy::Boxed(_, x) => x.generable(),
             FTy::Res(a, b) => a.generable().and(b.generable()),
             FTy::Tuple(v) => v.iter().try_for_each(FTy::generable),
@@ -1747,7 +1899,9 @@ impl Resolver<'_> {
                                     format!("`{}`", d.module.join("::"))
                                 };
                                 let why = format!(
-                                    "the field `{n}` of `{name}` is private to the module {m}"
+                                    "the field `{n}` of `{name}` is private to the module {m}, \
+                                     so the harness cannot build the value: {}",
+                                    build_advice(self.items, &segs.join("::"), name)
                                 );
                                 (n.clone(), FTy::Hidden(why))
                             })

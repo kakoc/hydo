@@ -37,6 +37,96 @@ fn skipped<'a>(rep: &'a Report, name: &str) -> &'a str {
         .unwrap_or_else(|| panic!("{name}: {:?}", rep.skipped))
 }
 
+/// A copy of the fixture at `dir/crate`, with `edit` applied to its `src/lib.rs`.
+fn fixture_copy(dir: &Path, edit: &dyn Fn(String) -> String) -> std::path::PathBuf {
+    let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fuzz-m326");
+    let to = dir.join("crate");
+    std::fs::create_dir_all(to.join("src")).unwrap();
+    std::fs::copy(from.join("Cargo.toml"), to.join("Cargo.toml")).unwrap();
+    let lib = std::fs::read_to_string(from.join("src/lib.rs")).unwrap();
+    std::fs::write(to.join("src/lib.rs"), edit(lib)).unwrap();
+    to
+}
+
+#[test]
+fn a_private_field_names_the_build_line_with_the_crates_constructor() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m326-private");
+    let list = |args: &[&str]| -> Vec<hydo_contracts::fuzz::Skipped> {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fuzz-m326");
+        let pkg = fixture.canonicalize().unwrap();
+        let sources = vec![pkg.join("src/lib.rs")];
+        let (_, skipped, _) = hydo_contracts::fuzz::find(&pkg, &sources, "fuzz-m326");
+        skipped
+            .into_iter()
+            .filter(|s| args.iter().any(|a| s.name.ends_with(a)))
+            .collect()
+    };
+    let why = |name: &str| -> String {
+        list(&[name])
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| panic!("{name}"))
+            .why
+    };
+    // `new` first, then `from_*` and `From`; a private function is not proposed; a `read` line
+    // with a method that reads the value
+    let w = why("::widths");
+    assert!(
+        w.contains("write `// hydo: build B from bits::B::new(x: u8)`"),
+        "{w}"
+    );
+    assert!(w.contains("`bits::B::from_bits(bits: u16)`"), "{w}");
+    assert!(w.contains("`bits::B::from(v: u8)`"), "{w}");
+    assert!(!w.contains("secret"), "{w}");
+    assert!(w.contains("`// hydo: read B as u16 by to_bits()`"), "{w}");
+    // `#[derive(Default)]`
+    let d = why("::d_of");
+    assert!(
+        d.contains("`// hydo: build D from bits::D::default()`"),
+        "{d}"
+    );
+    // no constructor: what to add instead
+    let b = why("::bare_of");
+    assert!(b.contains("the crate has none that hydo can call"), "{b}");
+    assert!(b.contains("`// hydo: read Bare as u8 by n()`"), "{b}");
+    // the proposed lines work as written
+    let line = w
+        .split("write `")
+        .nth(1)
+        .and_then(|r| r.split('`').next())
+        .unwrap()
+        .to_string();
+    let read = w
+        .split("and `")
+        .nth(1)
+        .and_then(|r| r.split('`').next())
+        .unwrap()
+        .to_string();
+    let krate = fixture_copy(t.path(), &|lib| {
+        lib.replace(
+            "// hydo: ensures len(result) == len(v)\npub fn widths",
+            &format!(
+                "{line}\n{read}\n// hydo: ensures len(result) == len(v)\n\
+                 // hydo: ensures len(v) == 0 || result[0] == v[0]\npub fn widths"
+            ),
+        )
+    });
+    let out = t.path().join("out2");
+    let code = hydo_contracts::fuzz::main(&[
+        krate.to_string_lossy().into(),
+        "--out".into(),
+        out.to_string_lossy().into(),
+        "--cases".into(),
+        "200".into(),
+        "--fn".into(),
+        "widths".into(),
+    ]);
+    let rep: Report =
+        serde_json::from_str(&std::fs::read_to_string(out.join("fuzz.json")).unwrap()).unwrap();
+    assert_eq!(code, 0, "{rep:?}");
+    assert_eq!(one(&rep, "::widths").verdict, "held", "{rep:?}");
+}
+
 #[test]
 fn a_harness_that_does_not_build_names_the_contract_line_and_the_compiler_help() {
     let t = TmpDir::new("hydo-contracts-fuzz-m326-build");
