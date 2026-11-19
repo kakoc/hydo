@@ -295,6 +295,10 @@ the `hydo` command of both releases. The pins:
   (`17826bdcc8d540953c87fba84fb553e34872e29a481e07be9c385512e3fa0c8f`, 2,346,072 bytes) and arm64
   `3c952bf0…` (`3c952bf02e47677d05a13b52312b52ffa977e83e318e611dd95eb625a43ede3d`, 1,946,632
   bytes), built on this Mac.
+  Since 0.4.1 (the version) the pins are x86_64 `269a69a8…`
+  (`269a69a83cad7aff027327faebf22727d44910c6387035b1f5731c5434e501e6`, 2,346,072 bytes) and arm64
+  `cf7ca05a…` (`cf7ca05a73b85675f38162bc2491e4fe2cdd061d6adc99193dae021605c34c14`, 1,946,648
+  bytes), built on this Mac.
   `hydo-world-tls` (Milestone 180: the same program with the cargo feature `tls`, the TLS front of
   `tls:` fakes and proxies, `HYDO_WORLD_TLS=1 hydo/crates/hydo-world/build.sh`; staged only for
   manifests with `tls:`): pure Rust (rustls 0.23 with its own RustCrypto provider: p256 0.13,
@@ -325,6 +329,10 @@ the `hydo` command of both releases. The pins:
   Since 0.4.0 (the version): x86_64 `eae46147…`
   (`eae46147040b7c21ab02a715d5cfb7b73b44a1d82e079d42c290d041b5312c5e`, 3,037,688 bytes) and arm64
   `83c3727f…` (`83c3727fa1aa0a74d041e2f5d993a8adc2dcd74bffbf4ee5b8e73a00fbf3b473`, 2,536,192
+  bytes).
+  Since 0.4.1 (the version): x86_64 `bcc706bf…`
+  (`bcc706bfd112da9fb101b80c9bb911b9824635cab266798ea194c445a12c968a`, 3,037,688 bytes) and arm64
+  `94d81875…` (`94d81875af8e11aeec52291596d70b00a4937767d9a54c58b488b249ab9806b8`, 2,536,192
   bytes).
   Extra crates (Cargo.lock): tokio 1.54.1 (current-thread runtime), h2 0.4.20, http 1.5.0,
   bytes 1.12.1, httparse 1.10.1. It replaces the Go program of `hydo/onboard/world/` (Go 1.26.5,
@@ -375,6 +383,8 @@ from go.dev it still builds `orderd-arm64` `a87ca7fa…` (M96).
   and arm64 `7193e07f…` (`7193e07f743c8b13203c39d81de7d5dfe887b5b9765304b8537c46e40a2ebd17`).
   Since 0.4.0 they are `4907c8fc…` (`4907c8fcc886f0658648e414e3a212c0ee24c1e8a8495a9becbac81e1b6f2e3d`)
   and arm64 `f0a161f6…` (`f0a161f6a21ac92516e2f0cf0258b05c2984ef9c540b631d2de7c4ddb026dc2b`).
+  Since 0.4.1 they are `1ea29617…` (`1ea2961772d895b9f7ecb2ea495d8b8805179ec0151834c4950b16eab176a59a`)
+  and arm64 `aaf213e6…` (`aaf213e6a2222e2d6781b44af4f94bd0d9383ca194d6257fec92492d1f257494`).
 - **Well-known imports:** `hydo/crates/hydo-grpc-gen/src/wkt.pb` holds the descriptors of
   `google/protobuf/*.proto` exactly as protocompile v0.14.1 with protobuf-go v1.35.2 produced them
   for the Go generator (sha256 `f9696902ad5a824e…`), so a schema that imports them is the same

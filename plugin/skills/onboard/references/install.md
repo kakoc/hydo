@@ -49,7 +49,7 @@ hydo doctor
 
 ## Upgrading
 
-From the hydo release after 0.4.0 on, one command updates hydo, the way it was installed, and
+From hydo 0.4.1 on, one command updates hydo, the way it was installed, and
 every copy of this skill. Ask the user first, saying what `hydo update --check` printed:
 
 ```sh
