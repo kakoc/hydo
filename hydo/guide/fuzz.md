@@ -47,7 +47,8 @@ holds the whole report.
   (`l.balance`), or the elements of a list (`v[]`).
 - `// hydo: with T = i64`: the type that a type parameter takes. It names the parameters of a
   generic function, of a generic `impl` block, and of a trait. `with Self = i64` names the type
-  that a trait's method is fuzzed on (section "Trait methods").
+  that a trait's method is fuzzed on (section "Trait methods"). A const generic parameter
+  takes its value the same way: `with N = 16`.
 - `// hydo: build <Type> from <constructor>(<name>: <type>, ...)` and `// hydo: read <Type> as
   <type> by <method>()`: how hydo makes and reads a value of a type that it cannot generate
   field by field (section "Values built by a constructor").
@@ -137,6 +138,23 @@ generic `impl` block takes `with` lines for the block's type parameters. A trait
 a `with Self` line is refused with what to write. A parameter of the form `&mut &[u8]` is
 generated as a slice too.
 
+A result of an associated type, such as heck's `fn to_snake_case(&self) -> Self::Owned`, is
+read as the type it stands for. hydo takes it from `type Owned = String;` in the crate's
+`impl` of the trait for the `Self` type, else from the result type that the `impl`'s method
+writes, else from the standard library's `ToOwned`: `String` for `str`, `Vec<T>` for `[T]`.
+
+```rust
+pub trait ToSnakeCase: ToOwned {
+    // hydo: with Self = str
+    // hydo: ensures self != "" || result == ""
+    fn to_snake_case(&self) -> Self::Owned;
+}
+```
+
+A crate can define one name in two modules, as humantime does with `Error`. hydo then takes the
+type of the function's own module, else the one that a `use` line of its file imports. A path
+names the other one: `crate::duration::Error`.
+
 ## Values built by a constructor
 
 A type with a pointer or with private fields of another module cannot be generated field by
@@ -160,10 +178,62 @@ pub fn split_to(&mut self, at: usize) -> Self {
   the call with `self` for a `&mut` parameter or with `result`.
 - A report shows a built input as its constructor's call, `self = Bytes::copy_from_slice(b"ab")`.
 
+- An element of a list of built values, or a field of one, is read through the `read` line
+  too: `len(self) == 0 || result[0] == self[0]` compares half's `f16` as its `u16` bits. A
+  built value without a `read` line is not compared: the clause is `not judged`, with the
+  `read` line to write.
+
 A constructor that panics on an input ends the call with a panic at the constructor. Narrow its
 arguments with `input` lines: chrono's `NaiveDate::from_ymd(year: i32, month: u32, day: u32)`
 needs `input self.month in 1..=12` and `input self.day in 1..=28`. A type without a `build` line
 is refused with the line to write.
+
+The type of a `build` or a `read` line may have type arguments, and so may the constructor:
+
+```rust
+// hydo: with T = u8
+// hydo: with CAP = 8
+// hydo: build ArrayVec<u8, 8> from ArrayVec::<u8, 8>::from_iter(v: Vec<u8>)
+// hydo: read ArrayVec<u8, 8> as Vec<u8> by to_vec()
+// hydo: input self.v len 0..=8
+// hydo: ensures is_ok(result) == (old(len(self)) < 8)
+pub fn try_push(&mut self, element: T) -> Result<(), CapacityError<T>> {
+```
+
+A `read` line's method may be `to_string()`, also in a `#![no_std]` crate with `alloc`, and
+`collect()`, which collects into the line's type. A turbofish works too:
+`read PercentDecode as Vec<u8> by collect::<Vec<u8>>()`. A method that takes its value, such
+as `collect()` or `into_vec()`, reads a clone, so the type must implement `Clone`.
+
+## Closures and `&'static` parameters
+
+A parameter whose type parameter is bound by `Fn`, `FnMut` or `FnOnce`, or whose type is `impl
+Fn(...)`, takes a generated closure. hydo names the other type parameters with `with` lines and
+chooses each closure from a few shapes:
+
+- every closure: `|_| k`, with a generated `k` of the result's type;
+- an argument of the result's type: `|x| x`;
+- an integer argument and an integer result: `|x| try_from(x).unwrap_or(k)`, and the same plus
+  one;
+- an integer argument and a `bool` result: `|x| x % 2 == 0` and `|x| x > 0`.
+
+```rust
+// hydo: with L = i32
+// hydo: with R = u8
+// hydo: with M = i64
+// hydo: ensures matches(result, Left(_)) == matches(self, Left(_))
+pub fn map_left<F, M>(self, f: F) -> Either<M, R>
+where
+    F: FnOnce(L) -> M,
+```
+
+A report shows a closure in that form, and `--input` reads it back: `f = |x| x > 0`. A closure
+whose result hydo cannot generate is refused. Test such a function with a property function
+that calls it with closures of your own.
+
+A `&'static` parameter, such as percent-encoding's `ascii_set: &'static AsciiSet`, gets a
+generated value that lives as long as the test program: hydo leaks it after it reads the values
+at entry. A `&'static str` and a `&'static [T]` work the same way.
 
 ## Sorted inputs
 
@@ -205,6 +275,12 @@ of bytes takes text examples too, as their bytes, and a report shows it as a byt
   for terabytes. An `input` line gives the whole range.
 - A list or a string is short in the first inputs and up to 256 long later. Some lists are edge
   sizes up to 4,096, such as 63, 64, and 65.
+- A string's characters come from one of three sets, each in about a third of the random
+  inputs. The first set is printable ASCII. The second is the set of `chars any`. The third is
+  letters, a space, `_` and `-`, with characters whose case mapping changes their length or
+  meaning. These are `ß`, `İ`, `ı`, `ﬄ`, `ǅ`, `Σ`, `σ`, `ς`, `ŉ`, `é`, the Kelvin sign, and two
+  combining marks (U+0301 and U+0307). The capital U+10400, outside the Basic Multilingual
+  Plane, is among them too. A `chars` part of an `input` line replaces the three sets.
 - Some lists repeat one value with a few others among it.
 - A floating-point number is 0, -0, 1, -1, a half, the type's smallest or largest value, an
   infinity, NaN, a small fraction, a value of the `in` range, or any bits.
@@ -226,7 +302,9 @@ a structure of another crate without a `read` line. Such a value shows as `<not 
 
 A clause `a || ... || z` holds without checking `z` when a part before it is true. The report
 counts the calls on which `z` decided. Fewer than `--min-reach` such calls make the run
-`vacuous`. When calls panicked, the clause line says `not reached` instead: the calls that
+`vacuous`. When the inputs reached `z` and hydo could not decide it, the verdict is `not
+judged` instead. The report then names the value that hydo does not read, with its type, and
+the inputs need no other shape. When calls panicked, the clause line says `not reached` instead: the calls that
 panicked may be the ones that reach `z`, so the verdict is the panic. Each `too few inputs`,
 `not judged` and `vacuous` verdict ends with a `to fix:` line. `--min-inputs 0` and
 `--min-reach 0` turn the checks off.
@@ -256,10 +334,13 @@ pub fn display_roundtrip(text: &str) -> Option<bool> {
 
 - a method of a trait without a `with Self` line;
 - a generic function, or a method of a generic `impl` block or trait, without a `with` line for
-  each type parameter;
+  each type parameter and each const generic parameter. A type parameter bound by `Fn`,
+  `FnMut` or `FnOnce` needs none;
 - a parameter of a type that holds a pointer, or whose structure has a private field of another
   module, without a `build` line;
-- a parameter of a generic structure, a `char`, or a map.
+- a closure whose result hydo cannot generate, and a closure of a generic `impl` block's type
+  parameter;
+- a parameter of a generic structure without a `build` line, a `char`, or a map.
 
 A result of such a type is read in part, and a clause that reads the rest is undecided. A
 function whose test module does not build is reported with the compiler's first error, and the

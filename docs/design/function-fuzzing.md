@@ -554,13 +554,17 @@ docs/design/function-fuzzing-evaluation-2.md, section "After Milestone 307".
 - The language has one quantifier, `sorted(v)` (Milestone 307). "Every element is unique" or
   "every element keeps a rule" cannot be stated.
 - A generic function needs a `with T = <type>` line for each type parameter (Milestone 282), and
-  a trait's method a `with Self = <type>` line (Milestone 307). A generic structure, `char` and
-  maps are not fuzzed.
+  a trait's method a `with Self = <type>` line (Milestone 307). A const generic parameter needs
+  a `with N = <value>` line, and a type parameter bound by `Fn`, `FnMut` or `FnOnce` takes a
+  generated closure of a few shapes (Milestone 318). A generic structure without a `build`
+  line, `char` and maps are not fuzzed.
 - A `build` line's constructor must return the value. One that returns an `Option`, as chrono's
   `NaiveDate::from_ymd_opt`, is not used; its panicking twin and `input` lines are.
 - A result that borrows from a `&mut` parameter was not tried.
 - The reading of the sources is textual. A structure defined by a macro is not found, and a
-  field type of a structure in another module is written as that module writes it.
+  field type of a structure in another module is written as that module writes it. A name
+  that two modules define resolves by the function's module, its file's `use` lines, or a
+  path (Milestone 318); a glob import is not followed.
 
 ## Sources
 

@@ -317,3 +317,52 @@ In the order of the frictions:
    line, and accept a generic type in a `build` line.
 7. Keep each failed harness's whole compiler output in `build.log`.
 8. Name the `build` line in the refusal for a private field.
+
+## After Milestone 318
+
+Milestone 318 made the first six fixes of the preceding list. The runs below used fresh copies of
+the six crates, unpacked from their crates.io archives, with seed 1 and 1,000 inputs on the
+Mac. percent-encoding's copy is the archive, not a member of the `rust-url` workspace. The
+evaluation page quotes only part of the evaluator's contracts, so the contracts were written
+again from it: 71 contracted functions, on the same functions where the page names them. Two
+helpers were added to percent-encoding's `AsciiSet`, `hydo_set` and `hydo_bytes`, because its
+only field is private and the crate has no constructor that takes its bytes. "Before" is `main`
+at `da3e590e`, given the same contracts. A refused function is one that the run did not fuzz. A
+wrong verdict is one that hydo's own reading caused.
+
+| Crate | Contracts | Refused before | Wrong before | Refused after | Wrong after | Verdicts after |
+|---|---|---|---|---|---|---|
+| heck 0.5.0 | 17 | 0 | 8 | 0 | 0 | 10 held, 7 broken |
+| half 2.7.1 | 12 | 0 | 1 | 0 | 0 | 11 held, 1 broken |
+| either 1.19.0 | 12 | 4 | 0 | 0 | 0 | 12 held |
+| humantime 2.4.0 | 9 | 1 | 0 | 0 | 0 | 4 held, 5 broken |
+| percent-encoding 2.3.2 | 9 | 4 | 0 | 0 | 0 | 7 held, 2 broken |
+| arrayvec 0.7.8 | 12 | 12 | 0 | 0 | 0 | 12 held |
+
+What each crate shows:
+
+- heck: the eight conversions return `Self::Owned`, which reads as a `String` now. Each held
+  `self != "" || result == ""`, with its last part decided on the empty inputs; before, each was
+  `vacuous` with advice about the inputs. With the default strings, the properties broke on three
+  known issues: 36 at `s = "a_a"`, and 70 at `s = "ﬄ"` in title case and `"Bİ"` in train case.
+  Issue 71 broke at `s = "İ"` in snake case, kebab case, and snake case of kebab case. Before, without a `chars`
+  line, only issue 36 showed.
+- half: `len(self) == 0 || result[0] == self[0]` on `reinterpret_cast` held on 1,000 calls; it
+  broke on every call before. `convert_to_f32_slice` without `requires` broke on its documented
+  panic, as before.
+- either: `map_left`, `map_right`, `left_or_else` and `right_or_else` ran with generated
+  closures; before they were refused with `with F = i64`.
+- humantime: `parse_duration` ran with `Error::Empty` of `duration.rs`. The properties broke on
+  issues 78 (`tail = "Z"` after a complete time), 67 (`tail = "aaaaa"`), 68
+  (`secs = 253402300800`), 69 (`n = 1, m = 0`) and 82 (`k = 1`), as before.
+- percent-encoding: `percent_encode` and `utf8_percent_encode` take their `&'static AsciiSet`
+  and are read by `to_string()` in the `#![no_std]` crate. `percent_decode` and
+  `percent_decode_str` are read by `collect()`. `AsciiSet::add` and `remove` panic at
+  `byte = 128`, `rust-url` issue 1132, as before.
+- arrayvec: twelve methods of `ArrayVec<T, CAP>` ran with `with T = u8`, `with CAP = 8` and
+  `build ArrayVec<u8, 8> from ArrayVec::<u8, 8>::from_iter(v: Vec<u8>)`. Before, the run
+  stopped at the `build` line's syntax, and without it every method was refused for `CAP`.
+
+All nine known upstream bugs of the evaluation showed after the fixes; seven showed before.
+Nothing new was found, and nothing was posted upstream. Fixes 7 and 8 of the list, and
+friction 9 to 11, stay open (open item 163).

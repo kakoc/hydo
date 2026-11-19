@@ -17748,3 +17748,67 @@ and the busybox image's 400 hard links each became a whole copy in the initramfs
 mutants with a `contracts:` key that the recorded answers do not list (`error_paths`, M306).
 
 **What is left.** Open item 162.
+
+## Milestone 318 (tentative number): what the third evaluation of `hydo fuzz` found, fixed
+
+The third evaluation of `hydo fuzz` by a new user (Milestone 308,
+`docs/design/function-fuzzing-evaluation-3.md`) ranked what stopped a Rust developer. This
+milestone fixes the first six items of its list. Each fix is its own commit, so that a release
+can take them one by one. None touches an engine, an image, or a recorded value. The tests are
+`cargo test -p hydo-contracts --test it fuzz_m318::`, on the new fixture
+`hydo/crates/hydo-contracts/tests/fuzz-m318`.
+
+**1. A false `broken` verdict on an element of a list of built values.** half's
+`len(self) == 0 || result[0] == self[0]` broke on every call. The harness answered the read
+value before the call only for a parameter that a `build` line builds, not for such values
+inside a list. So `self[0]` was the constructor's arguments, and a record compared with a
+number gave `false`. The harness now answers the read value of every built value inside a
+parameter (an element, a field, a variant's field), and the clauses read each through its
+`read` line. A built value without a `read` line is undecided, with the line to write. A
+comparison of two kinds of value is undecided, never false. Commit `63b72900`. Before, the
+fixture's `bits` broke on 198 of 300 calls; now it holds, and `first` is `not judged`.
+
+**2. Results hydo did not read gave the wrong verdict and advice.** heck's eight conversions
+return `Self::Owned`, and each was `vacuous` with advice about the inputs. `Self::<name>` now
+resolves through `type <name> = ...;` in the crate's `impl` of the trait for the type, the
+result type that the `impl`'s method writes, and `ToOwned::Owned` (`String` for `str`, `Vec<T>`
+for `[T]`). When a clause's last part is reached and cannot be decided, the clause is `not
+judged`, and the report names the place and its type. Commit `f9ae01d8`.
+
+**3. Two enumerations of one name.** humantime's `duration::Error` resolved to `date::Error`,
+and a full path did not help. The reading now keeps every structure and enumeration of a name
+with its module, and each file's `use` lines. A name resolves to the definition of the
+function's module, else to the one a `use` line imports. A path resolves from `crate`, `self`,
+`super`, the function's module, an imported first segment, or the root. Commit `b6f4c049`. The
+no_std fixture's two structures named `P` resolve too.
+
+**4. Const generics, `&'static` parameters and closures.** A const generic parameter takes its
+value from a `with` line (`with N = 8`), also in array lengths, and an `impl` block for an
+array type is read whole. A `&'static` parameter gets a value that the harness leaks after it
+reads the values at entry. A type parameter bound by `Fn`, `FnMut` or `FnOnce`, and `impl
+Fn(...)`, take a generated closure from a few shapes (a constant, the argument, an integer
+converted or one past it, a predicate on an integer). A report shows it as `|x| x > 0`, and
+`--input` reads it back. A closure whose result hydo cannot generate is refused with advice to
+write a property function. Commits `f8db7860` and `e172fe25`; the second fixes the leak when
+the result keeps the reference, which the proof run on percent-encoding found.
+
+**5. The default strings.** A random string now takes printable ASCII, the default characters,
+or letters with characters whose case mapping changes them (`ß`, `İ`, `ﬄ`, combining marks, a
+capital outside the Basic Multilingual Plane, and others), each about a third of the time.
+Commit `ee27924a`. The fixture's title case breaks at one such character within 1,000 calls;
+before it held.
+
+**6. The `read` line.** The harness imports `ToString`, `ToOwned` and `FromIterator`. A method
+that takes its value (`collect`, `into`, `into_*`) reads a clone, and `collect()` and `into()`
+get the line's type. A method takes a turbofish, and the types and constructors of `build` and
+`read` lines take type arguments (`ArrayVec<u8, 8>`). Commit `f052453c`.
+
+**The proof.** Fresh copies of the evaluation's six crates from crates.io, 71 contracted
+functions written again from the evaluation page, seed 1, 1,000 inputs, on the Mac. `main` at
+`da3e590e` refused 21 of them and gave 9 wrong verdicts. This milestone refused none and gave
+no wrong verdict. All nine known upstream bugs of the evaluation showed (heck 36, 70, 71;
+humantime 67, 68, 69, 78, 82; `rust-url` 1132); seven showed before. The table per crate is the
+section "After Milestone 318" of the evaluation page. Nothing new was found, and nothing was
+posted.
+
+What is left is open item 163.
