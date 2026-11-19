@@ -587,7 +587,9 @@ fn a_no_std_crate_fuzzes_function_by_function_with_verdicts() {
     assert_eq!(f("::version").verdict, "held");
     assert!(skipped("::major_of").contains("is private to the module `ident`"));
     // one function whose harness does not build stops no other
-    assert!(skipped("::b::get").contains("its harness did not build: error[E0560]"));
+    assert!(skipped("::nothing").contains("its harness did not build: error[E0412]"));
+    // since Milestone 318 a name that two modules define resolves by the function's module
+    assert_eq!(f("::b::get").verdict, "held");
     // too few inputs, and a clause that is never checked
     let name = f("::is_name");
     assert_eq!((name.verdict.as_str(), name.calls), ("too few inputs", 0));

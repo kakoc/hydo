@@ -607,6 +607,88 @@ pub struct Items {
     /// The `impl` blocks of the crate, for the associated types a trait's method returns
     /// (Milestone 318).
     pub impls: Vec<ImplDef>,
+    /// Every enumeration and structure of a name, when two modules define one (humantime's two
+    /// `Error`s; Milestone 318). `enums` and `structs` keep the first.
+    pub all_enums: BTreeMap<String, Vec<EnumDef>>,
+    pub all_structs: BTreeMap<String, Vec<StructDef>>,
+    /// The `use` lines of each module's file: by the module, each imported name with the paths
+    /// it may stand for, as modules and the item's name (Milestone 318).
+    pub uses: BTreeMap<Vec<String>, BTreeMap<String, Vec<Vec<String>>>>,
+}
+
+/// Add the names a `use` tree imports (`a::b::{C, d::E as F, self}`) to `out`: each name with
+/// the paths it may stand for. `module` is the module of the file; a path that starts with
+/// `crate`, `self` or `super` is made absolute, and any other one is read both from the
+/// module (2018's paths) and from the crate's root (Milestone 318).
+fn use_tree(
+    prefix: &[String],
+    tree: &str,
+    module: &[String],
+    out: &mut BTreeMap<String, Vec<Vec<String>>>,
+) {
+    let tree = tree.trim();
+    if let Some(open) = tree.find('{') {
+        let head: Vec<String> = tree[..open]
+            .trim()
+            .trim_end_matches("::")
+            .split("::")
+            .filter(|s| !s.is_empty())
+            .map(|s| s.trim().to_string())
+            .collect();
+        let mut p = prefix.to_vec();
+        p.extend(head);
+        let Some(close) = tree.rfind('}') else { return };
+        for part in split_top(&tree[open + 1..close], ',') {
+            use_tree(&p, &part, module, out);
+        }
+        return;
+    }
+    let (path, alias) = match tree.split_once(" as ") {
+        Some((p, a)) => (p.trim(), Some(a.trim().to_string())),
+        None => (tree, None),
+    };
+    let mut segs = prefix.to_vec();
+    segs.extend(
+        path.trim_start_matches("::")
+            .split("::")
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
+    );
+    if segs.last().is_some_and(|s| s == "self") {
+        segs.pop();
+    }
+    let Some(name) = alias.or_else(|| segs.last().cloned()) else {
+        return;
+    };
+    if name == "*" || name == "_" || segs.is_empty() {
+        return;
+    }
+    let mut paths = Vec::new();
+    match segs[0].as_str() {
+        "crate" => paths.push(segs[1..].to_vec()),
+        "self" => paths.push(
+            module
+                .iter()
+                .cloned()
+                .chain(segs[1..].iter().cloned())
+                .collect(),
+        ),
+        "super" => {
+            let mut m = module.to_vec();
+            let mut i = 0;
+            while segs.get(i).is_some_and(|s| s == "super") {
+                m.pop();
+                i += 1;
+            }
+            m.extend(segs[i..].iter().cloned());
+            paths.push(m);
+        }
+        _ => {
+            paths.push(module.iter().cloned().chain(segs.iter().cloned()).collect());
+            paths.push(segs.clone());
+        }
+    }
+    out.entry(name).or_default().extend(paths);
 }
 
 /// An `impl` block of the crate as the resolution of an associated type needs it (Milestone
@@ -980,14 +1062,45 @@ pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
         };
         let mut module = module.to_vec();
         module.extend(inline_modules(&m, at));
-        items.enums.entry(name.clone()).or_insert(EnumDef {
-            name,
+        let def = EnumDef {
+            name: name.clone(),
             params,
             variants,
             module,
-        });
+        };
+        items
+            .all_enums
+            .entry(name.clone())
+            .or_default()
+            .push(def.clone());
+        items.enums.entry(name).or_insert(def);
     }
     read_impls(text, &m, items);
+    // `use crate::duration::Error;` and the like, for the names of the file's module
+    {
+        let mut from = 0;
+        let mut names = BTreeMap::new();
+        while let Some(p) = ms[from..].find("use ") {
+            let at = from + p;
+            from = at + 4;
+            if at > 0 && id(b[at - 1]) {
+                continue;
+            }
+            let Some(semi) = ms[at..].find(';') else {
+                break;
+            };
+            let tree = ms[at + 4..at + semi].split_whitespace().collect::<Vec<_>>();
+            let mut here = module.to_vec();
+            here.extend(inline_modules(&m, at));
+            use_tree(&[], &tree.join(" "), &here, &mut names);
+        }
+        if !names.is_empty() {
+            let e = items.uses.entry(module.to_vec()).or_default();
+            for (k, v) in names {
+                e.entry(k).or_default().extend(v);
+            }
+        }
+    }
     for kw in ["struct", "type"] {
         let mut from = 0;
         while let Some(p) = ms[from..].find(kw) {
@@ -1070,14 +1183,20 @@ pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
             if let Some((fields, public)) = parse_fields(body, tuple) {
                 let mut module = module.to_vec();
                 module.extend(inline_modules(&m, at));
-                items.structs.entry(name.clone()).or_insert(StructDef {
-                    name,
+                let def = StructDef {
+                    name: name.clone(),
                     generic,
                     tuple,
                     fields,
                     public,
                     module,
-                });
+                };
+                items
+                    .all_structs
+                    .entry(name.clone())
+                    .or_default()
+                    .push(def.clone());
+                items.structs.entry(name).or_insert(def);
             }
         }
     }
@@ -1368,8 +1487,15 @@ impl Resolver<'_> {
                             stack.pop();
                             return r;
                         }
-                        let Some(d) = self.items.structs.get(name).filter(|_| n == 0) else {
-                            if let Some(e) = self.items.enums.get(name) {
+                        // two definitions of the name: the one that the path or the function's
+                        // module names (Milestone 318)
+                        let (s_def, e_def) = match self.pick(name, segs) {
+                            Some(Def::S(s)) => (Some(s), None),
+                            Some(Def::E(e)) => (None, Some(e)),
+                            None => (self.items.structs.get(name), self.items.enums.get(name)),
+                        };
+                        let Some(d) = s_def.filter(|_| n == 0) else {
+                            if let Some(e) = e_def {
                                 return self.enumeration(e, segs, args, t, stack);
                             }
                             if name == "Ordering" && n == 0 && !segs.iter().any(|s| s == "atomic") {
@@ -1411,6 +1537,72 @@ impl Resolver<'_> {
                 }
             }
         }
+    }
+
+    /// The modules where a type written as `segs` may be defined, the likeliest first
+    /// (Milestone 318): for `a::b::Name` the path from `crate`, `self`, `super`, the function's
+    /// module, a `use` line of its file, or the crate's root; for `Name` the function's module,
+    /// then the `use` lines of its file.
+    pub fn modules_of(&self, segs: &[String]) -> Vec<Vec<String>> {
+        let cur = self.module.to_vec();
+        // the `use` lines of the function's module, else of the nearest enclosing one
+        let uses = (0..=cur.len())
+            .rev()
+            .find_map(|k| self.items.uses.get(&cur[..k]));
+        let imported = |n: &str| -> Vec<Vec<String>> {
+            uses.and_then(|u| u.get(n)).cloned().unwrap_or_default()
+        };
+        let mut out: Vec<Vec<String>> = Vec::new();
+        let n = segs.len();
+        if n <= 1 {
+            out.push(cur.clone());
+            for p in imported(segs.first().map_or("", String::as_str)) {
+                out.push(p[..p.len().saturating_sub(1)].to_vec());
+            }
+            return out;
+        }
+        let prefix = &segs[..n - 1];
+        match prefix[0].as_str() {
+            "crate" => out.push(prefix[1..].to_vec()),
+            "self" => out.push(cur.iter().chain(&prefix[1..]).cloned().collect()),
+            "super" => {
+                let mut m = cur.clone();
+                let mut i = 0;
+                while prefix.get(i).is_some_and(|s| s == "super") {
+                    m.pop();
+                    i += 1;
+                }
+                m.extend(prefix[i..].iter().cloned());
+                out.push(m);
+            }
+            first => {
+                out.push(cur.iter().chain(prefix).cloned().collect());
+                for p in imported(first) {
+                    out.push(p.into_iter().chain(prefix[1..].iter().cloned()).collect());
+                }
+                out.push(prefix.to_vec());
+            }
+        }
+        out
+    }
+
+    /// The definition that a type's name stands for when the crate defines the name more than
+    /// once (Milestone 318); none when it defines it once, or when no module fits.
+    fn pick(&self, name: &str, segs: &[String]) -> Option<Def<'_>> {
+        let ss = self.items.all_structs.get(name).map_or(&[][..], |v| &v[..]);
+        let es = self.items.all_enums.get(name).map_or(&[][..], |v| &v[..]);
+        if ss.len() + es.len() < 2 {
+            return None;
+        }
+        for m in self.modules_of(segs) {
+            if let Some(s) = ss.iter().find(|d| d.module == m) {
+                return Some(Def::S(s));
+            }
+            if let Some(e) = es.iter().find(|d| d.module == m) {
+                return Some(Def::E(e));
+            }
+        }
+        None
     }
 
     /// A type that a `build` or `read` line names (Milestone 307).
@@ -1490,6 +1682,12 @@ impl Resolver<'_> {
             variants,
         }
     }
+}
+
+/// A definition of a name: a structure or an enumeration (Milestone 318).
+enum Def<'a> {
+    S(&'a StructDef),
+    E(&'a EnumDef),
 }
 
 /// The standard library's `Ordering`, which comparisons return (Milestone 307).

@@ -51,6 +51,60 @@ pub fn first(v: &[h::G]) -> u16 {
     v.first().map_or(0, h::G::get)
 }
 
+// ---------------------------------------------------------------- one name in two modules
+
+/// humantime has two enumerations named `Error`, in `date.rs` and in `duration.rs`.
+pub mod date {
+    #[derive(Debug, PartialEq)]
+    pub enum Error {
+        OutOfRange,
+        InvalidDigit,
+        InvalidFormat,
+    }
+}
+
+pub mod duration {
+    #[derive(Debug, PartialEq)]
+    pub enum Error {
+        Empty,
+        NumberExpected(usize),
+        UnknownUnit { start: usize, end: usize },
+    }
+
+    /// As humantime's `parse_duration`: the module's own `Error`.
+    // hydo: ensures !matches(result, Err(Error::Empty)) || s == ""
+    // hydo: ensures s != "" || matches(result, Err(Empty))
+    pub fn parse(s: &str) -> Result<u64, Error> {
+        if s.is_empty() {
+            return Err(Error::Empty);
+        }
+        s.parse::<u64>().map_err(|_| Error::NumberExpected(0))
+    }
+}
+
+/// A module that imports one of the two.
+pub mod user {
+    use crate::duration::Error;
+
+    // hydo: ensures matches(result, Error::Empty) == (n == 0)
+    pub fn check(n: u8) -> Error {
+        if n == 0 {
+            Error::Empty
+        } else {
+            Error::UnknownUnit {
+                start: 0,
+                end: n as usize,
+            }
+        }
+    }
+}
+
+/// A full path from the crate's root.
+// hydo: ensures !matches(result, Err(crate::duration::Error::Empty)) || len(s) == 0
+pub fn parse_full(s: &str) -> Result<u64, crate::duration::Error> {
+    duration::parse(s)
+}
+
 // ---------------------------------------------------------------- associated result types
 
 /// heck's conversions return `Self::Owned`, the standard library's `ToOwned::Owned`.

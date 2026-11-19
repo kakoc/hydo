@@ -72,6 +72,22 @@ fn associated_result_types_are_read_and_an_unread_result_is_named() {
 }
 
 #[test]
+fn a_name_that_two_modules_define_resolves_by_the_module_its_use_lines_and_a_full_path() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m318-names");
+    let (_, rep) = fuzz_m318(
+        t.path(),
+        &["--fn", "parse", "--fn", "check", "--fn", "parse_full"],
+    );
+    assert!(rep.skipped.is_empty(), "{:?}", rep.skipped);
+    // the function's own module
+    assert_eq!(one(&rep, "duration::parse").verdict, "held");
+    // a `use` line of the function's file
+    assert_eq!(one(&rep, "user::check").verdict, "held");
+    // a full path
+    assert_eq!(one(&rep, "::parse_full").verdict, "held");
+}
+
+#[test]
 fn values_of_two_kinds_are_not_compared() {
     use hydo_contracts::fuzz::check::{holds, Env};
     use hydo_contracts::fuzz::value::Val;

@@ -53,8 +53,8 @@ mod a {
 }
 
 pub mod b {
-    /// Another `P` than `a::P`: hydo's textual reading takes the first one it meets, so this
-    /// function's harness does not build. The other functions still run.
+    /// Another `P` than `a::P`: until Milestone 318 hydo's textual reading took the first one
+    /// it met, so this function's harness did not build. Now the function's module decides.
     pub struct P {
         pub y: u16,
     }
@@ -63,6 +63,14 @@ pub mod b {
     pub fn get(p: P) -> u16 {
         p.y
     }
+}
+
+/// A `with` line that names no type: this function's harness does not build, and the other
+/// functions still run.
+// hydo: with T = NoSuchType
+// hydo: ensures is_none(result)
+pub fn nothing<T>() -> Option<T> {
+    None
 }
 
 /// A `requires` that generated inputs almost never keep: `too few inputs`.
