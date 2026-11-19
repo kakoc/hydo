@@ -329,7 +329,13 @@ fn fuzzing_the_fixture_finds_each_planted_bug_with_a_small_input() {
     assert!(avg.broken[0].text.starts_with("src/lib.rs:"), "{avg:?}");
     assert!(avg.broken[0].after.contains("overflow"), "{avg:?}");
     let fw = f("::first_word");
-    assert_eq!(fw.broken[0].input, "s = \"aaaaaaaaa\"");
+    // the smallest word that breaks the clause has 9 bytes; since Milestone 318 a random
+    // string may hold multi-byte characters, which the shrink keeps when a shorter one would
+    // end the failure
+    let word: String = serde_json::from_str(fw.broken[0].input.trim_start_matches("s = "))
+        .unwrap_or_else(|e| panic!("{e}: {fw:?}"));
+    assert_eq!(word.len(), 9, "{fw:?}");
+    assert!(!word.contains(' '), "{fw:?}");
     let pay = f("::Account::can_pay");
     assert_eq!(
         pay.broken[0].input,

@@ -883,6 +883,36 @@ fn ascii() -> Vec<char> {
     (' '..='~').collect()
 }
 
+/// The characters whose case mapping changes their length or meaning, which a text library
+/// meets: German sharp s, a capital I with a dot, a ligature, a title-case digraph, the Greek
+/// sigmas, combining marks, a capital outside the Basic Multilingual Plane, and the Kelvin
+/// sign (Milestone 318).
+pub const CASE_CHARS: &[char] = &[
+    'ß',
+    'İ',
+    'ı',
+    'ﬄ',
+    'ǅ',
+    'Σ',
+    'σ',
+    'ς',
+    '\u{301}',
+    '\u{307}',
+    '\u{10400}',
+    'ŉ',
+    'é',
+    '\u{212a}',
+];
+
+/// The third default set of a string (Milestone 318): letters, a space, `_` and `-`, and
+/// [`CASE_CHARS`].
+fn case_mix() -> Vec<char> {
+    let mut v: Vec<char> = ('a'..='z').chain('A'..='Z').collect();
+    v.extend([' ', '_', '-']);
+    v.extend_from_slice(CASE_CHARS);
+    v
+}
+
 /// The longest random length for the `k`-th input: short first, then longer.
 pub fn max_len_for(k: usize) -> usize {
     match k {
@@ -1091,7 +1121,13 @@ impl Gen<'_> {
         let key = format!("{path}#len");
         let set: Vec<char> = match self.hints.chars.get(path) {
             Some(s) => s.clone(),
-            None if self.mode == 2 && self.rng.below(2) == 0 => ascii(),
+            // a random string takes printable ASCII, the default characters, or letters with
+            // characters whose case mapping changes them (Milestone 318), each about a third
+            None if self.mode == 2 => match self.rng.below(3) {
+                0 => ascii(),
+                1 => case_mix(),
+                _ => crate::lang::DEFAULT_CHARS.to_vec(),
+            },
             None => crate::lang::DEFAULT_CHARS.to_vec(),
         };
         if let Some(ex) = self.hints.like.get(path).filter(|e| !e.is_empty()).cloned() {

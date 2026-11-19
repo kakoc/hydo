@@ -204,6 +204,30 @@ pub fn tally<F: FnMut(u8) -> std::collections::HashMap<u8, u8>>(mut f: F) -> usi
     f(0).len()
 }
 
+// ---------------------------------------------------------------- characters that change case
+
+/// Each word with its first character in upper case and the rest in lower case.
+pub fn title(s: &str) -> String {
+    s.split(' ')
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                Some(f) => f.to_uppercase().collect::<String>() + &c.as_str().to_lowercase(),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// heck's issue 70: a title case of a title case changes it, for `ﬄ` (`FFL`, then `Ffl`) and
+/// `ß` (`SS`, then `Ss`). The default strings hold such characters since Milestone 318.
+// hydo: ensures result
+pub fn title_is_idempotent(s: &str) -> bool {
+    let t = title(s);
+    title(&t) == t
+}
+
 // ---------------------------------------------------------------- associated result types
 
 /// heck's conversions return `Self::Owned`, the standard library's `ToOwned::Owned`.

@@ -163,6 +163,24 @@ fn a_generated_closure_shows_and_reads_back_the_same() {
 }
 
 #[test]
+fn the_default_strings_hold_characters_whose_case_changes_them() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m318-case");
+    let (code, rep) = fuzz_m318(
+        t.path(),
+        &["--fn", "title_is_idempotent", "--cases", "1000"],
+    );
+    assert_eq!(code, 1, "{rep:?}");
+    let f = one(&rep, "::title_is_idempotent");
+    assert_eq!(f.verdict, "broken", "{f:?}");
+    // the shrink ends at one character whose upper case is two or three letters
+    let input = f.broken[0].input.as_str();
+    assert!(
+        ["s = \"ß\"", "s = \"ﬄ\"", "s = \"ŉ\""].contains(&input),
+        "{input}"
+    );
+}
+
+#[test]
 fn values_of_two_kinds_are_not_compared() {
     use hydo_contracts::fuzz::check::{holds, Env};
     use hydo_contracts::fuzz::value::Val;
