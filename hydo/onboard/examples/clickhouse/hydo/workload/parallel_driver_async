@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=50
+# one block into t_async with async_insert = 1 and wait_for_async_insert = 1, tried as opInsert says
+exec /bin/chc op async

@@ -1,0 +1,44 @@
+# ClickHouse v26.10.6.18 (the image tag 26.10.6) with two replicas of one shard and three
+# ClickHouse Keeper servers, from the official images. The servers read conf/server.xml as
+# config.d/hydo.xml: the replica's macros, the three Keepers, and smaller pools and caches. The
+# Keepers read conf/keeper.xml. The test client (../client) creates four ReplicatedMergeTree
+# tables on both replicas.
+services:
+  keeper1:
+    image: clickhouse/clickhouse-keeper:26.10.6
+    command: ["clickhouse-keeper", "--config-file=/etc/clickhouse-keeper/keeper_config.xml"]
+    environment: {KEEPER_ID: "1"}
+    volumes: ["./conf/keeper.xml:/etc/clickhouse-keeper/keeper_config.xml:ro", "k1:/var/lib/clickhouse-keeper"]
+    restart: always
+  keeper2:
+    image: clickhouse/clickhouse-keeper:26.10.6
+    command: ["clickhouse-keeper", "--config-file=/etc/clickhouse-keeper/keeper_config.xml"]
+    environment: {KEEPER_ID: "2"}
+    volumes: ["./conf/keeper.xml:/etc/clickhouse-keeper/keeper_config.xml:ro", "k2:/var/lib/clickhouse-keeper"]
+    restart: always
+  keeper3:
+    image: clickhouse/clickhouse-keeper:26.10.6
+    command: ["clickhouse-keeper", "--config-file=/etc/clickhouse-keeper/keeper_config.xml"]
+    environment: {KEEPER_ID: "3"}
+    volumes: ["./conf/keeper.xml:/etc/clickhouse-keeper/keeper_config.xml:ro", "k3:/var/lib/clickhouse-keeper"]
+    restart: always
+  ch1:
+    image: clickhouse/clickhouse-server:26.10.6
+    command: ["clickhouse-server", "--config-file=/etc/clickhouse-server/config.xml"]
+    environment: {CH_REPLICA: ch1, CH_HOST: ch1, CLICKHOUSE_WATCHDOG_ENABLE: "0"}
+    volumes: ["./conf/server.xml:/etc/clickhouse-server/config.d/hydo.xml:ro", "c1:/var/lib/clickhouse"]
+    depends_on: [keeper1, keeper2, keeper3]
+    restart: always
+  ch2:
+    image: clickhouse/clickhouse-server:26.10.6
+    command: ["clickhouse-server", "--config-file=/etc/clickhouse-server/config.xml"]
+    environment: {CH_REPLICA: ch2, CH_HOST: ch2, CLICKHOUSE_WATCHDOG_ENABLE: "0"}
+    volumes: ["./conf/server.xml:/etc/clickhouse-server/config.d/hydo.xml:ro", "c2:/var/lib/clickhouse"]
+    depends_on: [keeper1, keeper2, keeper3]
+    restart: always
+volumes:
+  k1: {}
+  k2: {}
+  k3: {}
+  c1: {}
+  c2: {}

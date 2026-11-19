@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=50
+# one block into t_qpar with insert_quorum = 2 and insert_quorum_parallel = 1; after the acknowledgement the other replica must hold it whole
+exec /bin/chc op quorum

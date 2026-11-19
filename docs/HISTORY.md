@@ -17521,3 +17521,100 @@ Retro: the VictoriaMetrics cluster v1.156.0, hvx, 2026-11-18
   strategies` are updated.
 
 **What is left.** Open item 158.
+
+## Milestone 311 (tentative number): ClickHouse with two replicas, deduplicated retries and quorum inserts
+
+**The example.** `hydo/onboard/examples/clickhouse` (RESULTS.md) runs ClickHouse v26.10.6.18,
+the newest stable release (2026-11-18), as two replicas of one shard, `ch1` and `ch2`, with three
+ClickHouse Keeper servers. The images are the official `clickhouse/clickhouse-server` and
+`clickhouse/clickhouse-keeper` under their tag `26.10.6` (amd64 `sha256:9084cd79…` and
+`sha256:ca269194…`). It was imported with `hydo compose` from the example's own Compose file
+and runs on hvx only (x86_64, `guest.cpu: v3`, 4,096 MiB). A static Go client on the HTTP
+interface, `chc`, writes blocks of 1 to 30 rows into four `ReplicatedMergeTree` tables. They take
+synchronous inserts deduplicated by the block's hash or by `insert_deduplication_token`, async
+inserts, and quorum inserts with `insert_quorum = 2`, parallel and sequential. Each insert is
+tried up to four times on either replica, and one acknowledged insert of three is sent once more.
+A messages check judges them: `no-loss`, `at-most-once`, and `fan-out` over the groups `ch1` and
+`ch2`, with one delivery per stored copy of a block. So do two final rules (`converge`,
+`blocks`), a read of each acknowledged quorum insert on the other replica, and an anytime read
+with `select_sequential_consistency = 1`. The build parameter `fsync` is `0` (ClickHouse's
+defaults), `insert` (`fsync_after_insert`, `fsync_part_directory`) or `1` (also the fsync after a
+merge and after a fetch). Two clean runs give one fingerprint on each image: `8174700d4ae25fa3`
+on the default image (`aaed39f4…`) and `23aed071fdf281b0` with `fsync=1` (`96b2ed99…`).
+
+**Finding 1, a known bug.** On the image with `fsync=insert` (`9b5182d2…`), `disk=cut | run
+C=40` leaves the replicas apart for good. `final_converge` fails with `the replicas differ in 21
+blocks after the heal` (`b9f68cd13b21c4c3`, twice), `fan-out` fails, and `no-loss` holds. The
+power cut loses merged parts that no replica synced. Each replica then queues a fetch of the
+merged part, which no replica has. The replica that merged keeps the source parts, and the part
+check stops at "Hoping that it will eventually appear as a result of a merge"
+(`ReplicatedMergeTreePartCheckThread::searchForMissingPartOnOtherReplicas`), so the other replica
+never gets the rows. 13 more minutes of guest time in a `hydo inspect` session changed nothing.
+The stuck fetch is known (#29778, #33508, #53143 open); no report names the power cut as its
+trigger. A cut at step 20, `disk=none`, and the composition of seed 1 fail too; with `fsync=1`
+and on the default image the schedule passes. The schedule is in
+`schedules/known-merged-part-lost-at-power-cut.schedule`, outside `hydo/regressions/`, because it
+needs the build parameter.
+
+**The settings.** `hydo explore --configs --seeds 1-8 --no-shrink` explored the three values of
+`fsync` with the same schedules, four of them with a power cut. With `0` three failed: seeds 1
+and 5 lost a block acknowledged with `insert_quorum = 2` (`no-loss`), and seed 6 broke
+`converge`. With `insert` seeds 1, 5 and 6 broke `converge` (finding 1). With `1` none failed.
+Without shrinks the command's table lists no class and says that no combination failed, so seed 5
+went through it once more with shrinks. On `0` it shrank in 81 tries to the power cut and the
+quorum inserts alone (`a40341cdfd2dfa90`, twice). The shrink on `insert` was stopped after 8 tries
+of 1.5 minutes, and `1` passed. The table labeled the loss on `0` the setting's documented
+trade-off, found only with `fsync=0` and not with `fsync=1`. It is not reported.
+
+**What held.** No retried insert was stored twice, also not a second send of an acknowledged
+block, with block hashes, tokens and async inserts. Every acknowledged quorum insert was on the
+other replica at once. Every read with `select_sequential_consistency = 1` had every block
+acknowledged before it. No block was partial, and no block refused before the write appeared.
+With the fsync after an insert and a merge on (E2, E3: 40 schedules) and with every fsync setting
+on (E4), no acknowledged insert was lost in a run that reached its checks. The faults were kills
+of replicas and Keepers, pauses, partitions, one-way loss, clock steps from 30 days back to a
+year forward, and power cuts at steps and at disk flushes (`cf=`). E4's six failures each had a
+lying disk or disk I/O errors. The clock audit's three schedules passed.
+
+**What hydo lacked.** Seven gaps, in RESULTS.md, "What hydo lacked". hvx takes at most 4 GiB of
+root and data disk together, and ClickHouse's programs are 1.4 GB (`root.share_images` and a
+1,024 MiB data disk). One explorer worker of a 4 GiB guest held about 7 GB of the host, and the
+host's out-of-memory killer ended one run. A group's kill restarts the Keepers one at a time
+after each is ready, and a Keeper opens its client port only with a quorum (`ready: "true"`, as
+open item 147 says for PD). The guest agent stopped answering in four schedules, three with a
+ring partition of the Keepers and one with a kill of two Keepers (`TIMEOUT workload`, not
+traced). The importer took port 2181 from the Keeper image's `EXPOSE`, kept the images'
+`entrypoint.sh`, which changes owners in the read-only root, and did not propose `guest.cpu:
+v3`, without which the programs stop with SIGILL. `hydo explore --configs` without shrinks
+lists no class of failure and says that no combination failed. A workload command's output stays
+in the guest. hydo's check of tracked files reads a version of four numbers as an address, so the
+example names the image tag `26.10.6`.
+
+**Tests.** The explorer's identity-quick and corpus-full goldens and the control corpus-quick
+golden are re-recorded for the new example: its inputs and entries are new, the quick identity
+golden's sample of examples shifts by one manifest, and the full corpus's later chunks shift by
+the new example's schedules. Nothing recorded moved.
+
+Retro: ClickHouse v26.10.6.18, hvx, 2026-11-18 and 19
+- Time to the first clean run: 50 minutes of wall time, about 20 of them in image builds.
+- Schedules run before the first finding: 1 (seed 1 of E1). None failed by the rules' mistakes.
+- The findings: 0 new, 1 known (#53143, with a power cut as its trigger), 1 documented (the
+  default fsync settings, labeled by `hydo explore --configs`), and the environment's (a lying disk
+  and disk I/O errors in E4).
+- What took the most time: seven runs that each waited 900 s after the guest agent stopped
+  answering (1 hour 45 minutes); the disk limit, the entrypoint, SIGILL and the pool sizes before
+  the first clean run (40 minutes); the shrinks of the settings exploration (1 hour).
+- What hydo lacked: the disk limit of hvx (open item 157); memory for two VMs beside other
+  sessions (open item 157); the one-at-a-time restart of a group (open item 147, and the
+  example's `ready: "true"`); the agent that stops answering after the Keepers lose their quorum
+  (open item 157); the import's port, entrypoint and CPU level (open item 157); a command's output
+  in the guest (open item 157); a version of four numbers read as an address (the example names
+  the tag `26.10.6`).
+- Strategies: power cuts of the whole guest found finding 1 at the first seed, and the messages
+  check's `fan-out` over one group per replica found it with the rule `converge`. The entries
+  "Power cuts of the whole guest", "The messages check's claims" and "Settings that trade
+  durability" of `hydo guide strategies` are updated. Clock steps and the clock audit found
+  nothing: the audit's places were merges and replica delays, not the deduplication window.
+
+
+**What is left.** Open item 157.

@@ -155,7 +155,7 @@ showed without a fault.
 
 | fault | token | findings |
 |---|---|---|
-| power cut at a step | `C=` | Valkey's lost expiry; SWUpdate's slot; Mender's empty `version` file; NATS 3.1 and 3.4 |
+| power cut at a step | `C=` | Valkey's lost expiry; SWUpdate's slot; Mender's empty `version` file; NATS 3.1 and 3.4; ClickHouse's replicas apart for good after a lost merged part (known, [ClickHouse#53143](https://github.com/ClickHouse/ClickHouse/issues/53143)) |
 | power cut at the k-th disk flush (hvx only) | `cf=` | Saleor's gift card charge (a cut at a flush, after a clock step) |
 | power cut at an event | `A=<event>:cut` | Mender's commit that rolls back and exits 0 |
 | clock step | `T=` | Valkey#5406; Temporal's server down for the length of the step ([temporal#13099](https://github.com/temporalio/temporal/issues/13099)); River's clock effects; Blnk's rejected transfers; Restate's invocations held after a restart (with `L=` or `K=`) |

@@ -1,0 +1,220 @@
+# ClickHouse v26.10.6.18 (the newest stable release, the image tag 26.10.6): two replicas of one
+# shard of four ReplicatedMergeTree tables, and three ClickHouse Keeper servers, all from the
+# official images, as ../docker-compose.yaml runs them. RESULTS.md says what was tested and found.
+#
+#   sh ../build.sh            # bin/chc-amd64, the test client (../client)
+#   sh fetch-images.sh        # the two images by digest
+#   hydo build hydo.yaml      # x86_64: hvx or KVM (fsync_after_insert = 0, ClickHouse's default)
+#   hydo build hydo.yaml --set fsync=insert   # fsync_after_insert and fsync_part_directory on
+#   hydo build hydo.yaml --set fsync=1        # also the fsync after a merge and a fetch: the durable tables
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --new-faults --cluster-faults
+#   hydo explore --configs hydo.yaml --seeds 1-20
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The services below are the importer's,
+# with these changes:
+# - every service runs its program as root on a fresh data directory (user: "" and entrypoint:):
+#   the images' entrypoint.sh changes the owners of directories in the read-only root, and the
+#   programs need nothing else of it;
+# - the Keepers count as ready when they started (the importer's connect to 2181, the first port
+#   of the image's EXPOSE, never passes, and a Keeper opens its client port 9181 only when it has
+#   a quorum), and a server's readiness is a query (chc ready);
+# - the images are shared by the services of one image (root.share_images).
+format: 1
+name: clickhouse
+description: "ClickHouse v26.10.6.18, two replicas and three Keepers: deduplication of retried inserts (block hashes, insert_deduplication_token, async inserts) and quorum inserts with insert_quorum = 2, parallel and sequential, under kills, pauses, partitions, clock steps and power cuts"
+hydo_version: "0.3"
+
+params:
+  fsync: "0"   # 0 | insert | 1: the fsync settings of every table (../client/main.go, ddl); 0 is ClickHouse's default
+
+configs:
+  fsync:
+    values: ["0", "insert", "1"]
+    service: [ch1, ch2]
+    doc: "https://clickhouse.com/docs/operations/settings/merge-tree-settings#fsync_after_insert"
+    tradeoff:
+      "0": "fsync_after_insert, fsync_part_directory and the fsync after a merge (min_rows_to_fsync_after_merge) are off by default: ClickHouse writes a part without an fsync, so a power loss of every replica can lose parts that it acknowledged"
+      insert: "min_rows_to_fsync_after_merge, min_compressed_bytes_to_fsync_after_merge and min_compressed_bytes_to_fsync_after_fetch are 0 by default: a merged part and a part fetched from another replica are written without an fsync"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 4096
+  cpu: v3   # the official x86_64 binaries stop with SIGILL on the x86-64-v2 guest (RESULTS.md, "The setup")
+  clock_start: 1794960000   # 2026-11-18 00:00 UTC, the day of the import
+  outcomes_after_cut: true  # the checks in a recovery boot read the failed blocks too
+
+data:
+  size_mib: 1024   # the data disk: every volume lives here (the fault target); hvx takes at most 4 GiB of root and data together
+  dirs: [vol/k1, vol/anon-keeper1-var-lib-clickhouse, vol/k2, vol/anon-keeper2-var-lib-clickhouse, vol/k3, vol/anon-keeper3-var-lib-clickhouse, vol/c1, vol/c2]
+
+root:
+  share_images: true   # one unpacked tree per image: the three Keepers share one, the two servers another
+  files:                 # bind-mount sources, copied into the read-only root
+    - {src: ../conf/keeper.xml, dst: /etc/hydo/compose/bind/0-keeper.xml}
+    - {src: ../conf/server.xml, dst: /etc/hydo/compose/bind/1-server.xml}
+    - {src: ../bin/chc-amd64, dst: /bin/chc, mode: "0755"}
+  text:
+    /etc/chc.conf: "fsync={{fsync}}\n"
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 keeper1
+      10.89.0.12 keeper2
+      10.89.0.13 keeper3
+      10.89.0.14 ch1
+      10.89.0.15 ch2
+
+groups:
+  - name: keepers
+    services: [keeper1, keeper2, keeper3]
+  - name: replicas
+    services: [ch1, ch2]
+
+services:
+  # Compose service keeper1
+  # image clickhouse/clickhouse-keeper:26.10.6 = docker.io/clickhouse/clickhouse-keeper@sha256:8f507d833d94c22e8f4252f321db42b5a2f8dbe52b45d157d5f3f05c8e8d39ab
+  #   linux/amd64: sha256:ca2691948bf647fdcfebd48dc3ed304a0f1e19702afde0840504d7a6ba844d52
+  #   linux/arm64: sha256:503ce3458c21cfedba0f0cb7e80b07ba586242f65cd843437ad43f622f606be2
+  # the image declares VOLUME /var/lib/clickhouse: an anonymous volume on the data disk
+  - name: keeper1
+    image: {x86_64: images/clickhouse-clickhouse-keeper-26.10.6-amd64.docker.tar, arm64: images/clickhouse-clickhouse-keeper-26.10.6-arm64-oci}
+    image_ref: "clickhouse/clickhouse-keeper:26.10.6"
+    user: ""
+    entrypoint: [/usr/bin/clickhouse-keeper]   # the image's entrypoint.sh changes owners in its read-only root
+    cmd: ["--config-file=/etc/clickhouse-keeper/keeper_config.xml"]
+    env:
+      KEEPER_ID: "1"
+    port: 9181
+    addr: 10.89.0.11
+    ready: "true"   # RESULTS.md, "What hydo lacked": a Keeper opens its client port only with a quorum, and hydo restarts a killed group one member at a time
+    restart: "always"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-keeper.xml, dst: /etc/clickhouse-keeper/keeper_config.xml}
+      - {src: /data/vol/k1, dst: /var/lib/clickhouse-keeper}
+      - {src: /data/vol/anon-keeper1-var-lib-clickhouse, dst: /var/lib/clickhouse}
+  # Compose service keeper2
+  - name: keeper2
+    image: {x86_64: images/clickhouse-clickhouse-keeper-26.10.6-amd64.docker.tar, arm64: images/clickhouse-clickhouse-keeper-26.10.6-arm64-oci}
+    image_ref: "clickhouse/clickhouse-keeper:26.10.6"
+    user: ""
+    entrypoint: [/usr/bin/clickhouse-keeper]   # the image's entrypoint.sh changes owners in its read-only root
+    cmd: ["--config-file=/etc/clickhouse-keeper/keeper_config.xml"]
+    env:
+      KEEPER_ID: "2"
+    port: 9181
+    addr: 10.89.0.12
+    start_after: started   # a Keeper alone has no quorum: the three start together
+    ready: "true"   # RESULTS.md, "What hydo lacked": a Keeper opens its client port only with a quorum, and hydo restarts a killed group one member at a time
+    restart: "always"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-keeper.xml, dst: /etc/clickhouse-keeper/keeper_config.xml}
+      - {src: /data/vol/k2, dst: /var/lib/clickhouse-keeper}
+      - {src: /data/vol/anon-keeper2-var-lib-clickhouse, dst: /var/lib/clickhouse}
+  # Compose service keeper3
+  - name: keeper3
+    image: {x86_64: images/clickhouse-clickhouse-keeper-26.10.6-amd64.docker.tar, arm64: images/clickhouse-clickhouse-keeper-26.10.6-arm64-oci}
+    image_ref: "clickhouse/clickhouse-keeper:26.10.6"
+    user: ""
+    entrypoint: [/usr/bin/clickhouse-keeper]   # the image's entrypoint.sh changes owners in its read-only root
+    cmd: ["--config-file=/etc/clickhouse-keeper/keeper_config.xml"]
+    env:
+      KEEPER_ID: "3"
+    port: 9181
+    addr: 10.89.0.13
+    start_after: started
+    ready: "true"   # RESULTS.md, "What hydo lacked": a Keeper opens its client port only with a quorum, and hydo restarts a killed group one member at a time
+    restart: "always"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-keeper.xml, dst: /etc/clickhouse-keeper/keeper_config.xml}
+      - {src: /data/vol/k3, dst: /var/lib/clickhouse-keeper}
+      - {src: /data/vol/anon-keeper3-var-lib-clickhouse, dst: /var/lib/clickhouse}
+  # Compose service ch1
+  # image clickhouse/clickhouse-server:26.10.6 = docker.io/clickhouse/clickhouse-server@sha256:9c55d8d8a77e03e1fd399d59e4d0a1c7a5e42df70098ff1c5d8bd18eb1a5d106
+  #   linux/amd64: sha256:9084cd79bde01fa4a99060d8d9cf71acdc4d3df44fce586230f566890277b2d6
+  #   linux/arm64: sha256:d610448be0bfbb32c1aae9dfb900054f7175a77084d692840f95593d60a35274
+  - name: ch1
+    image: {x86_64: images/clickhouse-clickhouse-server-26.10.6-amd64.docker.tar, arm64: images/clickhouse-clickhouse-server-26.10.6-arm64-oci}
+    image_ref: "clickhouse/clickhouse-server:26.10.6"
+    user: ""
+    entrypoint: [/usr/bin/clickhouse-server]
+    cmd: ["--config-file=/etc/clickhouse-server/config.xml"]
+    env:
+      CH_REPLICA: "ch1"
+      CH_HOST: "ch1"
+      CLICKHOUSE_WATCHDOG_ENABLE: "0"
+    port: 8123
+    addr: 10.89.0.14
+    depends_on: [keeper1, keeper2, keeper3]
+    start_after: started   # Compose's service_started: no wait for readiness
+    ready: "timeout 5 /bin/chc ready ch1"
+    ready_timeout: 300
+    restart: "always"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/1-server.xml, dst: /etc/clickhouse-server/config.d/hydo.xml}
+      - {src: /data/vol/c1, dst: /var/lib/clickhouse}
+  # Compose service ch2
+  - name: ch2
+    image: {x86_64: images/clickhouse-clickhouse-server-26.10.6-amd64.docker.tar, arm64: images/clickhouse-clickhouse-server-26.10.6-arm64-oci}
+    image_ref: "clickhouse/clickhouse-server:26.10.6"
+    user: ""
+    entrypoint: [/usr/bin/clickhouse-server]
+    cmd: ["--config-file=/etc/clickhouse-server/config.xml"]
+    env:
+      CH_REPLICA: "ch2"
+      CH_HOST: "ch2"
+      CLICKHOUSE_WATCHDOG_ENABLE: "0"
+    port: 8123
+    addr: 10.89.0.15
+    depends_on: [keeper1, keeper2, keeper3]
+    start_after: started
+    ready: "timeout 5 /bin/chc ready ch2"
+    ready_timeout: 300
+    restart: "always"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/1-server.xml, dst: /etc/clickhouse-server/config.d/hydo.xml}
+      - {src: /data/vol/c2, dst: /var/lib/clickhouse}
+
+# the four tables exist on both replicas before the window under test
+provision: /bin/chc schema
+
+# 40 rounds of 500 ms: 20 s of guest time without faults
+workload:
+  steps: 40
+  timeout: 600    # also the drain's limit: it gives up after 420 s
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 500
+  command_timeout: 240   # also the final checks' limit: each waits for both replicas to sync first
+  drain_timeout: 60
+
+checks:
+  - id: inserts
+    type: messages
+    history: ch
+    msg: every acknowledged block is stored once on both replicas, also after retries
+    final: /bin/chc drain
+    acknowledgement: none           # an insert has no consumer: the drain reads each replica's copy
+    claims:
+      delivery: exactly-once        # no-loss: every acknowledged block is read back; at-most-once: no block is stored twice
+      fan_out: every-group          # the groups ch1 and ch2: each replica holds every acknowledged block
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

@@ -1,0 +1,11 @@
+# Known (RESULTS.md, finding 1; ClickHouse #29778, #53143). This schedule needs the image built with
+# `hydo build hydo/hydo.yaml --set fsync=insert` (fsync_after_insert = 1, the fsync after a merge
+# and after a fetch off), so it is not in hydo/regressions/, which every build of the example
+# replays: on the default image and with --set fsync=1 it passes.
+# The power goes off before step 40. Each replica lost a merged part that it had not synced and
+# queues a fetch of it that no replica can serve. One replica keeps the merged part's source
+# parts, the other never gets them: final_converge fails ("the replicas differ in 21 blocks after
+# the heal"), fingerprint b9f68cd13b21c4c3 on hvx with the image 9b5182d245477560 (twice).
+#   hydo run "$(tail -1 ../schedules/known-merged-part-lost-at-power-cut.schedule)"
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run C=40

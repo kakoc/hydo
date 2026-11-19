@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: after the faults heal, both replicas hold the same blocks of every table, each with the same rows
+exec /bin/chc check converge

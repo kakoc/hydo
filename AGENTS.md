@@ -736,6 +736,28 @@ posted:
 - At a backward clock step, vminsert's writes to every node fail with `i/o timeout`: the
   connection compares its deadline with a cached clock that lags up to a second. A batch then
   gets one copy, and a power loss of that one node loses acknowledged samples.
+**ClickHouse's replicated inserts (M311, tentative number).** ClickHouse v26.10.6.18 runs as two
+replicas of one shard with three ClickHouse Keeper servers in `hydo/onboard/examples/clickhouse`
+(RESULTS.md). It runs from the official images, imported with `hydo compose`, on hvx only. A Go
+client writes blocks into four `ReplicatedMergeTree` tables. They take synchronous inserts
+deduplicated by hash or by `insert_deduplication_token`, async inserts, and quorum inserts with
+`insert_quorum = 2`. The quorum inserts run in the parallel mode and in the sequential mode. The
+client retries each insert on either replica and sends one acknowledged block of three again. A messages check over both replicas and
+two final rules judge them, with a read after each quorum acknowledgement and reads with
+`select_sequential_consistency = 1`. No retry stored a block twice. Every acknowledged quorum
+insert was on the other replica at once. With the fsync after an insert and a merge on, no
+acknowledged insert was lost in a run that reached its checks. `hydo explore --configs` over the build parameter `fsync` showed the
+default settings' documented trade-off: a power cut lost a block acknowledged with
+`insert_quorum = 2`. One known bug, not
+posted:
+- With `fsync_after_insert = 1` and the fsync after a merge and a fetch off (the defaults), a
+  power cut loses merged parts on both replicas. Each replica queues a fetch that no replica can
+  serve, and the part check waits for a merge that never comes. Acknowledged rows stay on one
+  replica for good: `disk=cut | run C=40` (ClickHouse #29778, #53143). With every fsync setting
+  on it passes.
+
+In four schedules the guest agent stopped answering after the Keepers lost their quorum (open item
+157).
 
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
@@ -2491,6 +2513,31 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       only, because no sharded run watches them: only the Mac engine does. The CI page does not
       show them. A declaration that a place must run in an exploration, which fails it, is not
       built.
+157. The ClickHouse example (M311, tentative number). What is left:
+    - Finding 1 is known (#53143, open). A comment with its power-cut trigger was not posted.
+    - The hvx engine takes at most 4 GiB of root and data disk together (`HVX_DISK_MAX`).
+      ClickHouse's two programs are 1.4 GB. So the services of each image share one tree, and the
+      data disk has 1,024 MiB; a third replica or a larger data set does not fit.
+    - After a kill of a group, hydo restarts its members one at a time, each after the one before
+      is ready (as open item 147). A Keeper opens its client port only with a quorum, so the
+      Keepers count as ready at once, and a Keeper that does not start is not named.
+    - `hydo compose` took the Keeper's port from the image's `EXPOSE` (2181; it listens on 9181)
+      and kept the images' `entrypoint.sh`, which changes owners in the read-only root. The
+      import does not propose `guest.cpu: v3`, without which the programs stop with SIGILL.
+    - In four schedules the guest agent stopped answering after the Keepers lost their quorum.
+      Three had a ring partition of the Keepers, and one a kill of two of them and a forward
+      clock step. Each run ended `TIMEOUT workload` after 900 s, and seven runs did so. `hydo
+      inspect` cannot start where the agent does not answer, so the cause was not traced.
+    - `hydo explore --configs` with `--no-shrink` or `--schedule` lists no class of failure and
+      says that no combination failed, although 6 of 24 and 2 of 3 runs failed. An exploration's
+      failures are recorded only when they are shrunk.
+    - A workload command's output stays in the guest (`/tmp/hydo/compose/log.<n>`); the client
+      copies its errors to the console to show them in a run's `one.log`.
+    - Two of the onboarding's VMs of 4 GiB beside other sessions made the host's out-of-memory
+      killer end one of its runs; its scripts then held one lock for every VM.
+    - Only hvx ran it: not the Mac engine (the images have arm64 builds) and not KVM. No `cf=`
+      run, no third replica, and no Distributed table, materialized view, or lightweight update.
+
 158. The example `victoriametrics` (M312, tentative number). What is left:
     - The three candidates are not reported upstream. Each cause is plain in the code, so no
       native run was made.
@@ -3391,6 +3438,12 @@ build machine, before 2026-10-13.
   back deletes the current month's partition on every node (since v1.141.0). New samples wait in
   memory for the step's length. Spurious `i/o timeout`s leave a batch with one copy. Nothing
   recorded moved
+- M311 (tentative number): the ClickHouse v26.10.6.18 onboarding on hvx with two replicas and
+  three Keepers. No retried insert was stored twice, with hashes, tokens and async inserts, and
+  every acknowledged quorum insert was on the other replica at once. A known bug (#53143): with
+  the fsync after a merge and a fetch off, the defaults, a power cut loses merged parts on both
+  replicas. Replication then stops for good with rows on one replica. `hydo explore --configs`
+  labeled the default settings' loss the documented trade-off. Nothing recorded moved
 - M315 (tentative number): `hydo update` updates hydo the way it was installed: Homebrew,
   cargo, the release archive's `install.sh`, or the install cache. It updates every copy of the
   skill too: the known folders, every Claude Code configuration folder, the registry of copies,

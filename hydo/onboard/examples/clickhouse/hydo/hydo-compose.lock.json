@@ -1,0 +1,153 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "clickhouse/clickhouse-keeper:26.10.6": {
+   "index_digest": "sha256:8f507d833d94c22e8f4252f321db42b5a2f8dbe52b45d157d5f3f05c8e8d39ab",
+   "name": "clickhouse/clickhouse-keeper",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "LANG=en_US.UTF-8",
+       "LANGUAGE=en_US:en",
+       "LC_ALL=en_US.UTF-8",
+       "TZ=UTC",
+       "CLICKHOUSE_CONFIG=/etc/clickhouse-server/config.xml"
+      ],
+      "ExposedPorts": {
+       "10181/tcp": {},
+       "2181/tcp": {},
+       "44444/tcp": {},
+       "9181/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/var/lib/clickhouse": {},
+       "/var/lib/clickhouse-keeper": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:ca2691948bf647fdcfebd48dc3ed304a0f1e19702afde0840504d7a6ba844d52",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "LANG=en_US.UTF-8",
+       "LANGUAGE=en_US:en",
+       "LC_ALL=en_US.UTF-8",
+       "TZ=UTC",
+       "CLICKHOUSE_CONFIG=/etc/clickhouse-server/config.xml"
+      ],
+      "ExposedPorts": {
+       "10181/tcp": {},
+       "2181/tcp": {},
+       "44444/tcp": {},
+       "9181/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/var/lib/clickhouse": {},
+       "/var/lib/clickhouse-keeper": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:503ce3458c21cfedba0f0cb7e80b07ba586242f65cd843437ad43f622f606be2",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "clickhouse/clickhouse-keeper:26.10.6",
+   "registry": "docker.io",
+   "repo": "clickhouse/clickhouse-keeper",
+   "tag": "26.10.6"
+  },
+  "clickhouse/clickhouse-server:26.10.6": {
+   "index_digest": "sha256:9c55d8d8a77e03e1fd399d59e4d0a1c7a5e42df70098ff1c5d8bd18eb1a5d106",
+   "name": "clickhouse/clickhouse-server",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "LANG=en_US.UTF-8",
+       "TZ=UTC",
+       "CLICKHOUSE_CONFIG=/etc/clickhouse-server/config.xml"
+      ],
+      "ExposedPorts": {
+       "8123/tcp": {},
+       "9000/tcp": {},
+       "9009/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/var/lib/clickhouse": {}
+      },
+      "WorkingDir": null
+     },
+     "digest": "sha256:9084cd79bde01fa4a99060d8d9cf71acdc4d3df44fce586230f566890277b2d6",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "LANG=en_US.UTF-8",
+       "TZ=UTC",
+       "CLICKHOUSE_CONFIG=/etc/clickhouse-server/config.xml"
+      ],
+      "ExposedPorts": {
+       "8123/tcp": {},
+       "9000/tcp": {},
+       "9009/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/var/lib/clickhouse": {}
+      },
+      "WorkingDir": null
+     },
+     "digest": "sha256:d610448be0bfbb32c1aae9dfb900054f7175a77084d692840f95593d60a35274",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "clickhouse/clickhouse-server:26.10.6",
+   "registry": "docker.io",
+   "repo": "clickhouse/clickhouse-server",
+   "tag": "26.10.6"
+  }
+ }
+}

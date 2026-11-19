@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: on both replicas every block is whole, and no block whose every try was refused before the write is stored
+exec /bin/chc check blocks

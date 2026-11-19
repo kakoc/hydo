@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# read t_qseq with select_sequential_consistency = 1, or t_qpar, on one replica: every block acknowledged before the read is there, whole and once; exit 100 otherwise (opRead)
+exec /bin/chc read

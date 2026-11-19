@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=50
+# one block into t_dedup, by its hash or with insert_deduplication_token, tried up to 4 times on either replica, then once more in one of three (../../client/main.go, opInsert)
+exec /bin/chc op dedup

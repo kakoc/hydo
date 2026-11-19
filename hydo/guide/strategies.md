@@ -14,7 +14,7 @@ results page: new as far as the search found, known, by design, or a deployment 
 
 | system | its promise | the techniques that found most | where they found bugs |
 |---|---|---|---|
-| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics |
+| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse |
 | log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults | Redpanda, NATS |
 | job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate |
 | ledger or billing system | the books match the acknowledged operations; a limit holds | the generic rule beside domain rules; concurrent clients without faults; value properties | Blnk, Lago, Formance Ledger |
@@ -144,6 +144,10 @@ Three findings hold for every type of system:
     messages that a crashed engine had read (hatchet#5527).
   - Redpanda (finding 2): seed 9's hang was an error of the drain, which hydo does not shrink.
     With the `eventually` check, seed 37 reached the same cause as `VIOLATION [tx.no_hanging]`.
+  - ClickHouse (finding 1): each replica was a group of `fan_out: every-group`, and the drain
+    recorded one delivery per stored copy of a block. `fan-out` broke with the rule `converge`
+    when a power cut left rows on one replica only, while `no-loss` held. `at-most-once` held in
+    every schedule: no retried insert was stored twice.
 - **What it misses.** The drain's output stays in the guest, also when it fails. A drain that
   stops before the leases end and the recovery finishes reports false losses. Three of four
   failed explorations of a user's queue came from the plan.
@@ -244,6 +248,10 @@ Three findings hold for every type of system:
   - Meilisearch (finding 3): `disk=cut | run C=30` left all 5 dumps of the run at
     0 bytes, while each dump task said `succeeded`. In the first exploration 9 of 25 schedules
     failed so; a power loss of the service alone (`L=meilisearch@42+1`) does it too.
+  - ClickHouse (finding 1, known #53143): with `fsync_after_insert = 1` and the fsync after a
+    merge and a fetch off, `disk=cut | run C=40` lost merged parts on both replicas. Replication
+    then stopped for good with rows on one replica. In the first exploration seeds 1 and 5 did it
+    blind, and the power cut of seed 8 passed. With every fsync setting on, no cut did.
 - **What it misses.** A relaxed durability setting loses writes by design: make the setting a
   build parameter and run its durable value, or every value with `hydo explore --configs`. A lying disk or disk I/O errors break the disk's own
   promise. In Valkey's swarm exploration all 28 failures had a disk fault. Use `--durable-only`
@@ -683,12 +691,19 @@ Three findings hold for every type of system:
     alone, `C=30`. The table labeled both the documented trade-off. Iggy's README says that
     `replicated` acknowledges before the copy reaches the disk, and its issue 4631 measured the
     loss after a `kill -9`.
+  - ClickHouse's fsync settings (hvx, seeds 1-8): with every fsync setting on, all 8 schedules
+    passed. With the defaults, 3 of the 4 power-cut schedules failed. Two lost a block
+    acknowledged with `insert_quorum = 2`, and the shrink of one kept the cut and the quorum
+    inserts alone. With `fsync_after_insert` alone, 3 of 4 reached finding 1, the replication
+    that stops for good. That is a known bug, which a relaxed value only reaches.
   - Before it, each such finding came from one setting tried by hand. Examples are the write
     caching of Redpanda, the SQLite mode `synchronous=NORMAL` of Vikunja, and the durability
     default of libSQL.
 - **What it misses.** A setting that the system changes at run time is a `knobs:` entry (`R=`),
   which the explorer draws inside one image. A failure with another cause that appears only with a relaxed
-  value is labeled by design too, so read its check before you dismiss it.
+  value is labeled by design too, so read its check before you dismiss it. ClickHouse's finding 1
+  appears only with a relaxed value, and it is a known bug. With `--no-shrink` the table lists no
+  class of failure and says that no combination failed, so explore with shrinks.
 - **Cost.** One image and one exploration per combination. With more than 12 combinations, a
   pairwise set keeps the count near the product of the two largest settings' values.
 
