@@ -461,11 +461,20 @@ pub fn main_with(ctx: &Ctx, argv: &[String], io: &mut Io) -> i32 {
         let _ = io.out.flush();
         return 0;
     }
+    // the image services' roots against the guest's RAM (the Mac) or the engine's disk (hvx),
+    // before anything is unpacked (Milestone 324)
+    let fit = oci::root_fit_warnings(&p.oci, m, &a.arch);
     if has("--check") {
         for line in hydo_manifest::check_summary(&a.path, &p.loaded) {
             outln(io, &line);
         }
+        for w in &fit {
+            outln(io, &format!("hydo-build: warning: {w}"));
+        }
         return 0;
+    }
+    for w in &fit {
+        errln(io, &format!("hydo-build: warning: {w}"));
     }
     let out = a
         .out

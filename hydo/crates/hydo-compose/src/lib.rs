@@ -464,6 +464,15 @@ fn comment(text: &str, indent: usize) -> String {
     o
 }
 
+/// `a`, `a and b`, `a, b and c`.
+fn and_words(v: &[String]) -> String {
+    match v {
+        [] => String::new(),
+        [a] => a.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
 // ---------------------------------------------------------------- images
 
 /// 'redis:7.2.4', 'ghcr.io/x/y@sha256:..' -> (registry, repo, tag, digest).
@@ -1176,6 +1185,76 @@ impl<'a> Importer<'a> {
         }
         a.push(cdir);
         (a, skipped)
+    }
+
+    /// The services that run one image, two or more each, in service order: by the image's
+    /// digest for each architecture (a manifest names one config digest, which hydo-build shares
+    /// a tree by), else by its file (an image not resolved to a digest). Milestone 324: four
+    /// services of one 1.2 GB image gave four copies of its root, and the root did not fit in the
+    /// Mac's guest RAM.
+    fn shared_images(&self) -> Vec<(String, Vec<String>)> {
+        let mut groups: Vec<(String, Vec<String>)> = Vec::new();
+        for s in &self.svcs {
+            let plat = s.info.getn("platforms");
+            let digests: Vec<String> = ["amd64", "arm64"]
+                .iter()
+                .map(|a| plat.getn(a).getn("digest"))
+                .filter(|d| d.truthy())
+                .map(pstr)
+                .collect();
+            let key = if digests.is_empty() {
+                match &s.image {
+                    Img::One(a) | Img::Two(a, _) => a.clone(),
+                }
+            } else {
+                digests.join(" ")
+            };
+            match groups.iter_mut().find(|g| g.0 == key) {
+                Some(g) => g.1.push(s.name.clone()),
+                None => groups.push((key, vec![s.name.clone()])),
+            }
+        }
+        groups.retain(|g| g.1.len() > 1);
+        groups
+    }
+
+    /// `root.share_images: true` with the comment that says why, when services share an image.
+    fn share_images_lines(&self) -> String {
+        let groups = self.shared_images();
+        if groups.is_empty() {
+            return String::new();
+        }
+        let mut text = String::new();
+        for (_, names) in &groups {
+            let image_ref = self
+                .svcs
+                .iter()
+                .find(|s| s.name == names[0])
+                .map(|s| s.image_ref.clone())
+                .unwrap_or_default();
+            let line = format!("{} run one image, {image_ref}.", and_words(names));
+            // wrapped at 94 columns, as the other comments of the file
+            let mut cur = String::new();
+            for w in line.split(' ') {
+                if !cur.is_empty() && cur.len() + 1 + w.len() > 94 {
+                    text.push_str(&cur);
+                    text.push('\n');
+                    cur.clear();
+                }
+                if !cur.is_empty() {
+                    cur.push(' ');
+                }
+                cur.push_str(w);
+            }
+            text.push_str(&cur);
+            text.push('\n');
+        }
+        text.push_str(
+            "The services of one image share one unpacked copy of it in the root, not a copy each\n\
+             (on the Mac the root lives in the guest's RAM). Each service keeps its own /tmp,\n\
+             /data and mounts (MANIFEST.md, \"root\").",
+        );
+        format!("{}  share_images: true\n", comment(&text, 2))
     }
 
     /// The images directory, relative to the output's folder (`--images-dir`, else `images`).
@@ -3191,6 +3270,7 @@ impl<'a> Importer<'a> {
                 1
             )
         ));
+        l.push_str(&self.share_images_lines());
         l.push_str("\nservices:\n");
         for s in &self.svcs {
             if s.origin.is_empty() {

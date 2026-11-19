@@ -60,6 +60,13 @@ root:
       10.89.0.15 kv-2-init-volume-permissions
       10.89.0.16 kv-2 kv-2.kv-headless kv-2.kv-headless.default kv-2.kv-headless.default.svc kv-2.kv-headless.default.svc.cluster.local
       10.89.0.17 api api.default api.default.svc api.default.svc.cluster.local
+  # kv_0_init_volume_permissions, kv_1_init_volume_permissions and kv_2_init_volume_permissions
+  # run one image, busybox:1.36.
+  # kv_0, kv_1 and kv_2 run one image, registry.example.com/kv/server:2.1.
+  # The services of one image share one unpacked copy of it in the root, not a copy each
+  # (on the Mac the root lives in the guest's RAM). Each service keeps its own /tmp,
+  # /data and mounts (MANIFEST.md, "root").
+  share_images: true
 
 services:
   # Kubernetes StatefulSet kv, pod kv-0 (replica 1 of 3), init container volume-permissions

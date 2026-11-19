@@ -199,6 +199,45 @@ impl Source {
         }
     }
 
+    /// The size of a member, its first 4 bytes and its last 4 (a hard link reads its
+    /// target's), without reading the rest: what [`Image::unpacked_bytes`] needs of a layer.
+    fn ends(&self, src_path: &str, name: &str) -> R<(u64, Vec<u8>, Vec<u8>)> {
+        let (path, start, size) = match self {
+            Source::Dir(d) => {
+                let p = d.join(name);
+                let n = fs::metadata(&p)
+                    .map_err(|_| format!("{src_path}: {name} missing"))?
+                    .len();
+                (p, 0, n)
+            }
+            Source::Tar { file, all, .. } => {
+                let mut mi = self
+                    .member(name)
+                    .ok_or_else(|| format!("{src_path}: {name} missing from the archive"))?;
+                if mi.islnk() {
+                    let target = py::normpath(&mi.linkname);
+                    mi = all
+                        .iter()
+                        .rev()
+                        .find(|m| py::normpath(&m.name) == target && !m.islnk())
+                        .cloned()
+                        .ok_or_else(|| format!("{src_path}: {name}: link target missing"))?;
+                }
+                (file.clone(), mi.offset_data, mi.size)
+            }
+        };
+        let mut f = File::open(&path).map_err(|e| e.to_string())?;
+        let k = size.min(4) as usize;
+        let mut head = vec![0u8; k];
+        f.seek(SeekFrom::Start(start)).map_err(|e| e.to_string())?;
+        f.read_exact(&mut head).map_err(|e| e.to_string())?;
+        let mut tail = vec![0u8; k];
+        f.seek(SeekFrom::Start(start + size - k as u64))
+            .map_err(|e| e.to_string())?;
+        f.read_exact(&mut tail).map_err(|e| e.to_string())?;
+        Ok((size, head, tail))
+    }
+
     fn read(&self, src_path: &str, name: &str, digest: Option<&str>) -> R<Vec<u8>> {
         let mut b = Vec::new();
         self.open(src_path, name)?
@@ -551,6 +590,29 @@ impl Image {
             return Ok(());
         }
         Err(format!("{p}: image index nested too deeply"))
+    }
+
+    /// About how many bytes the image's layers hold unpacked, read without unpacking them: a
+    /// plain layer's size, and a gzip layer's own record of its size (the last 4 bytes of a gzip
+    /// stream, modulo 4 GiB; Milestone 324). A zstd layer counts its compressed size. A file
+    /// that a later layer replaces or deletes counts in each layer, so the estimate errs high.
+    pub fn unpacked_bytes(&self) -> R<u64> {
+        let mut total = 0u64;
+        for (name, _) in &self.layers {
+            let (size, head, tail) = self.src.ends(&self.path, name)?;
+            let n = if head.len() >= 2 && head[..2] == [0x1f, 0x8b] && tail.len() == 4 {
+                let mut n = u32::from_le_bytes([tail[0], tail[1], tail[2], tail[3]]) as u64;
+                // a layer of more than 4 GiB unpacked: its record wrapped around
+                while n < size {
+                    n += 1 << 32;
+                }
+                n
+            } else {
+                size
+            };
+            total += n;
+        }
+        Ok(total)
     }
 
     fn config_section(&self) -> Value {
@@ -1715,6 +1777,180 @@ fn unpack(o: &OciService, t: &mut Tree, tmpdir: &Path, busybox: &Path, hosts: &s
 /// 2026-11-07): `hydo compose` turns a Compose healthcheck into `ready: ... hydo-oci <svc> <prog>
 /// ...`, and an image without `<prog>` (the libSQL server's image has no `curl`) fails the
 /// readiness check of every run, after its whole time limit. Called after [`stage`] or
+/// The MiB of `b` bytes, rounded up.
+fn mib_of(b: u64) -> u64 {
+    b.div_ceil(1 << 20)
+}
+
+/// `a`, `a and b`, `a, b and c`.
+fn and_words(v: &[String]) -> String {
+    match v {
+        [] => String::new(),
+        [a] => a.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
+/// The services that run one image, and what `root.share_images: true` does for them.
+fn share_words(groups: &[String]) -> String {
+    match groups {
+        [one] => format!("{one} run one image: root.share_images: true unpacks it once"),
+        _ => format!(
+            "{} run one image, {}: root.share_images: true unpacks each image once",
+            groups[0],
+            groups[1..]
+                .iter()
+                .map(|g| format!("{g} another"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
+/// Milestone 324: whether the image services' roots fit where the engine keeps them, before the
+/// build unpacks them. Four services of one 1.2 GB image gave four roots in the initramfs, a
+/// 2.0 GB `cpio.gz`, and roots that did not fit in the Mac's guest RAM; the hvx engine takes at
+/// most 4 GiB of root and data disk together (`HVX_DISK_MAX`, which the ClickHouse onboarding
+/// met). The size of each image comes from its layers ([`Image::unpacked_bytes`]), so the
+/// estimate needs no unpacking and runs for `--check` too.
+///
+/// - arm64 with the root in the initramfs: the root is a tmpfs in the guest's RAM, which Linux
+///   gives at most half of `guest.ram_mib`.
+/// - x86_64, and arm64 with `guest.root: disk`: the root partition (1.3 times its content, as
+///   the build sizes it) and the data disk must fit in [`crate::image::DISK_MAX_BYTES`].
+///
+/// One warning, or none when the roots fit or an image cannot be read (the build says why).
+pub fn root_fit_warnings(oci: &[OciService], m: &Value, arch: &str) -> Vec<String> {
+    if oci.is_empty() {
+        return Vec::new();
+    }
+    let share = m.get("root").and_then(|r| r.get("share_images")) == Some(&Value::Bool(true));
+    // the images by config digest, in service order, with their services and size
+    let mut images: Vec<(String, Vec<String>, Vec<bool>, u64)> = Vec::new();
+    for o in oci {
+        let d = &o.img.config_digest;
+        match images.iter_mut().find(|x| &x.0 == d) {
+            Some(x) => {
+                x.1.push(o.svc.clone());
+                x.2.push(o.writable);
+            }
+            None => {
+                let Ok(n) = o.img.unpacked_bytes() else {
+                    return Vec::new();
+                };
+                images.push((d.clone(), vec![o.svc.clone()], vec![o.writable], mib_of(n)));
+            }
+        }
+    }
+    // the trees as the build stages them: a writable service's tree is its own and goes to the
+    // data disk on x86_64; the others are one per service, or one per image when shared
+    let on_x86 = arch != "arm64";
+    let trees = |shared: bool| -> (u64, u64) {
+        let (mut root, mut layers) = (0u64, 0u64);
+        for (_, _, writable, n) in &images {
+            let plain = writable.iter().filter(|w| !**w).count() as u64;
+            let own = writable.len() as u64 - plain;
+            let plain = if shared { plain.min(1) } else { plain };
+            root += n * plain;
+            if on_x86 {
+                layers += n * own;
+            } else {
+                root += n * own;
+                layers += n * own;
+            }
+        }
+        (root, layers)
+    };
+    let (root_now, layers) = trees(share);
+    let (root_shared, _) = trees(true);
+    let detail: Vec<String> = images
+        .iter()
+        .map(|(_, names, _, n)| {
+            if names.len() == 1 {
+                format!("{}: {n} MiB", names[0])
+            } else {
+                format!("{}: {n} MiB each", and_words(names))
+            }
+        })
+        .collect();
+    let groups: Vec<String> = images
+        .iter()
+        .filter(|(_, _, w, _)| w.iter().filter(|x| !**x).count() > 1)
+        .map(|(_, names, _, _)| and_words(names))
+        .collect();
+    let can_share = !share && root_shared < root_now;
+    let get = |sec: &str, k: &str| m.get(sec).and_then(|s| s.get(k)).and_then(Value::as_u64);
+    if !on_x86 && !crate::arm64::root_on_disk(m) {
+        let ram = get("guest", "ram_mib").unwrap_or(1024);
+        let half = ram / 2;
+        if root_now <= half {
+            return Vec::new();
+        }
+        let target = if can_share { root_shared } else { root_now };
+        let need = (2 * target).div_ceil(256) * 256;
+        let max = hydo_manifest::RAM_MIB_MAX as u64;
+        let mut fix = Vec::new();
+        if can_share {
+            fix.push(format!(
+                "{}, {root_shared} MiB in all",
+                share_words(&groups)
+            ));
+        }
+        if need > max {
+            fix.push(format!(
+                "even at the most guest RAM, {max} MiB, the roots do not fit in half of it: put \
+                 the root on the disk with guest.root: disk"
+            ));
+        } else if need > ram {
+            fix.push(format!(
+                "guest.ram_mib: {need} or more gives the roots the room (now {ram})"
+            ));
+        }
+        return vec![format!(
+            "the image services' roots need about {root_now} MiB unpacked ({}), and on the Mac \
+             engine the root lives in the guest's RAM, where Linux gives it at most half of \
+             guest.ram_mib ({half} of {ram} MiB): the guest stops at boot with `Initramfs \
+             unpacking failed`. To fix it: {}",
+            detail.join("; "),
+            fix.join("; ")
+        )];
+    }
+    let data = get("data", "size_mib").unwrap_or(512);
+    let disk_of = |root: u64| {
+        (root * 13 / 10).div_ceil(64) * 64 + data + (layers * 13 / 10).div_ceil(64) * 64
+    };
+    let max = crate::image::DISK_MAX_BYTES >> 20;
+    let disk = disk_of(root_now);
+    if disk <= max {
+        return Vec::new();
+    }
+    let mut fix = Vec::new();
+    if can_share {
+        fix.push(format!(
+            "{}, a disk of about {} MiB",
+            share_words(&groups),
+            disk_of(root_shared)
+        ));
+    }
+    fix.push(format!(
+        "a smaller data.size_mib (now {data}) or fewer image services; guest.ram_mib does not \
+         help, because the root is on the disk"
+    ));
+    vec![format!(
+        "the image services' roots need about {root_now} MiB unpacked ({}), so the disk would be \
+         about {disk} MiB (the root partition at 1.3 times its content, and the data disk of \
+         {data} MiB{}), more than the {max} MiB of root and data disk together that the hvx \
+         engine takes (it refuses the image). To fix it: {}",
+        detail.join("; "),
+        if layers > 0 {
+            " with the writable services' layers"
+        } else {
+            ""
+        },
+        fix.join("; ")
+    )]
+}
+
 /// [`stage_with`] with the same `share` and `layers`, so that each service's tree is looked at
 /// where it was unpacked (its own `R/oci/<svc>`, the tree it shares with `root.share_images`, or
 /// its `writable: true` layer on the staged data partition); one warning per such command.
