@@ -85,10 +85,23 @@ fn json_loads(text: &str) -> Result<Value, ManifestError> {
 /// is set and the text starts with `{` (an image keeps every plan as /etc/hydo/hydo.yaml), else
 /// hydo-build's YAML subset.
 pub fn parse_text(text: &str, name: &str, by_content: bool) -> Result<Value, ManifestError> {
-    if name.ends_with(".json") || (by_content && py::lstrip(text).starts_with('{')) {
-        return json_loads(text);
+    let mut m = if name.ends_with(".json") || (by_content && py::lstrip(text).starts_with('{')) {
+        json_loads(text)?
+    } else {
+        yaml::parse_yaml(text, name)?
+    };
+    drop_extensions(&mut m);
+    Ok(m)
+}
+
+/// Compose's extension fields in a manifest (Milestone 316): a top-level key that starts with
+/// `x-` only holds what an anchor names (`x-common: &common`), and the parser has already put
+/// its value wherever an alias or a `<<` merge key uses it, so the manifest drops such keys
+/// before any key is read. No key of the project format starts with `x-`.
+pub fn drop_extensions(m: &mut Value) {
+    if let Value::Object(o) = m {
+        o.retain(|k, _| !k.starts_with("x-"));
     }
-    yaml::parse_yaml(text, name)
 }
 
 /// What `load` needs besides the file.
@@ -239,6 +252,7 @@ fn load_inner(
     } else {
         yaml::parse_yaml(&text, &py::basename(&p))?
     };
+    drop_extensions(&mut m);
     if !m.is_object() {
         return Err(ManifestError {
             message: "the manifest must be a mapping".into(),

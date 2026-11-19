@@ -5,6 +5,7 @@
 
 mod tmpdir;
 
+mod anchors;
 mod ci_format;
 mod engine_version;
 mod equivalence;

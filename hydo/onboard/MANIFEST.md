@@ -2708,8 +2708,13 @@ a number, hex or one of these ids needs a `normalize:` pattern).
 The build machine has no YAML library, so `hydo-build` parses a subset: block mappings and
 sequences, `- key: value` mapping items, `|` / `|-` literal and `>` / `>-` folded blocks,
 flow `[a, b]` and `{k: v}`, single- and double-quoted strings, integers, `true`/`false`,
-comments. Not supported: anchors and aliases, tags, multiple documents, multi-line plain
-scalars. A `.json` file with the same structure is accepted as well.
+comments. Since Milestone 316 it also reads anchors (`&name` before a value), aliases (`*name`
+as a whole value) and `<<` merge keys, as PyYAML's `safe_load` does: a mapping's own keys win
+over merged ones, and in `<<: [*a, *b]` the earlier mapping wins. An alias needs its anchor
+earlier in the file. As in a Compose file, a top-level key that starts with `x-` is an
+extension field: it can hold an anchor (`x-common: &common`), and hydo drops it before it reads
+the manifest's keys. Not supported: tags, multiple documents, multi-line plain scalars. A
+`.json` file with the same structure is accepted as well.
 Quote values YAML would otherwise turn into numbers or booleans when you mean a string
 (`"1"`, `"no"`).
 
