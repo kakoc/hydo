@@ -390,6 +390,31 @@ pub fn replay_command(
     w.join(" ")
 }
 
+/// The command that runs `schedule` once into the run directory `out`, for `hydo inspect`
+/// (Milestone 324): always with the image and, on Linux, the engine, so that it runs the same
+/// schedule from any folder. The Mac has one engine, which `hydo run` takes without `--backend`.
+pub fn run_dir_command(image: &str, engine: &Engine, schedule: &str, out: &str) -> String {
+    let q = crate::inspect::work::quote;
+    let mut w = vec!["hydo run".to_string()];
+    if let Some(b @ ("kvm" | "hvx")) = engine.backend.as_deref() {
+        w.push(format!("--backend {b}"));
+    }
+    let o = crate::runs::RunOpts::of_eargs(engine.args.as_deref().unwrap_or(&[]));
+    if let Some(n) = o
+        .vcpus
+        .or(engine.vcpus.filter(|n| *n > 1).map(|n| n as u32))
+    {
+        w.push(format!("--vcpus {n}"));
+    }
+    if let Some(m) = o.turn_margin {
+        w.push(format!("--turn-margin {m}"));
+    }
+    w.push(format!("--image {}", q(image)));
+    w.push(format!("\"{schedule}\""));
+    w.push(format!("--out {}", q(out)));
+    w.join(" ")
+}
+
 /// The sentence before a replay command (plain words with backquotes).
 pub fn needs_first_words(pr: &Project, image: Option<&str>) -> String {
     match (&pr.folder, image_arg(pr, image)) {

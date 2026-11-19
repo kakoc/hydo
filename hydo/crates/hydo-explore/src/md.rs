@@ -168,6 +168,39 @@ pub fn parts_md(doc: &Exploration) -> Vec<String> {
     l
 }
 
+/// The exploration's folder, as its command line named it (`--out`).
+pub fn out_dir(doc: &Exploration) -> Option<String> {
+    let a = &doc.config.argv;
+    a.iter().enumerate().find_map(|(i, x)| {
+        if x == "--out" {
+            a.get(i + 1).cloned()
+        } else {
+            x.strip_prefix("--out=").map(String::from)
+        }
+    })
+}
+
+/// The command that runs a minimal schedule once into a run directory of its own,
+/// `<exploration>/runs/seed-<n>`, for `hydo inspect` (Milestone 324: an exploration keeps no
+/// run directory, so `hydo inspect diagnose` of its folder found no result.json). It is the
+/// "by hand" line with the engine named on Linux and `--out`.
+pub fn run_dir_command(doc: &Exploration, v: &hydo_results::Shrink) -> Option<String> {
+    let by_hand = v.repro_command.as_deref()?.trim_matches('`');
+    let rest = by_hand.strip_prefix("hydo run ")?;
+    let out = out_dir(doc)?;
+    let engine = match doc.engine.backend.as_deref() {
+        Some("hvx") if !rest.starts_with("--backend ") => "--backend hvx ",
+        _ => "",
+    };
+    let dir = format!("{}/runs/seed-{}", out.trim_end_matches('/'), v.from_seed);
+    let dir = if dir.contains(' ') {
+        format!("'{dir}'")
+    } else {
+        dir
+    };
+    Some(format!("hydo run {engine}{rest} --out {dir}"))
+}
+
 /// report.md of an exploration document.
 pub fn report(doc: &Exploration) -> String {
     if doc.mode == "branch" {
@@ -287,6 +320,9 @@ pub fn report(doc: &Exploration) -> String {
             "- by hand: {}",
             v.repro_command.clone().unwrap_or_default()
         ));
+        if let Some(c) = run_dir_command(doc, v) {
+            l.push(format!("- a run directory for `hydo inspect`: `{c}`"));
+        }
         l.push(String::new());
     }
     l.extend(
