@@ -18155,3 +18155,33 @@ fingerprint of an image with it moves. As the default it belongs to a new finger
 release that raises the middle number, as M316's launcher fix does (open item 164).
 
 **What is left.** Open item 164.
+
+## Milestone 321 (tentative number): two tests that only Linux ran, and command output without a pipe
+
+CI on `main` failed on Linux after Milestones 317 and 320 were merged. Both failures were in new
+tests that the Mac skips or passes, and a third problem was a hang of four hours.
+
+**The launcher test of Milestone 317.** `oci::tests::a_helper_beside_the_launcher_never_hides_the_shm_tmpfs`
+named its folder `hydo-oci-once-...` in the temporary folder. It replaces the scripts' `/tmp/hydo`
+with that folder, and on Linux the temporary folder is `/tmp`. So the stand-in busybox's own path
+was replaced too, and the helper never ran ("the helper never reached its bind of /dev").
+`TMPDIR=/tmp` reproduces it on a Mac. The folder is `oci-once-...` now, and the test passes with
+`TMPDIR=/tmp`. The launcher's code was right.
+
+**The registry test of Milestone 320.** On Linux an import with a wrong password passed. The test
+now prints the registry's log and what the credential helper was asked when that happens. The
+log showed no request of the import at all: with only the lock file removed, the import pinned
+the image files that `fetch-images.sh` had saved in the project folder. The test now removes
+the whole project folder before the wrong password, so the import must ask the registry. hydo's
+code was right.
+
+**A read that waited for hours.** A run of `cargo test -p hydo --test it` waited about four hours
+in `configs::`: an explorer was in `hydo_engine::host_cpu`, reading the output of `sysctl` from a
+pipe that a child of another thread held open (the scripted engine `engine.sh serve`). macOS marks
+a new pipe close-on-exec only after it is made, so a child started in that moment inherits its
+write end. `host_cpu` and `available_mib` now read the output of `sysctl` and `vm_stat` through a
+temporary file, and `wait` ends when the command ends. A unit test runs a command that leaves a
+child running: it returns at once, where the pipe waited for the child.
+
+Nothing recorded moved.
+

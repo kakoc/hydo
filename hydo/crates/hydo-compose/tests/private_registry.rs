@@ -884,9 +884,21 @@ fn with_docker_a_private_registry_and_from_docker() {
     let wrong = d.join("wrong");
     helper(&wrong, "store", &host, "not-the-password");
     let cfg_wrong = docker_config(&wrong, serde_json::json!({"credsStore": "store"}));
-    std::fs::remove_file(d.join("shop/hydo-compose.lock.json")).unwrap();
+    // the whole project folder: with the lock file alone gone, the import pinned the image files
+    // that fetch-images.sh had saved there and asked no registry, so Linux CI passed the wrong
+    // password (the registry's log showed no request)
+    std::fs::remove_dir_all(d.join("shop")).unwrap();
     let (out, e) = cli_import(&d, &image_ref, &cfg_wrong, &[]);
-    assert_eq!(out.0, 1, "{e}");
+    if out.0 != 1 {
+        // what the registry saw: whether credentials came, and what it answered (Linux CI's
+        // import once passed with the wrong password, open item 165)
+        let logs = dk(&["logs", "--tail", "60", &name]).unwrap_or_else(|x| x);
+        let asked_wrong = asked(&wrong, "store");
+        panic!(
+            "a wrong password was accepted (status {}): {e}\nthe helper was asked for: {asked_wrong:?}\nthe registry's log:\n{logs}",
+            out.0
+        );
+    }
     no_secret(&e);
     assert!(e.contains("the registry refused the credential"), "{e}");
 

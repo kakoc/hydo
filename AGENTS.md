@@ -3634,6 +3634,12 @@ build machine, before 2026-10-13.
   periodic tick sets ticks 1 ms apart. So a tick is due 19 ms ahead after 2 minutes, and a busy
   guest's clock nearly stopped. `guest.exact_tick: true` boots it with `clocksource=jiffies`;
   seed 20 then ends with finding 1's verdict. Nothing recorded moved
+- M321 (tentative number): two tests that only Linux ran, and command output without a pipe. On
+  Linux the launcher test of M317 replaced its own folder's path with the scripts' `/tmp/hydo`.
+  The registry test of M320 left image files that let a wrong password pass. Both
+  tests are fixed; hydo's code was right. `host_cpu` and `available_mib` read `sysctl` and
+  `vm_stat` through a file, so a pipe that another child inherits no longer keeps them waiting.
+  Nothing recorded moved
 
 ## Where to look
 
