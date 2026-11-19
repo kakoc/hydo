@@ -215,28 +215,34 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.3.4 was published on 2026-11-15 from the release commit `dee7da68`, in
+**Releases.** hydo 0.4.0 was published on 2026-11-18 from the release commit `75db9ff9`, in
 these places:
 
-- The GitHub release `v0.3.4`: both tarballs, their sources archives, and the Mac signatures.
+- The GitHub release `v0.4.0`: both tarballs, their sources archives, and the Mac signatures.
 - The Homebrew tap: `brew install kakoc/tap/hydo`.
-- crates.io: the 21 crates of `cargo install hydo` (`hydo-contracts` is new, its first version
-  published by hand, open item 63), and `hydo-assert`.
-- PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.3.4`.
-- The skill release `skill-v2.3.1` (the plugin `hydo`, command `/hydo:onboard`).
+- crates.io: the crates of `cargo install hydo`, and `hydo-assert`.
+- PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.4.0`.
+- The skill release `skill-v2.3.3` (the plugin `hydo`, command `/hydo:onboard`).
 
+0.4.0 adds Milestones 254 to 256 and 258 to 303 to 0.3.4, with the fingerprint epoch 4. The
+release 0.4.1 is prepared on the branch `release-0.4.1`, from `75db9ff9`, and not published. It
+is 0.4.0 with `hydo update` (M315), the five fixes of M316, and the skill 2.4.0. It comes early, so
+that the manual upgrade from 0.4.0 is the last one (user, 2026-11-18). Everything else on `main`
+after 0.4.0 waits for 0.5.0. The epoch stays 4, as the section "The 0.4.1 release, prepared for
+publication" of `docs/HISTORY.md` says. The release 0.3.4 was published on 2026-11-15 from
+`dee7da68`, with the skill release `skill-v2.3.1`.
 The registries are published by `release.yml` on the tag. 0.3.4 adds Milestones 231, 233–253
 and 257 to 0.3.3, as `docs/HISTORY.md` "The 0.3.4 release" says. The fingerprint epoch is 3. Both
 releases ship M234's guest kernels with cgroups next to the old ones. 0.3.3 (`dad45fc9`) added
-Milestones 228–230, 232, 239, and 240. The next release raises the middle number (0.4.0): a release
-with features raises it, and the last number is for small fixes only (user, 2026-11-15).
+Milestones 228–230, 232, 239, and 240. A release with features raises the middle number, and the
+last number is for small fixes only (user, 2026-11-15).
 Plans keep `hydo_version: "0.3"` across releases: since M262 it means 0.3 or any newer 0.x, and
 only an older hydo refuses a plan (`docs/RELEASING.md` step 1). The release index `hydo/dist/releases.txt` pins every published archive.
 Since 0.2.0 the Linux release ships the KVM engine, and the Mac programs are signed and notarized.
 `cargo install hydo` followed by `hydo setup` works on the Mac and, since M210, on Linux with KVM.
-How to release: `docs/RELEASING.md` and `docs/PUBLISHING.md`. The files of 0.3.4 and its prepared
-material are in `hydo/dist/out/0.3.4/` of the main checkout. Their sha256 values are in the
-section "The 0.3.4 release" of `docs/HISTORY.md`.
+How to release: `docs/RELEASING.md` and `docs/PUBLISHING.md`. The files of each release and its
+prepared material are in `hydo/dist/out/<version>/` of the main checkout. Their sha256 values are
+in the release's section of `docs/HISTORY.md`.
 
 **What 0.3.2 changed in the release** (`docs/HISTORY.md` "The 0.3.2 release"). The fingerprint
 epoch stays 2.
