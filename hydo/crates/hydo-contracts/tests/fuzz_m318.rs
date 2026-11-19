@@ -94,6 +94,7 @@ fn const_generics_static_references_and_closures_are_fuzzed() {
         "head",
         "total",
         "keep",
+        "hold",
         "tag",
         "map_left",
         "left_or_else",
@@ -108,8 +109,9 @@ fn const_generics_static_references_and_closures_are_fuzzed() {
     // a const generic parameter takes its value from a `with` line
     assert_eq!(one(&rep, "::head").verdict, "held", "{rep:?}");
     assert_eq!(one(&rep, "::[u8; 3]::total").verdict, "held");
-    // a `&'static` parameter gets a leaked value
+    // a `&'static` parameter gets a leaked value, which a result may keep
     assert_eq!(one(&rep, "::keep").verdict, "held");
+    assert_eq!(one(&rep, "::hold").verdict, "held");
     assert_eq!(one(&rep, "::tag").verdict, "held");
     // a closure parameter takes a generated closure
     assert_eq!(one(&rep, "::map_left").verdict, "held");

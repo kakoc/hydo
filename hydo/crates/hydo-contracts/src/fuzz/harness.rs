@@ -56,13 +56,24 @@ pub fn is_read_built(t: &FTy) -> bool {
     }
 }
 
-/// An expression that leaks the value `v` of type `t` and gives a `&'static mut` reference to
-/// it: a string as a `str`, a list as a slice, any other value as itself (Milestone 318).
-fn leaked(t: &FTy, v: &str) -> String {
+/// The type and the expression of a binding that leaks the value `v` of type `t` and holds a
+/// `&'static` reference to it: a string as a `str`, a list as a slice, any other value as itself
+/// (Milestone 318). The binding's type makes the reference shared and `'static` at once, so
+/// that a result may keep it (percent-encoding's `PercentEncode` keeps its `&'static AsciiSet`).
+fn leaked(t: &FTy, v: &str) -> (String, String) {
     match t {
-        FTy::Str => format!("self::std::boxed::Box::leak({v}.into_boxed_str())"),
-        FTy::List(_) => format!("self::std::boxed::Box::leak({v}.into_boxed_slice())"),
-        _ => format!("self::std::boxed::Box::leak(self::std::boxed::Box::new({v}))"),
+        FTy::Str => (
+            "&'static str".into(),
+            format!("self::std::boxed::Box::leak({v}.into_boxed_str())"),
+        ),
+        FTy::List(x) => (
+            format!("&'static [{}]", rty(x)),
+            format!("self::std::boxed::Box::leak({v}.into_boxed_slice())"),
+        ),
+        _ => (
+            format!("&'static {}", rty(t)),
+            format!("self::std::boxed::Box::leak(self::std::boxed::Box::new({v}))"),
+        ),
     }
 }
 
@@ -518,7 +529,8 @@ pub fn module(s: &Spec) -> String {
     let mut leaks = String::new();
     for (i, p) in s.params.iter().enumerate() {
         if p.leak {
-            let _ = write!(leaks, "let l{i} = {}; ", leaked(&p.ty, &format!("a{i}")));
+            let (ty, e) = leaked(&p.ty, &format!("a{i}"));
+            let _ = write!(leaks, "let l{i}: {ty} = {e}; ");
             args.push(format!("l{i}"));
             continue;
         }

@@ -149,6 +149,23 @@ pub fn keep(input: &[u8], set: &'static Set) -> Vec<u8> {
         .collect()
 }
 
+/// A result that keeps the `&'static` reference, as percent-encoding's `PercentEncode`.
+pub struct Holder {
+    set: &'static Set,
+}
+
+impl Holder {
+    pub fn lo(&self) -> u64 {
+        self.set.lo
+    }
+}
+
+// hydo: read Holder as u64 by lo()
+// hydo: ensures result == set.lo
+pub fn hold(set: &'static Set) -> Holder {
+    Holder { set }
+}
+
 /// A name that must live as long as the program.
 // hydo: ensures result == len(name)
 pub fn tag(name: &'static str) -> usize {
