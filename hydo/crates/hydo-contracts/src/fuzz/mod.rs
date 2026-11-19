@@ -1108,8 +1108,9 @@ fn check_pat(p: &lang::Pat, t: &FTy) -> Result<(), String> {
             match (sub, v.kind) {
                 (None, _) => Ok(()),
                 (Some(ps), rust::VKind::Named) if !ps.is_empty() => Err(format!(
-                    "`{n}` has named fields: write `{n}` in the pattern, and read a field with \
-                     `.{n}.<field>`"
+                    "`{n}` has named fields: write `{n} {{ {}: <pattern>, .. }}`, or `{n}` for \
+                     any fields",
+                    v.fields.first().map_or("<field>", |(f, _)| f.as_str())
                 )),
                 (Some(ps), _) => fields(
                     ps,
@@ -1137,11 +1138,51 @@ fn check_pat(p: &lang::Pat, t: &FTy) -> Result<(), String> {
                 ),
             }
         }
+        // named fields (Milestone 326)
+        (Pat::Fields(n, ps), FTy::Enum { path, variants, .. }) => {
+            let Some(v) = variants.iter().find(|v| v.name == *n) else {
+                return Err(format!(
+                    "`{}` has no variant `{n}`; its variants are {}",
+                    path.trim_start_matches("self::"),
+                    variant_names(variants)
+                ));
+            };
+            named_fields(n, ps, &v.fields)
+        }
+        (Pat::Fields(n, ps), FTy::Struct { path, fields, .. }) => {
+            let name = path.rsplit("::").next().unwrap_or(path);
+            if n != name {
+                return Err(format!("the value is a `{name}`, not a `{n}`"));
+            }
+            named_fields(n, ps, fields)
+        }
         (p, t) => Err(format!(
             "the pattern `{p}` does not fit a value of `{}`",
             t.rust()
         )),
     }
+}
+
+/// Whether each named field's pattern fits its field (Milestone 326).
+fn named_fields(
+    n: &str,
+    ps: &[(String, lang::Pat)],
+    fields: &[(String, FTy)],
+) -> Result<(), String> {
+    for (k, p) in ps {
+        let Some((_, t)) = fields.iter().find(|(f, _)| f == k) else {
+            return Err(format!(
+                "`{n}` has no field `{k}`; its fields are {}",
+                fields
+                    .iter()
+                    .map(|(f, _)| format!("`{f}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        };
+        check_pat(p, t)?;
+    }
+    Ok(())
 }
 
 /// The lints that a source's attributes forbid: `#![forbid(unsafe_code)]`, `#[forbid(...)]`,

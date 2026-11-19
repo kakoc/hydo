@@ -65,6 +65,10 @@ pub enum Pat {
     /// A variant's name (the path's last segment) and, when written, its fields' patterns.
     Variant(String, Option<Vec<Pat>>),
     Tuple(Vec<Pat>),
+    /// A variant or a structure with named fields' patterns (Milestone 326):
+    /// `UnknownUnit { start: 0, .. }`. A field the pattern does not name matches anything, and
+    /// `Name { .. }` is `Variant(Name, None)`.
+    Fields(String, Vec<(String, Pat)>),
 }
 
 impl fmt::Display for Pat {
@@ -79,6 +83,10 @@ impl fmt::Display for Pat {
             Pat::Variant(n, Some(v)) => write!(f, "{n}({})", list(v)),
             Pat::Tuple(v) if v.len() == 1 => write!(f, "({},)", v[0]),
             Pat::Tuple(v) => write!(f, "({})", list(v)),
+            Pat::Fields(n, v) => {
+                let parts: Vec<String> = v.iter().map(|(k, p)| format!("{k}: {p}")).collect();
+                write!(f, "{n} {{ {}, .. }}", parts.join(", "))
+            }
         }
     }
 }
@@ -1431,6 +1439,15 @@ impl Parser<'_> {
                         _ => return Err(format!("`{}`: a name after `::` in a pattern", self.src)),
                     }
                 }
+                if self.peek_op() == Some("{") {
+                    self.i += 1;
+                    let fields = self.field_patterns()?;
+                    return Ok(if fields.is_empty() {
+                        Pat::Variant(n, None)
+                    } else {
+                        Pat::Fields(n, fields)
+                    });
+                }
                 if self.peek_op() != Some("(") {
                     return Ok(Pat::Variant(n, None));
                 }
@@ -1447,6 +1464,49 @@ impl Parser<'_> {
                 self.src,
                 self.show(self.i - 1)
             )),
+        }
+    }
+
+    /// The named fields' patterns up to the closing `}` (Milestone 326): `start: 0`, `end`
+    /// (any value), and `..` for the fields not named.
+    fn field_patterns(&mut self) -> Result<Vec<(String, Pat)>, String> {
+        let src = self.src;
+        let usage = || {
+            format!(
+                "`{src}`: a pattern of named fields is `Name {{ field: <pattern>, .. }}`, or \
+                 `Name {{ .. }}` for any fields"
+            )
+        };
+        let mut v = Vec::new();
+        loop {
+            match self.t.get(self.i).cloned() {
+                Some(Tok::Op("}")) => {
+                    self.i += 1;
+                    return Ok(v);
+                }
+                Some(Tok::Op("..")) => {
+                    self.i += 1;
+                    if self.peek_op() != Some("}") {
+                        return Err(usage());
+                    }
+                }
+                Some(Tok::Ident(name)) => {
+                    self.i += 1;
+                    let p = if self.peek_op() == Some(":") {
+                        self.i += 1;
+                        self.pattern()?
+                    } else {
+                        Pat::Any
+                    };
+                    v.push((name, p));
+                    match self.peek_op() {
+                        Some(",") => self.i += 1,
+                        Some("}") => {}
+                        _ => return Err(usage()),
+                    }
+                }
+                _ => return Err(usage()),
+            }
         }
     }
 

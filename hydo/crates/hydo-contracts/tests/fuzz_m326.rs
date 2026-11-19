@@ -119,6 +119,42 @@ fn two_lists_of_one_length_are_generated_and_shrunk_together() {
     assert_eq!(input, "dst = [0, 0, 0], src = [0, 0, 2]", "{bad:?}");
 }
 
+#[test]
+fn patterns_take_named_fields_and_two_dots() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m326-pats");
+    let (_, rep) = fuzz_m326(t.path(), &["--fn", "unit", "--fn", "unit_misspelt"]);
+    let u = one(&rep, "units::unit");
+    assert_eq!(u.verdict, "held", "{u:?}");
+    assert!(u.held.iter().all(|h| h.undecided == 0), "{u:?}");
+    let bad = skipped(&rep, "::unit_misspelt");
+    assert!(
+        bad.contains("`UnknownUnit` has no field `begin`; its fields are `start`, `end`"),
+        "{bad}"
+    );
+    use hydo_contracts::lang::{parse_expr, Pat};
+    let p = match parse_expr("matches(r, Err(E::U { start: 0, end, .. }))").unwrap() {
+        hydo_contracts::lang::Ast::Matches(_, p) => p,
+        e => panic!("{e:?}"),
+    };
+    assert_eq!(
+        p,
+        Pat::Variant(
+            "Err".into(),
+            Some(vec![Pat::Fields(
+                "U".into(),
+                vec![("start".into(), Pat::Int(0)), ("end".into(), Pat::Any)]
+            )])
+        )
+    );
+    assert_eq!(p.to_string(), "Err(U { start: 0, end: _, .. })");
+    // `{ .. }` is any fields
+    assert!(matches!(
+        parse_expr("matches(r, E::U { .. })").unwrap(),
+        hydo_contracts::lang::Ast::Matches(_, Pat::Variant(_, None))
+    ));
+    assert!(parse_expr("matches(r, E::U { .. , x })").is_err());
+}
+
 /// A copy of the fixture at `dir/crate`, with `edit` applied to its `src/lib.rs`.
 fn fixture_copy(dir: &Path, edit: &dyn Fn(String) -> String) -> std::path::PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fuzz-m326");

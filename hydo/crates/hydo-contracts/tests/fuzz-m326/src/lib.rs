@@ -160,6 +160,48 @@ pub fn both(a: bool, b: bool) -> bool {
     a && b
 }
 
+// ---------------------------------------------------------------- patterns of named fields
+
+/// As humantime's `parse_duration`: a variant with named fields.
+pub mod units {
+    #[derive(Debug, PartialEq)]
+    pub enum Error {
+        Empty,
+        NumberExpected(usize),
+        UnknownUnit { start: usize, end: usize },
+    }
+
+    // hydo: input s like "5s", "12m", "5x", "", "x5", "7"
+    // hydo: ensures s != "" || matches(result, Err(Error::Empty { .. }))
+    // hydo: ensures !matches(result, Err(Error::UnknownUnit { .. })) || len(s) >= 1
+    // hydo: ensures !matches(result, Err(Error::UnknownUnit { start: 0, .. }))
+    // hydo: ensures !matches(result, Err(Error::UnknownUnit { start, end })) || is_err(result)
+    pub fn unit(s: &str) -> Result<u64, Error> {
+        if s.is_empty() {
+            return Err(Error::Empty);
+        }
+        let digits = s.bytes().take_while(u8::is_ascii_digit).count();
+        if digits == 0 {
+            return Err(Error::NumberExpected(0));
+        }
+        let n: u64 = s[..digits].parse().unwrap_or(u64::MAX);
+        match &s[digits..] {
+            "s" => Ok(n),
+            "m" => Ok(n.saturating_mul(60)),
+            _ => Err(Error::UnknownUnit {
+                start: digits,
+                end: s.len(),
+            }),
+        }
+    }
+
+    /// A field that the variant does not have is refused before the run.
+    // hydo: ensures !matches(result, Err(Error::UnknownUnit { begin: 0, .. }))
+    pub fn unit_misspelt(s: &str) -> Result<u64, Error> {
+        unit(s)
+    }
+}
+
 // ---------------------------------------------------------------- two lists of one length
 
 /// As half's `convert_from_f32_slice`: the lists must have one length.

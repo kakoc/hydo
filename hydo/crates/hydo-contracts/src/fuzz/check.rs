@@ -287,6 +287,30 @@ pub fn matches_pat(v: &Val, p: &Pat) -> Result<bool, Undecided> {
                 Some(ps) => all(&fields, ps, &format!("`{n}`")),
             }
         }
+        // named fields (Milestone 326): each named one matches its pattern
+        (Pat::Fields(n, ps), Val::Enum(..) | Val::Struct(_)) => {
+            let (vname, fs) = match v {
+                Val::Enum(m, fs) => (m.as_str(), fs),
+                // a structure: its name was checked against the type before the run
+                Val::Struct(fs) => (n.as_str(), fs),
+                _ => unreachable!("matched above"),
+            };
+            if vname != n {
+                return Ok(false);
+            }
+            for (k, p) in ps {
+                let Some((_, x)) = fs.iter().find(|(f, _)| f == k) else {
+                    return Err(format!("`{n}` has no field `{k}`"));
+                };
+                if !matches_pat(x, p)? {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
+        }
+        (Pat::Fields(..), _) => Err(format!(
+            "`{p}` is a pattern of named fields, and the value has none"
+        )),
         (p, _) => Err(format!("the pattern `{p}` does not fit the value's type")),
     }
 }
