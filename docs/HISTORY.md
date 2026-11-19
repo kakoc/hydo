@@ -18343,7 +18343,10 @@ shares one tree between services of one image since Milestone 287, but `hydo com
 propose it (open item 147).
 
 - `hydo compose`, and `hydo k8s` through it, writes `root.share_images: true` when two or more
-  services run one image. The key is the image's digest for each architecture, because one
+  services run one image, commented out. The lead changed it from on to commented out at the
+  merge: services of one shared tree once met one lock file in `/tmp` (open item 147), so
+  turning it on by itself could break a project of replicas without a message. The comment
+  says to turn it on when `hydo build` warns that the roots do not fit. The key is the image's digest for each architecture, because one
   manifest names one config digest, and hydo-build shares a tree by the config digest. An
   image not resolved to a digest is keyed by its file. A comment names the services of each
   image and says why.

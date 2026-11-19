@@ -1218,7 +1218,8 @@ impl<'a> Importer<'a> {
         groups
     }
 
-    /// `root.share_images: true` with the comment that says why, when services share an image.
+    /// `root.share_images: true`, commented out, with the comment that says why and when to turn it
+    /// on, when services share an image (on by itself only once open item 147's `/tmp` is traced).
     fn share_images_lines(&self) -> String {
         let groups = self.shared_images();
         if groups.is_empty() {
@@ -1250,11 +1251,12 @@ impl<'a> Importer<'a> {
             text.push('\n');
         }
         text.push_str(
-            "The services of one image share one unpacked copy of it in the root, not a copy each\n\
-             (on the Mac the root lives in the guest's RAM). Each service keeps its own /tmp,\n\
-             /data and mounts (MANIFEST.md, \"root\").",
+            "With share_images they would share one unpacked copy of it in the root, not a copy\n\
+             each (on the Mac the root lives in the guest's RAM; MANIFEST.md, \"root\"). It is\n\
+             not on by itself: services of one shared tree once met one lock file in /tmp (open\n\
+             item 147). Turn it on when `hydo build` warns that the roots do not fit.",
         );
-        format!("{}  share_images: true\n", comment(&text, 2))
+        format!("{}  # share_images: true\n", comment(&text, 2))
     }
 
     /// The images directory, relative to the output's folder (`--images-dir`, else `images`).

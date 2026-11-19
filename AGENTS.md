@@ -523,7 +523,8 @@ real registry. Reference: `hydo guide workflow`.
 
 **Three gaps of a user's onboarding with 0.4.0 (M324, tentative number).** Each fix is its own
 commit; none moves a recorded value:
-- `hydo compose` writes `root.share_images: true`, with a comment, for services of one image.
+- `hydo compose` writes `root.share_images: true`, commented out, with a comment that says why
+  and when to turn it on, for services of one image (not on by itself because of open item 147).
   `hydo build` estimates each image's unpacked size from its layers, also with `--check`. It
   warns when the roots exceed half of `guest.ram_mib` on the Mac. On hvx it warns when the root
   and the data disk exceed 4096 MiB (MANIFEST.md, "Limits of v1").
@@ -2451,9 +2452,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       after any start of PD reaches it, so explorations with power cuts meet it often until a
       release has the fix.
     - With `root.share_images: true`, TiKV's address lock in `/tmp` was found by the other
-      stores of the same image, although MANIFEST.md gives each service its own `/tmp`. Since
-      M324 `hydo compose` proposes `share_images` for services of one image, so more projects
-      meet this; whether M317's mounts under one lock changed it was not tested.
+      stores of the same image, although MANIFEST.md gives each service its own `/tmp`. So
+      `hydo compose` writes `share_images` commented out (M324), and `hydo build` names it only
+      when the roots do not fit. Whether M317's mounts under one lock changed it was not tested.
     - TiKV's gRPC client did not reach PD by service name in the guest; the cause was not
       traced. The example names PD and the stores by address.
     - `hydo rules scan --kind clock` does not see a timestamp compared with a time to live
@@ -3708,7 +3709,7 @@ build machine, before 2026-10-13.
   the session timeout of 30 s. On hvx with `guest.exact_tick` two such threads of `keeper2` took
   a third of the guest's CPU. No report found; nothing posted. Nothing recorded moved
 - M324 (tentative number): three gaps of a user's onboarding with 0.4.0, each its own commit.
-  `hydo compose` writes `root.share_images: true` for services of one image. `hydo build` warns
+  `hydo compose` writes `root.share_images: true` commented out for services of one image, and `hydo build` warns
   when the roots exceed the Mac's guest RAM or hvx's disk. Each problem of an exploration
   names the `hydo run --out` of its run directory, and `hydo inspect diagnose` of the
   exploration reads it. The clock audit leaves out test code and ranks the code of the Cargo and

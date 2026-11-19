@@ -77,7 +77,7 @@ Guest settings:
 - On the Mac the image services' roots live in the guest's RAM too, and Linux gives them at
   most half of `guest.ram_mib`. `hydo build --check` warns with the estimate in MiB when they
   do not fit. Services of one image share one root with `root.share_images: true`, which `hydo
-  compose` writes for them. On hvx the root and the data disk together take at most 4,096 MiB.
+  compose` writes for them commented out: turn it on when `hydo build` warns. On hvx the root and the data disk together take at most 4,096 MiB.
 - `guest.cpu: v3` when a binary needs AVX or AVX2 (x86_64 only).
 - `guest.cpu_cache` is on by default (x86_64). Keep it on with `guest.cpu: v3` when an image is
   built on Red Hat Enterprise Linux 8 or a rebuild of it (AlmaLinux 8, Rocky Linux 8, UBI 8).
