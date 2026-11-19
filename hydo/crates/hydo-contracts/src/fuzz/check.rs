@@ -39,8 +39,9 @@ fn eval(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
     match eval_raw(a, env, old)? {
         Val::Built(Some(v), _) => Ok(*v),
         Val::Built(None, args) => Err(format!(
-            "`{a}` is a value that a `build` line built: it is read through its `read` line, \
-             in `ensures` only; name its constructor's arguments instead ({})",
+            "`{a}` is a value that a `build` line built: a clause reads it through its type's \
+             `read` line (`// hydo: read <Type> as <type> by <method>()`), in `ensures` only, so \
+             hydo does not compare it here; name its constructor's arguments instead ({})",
             args.iter()
                 .map(|(n, _)| format!("`{a}.{n}`"))
                 .collect::<Vec<_>>()
@@ -159,6 +160,15 @@ fn eval_raw(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
                 BinOp::Eq | BinOp::Ne => {
                     if l == Val::Opaque || r == Val::Opaque {
                         return Err("a comparison with a value of a type not read".into());
+                    }
+                    // values of two kinds are never equal by accident: hydo cannot compare
+                    // them, so the clause is undecided, never broken (Milestone 318)
+                    if let (Some(kl), Some(kr)) = (kind(&l), kind(&r)) {
+                        if kl != kr {
+                            return Err(format!(
+                                "`{a}` compares {kl} with {kr}, which hydo cannot compare"
+                            ));
+                        }
                     }
                     if matches!(l, Val::Enum(..)) || matches!(r, Val::Enum(..)) {
                         return Err(
@@ -333,6 +343,23 @@ fn float_op(op: BinOp, l: &Val, r: &Val) -> Result<Val, Undecided> {
         BinOp::Div => f(x / y),
         BinOp::Rem => f(x % y),
         BinOp::Or | BinOp::And => unreachable!("decided before"),
+    })
+}
+
+/// What kind of value a comparison sees, for a refusal of a comparison of two kinds; none for
+/// a value that compares with any (Milestone 318).
+fn kind(v: &Val) -> Option<&'static str> {
+    Some(match v {
+        Val::Int(_) | Val::Bool(_) | Val::Float(_) => "a number",
+        Val::Str(_) => "a string",
+        Val::List(_) => "a list",
+        Val::Opt(_) => "an `Option`",
+        Val::Res(_) => "a `Result`",
+        Val::Tuple(_) => "a tuple",
+        Val::Struct(_) => "a structure",
+        Val::Enum(..) => "a variant",
+        Val::Built(..) => "a value built by a `build` line",
+        Val::Opaque => return None,
     })
 }
 

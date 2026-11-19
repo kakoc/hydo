@@ -300,6 +300,86 @@ enum Owner {
     Trait(String, Vec<String>),
 }
 
+/// A generated value with each value that a `build` line builds marked as such: its
+/// constructor's arguments, and the value its `read` line gave (`read`, the harness's answer
+/// before the call, decoded with the same type), so that a clause reads an element of a list of
+/// built values through the `read` line and never as its constructor's arguments (Milestone
+/// 318).
+fn with_built(v: &Val, t: &FTy, read: Option<&Val>) -> Val {
+    let sub = |i: usize| -> Option<&Val> {
+        match read {
+            Some(Val::List(l) | Val::Tuple(l)) => l.get(i),
+            Some(Val::Struct(f) | Val::Enum(_, f)) => f.get(i).map(|(_, x)| x),
+            _ => None,
+        }
+    };
+    match (t, v) {
+        (FTy::Built { build: Some(_), .. }, Val::Struct(a)) => {
+            let view = read.filter(|r| **r != Val::Opaque).cloned().map(Box::new);
+            Val::Built(view, a.clone())
+        }
+        (FTy::Boxed(_, x), _) => with_built(v, x, read),
+        (FTy::List(x) | FTy::Array(x, _), Val::List(l)) => Val::List(
+            l.iter()
+                .enumerate()
+                .map(|(i, e)| with_built(e, x, sub(i)))
+                .collect(),
+        ),
+        (FTy::Opt(x), Val::Opt(Some(e))) => {
+            let r = match read {
+                Some(Val::Opt(Some(r))) => Some(&**r),
+                _ => None,
+            };
+            Val::Opt(Some(Box::new(with_built(e, x, r))))
+        }
+        (FTy::Res(a, b), Val::Res(r)) => {
+            let (ok, err) = match read {
+                Some(Val::Res(Ok(x))) => (Some(&**x), None),
+                Some(Val::Res(Err(x))) => (None, Some(&**x)),
+                _ => (None, None),
+            };
+            Val::Res(match r {
+                Ok(x) => Ok(Box::new(with_built(x, a, ok))),
+                Err(x) => Err(Box::new(with_built(x, b, err))),
+            })
+        }
+        (FTy::Tuple(ts), Val::Tuple(vs)) => Val::Tuple(
+            vs.iter()
+                .zip(ts)
+                .enumerate()
+                .map(|(i, (x, t))| with_built(x, t, sub(i)))
+                .collect(),
+        ),
+        (FTy::Struct { fields, .. }, Val::Struct(fs)) => Val::Struct(
+            fs.iter()
+                .zip(fields)
+                .enumerate()
+                .map(|(i, ((n, x), (_, t)))| (n.clone(), with_built(x, t, sub(i))))
+                .collect(),
+        ),
+        (FTy::Enum { variants, .. }, Val::Enum(n, fs)) => {
+            let Some(var) = variants.iter().find(|x| x.name == *n) else {
+                return v.clone();
+            };
+            let same = matches!(read, Some(Val::Enum(m, _)) if m == n);
+            Val::Enum(
+                n.clone(),
+                fs.iter()
+                    .zip(&var.fields)
+                    .enumerate()
+                    .map(|(i, ((fname, x), (_, t)))| {
+                        (
+                            fname.clone(),
+                            with_built(x, t, if same { sub(i) } else { None }),
+                        )
+                    })
+                    .collect(),
+            )
+        }
+        _ => v.clone(),
+    }
+}
+
 /// How a parameter whose type is `t` is passed: the pass, and for a reference to a reference
 /// (`&mut &[u8]`) how the inner reference is made (Milestone 307).
 fn passes(t: &TyAst) -> (Pass, Option<Pass>) {
@@ -1089,25 +1169,21 @@ impl Fn {
     }
 
     /// The values at entry. A value that a `build` line builds is its constructor's arguments,
-    /// and with `pre` (the harness's answer) also what its `read` line gave before the call.
+    /// and with `pre` (the harness's answer) also what its `read` line gave before the call:
+    /// the parameter itself, and since Milestone 318 each such element, field or variant's
+    /// field inside it.
     fn entry_env(&self, args: &[Val], pre: Option<&[Val]>) -> Vec<(String, Val)> {
         let mut pre = pre.map(|p| p.iter());
         self.params
             .iter()
             .zip(args)
             .map(|(p, v)| {
-                let v = match (v, &p.ty) {
-                    (Val::Struct(a), FTy::Built { build: Some(_), .. }) => {
-                        let read = if harness::is_read_built(&p.ty) {
-                            pre.as_mut().and_then(|it| it.next()).cloned().map(Box::new)
-                        } else {
-                            None
-                        };
-                        Val::Built(read, a.clone())
-                    }
-                    _ => v.clone(),
+                let read = if harness::is_read_built(&p.ty) {
+                    pre.as_mut().and_then(|it| it.next())
+                } else {
+                    None
                 };
-                (p.name.clone(), v)
+                (p.name.clone(), with_built(v, &p.ty, read))
             })
             .collect()
     }

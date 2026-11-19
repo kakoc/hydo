@@ -8,6 +8,7 @@ mod tmpdir;
 mod compile;
 mod eval;
 mod fuzz;
+mod fuzz_m318;
 mod keeps;
 mod lang;
 mod paths;

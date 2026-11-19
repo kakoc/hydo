@@ -31,18 +31,26 @@ fn passed(pass: Pass, base: &str) -> String {
     }
 }
 
-/// Whether a parameter's value is built by a `build` line and read by a `read` line: the
-/// harness then answers its read value before the call too, after the values after the call
-/// (Milestone 307).
+/// Whether a parameter's value holds a value that a `build` line builds and a `read` line reads:
+/// the parameter itself (Milestone 307), or an element, a field or a variant's field of it
+/// (Milestone 318). The harness then answers its read value before the call too, after the values
+/// after the call, so that a clause compares such an element as the value its `read` line reads.
 pub fn is_read_built(t: &FTy) -> bool {
-    matches!(
-        t,
+    match t {
         FTy::Built {
             build: Some(_),
             read: Some(_),
             ..
-        }
-    )
+        } => true,
+        FTy::List(x) | FTy::Array(x, _) | FTy::Opt(x) | FTy::Boxed(_, x) => is_read_built(x),
+        FTy::Res(a, b) => is_read_built(a) || is_read_built(b),
+        FTy::Tuple(v) => v.iter().any(is_read_built),
+        FTy::Struct { fields, .. } => fields.iter().any(|(_, t)| is_read_built(t)),
+        FTy::Enum { variants, .. } => variants
+            .iter()
+            .any(|v| v.fields.iter().any(|(_, t)| is_read_built(t))),
+        _ => false,
+    }
 }
 
 /// Whether building a value of `t` calls a constructor of the crate (a `build` line), which

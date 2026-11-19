@@ -1,0 +1,11 @@
+# The fifth fixture of the fuzzing tests (tests/fuzz_m318.rs, Milestone 318): what the third
+# evaluation of `hydo fuzz` found refused or judged wrong on the API of six crates.
+[package]
+name = "fuzz-m318"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# its own workspace (not part of the repository root's)
+[workspace]
