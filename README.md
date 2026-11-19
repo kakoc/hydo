@@ -47,7 +47,7 @@ each file. hydo needs an Apple Silicon Mac, or an x86_64 Linux machine where you
 KVM, the support for virtual machines that Linux has built in. Then `hydo doctor` checks the
 machine.
 [docs/INSTALL.md](docs/INSTALL.md) has the release archives and their checksums, and hydo's own
-kernel module for Intel machines. From the release after 0.4.0 on, `hydo update` updates hydo
+kernel module for Intel machines. Since 0.4.1, `hydo update` updates hydo
 the way you installed it, and its onboarding skill with it.
 
 ## What hydo found in real projects
@@ -142,7 +142,7 @@ To install the skill as a Claude Code plugin without `hydo onboard`, type these 
   more.
 - [How hydo is built](docs/ARCHITECTURE.md) and [how to contribute](CONTRIBUTING.md).
 
-The current release is hydo 0.4.0. It is experimental: formats and commands can change between
+The current release is hydo 0.4.1. It is experimental: formats and commands can change between
 versions.
 
 ## License

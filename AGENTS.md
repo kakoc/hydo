@@ -215,31 +215,37 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.4.0 was published on 2026-11-18 from the release commit `75db9ff9`, in
+**Releases.** hydo 0.4.1 was published on 2026-11-19 from the release commit `14e09873`, in
 these places:
 
-- The GitHub release `v0.4.0`: both tarballs, their sources archives, and the Mac signatures.
+- The GitHub release `v0.4.1`: both tarballs, their sources archives, and the Mac signatures.
 - The Homebrew tap: `brew install kakoc/tap/hydo`.
 - crates.io: the crates of `cargo install hydo`, and `hydo-assert`.
-- PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.4.0`.
-- The skill release `skill-v2.3.3` (the plugin `hydo`, command `/hydo:onboard`).
+- PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.4.1`.
+- The skill release `skill-v2.4.0` (the plugin `hydo`, command `/hydo:onboard`).
 
-0.4.0 adds Milestones 254 to 256 and 258 to 303 to 0.3.4, with the fingerprint epoch 4
-(`docs/HISTORY.md` "The 0.4.0 release"). Milestones 304 to 310 came after it. Its files and
-prepared material are in `hydo/dist/out/0.4.0/` of the main checkout. hydo 0.3.4 was published
-on 2026-11-15 from `dee7da68`, with the skill release `skill-v2.3.1`.
+The release 0.4.1 is 0.4.0 with `hydo update` (M315), the five fixes of M316, and the skill
+2.4.0. It came early, so that the manual upgrade from 0.4.0 is the last one (user, 2026-11-18).
+Its fingerprint epoch is 4. It was cut from 0.4.0's release commit on the branch
+`release-0.4.1`, which is merged into `main` (`docs/HISTORY.md` "The 0.4.1 release, published").
+The rest of `main` after 0.4.0 waits for 0.5.0, that is Milestones 304 to 314 and 317 to 320,
+and the fingerprint epoch 5. The release 0.4.0 was published on 2026-11-18 from `75db9ff9`, with the
+skill release `skill-v2.3.3`. It adds Milestones 254 to 256 and 258 to 303 to 0.3.4, with the
+fingerprint epoch 4. The files and prepared material of both releases are in
+`hydo/dist/out/0.4.0/` and `hydo/dist/out/0.4.1/` of the main checkout. hydo 0.3.4 was
+published on 2026-11-15 from `dee7da68`, with the skill release `skill-v2.3.1`.
 The registries are published by `release.yml` on the tag. 0.3.4 adds Milestones 231, 233–253
 and 257 to 0.3.3, as `docs/HISTORY.md` "The 0.3.4 release" says. The fingerprint epoch is 3. Both
 releases ship M234's guest kernels with cgroups next to the old ones. 0.3.3 (`dad45fc9`) added
-Milestones 228–230, 232, 239, and 240. The next release raises the middle number (0.4.0): a release
-with features raises it, and the last number is for small fixes only (user, 2026-11-15).
+Milestones 228–230, 232, 239, and 240. A release with features raises the middle number, and the
+last number is for small fixes only (user, 2026-11-15).
 Plans keep `hydo_version: "0.3"` across releases: since M262 it means 0.3 or any newer 0.x, and
 only an older hydo refuses a plan (`docs/RELEASING.md` step 1). The release index `hydo/dist/releases.txt` pins every published archive.
 Since 0.2.0 the Linux release ships the KVM engine, and the Mac programs are signed and notarized.
 `cargo install hydo` followed by `hydo setup` works on the Mac and, since M210, on Linux with KVM.
-How to release: `docs/RELEASING.md` and `docs/PUBLISHING.md`. The files of 0.3.4 and its prepared
-material are in `hydo/dist/out/0.3.4/` of the main checkout. Their sha256 values are in the
-section "The 0.3.4 release" of `docs/HISTORY.md`.
+How to release: `docs/RELEASING.md` and `docs/PUBLISHING.md`. The files of each release and its
+prepared material are in `hydo/dist/out/<version>/` of the main checkout. Their sha256 values are
+in the release's section of `docs/HISTORY.md`.
 
 **What 0.3.2 changed in the release** (`docs/HISTORY.md` "The 0.3.2 release"). The fingerprint
 epoch stays 2.
@@ -425,8 +431,8 @@ maintainers: the shared cases, and the Go module with its frozen copy in `hydo/s
 test in its language (M188). The examples are in `hydo/onboard/examples/`;
 `hydo/onboard/MANIFEST.md` is the project format's reference.
 
-**A user's onboarding with 0.4.0 on the Mac (M316, tentative number).** Five fixes for the patch
-release 0.4.1, each its own commit; none moves a recorded value, and the epoch stays 4:
+**A user's onboarding with 0.4.0 on the Mac (M316, tentative number).** Five fixes, released in
+0.4.1, each its own commit; none moves a recorded value, and the epoch stays 4:
 - `hydo.yaml` reads YAML anchors, aliases and `<<` merge keys, and drops top-level `x-` keys
   (MANIFEST.md "YAML subset").
 - An image's FIFOs are FIFOs in the service's root; device nodes stay left out. No recorded
@@ -1905,7 +1911,13 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `hvx/redis-oci`, `hvx/restate-oci`, `hvx/voting`, `hvx/voting-generated` and
       `hvx/voting-loopback` (14 runs). On hvx those 14 runs are expected to move; the 76 Mac and
       19 KVM runs are likely to move. The pass records the list at epoch 5 and fills
-      docs/REBASELINE.md section 28.
+      docs/REBASELINE.md section 29.
+    - The list's epoch-4 values are the ones of the release 0.4.1, since its branch was merged
+      (docs/REBASELINE.md section 28). Its re-pins of `hydo-world`, `hydo-world-tls` and
+      `hydo-grpc` moved 9 of 43 hvx images (30 of 141 runs) and 9 of 21 Mac images (36 of 76
+      runs). No KVM value moved. These values describe images built at epoch 4. At epoch 5 the
+      same images carry the programs of 0.4.1, so the re-pin moves nothing more there. The
+      release 0.5.0 re-pins these programs again with its version, and the pass runs after that.
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -2650,7 +2662,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The engine's notes of what a fault did are in a file of the run directory only; `hydo
       report` and its page do not show them.
 161. `hydo update` (M315, tentative number). What is left:
-    - It ships with the first release after 0.4.0. Versions 0.4.0 and older lack it, so their
+    - It ships with 0.4.1. Versions 0.4.0 and older lack it, so their
       users upgrade once by hand, as the section "Upgrading" of `docs/INSTALL.md` and the skill's
       `references/install.md` say.
     - The install kinds ran only against the fake release, brew, cargo and claude programs of
@@ -3634,6 +3646,14 @@ build machine, before 2026-10-13.
   periodic tick sets ticks 1 ms apart. So a tick is due 19 ms ahead after 2 minutes, and a busy
   guest's clock nearly stopped. `guest.exact_tick: true` boots it with `clocksource=jiffies`;
   seed 20 then ends with finding 1's verdict. Nothing recorded moved
+- The 0.4.1 release (no milestone number): 0.4.0 with Milestones 315 and 316, cut from 0.4.0's
+  release commit on the branch `release-0.4.1`. The version raised, `hydo-world`,
+  `hydo-world-tls` and `hydo-grpc` re-pinned, and the released project schema is the current
+  one. The examples are re-recorded at epoch 4: 9 images on hvx and 9 on the Mac moved, as at
+  0.4.0. Release step 6a checked the changed pages. Both releases are built twice to the same
+  bytes, and the Mac one is signed and notarized. They are verified on hvx, the Mac and KVM (six of
+  GitHub's runners). Published on 2026-11-19 with the skill release `skill-v2.4.0`; the branch
+  is merged into `main`
 
 ## Where to look
 
@@ -3641,7 +3661,7 @@ build machine, before 2026-10-13.
 - `docs/USE-CASES.md`: every use case with its status, by testing stage and by who asks, and the
   ideas not built yet.
 - `docs/REBASELINE.md`: the recorded fingerprints by section; section 13 is epoch 1, section 19
-  is epoch 2, section 24 is epoch 3, section 26 is epoch 4, section 28 is epoch 5.
+  is epoch 2, section 24 is epoch 3, section 26 is epoch 4, section 29 is epoch 5.
 - `docs/BUILD-PINS.md`: the pinned toolchain and guest programs.
 - `docs/CI.md`: what CI runs, where, and how long it takes.
 - `docs/RELEASING.md` and `docs/PUBLISHING.md`: the release and publishing steps.

@@ -17,11 +17,11 @@ hydo doctor
 Without Homebrew:
 
 ```sh
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.0/hydo-mac-0.4.0.tar.gz
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.0/SHA256SUMS
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.1/hydo-mac-0.4.1.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.1/SHA256SUMS
 shasum -a 256 -c --ignore-missing SHA256SUMS
-tar xzf hydo-mac-0.4.0.tar.gz
-./hydo-mac-0.4.0/install.sh
+tar xzf hydo-mac-0.4.1.tar.gz
+./hydo-mac-0.4.1/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -48,10 +48,10 @@ run several virtual CPUs.
 Download and check the release for both engines:
 
 ```sh
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.0/hydo-linux-0.4.0.tar.gz
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.0/SHA256SUMS
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.1/hydo-linux-0.4.1.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.1/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
-tar xzf hydo-linux-0.4.0.tar.gz
+tar xzf hydo-linux-0.4.1.tar.gz
 ```
 
 For the KVM engine, your user must be able to open `/dev/kvm`. Install, then let
@@ -59,7 +59,7 @@ For the KVM engine, your user must be able to open `/dev/kvm`. Install, then let
 module's engine):
 
 ```sh
-./hydo-linux-0.4.0/install.sh --no-module
+./hydo-linux-0.4.1/install.sh --no-module
 export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor --backend kvm
 ```
@@ -77,7 +77,7 @@ kernel's headers. Do not install it while other virtual machines run under KVM: 
 unloads the kernel modules `kvm_intel` and `kvm`.
 
 ```sh
-./hydo-linux-0.4.0/install.sh
+./hydo-linux-0.4.1/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor
 ```
@@ -93,8 +93,8 @@ hydo doctor                  # on Linux: hydo doctor --backend kvm
 ```
 
 `cargo install` builds only the `hydo` command. `hydo setup` downloads the release for your
-platform into `~/.hydo/versions/0.4.0` (`HYDO_HOME` names another folder than `~/.hydo`) and
-checks every file by sha256. The examples are in `~/.hydo/versions/0.4.0/examples`.
+platform into `~/.hydo/versions/0.4.1` (`HYDO_HOME` names another folder than `~/.hydo`) and
+checks every file by sha256. The examples are in `~/.hydo/versions/0.4.1/examples`.
 
 On Linux this gives the KVM engine, and your user must be able to open `/dev/kvm`, as for the
 tarball. For hydo's kernel module `hvx.ko`, use the tarball.
@@ -102,7 +102,7 @@ tarball. For hydo's kernel module `hvx.ko`, use the tarball.
 
 ## Upgrading
 
-From the release after 0.4.0 on, one command updates hydo and every copy of its onboarding skill:
+From 0.4.1 on, one command updates hydo and every copy of its onboarding skill:
 
 ```sh
 hydo update --check          # what is newer; changes nothing (exit status 3: something is newer)
@@ -121,11 +121,13 @@ installed it:
 - Homebrew: `brew update && brew upgrade kakoc/tap/hydo`.
 - cargo: `cargo install hydo --locked`, then `hydo setup`.
 - The release archive: download your platform's archive and `SHA256SUMS`, check the archive,
-  unpack it, and run `install.sh`. The preceding sections show these commands for 0.4.0.
+  unpack it, and run `install.sh`. The preceding sections show these commands for 0.4.1.
   You do not need the large `-sources.tar.gz` archives, which hold the third-party sources.
 
 Then update the skill: run `hydo skill update` for its copies. For Claude Code's plugin, run
 `claude plugin marketplace update hydo` and then `claude plugin update hydo@hydo`.
 
-Read the "Before you upgrade" section of the release notes first. For 0.4.0, images get new
-fingerprints, so build your images again after the upgrade.
+Read the "Before you upgrade" section of the release notes of each release after yours first.
+From 0.3.4 or older, images built by 0.4.0 or newer get new fingerprints, so build your images
+again after the upgrade. From 0.4.0 to 0.4.1, an image you built keeps its fingerprints. Only an
+image with fakes, proxies or generated gRPC drivers gets new bytes when you build it again.

@@ -3722,7 +3722,31 @@ demo's two images). These are the images and runs that moved at 0.3.1 to 0.3.4. 
 unchanged, every moved run gave the same values twice, and every worker-pool run gave its fresh
 boot's values. KVM's images carry none of these programs, so no KVM value moves.
 
-## 28. The fingerprint epoch 5 (M317, 2026-11-19)
+## 28. hydo 0.4.1 (2026-11-19)
+
+Made with `hydo-bench rebaseline --write` on the bare-metal machine and on a Mac, with the quick
+0.4.1 candidates as `--release` (docs/HISTORY.md "The 0.4.1 release"); the values are in
+`hydo/onboard/recorded.json`, and this section records only the decisions.
+
+**The fingerprint epoch stays 4.** As at 0.3.1 to 0.4.0, only hydo's own guest programs moved
+image bytes: `guest/hydo-world`, `guest/hydo-world-tls` and `guest/hydo-grpc` have new pins
+(docs/BUILD-PINS.md), and the SDK versions are in rust-kv's program, node-kv's `package.json` and
+python-kv's `__init__.py`. Milestones 315 and 316 change no engine, controller, agent, kernel or
+recorded image: no recorded image has a FIFO, YAML anchors, or emulators on service networks.
+
+**What moved.** hvx (the bare-metal machine, a tree unpacked under umask 022, the module
+`91D86B693F4D4035C368F9B`, 8,499 s on a machine that another session's explorations also used):
+9 of 43 images have new bytes and 30 of 141 runs new values (redis-proxy, redis-bridge, rust-kv,
+the shop's two images, the three gRPC stack images and the generated-driver stack). The Mac
+(`hvm`, `--jobs 1`, one image at a time): 9 of 21 images and 36 of 76 runs (redis-bridge,
+node-kv, python-kv, python-kv-hist, rust-kv, the shop's two images, the gRPC demo's two images).
+These are the images and runs that moved at 0.3.1 to 0.4.0. Every verdict is unchanged, every
+moved run gave the same values twice, and every worker-pool run gave its fresh boot's values.
+KVM's images carry none of these programs, so no KVM value moves. The release's KVM check
+confirmed it: run 44526304674 on six of GitHub's runners gave 0.4.0's recorded KVM values
+(docs/HISTORY.md, the section on the prepared 0.4.1 release).
+
+## 29. The fingerprint epoch 5 (M317, 2026-11-19)
 
 Open item 162 found a race in the launcher of every image service. The launcher and each of its
 `hydo-oci` helpers (a readiness check, for example) bound `/proc`, `/sys`, `/dev`, `/tmp` and
@@ -3734,7 +3758,7 @@ hydo-build writes into every image with an image service, so it is a change of t
 This section records the decision. Under the rule "Re-recording runs in batches" (AGENTS.md),
 the values are not re-recorded with the change: `hydo/onboard/recorded.json` keeps its epoch-4
 values and its `epoch` 4 until the re-recording pass before the 0.5.0 release (AGENTS.md open
-item 105).
+item 105). Since 0.4.1 was merged into `main`, these epoch-4 values are the ones of section 28.
 
 **The fingerprint epoch is 5.** An image built at epoch 5 has the new launcher: one block per
 boot under the service's lock binds the shared tree (`root.share_images`), the system folders and

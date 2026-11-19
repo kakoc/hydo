@@ -85,7 +85,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: kakoc/hydo/action@v1
         with:
-          hydo-version: 0.4.0
+          hydo-version: 0.4.1
 ```
 
 The action installs that hydo release, checked against the release's `SHA256SUMS`. It caches
@@ -121,7 +121,7 @@ include:
 hydo:
   extends: .hydo
   variables:
-    HYDO_VERSION: "0.4.0"
+    HYDO_VERSION: "0.4.1"
   tags: [kvm]
 ```
 
@@ -313,7 +313,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: kakoc/hydo/action@v1
         with:
-          hydo-version: 0.4.0
+          hydo-version: 0.4.1
           args: --shard ${{ matrix.shard }}/3
           comment: "false"
           artifact-name: hydo-shard-${{ matrix.shard }}
@@ -326,7 +326,7 @@ jobs:
         with: {pattern: hydo-shard-*, path: shards}
       - uses: kakoc/hydo/action@v1
         with:
-          hydo-version: 0.4.0
+          hydo-version: 0.4.1
           merge: shards/*
 ```
 
