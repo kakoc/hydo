@@ -58,6 +58,15 @@ non-deterministic tool cannot: bring a failed run back to any of its stops and l
    `dmesg` (the memory and crash lines, then its tail), `free` and `ps`. `hydo run` collects the
    evidence for ERROR verdicts (`--no-diagnose` skips it); `hydo inspect diagnose --evidence` collects
    it for any run.
+   A service that does not start in the recovery boot after a power cut ends the run with
+   `VIOLATION service cannot recover (committed data unrecoverable)`, whatever stopped it
+   (Milestone 316). When the service's last log lines name a cause in its environment (`permission
+   denied`, `operation not permitted`, `read-only file system`, `exec format error`, a shared
+   library that does not load, memory, an address in use) and none of them names damaged or
+   missing data (`structure needs cleaning`, an I/O error, `corrupt`, a checksum, `no such file or
+   directory`, and the like), the diagnosis says that the service did not start because of its
+   environment and that the run does not show lost data, and quotes the line. The verdict and the
+   explorer's class stay, so no recorded value moves.
 8. **hvx's host-call port.** On hvx the agent's lines travel over the host-call port (M138), so the
    consoles have none of them. The evidence replay records the agent events it sees before the stop,
    rebuilds the host layer from them, and `hydo run` keeps them in `agent-events.jsonl` in the run
