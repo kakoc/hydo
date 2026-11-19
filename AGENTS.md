@@ -1064,6 +1064,14 @@ Since M326 (tentative number) the rest of that evaluation's list is in, each its
 On the six crates every verdict and every smallest input stayed, and all nine known bugs showed
 (the evaluation page, "After Milestone 326"). Open item 163 has what is left.
 
+A fourth evaluation by a fresh user (M327, tentative number,
+`docs/design/function-fuzzing-evaluation-4.md`) used semver, base64, smallvec, time, textwrap
+and ordered-float. It found the tool worth keeping for property functions and for contracts over
+numbers, strings, and enumerations. hydo fuzzed 71 of 88 contracted library functions and all 60
+property functions, and reproduced 3 issues already reported upstream, none new. Generic
+containers (`A::Item`), parsers whose error has private fields, and types that only a fallible
+constructor builds still stop contracts on the API. One verdict was hydo's own false `broken`.
+
 **Function fuzzing inside the VM (M292 and M296, tentative numbers; a prototype on hvx and on
 the Mac engine).** `hydo fuzz --vm [CRATE_DIR]` makes the calls inside hydo's VM under faults: power
 cuts (`C=`, `cf=` on hvx), disk errors, clock steps, pauses, and since M296 kills. It builds the harness as a static musl program and writes a
@@ -2305,7 +2313,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A fault of a stepped instruction other than #DE, #UD, #GP and #PF leaves the trap flag in
       its frame. Only user mode is counted, so a loop in the guest kernel stays the observer's.
     - The k3s example is not in `hydo/onboard/recorded.json`.
-139. Function fuzzing (M275, M280, M282, M289, M292, M296, M307, M308, M318, M326). What is left:
+139. Function fuzzing (M275, M280, M282, M289, M292, M296, M307, M308, M318, M326, M327). What
+    is left:
     - The run inside the VM (`hydo fuzz --vm`, M292, M296) is a prototype that ran on hvx and
       on the Mac engine, not on KVM. What is left of it:
       - A fault inside a call comes 1 to 13 ms after its drawn delay, at the controller's next
@@ -2345,6 +2354,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       on six other crates reproduced 9 known upstream bugs and found none new. M318 fixed the
       first six items of its list and M326 the other two and the smaller frictions; open item
       163 has what is left of it.
+    - A fourth evaluation by a fresh user (M327, `docs/design/function-fuzzing-evaluation-4.md`)
+      on six other crates found no new candidate. It reproduced textwrap's `wrap_columns` panic
+      (pull request 647), textwrap's `dedent` (pull request 654), and ordered-float's issue 143.
+      Nothing was posted. Open item 163 has the fixes it calls for.
     - Qdrant's `decompress_sequence` accepts a header of more than 64 bits per value. What
       `decode_untrusted_bytes` returns for such a blob in a release build was not checked, and
       nothing was posted.
@@ -2801,8 +2814,34 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - percent-encoding still needs a helper of its own to build an `AsciiSet` from bytes; the
       refusal now names the helper, and with none it says to add one.
     - The proofs used contracts written again from the evaluation page by the one who fixed the
-      tool, on the crates.io archives. A fresh evaluator should run `hydo fuzz` again before
-      0.5.0.
+      tool, on the crates.io archives. The fourth evaluation (M327) was that fresh run.
+    - What the fourth evaluation (M327, `docs/design/function-fuzzing-evaluation-4.md`) found,
+      none of it fixed, worst first:
+      - A comparison with a value that hydo does not read can give `broken`: smallvec's
+        `into_vec` broke with `result = [<not read>]`. Elsewhere such a value gives `not judged`.
+      - An associated type of a type parameter's trait (`A::Item`) is refused as a parameter.
+        It is not read as a result, and it does not build in a generated closure. The refusal
+        names `T::Item` and proposes a `build Item` line. 12 of smallvec's 18 contracts gave
+        nothing.
+      - A `Result` whose error type has a field of a private module does not build. No clause
+        read the error of semver's five parsers.
+      - A `build` line without arguments (`X::default()`) does not build. A constructor that
+        returns a `Result` or an `Option` cannot be named. The refusals proposed lines that do
+        not build, such as an ambiguous `from` and an `unsafe` function. Four of six crates
+        needed a helper in the test module.
+      - An `impl` block's type parameter is not put into a parameter's type (`&OrderedFloat<T>`),
+        and `Self::Output` was taken from another `impl`.
+      - Structures with a lifetime parameter, `Cow<str>`, and the public fields of a type that a
+        `build` line builds are not read; two values of one enumeration cannot be compared.
+      - `with T = &[u8]` passes a `Vec<u8>`.
+      - Two floats are both NaN once in about 1,500 calls, and an index compared with a list's
+        length in `requires` is not generated inside it (64 % thrown away).
+      - Smaller ones:
+        - a `with` line for a name that is no type parameter is accepted;
+        - a nested `input` path is refused with `no argument pre`;
+        - `--fn <Trait>::` selects nothing, and there is no `--features`;
+        - a report names the package (`ordered-float::`);
+        - `--fn` can leave a helper unused under `#![deny(warnings)]`.
 
 164. The guest's clock on hvx (M319 and M323, tentative numbers; `docs/design/guest-clock.md`).
     Since M323 an x86_64 image built at epoch 5 keeps time with its TSC. What is left:
@@ -3793,6 +3832,12 @@ build machine, before 2026-10-13.
   field's refusal names the `build` line with the crate's constructor. Contracts take bit
   operators, two lists of one length and `{ .. }` patterns; `--fn codec::`, `&'static mut`,
   glob imports and more closure shapes work. The six crates kept every verdict. Nothing
+  recorded moved
+- M327 (tentative number): a fourth evaluation of `hydo fuzz` by a new user, on semver, base64,
+  smallvec, time, textwrap and ordered-float. hydo fuzzed 71 of 88 contracted library functions
+  and all 60 property functions, and reproduced 3 known upstream issues, none new. A list of
+  unread `A::Item` values gives a false `broken`; associated types of a type parameter, private
+  error fields, and fallible or argument-free constructors stop contracts on the API. Nothing
   recorded moved
 
 ## Where to look

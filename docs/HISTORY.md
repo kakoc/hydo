@@ -18895,3 +18895,60 @@ function kept its verdict. The section "After Milestone 326" of the evaluation p
 details. Nothing new was found, and nothing was posted.
 
 **What is left.** Open item 163.
+
+## Milestone 327 (tentative number): a fourth evaluation of `hydo fuzz` by a new user
+
+A fresh evaluator, a coding agent that played a Rust developer new to hydo, tried `hydo fuzz`
+natively after Milestones 318 and 326. The evaluator learned the tool only from `hydo guide fuzz`
+and `hydo fuzz --help`. It read the three earlier evaluations (M280, M288, M308) only for their
+method and their crates, and did not read hydo's source. The binary came from `main` at
+`7b3d309b`. The page is `docs/design/function-fuzzing-evaluation-4.md`. No code of hydo changed.
+
+Each crate came from its latest stable release on crates.io:
+
+- semver 1.0.28, a parser;
+- base64 0.23.1, an encoding with a trait for engines;
+- smallvec 1.16.5, a generic data structure;
+- time 0.3.55, dates and durations;
+- textwrap 0.16.4, text;
+- ordered-float 5.5.1, a trait-heavy API of floats.
+
+The evaluator contracted
+88 library functions and 60 property functions. hydo fuzzed 71 of the library functions:
+
+- 57 held, 2 were `vacuous`, and 9 were `not judged` because hydo did not read a value;
+- 3 broke: two known upstream bugs, and smallvec's `into_vec`, a false verdict of hydo's;
+- 8 were refused, all of smallvec for a parameter of type `A::Item`;
+- 9 harnesses did not build: semver's five parsers, three of ordered-float, and smallvec's
+  `retain`.
+
+Every property function ran, and 58 of 60 held. Each crate's first useful run came 6 to 10
+minutes after the first look at its source. Four crates needed a helper constructor in the test
+module.
+
+hydo reproduced 3 issues that other people had already reported upstream, and found no new
+candidate:
+
+- textwrap: `wrap_columns` panics when a line is wider than its column (pull request 647, merged
+  after the release of 0.16.4);
+- textwrap: a whitespace-only line stops `dedent` (pull request 654, open);
+- ordered-float: `OrderedFloat(NaN) == NaN` is `false` (issue 143, open), found on 20,000 calls
+  and missed on 1,000.
+
+The worst problems, in order:
+
+1. A false `broken` verdict: `into_vec`'s `result == old(self)` compared elements of type
+   `A::Item`, which hydo does not read, as unequal.
+2. A type parameter's associated type (`A::Item`) is refused as a parameter, not read as a
+   result, and does not build in a closure.
+3. A `Result` whose error type has a field of a private module does not build, although no
+   clause reads it: semver's `Error` holds an `ErrorKind`.
+4. A `build` line without arguments writes `(,)`, a constructor that returns a `Result` cannot be
+   named, and the refusals proposed an ambiguous `from`, an `unsafe` function, and a macro's
+   `$src` placeholder.
+5. An `impl` block's type parameter is not put into a parameter's type (`&OrderedFloat<T>`), and
+   `Self::Output` came from another `impl`.
+
+A bug planted in smallvec's `swap_remove` broke its contract on 25 of 1,000 calls and shrank to
+six elements and the index 1. The page lists nine fixes. Open items 139 and 163 have what is left.
+Nothing recorded moved.
