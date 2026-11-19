@@ -396,8 +396,10 @@ pub fn guest_fits(ram_mib: u64) -> Result<(), String> {
     }
 }
 
-/// Memory available for new work, in MiB: `MemAvailable` on Linux; on macOS the free, inactive
-/// and purgeable pages (`vm_stat`). None when it cannot be read.
+/// Memory available for new work, in MiB: `MemAvailable` on Linux; on macOS the free,
+/// speculative, inactive and purgeable pages (`vm_stat`). `Pages free` leaves out the
+/// speculative pages, files read ahead that macOS gives back at once and `top` counts as free
+/// (Milestone 316). None when it cannot be read.
 pub fn available_mib() -> Option<u64> {
     if let Ok(t) = std::fs::read_to_string("/proc/meminfo") {
         let kb: u64 = t
@@ -428,7 +430,11 @@ pub fn available_mib() -> Option<u64> {
             .unwrap_or(0)
     };
     Some(
-        (pages("Pages free") + pages("Pages inactive") + pages("Pages purgeable")) * page
+        (pages("Pages free")
+            + pages("Pages speculative")
+            + pages("Pages inactive")
+            + pages("Pages purgeable"))
+            * page
             / (1 << 20),
     )
 }

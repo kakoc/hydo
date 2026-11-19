@@ -1141,14 +1141,17 @@ fn size_pool(cx: &Cx, engine: &dyn Engine, mut spec: BootSpec) -> (usize, BootSp
         die(&format!("explore: {e}"));
     }
     // what one worker holds: its VM, and on hvx S0 and S1 in memory too (the hvx engine keeps
-    // them there whatever the store says)
-    let per = if hvx { per_mem } else { per_files };
+    // them there whatever the store says) and the image copied into kernel memory. The Mac and
+    // KVM engines load the image into the guest's RAM, which they map as plain memory that the
+    // host gives page by page as the guest touches it (Milestone 316: on a Mac a 4096 MiB guest
+    // was said to need 4831 MiB, its 479 MiB image counted beside its RAM, and the run fitted)
+    let per = if hvx { per_mem } else { ram + 256 };
     if let Some(av) = avail.filter(|&m| m < n as u64 * per) {
         eprintln!(
-            "warning: {n} worker{} with {ram} MiB guests need{} up to about {} MiB, and this machine has \
-             {av} MiB available: a worker may fail to make its VM (--workers {} fits)",
+            "warning: {n} worker{} with {ram} MiB guests may use up to about {} MiB as the guests \
+             touch their memory, and this machine has {av} MiB free or reclaimable now: if a \
+             worker cannot make its VM, run with --workers {}",
             if n == 1 { "" } else { "s" },
-            if n == 1 { "s" } else { "" },
             n as u64 * per,
             (av / per.max(1)).max(1)
         );
