@@ -15,8 +15,8 @@ has and the version of the newest release. It changes nothing. The exit status i
 everything is current, and 3 when something is newer.
 
 When hydo itself is older, the plan also prints the "Before you upgrade" section of the release
-notes of each newer release. Read it before you go on. For example, the notes of 0.4.0 say that
-images built by 0.4.0 get new fingerprints, so build your images again after the update.
+notes of each newer release. Read it before you go on: it says, for example, when images get new
+fingerprints and must be built again after the update.
 
 ## Update
 
@@ -60,8 +60,8 @@ an archive with another sha256, leaves the installed hydo as it was.
 Every copy is brought to the newest skill release (tag `skill-v<version>`), checked by sha256
 in the same way as `hydo skill update` checks it:
 
-- the copies in this repository's and your home's `.claude/skills/hydo` and
-  `.agents/skills/onboard`;
+- the copies in `.claude/skills/hydo` and `.agents/skills/onboard` of your home and of the
+  repository you run `hydo update` in;
 - the `skills/hydo` folder of each Claude Code configuration folder. These folders are
   `CLAUDE_CONFIG_DIR`, `~/.claude`, and every other `~/.claude*` folder that holds `plugins/` or
   `settings.json`;

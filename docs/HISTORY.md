@@ -16401,3 +16401,134 @@ behind, and no copy is in the known folders. Nothing was updated: the user's Cla
 and `~/.hydo` were not changed. Nothing recorded moved.
 
 **What is left.** Open item 161.
+
+## Milestone 316 (tentative number): five problems of a user's onboarding with 0.4.0 on the Mac
+
+A user onboarded a project of their own with hydo 0.4.0 on the Mac engine (an M2 Pro) and
+reported five problems. The project is private, so each problem was reproduced with public
+images and examples only. Each fix is its own commit, so that a patch release (0.4.1) can take
+them; none moves a recorded value, and the fingerprint epoch stays 4.
+
+**1. A service in the recovery boot without its tmpfs, and a claim of lost data.** In the user's
+recovery boot after a power cut, PostgreSQL's `/dev/shm` (`mounts: - {tmpfs: true, dst: /dev/shm,
+size: 64m}`, which `hydo compose` writes for every image service) was devtmpfs's directory
+(mode 755, root), although the tmpfs at `/tmp/hydo/oci-tmpfs/<service>/2` existed. PostgreSQL
+(uid 999) stopped with `could not open shared memory segment "/PostgreSQL.<n>": Permission
+denied`, and the run ended `VIOLATION service cannot recover (committed data unrecoverable)`,
+classed `durable-defaults`.
+
+- The mount was not reproduced. The official `postgres:16.4` image from a Compose file with
+  `shm_size: 64m` and a `pg_isready` healthcheck, imported with `hydo compose`, ran on the Mac
+  engine with `network: bridge`: its first boot and the recovery boots of `C=3`, `C=10` and
+  `C=15` had `none /oci/db/dev/shm tmpfs rw,relatime,size=65536k` (a check in the image said so),
+  and an exploration of seeds 1-24 failed only on disk faults (`ERROR db restart failed` under
+  `disk=ioerr`, and a lying disk's `Structure needs cleaning`). A test in the guest ran the
+  service's launcher and three of its `hydo-oci` helpers at once beside a busy loop, 70 times on
+  fresh views of the tree: every time the service saw its own tmpfs.
+- The launcher has one race that gives the user's symptom inside the service. Its first line
+  binds `/proc`, `/sys`, `/dev`, `/tmp` and `/data` into the service's root when `mountpoint`
+  says they are not, outside the lock that guards the `mounts:`. A `hydo-oci` helper (a
+  readiness check that `hydo compose` made from a healthcheck) that checks `$R/dev` before the
+  launcher binds it, and binds it after the launcher has mounted the tmpfs on `$R/dev/shm`, puts
+  a second bind of `/dev` over the first and hides the tmpfs. The service then sees devtmpfs's
+  `/dev/shm`, which the launcher's `mkdir -p` made with mode 755. The fix moves the binds under
+  the lock and decides with `/proc/mounts`. It changes the launcher of every image service, so
+  every image with one gets new bytes, recorded ones too: it waits for a release that raises the
+  middle number (open item 162).
+- What a patch can fix is the diagnosis. The verdict is the controller's for any service that
+  does not start in the recovery boot, and it stays. When the service's last log lines name a
+  cause in its environment (permission denied, operation not permitted, a read-only file system,
+  a program or shared library that cannot run, memory, an address in use) and none of them
+  names damaged or missing data (structure needs cleaning, an I/O error, corrupt, a checksum, no
+  such file or directory, and similar words), the diagnosis says that the service did not start
+  because of its environment, that the run does not show what "committed data unrecoverable"
+  says, and quotes the line (`hydo/crates/hydo-cli/src/inspect/diagnose.rs`,
+  `environment_cause`; `docs/design/inspect.md` decision 7). The class stays `durable-defaults`.
+
+**2. Emulators with `network: bridge`.** `emulators: [{use: s3, buckets: [...]}]` with
+`network: bridge` was refused: `services[0]: network: bridge gives every service its own network
+namespace and address: addr: required`. The expanded `<name>_emulator` service had no `addr:`,
+and the entry had no key for one. With an address, the emulator would still have listened on
+127.0.0.1 of its own network namespace, where neither its proxy (on 10.89.0.1) nor its readiness
+check reaches it. Now, with `network: bridge`, the service takes the entry's new `addr:` (a
+format-1 addition), or the first free address of 10.89.1.1, 10.89.1.2, ... that no service, fake
+or proxy has, and the emulator listens on 0.0.0.0. A manifest that writes its own `/etc/hosts`
+in `root.text`, as `hydo compose` does, gets `<addr> <name>_emulator` and `10.89.0.1 <name>`
+for each name it lacks. Without the bridge nothing changes.
+
+**3. YAML anchors in `hydo.yaml`.** A manifest with `x-common: &common` and `<<: *common` in its
+services stopped with `hydo.yaml:<n>: unexpected indentation` (open item 121). MANIFEST.md says
+that a Compose file is read as YAML 1.1 with anchors; for `hydo.yaml` it said that anchors are
+not supported. The YAML subset now reads `&name` before a value, `*name` as a whole value (also
+in flows) and `<<` merge keys as PyYAML's `safe_load` applies them: the merged pairs first, a
+merged list's mappings in reverse order, then the mapping's own keys, a later pair winning at
+the place its key was first seen. An alias needs its anchor earlier in the file, and a plain
+value such as a cron line stays a string. A top-level `x-` key is an extension field, as in
+Compose, and is dropped when a manifest is read (`hydo_manifest::drop_extensions`).
+
+**4. FIFOs of an image.** hydo-build left every FIFO of an image's layers out (`1 device/FIFO
+entries skipped`). A FIFO is now an empty file in the staged tree with its layer's mode and
+owners in the tree's meta. The cpio writer writes a FIFO entry for it (the arm64 initramfs and
+a disk root's archive), and the x86_64 ext4 pass replaces the file with debugfs's `mknod <name>
+p` in the file's folder before it sets the mode and owners. Device nodes stay left out. Before
+the change, the images of every recorded image service were fetched by their pinned digests
+and their layers read: the voting app's five images, redis 7.2.4 and restate 1.7.13, for each
+architecture they are recorded for. None has a FIFO or a device entry, so no recorded image
+gets new bytes.
+
+**5. Text that was not true.** MANIFEST.md said that `hydo compose` on a Mac passes `--no-addr`
+because the arm64 kernel has no network namespaces; since Milestone 99's second guest kernel the
+importer writes `network: bridge` and the addresses there too, as `hydo guide capabilities`
+says. The row now says what `--no-addr` is for and that `hydo compose` passes it on no machine.
+`hydo explore` on the Mac warned that one worker of 4096 MiB guests needed up to about 4831 MiB
+with 4563 MiB available, and the run fitted. The estimate counted the image (479 MiB) beside the
+guest's RAM, as on hvx, where the module copies it into kernel memory. The Mac and KVM engines
+load the image into the guest's RAM and map that RAM as plain memory that the host gives as the
+guest touches it. For them a worker is now its guest RAM and 256 MiB, the warning says "may use
+up to about ... as the guests touch their memory", and it names `--workers`. The estimate sizes
+no pool. The memory macOS has free now counts the speculative pages too, which `vm_stat`'s
+`Pages free` leaves out and `top` counts as free; a Mac's pool, sized from that memory, can grow
+by them (84 MiB on this Mac when measured).
+
+**Evidence.** On this Mac, with the released 0.4.0 and with this tree's `hydo` in a copy of the
+0.4.0 release tree, each in an install cache of its own (`HYDO_HOME`), and every VM run under the
+shared lock:
+
+- FIFO: an alpine image built with `mkfifo -m 0666 /srv/in` and `chown 1000:1000`, whose service
+  reads the FIFO, ended `ERROR service start (reader)` on 0.4.0 (`/srv/in is not a FIFO`). With
+  the change it is `prw-rw-rw- 1000 1000`, every line written into it reached the reader, and two
+  runs gave one fingerprint (`99f5f7bef543d84a`). The same image without the FIFO built to the
+  same initramfs and disk sha256 on 0.4.0 and on this tree (`3b67ed9c…`, `61d274de…`). The
+  debugfs commands ran with e2fsprogs 1.47.0 in a Linux container, with a space in a path: a FIFO
+  inode with the mode and owners, and `e2fsck -fn` clean. No x86_64 image was built.
+- Emulators: an s3 emulator on service networks behind a `root.text` `/etc/hosts` was refused by
+  0.4.0 with the user's message. With the change it was ready at 10.89.1.1, the hosts file had
+  `10.89.1.1 s3_emulator` and `10.89.0.1 s3`, the workload listed its bucket through the proxy by
+  the name `s3`, and rclone in the emulator's image wrote four objects to 10.89.1.1 and read them
+  back; two runs gave one fingerprint, and a kill of the emulator kept the verdict OK. rclone's
+  PUTs through the proxy stored empty objects, on loopback with 0.4.0 as well (open item 162).
+- Diagnosis: a service that stops in its recovery boot with PostgreSQL's two log lines gets the
+  verdict, the input hash and the control transcript of 0.4.0 (`ctl=c76f0c2a8db0e34e`), and its
+  diagnosis now ends with "db did not start because of its environment, not because of lost
+  data: its log ends with `FATAL: could not open shared memory segment "/PostgreSQL.7":
+  Permission denied` and names no damaged file". PostgreSQL 16.4's recovery failure under a
+  lying disk (`Structure needs cleaning`) keeps the claim.
+- YAML: every tracked YAML file parsed to the same value as before but seven Compose files, which
+  no command reads as a manifest. Their refusals as manifests moved in the equivalence corpora:
+  14 answers of hydo-manifest's and 14 of hydo-build's. The emulator key moved 4 answers of
+  hydo-manifest's (the list of an entry's known keys).
+- Tests: the YAML subset's `anchors_aliases_and_merge_keys`, hydo-manifest's
+  `tests/anchors.rs`, cpio's `an_image_fifo_is_a_fifo_entry` and the OCI staging goldens (only
+  the FIFO's entries changed), emulators'
+  `with_a_bridge_each_emulator_gets_a_free_address_and_its_names`, and diagnose's
+  `a_recovery_start_that_fails_on_its_environment_claims_no_lost_data`.
+
+Two things this work met are recorded for later: `hydo compose`'s guess of `guest.ram_mib:
+1024` was too small for the PostgreSQL image's initramfs on the Mac (`Initramfs unpacking failed:
+write error` at boot, and then a namespace setup that failed with `No such file or directory`),
+and the busybox image's 400 hard links each became a whole copy in the initramfs (open item
+162). On main, hydo-build's equivalence corpus has six mismatches from before this milestone, for
+two mutants with a `contracts:` key that the recorded answers do not list (`error_paths`, M306).
+The 0.4.1 release branch has no Milestone 306, and its corpus matches.
+
+**What is left.** Open item 162.

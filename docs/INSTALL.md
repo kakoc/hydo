@@ -127,5 +127,7 @@ installed it:
 Then update the skill: run `hydo skill update` for its copies. For Claude Code's plugin, run
 `claude plugin marketplace update hydo` and then `claude plugin update hydo@hydo`.
 
-Read the "Before you upgrade" section of the release notes first. For 0.4.0, images get new
-fingerprints, so build your images again after the upgrade.
+Read the "Before you upgrade" section of the release notes of each release after yours first.
+From 0.3.4 or older, images built by 0.4.0 or newer get new fingerprints, so build your images
+again after the upgrade. From 0.4.0 to 0.4.1, an image you built keeps its fingerprints. Only an
+image with fakes, proxies or generated gRPC drivers gets new bytes when you build it again.
