@@ -33,7 +33,7 @@ at release, and after release. The tables below take the chart's techniques in i
 |---|---|---|---|
 | Unit tests | `workload.kind: test` runs a team's own test program in the VM as one step, with faults only when `faults:` lists them. | built | M205; the examples `nats-flaky-8363`, `etcd-flaky-22796`, and `qdrant-flaky-10200` |
 | Functional tests | Commands in `hydo/workload/` use the system, and checks in `hydo/checks/` say what must hold after each run. | built | Every example; `docs/ONBOARD.md` |
-| Component tests | One service runs against fakes of its outside services (`fakes:`), ready-made emulators (`emulators:` for Stripe, SMTP, and S3), or a fake from an OpenAPI description (`hydo fake from-openapi`). | built | M89, M242 (`checkout`), M249 (`openapi-payouts`) |
+| Component tests | One service runs against fakes of its outside services (`fakes:`), ready-made emulators (`emulators:` for Stripe, SMTP, and S3), or a fake from an OpenAPI description (`hydo fake from-openapi`). Emulators run on service networks (`network: bridge`) too since M316. | built | M89, M242 (`checkout`), M249 (`openapi-payouts`), M316 |
 | Fuzz tests | `hydo fuzz` calls a Rust function with generated inputs natively. `hydo fuzz --vm` makes the calls inside the VM under power cuts and disk errors, and under clock steps, pauses, and kills inside a call. `hydo explore` draws the faults of each run from a seed. | partly built | M275, M282, M289, M292, M296 (`fuzz-vm`), M307 (enumerations, trait methods, `build` lines), M308 (a third evaluation: 9 known upstream bugs reproduced; const generics, `&'static` parameters and closures still refused); open item 139 |
 | Property-based tests | Function contracts (`// hydo: requires` and `ensures`) judge each generated input of `hydo fuzz`, and each call in a whole-system run. Value properties (`// hydo: keep`) judge a recorded value along its history. | partly built | M241, M255, M291 (`blnk`); open items 113 and 146 |
 | Formal verification | Not hydo's job. A proof covers every state of a model, and hydo checks only the runs that it makes. | not hydo's job | |
@@ -56,7 +56,7 @@ at release, and after release. The tables below take the chart's techniques in i
 
 | Technique | What hydo has | Status | Evidence |
 |---|---|---|---|
-| Integration tests | The whole system runs in one VM. `hydo onboard`, `hydo compose`, and `hydo k8s` start the project from a repository, a Compose file, or Kubernetes manifests. | built | M84, M214, M229, M243; every example |
+| Integration tests | The whole system runs in one VM. `hydo onboard`, `hydo compose`, and `hydo k8s` start the project from a repository, a Compose file, or Kubernetes manifests. `hydo.yaml` reads YAML anchors and `<<` merge keys, and an image's FIFOs reach its root, since M316. | built | M84, M214, M229, M243, M316; every example |
 | Tap compare | `hydo compare-versions` runs the same schedules on two versions and compares the verdicts, the client's outcomes and histories, and the stored state (`services[].compare`). `hydo versions` replays one finding on several versions. | built | Milestone 298 (Redis settings, Formance Ledger v2.3.24 against v2.4.0); M221 |
 | Load tests | `parallel_driver_` commands run copies of a workload command at once, so races show without faults. Throughput is not hydo's job: time in the VM is virtual, and a guest has at most 8 GiB of RAM. | built for concurrency | M86; `formance-ledger`, `blnk`, `medusa` |
 | Shadowing | Not hydo's job. It sends copies of production traffic to a new version. The nearest command is `hydo compare-versions`, on schedules instead of traffic. | not hydo's job | |
@@ -189,7 +189,7 @@ Ideas that would answer more:
 | The question | What hydo answers today | Status |
 |---|---|---|
 | Can the maintainer see it fail? | `hydo run <image> '<schedule>'` repeats the run bit for bit, and `hydo repro` replays a run directory. | built; every example |
-| Why did it fail? | `hydo report --html`, `hydo inspect` at any stop of the run, `hydo diff`, and `hydo explain`. The report names a step by the schedule's number. | built; M165, M178, M220, M228, M301 |
+| Why did it fail? | `hydo report --html`, `hydo inspect` at any stop of the run, `hydo diff`, and `hydo explain`. The report names a step by the schedule's number. A service that its environment stopped in a recovery boot is not said to have lost data (M316). | built; M165, M178, M220, M228, M301 |
 | Is it a bug of the system or of the setup? | Each failure class has a label and advice (`hydo_explore::advice`). A script under Docker in the example's `native/` folder confirms the cause outside hydo. | built; M228; `redpanda/native`, `saleor/native` |
 | Which versions have it? | `hydo versions` bisects over versions, assuming one change point. | built; `formance-ledger` (M221) |
 | Is the fix complete? | The same schedule on the fixed build, and the saved regression in CI. | built; `blnk`, `qdrant-flaky-10200` |

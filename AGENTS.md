@@ -413,6 +413,23 @@ maintainers: the shared cases, and the Go module with its frozen copy in `hydo/s
 test in its language (M188). The examples are in `hydo/onboard/examples/`;
 `hydo/onboard/MANIFEST.md` is the project format's reference.
 
+**A user's onboarding with 0.4.0 on the Mac (M316, tentative number).** Five fixes for the patch
+release 0.4.1, each its own commit; none moves a recorded value, and the epoch stays 4:
+- `hydo.yaml` reads YAML anchors, aliases and `<<` merge keys, and drops top-level `x-` keys
+  (MANIFEST.md "YAML subset").
+- An image's FIFOs are FIFOs in the service's root; device nodes stay left out. No recorded
+  image has a FIFO.
+- `emulators:` works with `network: bridge`: the service gets `addr:` (a format-1 addition, or
+  the first free 10.89.1.x) and listens on 0.0.0.0, and a `root.text` `/etc/hosts` gets the
+  names.
+- A service that its environment stopped in a recovery boot keeps its verdict. When its log
+  has `Permission denied` and no damaged file, the diagnosis says that the run shows no lost data.
+- MANIFEST.md no longer says that `hydo compose` passes `--no-addr` on a Mac. The explorer's
+  memory warning on the Mac and KVM no longer counts the image beside the guest's RAM.
+
+The user's tmpfs that was missing in a recovery boot was not reproduced. A race in the launcher
+explains the symptom, and its fix changes every image service's bytes (open item 162).
+
 **One command updates everything (M315, tentative number).** `hydo update [--check] [--yes]
 [--version V]` takes the newest `v<x>.<y>.<z>` release of the release list and updates hydo the
 way its own program's path says it was installed. A Homebrew keg gets `brew upgrade
@@ -1944,7 +1961,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     did not start; its first boot had finished the workload.
 
 121. What the Hatchet onboarding lacked (M250). A service without `image:` cannot have its own
-    `env:`. YAML anchors in `hydo.yaml` stop `hydo build` with `unexpected indentation`. The import
+    `env:`. YAML anchors in `hydo.yaml` are read since M316. The import
     took a gRPC server's port and readiness check from the image's `EXPOSE`. It ran one-shot jobs
     in the `setup:` of several services that start together. Links through one-shot jobs are lost
     (as items 97 and 111). `fetch-images.sh` stops on a machine without Docker for `build:`
@@ -2604,6 +2621,31 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       is reported and skipped.
     - Homebrew installs the formula's version only, so `--version V` with Homebrew is refused
       unless V is the formula's version.
+162. The fixes of a user's onboarding with 0.4.0 (M316, tentative number). What is left:
+    - The user's recovery boot without the service's `/dev/shm` tmpfs was not reproduced with
+      PostgreSQL 16.4 on the Mac engine. It ran first boots, three power cuts, 24 explored
+      schedules, and 70 tries of the launcher beside three `hydo-oci` helpers in the guest.
+    - A race fits the symptom. The launcher binds `/dev` and the other system folders into the
+      service's root outside the lock of its `mounts:`. So a `hydo-oci` helper, such as a
+      readiness check, can bind `/dev` a second time over the tmpfs. The fix puts the binds under
+      the lock and decides by `/proc/mounts`. It changes every image service's launcher, so every
+      such image gets new bytes, recorded ones too: it waits for 0.5.0. The user's report said
+      that `/proc/mounts` had no line for the shm mount, which a second bind does not explain.
+    - The diagnosis's environment rule reads the last log lines only. A service whose log names
+      both a permission error and a damaged file keeps the claim of lost data, and a service
+      that logs nothing gets no sentence.
+    - Through the s3 emulator's proxy, rclone's PUTs stored empty objects, on loopback with 0.4.0
+      too; reads and bucket lists went through. How the proxy handles rclone's upload was not
+      traced (a signed streaming body, or `Expect: 100-continue`). An image service sees the
+      emulators' names only when it mounts the manifest's `/etc/hosts`, as `hydo compose`'s
+      services do.
+    - No x86_64 image with a FIFO was built; the debugfs commands ran in a Linux container only.
+    - `hydo compose`'s `guest.ram_mib: 1024` was too small for the PostgreSQL image on the Mac:
+      the initramfs did not fit (`Initramfs unpacking failed: write error`), and the run failed
+      later with an unrelated message. hydo does not warn of it. An image's hard links (the
+      busybox image has 400) each become a whole copy in the initramfs.
+    - hydo-build's equivalence corpus has six mismatches from M306 (two mutants with a
+      `contracts:` key the recorded answers do not list).
 
 ## Milestone index
 
@@ -3461,6 +3503,12 @@ build machine, before 2026-10-13.
   the default `replicated`, a kill alone loses acknowledged messages, which `hydo explore
   --configs` labels the documented trade-off. A backward clock step stops a partition's message
   expiry for the step's length, a clock effect by design. Nothing new. Nothing recorded moved
+- M316 (tentative number): five fixes from a user's onboarding with 0.4.0 on the Mac, each its
+  own commit for 0.4.1. The reader of `hydo.yaml` takes YAML anchors and `x-` keys, an image's
+  FIFOs reach its root, and emulators run with `network: bridge`. The diagnosis claims no lost data when a
+  service's environment stopped it. The text about the Mac's service networks and memory is
+  true. The missing tmpfs was not reproduced; its race fix waits for 0.5.0. Nothing recorded
+  moved
 
 ## Where to look
 
