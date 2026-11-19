@@ -57,13 +57,20 @@ An expression reads parameters, fields, `result`, integers, floating-point numbe
 strings, `old(e)` (the value at the call's entry), and the functions `len`, `is_some`, `is_none`,
 `is_ok`, `is_err`, `some`, `ok` and `err`. `hydo fuzz` also reads `matches(e, <pattern>)` and
 `sorted(v)` (sections "Enumerations" and "Sorted inputs"). The operators are `||`, `&&`, the
-comparisons, `+ - * / %`, `!` and unary `-`. Integers are exact, with no overflow. A comparison
+comparisons, the bit operators `|`, `^`, `&`, `<<` and `>>`, `+ - * / %`, `!` and unary `-`.
+They bind as in Rust: `x & 0x3ff != 0` is `(x & 0x3ff) != 0`. `!` on an integer is Rust's
+bitwise `!` of its type, and on a condition its negation. An integer may be written `0x7c00`,
+`0b11111` or `0o17`. Integers are exact, with no overflow: a `<<` whose result does not fit in
+128 bits is undecided. half's NaN test is
+`(self.0 >> 10) & 0x1f == 0b11111 && (self.0 & 0x3ff) != 0`. A comparison
 of an integer with an `f32` or `f64` value is exact too. Arithmetic on such a value is the
 program's own `f64` arithmetic, and a NaN is unequal to everything, itself included. A call of
 the program's own code is refused.
 
 A type that a `with` line names is written as the function's module writes it. byteorder's
-`io.rs` does not import `BigEndian`, so its contracts write `with T = crate::BigEndian`.
+`io.rs` does not import `BigEndian`, so its contracts write `with T = crate::BigEndian`. hydo
+finds a type's definition through the module's `use` lines, a glob import (`use a::*`), and a
+renamed re-export (`pub use a::B as C`).
 
 ## Enumerations
 
@@ -77,6 +84,7 @@ library's `Ordering`. A variant's fields are generated like a structure's. `matc
 | `0`, `-1`, `"text"`, `true` | that value |
 | `Complete`, `Status::Complete` | the variant, whatever its fields are |
 | `Complete(_)`, `Ok(Complete((_, 0)))` | the variant, with a pattern for each field |
+| `UnknownUnit { .. }`, `UnknownUnit { start: 0, .. }` | a variant or a structure with named fields: each named field has its pattern, and the others any value |
 | `(_, 0)` | a tuple |
 
 `Some`, `None`, `Ok` and `Err` are variants too. A variant's field reads like a field:
@@ -97,7 +105,8 @@ hydo:   smallest input (0 shrink steps): buf = b"\r\n"
 hydo:   the call gave: result = Ok(Complete((2, 0)))
 ```
 
-A variant that the type does not have is refused before the run, with the variants it has. A
+A variant or a field that the type does not have is refused before the run. The refusal names
+the variants or the fields that the type has. A
 variant is never compared with `==`: write `matches()`. An `input` line names a variant's field
 as `op.Clamp.lo`.
 
@@ -186,7 +195,16 @@ pub fn split_to(&mut self, at: usize) -> Self {
 A constructor that panics on an input ends the call with a panic at the constructor. Narrow its
 arguments with `input` lines: chrono's `NaiveDate::from_ymd(year: i32, month: u32, day: u32)`
 needs `input self.month in 1..=12` and `input self.day in 1..=28`. A type without a `build` line
-is refused with the line to write.
+is refused with the line to write. For a structure with a private field, the refusal names
+the crate's public constructor with its parameters, `new` first, then `from_*`, `with_*`,
+`From` and `Default`, and a method for the `read` line:
+
+```text
+the field `0` of `f16` is private to the module `binary16`, so the harness cannot build the value: write `// hydo: build f16 from f16::from_bits(bits: u16)` (a public constructor of the crate; the others are `f16::from_f32(value: f32)`, `f16::from_f64(value: f64)`), and `// hydo: read f16 as u16 by to_bits()` for a clause that reads the value
+```
+
+When the crate has no constructor that hydo can call, the refusal says so: add one, or write
+a property function.
 
 The type of a `build` or a `read` line may have type arguments, and so may the constructor:
 
@@ -215,7 +233,14 @@ chooses each closure from a few shapes:
 - an argument of the result's type: `|x| x`;
 - an integer argument and an integer result: `|x| try_from(x).unwrap_or(k)`, and the same plus
   one;
-- an integer argument and a `bool` result: `|x| x % 2 == 0` and `|x| x > 0`.
+- an integer argument and a `bool` result: `|x| x % 2 == 0` and `|x| x > 0`;
+- two integer arguments and an integer result: `|x, y| x + y`, which wraps;
+- a second argument of the result's type: `|_, y| y`;
+- two arguments of one type and a `bool` result: `|x, y| x < y` and `|x, y| x == y`;
+- two arguments of one type and an `Ordering` result, for a sort: `|a, b| a.cmp(b)` and
+  `|a, b| b.cmp(a)`, and no constant, because a sort may panic on an order that is not total;
+- an `Option` result: `|x| Some(x)` for an argument of the inside's type, and
+  `|x| try_from(x).ok()` for an integer argument and an `Option` of an integer.
 
 ```rust
 // hydo: with L = i32
@@ -233,7 +258,10 @@ that calls it with closures of your own.
 
 A `&'static` parameter, such as percent-encoding's `ascii_set: &'static AsciiSet`, gets a
 generated value that lives as long as the test program: hydo leaks it after it reads the values
-at entry. A `&'static str` and a `&'static [T]` work the same way.
+at entry. A `&'static str` and a `&'static [T]` work the same way. A `&'static mut` parameter
+gets a leaked value too, and a clause reads it after the call. The test module makes that
+reference in an `unsafe` block, so in a crate that forbids `unsafe_code` such a function is
+refused.
 
 ## Sorted inputs
 
@@ -245,6 +273,19 @@ hydo generates the list in order, so no input is thrown away for it:
 // hydo: requires sorted(v)
 // hydo: ensures is_none(result) || v[some(result)] == x
 pub fn search(v: &[u32], x: u32) -> Option<usize> {
+```
+
+## Lists of one length
+
+`requires len(a) == len(b)` makes hydo generate `b` with the length of `a`, so that no input is
+thrown away for it. A shrink shortens both lists together. For half's `convert_from_f32_slice`
+this contract threw away 99 % of the generated inputs before hydo read it so; now none:
+
+```rust
+// hydo: with Self = [f16]
+// hydo: requires len(self) == len(src)
+// hydo: ensures len(self) == len(src)
+fn convert_from_f32_slice(&mut self, src: &[f32]);
 ```
 
 ## The `input` line
@@ -342,14 +383,45 @@ pub fn display_roundtrip(text: &str) -> Option<bool> {
   parameter;
 - a parameter of a generic structure without a `build` line, a `char`, or a map.
 
-A result of such a type is read in part, and a clause that reads the rest is undecided. A
-function whose test module does not build is reported with the compiler's first error, and the
-other functions run. hydo builds the test module in a `#![no_std]` crate too. The copy keeps the
-crate's `[lints]` tables, and the test module allows no lint that the crate forbids.
+A result of such a type is read in part, and a clause that reads the rest is undecided. hydo
+builds the test module in a `#![no_std]` crate too. The copy keeps the crate's `[lints]`
+tables, and the test module allows no lint that the crate forbids.
+
+## When a test module does not build
+
+A function whose test module does not build is reported, and the other functions run. The
+test module is one line that hydo writes into its copy of the crate, so the compiler's line
+and column there mean nothing in your files. The report names instead the line of your
+contract or the part of the function that caused the error. It adds the compiler's labels at
+the test module's own text, and the compiler's `help:` and `note:` lines:
+
+```text
+hydo: fuzz: mycrate::code_of (src/lib.rs:52) is not fuzzed: its harness did not build: error[E0308]: mismatched types
+    caused by the line `// hydo: build code::Code from code::Code::new(x: u16)` (src/lib.rs:49): the harness builds the value by calling `code::Code::new(...)` with the arguments that the line names
+    at `c.0`: expected `u8`, found `u16`
+    help: you can convert a `u16` to a `u8` and panic if the converted value doesn't fit: `.try_into().unwrap()`
+    the compiler's whole output: hydo-out/fuzz/harness/code_of.log (--show-harness prints it)
+```
+
+A cause is a `build`, `read` or `with` line, a parameter and how the test module passes it,
+the call, or a generated closure. `DIR/harness/<function>.log` keeps the whole output of the
+failed build, and `DIR/harness/<function>.rs` the test module's text. `--show-harness` prints
+the log. `DIR/build.log` keeps every build of the run, each under a numbered heading.
 
 When the copy does not build without any test module, hydo builds the crate with its own
 `Cargo.toml` to find the cause. If the crate builds, the message says that hydo's copy is the
-cause and names the first error.
+cause and names the first error. The message gives the first error's place in your files. For
+a member of a workspace without a `Cargo.lock`, hydo cannot build the crate apart. The message
+then names the member and the workspace's folder. It says that an error at that place is in
+the crate's own code, such as its test module, and gives the command that tells:
+`cargo test -p <member> --no-run` in the workspace's folder.
+
+## Choose the functions
+
+`--fn NAME` takes a function's name or the end of its path (`hex::encode`). With `::` after it,
+it takes a module or a type: `--fn codec::` fuzzes every contracted function of the module
+`codec`, and `--fn Ledger::` every method of `Ledger`. A name that names no function but a
+module, such as `--fn hydo_props`, selects that module's functions, and a line says so.
 
 ## See the inputs
 

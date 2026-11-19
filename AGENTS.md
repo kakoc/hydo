@@ -1046,7 +1046,23 @@ commit:
 
 On fresh copies of the six crates with 71 contracts, 21 functions were refused and 9 verdicts
 were wrong before, and none after. All nine known bugs showed, against seven before (the
-evaluation page, "After Milestone 318"). Open item 163 has what is left.
+evaluation page, "After Milestone 318").
+
+Since M326 (tentative number) the rest of that evaluation's list is in, each its own commit:
+- A test module that does not build names the error's cause in the user's files (a `build`,
+  `read` or `with` line, a parameter, the call), with the compiler's `help:` lines. The whole
+  output is in `<out>/harness/<function>.log`, which `--show-harness` prints.
+- A private field's refusal names the `build` line with the crate's public constructor and its
+  parameters, and a `read` line.
+- Contracts take the bit operators, `requires len(a) == len(b)` generates two lists of one
+  length, and `matches()` takes `Name { field: <pattern>, .. }`.
+- `--fn codec::` selects a module, `&'static mut` parameters are fuzzed, names resolve through
+  glob imports and re-exports, and a workspace member's own error names the member.
+- Closures take two arguments (`|x, y| x + y`), a sort's comparison (`|a, b| a.cmp(b)`), and an
+  `Option` result.
+
+On the six crates every verdict and every smallest input stayed, and all nine known bugs showed
+(the evaluation page, "After Milestone 326"). Open item 163 has what is left.
 
 **Function fuzzing inside the VM (M292 and M296, tentative numbers; a prototype on hvx and on
 the Mac engine).** `hydo fuzz --vm [CRATE_DIR]` makes the calls inside hydo's VM under faults: power
@@ -2289,7 +2305,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A fault of a stepped instruction other than #DE, #UD, #GP and #PF leaves the trap flag in
       its frame. Only user mode is counted, so a loop in the guest kernel stays the observer's.
     - The k3s example is not in `hydo/onboard/recorded.json`.
-139. Function fuzzing (M275, M280, M282, M289, M292, M296, M307, M308, M318). What is left:
+139. Function fuzzing (M275, M280, M282, M289, M292, M296, M307, M308, M318, M326). What is left:
     - The run inside the VM (`hydo fuzz --vm`, M292, M296) is a prototype that ran on hvx and
       on the Mac engine, not on KVM. What is left of it:
       - A fault inside a call comes 1 to 13 ms after its drawn delay, at the controller's next
@@ -2320,13 +2336,15 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The language has one quantifier, `sorted(v)` (M307). "Every element is unique" or "every
       element keeps a rule" cannot be stated.
     - The reading is textual. Since M318 a name of two modules resolves by the function's
-      module, its file's `use` lines, or a path. `--list` cannot tell a build failure in
-      advance.
+      module, its file's `use` lines, or a path, and since M326 through glob imports and
+      re-exports. `--list` cannot tell a build failure in advance; since M326 the build's
+      report names the contract line that caused it.
     - A list's shrink keeps a length that the bug needs: memchr's input kept 80 bytes. A panic
       inside code that a macro generates is still placed at the harness's line.
     - A third evaluation by a fresh user (M308, `docs/design/function-fuzzing-evaluation-3.md`)
       on six other crates reproduced 9 known upstream bugs and found none new. M318 fixed the
-      first six items of its list; open item 163 has what is left of it.
+      first six items of its list and M326 the other two and the smaller frictions; open item
+      163 has what is left of it.
     - Qdrant's `decompress_sequence` accepts a header of more than 64 bits per value. What
       `decode_untrusted_bytes` returns for such a blob in a release build was not checked, and
       nothing was posted.
@@ -2756,28 +2774,35 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       the initramfs did not fit (`Initramfs unpacking failed: write error`), and the run failed
       later with an unrelated message. hydo does not warn of it. An image's hard links (the
       busybox image has 400) each become a whole copy in the initramfs.
-163. What the fixes of the third `hydo fuzz` evaluation left (M318, tentative number;
-    `docs/design/function-fuzzing-evaluation-3.md`, "After Milestone 318"). What is left:
-    - Fix 7 of the evaluation: a harness that does not build reports only the compiler's first
-      line, and `build.log` can hold a later build's output.
-    - Fix 8: the refusal for a private field does not name the `build` line.
-    - The language has no bit operators and no named predicates, so half's NaN test is written
-      out in each clause. `requires len(self) == len(src)` turns away 99 % of two independent
-      lists. `Error::UnknownUnit { .. }` is refused, `--fn hydo_props` does not select a
-      module's functions, and an error in a test module of a workspace member names hydo's
-      copy.
-    - A generated closure takes one of a few shapes chosen from its first argument. A closure
-      of a generic `impl` block's type parameter, one with a reference result, and a `FnMut`
-      with state are not generated. A closure whose result hydo cannot generate is refused.
-    - A `&'static mut` parameter is passed as a shared reference and does not build.
+163. What the fixes of the third `hydo fuzz` evaluation left (M318 and M326, tentative numbers;
+    `docs/design/function-fuzzing-evaluation-3.md`, "After Milestone 326"). What is left:
+    - The cause of a test module's compile error is found by the text around the error's
+      place. A `with` line is named only for an error at the call. An error that no contract
+      line explains is named as hydo's own, with the output to report. The test module's text
+      is formatted only when `rustfmt` is beside cargo or on PATH.
+    - The language has no named predicates, so half's NaN test is still written out in each
+      clause, now shorter with the bit operators. On an integer whose type hydo does not know
+      (`!5`), `!` stays the negation.
+    - Two lists of one length are generated only for a `len(a) == len(b)` conjunct of
+      `requires`, and only for lists, not for strings.
+    - A pattern names a tuple variant's fields by position only, not as `Name { 0: _ }`.
+    - A name of a module selects its functions only when no function has that name; else
+      `--fn <name>::` does.
+    - A `&'static mut` parameter is read after the call through its raw pointer while a result
+      may still hold the reference; no run showed a wrong value. In a crate that forbids
+      `unsafe_code` such a function is refused.
+    - The resolution follows `use` lines a few steps as text, without checking that a
+      re-export is `pub`; the `use` lines of an inline module count as its file's.
+    - A generated closure of a generic `impl` block's type parameter, one with a reference
+      result, and a `FnMut` with state are not generated. A closure whose result hydo cannot
+      generate is refused.
     - An associated type that neither the crate's `impl` blocks nor `ToOwned` names, such as an
       `Iterator`'s `Item` from the standard library, stays unread; the report names it.
-    - The resolution by `use` lines reads them as text: a glob import (`use a::*`) and a
-      re-export under another name in another module are not followed.
-    - The proof used contracts written again from the evaluation page by the one who fixed the
-      tool, on the crates.io archives. percent-encoding needed two helpers of its own
-      (`AsciiSet::hydo_set`, `hydo_bytes`), because its set has a private field and no
-      constructor from bytes. A fresh evaluator should run `hydo fuzz` again before 0.5.0.
+    - percent-encoding still needs a helper of its own to build an `AsciiSet` from bytes; the
+      refusal now names the helper, and with none it says to add one.
+    - The proofs used contracts written again from the evaluation page by the one who fixed the
+      tool, on the crates.io archives. A fresh evaluator should run `hydo fuzz` again before
+      0.5.0.
 
 164. The guest's clock on hvx (M319 and M323, tentative numbers; `docs/design/guest-clock.md`).
     Since M323 an x86_64 image built at epoch 5 keeps time with its TSC. What is left:
@@ -3763,6 +3788,12 @@ build machine, before 2026-10-13.
   guest's clock at 0.44, and `tsc=reliable` alone made a read cost 82 µs and broke ClickHouse's
   start. Epoch-4 images keep their values; every epoch-5 hvx value waits for the pass (open item
   105)
+- M326 (tentative number): what M318 left of the third `hydo fuzz` evaluation, each its own
+  commit. A test module that does not build names its cause in the user's files, and a private
+  field's refusal names the `build` line with the crate's constructor. Contracts take bit
+  operators, two lists of one length and `{ .. }` patterns; `--fn codec::`, `&'static mut`,
+  glob imports and more closure shapes work. The six crates kept every verdict. Nothing
+  recorded moved
 
 ## Where to look
 

@@ -366,3 +366,43 @@ What each crate shows:
 All nine known upstream bugs of the evaluation showed after the fixes; seven showed before.
 Nothing new was found, and nothing was posted upstream. Fixes 7 and 8 of the list, and
 friction 9 to 11, stay open (open item 163).
+
+## After Milestone 326
+
+Milestone 326 made fixes 7 and 8 of the list and the parts of frictions 9 to 11 that fit the
+design. The proof ran on fresh copies of the six crates from crates.io, with the contracts of
+"After Milestone 318" written again by the same script. It used seed 1 and 1,000 inputs on the
+Mac. "Before" is `main` at `bfb38e06`, the start of the milestone.
+
+| Crate | Before | After |
+|---|---|---|
+| heck 0.5.0 | 10 held, 7 broken | 10 held, 7 broken |
+| half 2.7.1 | 11 held, 1 broken | 11 held, 1 broken |
+| either 1.19.0 | 12 held | 12 held |
+| humantime 2.4.0 | 4 held, 5 broken | 4 held, 5 broken |
+| percent-encoding 2.3.2 | 7 held, 2 broken | 7 held, 2 broken |
+| arrayvec 0.7.8 | 12 held | 12 held |
+
+Every function kept its verdict, and every broken one kept its smallest input. All nine known
+upstream bugs showed again. The milestone changed these runs in three places:
+
+- `convert_from_f32_slice` with `requires len(self) == len(src)` threw away 49,596 generated
+  inputs and ran 404 calls before. After, it threw away none and ran 1,000.
+- `--fn hydo_props` on heck found no function before. After, it fuzzed the 9 property
+  functions of the module, 7 of them broken as above.
+- A misspelt `read` line on `percent_encode` (`by to_text()`) gave only
+  `error[E0599]: no method named to_text found` before. After, the report also named the line,
+  `src/lib.rs:118`, and the file with the compiler's whole output.
+
+A second set of contracts used the new language on the same crates:
+
+- half's NaN tests are `(self.bits >> 10) & 0x1f == 0b11111 && (self.bits & 0x3ff) != 0`, and
+  `to_le_bytes` is `result[0] | (result[1] << 8) == self.bits`. All 11 functions held, and
+  `convert_to_f32_slice` broke on its documented panic. Before, the file did not parse.
+- humantime's `parse_duration` takes `!matches(result, Err(Error::UnknownUnit { start: 0, ..
+  }))`, and it held. Before, the pattern was refused with `unexpected {`.
+- percent-encoding without the `build` line for `AsciiSet` is refused with the line to write:
+  `` write `// hydo: build AsciiSet from AsciiSet::hydo_set(bytes: alloc::vec::Vec<u8>)` (the
+  crate's public constructor) ``. Before, the refusal left the constructor to the reader.
+
+Nothing new was found, and nothing was posted upstream. Open item 163 has what is left.

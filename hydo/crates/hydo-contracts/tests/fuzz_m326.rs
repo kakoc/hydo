@@ -438,19 +438,19 @@ fn a_harness_that_does_not_build_names_the_contract_line_and_the_compiler_help()
     let t = TmpDir::new("hydo-contracts-fuzz-m326-build");
     let (_, rep) = fuzz_m326(
         t.path(),
-        &["--fn", "echo", "--fn", "code_of", "--fn", "same"],
+        &["--fn", "pass_text", "--fn", "code_of", "--fn", "same"],
     );
     // a `read` line that names a method the type does not have
-    let echo = skipped(&rep, "::echo");
-    assert!(echo.contains("error[E0599]"), "{echo}");
+    let text = skipped(&rep, "::pass_text");
+    assert!(text.contains("error[E0599]"), "{text}");
     assert!(
-        echo.contains(
+        text.contains(
             "caused by the line `// hydo: read text::Text as String by as_text()` (src/lib.rs:28)"
         ),
-        "{echo}"
+        "{text}"
     );
     // one error at the values before and after the call is one error
-    assert!(!echo.contains("more error"), "{echo}");
+    assert!(!text.contains("more error"), "{text}");
     // a `build` line whose argument the constructor does not take: the compiler's error at the
     // line, with its help, and no value that does not fit
     let code = skipped(&rep, "::code_of");
@@ -471,7 +471,7 @@ fn a_harness_that_does_not_build_names_the_contract_line_and_the_compiler_help()
     // the harness's line numbers mean nothing to the user: no column of the harness's line
     assert!(!same.contains(":59:"), "{same}");
     // the whole output, kept apart for each function, and every build in build.log
-    for (s, name) in [(echo, "echo"), (code, "code_of"), (same, "same")] {
+    for (s, name) in [(text, "pass_text"), (code, "code_of"), (same, "same")] {
         let log = t.path().join("out/harness").join(format!("{name}.log"));
         assert!(s.contains(&log.display().to_string()), "{s}");
         assert!(s.contains("--show-harness"), "{s}");

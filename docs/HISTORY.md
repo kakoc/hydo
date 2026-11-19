@@ -18826,3 +18826,72 @@ The KVM images get `/etc/hydo/exact-tick` as new bytes; the Mac images do not ch
 recorded is re-recorded here.
 
 **What is left.** Open item 164.
+
+## Milestone 326 (tentative number): what Milestone 318 left of the third `hydo fuzz` evaluation
+
+Milestone 318 fixed the first six items of the third evaluation's list
+(`docs/design/function-fuzzing-evaluation-3.md`). This milestone fixes the rest, in the order
+of what costs a Rust developer most. Each fix is its own commit. None touches an engine, an
+image, or a recorded value. The tests are `cargo test -p hydo-contracts --test it fuzz_m326::`,
+on the new fixture `hydo/crates/hydo-contracts/tests/fuzz-m326`.
+
+**1. A test module that does not build.** The report showed only the compiler's first line, and
+`build.log` could hold a later build's output. The test module is one line in hydo's copy, so
+its line and column mean nothing to the user. Now the report gives the first error and its
+cause in the user's terms:
+
+- a `build`, `read` or `with` line, with its file and line;
+- a parameter and how the test module passes it;
+- the call, or a generated closure.
+
+It adds the compiler's labels at the test module's own text, its `help:` and `note:` lines, and
+the file `<out>/harness/<function>.log` with the whole output. `<function>.rs` beside it holds
+the test module's text, and `--show-harness` prints the log. `build.log` keeps every build under
+a numbered heading. A `build` line's arguments now have the line's types, so a type that the
+constructor does not take is a compile error at the line. Before, it was a value that did not
+fit and a false `broken`. Commit `9caaca7a`.
+
+**2. A private field's refusal.** The refusal said to fuzz a constructor instead. It now names
+the `build` line with the crate's public constructor of the type and its parameters, and a
+`read` line with a public method that reads the value. `new` comes first, then `from_*`,
+`with_*`, the others, `From` and `Default`. A crate without such a constructor gets what to add
+instead. The test writes the proposed lines into a copy, and the function holds with them.
+Commits `a8394bbb` and `db93baee`; the second gives the same advice for a type with a `read`
+line and no `build` line, as percent-encoding's `AsciiSet`.
+
+**3. The language.** Each part is its own commit:
+
+- The bit operators `&`, `|`, `^`, `<<` and `>>` bind as in Rust, exactly on 128 bits, with
+  `0b` and `0o` literals. In `hydo fuzz`, `!` on an integer is Rust's bitwise `!` of its type.
+  A run's contracts read them too. Commit `5b6f1fcb`.
+- `requires len(a) == len(b)` makes the generator give `b` the length of `a`, and the shrink
+  shortens both together. Commit `0d3397a2`.
+- `matches()` takes `Name { .. }` and `Name { field: <pattern>, .. }`, and refuses a field that
+  the type does not have. Commit `a1f3d749`.
+- `--fn codec::` selects a module's functions or a type's methods. A name that names no
+  function but a module, such as `--fn hydo_props`, selects that module, and a line says so.
+  Commit `fd7882b6`.
+- A `&'static mut` parameter gets a leaked value behind a raw pointer, read after the call. A
+  crate that forbids `unsafe_code` gets a refusal with what to write. Commit `5e6205d7`.
+- A type's name resolves through glob imports, renamed imports and re-exports, and re-exports
+  that a path names. Commit `fa19ca70`.
+- An error in a workspace member's own code names the member, the workspace's root, the error's
+  place in the user's files, and `cargo test -p <member> --no-run`. Commit `d113c7e1`.
+
+**4. More shapes of closures.** Two integer arguments add (`|x, y| x + y`). A second argument
+of the result's type is returned, and two arguments of one type compare (`x < y`, `x == y`). A
+sort's comparison is `|a, b| a.cmp(b)` or its reverse, never a constant, because a sort may
+panic on an order that is not total. An `Option` result takes `Some(x)` and
+`try_from(x).ok()`. Commit `2a144f18`.
+
+**The proof.** The six crates of the evaluation came fresh from crates.io, with the contracts
+that Milestone 318's script writes. The runs used seed 1 and 1,000 inputs on the Mac. `main` at
+`bfb38e06` and this milestone gave the same verdict for each of the 71 functions, and the same
+smallest input for each of the 15 broken ones. All nine known upstream bugs showed: heck 36, 70
+and 71; humantime 67, 68, 69, 78 and 82; `rust-url` 1132. half's `convert_from_f32_slice` threw
+away 49,596 inputs for 404 calls before, and none for 1,000 calls after. A second set of
+contracts used the bit operators on half and a pattern of named fields on humantime, and every
+function kept its verdict. The section "After Milestone 326" of the evaluation page has the
+details. Nothing new was found, and nothing was posted.
+
+**What is left.** Open item 163.

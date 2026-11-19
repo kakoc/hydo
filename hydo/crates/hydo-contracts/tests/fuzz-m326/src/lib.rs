@@ -27,7 +27,7 @@ pub mod text {
 // hydo: build text::Text from text::Text::new(s: String)
 // hydo: read text::Text as String by as_text()
 // hydo: ensures len(result) == len(t)
-pub fn echo(t: text::Text) -> text::Text {
+pub fn pass_text(t: text::Text) -> text::Text {
     t
 }
 
