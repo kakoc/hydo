@@ -42,8 +42,32 @@ fn an_element_of_a_list_of_built_values_compares_as_its_read_value() {
     let first = one(&rep, "::first");
     assert_eq!(first.verdict, "not judged", "{first:?}");
     assert!(
-        first.held[0].undecided_why.contains("`read` line"),
+        first.held[0].undecided_why.contains("// hydo: read G as"),
         "{first:?}"
+    );
+}
+
+#[test]
+fn associated_result_types_are_read_and_an_unread_result_is_named() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m318-assoc");
+    let (_, rep) = fuzz_m318(
+        t.path(),
+        &["--fn", "shout", "--fn", "measure", "--fn", "index"],
+    );
+    // heck's `Self::Owned` is a `String` for `str`
+    let shout = one(&rep, "<str as Shout>::shout");
+    assert_eq!(shout.verdict, "held", "{shout:?}");
+    assert!(shout.held[0].reached.unwrap_or(0) > 0, "{shout:?}");
+    // `type Out = u16;` in the crate's `impl`
+    assert_eq!(one(&rep, "<u8 as Measure>::measure").verdict, "held");
+    // a result hydo does not read: not judged, with its type, and no advice about the inputs
+    let index = one(&rep, "<u8 as Index>::index");
+    assert_eq!(index.verdict, "not judged", "{index:?}");
+    assert!(index.held[0].undecided_why.contains("HashMap"), "{index:?}");
+    assert!(index.held[0].reached_undecided > 0, "{index:?}");
+    assert!(
+        index.advice.iter().all(|a| !a.contains("shape")),
+        "{index:?}"
     );
 }
 

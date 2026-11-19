@@ -555,6 +555,21 @@ fn read_fn(
         module,
         subst: &subst,
     };
+    // `Self::Owned` and the other associated types, through the crate's `impl` blocks and the
+    // standard library's `ToOwned` (Milestone 318)
+    let trait_of: Option<String> = match &owner {
+        Owner::Trait(n, _) => Some(n.clone()),
+        Owner::Impl(_, Some(tr), _) => Some(rust::trait_name(tr)),
+        _ => None,
+    };
+    let fix = |t: &TyAst, ret: bool| -> TyAst {
+        match &self_ty {
+            Some(st) => rust::subst_assoc(t, &|n: &str| {
+                rust::assoc_type(items, st, trait_of.as_deref(), &sig.name, n, ret)
+            }),
+            None => t.clone(),
+        }
+    };
     let mut params = Vec::new();
     if let Some(r) = sig.receiver {
         let t = self_ty
@@ -581,6 +596,7 @@ fn read_fn(
         });
     }
     for (n, t) in &sig.params {
+        let t = &fix(t, false);
         let ty = res.resolve(t);
         ty.generable()
             .map_err(|why| refusal(&format!("the parameter `{n}`"), t, why))?;
@@ -593,7 +609,10 @@ fn read_fn(
         });
     }
     let (ret, ret_ref) = match &sig.ret {
-        Some(t) => (res.resolve(t), matches!(t, TyAst::Ref(..))),
+        Some(t) => {
+            let t = fix(t, true);
+            (res.resolve(&t), matches!(t, TyAst::Ref(..)))
+        }
         None => (FTy::Tuple(vec![]), false),
     };
     // every name a clause reads is a parameter or `result`
@@ -705,6 +724,52 @@ fn type_of(a: &Ast, params: &[harness::Param], ret: &FTy) -> Option<FTy> {
         _ => return None,
     };
     Some(plain(t))
+}
+
+/// The first place that a clause reads whose type hydo does not read, as the reason why the
+/// clause is undecided (Milestone 318): `result` of `Self::Owned`, or a built value without a
+/// `read` line.
+fn unread_in(a: &Ast, params: &[harness::Param], ret: &FTy) -> Option<String> {
+    let place = matches!(
+        a,
+        Ast::Name(_)
+            | Ast::Field(..)
+            | Ast::Index(..)
+            | Ast::Old(_)
+            | Ast::Call(
+                lang::Builtin::Some | lang::Builtin::Ok | lang::Builtin::Err,
+                _
+            )
+    );
+    if place {
+        match type_of(a, params, ret) {
+            Some(FTy::Opaque(t)) => {
+                return Some(format!(
+                    "`{a}` is of the type `{t}`, which hydo does not read"
+                ))
+            }
+            Some(FTy::Built { ty, read: None, .. }) => {
+                return Some(format!(
+                    "`{a}` is a `{ty}`, which a `build` line builds and no `// hydo: read {} as \
+                     <type> by <method>()` line reads",
+                    rust::type_key(&ty)
+                ))
+            }
+            _ => {}
+        }
+    }
+    match a {
+        Ast::Field(x, _)
+        | Ast::Call(_, x)
+        | Ast::Old(x)
+        | Ast::Not(x)
+        | Ast::Neg(x)
+        | Ast::Matches(x, _) => unread_in(x, params, ret),
+        Ast::Index(x, y) | Ast::Bin(_, x, y) => {
+            unread_in(x, params, ret).or_else(|| unread_in(y, params, ret))
+        }
+        _ => None,
+    }
 }
 
 /// A type without its box, and a type that a `read` line reads as the type it is read as.
@@ -1087,6 +1152,9 @@ pub struct Judged {
     /// The clauses `a || ... || z` (by index) whose last part decided the call: every part
     /// before it was false. A clause that no call reached held without checking its point.
     pub reached: Vec<usize>,
+    /// The clauses `a || ... || z` (by index) whose parts before `z` were false and whose `z`
+    /// hydo could not decide, such as a result of a type it does not read (Milestone 318).
+    pub reached_undecided: Vec<usize>,
 }
 
 /// The parts of a clause's text `a || b || c`, split at the `||` outside parentheses and
@@ -1267,6 +1335,7 @@ impl Fn {
             undecided: vec![],
             why: vec![],
             reached: vec![],
+            reached_undecided: vec![],
         };
         match o {
             Outcome::Returned { result, after } => {
@@ -1315,6 +1384,16 @@ impl Fn {
                             }
                         }
                         Err(e) => {
+                            // every part before the last was false: the call reached the last
+                            // part, and hydo could not decide it (Milestone 318)
+                            let parts = disjuncts(&c.ast);
+                            if parts.len() > 1
+                                && parts[..parts.len() - 1]
+                                    .iter()
+                                    .all(|p| check::holds(p, &env) == Ok(false))
+                            {
+                                j.reached_undecided.push(i);
+                            }
                             j.undecided.push(i);
                             j.why.push((i, e));
                         }
@@ -1499,6 +1578,12 @@ impl Fn {
     }
 
     /// The function's name without the package (`Version::parse`), as `--fn` takes it.
+    /// Why a clause reads a value that hydo does not read, naming the place and its type
+    /// (Milestone 318).
+    pub fn unread(&self, a: &Ast) -> Option<String> {
+        unread_in(a, &self.params, &self.ret)
+    }
+
     pub fn short_name(&self) -> &str {
         self.name.split_once("::").map_or(&self.name, |x| x.1)
     }
@@ -1720,6 +1805,11 @@ pub struct Held {
     /// The function's verdict is then the failure, and the clause is not called vacuous.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub failed_calls: u64,
+    /// For a clause `a || ... || z`: the calls on which every part before `z` was false and
+    /// hydo could not decide `z` (Milestone 318). The inputs reached `z`; the value it reads
+    /// was the problem, so the clause is not judged, never vacuous.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub reached_undecided: u64,
 }
 
 fn is_zero(n: &u64) -> bool {
@@ -1841,11 +1931,19 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64, lim: Limits) -> Result<FnRepo
                     h.undecided += 1;
                     if h.undecided_why.is_empty() {
                         if let Some((_, w)) = j.why.iter().find(|(k, _)| k == ci) {
-                            h.undecided_why = w.clone();
+                            // a value of a type that hydo does not read is named with its type
+                            // (Milestone 318)
+                            h.undecided_why = match f.unread(&f.contract.clauses[*ci].ast) {
+                                Some(u) if w.contains("not read") || w.contains("`read` line") => u,
+                                _ => w.clone(),
+                            };
                         }
                     }
                 } else {
                     h.cases += 1;
+                }
+                if j.reached_undecided.contains(ci) {
+                    h.reached_undecided += 1;
                 }
                 if j.reached.contains(ci) {
                     if let Some(n) = h.reached.as_mut() {
@@ -1892,6 +1990,14 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64, lim: Limits) -> Result<FnRepo
     for h in &mut held {
         // a clause that hydo could hardly decide is not judged, whatever its parts did
         h.not_judged = calls > 0 && h.cases < lim.min_reach;
+        // the inputs reached the last part, and hydo could not decide it: the value was the
+        // problem, not the inputs (Milestone 318)
+        if !h.not_judged
+            && h.reached.is_some_and(|n| n < lim.min_reach)
+            && h.reached.unwrap_or(0) + h.reached_undecided >= lim.min_reach
+        {
+            h.not_judged = true;
+        }
         h.vacuous = !h.not_judged && h.reached.is_some_and(|n| n < lim.min_reach);
         // calls that failed may be the ones that reach the last part: the failure is the
         // verdict, and the inputs need no other shape
@@ -3067,17 +3173,28 @@ fn print_report(r: &FnReport, f: &Fn, o: &Opts, lim: Limits) {
             "hydo:   {word}: ensures {} (line {}) on {} calls{reach}{und}",
             h.text, h.line, h.cases
         );
-        if h.not_judged {
+        let why = if h.undecided_why.is_empty() {
+            "a value it reads is of a type that hydo does not read"
+        } else {
+            h.undecided_why.as_str()
+        };
+        if h.not_judged && h.cases >= lim.min_reach {
+            // the inputs reached the last part, and hydo could not decide it (Milestone 318)
+            let parts = or_parts(&h.text);
             println!(
-                "hydo:     hydo decided it on {} of {} calls, fewer than --min-reach ({}): {}",
+                "hydo:     the inputs reached `{}` on {} calls, and hydo decided it on {} of \
+                 them, fewer than --min-reach ({}): {why}",
+                parts[parts.len() - 1],
+                h.reached.unwrap_or(0) + h.reached_undecided,
+                h.reached.unwrap_or(0),
+                lim.min_reach,
+            );
+        } else if h.not_judged {
+            println!(
+                "hydo:     hydo decided it on {} of {} calls, fewer than --min-reach ({}): {why}",
                 h.cases,
                 h.cases + h.undecided,
                 lim.min_reach,
-                if h.undecided_why.is_empty() {
-                    "a value it reads is of a type that hydo does not read"
-                } else {
-                    h.undecided_why.as_str()
-                }
             );
         }
         if h.failed_calls > 0 {
@@ -3124,7 +3241,7 @@ fn print_report(r: &FnReport, f: &Fn, o: &Opts, lim: Limits) {
             r.function, r.calls, o.cases, lim.min_inputs
         ),
         "not judged" => println!(
-            "hydo: fuzz: {}: not judged: a clause was decided on fewer than {} calls \
+            "hydo: fuzz: {}: not judged: hydo decided a clause, or its last part, on fewer than {} calls \
              (--min-reach)",
             r.function, lim.min_reach
         ),

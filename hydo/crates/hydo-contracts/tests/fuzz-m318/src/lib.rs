@@ -50,3 +50,49 @@ pub fn bits(v: &[h::H]) -> Vec<u16> {
 pub fn first(v: &[h::G]) -> u16 {
     v.first().map_or(0, h::G::get)
 }
+
+// ---------------------------------------------------------------- associated result types
+
+/// heck's conversions return `Self::Owned`, the standard library's `ToOwned::Owned`.
+pub trait Shout: ToOwned {
+    // hydo: with Self = str
+    // hydo: ensures self != "" || result == ""
+    fn shout(&self) -> Self::Owned;
+}
+
+impl Shout for str {
+    fn shout(&self) -> Self::Owned {
+        self.to_uppercase()
+    }
+}
+
+/// An associated type that the crate's `impl` names.
+pub trait Measure {
+    type Out;
+    // hydo: with Self = u8
+    // hydo: ensures result == self + 1
+    fn measure(&self) -> Self::Out;
+}
+
+impl Measure for u8 {
+    type Out = u16;
+    fn measure(&self) -> Self::Out {
+        *self as u16 + 1
+    }
+}
+
+/// An associated type of a type that hydo does not read: not judged, and the report names the
+/// type instead of blaming the inputs.
+pub trait Index {
+    type Out;
+    // hydo: with Self = u8
+    // hydo: ensures self != 0 || len(result) == 0
+    fn index(&self) -> Self::Out;
+}
+
+impl Index for u8 {
+    type Out = std::collections::HashMap<u8, u8>;
+    fn index(&self) -> Self::Out {
+        std::collections::HashMap::new()
+    }
+}

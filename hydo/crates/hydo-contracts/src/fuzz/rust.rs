@@ -604,6 +604,175 @@ pub struct Items {
     /// The `read` lines of the crate's contracts, by the type's name: the type to read a value
     /// as, and the method that gives it (Milestone 307).
     pub reads: BTreeMap<String, (TyAst, String)>,
+    /// The `impl` blocks of the crate, for the associated types a trait's method returns
+    /// (Milestone 318).
+    pub impls: Vec<ImplDef>,
+}
+
+/// An `impl` block of the crate as the resolution of an associated type needs it (Milestone
+/// 318): the type, the trait, the associated types it names (`type Owned = String;`), and the
+/// result type of each method.
+#[derive(Clone, Debug)]
+pub struct ImplDef {
+    pub ty: TyAst,
+    pub tr: Option<TyAst>,
+    pub assoc: Vec<(String, TyAst)>,
+    pub rets: Vec<(String, Option<TyAst>)>,
+}
+
+/// Whether two types are written alike, spaces aside.
+fn same_ty(a: &TyAst, b: &TyAst) -> bool {
+    a.text().replace(' ', "") == b.text().replace(' ', "")
+}
+
+/// The last segment of a trait's path, without type arguments.
+pub fn trait_name(t: &TyAst) -> String {
+    match t {
+        TyAst::Path(s, _) => s.last().cloned().unwrap_or_default(),
+        o => o.text(),
+    }
+}
+
+/// What `Self::<name>` stands for in the method `method` of the trait `tr` (of an inherent
+/// `impl` when `tr` is none) on the type `self_ty` (Milestone 318), in this order:
+///
+/// - `type <name> = <type>;` in the crate's `impl` of the trait for the type, else in another
+///   `impl` for the type;
+/// - for a result (`ret`), the result type that the method of that `impl` writes, when it
+///   names no `Self`;
+/// - the standard library's `ToOwned::Owned`: `String` for `str`, `Vec<T>` for `[T]`, else the
+///   type itself.
+pub fn assoc_type(
+    items: &Items,
+    self_ty: &TyAst,
+    tr: Option<&str>,
+    method: &str,
+    name: &str,
+    ret: bool,
+) -> Option<TyAst> {
+    let own = |i: &&ImplDef| {
+        same_ty(&i.ty, self_ty)
+            && match (tr, &i.tr) {
+                (Some(t), Some(it)) => trait_name(it) == t,
+                (None, None) => true,
+                _ => false,
+            }
+    };
+    let blocks: Vec<&ImplDef> = items.impls.iter().filter(own).collect();
+    let others = items.impls.iter().filter(|i| same_ty(&i.ty, self_ty));
+    for b in blocks.iter().copied().chain(others) {
+        if let Some((_, t)) = b.assoc.iter().find(|(n, _)| n == name) {
+            return Some(t.clone());
+        }
+    }
+    if ret {
+        for b in &blocks {
+            if let Some((_, Some(r))) = b.rets.iter().find(|(n, _)| n == method) {
+                if !r.text().contains("Self") {
+                    return Some(r.clone());
+                }
+            }
+        }
+    }
+    if name == "Owned" {
+        return Some(match self_ty {
+            TyAst::Path(s, a) if a.is_empty() && s.last().map(String::as_str) == Some("str") => {
+                TyAst::Path(vec!["String".into()], vec![])
+            }
+            TyAst::Slice(x) => TyAst::Path(vec!["Vec".into()], vec![(**x).clone()]),
+            o => o.clone(),
+        });
+    }
+    None
+}
+
+/// `t` with each `Self::<name>` that `f` resolves replaced (Milestone 318).
+pub fn subst_assoc(t: &TyAst, f: &dyn Fn(&str) -> Option<TyAst>) -> TyAst {
+    match t {
+        TyAst::Path(segs, args) if segs.len() == 2 && segs[0] == "Self" && args.is_empty() => {
+            f(&segs[1]).unwrap_or_else(|| t.clone())
+        }
+        TyAst::Path(segs, args) => TyAst::Path(
+            segs.clone(),
+            args.iter().map(|a| subst_assoc(a, f)).collect(),
+        ),
+        TyAst::Ref(m, x) => TyAst::Ref(*m, Box::new(subst_assoc(x, f))),
+        TyAst::Slice(x) => TyAst::Slice(Box::new(subst_assoc(x, f))),
+        TyAst::Array(x, n) => TyAst::Array(Box::new(subst_assoc(x, f)), n.clone()),
+        TyAst::Tuple(v) => TyAst::Tuple(v.iter().map(|x| subst_assoc(x, f)).collect()),
+        TyAst::Other(o) => TyAst::Other(o.clone()),
+    }
+}
+
+/// Add the `impl` blocks of a source (its text and masked text), with their associated types
+/// and their methods' result types (Milestone 318).
+fn read_impls(text: &str, m: &[u8], items: &mut Items) {
+    let ms = String::from_utf8_lossy(m).to_string();
+    let b = ms.as_bytes();
+    let id = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    let mut from = 0;
+    while let Some(p) = ms[from..].find("impl") {
+        let at = from + p;
+        from = at + 4;
+        if (at > 0 && id(b[at - 1])) || !matches!(b.get(at + 4), Some(b' ' | b'<' | b'\n')) {
+            continue;
+        }
+        // the header up to the block's `{`, outside parentheses and brackets
+        let (mut d, mut j) = (0i32, at);
+        let open = loop {
+            match b.get(j) {
+                None | Some(b';') => break None,
+                Some(b'(' | b'[') => d += 1,
+                Some(b')' | b']') => d -= 1,
+                Some(b'{') if d == 0 => break Some(j),
+                _ => {}
+            }
+            j += 1;
+        };
+        let Some(open) = open else { continue };
+        let header = ms[at..open]
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let (Some((ty, tr, _)), Some(close)) = (impl_parts(&header), close_of(m, open)) else {
+            continue;
+        };
+        let mut def = ImplDef {
+            ty,
+            tr,
+            assoc: vec![],
+            rets: vec![],
+        };
+        // the items at the block's own depth
+        let mut depth = 0;
+        for k in open + 1..close {
+            match b[k] {
+                b'{' => depth += 1,
+                b'}' => depth -= 1,
+                _ if depth == 0 && !id(b[k - 1]) => {
+                    let rest = &ms[k..close];
+                    if let Some(r) = rest.strip_prefix("type ") {
+                        let (Some(eq), Some(semi)) = (r.find('='), r.find(';')) else {
+                            continue;
+                        };
+                        let name = r[..eq].trim();
+                        if eq < semi && name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                            let t = r[eq + 1..semi].split_whitespace().collect::<Vec<_>>();
+                            if let Ok(t) = parse_ty(&t.join(" ")) {
+                                def.assoc.push((name.to_string(), t));
+                            }
+                        }
+                    } else if rest.starts_with("fn ") {
+                        if let Ok(sig) = signature(text, m, k) {
+                            def.rets.push((sig.name, sig.ret));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        items.impls.push(def);
+    }
 }
 
 /// The name a `build` or `read` line keys its type by: the last segment of its path, without
@@ -818,6 +987,7 @@ pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
             module,
         });
     }
+    read_impls(text, &m, items);
     for kw in ["struct", "type"] {
         let mut from = 0;
         while let Some(p) = ms[from..].find(kw) {
