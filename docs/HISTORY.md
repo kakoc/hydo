@@ -16676,12 +16676,14 @@ the default target folder it passes.
   `5c2e4b0f825cffa5`); the exploration 11 failures, 13 of 13 reproduced; `hydo report`, `hydo
   report --html`, `hydo init`, `hydo build --check` and `hydo onboard`. `hydo --version` prints
   `hydo 0.4.1 (14e098736a19814f3e4e56f9c5a5e0d0ce54fc05)`.
-- KVM: to come. The one-off workflow `tmp-rel041-kvm` (the branch of that name: the release
-  commit and the workflow, `0db24b20`) takes the Linux tarball from a draft release
-  `candidate-0.4.1`, checks its sha256 `0648773f…`, and on six of GitHub's runners runs the
-  quickstart with `--backend kvm`, an exploration and its repro, `hydo update --check`, the KVM
-  re-baseline `--check --thorough`, `kvm-check.sh` and `smp-check.sh`. The lead pushes the branch
-  and makes the draft; both are deleted after the run.
+- KVM: run 44526304674 of the one-off workflow `tmp-rel041-kvm` passed on six of GitHub's
+  runners. It took the Linux tarball from a draft release `candidate-0.4.1` and checked its
+  sha256 `0648773f…`. Two earlier runs stopped before the tests: the workflow's token could not
+  see the draft (`contents: read`), and its version check named the commit before the release
+  commit. The hosts were two AMD EPYC 9V74, an AMD EPYC 7763, a Xeon Platinum 8370C and two Xeon
+  6975P-C. Each passed `kvm-check.sh` 15 of 15 and `smp-check.sh` 13 of 13. The quickstart gave
+  0.4.0's recorded AMD values (`7adecc09c07aaaa4`, `fd41aeb199057728`) on the three AMD hosts, and
+  one set of values on the three Intel hosts. The branch and the draft were deleted after the run.
 
 **`hydo update` against GitHub's real release list**, in an empty HOME, with the installed signed
 Mac release and the installed Linux release: `hydo update --check` printed `hydo: 0.4.1, newer
@@ -16712,4 +16714,4 @@ twice with the same bytes, `c85ded9662397ae2ae720ce6b694e2a277df169ee63d2587e454
 (in `hydo/dist/out/skill/2.4.0/` of the main checkout). The plugin folder is main's, so the
 archive is the same from main.
 
-**What is left.** Open items 161 and 162, and the KVM run.
+**What is left.** Open items 161 and 162.
