@@ -191,6 +191,28 @@ fn fn_names_a_module_or_a_path_prefix() {
     assert_eq!(rep.functions.len(), 1, "{rep:?}");
 }
 
+#[test]
+fn a_static_mut_parameter_builds_and_is_read_after_the_call() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m326-static");
+    let (_, rep) = fuzz_m326(t.path(), &["--fn", "push_static", "--fn", "bang"]);
+    assert!(rep.skipped.is_empty(), "{:?}", rep.skipped);
+    for f in ["::push_static", "::bang"] {
+        let r = one(&rep, f);
+        assert_eq!(r.verdict, "held", "{r:?}");
+        assert!(r.held.iter().all(|h| h.undecided == 0), "{r:?}");
+    }
+    // a crate that forbids `unsafe_code` gets a refusal that says what to write
+    let krate = fixture_copy(t.path(), &|lib| format!("#![forbid(unsafe_code)]\n{lib}"));
+    let pkg = krate.canonicalize().unwrap();
+    let (_, skipped, _) = hydo_contracts::fuzz::find(&pkg, &[pkg.join("src/lib.rs")], "fuzz-m326");
+    let s = skipped
+        .iter()
+        .find(|s| s.name.ends_with("::push_static"))
+        .unwrap_or_else(|| panic!("{:?}", skipped.iter().map(|s| &s.name).collect::<Vec<_>>()));
+    assert!(s.why.contains("forbids `unsafe_code`"), "{}", s.why);
+    assert!(s.why.contains("Box::leak"), "{}", s.why);
+}
+
 /// A copy of the fixture at `dir/crate`, with `edit` applied to its `src/lib.rs`.
 fn fixture_copy(dir: &Path, edit: &dyn Fn(String) -> String) -> std::path::PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fuzz-m326");

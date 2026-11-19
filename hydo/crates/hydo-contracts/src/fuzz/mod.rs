@@ -367,6 +367,21 @@ pub fn find_all(
                 match read_fn(text, &m, c, &items, pkg, &module, &rel) {
                     Ok(mut f) => {
                         f.forbidden = forbidden.clone();
+                        // a `&'static mut` parameter needs an `unsafe` block in the harness
+                        // (Milestone 326)
+                        if let Some(p) = f.params.iter().find(|p| harness::is_static_mut(p)) {
+                            if forbidden.iter().any(|l| l == "unsafe_code") {
+                                skipped.push(skip(format!(
+                                    "the parameter `{}` is a `&'static mut` reference, which \
+                                     the harness makes in an `unsafe` block, and the crate \
+                                     forbids `unsafe_code`: write the contract on a property \
+                                     function in the crate's test module that leaks a value \
+                                     with `Box::leak` and calls the function",
+                                    p.name
+                                )));
+                                continue;
+                            }
+                        }
                         let own: Vec<Origin> = contract_lines(text, c.line)
                             .into_iter()
                             .map(|(l, t)| Origin::new(&rel, l, &t))

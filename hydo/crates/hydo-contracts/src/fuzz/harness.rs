@@ -60,19 +60,53 @@ pub fn is_read_built(t: &FTy) -> bool {
 /// `&'static` reference to it: a string as a `str`, a list as a slice, any other value as itself
 /// (Milestone 318). The binding's type makes the reference shared and `'static` at once, so
 /// that a result may keep it (percent-encoding's `PercentEncode` keeps its `&'static AsciiSet`).
-fn leaked(t: &FTy, v: &str) -> (String, String) {
+fn leaked(t: &FTy, v: &str, unsized_ref: bool) -> (String, String) {
     match t {
-        FTy::Str => (
+        FTy::Str if unsized_ref => (
             "&'static str".into(),
             format!("self::std::boxed::Box::leak({v}.into_boxed_str())"),
         ),
-        FTy::List(x) => (
+        FTy::List(x) if unsized_ref => (
             format!("&'static [{}]", rty(x)),
             format!("self::std::boxed::Box::leak({v}.into_boxed_slice())"),
         ),
         _ => (
             format!("&'static {}", rty(t)),
             format!("self::std::boxed::Box::leak(self::std::boxed::Box::new({v}))"),
+        ),
+    }
+}
+
+/// Whether a reference refers to a `str` or a slice, which a leaked `String` or `Vec` gives
+/// (Milestone 326; a `&'static String` leaks the `String` itself).
+fn is_unsized(p: Pass) -> bool {
+    matches!(
+        p,
+        Pass::Ref { unsized_ref: true } | Pass::RefMut { unsized_ref: true }
+    )
+}
+
+/// Whether a parameter is a `&'static mut` reference (Milestone 326).
+pub fn is_static_mut(p: &Param) -> bool {
+    p.leak && matches!(p.pass, Pass::RefMut { .. })
+}
+
+/// The type and the expression of a binding that leaks the value `v` of type `t` behind a raw
+/// pointer, for a `&'static mut` parameter (Milestone 326): a string as a `str`, a list as a
+/// slice, any other value as itself.
+fn leaked_mut(t: &FTy, v: &str, unsized_ref: bool) -> (String, String) {
+    match t {
+        FTy::Str if unsized_ref => (
+            "*mut str".into(),
+            format!("self::std::boxed::Box::into_raw({v}.into_boxed_str())"),
+        ),
+        FTy::List(x) if unsized_ref => (
+            format!("*mut [{}]", rty(x)),
+            format!("self::std::boxed::Box::into_raw({v}.into_boxed_slice())"),
+        ),
+        _ => (
+            format!("*mut {}", rty(t)),
+            format!("self::std::boxed::Box::into_raw(self::std::boxed::Box::new({v}))"),
         ),
     }
 }
@@ -125,7 +159,7 @@ const ALLOWED: &[&str] = &[
 /// for an `unsafe` function, whose call the module makes in an `unsafe` block.
 fn allow_list(s: &Spec) -> String {
     let mut l: Vec<&str> = ALLOWED.to_vec();
-    if s.is_unsafe {
+    if s.is_unsafe || s.params.iter().any(is_static_mut) {
         l.insert(2, "unsafe_code");
     }
     l.retain(|x| !s.forbidden.iter().any(|f| f == x));
@@ -532,8 +566,16 @@ pub fn module(s: &Spec) -> String {
     // a `&'static` parameter: the value leaked after the read values are taken (Milestone 318)
     let mut leaks = String::new();
     for (i, p) in s.params.iter().enumerate() {
+        if is_static_mut(p) {
+            // a `&'static mut` parameter (Milestone 326): a leaked value behind a raw pointer,
+            // so that the call takes a `'static` reference and the value is read after it
+            let (ty, e) = leaked_mut(&p.ty, &format!("a{i}"), is_unsized(p.pass));
+            let _ = write!(leaks, "let l{i}: {ty} = {e}; ");
+            args.push(format!("unsafe {{ &mut *l{i} }}"));
+            continue;
+        }
         if p.leak {
-            let (ty, e) = leaked(&p.ty, &format!("a{i}"));
+            let (ty, e) = leaked(&p.ty, &format!("a{i}"), is_unsized(p.pass));
             let _ = write!(leaks, "let l{i}: {ty} = {e}; ");
             args.push(format!("l{i}"));
             continue;
@@ -582,7 +624,10 @@ pub fn module(s: &Spec) -> String {
     b.push_str(&enc(&s.ret, v, 0));
     b.push_str(" let _ = v; ");
     for (i, p) in s.params.iter().enumerate() {
-        if matches!(p.pass, Pass::RefMut { .. }) {
+        if is_static_mut(p) {
+            b.push(' ');
+            b.push_str(&enc(&p.ty, &format!("(unsafe {{ &*l{i} }})"), 0));
+        } else if matches!(p.pass, Pass::RefMut { .. }) {
             let base = if p.inner.is_some() { "b" } else { "a" };
             b.push(' ');
             b.push_str(&enc(&p.ty, &format!("&{base}{i}"), 0));

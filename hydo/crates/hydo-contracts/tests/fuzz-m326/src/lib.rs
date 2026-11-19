@@ -202,6 +202,22 @@ pub mod units {
     }
 }
 
+// ---------------------------------------------------------------- `&'static mut` parameters
+
+/// A `&'static mut` parameter, read after the call.
+// hydo: ensures result == old(len(buf)) + 1 && len(buf) == result && buf[result - 1] == x
+pub fn push_static(buf: &'static mut Vec<u8>, x: u8) -> usize {
+    buf.push(x);
+    buf.len()
+}
+
+/// A result that keeps the `&'static mut` reference.
+// hydo: ensures len(result) == old(len(s)) + 1 && len(s) == len(result)
+pub fn bang(s: &'static mut String) -> &'static mut String {
+    s.push('!');
+    s
+}
+
 // ---------------------------------------------------------------- two lists of one length
 
 /// As half's `convert_from_f32_slice`: the lists must have one length.
