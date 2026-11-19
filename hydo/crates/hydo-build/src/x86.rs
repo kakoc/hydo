@@ -429,13 +429,15 @@ pub fn default_etc(r: &Path, hosts: &str) -> Result<(), Fail> {
     Ok(())
 }
 
-/// manifest.sh, prelude.sh, hydo.yaml and the params file.
+/// manifest.sh, prelude.sh, hydo.yaml and the params file (and the files of the `guest:` keys
+/// that the engines read) of an image for `arch` (`x86_64` or `arm64`).
 pub fn write_compiled(
     ctx: &Ctx,
     p: &Prepared,
     manifest_path: &str,
     r: &Path,
     t: &ShellTools,
+    arch: &str,
 ) -> Result<(), Fail> {
     let (ms, pre) = shell::compile_shell(ctx, &p.data, &p.loaded.service_order, t)?;
     fsx::write_text(&r.join("etc/hydo/manifest.sh"), &ms)?;
@@ -461,21 +463,26 @@ pub fn write_compiled(
             &format!("{BRANCH_TICK_PERIOD}\n"),
         )?;
     }
-    // Milestone 319: `guest.exact_tick`, the hvx engine's guest kernel with `clocksource=jiffies`
-    // (MANIFEST.md, "The guest's timer tick on hvx"); nothing is written without it, so other
-    // images keep their bytes
-    if exact_tick(&p.data) {
-        fsx::write_text(&r.join("etc/hydo/exact-tick"), "jiffies\n")?;
+    // Milestones 319 and 323: `guest.exact_tick`, how the hvx engine's guest kernel keeps time
+    // (MANIFEST.md, "The guest's timer tick on hvx"). M319 wrote `jiffies` for the key; from the
+    // fingerprint epoch 5 the key and its default write `tsc`. Nothing is written with `false`.
+    if let Some(w) = guest_clock(&p.data, arch) {
+        fsx::write_text(&r.join("etc/hydo/exact-tick"), &format!("{w}\n"))?;
     }
     Ok(())
 }
 
-/// Whether the manifest asks for the exact timer tick on hvx (`guest.exact_tick: true`).
-pub fn exact_tick(data: &Value) -> bool {
-    data.get("guest")
+/// The word of `/etc/hydo/exact-tick` for an image of `arch` built by this hydo (Milestone 323):
+/// `tsc` with `guest.exact_tick: true`, and without the key when the fingerprint epoch's default
+/// says so ([`hydo_image::EpochDefaults::exact_tick`], an x86_64 image from epoch 5); None with
+/// `false`. hvx then boots the guest with `tsc=reliable` and a TSC step of 1 us.
+pub fn guest_clock(data: &Value, arch: &str) -> Option<&'static str> {
+    let key = data
+        .get("guest")
         .and_then(|g| g.get("exact_tick"))
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
+        .and_then(Value::as_bool);
+    key.unwrap_or_else(|| hydo_image::defaults(hydo_image::EPOCH, arch).exact_tick)
+        .then_some("tsc")
 }
 
 /// The branch tick's period, in the guest's user-mode conditional branches without an exit, that
@@ -786,7 +793,7 @@ pub fn build(
         }),
         ip: netns.then(|| format!("{}/bin/ip", iproute2.clone().unwrap_or_default())),
     };
-    write_compiled(ctx, p, manifest_path, &r, &tools)?;
+    write_compiled(ctx, p, manifest_path, &r, &tools, "x86_64")?;
     let (bin, sha) = crate::agent::binary(ctx, bdir, false, io)?;
     crate::agent::install(&bin, &sha, &r, "/sbin/init", io)?;
     let variant = crate::record::kernel_variant(&m);
@@ -980,4 +987,32 @@ pub fn build(
     }
     crate::contracts::write_plan(&m, manifest_path, &disk, io)?;
     crate::stage::write_regressions(&disk, &p.regressions, io)
+}
+
+#[cfg(test)]
+mod guest_clock_tests {
+    use super::guest_clock;
+    use serde_json::json;
+
+    /// Milestone 323: from the fingerprint epoch 5 an x86_64 image keeps time with its TSC
+    /// unless `guest.exact_tick: false` says otherwise; the key itself writes `tsc` on any
+    /// architecture, and an arm64 image without it writes nothing (hvx runs x86_64 only).
+    #[test]
+    fn the_key_and_its_default_choose_the_tsc_clock() {
+        assert_eq!(guest_clock(&json!({}), "x86_64"), Some("tsc"));
+        assert_eq!(guest_clock(&json!({"guest": {}}), "x86_64"), Some("tsc"));
+        assert_eq!(
+            guest_clock(&json!({"guest": {"exact_tick": true}}), "x86_64"),
+            Some("tsc")
+        );
+        assert_eq!(
+            guest_clock(&json!({"guest": {"exact_tick": false}}), "x86_64"),
+            None
+        );
+        assert_eq!(guest_clock(&json!({}), "arm64"), None);
+        assert_eq!(
+            guest_clock(&json!({"guest": {"exact_tick": true}}), "arm64"),
+            Some("tsc")
+        );
+    }
 }

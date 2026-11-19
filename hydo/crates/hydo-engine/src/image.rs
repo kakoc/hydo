@@ -319,10 +319,16 @@ pub fn branch_tick(image: &Path) -> Option<String> {
     (!t.is_empty()).then(|| t.to_string())
 }
 
-/// Milestone 319: whether the image asks for the exact timer tick on hvx (`guest.exact_tick`, its
-/// `/etc/hydo/exact-tick`; the file is written only with the key).
-pub fn exact_tick(image: &Path) -> bool {
-    embedded_file(image, "etc/hydo/exact-tick").is_ok_and(|t| t.trim() == "jiffies")
+/// Milestones 319 and 323: how hvx's guest kernel keeps time (`guest.exact_tick`): the word of
+/// the image's `/etc/hydo/exact-tick`, `jiffies` (M319's key) or `tsc` (the key, or its default
+/// from the fingerprint epoch 5), or None for an image without the file, which boots as before.
+pub fn guest_clock(image: &Path) -> Option<&'static str> {
+    let t = embedded_file(image, "etc/hydo/exact-tick").ok()?;
+    match t.trim() {
+        "jiffies" => Some("jiffies"),
+        "tsc" => Some("tsc"),
+        _ => None,
+    }
 }
 
 pub fn embedded_manifest(image: &Path) -> Result<String, ImageError> {

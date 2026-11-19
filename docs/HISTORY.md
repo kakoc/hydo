@@ -18461,3 +18461,147 @@ places that `temporal` runs name it, as in `K=temporal@2+3`, where the audit wro
 `hydo::rules::the_clock_audit_ranks_the_code_that_the_services_run_first`.
 
 **What is left.** Open item 166.
+
+## Milestone 323 (tentative number): hvx's guest clock right by default from the fingerprint epoch 5
+
+Milestone 319 found why a busy hvx guest's clock nearly stopped late in a long run, and made the
+fix an opt-in key, `guest.exact_tick` (`clocksource=jiffies`). The user approved making a fix the
+default at the fingerprint epoch 5 (2026-11-19). This milestone compares four ways for the guest
+kernel to keep time, makes the best one the default for an x86_64 image built at epoch 5, and
+checks that images of earlier epochs keep their values. The design note is
+`docs/design/guest-clock.md`.
+
+**The four ways.** All ran on the bare-metal machine, from a tree of their own, with the engine's
+`HVX_EXPLORE_CMDLINE_EXTRA` adding the words to the guest kernel's command line:
+
+- (d) today's default: nothing on the command line;
+- (a) `clocksource=jiffies`, M319's key;
+- (b) `tsc=reliable`, which turns the clocksource watchdog off and keeps the TSC as the clock;
+- (c) `clocksource=tsc tsc=reliable`;
+- (e) `tsc=reliable` and a virtual TSC step of 1,600 instead of 65,536 (1 µs instead of 41 µs of
+  the 1.6 GHz TSC), through a temporary engine variable for the comparison.
+
+(e) came from (b)'s result. The module moves the virtual TSC by one step at each `RDTSC` it
+emulates and by one more at the exit while a timer is armed, so with the old step every clock read
+costs the guest 82 µs of its time.
+
+**The probe.** A static C program `clockprobe` in an image without services ran 500 million loop
+passes after each minute of idle time, for 10 steps, and printed how far `CLOCK_MONOTONIC`,
+`CLOCK_REALTIME` and the TSC moved during the work. Step 0 and the last step also printed
+`clock_getres` and what 100,000 calls of `clock_gettime` saw, and the kernel's clocksource lines.
+Each way ran twice with `disk=none | run`:
+
+| | (d) default | (a) jiffies | (b) `tsc=reliable` | (c) both words | (e) (b), step 1 µs |
+|---|---|---|---|---|---|
+| The clock after the boot | `refined-jiffies`, from 10.02 s | `jiffies` | `tsc`, from 11.47 s | `tsc`, from 11.46 s | `tsc`, from 2.25 s |
+| Monotonic clock against the TSC during the work, step 0 | 0.082 | 0.443 | 1.0001 | 1.0003 | 1.000003 |
+| The same, step 9 (10 minutes of uptime) | 0.010 | 0.443 | 1.0001 | 1.0003 | 1.000003 |
+| Uptime against the TSC at the end | 0.021 | 0.787 | 0.990 | 0.990 | 0.998 |
+| `clock_getres`, and the smallest step seen | 1 ms, 999,848 ns | 1 ms, 1 ms | 1 ns, 81,920 ns | 1 ns, 81,920 ns | 1 ns, 2,000 ns |
+| Guest time of 100,000 reads | 6 ms | 6 ms | 18.0 s | 18.0 s | 0.21 s |
+| Fingerprint, both runs | `b7be8240a5b19163` | `cd64262ead35819b` | `44c291ef9bbeb2a1` | `50d435480a3ca259` | `af2c947920e24539` |
+| Host seconds of the two runs | 28, 27 | 27, 27 | 20, 18 | 19, 20 | 24, 22 |
+
+In (d) the kernel log has `Marking clocksource 'tsc-early' as unstable because the skew is too
+large` at 6.25 s and `Switched to clocksource refined-jiffies` at 10.02 s; at the end
+`/proc/timer_list` showed `tick_handle_periodic` and 607,453 local timer interrupts in 607 s. In
+(a) the TSC is marked unstable the same way, and the kernel keeps `jiffies`. A busy guest's clock
+runs at 0.44 of the TSC there, because each tick's next deadline is set 1 ms after the tick's
+handling, which waits for the next tick of the branch clock (2 ms of the TSC). In (b), (c) and (e)
+no watchdog line appears, and the timers run in high-resolution mode (`hrtimer_interrupt`,
+`nohz_mode 2`, 116,870 local timer interrupts in 708 s). (c) behaved as (b): the TSC has the
+highest rating of the guest's clocksources. A step of 6,400 (4 µs) also gave one fingerprint in
+two runs.
+
+**ClickHouse seed 20.** M319's schedule `disk=cut dseed=6711e6dcb424bc7a | run
+K=keepers.minority.7@36+3 N=keepers.ring@12-21:loss,100% C=40 P=replicas.all@6+3
+W=9580664b,p4,q2,r250` ran on the onboarding's image `img-i2` (read only) with each way:
+
+| Way | Verdict | Fingerprint | Host seconds | The workload's TSC | The workload's `RDTSC` exits |
+|---|---|---|---|---|---|
+| (d) | `TIMEOUT workload` at a wall limit of 600 s | none | 626 | n/a | n/a |
+| (a) | `VIOLATION [converge] the replicas differ in 1 blocks after the heal` | `56cdb36c4bdaf736`, M319's | 560 | 654.7 s | 9,372,812 |
+| (b) | `ERROR service start (ch1)`, twice | `3b0869bf667a6985` | 112, 93 | n/a | n/a |
+| (e) | `VIOLATION [converge] the replicas differ in 7 blocks after the heal`, twice | `98ad6346319c3f0a` | 457, 408 | 212.2 s | 28,963,047 |
+
+In (b) `ch1`'s readiness check did not pass in 300 s of guest time: ClickHouse's log ran from
+00:00:29 to 00:05:08 while it started, because every read of its clocks moved them 82 µs. In (e)
+the log's times have microseconds (`00:03:39.887406`); in (a) they end in `000`. Two runs of (e)
+gave one fingerprint, input hash and transcript hash. The runs of (a), (b) and (e) overlapped
+with other runs of this milestone on the machine, so the host seconds compare only roughly.
+
+**The pinned reproducer's stack.** `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` on
+the epoch-4 images in `~/hydo/build/m302` (Kafka on a JVM, MySQL, Redis) gave its two verdicts
+with every way: `VIOLATION [stack.exactly_once] order=11` on the old image and `OK` on the fixed
+one. The host seconds were 79 and 41 with (d), 90 and 62 with (a), 176 and 152 with (b), and 104
+and 60 with (e). With (b) the workload took 45.5 s of guest time and made 722,911 `RDTSC` exits;
+with (a) it took 4.3 s.
+
+**The choice: (e).** It is the only way whose clocks follow the TSC exactly at every uptime and
+read in steps finer than 1 ms, while a read costs little guest time: 2 µs, near the 2,666 ns of a
+read on the Mac engine. (a) keeps the ticks exact but runs a busy guest's clock at 0.44 of the TSC
+and gives programs steps of 1 ms. (b) and (c) are exact but make a clock-heavy program's time run
+82 µs per read, which broke ClickHouse's start. The fine step is used only with the PMU branch
+clock: on the exit-count clock alone the step is all that moves the TSC.
+
+**What was built.**
+
+- `hydo_image::EpochDefaults::exact_tick`: on for an x86_64 image from epoch 5. hydo-build
+  writes `/etc/hydo/exact-tick` with `tsc` when `guest.exact_tick` is `true`, or absent and on by
+  the default (`hydo_build::x86::guest_clock`). `false` writes nothing.
+- `hydo_engine::image::guest_clock` reads the file's word, `jiffies` (M319's images) or `tsc`, and
+  passes `--exact-tick <word>` to hvx or the in-process engine's `Start::clock`.
+- `hydo_hvx::engine::GuestClock`: `Kernel` (no file), `Jiffies` (`clocksource=jiffies`) and
+  `Tsc` (`tsc=reliable` and the TSC step `FINE_TSC_STEP`, 1,600). A VM that falls back to the
+  exit-count clock keeps the old step.
+- The project schema says `"default": true` for the key, and the validator's message names the
+  TSC. MANIFEST.md's section "The guest's timer tick on hvx" describes the new default.
+
+**Images built at epoch 5.** With the change, the release's Redis example and the probe built at
+epoch 5 recorded `tsc`, and the probe with `guest.exact_tick: false` recorded nothing. The probe
+booted with `tsc=reliable` and gave (e)'s values: 233,302 stops, the clock at 1.000003 of the TSC,
+reads in steps of 2,000 ns, `d9b2ce1e7caaca85` in two runs. The probe with `false` booted with the
+old command line and gave (d)'s values (0.010 at step 9). The Redis image ran each schedule twice,
+with one fingerprint each:
+
+| Schedule | Verdict | Fingerprint |
+|---|---|---|
+| `disk=none \| run` | OK | `cce52f9e8565f6e2` |
+| `disk=none dseed=1 \| run K=redis@5+3 P=redis@12+2 T=8:-86400` | OK | `ee3e7b755122e7d3` |
+| `disk=none \| run T=8:3600` | OK | `2ba6fb7c1603fd87` |
+| `disk=none tj=5 tjpm=100 \| run` | OK (`tjn=2`) | `df98ec8fec90d043` |
+| `disk=none xt=1 xtr=4 xtpm=100 \| run` | OK (`xtn=4`) | `7bcd6f5637d071c1` |
+| `disk=none pp=65536 \| run` | OK | `3f9f4cad1ea598e0` |
+| `disk=none \| run`, `--vcpus 2` | OK | `fc9769c78faf58c6` |
+| `disk=cut \| run C=12 R=everysec` | `VIOLATION [redis.acked_writes_survive] key k:1 lost` | `8bee301c59ad1b12` |
+
+The PMU branch clock was on in every run.
+
+**Images of earlier epochs keep their values.** With this tree's engine on hvx, and no developer
+variable set:
+
+- the pinned reproducers gave `e153f376096a072c` and `6a5c2fe208174af3` on the epoch-4 images in
+  `~/hydo/build/m302`, and `a76d7fe857fdb37c` and `efbde7b57264be0f` on the epoch-2 images in
+  `~/hydo/build/m204`;
+- the release's Redis example of the epoch-4 re-recording (`80643bb1…`) gave `2f9186af5e3be2b1`
+  (`disk=none | run`), `d299dc487ceb5e3c` (`C=12 R=everysec`) and `28275db955114140`
+  (`disk=cut | run C=12`), its recorded values.
+
+An empty `HVX_EXPLORE_CMDLINE_EXTRA` still adds a space to the command line and so moves a
+fingerprint: the comparison's runs of (d) set it empty, and their values are not the recorded ones.
+
+**The Mac and KVM engines.** The same probe, built for arm64 with 0.4.1 and run on the Mac engine,
+showed `arch_sys_counter` as the clocksource and the arch timer on the same counter, in
+high-resolution mode, with no watchdog line. The fixed work took 5 µs of guest time at every step
+from 1 to 10 minutes: the engine's clock counts exits, and the loop makes none. A read cost 2,666 ns
+of guest time. So the Mac guest has no gap. The KVM engine's guest kernel reads one exit clock for
+its clocksource `hydo` and its one-shot timer, both in nanoseconds
+(`hv/kvm/linux/hydo-kvm-guest.patch`), with the TSC hidden in CPUID; no KVM run measured it. Neither
+engine changed.
+
+**What moves.** Every hvx image built at epoch 5 gets the TSC clock, so every hvx value of the list
+moves at the re-recording pass, and a verdict can move with the guest's timeouts (open item 105).
+The KVM images get `/etc/hydo/exact-tick` as new bytes; the Mac images do not change. Nothing
+recorded is re-recorded here.
+
+**What is left.** Open item 164.

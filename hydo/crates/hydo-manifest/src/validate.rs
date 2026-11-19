@@ -967,12 +967,12 @@ pub fn validate(m: &mut Value) -> R<()> {
             )));
         }
     }
-    // Milestone 319: hvx's guest kernel counts a timer tick as exactly 1 ms
+    // Milestones 319 and 323: hvx's guest kernel keeps time with its TSC
     if has(&guest, "exact_tick")? {
         let c = index(&guest, "exact_tick")?;
         if !c.is_boolean() {
             return Err(err(format!(
-                "guest.exact_tick: true (the hvx engine's guest kernel counts each timer tick as exactly 1 ms) or false (the default; got {})",
+                "guest.exact_tick: true (the hvx engine's guest keeps time with its TSC; the default) or false (got {})",
                 repr(c)
             )));
         }

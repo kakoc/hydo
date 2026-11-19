@@ -162,8 +162,8 @@ guest:
                                # without VM exits; see "Loops without VM exits"
   cgroup2: false               # optional: no cgroup2 mount on /sys/fs/cgroup at boot (default
                                # true since fingerprint epoch 4); see "The cgroup2 mount"
-  exact_tick: true             # optional (hvx): the guest kernel counts each timer tick as
-                               # exactly 1 ms; see "The guest's timer tick on hvx"
+  exact_tick: true             # optional (hvx): the guest keeps time with its TSC (default
+                               # from epoch 5); see "The guest's timer tick on hvx"
 
 network: bridge                # loopback (default): one network for everything in the guest;
                                # bridge: each service in its own network namespace at its addr:
@@ -1350,31 +1350,47 @@ mount, and the run's log says so. Every engine's guest kernel for an epoch-4 ima
 
 ### The guest's timer tick on hvx (`guest.exact_tick`)
 
-On hvx the guest's clock counts timer ticks. The guest kernel finds the virtual TSC unstable at
-boot and keeps time with its `refined-jiffies` clock, which counts each tick as 999,848 ns. Its
-timer comes once per millisecond: each next tick is set 1,000,000 ns after the one before. The
-two counts differ by 152 ns a tick, and the difference adds up. After t seconds of uptime the
-guest sets its next tick 1 ms plus 0.152 ms for each second of t ahead on the virtual TSC: 19 ms
-ahead after 2 minutes.
+hvx gives the guest a virtual TSC, a time-stamp counter of 1.6 GHz that counts the guest's work:
+its branches and its exits to the engine. Without a word on the command line, the guest kernel
+finds this TSC unstable at boot and keeps time with its `refined-jiffies` clock. That clock
+counts each timer tick as 999,848 ns, while each next tick is set 1,000,000 ns after the one
+before. The difference adds up: after t seconds of uptime the next tick is due 1 ms plus
+0.152 ms for each second of t ahead on the virtual TSC.
 
 An idle guest does not notice, because hvx moves the virtual TSC to the next timer when the guest
 waits. A guest whose CPU stays busy has to run through that virtual time to reach each tick. Late
 in a long run the guest's clock then nearly stops, and every timeout in the guest waits with it:
 a command's `timeout`, the step's timer, a client's deadline. The run ends at the engine's limit
-of 900 s of host time as `TIMEOUT workload`, with nothing in the console after the CPU got busy.
+of 900 s of host time as `TIMEOUT workload`. A probe ran fixed CPU work every minute. During the
+work the guest's clock moved 8 % of the virtual TSC after 1 minute of uptime, and 1 % after 10
+minutes.
 
-With `guest.exact_tick: true` (Milestone 319) hvx boots the guest kernel with
-`clocksource=jiffies`, which counts a tick as exactly 1,000,000 ns. Each tick is then due 1 ms
-after the one before, however long the guest has run.
+`guest.exact_tick: true` makes hvx boot the guest kernel with its TSC as the clock:
+
+- The kernel gets `tsc=reliable`, which turns the clocksource watchdog off. The guest's clocks
+  are then the virtual TSC. In the probe `CLOCK_MONOTONIC` and `CLOCK_REALTIME` moved 1.000003 s
+  for each second of the TSC, at every uptime. The kernel runs its timers in high-resolution
+  mode.
+- The virtual TSC moves in steps of 1 µs instead of 41 µs. hvx moves it by one step at each read
+  of the TSC and at each exit while a timer is armed. So a clock read costs the guest 2 µs of its
+  time, and a program sees its clocks in steps of 2 µs.
+
+The key is on by default for an x86_64 image built at the fingerprint epoch 5 or later (Milestone
+323). An image built earlier boots as it did, and `false` turns it off. An image built with
+Milestone 319's key records `jiffies` in `/etc/hydo/exact-tick` and boots with
+`clocksource=jiffies`. Its ticks count 1 ms each. But a busy guest's clock runs at 0.44 of the
+virtual TSC, and it reads in steps of 1 ms.
 
 - In the ClickHouse example, two threads of a ClickHouse Keeper kept the CPU busy after the
   Keepers lost their quorum. Without the key the guest's clock ran about 1.2 s in 100 s of host
-  time, and seven runs ended at the 900 s limit. With it the clock kept up: one of those
-  schedules ended with a `VIOLATION` verdict in two runs, with one fingerprint.
-- The key is opt-in. An image without it gets the same bytes and fingerprints as before. An image
-  with it records the key in `/etc/hydo/exact-tick` and has its own fingerprints.
-- The Mac and KVM engines ignore the key. Whether their guest kernels have the same gap was not
-  measured.
+  time, and seven runs ended at the 900 s limit. With it, that schedule ended with its
+  `VIOLATION` verdict in 457 s of host time, twice with one fingerprint.
+- `tsc=reliable` alone keeps the step of 41 µs, and a read then costs 82 µs of the guest's time.
+  ClickHouse reads its clocks often enough that its start passed its readiness deadline of
+  300 s, and the run ended `ERROR service start`.
+- An image with the key records `tsc` in `/etc/hydo/exact-tick` and has its own fingerprints.
+  The Mac and KVM engines ignore the key: their guest kernels read one counter for the clock and
+  for the timer, so they have no such gap.
 
 ### Link faults (a network fault between two named services)
 

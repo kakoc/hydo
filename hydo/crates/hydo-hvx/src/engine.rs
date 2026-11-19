@@ -36,6 +36,11 @@ const EXP_MEM_MIB: u64 = 1024;
 const EXP_MEM_MIN_MIB: u64 = 256;
 const EXP_MEM_MAX_MIB: u64 = boot::RAM_MAX >> 20; // 8192 since M179 (3072 before)
 const BOOT_TSC_STEP: u64 = 0x10000;
+/// Milestone 323: the virtual TSC's step with the guest's TSC clock ([`GuestClock::Tsc`]), 1 us
+/// of the 1.6 GHz TSC. In the exit-count mode the module moves the TSC by one step at each RDTSC
+/// and at each counted exit while a timer is armed, so a clock read costs the guest two steps of
+/// its time: 2 us instead of 82 us with [`BOOT_TSC_STEP`].
+const FINE_TSC_STEP: u64 = 1600;
 /// Milestone 263: the reboots one run may take (docs/design/devices.md).
 const REBOOT_MAX: u32 = 64;
 
@@ -56,6 +61,9 @@ struct Env {
     cmdbase: String,
     /// The base image's non-zero 4 KiB blocks as merged (offset, length) runs.
     base_runs: Vec<(usize, usize)>,
+    /// The virtual TSC's step of a fresh VM: [`BOOT_TSC_STEP`], or [`FINE_TSC_STEP`] with the
+    /// guest's TSC clock (Milestone 323).
+    tsc_step: u64,
 }
 
 /// `struct boot`: one VM and its reconstructed console.
@@ -656,7 +664,7 @@ impl Core {
         // what create_vm sets on a fresh VM (the snapshot then sets all of it again)
         let mut tsc = hvx_tsc {
             tsc: 0,
-            step: BOOT_TSC_STEP,
+            step: self.e.tsc_step,
             aux: 0,
             count: 0,
             mode: HVX_TSC_COUNTER,
@@ -3144,9 +3152,17 @@ fn create_vm(
         say!("mmap RAM: {e}");
         return None;
     }
+    // Milestone 323: the fine step only with the PMU branch clock. On the exit-count clock alone
+    // the step is all that moves the TSC, and a guest whose only exits are its own timer's
+    // would wait 64 times longer for each tick.
+    let step = if cfg.flags & HVX_VM_PMU_CLOCK != 0 {
+        e.tsc_step
+    } else {
+        BOOT_TSC_STEP
+    };
     let mut tsc = hvx_tsc {
         tsc: 0,
-        step: BOOT_TSC_STEP,
+        step,
         aux: 0,
         count: 0,
         mode: HVX_TSC_COUNTER,
@@ -3533,13 +3549,60 @@ pub struct Start {
     pub cpu_v3: bool,
     /// `--cpu-cache on` (M203: `guest.cpu_cache`, the CPUID cache leaves).
     pub cpu_cache: bool,
-    /// `--exact-tick on` (Milestone 319: `guest.exact_tick`): the guest kernel boots with
-    /// `clocksource=jiffies`, which counts each timer tick as exactly 1 ms.
-    pub exact_tick: bool,
+    /// `--exact-tick jiffies|tsc` (Milestones 319 and 323: `guest.exact_tick`): how the guest
+    /// kernel keeps time.
+    pub clock: GuestClock,
+}
+
+/// How the guest kernel keeps time (`--exact-tick`, from the image's `/etc/hydo/exact-tick`;
+/// MANIFEST.md, "The guest's timer tick on hvx").
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GuestClock {
+    /// Nothing on the command line (`off`): the clocksource watchdog finds the virtual TSC
+    /// unstable at boot, and the kernel keeps time with refined-jiffies, which counts a tick as
+    /// 999,848 ns while its periodic tick is set 1,000,000 ns apart. Images built before the
+    /// fingerprint epoch 5 boot so.
+    #[default]
+    Kernel,
+    /// `clocksource=jiffies` (`jiffies`, or `on`; Milestone 319): each tick counts exactly 1 ms.
+    /// A busy guest's clock still runs at about 0.44 of the virtual TSC, and it reads in steps of
+    /// 1 ms.
+    Jiffies,
+    /// `tsc=reliable` and a TSC step of [`FINE_TSC_STEP`] (`tsc`; Milestone 323, the default of
+    /// an image built at the fingerprint epoch 5): the watchdog is off, and the guest's clocks
+    /// are the virtual TSC itself, read in steps of 2 us.
+    Tsc,
+}
+
+impl GuestClock {
+    /// The word of `--exact-tick` and of `/etc/hydo/exact-tick`.
+    pub fn parse(w: &str) -> Option<GuestClock> {
+        match w {
+            "off" => Some(GuestClock::Kernel),
+            "on" | "jiffies" => Some(GuestClock::Jiffies),
+            "tsc" => Some(GuestClock::Tsc),
+            _ => None,
+        }
+    }
+    /// The words this clock adds to the guest kernel's command line.
+    pub fn cmdline(self) -> &'static str {
+        match self {
+            GuestClock::Kernel => "",
+            GuestClock::Jiffies => " clocksource=jiffies",
+            GuestClock::Tsc => " tsc=reliable",
+        }
+    }
+    /// The virtual TSC's step of a fresh VM (with the PMU branch clock).
+    pub fn tsc_step(self) -> u64 {
+        match self {
+            GuestClock::Tsc => FINE_TSC_STEP,
+            _ => BOOT_TSC_STEP,
+        }
+    }
 }
 
 /// The program's command line (`[--ram-mib N] [--vcpus N] [--cpu v2|v3] [--cpu-cache on|off]
-/// [--exact-tick on|off] --control boot serve|one <bzImage> <initramfs> <disk.img> <outdir>
+/// [--exact-tick off|jiffies|tsc] --control boot serve|one <bzImage> <initramfs> <disk.img> <outdir>
 /// ["<schedule>"]`, read as hvx_explore read it), then [`run`] over the text port (requests and commands on `io.input`, reports on
 /// `io.out`). The plain `one`/`serve` modes and `--control one` (the shell-init images') are
 /// refused since M145.
@@ -3547,7 +3610,7 @@ pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
     let mut a: Vec<String> = args.to_vec();
     let (mut control_one, mut control_boot) = (false, false);
     let (mut ram_mib, mut vcpus, mut cpu_v3, mut cpu_cache) = (None, None, false, false);
-    let mut exact_tick = false;
+    let mut clock = GuestClock::Kernel;
     while a.len() > 2
         && matches!(
             a[1].as_str(),
@@ -3585,11 +3648,14 @@ pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
                     return 2;
                 }
             },
-            "--exact-tick" => match a[2].as_str() {
-                "on" => exact_tick = true,
-                "off" => exact_tick = false,
-                v => {
-                    let _ = writeln!(io.diag, "hydo-hvx: --exact-tick {v}: expected on or off");
+            "--exact-tick" => match GuestClock::parse(&a[2]) {
+                Some(c) => clock = c,
+                None => {
+                    let _ = writeln!(
+                        io.diag,
+                        "hydo-hvx: --exact-tick {}: expected off, jiffies (or on) or tsc",
+                        a[2]
+                    );
                     return 2;
                 }
             },
@@ -3601,7 +3667,7 @@ pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
         a.drain(1..3);
     }
     if a.len() < 6 {
-        let _ = writeln!(io.diag, "usage: {} [--ram-mib N] [--vcpus N] [--cpu v2|v3] [--cpu-cache on|off] [--exact-tick on|off] --control boot serve|one <bzImage> <initramfs> <disk.img> <outdir> [\"<schedule>\"]", a.first().map(String::as_str).unwrap_or("hydo-hvx"));
+        let _ = writeln!(io.diag, "usage: {} [--ram-mib N] [--vcpus N] [--cpu v2|v3] [--cpu-cache on|off] [--exact-tick off|jiffies|tsc] --control boot serve|one <bzImage> <initramfs> <disk.img> <outdir> [\"<schedule>\"]", a.first().map(String::as_str).unwrap_or("hydo-hvx"));
         return 2;
     }
     if !control_boot || control_one {
@@ -3644,7 +3710,7 @@ pub fn main_with(args: &[String], o: Options, mut io: Io) -> i32 {
         vcpus,
         cpu_v3,
         cpu_cache,
-        exact_tick,
+        clock,
     };
     let port = Box::new(crate::text::TextPort::new(io.input, io.out));
     run(start, o, port, io.diag)
@@ -3736,16 +3802,16 @@ pub fn run(
         }
     };
     let mut cmdbase = boot::ROOTFS_CMDLINE.to_string();
-    // Milestone 319 (`guest.exact_tick`): the TSC fails the kernel's clocksource watchdog at boot,
-    // so the guest keeps time with refined-jiffies, which counts a tick as 999,848 ns, while the
-    // periodic tick on the one-shot TSC-deadline timer sets each next tick 1,000,000 ns after the
-    // one before. The tick is then programmed 152 ns later per tick that passed: 18 ms late after
-    // 2 minutes of uptime. An idle guest does not notice (a HLT jumps to the deadline), but a busy
-    // one needs that much virtual time per tick, and its clock nearly stops. The plain jiffies
-    // clocksource counts a tick as 1,000,000 ns, the tick's own period.
-    if start.exact_tick {
-        cmdbase.push_str(" clocksource=jiffies");
-    }
+    // Milestones 319 and 323 (`guest.exact_tick`): the TSC fails the kernel's clocksource watchdog
+    // at boot, so without a word the guest keeps time with refined-jiffies, which counts a tick
+    // as 999,848 ns, while the periodic tick on the one-shot TSC-deadline timer sets each next
+    // tick 1,000,000 ns after the one before. The tick is then programmed 152 ns later per tick
+    // that passed: 18 ms late after 2 minutes of uptime. An idle guest does not notice (a HLT
+    // jumps to the deadline), but a busy one needs that much virtual time per tick, and its
+    // clock nearly stops. `clocksource=jiffies` counts a tick as 1,000,000 ns, the tick's own
+    // period (M319). `tsc=reliable` turns the watchdog off, so the clocks are the virtual TSC,
+    // and the fine step makes a read cost 2 us of it instead of 82 us (M323).
+    cmdbase.push_str(start.clock.cmdline());
     if let Some(x) = &o.cmdline_extra {
         cmdbase = format!("{cmdbase} {x}");
         ccap(&mut cmdbase, 1024);
@@ -3791,6 +3857,7 @@ pub fn run(
             p2_len,
             cmdbase,
             base_runs,
+            tsc_step: start.clock.tsc_step(),
         }),
         outdir,
         port,
@@ -3891,6 +3958,29 @@ pub fn main_stdio(args: &[String], o: Options) -> i32 {
 
 #[cfg(test)]
 mod tests {
+    /// Milestone 323: the words of `/etc/hydo/exact-tick` and `--exact-tick`, and what each
+    /// clock puts on the command line and into the TSC. M319's `jiffies` (and its program word
+    /// `on`) keep their meaning, and an image without the file boots exactly as before.
+    #[test]
+    fn each_guest_clock_has_its_words_and_its_step() {
+        use super::{GuestClock, BOOT_TSC_STEP, FINE_TSC_STEP};
+        assert_eq!(GuestClock::parse("tsc"), Some(GuestClock::Tsc));
+        assert_eq!(GuestClock::parse("jiffies"), Some(GuestClock::Jiffies));
+        assert_eq!(GuestClock::parse("on"), Some(GuestClock::Jiffies));
+        assert_eq!(GuestClock::parse("off"), Some(GuestClock::Kernel));
+        assert_eq!(GuestClock::parse("TSC"), None);
+        assert_eq!(GuestClock::default(), GuestClock::Kernel);
+        assert_eq!(GuestClock::Kernel.cmdline(), "");
+        assert_eq!(GuestClock::Jiffies.cmdline(), " clocksource=jiffies");
+        assert_eq!(GuestClock::Tsc.cmdline(), " tsc=reliable");
+        assert_eq!(GuestClock::Kernel.tsc_step(), BOOT_TSC_STEP);
+        assert_eq!(GuestClock::Jiffies.tsc_step(), BOOT_TSC_STEP);
+        // 1 us of the 1.6 GHz TSC; a read then costs two steps, 2 us
+        assert_eq!(GuestClock::Tsc.tsc_step(), FINE_TSC_STEP);
+        assert_eq!(FINE_TSC_STEP, 1_600);
+        assert_eq!(BOOT_TSC_STEP, 0x10000);
+    }
+
     /// `hydo run` finds the note by its mark, and the note names the module's limit.
     #[test]
     fn console_full_note_starts_with_its_mark() {

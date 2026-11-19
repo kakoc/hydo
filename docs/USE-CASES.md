@@ -101,6 +101,7 @@ last line names the ideas that would answer more.
 | Does an acknowledged write survive a power cut? | `C=` cuts the whole guest's power, and `cf=` cuts it at the k-th disk flush (hvx only). History checks and the messages check judge what survived. | built; `nats-jetstream`, `vikunja`, `yugabyte`, `saleor`, `restate`, `iggy`, `clickhouse` |
 | Does one node's damage lose data or stop the cluster? | `G=` damages one file of a service's storage, and `L=` cuts one service's power. `hydo explore --storage-faults` draws both. | built; `nats-jetstream/blocks`, `redpanda`, `surrealdb`, `iggy`, `victoriametrics` (replicas on two nodes) |
 | Does the storage engine survive a disk that tears or misplaces a write, cannot read a sector, or stops answering? | `torn=`, `mis=`, `lse=` and `hang=` on the data disk, and `G=<svc>@<at>:bad\|rot` under a file of a service's storage. `hydo explore --block-faults` draws them. | partly built; `disk-faults` on the Mac engine and on KVM (AMD and Intel); hvx refuses them (M313; open item 160) |
+| Do the guest's timeouts fire on time late in a long, busy run? | On hvx an x86_64 image built at the fingerprint epoch 5 keeps time with its TSC (`guest.exact_tick`). Its clocks follow the virtual TSC at every uptime and read in steps of 2 µs. The Mac and KVM guest kernels read one counter for the clock and the timer. | built; `clickhouse` seed 20 (M319, M323), `docs/design/guest-clock.md` |
 | Does a backward clock step break a lease or a timeout? | `T=` steps the guest's wall clock. `hydo rules scan --kind clock` proposes the steps. | built; `valkey`, `temporal`, `dragonfly`, `river`, `restate`, `iggy` (a topic's message expiry), `victoriametrics` (a step back deletes a month, holds new samples in memory, and leaves one copy) |
 | Does an acknowledged job run, and run once? | A `type: messages` check declares the claims. Kills of the process that holds the work test them. A durable execution's journaled steps append to an effects file, and a rule finds a step that runs again. | built; `hatchet`, `river`, `redpanda`, `restate`, `iggy` |
 | Does a crash between two commits of one operation run it twice? | `A=<event>+<ms>:kill-now-<svc>` kills the service at the moment the client writes an event, or a number of milliseconds later, before any thread of the service runs on. A shell loop over the delay finds the window, and `hydo explore --reactive fault --kill-now` draws such kills, also on a project with one service. | built; `meilisearch` finding 1 on the Mac engine and hvx, found blind on the Mac engine (M305, M309; open item 154) |
@@ -297,15 +298,6 @@ that a milestone builds moves into the tables of this page with its new status.
 - **What it needs.** A stop in each interpreter's call path, and reads of the interpreter's own
   structures.
 - **Where it came from.** The section "Next steps" of `docs/design/contracts.md`.
-
-### The exact timer tick by default on hvx
-
-- **What it is.** `guest.exact_tick` (M319) on for every image built at a new fingerprint epoch.
-- **Why it matters.** Without it hvx's guest clock falls behind by 152 ns a tick. A busy guest
-  late in a long run then nearly stops its clock, and the run ends at the engine's wall limit.
-- **What it needs.** A new fingerprint epoch, the key's default in `hydo_image::defaults`, and a
-  re-recording of the hvx values.
-- **Where it came from.** Open item 164; the ClickHouse example's runs of open item 157.
 
 ### A guest counter for loops without exits on the Mac engine
 

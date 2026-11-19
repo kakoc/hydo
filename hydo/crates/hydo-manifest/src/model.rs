@@ -808,14 +808,16 @@ pub struct Guest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = true))]
     pub cgroup2: Option<bool>,
-    /// The hvx engine boots the guest kernel with `clocksource=jiffies`, which counts each timer
-    /// tick as exactly 1 ms. Without it the guest kernel counts a tick as 999,848 ns while its
-    /// timer is set 1 ms apart, so the gap between the two grows by 152 ns a tick; a guest that
-    /// keeps its CPU busy late in a long run then needs many times its own time in virtual time,
-    /// and its clock nearly stops. The Mac and KVM engines ignore the key (Milestone 319;
-    /// MANIFEST.md, "The guest's timer tick on hvx").
+    /// The hvx engine boots the guest kernel with its TSC as the clock (`tsc=reliable`, and a
+    /// virtual TSC that moves 1 us per step), so the guest's clocks follow the virtual TSC
+    /// exactly, read in steps of 2 us. Without it the guest kernel keeps time with
+    /// refined-jiffies, which counts a tick as 999,848 ns while its timer is set 1 ms apart: the
+    /// gap grows by 152 ns a tick, and a guest that keeps its CPU busy late in a long run finds
+    /// its clock nearly stopped. On by default for x86_64 images built at fingerprint epoch 5 and
+    /// later; an image built earlier keeps it off. The Mac and KVM engines ignore the key
+    /// (Milestones 319 and 323; MANIFEST.md, "The guest's timer tick on hvx").
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schemars(extend("default" = false))]
+    #[schemars(extend("default" = true))]
     pub exact_tick: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,

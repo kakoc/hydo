@@ -503,7 +503,7 @@ pub fn build(
         fc: fc.clone(),
         ip: ip.clone(),
     };
-    x86::write_compiled(ctx, p, manifest_path, &r, &tools)?;
+    x86::write_compiled(ctx, p, manifest_path, &r, &tools, "arm64")?;
     let (agent_bin, agent_sha) = crate::agent::binary(ctx, bdir, true, io)?;
     crate::stage::compose_stage(&m, &r)?;
     let (oci_meta, _) = crate::oci::stage_with(
