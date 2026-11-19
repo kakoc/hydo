@@ -548,8 +548,8 @@ fn closure_param(
             b.ret.text()
         )));
     }
-    let first = b.args.first().map(|a| res.resolve(a));
-    let c = rust::Closure::new(&b, first.as_ref(), &ret);
+    let args: Vec<FTy> = b.args.iter().map(|a| res.resolve(a)).collect();
+    let c = rust::Closure::with_args(&b, &args, &ret);
     let shape = FTy::Int {
         name: "u8".into(),
         signed: false,

@@ -295,7 +295,8 @@ pub struct FnBound {
     pub ret: TyAst,
 }
 
-/// What a generated closure does with its first argument (Milestone 318).
+/// What a generated closure does with its arguments (Milestone 318; the shapes of two arguments
+/// and of an `Option` result since Milestone 326).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Shape {
     /// `|_| k`: the generated value, whatever the arguments.
@@ -310,7 +311,40 @@ pub enum Shape {
     Even,
     /// `|x| x > 0`.
     Positive,
+    /// `|x, y| x + y`: two integer arguments added, as the integer result, wrapping.
+    Sum,
+    /// `|_, y| y`: the second argument, when the result has its type.
+    Second,
+    /// `|a, b| a.cmp(b)`: two arguments of one type compared, for a sort.
+    Cmp,
+    /// `|a, b| b.cmp(a)`: the reverse order.
+    RevCmp,
+    /// `|x, y| x < y` and `|x, y| x == y`: a predicate on two arguments of one type.
+    Less,
+    Equal,
+    /// `|x| Some(x)`: the argument in an `Option`, when the result is an `Option` of its type.
+    SomeSame,
+    /// `|x| try_from(x).ok()`: an integer argument as an `Option` of an integer.
+    SomeConv,
 }
+
+/// Every shape, in the order of its number in a closure's path.
+const SHAPES: [Shape; 14] = [
+    Shape::Const,
+    Shape::Same,
+    Shape::Conv,
+    Shape::Add,
+    Shape::Even,
+    Shape::Positive,
+    Shape::Sum,
+    Shape::Second,
+    Shape::Cmp,
+    Shape::RevCmp,
+    Shape::Less,
+    Shape::Equal,
+    Shape::SomeSame,
+    Shape::SomeConv,
+];
 
 /// A closure that hydo generates for a parameter bound by `Fn`, `FnMut` or `FnOnce`
 /// (Milestone 318): its argument and result types as the harness writes them, and the shapes
@@ -323,6 +357,10 @@ pub struct Closure {
     pub by_ref: bool,
     pub ret: String,
     pub shapes: Vec<Shape>,
+    /// Whether the second argument is a reference (Milestone 326).
+    pub by_ref2: bool,
+    /// The type inside an `Option` result, for `|x| try_from(x).ok()` (Milestone 326).
+    pub some: String,
 }
 
 /// The mark that starts a closure's `Ctor` path.
@@ -332,23 +370,66 @@ impl Closure {
     /// The closure for a bound whose types are resolved: the shapes that fit its first
     /// argument and its result.
     pub fn new(b: &FnBound, first: Option<&FTy>, ret: &FTy) -> Closure {
+        Closure::with_args(b, &first.into_iter().cloned().collect::<Vec<_>>(), ret)
+    }
+
+    /// The closure for a bound whose argument types are resolved as `args` (Milestone 326):
+    /// the shapes that fit its arguments and its result. A comparison for a sort takes no
+    /// constant, because a sort may panic on an order that is not total.
+    pub fn with_args(b: &FnBound, args: &[FTy], ret: &FTy) -> Closure {
         let int = |t: &FTy| matches!(t, FTy::Int { .. });
-        let mut shapes = vec![Shape::Const];
-        let by_ref = matches!(b.args.first(), Some(TyAst::Ref(..)));
-        match first {
+        let text = |i: usize| b.args.get(i).map(TyAst::text);
+        let same_args = args.len() == 2 && text(0) == text(1);
+        let ordering = matches!(&b.ret, TyAst::Path(s, a) if a.is_empty()
+            && s.last().is_some_and(|l| l == "Ordering")
+            && !s.iter().any(|x| x == "atomic"));
+        // `Option<T>`: the inside's text
+        let some = match &b.ret {
+            TyAst::Path(s, a) if s.last().is_some_and(|l| l == "Option") && a.len() == 1 => {
+                Some(a[0].text())
+            }
+            _ => None,
+        };
+        let mut shapes = if ordering && same_args {
+            vec![Shape::Cmp, Shape::RevCmp]
+        } else {
+            vec![Shape::Const]
+        };
+        match args.first() {
             Some(a) if int(a) && int(ret) => shapes.extend([Shape::Conv, Shape::Add]),
             Some(a) if int(a) && *ret == FTy::Bool => shapes.extend([Shape::Even, Shape::Positive]),
-            Some(_) if b.args.first().is_some_and(|a| a.text() == b.ret.text()) => {
+            Some(_) if text(0).as_deref() == Some(b.ret.text().as_str()) => {
                 shapes.push(Shape::Same)
             }
             _ => {}
         }
+        if let [a, c] = args {
+            if int(a) && int(c) && int(ret) {
+                shapes.push(Shape::Sum);
+            }
+            if text(1).as_deref() == Some(b.ret.text().as_str()) {
+                shapes.push(Shape::Second);
+            }
+            if same_args && *ret == FTy::Bool {
+                shapes.extend([Shape::Less, Shape::Equal]);
+            }
+        }
+        if let (Some(inner), Some(a)) = (&some, args.first()) {
+            if text(0).as_deref() == Some(inner.as_str()) {
+                shapes.push(Shape::SomeSame);
+            }
+            if int(a) && matches!(ret, FTy::Opt(x) if int(x)) {
+                shapes.push(Shape::SomeConv);
+            }
+        }
         Closure {
             once: b.once,
             args: b.args.iter().map(TyAst::text).collect(),
-            by_ref,
+            by_ref: matches!(b.args.first(), Some(TyAst::Ref(..))),
             ret: b.ret.text(),
             shapes,
+            by_ref2: matches!(b.args.get(1), Some(TyAst::Ref(..))),
+            some: some.unwrap_or_default(),
         }
     }
 
@@ -360,12 +441,14 @@ impl Closure {
             .map(|s| format!("{}", *s as u8))
             .collect();
         format!(
-            "{CLOSURE}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}",
+            "{CLOSURE}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}",
             self.once,
             self.by_ref,
             self.args.join("\u{1e}"),
             self.ret,
-            shapes.join(",")
+            shapes.join(","),
+            self.by_ref2,
+            self.some
         )
     }
 
@@ -373,17 +456,9 @@ impl Closure {
     pub fn of(path: &str) -> Option<Closure> {
         let r = path.strip_prefix(CLOSURE)?.strip_prefix('\u{1f}')?;
         let p: Vec<&str> = r.split('\u{1f}').collect();
-        let [once, by_ref, args, ret, shapes] = p.as_slice() else {
+        let [once, by_ref, args, ret, shapes, by_ref2, some] = p.as_slice() else {
             return None;
         };
-        let all = [
-            Shape::Const,
-            Shape::Same,
-            Shape::Conv,
-            Shape::Add,
-            Shape::Even,
-            Shape::Positive,
-        ];
         Some(Closure {
             once: *once == "true",
             by_ref: *by_ref == "true",
@@ -395,8 +470,10 @@ impl Closure {
             ret: ret.to_string(),
             shapes: shapes
                 .split(',')
-                .filter_map(|s| all.get(s.parse::<usize>().ok()?).copied())
+                .filter_map(|s| SHAPES.get(s.parse::<usize>().ok()?).copied())
                 .collect(),
+            by_ref2: *by_ref2 == "true",
+            some: some.to_string(),
         })
     }
 
@@ -417,6 +494,12 @@ impl Closure {
             String::new()
         };
         let x = if self.args.is_empty() { "" } else { "x" };
+        // the shapes of two arguments name both
+        let more = if self.args.len() > 2 {
+            ", _".repeat(self.args.len() - 2)
+        } else {
+            String::new()
+        };
         match self.shape(i) {
             Shape::Const => format!("|{}{rest}| {k}", if x.is_empty() { "" } else { "_" }),
             Shape::Same => format!("|{x}{rest}| x"),
@@ -424,6 +507,14 @@ impl Closure {
             Shape::Add => format!("|{x}{rest}| try_from(x).unwrap_or({k}).wrapping_add(1)"),
             Shape::Even => format!("|{x}{rest}| x % 2 == 0"),
             Shape::Positive => format!("|{x}{rest}| x > 0"),
+            Shape::Sum => format!("|x, y{more}| x + y"),
+            Shape::Second => format!("|_, y{more}| y"),
+            Shape::Cmp => format!("|a, b{more}| a.cmp(b)"),
+            Shape::RevCmp => format!("|a, b{more}| b.cmp(a)"),
+            Shape::Less => format!("|x, y{more}| x < y"),
+            Shape::Equal => format!("|x, y{more}| x == y"),
+            Shape::SomeSame => format!("|{x}{rest}| Some(x)"),
+            Shape::SomeConv => format!("|{x}{rest}| try_from(x).ok()"),
         }
     }
 }

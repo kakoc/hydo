@@ -339,6 +339,11 @@ fn zero(t: &FTy) -> Option<Val> {
         FTy::List(_) => Val::List(vec![]),
         FTy::Opt(_) => Val::Opt(None),
         FTy::Tuple(v) => Val::Tuple(v.iter().map(zero).collect::<Option<_>>()?),
+        // an enumeration's first variant without fields, as `Ordering`'s `Less` (Milestone 326)
+        FTy::Enum { variants, .. } => {
+            let v = variants.iter().find(|v| v.fields.is_empty())?;
+            Val::Enum(v.name.clone(), vec![])
+        }
         _ => return None,
     })
 }
@@ -701,7 +706,30 @@ impl Reader<'_> {
                     .ok_or("a closure's parameters end with `|`")?;
                 self.i += close + 1;
                 let idx = |s: Shape| cl.shapes.iter().position(|x| *x == s);
-                let (shape, k) = if self.eat("try_from(x).unwrap_or(") {
+                let k0 = || zero(kt).ok_or("this closure is written `|_| <value>`");
+                // the shapes of two arguments and of an `Option` result (Milestone 326)
+                let more = [
+                    ("try_from(x).ok()", Shape::SomeConv),
+                    ("Some(x)", Shape::SomeSame),
+                    ("x + y", Shape::Sum),
+                    ("x < y", Shape::Less),
+                    ("x == y", Shape::Equal),
+                    ("a.cmp(b)", Shape::Cmp),
+                    ("b.cmp(a)", Shape::RevCmp),
+                ];
+                let found = more.iter().find(|(text, _)| {
+                    let rest = self.s[self.i..].trim_start();
+                    rest.strip_prefix(text).is_some_and(|r| {
+                        !r.starts_with(|c: char| c.is_alphanumeric() || c == '.' || c == '(')
+                    })
+                });
+                let (shape, k) = if let Some((text, s)) = found {
+                    self.ws();
+                    self.i += text.len();
+                    (*s, k0()?)
+                } else if self.eat("y") {
+                    (Shape::Second, k0()?)
+                } else if self.eat("try_from(x).unwrap_or(") {
                     let k = self.val(kt)?;
                     self.expect(")")?;
                     let s = if self.eat(".wrapping_add(1)") {

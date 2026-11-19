@@ -274,6 +274,68 @@ fn an_error_in_a_workspace_members_test_module_names_the_member_and_the_workspac
     assert!(!ws.join("Cargo.lock").exists());
 }
 
+#[test]
+fn closures_of_two_arguments_comparisons_and_options_are_generated() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m326-closures");
+    let (_, rep) = fuzz_m326(t.path(), &["--fn", "closures::", "--show-inputs", "60"]);
+    assert!(rep.skipped.is_empty(), "{:?}", rep.skipped);
+    assert_eq!(rep.functions.len(), 4, "{rep:?}");
+    for f in &rep.functions {
+        assert_eq!(f.verdict, "held", "{f:?}");
+    }
+    let shown = |name: &str| one(&rep, name).samples.join("\n");
+    let fold = shown("::fold_with");
+    assert!(fold.contains("|x, y| x + y"), "{fold}");
+    // a sort's comparison is never a constant, which a sort may refuse as no total order
+    let sort = shown("::sorted_by");
+    assert!(sort.contains("|a, b| a.cmp(b)"), "{sort}");
+    assert!(sort.contains("|a, b| b.cmp(a)"), "{sort}");
+    assert!(!sort.contains("|_, _|"), "{sort}");
+    let some = shown("::keep_some");
+    assert!(some.contains("|x| try_from(x).ok()"), "{some}");
+    let dedup = shown("::dedup_with");
+    assert!(dedup.contains("|x, y| x == y"), "{dedup}");
+    // each shown closure reads back as the same value
+    use hydo_contracts::fuzz::rust::{fn_bound, Closure, Ctor, FTy, Pass};
+    use hydo_contracts::fuzz::value::{parse, show, Val};
+    let int = |n: &str, bits| FTy::Int {
+        name: n.into(),
+        signed: false,
+        bits,
+    };
+    let b = fn_bound("Fn(u32, u8) -> u32").unwrap();
+    let c = Closure::with_args(&b, &[int("u32", 32), int("u8", 8)], &int("u32", 32));
+    let t = FTy::Built {
+        ty: "_".into(),
+        build: Some(Ctor {
+            path: c.path(),
+            args: vec![
+                ("shape".into(), int("u8", 8), Pass::Value),
+                ("k".into(), int("u32", 32), Pass::Value),
+            ],
+        }),
+        read: None,
+    };
+    for i in 0..c.shapes.len() as i128 {
+        let k = if matches!(c.shape(i), hydo_contracts::fuzz::rust::Shape::Const) {
+            7
+        } else {
+            0
+        };
+        let v = Val::Struct(vec![
+            ("shape".into(), Val::Int(i)),
+            ("k".into(), Val::Int(k)),
+        ]);
+        let text = show(&v, &t);
+        if !matches!(
+            c.shape(i),
+            hydo_contracts::fuzz::rust::Shape::Conv | hydo_contracts::fuzz::rust::Shape::Add
+        ) {
+            assert_eq!(parse(&text, &t), Ok(v), "{text}");
+        }
+    }
+}
+
 /// A copy of the fixture at `dir/crate`, with `edit` applied to its `src/lib.rs`.
 fn fixture_copy(dir: &Path, edit: &dyn Fn(String) -> String) -> std::path::PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fuzz-m326");

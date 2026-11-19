@@ -289,20 +289,32 @@ fn dec(t: &FTy) -> String {
                 .map(|(i, t)| format!("x{i}: {t}"))
                 .collect();
             let x = if cl.by_ref { "(*x0)" } else { "x0" };
+            let y = if cl.by_ref2 { "(*x1)" } else { "x1" };
             let ret = &cl.ret;
+            let some = &cl.some;
+            let conv = |v: &str| {
+                format!("<{ret} as self::std::convert::TryFrom<_>>::try_from({v}).unwrap_or(k)")
+            };
             let mut arms = String::new();
             for (i, s) in cl.shapes.iter().enumerate() {
                 let body = match s {
                     Shape::Const => k.clone(),
                     Shape::Same => "x0".to_string(),
-                    Shape::Conv => format!(
-                        "<{ret} as self::std::convert::TryFrom<_>>::try_from({x}).unwrap_or(k)"
-                    ),
-                    Shape::Add => format!(
-                        "<{ret} as self::std::convert::TryFrom<_>>::try_from({x}).unwrap_or(k).wrapping_add(1)"
-                    ),
+                    Shape::Conv => conv(x),
+                    Shape::Add => format!("{}.wrapping_add(1)", conv(x)),
                     Shape::Even => format!("({x} as i128) % 2 == 0"),
                     Shape::Positive => format!("({x} as i128) > 0"),
+                    // the shapes of two arguments and of an `Option` result (Milestone 326)
+                    Shape::Sum => format!("{}.wrapping_add({})", conv(x), conv(y)),
+                    Shape::Second => "x1".to_string(),
+                    Shape::Cmp => "self::std::cmp::Ord::cmp(&x0, &x1)".to_string(),
+                    Shape::RevCmp => "self::std::cmp::Ord::cmp(&x1, &x0)".to_string(),
+                    Shape::Less => "x0 < x1".to_string(),
+                    Shape::Equal => "x0 == x1".to_string(),
+                    Shape::SomeSame => "self::std::option::Option::Some(x0)".to_string(),
+                    Shape::SomeConv => format!(
+                        "<{some} as self::std::convert::TryFrom<_>>::try_from({x}).ok()"
+                    ),
                 };
                 let _ = write!(arms, "{i} => {body}, ");
             }

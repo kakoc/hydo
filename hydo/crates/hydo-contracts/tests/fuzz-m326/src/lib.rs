@@ -279,6 +279,43 @@ pub mod far {
     }
 }
 
+// ---------------------------------------------------------------- more shapes of closures
+
+pub mod closures {
+    use std::cmp::Ordering;
+
+    /// A closure over two arguments, as a fold's.
+    // hydo: ensures len(v) != 0 || result == init
+    pub fn fold_with<F: Fn(u32, u8) -> u32>(v: &[u8], init: u32, f: F) -> u32 {
+        v.iter().fold(init, |a, &x| f(a, x))
+    }
+
+    /// A comparison for a sort: the generated ones are total orders, so the result is in one
+    /// of the two orders.
+    // hydo: ensures len(result) == len(v)
+    // hydo: ensures len(result) < 2 || result[0] <= result[len(result) - 1] || result[0] >= result[len(result) - 1]
+    // hydo: ensures sorted(result) || result[0] >= result[len(result) - 1]
+    pub fn sorted_by<F: FnMut(&u8, &u8) -> Ordering>(v: Vec<u8>, f: F) -> Vec<u8> {
+        let mut v = v;
+        v.sort_by(f);
+        v
+    }
+
+    /// A closure that returns an `Option`, as `filter_map`'s.
+    // hydo: ensures len(result) <= len(v)
+    pub fn keep_some<F: Fn(u8) -> Option<u16>>(v: &[u8], f: F) -> Vec<u16> {
+        v.iter().filter_map(|&x| f(x)).collect()
+    }
+
+    /// A predicate on two arguments, as `dedup_by`'s.
+    // hydo: ensures len(result) <= len(v)
+    pub fn dedup_with<F: FnMut(&mut u8, &mut u8) -> bool>(v: Vec<u8>, f: F) -> Vec<u8> {
+        let mut v = v;
+        v.dedup_by(f);
+        v
+    }
+}
+
 // ---------------------------------------------------------------- two lists of one length
 
 /// As half's `convert_from_f32_slice`: the lists must have one length.
