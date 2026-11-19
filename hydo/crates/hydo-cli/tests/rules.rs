@@ -354,3 +354,67 @@ fn the_clock_audit_aims_clock_steps_at_durations_on_the_wall_clock() {
         "{text}"
     );
 }
+
+/// Milestone 324: the clock audit maps the code to the services of hydo.yaml. The Go module
+/// builds two programs: `queue`, which the service runs, and `report`, which nothing runs. The
+/// places in the code that `queue` reaches come first, each names who runs it, and a schedule
+/// names the one service instead of `<service>`. A Go test function inside a source file is
+/// left out.
+#[test]
+fn the_clock_audit_ranks_the_code_that_the_services_run_first() {
+    let t = T::new("clockmap");
+    let w = |rel: &str, text: &str| {
+        let p = t.dir.join("proj").join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, text).unwrap();
+    };
+    w("go.mod", "module example.com/q\n\ngo 1.22\n");
+    w(
+        "cmd/queue/main.go",
+        "package main\n\nimport \"example.com/q/store\"\n\nfunc main() { store.Run() }\n",
+    );
+    w(
+        "cmd/report/main.go",
+        "package main\n\nimport \"example.com/q/stats\"\n\nfunc main() { stats.Print() }\n",
+    );
+    // the place that the service runs has a weaker score than the report's
+    w(
+        "store/idle.go",
+        "package store\n\nfunc (s *Server) expireIdle() {\n\tif time.Now().UTC().Sub(s.lastSeen) > s.idleTimeout {\n\t}\n}\n\nfunc TestExpireIdle(t *testing.T) {\n\tif time.Now().UTC().Sub(start) > timeout {\n\t}\n}\n",
+    );
+    w(
+        "stats/retry.go",
+        "package stats\n\nconst retryMin = 2 * time.Second\n\nfunc (r *Retrier) retryLease() {\n\tif time.Now().UTC().Sub(r.last) > retryMin {\n\t}\n}\n",
+    );
+    w(
+        "hydo/hydo.yaml",
+        "format: 1\nname: q\nservices:\n  - name: queue\n    cmd: \"/bin/queue serve\"\n  - name: postgres\n    image_ref: postgres:16\nworkload:\n  steps: 12\n",
+    );
+    let (rc, text) = t.hydo(&["rules", "scan", "proj", "--kind", "clock"]);
+    assert_eq!(rc, 0, "{text}");
+    for want in [
+        "\nIt left out 1 test function inside the source files, besides the test files.\n",
+        "\nQueue runs queue (its command), built from cmd/queue and 1 Go package it uses;",
+        "the places in the code that hydo.yaml runs come first",
+        "\n1. store/idle.go:4, in expireIdle [high]\n",
+        "\n   Run by queue (queue).\n",
+        "disk=none | run T=1:-300 N=queue@2-5:loss,30%",
+        "\n2. stats/retry.go:6, in retryLease [high]\n",
+        "\n   No service of hydo.yaml and not the workload runs this code.\n",
+        "<leader>: no service of hydo.yaml runs this code, so no fault of one makes it run.",
+    ] {
+        assert!(text.contains(want), "{want:?}\n{text}");
+    }
+    assert!(!text.contains("idle.go:9"), "{text}");
+    let (rc, text) = t.hydo(&["rules", "scan", "proj", "--kind", "clock", "--json"]);
+    assert_eq!(rc, 0, "{text}");
+    let doc: Value = serde_json::from_str(&text).unwrap();
+    let places = doc["clock"].as_array().unwrap();
+    let idle = places
+        .iter()
+        .find(|p| p["file"] == "store/idle.go")
+        .unwrap();
+    assert_eq!(idle["run_by"], serde_json::json!(["queue"]));
+    assert_eq!(idle["rank"], 1);
+    assert_eq!(doc["tests_left_out"]["functions"], 1);
+}

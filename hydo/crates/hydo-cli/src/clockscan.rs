@@ -927,6 +927,8 @@ struct SrcFile {
     /// the function that holds each line (an index into `funcs`, or None at file level)
     scope: Vec<Option<usize>>,
     funcs: Vec<Func>,
+    /// the test functions and modules inside the file, whose lines are left out of `code`
+    tests: TestItems,
 }
 
 const CONTROL: &[&str] = &[
@@ -1132,6 +1134,240 @@ fn scopes(lang: Lang, code: &[String]) -> (Vec<Option<usize>>, Vec<Func>) {
         }
     }
     (scope, funcs)
+}
+
+// ---------------------------------------------------------------- test code inside a source file
+
+/// What the audit left out of one file as test code (Milestone 324): the functions and the
+/// modules or classes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct TestItems {
+    pub functions: usize,
+    pub modules: usize,
+}
+
+/// The last line of the item that starts at line `start`: where its braces close, or the line
+/// that ends it with `;` before any brace opens. `parens` counts parentheses too (a call such
+/// as JavaScript's `describe("...", () => { ... })`).
+fn item_end(code: &[String], start: usize, parens: bool) -> usize {
+    let mut depth = 0i32;
+    let mut opened = false;
+    for (i, l) in code.iter().enumerate().skip(start) {
+        for c in l.chars() {
+            match c {
+                '{' => {
+                    depth += 1;
+                    opened = true;
+                }
+                '(' if parens => {
+                    depth += 1;
+                    opened = true;
+                }
+                '}' => depth -= 1,
+                ')' if parens => depth -= 1,
+                _ => {}
+            }
+        }
+        if opened && depth <= 0 {
+            return i;
+        }
+        if !opened && l.trim_end().ends_with(';') {
+            return i;
+        }
+    }
+    code.len().saturating_sub(1)
+}
+
+/// The last line of a Python or Ruby block that starts at line `start`: the lines indented
+/// deeper than it.
+fn indent_end(code: &[String], start: usize) -> usize {
+    let ind = indent_of(&code[start]);
+    let mut end = start;
+    for (i, l) in code.iter().enumerate().skip(start + 1) {
+        if l.trim().is_empty() {
+            continue;
+        }
+        if indent_of(l) <= ind {
+            break;
+        }
+        end = i;
+    }
+    end
+}
+
+/// The path of a Rust attribute (`tokio::test` of `#[tokio::test(flavor = "...")]`).
+fn rust_attr(t: &str) -> Option<&str> {
+    let inner = t.strip_prefix("#[")?;
+    let end = inner.find(['(', ']', ' ']).unwrap_or(inner.len());
+    Some(&inner[..end])
+}
+
+/// Whether a Rust attribute marks a test: `#[test]` and the test attributes of other crates
+/// (`#[tokio::test]`, `#[rstest]`, `#[test_case(...)]`, `#[bench]`), and `#[cfg(test)]` or
+/// `#[cfg(all(test, ...))]` (code that only a test build has; `any(test, ...)` is not).
+fn rust_test_attr(t: &str) -> bool {
+    let Some(path) = rust_attr(t) else {
+        return false;
+    };
+    let last = path.rsplit("::").next().unwrap_or(path);
+    if matches!(
+        last,
+        "test" | "rstest" | "test_case" | "bench" | "quickcheck" | "proptest"
+    ) {
+        return true;
+    }
+    let compact: String = t.chars().filter(|c| !c.is_whitespace()).collect();
+    path == "cfg" && (compact.starts_with("#[cfg(test)]") || compact.starts_with("#[cfg(all(test,"))
+}
+
+/// The lines of test code in a source file that is not itself a test file, by each language's
+/// conventions (Milestone 324: the audit ranked a Rust test function in a `#[cfg(test)]` module
+/// first):
+///
+/// - Rust: an item after `#[cfg(test)]` (a `mod tests { ... }`), and a function after `#[test]`
+///   or another crate's test attribute;
+/// - Go: `func TestX(t *testing.T)`, `BenchmarkX` and `FuzzX`;
+/// - Python and Ruby: `def test_...` and `class Test...`;
+/// - Java, Kotlin and C#: a method or class after `@Test` (and JUnit's other test
+///   annotations), `[Test]`, `[Fact]`, `[Theory]`, `[TestMethod]` or `[TestFixture]`;
+/// - JavaScript and TypeScript: `describe(`, `it(` and `test(` blocks, and Vitest's
+///   `if (import.meta.vitest)`;
+/// - C and C++: googletest's `TEST(`, `TEST_F(` and `TEST_P(`.
+fn test_lines(lang: Lang, code: &[String], funcs: &[Func]) -> (Vec<bool>, TestItems) {
+    let mut mask = vec![false; code.len()];
+    let mut items = TestItems::default();
+    let mark = |mask: &mut Vec<bool>, a: usize, b: usize| {
+        for m in mask.iter_mut().take(b + 1).skip(a) {
+            *m = true;
+        }
+    };
+    // the first line of the item after the attributes that start at line `i`
+    let after_attrs = |i: usize, is_attr: &dyn Fn(&str) -> bool| -> Option<usize> {
+        (i..code.len().min(i + 12)).find(|&k| {
+            let t = code[k].trim();
+            !t.is_empty() && !is_attr(t)
+        })
+    };
+    let mut i = 0;
+    while i < code.len() {
+        if mask[i] {
+            i += 1;
+            continue;
+        }
+        let t = code[i].trim();
+        // (start, end, what it counts as: a module or class, a function, or neither)
+        let mut range: Option<(usize, usize, Option<bool>)> = None;
+        match lang {
+            Lang::Rust if rust_test_attr(t) => {
+                let rust_is_attr = |s: &str| s.starts_with("#[");
+                if let Some(s) = after_attrs(i, &rust_is_attr) {
+                    let item = code[s].trim();
+                    let words: Vec<&str> = item
+                        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+                        .filter(|w| !w.is_empty())
+                        .take(4)
+                        .collect();
+                    let kind = if words.iter().any(|w| matches!(*w, "mod" | "impl")) {
+                        Some(true)
+                    } else if words.contains(&"fn") {
+                        Some(false)
+                    } else {
+                        None
+                    };
+                    range = Some((i, item_end(code, s, false), kind));
+                }
+            }
+            Lang::Jvm | Lang::CSharp => {
+                let word = t
+                    .trim_start_matches(['@', '['])
+                    .split(|c: char| !(c.is_ascii_alphanumeric() || c == '.'))
+                    .next()
+                    .unwrap_or("");
+                let last = word.rsplit('.').next().unwrap_or(word);
+                let annotated = (t.starts_with('@') || t.starts_with('['))
+                    && matches!(
+                        last,
+                        "Test"
+                            | "ParameterizedTest"
+                            | "RepeatedTest"
+                            | "TestFactory"
+                            | "TestTemplate"
+                            | "TestMethod"
+                            | "Fact"
+                            | "Theory"
+                            | "TestCase"
+                            | "TestFixture"
+                            | "TestClass"
+                    );
+                if annotated {
+                    let is_attr = |s: &str| s.starts_with('@') || s.starts_with('[');
+                    if let Some(s) = after_attrs(i, &is_attr) {
+                        let class = code[s].contains("class ");
+                        range = Some((i, item_end(code, s, false), Some(class)));
+                    }
+                }
+            }
+            Lang::Js => {
+                let call = ["describe(", "it(", "test(", "describe.", "it.", "test."]
+                    .iter()
+                    .any(|p| t.starts_with(p))
+                    || t.starts_with("if (import.meta.vitest)");
+                if call {
+                    let block = t.starts_with("describe") || t.starts_with("if");
+                    range = Some((i, item_end(code, i, true), Some(block)));
+                }
+            }
+            Lang::C => {
+                if ["TEST(", "TEST_F(", "TEST_P("]
+                    .iter()
+                    .any(|p| t.starts_with(p))
+                {
+                    range = Some((i, item_end(code, i, false), Some(false)));
+                }
+            }
+            Lang::Python | Lang::Ruby => {
+                let class = t
+                    .strip_prefix("class ")
+                    .is_some_and(|r| r.starts_with("Test"));
+                if class {
+                    range = Some((i, indent_end(code, i), Some(true)));
+                }
+            }
+            _ => {}
+        }
+        if let Some((a, b, kind)) = range {
+            mark(&mut mask, a, b);
+            match kind {
+                Some(true) => items.modules += 1,
+                Some(false) => items.functions += 1,
+                None => {}
+            }
+            i = b + 1;
+            continue;
+        }
+        i += 1;
+    }
+    // functions by their names: Go's TestX(t *testing.T), Python's and Ruby's def test_x
+    for f in funcs {
+        if mask[f.start] {
+            continue;
+        }
+        let test = match lang {
+            Lang::Go => {
+                ["Test", "Benchmark", "Fuzz"]
+                    .iter()
+                    .any(|p| f.name.starts_with(p))
+                    && code[f.start].contains("testing.")
+            }
+            Lang::Python | Lang::Ruby => f.name.starts_with("test_") || f.name == "test",
+            _ => false,
+        };
+        if test {
+            mark(&mut mask, f.start, f.end);
+            items.functions += 1;
+        }
+    }
+    (mask, items)
 }
 
 // ---------------------------------------------------------------- taint: what holds a reading
@@ -2572,7 +2808,17 @@ fn find_limit(
 // ---------------------------------------------------------------- the audit
 
 /// Audits every source file under `root`: the matches in path order, and how many files were read.
-pub fn audit(root: &Path) -> (usize, Vec<ClockMatch>) {
+/// What the audit read and found.
+#[derive(Clone, Debug, Default)]
+pub struct Audit {
+    /// The source files read.
+    pub read: usize,
+    pub matches: Vec<ClockMatch>,
+    /// The test code left out of those files (Milestone 324).
+    pub tests: TestItems,
+}
+
+pub fn audit(root: &Path) -> Audit {
     let mut paths = Vec::new();
     crate::rules::walk(root, &mut paths);
     let mut files: Vec<SrcFile> = Vec::new();
@@ -2604,17 +2850,32 @@ pub fn audit(root: &Path) -> (usize, Vec<ClockMatch>) {
         }
         files.push(source_file(rel, lang, &text));
     }
-    let n = files.len();
-    (n, audit_files(&files))
+    let mut tests = TestItems::default();
+    for f in &files {
+        tests.functions += f.tests.functions;
+        tests.modules += f.tests.modules;
+    }
+    Audit {
+        read: files.len(),
+        matches: audit_files(&files),
+        tests,
+    }
 }
 
 fn source_file(rel: String, lang: Lang, text: &str) -> SrcFile {
-    let code = clean(lang, text);
+    let mut code = clean(lang, text);
     let raw: Vec<String> = text
         .split('\n')
         .map(|s| s.trim_end_matches('\r').to_string())
         .collect();
     let (scope, funcs) = scopes(lang, &code);
+    // test code inside the file is not read: neither a match nor a reading (Milestone 324)
+    let (mask, tests) = test_lines(lang, &code, &funcs);
+    for (l, t) in code.iter_mut().zip(&mask) {
+        if *t {
+            l.clear();
+        }
+    }
     SrcFile {
         rel,
         lang,
@@ -2622,6 +2883,7 @@ fn source_file(rel: String, lang: Lang, text: &str) -> SrcFile {
         code,
         scope,
         funcs,
+        tests,
     }
 }
 
@@ -2739,6 +3001,8 @@ pub struct Services {
     /// (`replicaof` and `repl` for Valkey's replicas, `sql` for a SQL store), to rank the code
     /// that those services run first
     pub words: HashSet<String>,
+    /// which code of the tree the services and the workload run (Milestone 324)
+    pub map: crate::clockmap::Mapping,
 }
 
 /// Words of a command line that name no feature.
@@ -2881,6 +3145,62 @@ pub fn services_of(text: &str, name: &str) -> Services {
     s
 }
 
+/// `a`, `a and b`, `a, b and c`.
+pub fn and_words(v: &[String]) -> String {
+    match v {
+        [] => String::new(),
+        [a] => a.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
+/// The services of hydo.yaml that run a place's code, without the workload (None: the map
+/// cannot tell).
+fn services_running(m: &ClockMatch, svcs: &Services) -> Option<Vec<String>> {
+    svcs.map.run_by(&m.file).map(|v| {
+        v.into_iter()
+            .filter(|w| w != crate::clockmap::WORKLOAD)
+            .collect()
+    })
+}
+
+/// Why a place's schedules keep `<service>` or `<leader>` (Milestone 324), when hydo.yaml was
+/// read: the map cannot tell who runs the file, no service runs it, or several do.
+fn placeholder_why(m: &ClockMatch, svcs: &Services) -> Option<String> {
+    if svcs.names.is_empty() {
+        return None;
+    }
+    let (_, ps) = proposals(m, svcs);
+    let ph = ps
+        .iter()
+        .find_map(|p| {
+            let i = p.schedule.find('<')?;
+            let j = p.schedule[i..].find('>')?;
+            Some(p.schedule[i..=i + j].to_string())
+        })
+        .filter(|t| t == "<service>" || t == "<leader>")?;
+    Some(match services_running(m, svcs) {
+        None if svcs.map.programs.is_empty() => format!(
+            "{ph}: the audit cannot tell which service runs {} (it maps the programs of Cargo \
+             packages and Go modules only); name the service of hydo.yaml that runs it",
+            m.file
+        ),
+        None => format!(
+            "{ph}: the audit cannot tell which service runs {}, because no service of hydo.yaml \
+             runs a program that these sources build; name the service that runs this code",
+            m.file
+        ),
+        Some(v) if v.is_empty() => {
+            format!("{ph}: no service of hydo.yaml runs this code, so no fault of one makes it run")
+        }
+        Some(v) => format!(
+            "{ph}: {} run this code ({}): name one of them",
+            and_words(&v),
+            svcs.map.programs_of(&m.file).join(", ")
+        ),
+    })
+}
+
 /// One proposed schedule.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Proposal {
@@ -2985,9 +3305,13 @@ fn role_of(m: &ClockMatch) -> &'static str {
 
 fn fault_for(m: &ClockMatch, svcs: &Services) -> (&'static str, String, &'static str) {
     let one = |v: &[String]| v.last().cloned();
+    // the one service that runs the place's code (Milestone 324)
+    let only = services_running(m, svcs)
+        .filter(|v| v.len() == 1)
+        .map(|v| v[0].clone());
     match role_of(m) {
         "leader" => {
-            let who = svcs.primary_groups.first().map(|g| format!("{g}.primary"));
+            let who = svcs.primary_groups.first().map(|g| format!("{g}.primary")).or(only);
             ("leader", who.unwrap_or_else(|| "<leader>".into()), "the process that holds the lease or lock is killed and comes back, so that another one takes over")
         }
         "replica" => ("replica", one(&svcs.replicas).unwrap_or_else(|| "<replica>".into()), "a replica is killed and comes back, so that it connects again and asks for its data"),
@@ -2995,8 +3319,8 @@ fn fault_for(m: &ClockMatch, svcs: &Services) -> (&'static str, String, &'static
             let db = (svcs.databases.len() == 1).then(|| svcs.databases[0].clone());
             ("database", db.unwrap_or_else(|| "<database>".into()), "the database is killed and comes back, so that its clients connect again")
         }
-        "answer" => ("answer", "<service>".into(), "answers from the service are lost for a while, so that requests time out and are retried"),
-        _ => ("service", "<service>".into(), "the service is killed and comes back, so that this code runs again"),
+        "answer" => ("answer", only.unwrap_or_else(|| "<service>".into()), "answers from the service are lost for a while, so that requests time out and are retried"),
+        _ => ("service", only.unwrap_or_else(|| "<service>".into()), "the service is killed and comes back, so that this code runs again"),
     }
 }
 
@@ -3140,7 +3464,9 @@ pub fn services_near(root: &Path, manifest: Option<&str>) -> Services {
     };
     for c in cands {
         if let Ok(text) = std::fs::read_to_string(&c) {
-            return services_of(&text, &c.to_string_lossy());
+            let mut s = services_of(&text, &c.to_string_lossy());
+            s.map = crate::clockmap::map(root, &c, &text);
+            return s;
         }
     }
     Services::default()
@@ -3263,8 +3589,12 @@ fn targets<'a>(matches: &'a [ClockMatch], svcs: &Services) -> Vec<&'a ClockMatch
         .filter(|m| m.confidence == "high")
         .filter(|m| seen.insert((m.file.clone(), m.function.clone().unwrap_or_default())))
         .collect();
-    // the sort is stable: equal scores keep the path order
-    out.sort_by_key(|m| -rank_score(m, svcs));
+    // the sort is stable: equal scores keep the path order. With a map of what the services
+    // run, the places in that code come first (Milestone 324)
+    out.sort_by_key(|m| {
+        let none = svcs.map.run_by(&m.file).is_some_and(|w| w.is_empty());
+        (none, -rank_score(m, svcs))
+    });
     out
 }
 
@@ -3285,7 +3615,8 @@ pub fn match_json(m: &ClockMatch) -> serde_json::Value {
     })
 }
 
-pub fn json_report(dir: &str, read: usize, matches: &[ClockMatch], svcs: &Services) -> String {
+pub fn json_report(dir: &str, a: &Audit, svcs: &Services) -> String {
+    let (read, matches) = (a.read, &a.matches[..]);
     let t: HashMap<(String, usize), usize> = targets(matches, svcs)
         .iter()
         .enumerate()
@@ -3295,6 +3626,9 @@ pub fn json_report(dir: &str, read: usize, matches: &[ClockMatch], svcs: &Servic
         .iter()
         .map(|m| {
             let mut v = match_json(m);
+            if let Some(who) = svcs.map.run_by(&m.file) {
+                v["run_by"] = who.into();
+            }
             if let Some(rank) = t.get(&(m.file.clone(), m.line)) {
                 v["rank"] = (*rank).into();
                 let (why, ps) = proposals(m, svcs);
@@ -3307,21 +3641,18 @@ pub fn json_report(dir: &str, read: usize, matches: &[ClockMatch], svcs: &Servic
             v
         })
         .collect();
-    serde_json::to_string_pretty(
-        &serde_json::json!({"dir": dir, "files_read": read, "clock": items}),
-    )
-    .unwrap_or_default()
+    let mut doc = serde_json::json!({"dir": dir, "files_read": read, "clock": items});
+    doc["tests_left_out"] =
+        serde_json::json!({"functions": a.tests.functions, "modules": a.tests.modules});
+    if !svcs.names.is_empty() {
+        doc["services_run"] = svcs.map.words().into();
+    }
+    serde_json::to_string_pretty(&doc).unwrap_or_default()
 }
 
-pub fn text_report(
-    dir: &str,
-    read: usize,
-    matches: &[ClockMatch],
-    svcs: &Services,
-    max: usize,
-    all: bool,
-) -> String {
+pub fn text_report(dir: &str, a: &Audit, svcs: &Services, max: usize, all: bool) -> String {
     use std::fmt::Write;
+    let (read, matches) = (a.read, &a.matches[..]);
     let mut o = String::new();
     let ts = targets(matches, svcs);
     let _ = writeln!(
@@ -3329,6 +3660,34 @@ pub fn text_report(
         "hydo rules scan --kind clock: {} functions in {read} source files of {dir} measure a duration with the wall clock",
         ts.len()
     );
+    // what was left out and how hydo.yaml was read (Milestone 324)
+    let t = a.tests;
+    if t.functions + t.modules > 0 {
+        let mut what = Vec::new();
+        if t.functions > 0 {
+            what.push(format!(
+                "{} test function{}",
+                t.functions,
+                if t.functions == 1 { "" } else { "s" }
+            ));
+        }
+        if t.modules > 0 {
+            what.push(format!(
+                "{} test module{} or class{}",
+                t.modules,
+                if t.modules == 1 { "" } else { "s" },
+                if t.modules == 1 { "" } else { "es" }
+            ));
+        }
+        let _ = writeln!(
+            o,
+            "It left out {} inside the source files, besides the test files.",
+            and_words(&what)
+        );
+    }
+    if !svcs.names.is_empty() {
+        let _ = writeln!(o, "{}", svcs.map.words());
+    }
     if ts.is_empty() {
         let _ = writeln!(
             o,
@@ -3356,6 +3715,23 @@ pub fn text_report(
         );
         let _ = writeln!(o, "     {}", m.text);
         let _ = writeln!(o, "   {}", what_it_does(m));
+        match svcs.map.run_by(&m.file) {
+            Some(v) if v.is_empty() => {
+                let _ = writeln!(
+                    o,
+                    "   No service of hydo.yaml and not the workload runs this code."
+                );
+            }
+            Some(v) => {
+                let _ = writeln!(
+                    o,
+                    "   Run by {} ({}).",
+                    and_words(&v),
+                    svcs.map.programs_of(&m.file).join(", ")
+                );
+            }
+            None => {}
+        }
         match m.origin.len() {
             0 => {}
             1 | 2 => {
@@ -3397,6 +3773,9 @@ pub fn text_report(
         for p in &ps {
             let _ = writeln!(o, "     {:<14} {}", p.name, p.schedule);
             let _ = writeln!(o, "     {:<14} {}", "", p.says);
+        }
+        if let Some(w) = placeholder_why(m, svcs) {
+            let _ = writeln!(o, "   {w}.");
         }
     }
     let rest: Vec<&ClockMatch> = matches.iter().filter(|m| m.confidence != "high").collect();
@@ -3561,6 +3940,44 @@ mod tests {
             );
             assert_eq!(m[0].confidence, "high", "{rel}");
         }
+    }
+
+    /// Milestone 324: the test code inside a source file is left out by each language's
+    /// conventions, and the product's code beside it is still read (the audit ranked a Rust test
+    /// function in a `#[cfg(test)]` module first).
+    #[test]
+    fn test_code_inside_a_source_file_is_left_out() {
+        let rust = "fn expired(&self) -> bool {\n    let now = SystemTime::now();\n    now.duration_since(self.last_seen).unwrap() > self.lease_timeout\n}\n\n#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn test_clean_unpartitioned_table() {\n        let now = SystemTime::now();\n        assert!(now.duration_since(t.last_seen).unwrap() > t.lease_timeout);\n    }\n}\n\n#[tokio::test(flavor = \"multi_thread\")]\nasync fn lease_ends() {\n    let now = SystemTime::now();\n    assert!(now.duration_since(l.last_seen).unwrap() > l.lease_timeout);\n}\n";
+        let m = one("src/lease.rs", rust);
+        assert_eq!(
+            m.iter().map(|x| x.line).collect::<Vec<_>>(),
+            vec![3],
+            "{m:#?}"
+        );
+        let cases: &[(&str, &str, usize, (usize, usize))] = &[
+            ("a.go", "package a\n\nfunc expired() bool {\n\treturn time.Now().UTC().Sub(last) > timeout\n}\n\nfunc TestExpired(t *testing.T) {\n\tif time.Now().UTC().Sub(start) > timeout {\n\t}\n}\n", 4, (1, 0)),
+            ("a.py", "def expired(self):\n    if time.time() - self.started > self.timeout:\n        return True\n\ndef test_expired():\n    if time.time() - started > timeout:\n        pass\n\nclass TestLease:\n    def check(self):\n        if time.time() - self.started > self.timeout:\n            pass\n", 2, (1, 1)),
+            ("A.java", "class A {\n  boolean expired() {\n    long now = System.currentTimeMillis();\n    return now - lastHeartbeat > heartbeatTimeoutMs;\n  }\n  @Test\n  void expires() {\n    long now = System.currentTimeMillis();\n    assert now - lastHeartbeat > heartbeatTimeoutMs;\n  }\n}\n", 4, (1, 0)),
+            ("a.ts", "function expired(lock) {\n  return Date.now() - lock.acquiredAt > LOCK_TTL_MS;\n}\nif (import.meta.vitest) {\n  it(\"expires\", () => {\n    expect(Date.now() - lock.acquiredAt > LOCK_TTL_MS).toBe(true);\n  });\n}\n", 2, (0, 1)),
+            ("a.cs", "bool Expired() {\n    return DateTime.UtcNow - lastSeen > timeout;\n}\n[Fact]\nvoid Expires() {\n    Assert.True(DateTime.UtcNow - lastSeen > timeout);\n}\n", 2, (1, 0)),
+            ("b.cc", "int expired(void) {\n    return time(NULL) - last_ping > ping_timeout;\n}\nTEST(Lease, Expires) {\n    EXPECT_TRUE(time(NULL) - last_ping > ping_timeout);\n}\n", 2, (1, 0)),
+        ];
+        for (rel, src, line, (fns, mods)) in cases {
+            let m = one(rel, src);
+            assert_eq!(
+                m.iter().map(|x| x.line).collect::<Vec<_>>(),
+                vec![*line],
+                "{rel}: {m:#?}"
+            );
+            let f = source_file(rel.to_string(), lang_of(rel).unwrap(), src);
+            assert_eq!((f.tests.functions, f.tests.modules), (*fns, *mods), "{rel}");
+        }
+        let f = source_file("src/lease.rs".into(), Lang::Rust, rust);
+        assert_eq!((f.tests.functions, f.tests.modules), (1, 1));
+        // code only a test build has; `any(test, ...)` is not that
+        assert!(rust_test_attr("#[cfg(all(test, feature = \"x\"))]"));
+        assert!(!rust_test_attr("#[cfg(any(test, feature = \"x\"))]"));
+        assert!(!rust_test_attr("#[derive(Debug)]"));
     }
 
     #[test]
