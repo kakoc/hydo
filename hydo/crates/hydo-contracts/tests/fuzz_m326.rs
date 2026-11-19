@@ -155,6 +155,42 @@ fn patterns_take_named_fields_and_two_dots() {
     assert!(parse_expr("matches(r, E::U { .. , x })").is_err());
 }
 
+#[test]
+fn fn_names_a_module_or_a_path_prefix() {
+    use hydo_contracts::fuzz::names_fn;
+    let f = "pkg::codec::hex::encode";
+    for w in [
+        "encode",
+        "hex::encode",
+        "codec::",
+        "codec::hex::",
+        "crate::codec::",
+        "hex::",
+        "pkg::codec::",
+    ] {
+        assert!(names_fn(f, w), "{w}");
+    }
+    for w in ["code", "dec::", "codec", "encode::"] {
+        assert!(!names_fn(f, w), "{w}");
+    }
+    assert!(names_fn("pkg::Ledger::apply", "Ledger::"));
+    // a module's name alone selects its functions when no function has that name
+    let t = TmpDir::new("hydo-contracts-fuzz-m326-module");
+    let (_, rep) = fuzz_m326(t.path(), &["--fn", "units"]);
+    let mut got: Vec<&str> = rep.functions.iter().map(|f| f.function.as_str()).collect();
+    got.sort();
+    assert_eq!(got, ["fuzz-m326::units::unit"], "{rep:?}");
+    assert!(
+        rep.skipped
+            .iter()
+            .any(|s| s.contains("units::unit_misspelt")),
+        "{:?}",
+        rep.skipped
+    );
+    let (_, rep) = fuzz_m326(t.path(), &["--fn", "units::"]);
+    assert_eq!(rep.functions.len(), 1, "{rep:?}");
+}
+
 /// A copy of the fixture at `dir/crate`, with `edit` applied to its `src/lib.rs`.
 fn fixture_copy(dir: &Path, edit: &dyn Fn(String) -> String) -> std::path::PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fuzz-m326");

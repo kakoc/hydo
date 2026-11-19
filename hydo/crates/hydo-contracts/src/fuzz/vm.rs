@@ -310,10 +310,12 @@ fn run_all(o: &Opts) -> Result<i32, String> {
         .iter()
         .map(|s| format!("{} ({}:{}): {}", s.name, s.file.display(), s.line, s.why))
         .collect();
+    let all_names: Vec<&str> = all.iter().map(|f| f.name.as_str()).collect();
+    let want = super::wanted_names(&o.fns, &all_names);
     let (plain, checks) = super::split_checks(all, &sources);
     let mut checks: Vec<Option<Fn>> = checks.into_iter().map(|(c, _)| Some(c)).collect();
     for f in plain {
-        if !super::named(&f, &o.fns) {
+        if !super::named(&f, &want) {
             continue;
         }
         let mut check = None;

@@ -43,7 +43,8 @@ pub const USAGE: &str =
   CRATE_DIR is a package's folder (default .). hydo copies the package to --out DIR (default
   hydo-out/fuzz) and adds a test module there; the project's files stay as they are. A
   function whose test module does not build is reported, and the others run.
-  --fn NAME        fuzz only this function (repeat it for more); a name or its path's end
+  --fn NAME        fuzz only this function (repeat it for more); a name or its path's end,
+                   or a module or a type with `::` after it (`codec::`, `Ledger::`)
   --cases N        inputs per function that keep `requires` (default 1000)
   --seed S         the generator's seed (default 1)
   --target-dir     cargo's build folder (default DIR/target)
@@ -2773,11 +2774,47 @@ impl Opts {
 
 /// Whether the function is the one a `--fn` names: by its name, or by the end of its full name.
 pub(crate) fn named(f: &Fn, want: &[String]) -> bool {
-    want.is_empty()
-        || want.iter().any(|w| {
-            let short = f.name.rsplit("::").next().unwrap_or(&f.name);
-            w == short || w == &f.name || f.name.ends_with(&format!("::{w}"))
+    want.is_empty() || want.iter().any(|w| names_fn(&f.name, w))
+}
+
+/// Whether `w` names the function of the full name `name` (`pkg::codec::encode`): its name,
+/// the end of its path, or, for `w` that ends in `::`, a module or a type of its path
+/// (`codec::`, `crate::codec::`, `Ledger::`; Milestone 326).
+pub fn names_fn(name: &str, w: &str) -> bool {
+    if let Some(m) = w.strip_suffix("::") {
+        let m = m.trim_start_matches("crate::");
+        if m.is_empty() {
+            return true;
+        }
+        let rest = name.split_once("::").map_or(name, |x| x.1);
+        return rest.starts_with(&format!("{m}::"))
+            || name.starts_with(&format!("{m}::"))
+            || name.contains(&format!("::{m}::"));
+    }
+    let short = name.rsplit("::").next().unwrap_or(name);
+    w == short || w == name || name.ends_with(&format!("::{w}"))
+}
+
+/// The `--fn` names as the run takes them (Milestone 326): a name that names no function but a
+/// module or a type of some function's path (`--fn hydo_props`) selects that module's
+/// functions, as `hydo_props::` does, and a line says so.
+pub(crate) fn wanted_names(want: &[String], all: &[&str]) -> Vec<String> {
+    want.iter()
+        .map(|w| {
+            let module = format!("{w}::");
+            if w.ends_with("::")
+                || all.iter().any(|n| names_fn(n, w))
+                || !all.iter().any(|n| names_fn(n, &module))
+            {
+                return w.clone();
+            }
+            eprintln!(
+                "hydo: fuzz: no function is named `{w}`; --fn {w} selects the functions of the \
+                 module `{w}` (as --fn {module} does)"
+            );
+            module
         })
+        .collect()
 }
 
 /// `hydo fuzz`.
@@ -3107,7 +3144,13 @@ fn run_all(o: &Opts) -> Result<i32, String> {
     if !errors.is_empty() {
         return Ok(2);
     }
-    let (fns, mut others): (Vec<Fn>, Vec<Fn>) = fns.into_iter().partition(|f| named(f, &o.fns));
+    let all_names: Vec<&str> = fns
+        .iter()
+        .map(|f| f.name.as_str())
+        .chain(skipped.iter().map(|s| s.name.as_str()))
+        .collect();
+    let want = wanted_names(&o.fns, &all_names);
+    let (fns, mut others): (Vec<Fn>, Vec<Fn>) = fns.into_iter().partition(|f| named(f, &want));
     let checks: Vec<(String, PathBuf, u32, String)> = checks
         .into_iter()
         .map(|(c, of)| {
@@ -3153,12 +3196,7 @@ fn run_all(o: &Opts) -> Result<i32, String> {
         }
         return Ok(0);
     }
-    let wanted = |name: &str| {
-        o.fns.is_empty()
-            || o.fns
-                .iter()
-                .any(|w| name == w || name.ends_with(&format!("::{w}")))
-    };
+    let wanted = |name: &str| want.is_empty() || want.iter().any(|w| names_fn(name, w));
     // with --json, standard output holds only the JSON
     let say = |line: String| {
         if o.json {
