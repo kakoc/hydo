@@ -816,8 +816,15 @@ posted:
   replica for good: `disk=cut | run C=40` (ClickHouse #29778, #53143). With every fsync setting
   on it passes.
 
-In four schedules the guest agent stopped answering after the Keepers lost their quorum (open item
-157).
+One new candidate, not posted (M325, tentative number):
+- A Keeper without a quorum spins on a session that its client closed. The client sends `Close`
+  and shuts its socket down. The handler then stops reading the socket, but its `poll()` asks for
+  `POLLIN`, which the unread FIN gives at once (`KeeperTCPHandler.cpp` lines 610 and 192 to 220).
+  So the thread runs until the session timeout of 30 s. On hvx two such threads of `keeper2` took
+  about a third of the guest's CPU after a ring partition of the Keepers.
+
+Four schedules ended `TIMEOUT workload` because hvx's guest clock nearly stopped under that busy
+work (M319, `guest.exact_tick`).
 
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
@@ -2594,6 +2601,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The four schedules that ended `TIMEOUT workload` after 900 s were the guest's clock, not
       the agent (M319). With `guest.exact_tick` seed 20 ends with a verdict and seed 33 passes.
       Seeds 27 and 40 did not run again (open item 164).
+    - The busy `KeeperHandler` threads of those runs are a ClickHouse candidate (M325): a handler
+      polls the socket of a closed session until the session timeout. It is not reported
+      upstream, and nothing was posted. It was not reproduced outside hydo, because the cause is
+      plain in the code. Seeds 27, 33 and 40 were not checked for the same loop.
     - `hydo explore --configs` with `--no-shrink` or `--schedule` lists no class of failure and
       says that no combination failed, although 6 of 24 and 2 of 3 runs failed. An exploration's
       failures are recorded only when they are shrunk.
@@ -2729,9 +2740,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The Mac and KVM guest kernels were not checked for the same gap.
     - Seeds 27 and 40 of the ClickHouse explorations did not run with the key. Seed 33 ran once
       with it and passed, but not without it on the same image.
-    - Two `KeeperHandler` threads of a Keeper stayed runnable, mostly in the kernel, while its
-      client port held a connection in `CLOSE_WAIT` after the Keepers lost their quorum. The
-      cause in ClickHouse was not traced, and nothing was reported.
     - A run whose guest clock falls far behind the virtual TSC still ends only at the engine's
       wall limit, as `TIMEOUT workload`. Neither the verdict nor the diagnosis says that the
       guest's clock fell behind.
@@ -3655,6 +3663,11 @@ build machine, before 2026-10-13.
   only, and never show it. At the limit the commands say so in one line, with the reset time
   and how to lift it, and exit 4; the doctor stays quiet. One request per command, and a kept
   answer of 10 minutes. Nothing recorded moved
+- M325 (tentative number): the busy Keeper threads of the ClickHouse runs are a ClickHouse
+  candidate. A server that gives up its session sends `Close` and closes its socket. A Keeper
+  without a quorum cannot answer, and its handler polls the closed socket without a pause until
+  the session timeout of 30 s. On hvx with `guest.exact_tick` two such threads of `keeper2` took
+  a third of the guest's CPU. No report found; nothing posted. Nothing recorded moved
 
 ## Where to look
 

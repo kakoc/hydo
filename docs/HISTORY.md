@@ -18280,3 +18280,51 @@ was not reached during the check, so the line at the limit ran against the fake 
 
 Nothing recorded moved. `hydo update --help`, `hydo skill --help` and `hydo guide update` have
 new text.
+
+## Milestone 325 (tentative number): the busy Keeper threads of the ClickHouse runs
+
+Milestone 319 found that two `KeeperHandler` threads of a Keeper kept hvx's guest busy in the
+ClickHouse runs that never ended, while the Keeper's client port held a connection in
+`CLOSE_WAIT`. It did not trace their cause (open items 157 and 164). The threads are ClickHouse
+Keeper's own loop: a candidate, not reported upstream, and not posted.
+
+**The run.** Seed 20 of exploration E2, `disk=cut dseed=6711e6dcb424bc7a | run
+K=keepers.minority.7@36+3 N=keepers.ring@12-21:loss,100% C=40 P=replicas.all@6+3
+W=9580664b,p4,q2,r250`, ran with `hydo run` on hvx from a tree of its own on the bare-metal
+machine. The image was M319's `img-x1`, built from the committed example with `--set
+fsync=insert`, so with `guest.exact_tick`. The run gave M319's `VIOLATION [converge]` with
+`fp=2be840e3c29f36dd`, `inh=50392a9848e8a956` and `ctl=897572c6272fa6fd`, in 419 s of host time.
+
+**What `hydo inspect` showed.** The partition began at stop 292118. Sessions at stops 518232 and
+438127 found every handler asleep. A session at stop 364112 found the loop on `keeper2`:
+
+- `ch1` and `ch2` had sessions 3 and 4 on `keeper2`'s handler threads 333 and 338. Both servers
+  ended them at 00:03:14.02 of the guest's clock, after `Connection loss` answers.
+- Threads 333 and 338 were runnable in every sample and ran 9.2 ms and 8.2 ms in 50 ms of guest
+  time. All 100 samples of each kernel stack had `exit_to_user_mode_prepare` on top.
+- `keeper2`'s port 9181 held both connections in `CLOSE_WAIT`, each with the FIN unread and no
+  data. Each Keeper's port also held 218 to 231 connections in `TIME_WAIT` from the servers'
+  repeated connects.
+- `mntr`, `stat` and `cons` answered `This instance is not currently serving requests`.
+- In steps of 5 s, the loop went on at 00:03:40 and was over at 00:03:46, 30 s after the
+  `Close`. The threads then had 2.90 s and 2.92 s of CPU, 78 % of it system time.
+
+**The cause.** In `src/Server/KeeperTCPHandler.cpp` of v26.10.6.18 the handler reads the socket
+only when `result.has_requests && !close_received` (line 610). After a `Close` request (line 626)
+it waits for the `Close`'s response. Its `poll()` still asks for `POLLIN` on the socket (lines 192
+to 220; Linux builds take the `poll()` branch, because `POCO_HAVE_FD_EPOLL` is private to Poco's
+network library). The client's `ZooKeeper::finalize` sends the `Close` and shuts its socket down
+without waiting (`src/Common/ZooKeeper/ZooKeeperImpl.cpp`, lines 1551 and 1583). The unread FIN
+makes every `poll()` return at once. A Keeper without a quorum cannot answer the `Close`, so the
+loop ends only at the session timeout (line 711). `master` has the same code on 2026-11-19.
+
+**The label.** A ClickHouse candidate. The partition holds only the links between the Keepers,
+and the client closes its own socket, so a real network gives the same loop. The guest's clock was
+not the cause: with the exact tick the loop ended after 30 s of guest time. Without it, the
+loop kept the guest busy past the engine's limit, which M319 described. The cause is plain in the
+code, so it was not reproduced outside hydo. A search of ClickHouse's issues and pull requests
+with 22 phrases found no report. `gh search issues --include-prs` returned nothing for phrases of
+several words on that day, so the search used `gh api search/issues`. The details and the
+searches are in the section "The busy Keeper threads" of the example's RESULTS.md.
+
+Nothing recorded moved, and no tracked code changed.
