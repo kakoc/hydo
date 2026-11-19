@@ -47,7 +47,8 @@ each file. hydo needs an Apple Silicon Mac, or an x86_64 Linux machine where you
 KVM, the support for virtual machines that Linux has built in. Then `hydo doctor` checks the
 machine.
 [docs/INSTALL.md](docs/INSTALL.md) has the release archives and their checksums, and hydo's own
-kernel module for Intel machines.
+kernel module for Intel machines. From the release after 0.4.0 on, `hydo update` updates hydo
+the way you installed it, and its onboarding skill with it.
 
 ## What hydo found in real projects
 

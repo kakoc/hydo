@@ -290,6 +290,7 @@ impl Fixture {
             release_url: self.server.base(),
             release_api: String::new(),
             offline: !online,
+            ..Default::default()
         };
         let opts = Options {
             base: self.server.base(),
@@ -297,6 +298,7 @@ impl Fixture {
             attempts: 3,
             pause: Duration::ZERO,
             verbose: false,
+            timeout: None,
         };
         let mut c = Cache::new(&cfg, "linux", !online, Some(opts));
         c.index = index(&self.a010);
@@ -758,6 +760,7 @@ fn an_http_base_url_off_the_loopback_is_refused() {
         release_url: "http://example.org/releases".into(),
         release_api: String::new(),
         offline: false,
+        ..Default::default()
     };
     let _rm = Rm(cfg.home.clone());
     let c = Cache::new(&cfg, "linux", false, None);
@@ -779,6 +782,7 @@ fn moving_the_bin_link_to_another_version_is_said_first() {
         release_url: String::new(),
         release_api: String::new(),
         offline: true,
+        ..Default::default()
     };
     let _rm = Rm(cfg.home.clone());
     let c = Cache::new(&cfg, "linux", true, None);

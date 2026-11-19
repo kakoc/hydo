@@ -281,6 +281,13 @@ fn update(
             v => todo.push((t.clone(), v)),
         }
     }
+    // Milestone 315: every copy this command saw is registered, so `hydo update` finds it from
+    // anywhere (also a copy made before the registry existed)
+    for t in &targets {
+        if let Some(v) = version_at(t).filter(|_| todo.iter().all(|(x, _)| x != t)) {
+            hydo_agents::copies::record(t, &v);
+        }
+    }
     if todo.is_empty() {
         return Ok(0);
     }
@@ -291,6 +298,7 @@ fn update(
         let src = source.get(&wanted, &work)?;
         for (t, before) in &todo {
             let verb = replace_dir(&src, t, a.w.force).map_err(|e| e.0)?;
+            hydo_agents::copies::record(t, &wanted);
             let was = before
                 .as_ref()
                 .map(|v| format!("{v} -> "))

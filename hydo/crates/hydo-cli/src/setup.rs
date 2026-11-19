@@ -1207,7 +1207,7 @@ fn print_add_to_path(bin: &Path, p: Platform) -> i32 {
     0
 }
 
-fn platform_name(p: Platform) -> &'static str {
+pub fn platform_name(p: Platform) -> &'static str {
     match p {
         Platform::Linux => "linux",
         Platform::Mac => "mac",

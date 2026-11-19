@@ -49,5 +49,27 @@ hydo doctor
 
 ## Upgrading
 
-Upgrade the same way you installed (`brew upgrade hydo`, or the newer tarball's `install.sh`),
-then run `hydo --version` and `hydo doctor` again. Images built by an older hydo keep working.
+From the hydo release after 0.4.0 on, one command updates hydo, the way it was installed, and
+every copy of this skill. Ask the user first, saying what `hydo update --check` printed:
+
+```sh
+hydo update --check     # what is newer; changes nothing (exit status 3: something is newer)
+hydo update --yes       # update hydo and the skill
+```
+
+hydo 0.4.0 and older have no `hydo update` (they print the usage text). Upgrade such a hydo once
+by hand, the same way it was installed:
+
+- Homebrew: `brew update && brew upgrade kakoc/tap/hydo`.
+- cargo: `cargo install hydo --locked`, then `hydo setup`.
+- The release archive: download only this platform's `hydo-<mac|linux>-<version>.tar.gz` and
+  `SHA256SUMS` from https://github.com/kakoc/hydo/releases (not the `-sources.tar.gz` archives,
+  which hold third-party sources and are large), check the archive (`shasum -a 256 -c
+  --ignore-missing SHA256SUMS` on a Mac, `sha256sum -c --ignore-missing SHA256SUMS` on Linux),
+  unpack it, and run its `install.sh`. On Linux add `--no-module` unless the user uses the
+  kernel module.
+
+Then update the skill: `hydo skill update` for its copies, and for Claude Code's plugin `claude
+plugin marketplace update hydo` and `claude plugin update hydo@hydo`. Run `hydo --version` and
+`hydo doctor` again. Images built by an older hydo keep working; the release notes' "Before you
+upgrade" section says when images get new fingerprints and should be built again.

@@ -211,6 +211,10 @@ pub fn cmd_doctor_kvm(ctx: &Ctx) -> i32 {
         "install the Linux release (guest/)",
         false,
     );
+    // Milestone 315: a newer release, at most one look a day (never an error, never slow)
+    if let Some(n) = crate::update::doctor_note(ctx) {
+        println!("{n}");
+    }
     c.summary()
 }
 
@@ -557,6 +561,10 @@ pub fn cmd_doctor_linux(ctx: &Ctx) -> i32 {
             true,
         );
     }
+    // Milestone 315: a newer release, at most one look a day (never an error, never slow)
+    if let Some(n) = crate::update::doctor_note(ctx) {
+        println!("{n}");
+    }
     c.summary()
 }
 
@@ -850,6 +858,10 @@ pub fn cmd_doctor_mac(ctx: &Ctx) -> i32 {
             "free some space",
             true,
         );
+    }
+    // Milestone 315: a newer release, at most one look a day (never an error, never slow)
+    if let Some(n) = crate::update::doctor_note(ctx) {
+        println!("{n}");
     }
     c.summary()
 }

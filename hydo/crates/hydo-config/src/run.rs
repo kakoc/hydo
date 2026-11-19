@@ -135,6 +135,12 @@ pub struct Cache {
     pub release_api: String,
     /// `HYDO_OFFLINE` set and not `0`: never use the network. Default off.
     pub offline: bool,
+    /// `HYDO_UPDATE_CHECK`: `hydo doctor` looks for a newer release once a day; `0` turns it
+    /// off. Default on.
+    pub update_check: bool,
+    /// `CLAUDE_CONFIG_DIR`: Claude Code's configuration folder, which `hydo update` also
+    /// updates; None (unset or empty): only the folders found in the home directory.
+    pub claude_config_dir: Option<PathBuf>,
 }
 
 impl Cache {
@@ -150,6 +156,8 @@ impl Cache {
                 .nonempty(HYDO_RELEASE_API)
                 .unwrap_or_else(|| RELEASE_API.to_string()),
             offline: e.set_not_0(HYDO_OFFLINE),
+            update_check: e.not_0(HYDO_UPDATE_CHECK),
+            claude_config_dir: e.path_nonempty(CLAUDE_CONFIG_DIR),
         }
     }
 }

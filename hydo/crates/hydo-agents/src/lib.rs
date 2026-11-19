@@ -43,6 +43,7 @@ use std::path::{Path, PathBuf};
 
 use hydo_manifest::py;
 
+pub mod copies;
 pub mod release;
 
 mod embedded {
@@ -708,6 +709,8 @@ pub fn copy_skill(sk: &Skill, dst: &Path, force: bool, out: &mut Out) -> R<()> {
     }
     sk.copy_to(dst, form_of(dst))?;
     let v = sk.version().unwrap_or_else(|| "unknown".into());
+    // Milestone 315: `hydo update` finds the copy again from anywhere
+    copies::record(dst, &v);
     out.put(&format!("hydo: {verb} {} ({SKILL} {v})\n", dst.display()))
 }
 

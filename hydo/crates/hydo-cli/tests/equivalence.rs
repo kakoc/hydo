@@ -383,6 +383,8 @@ fn doctor_needs_no_python() {
         let o = Command::new(root.join("bin/hydo"))
             .env("HYDO_CLI_PLATFORM", plat)
             .env("PATH", "/usr/bin:/bin")
+            // Milestone 315: no look for a newer release from a test
+            .env("HYDO_UPDATE_CHECK", "0")
             // the hvx doctor, also on a machine whose only engine is KVM (0.3.1 picks it)
             .env("HYDO_BACKEND", "hvx")
             .arg("doctor")
@@ -429,6 +431,8 @@ fn the_machine_engine_is_chosen() {
         let mut c = Command::new(root.join("bin/hydo"));
         c.env("HYDO_CLI_PLATFORM", "linux")
             .env("PATH", "/usr/bin:/bin")
+            // Milestone 315: no look for a newer release from a test
+            .env("HYDO_UPDATE_CHECK", "0")
             .env("HYDO_CLI_HOST_ROOT", host)
             .env("HYDO_OFFLINE", "1")
             .env_remove("HYDO_BACKEND")
@@ -509,6 +513,8 @@ fn no_hvx_device_is_explained() {
 /// into the cache, and a missing release file (here the KVM guest kernel, which the release
 /// ships since 0.2.0) is reported with the one command that gets it. Until this test the KVM
 /// check asked the install cache, which downloaded the whole Linux release archive (64 MB).
+/// (The doctor's daily look for a newer release, Milestone 315, reads only the small release
+/// list of `HYDO_RELEASE_API`; it is off here, and `tests/update.rs` tests it.)
 #[test]
 fn doctor_never_fetches() {
     use std::net::TcpListener;
@@ -525,6 +531,8 @@ fn doctor_never_fetches() {
         let o = Command::new(root.join("bin/hydo"))
             .env("HYDO_CLI_PLATFORM", plat)
             .env("PATH", "/usr/bin:/bin")
+            // Milestone 315: no look for a newer release from a test
+            .env("HYDO_UPDATE_CHECK", "0")
             .env("HYDO_HOME", &home)
             .env("HYDO_RELEASE_URL", &url)
             .env_remove("HYDO_OFFLINE")
