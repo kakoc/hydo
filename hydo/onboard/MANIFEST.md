@@ -410,9 +410,10 @@ What the build does:
   (arm64); timestamps are normalised like every other file (fixed mtime, zeroed
   ctime/atime/crtime). Two builds from the same image file are byte-identical; the files
   under `/oci/<service>` depend only on the image's content (`image.json` also records where it
-  came from). Device nodes, FIFOs and extended
-  attributes (file capabilities) in layers are skipped; a path containing `"`, `\` or a newline
-  is refused.
+  came from). A FIFO in a layer (one that `mkfifo` made in the image's build) is a FIFO in
+  the root, with its owner and mode (Milestone 316; before, it was skipped). Device nodes and
+  extended attributes (file capabilities) in layers are skipped; a path containing `"`, `\` or
+  a newline is refused.
 - **Architecture:** the image config's `architecture` must match the build (`amd64` for the
   default x86_64 build, `arm64` for `--arch arm64`); anything else is refused with an error.
 - Inside the image: `/etc/hydo/oci/<service>/run` (the launcher), `exec` (used by `hydo-oci`),
@@ -2784,8 +2785,8 @@ image keeps working after hydo is upgraded").
   refuses a guest that does not fit.
 - Images are files on the build machine (no registry pulls); one root per image service, not
   a merged root (with `root.share_images: true`, services of one image share its unpacked
-  tree; it is opt-in because it changes the image's bytes); no xattrs/capabilities, devices or
-  FIFOs from layers; no zstd layers.
+  tree; it is opt-in because it changes the image's bytes); no xattrs/capabilities or devices
+  from layers (FIFOs since Milestone 316); no zstd layers.
 - The guest console keeps 64 KiB per VM on hvx (the kernel module's buffer; `hydo run` warns
   when a run wrote more) and 4 MiB on the KVM engine and the Mac: a workload that prints every
   acknowledged id should print short ids, or the done marker can be lost.
