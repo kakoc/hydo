@@ -2854,6 +2854,12 @@ pub fn main(args: &[String]) -> i32 {
     }
 }
 
+/// `hydo fuzz` without `--help`, with the message of a run that could not start as its error
+/// (exit status 2).
+pub fn try_main(args: &[String]) -> Result<i32, String> {
+    run_all(&opts(args)?)
+}
+
 /// Where each harness module stands in the copy: its function's index, the file, the line and
 /// the first and last columns (1-based characters, as rustc counts).
 pub(crate) struct Placed {
@@ -3124,21 +3130,43 @@ fn bare_failure(
         ),
         Some(false) => format!(
             "the crate does not build in the {profile} profile (`cargo test --no-run` fails \
-             without hydo too), so no function can be fuzzed{}: {}",
+             without hydo too), so no function can be fuzzed{}{}: {}",
             if e.first_error().contains("is never used") {
                 " (a function that only `hydo fuzz` calls is unused in the crate's own tests, \
                  and the crate denies warnings: mark it `#[allow(dead_code)]`)"
             } else {
                 ""
             },
+            why::first_place(e, copy)
+                .map(|p| format!("; the first error is at {p}"))
+                .unwrap_or_default(),
             e.text
         ),
-        None => format!(
-            "hydo's copy of the crate does not build without hydo's harness, so no function can \
-             be fuzzed; hydo could not build the crate apart to tell whether the crate or the \
-             copy is the cause: {}",
-            e.text
-        ),
+        // a workspace member without a lock file (Milestone 326): name the member, the
+        // workspace, the first error's place in the user's files, and the command that tells
+        None => {
+            let at = match why::first_place(e, copy) {
+                Some(p) => format!(
+                    " at {p}, in the crate's own code, which hydo's copy keeps as it is (an \
+                     error in the crate's test module is such an error)"
+                ),
+                None => String::new(),
+            };
+            let root = pkg.workspace_root.display();
+            format!(
+                "hydo's copy of the crate does not build without hydo's harness, so no \
+                 function can be fuzzed. The first error is `{}`{at}. The crate is the member \
+                 `{}` of the workspace at {root}, which has no Cargo.lock, so hydo could not \
+                 build the crate apart to tell whether the crate or hydo's copy is the cause: \
+                 run `cargo test -p {} --no-run` in {root} to see whether the crate builds \
+                 there, or `cargo generate-lockfile` there so that hydo can tell. cargo's \
+                 output: {}",
+                e.first_error(),
+                pkg.name,
+                pkg.name,
+                log.display()
+            )
+        }
     }
 }
 

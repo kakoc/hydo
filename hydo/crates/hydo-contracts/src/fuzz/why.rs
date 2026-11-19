@@ -254,6 +254,16 @@ fn user_place(file: &str, line: u32, copy: &Path) -> String {
     format!("{}:{line}", rel.display())
 }
 
+/// The place of a failed build's first error in the user's files (`src/lib.rs:120`), when the
+/// compiler names one in the package (Milestone 326).
+pub(crate) fn first_place(e: &super::cargo::BuildFail, copy: &Path) -> Option<String> {
+    let s = e.errors.first()?.primary.as_ref()?;
+    let p = Path::new(&s.file);
+    let rel = p.strip_prefix(copy).unwrap_or(p);
+    (rel.is_relative() && !s.file.contains("/.cargo/") && !s.file.starts_with("/rustc/"))
+        .then(|| user_place(&s.file, s.line, copy))
+}
+
 /// One error as the user reads it: its first line, the cause, its labels and the compiler's
 /// help.
 fn describe(f: &Fn, d: &Diag, pl: Option<&Placed>, copy: &Path) -> Vec<String> {

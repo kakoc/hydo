@@ -230,6 +230,50 @@ fn names_resolve_through_glob_imports_and_renamed_reexports() {
     }
 }
 
+#[test]
+fn an_error_in_a_workspace_members_test_module_names_the_member_and_the_workspace() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m326-member");
+    let ws = t.path().join("ws");
+    std::fs::create_dir_all(ws.join("member/src")).unwrap();
+    std::fs::write(
+        ws.join("Cargo.toml"),
+        "[workspace]\nmembers = [\"member\"]\nresolver = \"2\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        ws.join("member/Cargo.toml"),
+        "[package]\nname = \"the-member\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        ws.join("member/src/lib.rs"),
+        "// hydo: ensures result == x\npub fn id(x: u8) -> u8 {\n    x\n}\n\n#[cfg(test)]\nmod \
+         tests {\n    #[test]\n    fn t() {\n        let _y: u8 = \"not a number\";\n    }\n}\n",
+    )
+    .unwrap();
+    let out = t.path().join("out");
+    let args: Vec<String> = vec![
+        ws.join("member").to_string_lossy().into(),
+        "--out".into(),
+        out.to_string_lossy().into(),
+    ];
+    let why = hydo_contracts::fuzz::try_main(&args).unwrap_err();
+    assert!(
+        why.contains("the member `the-member` of the workspace at"),
+        "{why}"
+    );
+    assert!(
+        why.contains(&ws.canonicalize().unwrap().display().to_string()),
+        "{why}"
+    );
+    assert!(
+        why.contains("at src/lib.rs:10, in the crate's own code"),
+        "{why}"
+    );
+    assert!(why.contains("cargo test -p the-member --no-run"), "{why}");
+    assert!(!ws.join("Cargo.lock").exists());
+}
+
 /// A copy of the fixture at `dir/crate`, with `edit` applied to its `src/lib.rs`.
 fn fixture_copy(dir: &Path, edit: &dyn Fn(String) -> String) -> std::path::PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fuzz-m326");
