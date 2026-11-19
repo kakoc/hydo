@@ -570,28 +570,38 @@ fn closure_param(
 
 /// A parameter's refusal, with what to write when the type needs a `build` line: the
 /// parameter's own type, or for a list the type that the reason names.
-fn refusal(what: &str, t: &TyAst, why: String) -> String {
+fn refusal(what: &str, t: &TyAst, why: String, items: &rust::Items) -> String {
     let mut base = t;
     while let TyAst::Ref(_, x) = base {
         base = x;
     }
+    // the parameter's own type, else for a list or another container the type that the reason
+    // names
+    let container = matches!(base, TyAst::Path(s, _) if s.last().is_some_and(|l| {
+        matches!(l.as_str(), "Vec" | "Option" | "Box" | "Rc" | "Arc" | "Result")
+    }));
     let named = matches!(base, TyAst::Path(..))
         .then(|| base.text())
+        .filter(|_| !container)
         .or_else(|| {
             why.strip_prefix("hydo cannot generate a value of `")
                 .and_then(|r| r.split('`').next())
                 .map(str::to_string)
         })
         .filter(|n| !n.is_empty() && !why.contains("// hydo: build"));
-    if let Some(n) = named {
-        let ty = rust::type_key(&n);
-        format!(
-            "{what}: {why}; a `// hydo: build {ty} from <constructor>(<name>: <type>, ...)` line \
-             names a function that builds one"
-        )
-    } else {
-        format!("{what}: {why}")
+    let Some(n) = named else {
+        return format!("{what}: {why}");
+    };
+    let ty = rust::type_key(&n);
+    // a structure of the crate: its public constructor (Milestone 326)
+    if items.structs.contains_key(&ty) {
+        let path = n.split('<').next().unwrap_or(&n).trim();
+        return format!("{what}: {why}; {}", rust::build_advice(items, path, &ty));
     }
+    format!(
+        "{what}: {why}; a `// hydo: build {ty} from <constructor>(<name>: <type>, ...)` line \
+         names a function that builds one"
+    )
 }
 
 fn read_fn(
@@ -773,7 +783,8 @@ fn read_fn(
             Owner::Trait(..) => format!("`self` (`with Self = {}`)", t.text()),
             _ => "`self`".to_string(),
         };
-        ty.generable().map_err(|why| refusal(&what, t, why))?;
+        ty.generable()
+            .map_err(|why| refusal(&what, t, why, items))?;
         let inner = matches!(t, TyAst::Ref(..)).then(|| rust::pass_of(t));
         let pass = match r {
             Receiver::Value => rust::pass_of(t),
@@ -796,7 +807,7 @@ fn read_fn(
             None => res.resolve(t),
         };
         ty.generable()
-            .map_err(|why| refusal(&format!("the parameter `{n}`"), t, why))?;
+            .map_err(|why| refusal(&format!("the parameter `{n}`"), t, why, items))?;
         let (pass, inner) = passes(t);
         params.push(harness::Param {
             name: n.clone(),

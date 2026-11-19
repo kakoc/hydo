@@ -107,6 +107,21 @@ pub mod bits {
         n: u8,
     }
 
+    /// A value with a `read` line and no `build` line, as percent-encoding's `AsciiSet`.
+    pub struct Set {
+        mask: u8,
+    }
+
+    impl Set {
+        pub fn from_mask(mask: u8) -> Set {
+            Set { mask }
+        }
+
+        pub fn mask(&self) -> u8 {
+            self.mask
+        }
+    }
+
     impl Bare {
         pub fn n(&self) -> u8 {
             self.n
@@ -127,6 +142,12 @@ pub fn d_of(d: bits::D) -> u8 {
 // hydo: ensures result == 0 || result > 0
 pub fn bare_of(b: &bits::Bare) -> u8 {
     b.n()
+}
+
+// hydo: read bits::Set as u8 by mask()
+// hydo: ensures result == s
+pub fn set_of(s: &bits::Set) -> u8 {
+    s.mask()
 }
 
 // ---------------------------------------------------------------- the bit operators

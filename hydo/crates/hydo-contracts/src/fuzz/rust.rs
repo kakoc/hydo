@@ -1168,6 +1168,15 @@ pub fn build_advice(items: &Items, path: &str, name: &str) -> String {
             t => t,
         };
         let x = t.text();
+        let x = [
+            "alloc::vec::",
+            "std::vec::",
+            "alloc::string::",
+            "std::string::",
+        ]
+        .iter()
+        .find_map(|p| x.strip_prefix(p))
+        .map_or(x.clone(), str::to_string);
         let plain = [
             "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize",
             "bool", "f32", "f64", "String",
@@ -1193,6 +1202,9 @@ pub fn build_advice(items: &Items, path: &str, name: &str) -> String {
         }
     }
     reads.sort();
+    if items.reads.contains_key(name) {
+        reads.clear();
+    }
     let read = match reads.first() {
         Some((_, r)) => format!(", and {r} for a clause that reads the value"),
         None => String::new(),
@@ -1757,10 +1769,8 @@ impl FTy {
             }
             FTy::Built { ty, build, .. } => match build {
                 Some(c) => c.args.iter().try_for_each(|(_, t, _)| t.generable()),
-                None => Err(format!(
-                    "hydo cannot generate a value of `{ty}`: a `// hydo: build {ty} from \
-                     <constructor>(<name>: <type>, ...)` line names how to build one"
-                )),
+                // the refusal adds the `build` line to write (Milestone 326)
+                None => Err(format!("hydo cannot generate a value of `{ty}`")),
             },
             _ => Ok(()),
         }

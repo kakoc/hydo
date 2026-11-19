@@ -388,6 +388,13 @@ fn a_private_field_names_the_build_line_with_the_crates_constructor() {
     let b = why("::bare_of");
     assert!(b.contains("the crate has none that hydo can call"), "{b}");
     assert!(b.contains("`// hydo: read Bare as u8 by n()`"), "{b}");
+    // a type with a `read` line and no `build` line, as percent-encoding's `AsciiSet`
+    let s = why("::set_of");
+    assert!(
+        s.contains("write `// hydo: build Set from bits::Set::from_mask(mask: u8)`"),
+        "{s}"
+    );
+    assert!(!s.contains("hydo: read"), "{s}");
     // the proposed lines work as written
     let line = w
         .split("write `")
