@@ -18328,3 +18328,133 @@ several words on that day, so the search used `gh api search/issues`. The detail
 searches are in the section "The busy Keeper threads" of the example's RESULTS.md.
 
 Nothing recorded moved, and no tracked code changed.
+
+## Milestone 324 (tentative number): three gaps of a user's onboarding with 0.4.0
+
+A user onboarded a project of their own with hydo 0.4.0 and reported three gaps. The project is
+private, so each gap was reproduced with public sources, made-up images, and the repository's
+examples. Each fix is its own commit. None moves a recorded value, and the fingerprint epoch
+stays 5.
+
+**1. Identical images copied once per service.** Four services of one 1.2 GB image got four
+roots in the initramfs (`image sha256:418c… -> /oci/scheduler`, `/oci/executor_1`, and so on), a
+2.0 GB `cpio.gz`, and roots that did not fit in the Mac's guest RAM. `root.share_images: true`
+shares one tree between services of one image since Milestone 287, but `hydo compose` did not
+propose it (open item 147).
+
+- `hydo compose`, and `hydo k8s` through it, writes `root.share_images: true` when two or more
+  services run one image. The key is the image's digest for each architecture, because one
+  manifest names one config digest, and hydo-build shares a tree by the config digest. An
+  image not resolved to a digest is keyed by its file. A comment names the services of each
+  image and says why.
+- `hydo build` and `hydo build --check` estimate each image's unpacked size from its layers
+  without unpacking them (`Image::unpacked_bytes`): a plain layer's size, and a gzip layer's own
+  record of its size in its last 4 bytes. They warn, with the estimate in MiB, in two cases. On
+  the Mac, when the roots exceed half of `guest.ram_mib`: the initramfs root is a tmpfs, and
+  Linux gives a tmpfs half of the RAM. On hvx, when the root partition (1.3 times its content,
+  as the build sizes it) and the data disk exceed the 4,096 MiB that the engine takes
+  (`HVX_DISK_MAX`, which the ClickHouse onboarding of Milestone 311 met). The warning names
+  `root.share_images` when services share an image. On the Mac it also names `guest.ram_mib`,
+  or `guest.root: disk` when 8,192 MiB is not enough, and on hvx `data.size_mib`.
+
+The proof on this Mac, with no VM: a `docker save` archive of one image whose gzip layer holds
+1,200 MiB of zeros, and a `hydo.yaml` of four services of it with `guest.ram_mib: 4096`.
+`hydo build hydo.yaml --check` printed:
+
+```text
+hydo-build: warning: the image services' roots need about 4804 MiB unpacked (scheduler,
+executor_1, executor_2 and executor_3: 1201 MiB each), and on the Mac engine the root lives in
+the guest's RAM, where Linux gives it at most half of guest.ram_mib (2048 of 4096 MiB): the
+guest stops at boot with `Initramfs unpacking failed`. To fix it: scheduler, executor_1,
+executor_2 and executor_3 run one image: root.share_images: true unpacks it once, 1201 MiB in all
+```
+
+The test `hydo-build::root_fit` checks both engines' limits with and without sharing, and that a
+48 MiB layer's estimate is its tar's size. The change of `hydo compose`'s output moves no recorded
+value: a manifest that `hydo compose` writes is input, and the examples' Compose-made manifests
+were not written again. The importer's goldens were re-recorded for the new lines only: 28 cases
+of `tests/golden.json` (the unit projects anchors, health, cluster and restart, and Mastodon and
+Sentry) and `tests/golden/k8s-cluster.yaml`. Docker's voting app has no shared image and did not
+change.
+
+**2. An exploration keeps no run directory for its failures.** `hydo inspect diagnose
+hydo-out/explore` said `no-run: ./result.json: No such file`, and the user replayed the minimal
+schedule by hand with `hydo run "<schedule>" --out <dir>`.
+
+- `report.md` gives each minimal schedule the line "a run directory for `hydo inspect`": the
+  "by hand" command, with `--backend hvx` on hvx, and `--out <exploration>/runs/seed-<n>` by the
+  seed the failure came from. The folder comes from the exploration's command line in
+  `exploration.json`, so `hydo report --details` prints the same line.
+- `hydo report`'s problem text gives each failing problem two lines, `Why it failed: hydo
+  inspect diagnose <dir> --problem N` and `A run directory of it: hydo run [--backend kvm|hvx]
+  --image <image> "<schedule>" --out <dir>/runs/seed-<n>`. The command names the image and the
+  engine, so it runs from any folder; the Mac has one engine and takes no `--backend`.
+- `hydo inspect diagnose <explore dir> [--problem N] [--run]` takes problem N as `hydo report`
+  numbers it (default 1). It reads, in this order: the run directory that the command made; the
+  explorer's replay of a run that stopped with an error (`replays/<tag>/`, Milestone 247); and
+  the exploration's own control transcripts of the run (`consoles/<tag>.control.jsonl`, the
+  minimal schedule's first confirmation when hydo shrank it). With none of them it names the
+  command, and `--run` runs it once into that folder and diagnoses the result. A problem of
+  error lines, a number past the last problem, and `--problem` on a run directory are refused
+  with the command to use.
+
+The test `hydo::inspect_explore` runs every path on the scripted exploration of
+`tests/fixtures/report/scripted-explore`, with the Redis run of `tests/fixtures/report/redis` as
+the files a real run leaves, and `--run` through the scripted engine. The explorer's documents
+did not change (`exploration.json` and the event stream). Goldens re-recorded for the new lines
+only:
+
+- `tests/golden/report/exploration.txt`: 4 lines.
+- 4 answers of `tests/golden/cli.jsonl`: `hydo report` of the composed exploration, now longer
+  than 4 KiB and so kept as a digest.
+- `report.md` of 19 scenarios of `hydo-explore`'s `fake_engine`: one line per minimal schedule.
+  `freeze_call` and `protocol_cover` became longer than 4 KiB and are kept as digests.
+
+Before the re-recording, the old goldens matched the code before the change.
+
+**3. The clock audit's noise.** The user's `hydo rules scan --kind clock` ranked a Rust test
+function `[high]` (`test_clean_unpartitioned_table` in a `#[cfg(test)]` module). It also ranked
+places in a program that no service of the manifest runs, and its schedules kept `<service>`
+although `hydo/hydo.yaml` existed.
+
+- Test code inside a source file is left out by each language's conventions:
+  - Rust: an item after `#[cfg(test)]` or `#[cfg(all(test, ...))]`, and a function after
+    `#[test]` or another crate's test attribute (`#[tokio::test]`, `#[rstest]`).
+  - Go: `func TestX(t *testing.T)`, `BenchmarkX` and `FuzzX`.
+  - Python and Ruby: `def test_...` and `class Test...`.
+  - Java, Kotlin and C#: JUnit's and .NET's test annotations.
+  - JavaScript and TypeScript: `describe(`, `it(` and `test(` blocks, and Vitest's
+    `if (import.meta.vitest)`.
+  - C and C++: googletest's `TEST(`.
+  Its lines are neither places nor readings, and the report's head counts what it left out.
+- With a manifest, the audit maps the code to the programs that the services and the workload
+  run (`hydo-cli/src/clockmap.rs`). A Cargo binary comes with the packages of the tree that it
+  depends on, dev-dependencies left out. A Go main package comes with the packages of its module
+  that it imports. A service runs a program that a command of its `entrypoint` and `cmd` starts
+  (with the image's, from `hydo-compose.lock.json`), or its `setup` or `ready`. Failing those, it
+  runs a program named like its image. The places in the mapped code come first. The head says
+  how the audit mapped them, each place says who runs it, and `--json` gives `run_by`.
+- A schedule names the one service that runs a place's code instead of `<service>` or
+  `<leader>`. When several services run it, none does, or the map cannot tell, a line under the
+  schedules says why the placeholder stays.
+
+The proof used the tagged sources of Milestone 248's projects and TiKV v8.5.8, downloaded from
+GitHub, each with its example's `hydo/hydo.yaml`:
+
+| project | the head of the report | the known place, rank before and after |
+|---|---|---|
+| Valkey 9.1.3 | C is not mapped: ranked by words alone | `refreshGoodReplicasCount` 2 and 2, `shouldStartChildReplication` 4 and 4 |
+| Temporal 1.32.2 | `temporal` runs `server` (the image's name), built from `cmd/server` and 293 Go packages | `reconnect` 1 and 1 |
+| River v0.51.2 | the workers run `riverq`, the example's own program, which River's tree does not build | `river_leader.sql` 2 and 2 |
+| TiKV v8.5.8 | `tikv1` to `tikv3` run `tikv-server` (the image's entrypoint), built from `cmd/tikv-server` and 60 packages | `test_from_local_time`, a test, ranked 5 before and left out after |
+
+On TiKV the audit left out 223 test functions and 489 test modules, and 3 of its 7 high places
+went. Two were in `#[cfg(test)]` modules. The third, `check_damaged_files`, measures `Instant`,
+and only a test's assignment had made its field a wall-clock reading. The two functions left are
+Azure's credential code, which `tikv-server` links. On Temporal the schedules of the
+places that `temporal` runs name it, as in `K=temporal@2+3`, where the audit wrote `<leader>` and
+`<service>`. The tests are the unit tests `test_code_inside_a_source_file_is_left_out` and
+`clockmap::tests` (a Cargo workspace, a Go module, and a tree without either), and
+`hydo::rules::the_clock_audit_ranks_the_code_that_the_services_run_first`.
+
+**What is left.** Open item 166.

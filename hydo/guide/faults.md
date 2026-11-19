@@ -322,11 +322,16 @@ hydo rules scan --kind clock --json          # every place as JSON, each with it
 
 The audit reads Go, C and C++, Rust, Java and Kotlin, Python, JavaScript and TypeScript, Ruby,
 C# and SQL. It skips test files, examples, and vendored code. It also skips the test code inside
-a source file, by each language's conventions: a Rust `#[cfg(test)]` module and a `#[test]`
-function, a Go `func TestX(t *testing.T)`, Python's `def test_...` and `class Test...`, a Java,
-Kotlin or C# method with `@Test`, `[Fact]` or `[Test]`, a JavaScript `describe(` or `it(`
-block, and googletest's `TEST(`. The report's head counts what it left out. A place is one of
-three shapes:
+a source file, by each language's conventions:
+
+- Rust: a `#[cfg(test)]` module and a `#[test]` function;
+- Go: `func TestX(t *testing.T)`;
+- Python and Ruby: `def test_...` and `class Test...`;
+- Java, Kotlin and C#: a method with `@Test`, `[Fact]` or `[Test]`;
+- JavaScript: a `describe(` or `it(` block;
+- C and C++: googletest's `TEST(`.
+
+The report's head counts what it left out. A place is one of three shapes:
 
 | shape | what the code does | example |
 |---|---|---|

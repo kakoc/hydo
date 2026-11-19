@@ -181,7 +181,8 @@ root:                          # what goes on the read-only root filesystem
   dirs: [/etc/myapp]           # empty directories to create
   share_images: true           # image services with the same image (config digest) share one
                                # unpacked tree, each on its own mount of it with its own /tmp,
-                               # /data and mounts (default false: one copy per service)
+                               # /data and mounts (default false: one copy per service;
+                               # `hydo compose` writes true when services share an image)
   fix_pyc: false               # Python bytecode caches (__pycache__/*.pyc that check their
                                # source's time) get the image's fixed file time, so Python uses
                                # them instead of compiling every module again in every run
@@ -2873,7 +2874,11 @@ image keeps working after hydo is upgraded").
   refuses a guest that does not fit.
 - Images are files on the build machine (no registry pulls); one root per image service, not
   a merged root (with `root.share_images: true`, services of one image share its unpacked
-  tree; it is opt-in because it changes the image's bytes); no xattrs/capabilities or devices
+  tree; it is opt-in because it changes the image's bytes). `hydo build` and `hydo build
+  --check` estimate each image's unpacked size from its layers and warn, with the estimate in
+  MiB, when the roots exceed half of `guest.ram_mib` on the Mac (the initramfs root is a tmpfs,
+  which Linux gives half of the RAM) or when the root partition and the data disk exceed the
+  4,096 MiB that hvx takes (Milestone 324); no xattrs/capabilities or devices
   from layers (FIFOs since Milestone 316); no zstd layers.
 - The guest console keeps 64 KiB per VM on hvx (the kernel module's buffer; `hydo run` warns
   when a run wrote more) and 4 MiB on the KVM engine and the Mac: a workload that prints every
@@ -2936,6 +2941,7 @@ validator before it is written. Example: `examples/compose-voting/` (Docker's ex
 | `restart:`, `deploy.restart_policy` | `restart:` with the same words (see "Restart policies"; `deploy.restart_policy.condition` `none` -> `no`, `any` -> `always`, `on-failure` with `max_attempts` -> `on-failure:<max>`, and it wins over `restart:` as in Compose; its `delay` and `window` are ignored with a warning, hydo waits Docker's own delays); a value that is not a policy is left out with a warning. `restart: "no"` also gives `recovery: false` (not started again after a power cut, as Docker does not restart it after a reboot); every other policy -> started in crash recovery. hydo's kill faults keep their own restart points whatever the policy. |
 | `profiles:` | services in a profile are left out unless `--profile <p>` (as `docker compose up`) |
 | `mem_limit:`, `deploy.resources.limits.memory` | counted in the `guest.ram_mib` guess |
+| several services of one image | `root.share_images: true`, with a comment that names the services of each image (by its digest for each architecture, else by its file). Without it, each service gets its own copy of the image's root, and on the Mac the root lives in the guest's RAM (Milestone 324). The examples' manifests made before keep their own setting. |
 | (images) | `guest.ram_mib`: 256 MiB + a per-image guess (PostgreSQL 384, MySQL/MongoDB 640, Redis 96, JVM services 1024, others 256), at least 1024, at most 8192. `guest.cpu: v3` when an image's linux/amd64 manifest has variant v3/v4 or the image is known to need AVX2 (restatedev/restate); otherwise a commented line to uncomment if a service stops with "invalid opcode". `data.size_mib` from the volumes. |
 | (workload, invariants) | a TODO skeleton that fails loudly (`exit 1` / `exit 2`), so nobody mistakes it for a passing test. The onboarding skill (`hydo guide skill`, `plugin/skills/onboard`) writes the real ones. |
 | `faults:` | all kinds except `freeze` |

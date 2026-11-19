@@ -521,6 +521,20 @@ file again with `hydo-fetch-image docker` and stops at another digest until
 The proof is a registry in the test process and Docker's `registry:2` with htpasswd, never a
 real registry. Reference: `hydo guide workflow`.
 
+**Three gaps of a user's onboarding with 0.4.0 (M324, tentative number).** Each fix is its own
+commit; none moves a recorded value:
+- `hydo compose` writes `root.share_images: true`, with a comment, for services of one image.
+  `hydo build` estimates each image's unpacked size from its layers, also with `--check`. It
+  warns when the roots exceed half of `guest.ram_mib` on the Mac. On hvx it warns when the root
+  and the data disk exceed 4096 MiB (MANIFEST.md, "Limits of v1").
+- `report.md` and `hydo report` print, for each problem, the `hydo run` command that makes its
+  run directory, `runs/seed-<n>` of the exploration's folder.
+  `hydo inspect diagnose <explore dir> --problem N` reads that folder, the explorer's replay, or
+  the exploration's own transcripts, and `--run` makes the folder (`hydo guide inspect`).
+- The clock audit leaves out test code inside source files. It ranks first the code of the
+  Cargo and Go programs that the manifest's services run. Its schedules name the one service
+  that runs a place (`hydo guide faults`).
+
 **Business rules: what found what (M215).** On Formance Ledger, rules over the ledger's own
 state (balances, moves, effective volumes, overdraft, reverts, bulks, the audit log) found
 nothing. A duplicate from a retry without a key, and a payment lost on a lying disk, showed only
@@ -1186,7 +1200,9 @@ and parameters. Each place gets three clock-step schedules. The report ranks one
 and shows the 5 most likely; `--all` and `--json` show every place. The audit found the known lines of
 Valkey, Temporal, and River at their tagged versions. On the Mac engine its schedule for Valkey
 gave the fingerprint of the example's regression for valkey-io/valkey#5406. The skill (2.3.0)
-runs the audit during onboarding and offers the first three places. The guide is the section "Find the durations measured on the
+runs the audit during onboarding and offers the first three places. Since M324 it leaves out
+test code inside source files and ranks first the code that the services of `hydo.yaml` run.
+The guide is the section "Find the durations measured on the
 wall clock" of `hydo guide faults`. The design and the precision numbers are in the section
 "The clock audit" of `docs/design/rule-suggestion.md`.
 
@@ -2435,12 +2451,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       after any start of PD reaches it, so explorations with power cuts meet it often until a
       release has the fix.
     - With `root.share_images: true`, TiKV's address lock in `/tmp` was found by the other
-      stores of the same image, although MANIFEST.md gives each service its own `/tmp`. The
-      import does not propose `share_images` when copies of one image pass the engine's disk.
+      stores of the same image, although MANIFEST.md gives each service its own `/tmp`. Since
+      M324 `hydo compose` proposes `share_images` for services of one image, so more projects
+      meet this; whether M317's mounts under one lock changed it was not tested.
     - TiKV's gRPC client did not reach PD by service name in the guest; the cause was not
       traced. The example names PD and the stores by address.
     - `hydo rules scan --kind clock` does not see a timestamp compared with a time to live
-      (`lock.ts.physical() + lock.ttl`), and ranked cloud-credential code and a test first.
+      (`lock.ts.physical() + lock.ttl`). Since M324 the test it ranked fifth is left out; the
+      cloud-credential code stays first, because `tikv-server` links it.
     - TiKV logged `monotonic time jumped back, 52.048 -> 45.589` once on tikv1 in seed 4's run
       (the receive delay of a Raft message); whether the guest's clocks or TiKV's comparison
       caused it was not traced.
@@ -2767,6 +2785,27 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       caught by `hydo compose` and fetch-images.sh only.
     - hydo-build's equivalence corpus has six mismatches from M306 (two mutants with a
       `contracts:` key the recorded answers do not list).
+166. The three gaps of a user's onboarding with 0.4.0 (M324, tentative number). What is left:
+    - The roots' estimate counts the image layers only. It leaves out the rest of the root
+      (the agent, busybox, the tools) and the copies that an image's hard links become in the
+      initramfs (open item 162). So M316's PostgreSQL image in 1,024 MiB, which failed to unpack, may get
+      no warning. The half of the RAM is Linux's default for a tmpfs root, read from the kernel,
+      not measured in a VM. No build or VM ran with the change; only `--check` ran.
+    - `hydo compose` keys an image by its manifest digest, so two manifests of one config (one
+      image pushed twice) are not proposed for sharing; hydo-build would share them.
+    - `hydo inspect diagnose <explore dir> --run` ran only through the scripted engine, and the
+      exploration's own transcripts in the test were the Redis run's, copied in. No real
+      exploration of an agent image was diagnosed. `--evidence` needs the run directory.
+    - The web page of an exploration does not show the run directory's command.
+    - The clock audit maps Cargo binaries and Go main packages only. Valkey's C, and Java,
+      Python and JavaScript projects, are ranked by their words alone. A Go program is named
+      after its folder, so Temporal's `temporal-server` (built from `cmd/server`) was found by
+      the image's name `server` only. Cargo features, optional and target-only dependencies
+      count as dependencies.
+    - A place that several services run (TiKV's three stores) keeps `<service>`, with a line
+      that names them. `<replica>` and `<database>` keep their roles' rules.
+    - The test code of JavaScript is found by `describe(`, `it(` and `test(` at a line's start,
+      so a product function named `test` called there is left out too.
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -3668,6 +3707,12 @@ build machine, before 2026-10-13.
   without a quorum cannot answer, and its handler polls the closed socket without a pause until
   the session timeout of 30 s. On hvx with `guest.exact_tick` two such threads of `keeper2` took
   a third of the guest's CPU. No report found; nothing posted. Nothing recorded moved
+- M324 (tentative number): three gaps of a user's onboarding with 0.4.0, each its own commit.
+  `hydo compose` writes `root.share_images: true` for services of one image. `hydo build` warns
+  when the roots exceed the Mac's guest RAM or hvx's disk. Each problem of an exploration
+  names the `hydo run --out` of its run directory, and `hydo inspect diagnose` of the
+  exploration reads it. The clock audit leaves out test code and ranks the code of the Cargo and
+  Go programs that the services run first. Nothing recorded moved
 
 ## Where to look
 
