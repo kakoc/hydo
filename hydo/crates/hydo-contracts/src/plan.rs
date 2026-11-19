@@ -462,6 +462,47 @@ pub enum BinOp {
     Mul,
     Div,
     Rem,
+    /// The bit operators `&`, `|`, `^`, `<<` and `>>` (Milestone 326), exact on 128 bits: a
+    /// negative integer is its two's complement, and `<<` past 128 bits is undecided.
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
+}
+
+impl BinOp {
+    /// Whether the operator is one of the bit operators.
+    pub fn is_bits(self) -> bool {
+        matches!(
+            self,
+            BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr
+        )
+    }
+
+    /// A bit operator on two integers, exactly: `None` for a shift by a negative amount and
+    /// for a `<<` whose result does not fit in 128 bits.
+    pub fn bits(self, i: i128, j: i128) -> Option<i128> {
+        Some(match self {
+            BinOp::BitAnd => i & j,
+            BinOp::BitOr => i | j,
+            BinOp::BitXor => i ^ j,
+            BinOp::Shr if j < 0 => return None,
+            BinOp::Shr if j >= 128 => {
+                if i < 0 {
+                    -1
+                } else {
+                    0
+                }
+            }
+            BinOp::Shr => i >> j,
+            BinOp::Shl if j < 0 => return None,
+            BinOp::Shl if i == 0 => 0,
+            BinOp::Shl if j >= 127 => return None,
+            BinOp::Shl => i.checked_mul(1i128 << j)?,
+            _ => return None,
+        })
+    }
 }
 
 /// One call as an engine recorded it: the function, the guest time (the engine's clock) at

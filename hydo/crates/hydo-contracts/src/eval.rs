@@ -129,6 +129,19 @@ pub fn eval(
                 return Ok(V::Bool(boolean(eval(b, at_entry, at_return)?)));
             }
             let (x, y) = (eval(a, at_entry, at_return)?, eval(b, at_entry, at_return)?);
+            if op.is_bits() {
+                if let (V::Bool(p), V::Bool(q)) = (x, y) {
+                    if let Some(v) = op.bits(p as i128, q as i128) {
+                        return Ok(V::Bool(v != 0));
+                    }
+                }
+                if matches!(x, V::Float(_)) || matches!(y, V::Float(_)) {
+                    return Err(Undecided("a bit operator on a floating-point value".into()));
+                }
+                return op.bits(int(x), int(y)).map(V::Int).ok_or_else(|| {
+                    Undecided("a shift past 128 bits or by a negative amount".into())
+                });
+            }
             if matches!(x, V::Float(_)) || matches!(y, V::Float(_)) {
                 return float_op(*op, x, y);
             }
@@ -148,7 +161,7 @@ pub fn eval(
                 }
                 BinOp::Div => V::Int(i / j),
                 BinOp::Rem => V::Int(i % j),
-                BinOp::Or | BinOp::And => unreachable!("handled above"),
+                _ => unreachable!("handled above"),
             }
         }
     })
@@ -181,7 +194,7 @@ fn float_op(op: BinOp, x: V, y: V) -> Result<V, Undecided> {
         BinOp::Div => V::Float(a / b),
         BinOp::Rem if b == 0.0 => return Err(Undecided("a division by zero".into())),
         BinOp::Rem => V::Float(a % b),
-        BinOp::Or | BinOp::And => unreachable!("decided before"),
+        _ => unreachable!("decided before"),
     })
 }
 

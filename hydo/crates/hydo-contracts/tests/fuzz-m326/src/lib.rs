@@ -128,3 +128,40 @@ pub fn d_of(d: bits::D) -> u8 {
 pub fn bare_of(b: &bits::Bare) -> u8 {
     b.n()
 }
+
+// ---------------------------------------------------------------- the bit operators
+
+/// half's NaN test with the bit operators, against an implementation that compares.
+// hydo: ensures result == ((x >> 10) & 0x1f == 0b11111 && (x & 0x3ff) != 0)
+pub fn is_nan(x: u16) -> bool {
+    x & 0x7fff > 0x7c00
+}
+
+/// `!` on an integer is Rust's bitwise `!` of its type.
+// hydo: ensures result == !x && result ^ x == 0xff && (result | x) == 255 && (result & x) == 0
+pub fn flip(x: u8) -> u8 {
+    !x
+}
+
+// hydo: ensures result == !x && result == -x - 1
+pub fn flip_signed(x: i8) -> i8 {
+    !x
+}
+
+/// `<<` is exact: no bit is lost.
+// hydo: ensures result == x << 2 && result >> 2 == x
+pub fn times_four(x: u8) -> u16 {
+    (x as u16) << 2
+}
+
+/// `&` on two conditions.
+// hydo: ensures result == (a & b) && !(result ^ (a && b))
+pub fn both(a: bool, b: bool) -> bool {
+    a && b
+}
+
+/// A planted mask that drops bits 8 to 11.
+// hydo: ensures result == x & 0x0fff
+pub fn low_bits(x: u16) -> u16 {
+    x & 0x00ff
+}

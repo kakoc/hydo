@@ -19,7 +19,7 @@ pub mod vm;
 mod why;
 
 use crate::lang::{self, Ast, SrcContract};
-use crate::plan::ClauseKind;
+use crate::plan::{BinOp, ClauseKind};
 use rust::{FTy, Pass, Receiver, TyAst};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -852,7 +852,13 @@ fn read_fn(
         name,
         file: rel.to_path_buf(),
         line: c.line,
-        contract: c.clone(),
+        contract: {
+            let mut c = c.clone();
+            for cl in &mut c.clauses {
+                cl.ast = bit_not(&cl.ast, &params, &ret);
+            }
+            c
+        },
         params,
         ret,
         ret_ref,
@@ -909,6 +915,54 @@ fn type_of(a: &Ast, params: &[harness::Param], ret: &FTy) -> Option<FTy> {
         _ => return None,
     };
     Some(plain(t))
+}
+
+/// The integer type of an expression, when a place in it fixes it (Milestone 326): `self.0`,
+/// `!self.0`, `self.0 & 0x7c00`. Whether it is signed, and its bits.
+fn int_width(a: &Ast, params: &[harness::Param], ret: &FTy) -> Option<(bool, u32)> {
+    match a {
+        Ast::Bin(op, x, y) if !matches!(op, BinOp::Or | BinOp::And) && !is_cmp(*op) => {
+            int_width(x, params, ret).or_else(|| int_width(y, params, ret))
+        }
+        Ast::Old(x) | Ast::Neg(x) | Ast::Not(x) => int_width(x, params, ret),
+        Ast::Call(lang::Builtin::Len, _) => Some((false, 64)),
+        a => match type_of(a, params, ret)? {
+            FTy::Int { signed, bits, .. } => Some((signed, bits)),
+            _ => None,
+        },
+    }
+}
+
+fn is_cmp(op: BinOp) -> bool {
+    matches!(
+        op,
+        BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge
+    )
+}
+
+/// The clause with each `!` on an integer made Rust's bitwise `!` of its type (Milestone 326):
+/// `x ^ <the type's ones>` for an unsigned integer, `-x - 1` for a signed one. `!` on a
+/// condition stays the negation.
+fn bit_not(a: &Ast, params: &[harness::Param], ret: &FTy) -> Ast {
+    let r = |x: &Ast| Box::new(bit_not(x, params, ret));
+    match a {
+        Ast::Not(x) => match int_width(x, params, ret) {
+            Some((true, _)) => {
+                Ast::Bin(BinOp::Sub, Box::new(Ast::Neg(r(x))), Box::new(Ast::Int(1)))
+            }
+            Some((false, bits)) if bits < 128 => {
+                Ast::Bin(BinOp::BitXor, r(x), Box::new(Ast::Int((1i128 << bits) - 1)))
+            }
+            _ => Ast::Not(r(x)),
+        },
+        Ast::Bin(op, x, y) => Ast::Bin(*op, r(x), r(y)),
+        Ast::Old(x) => Ast::Old(r(x)),
+        Ast::Neg(x) => Ast::Neg(r(x)),
+        Ast::Call(b, x) => Ast::Call(*b, r(x)),
+        Ast::Index(x, i) => Ast::Index(r(x), r(i)),
+        Ast::Matches(x, p) => Ast::Matches(r(x), p.clone()),
+        o => o.clone(),
+    }
 }
 
 /// The first place that a clause reads whose type hydo does not read, as the reason why the

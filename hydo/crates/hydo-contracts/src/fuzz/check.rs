@@ -153,6 +153,22 @@ fn eval_raw(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
                 return Ok(Val::Bool(truth(&eval(y, env, old)?)?));
             }
             let (l, r) = (eval(x, env, old)?, eval(y, env, old)?);
+            // `&`, `|`, `^`, `<<` and `>>` (Milestone 326): on two booleans as Rust's, and on
+            // integers exactly
+            if op.is_bits() {
+                if let (Val::Bool(p), Val::Bool(q), false) =
+                    (&l, &r, matches!(op, BinOp::Shl | BinOp::Shr))
+                {
+                    let v = op.bits(*p as i128, *q as i128).unwrap_or(0);
+                    return Ok(Val::Bool(v != 0));
+                }
+                if matches!(l, Val::Float(_)) || matches!(r, Val::Float(_)) {
+                    return Err(format!("`{a}`: a bit operator on a floating-point value"));
+                }
+                return op.bits(int(&l)?, int(&r)?).map(Val::Int).ok_or_else(|| {
+                    format!("`{a}`: a shift by a negative amount, or a `<<` past 128 bits")
+                });
+            }
             if matches!(l, Val::Float(_)) || matches!(r, Val::Float(_)) {
                 return float_op(*op, &l, &r);
             }
@@ -342,7 +358,7 @@ fn float_op(op: BinOp, l: &Val, r: &Val) -> Result<Val, Undecided> {
         BinOp::Mul => f(x * y),
         BinOp::Div => f(x / y),
         BinOp::Rem => f(x % y),
-        BinOp::Or | BinOp::And => unreachable!("decided before"),
+        _ => unreachable!("decided before"),
     })
 }
 

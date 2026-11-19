@@ -13,8 +13,10 @@
 //! (through pointers and references too), integers, `true` and `false`, and `old(e)`: the value
 //! of `e` at the call's entry. A parameter in `ensures` is its value at entry; a field read
 //! through it is read at return unless it is inside `old()`. Operators, loosest first: `||`,
-//! `&&`, the comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), `+ -`, `* / %`, then `!` and unary
-//! `-`. Integers are exact: no overflow, no wrapping. A call of the program's code is refused:
+//! `&&`, the comparisons (`==`, `!=`, `<`, `<=`, `>`, `>=`), `|`, `^`, `&`, `<< >>`, `+ -`,
+//! `* / %`, then `!` and unary `-` (the bit operators since Milestone 326; `hydo fuzz` reads
+//! `!` on an integer as Rust's bitwise `!` of its type). Integers are exact: no overflow, no
+//! wrapping. A call of the program's code is refused:
 //! it would run the program, which a check must not do (docs/design/contracts.md). Since
 //! Milestone 255 an expression may use string literals (`s == "ok"`), elements (`v[k]`), Go's
 //! `nil`, and the functions `len`, `is_some`, `is_none`, `is_ok`, `is_err`, `some`, `ok` and
@@ -1021,9 +1023,15 @@ fn parse_int(s: &str) -> Option<i128> {
         Some(r) => (true, r.to_string()),
         None => (false, s),
     };
-    let v = match s.strip_prefix("0x") {
-        Some(h) => i128::from_str_radix(h, 16).ok()?,
-        None => s.parse::<i128>().ok()?,
+    // `0b` and `0o` for masks too (Milestone 326)
+    let v = if let Some(h) = s.strip_prefix("0x") {
+        i128::from_str_radix(h, 16).ok()?
+    } else if let Some(b) = s.strip_prefix("0b") {
+        i128::from_str_radix(b, 2).ok()?
+    } else if let Some(o) = s.strip_prefix("0o") {
+        i128::from_str_radix(o, 8).ok()?
+    } else {
+        s.parse::<i128>().ok()?
     };
     Some(if neg { -v } else { v })
 }
@@ -1060,9 +1068,9 @@ enum Tok {
     Op(&'static str),
 }
 
-const OPS: [&str; 21] = [
-    "::", "||", "&&", "==", "!=", "<=", ">=", "<", ">", "+", "-", "*", "/", "%", "!", "(", ")",
-    ".", ",", "[", "]",
+const OPS: [&str; 30] = [
+    "::", "||", "&&", "==", "!=", "<<", ">>", "<=", ">=", "<", ">", "+", "-", "*", "/", "%", "!",
+    "&", "|", "^", "(", ")", "..", ".", ",", "[", "]", "{", "}", ":",
 ];
 
 fn lex(s: &str) -> Result<Vec<Tok>, String> {
@@ -1173,11 +1181,17 @@ fn binop(op: &str) -> Option<(BinOp, u8)> {
         "<=" => (BinOp::Le, 3),
         ">" => (BinOp::Gt, 3),
         ">=" => (BinOp::Ge, 3),
-        "+" => (BinOp::Add, 4),
-        "-" => (BinOp::Sub, 4),
-        "*" => (BinOp::Mul, 5),
-        "/" => (BinOp::Div, 5),
-        "%" => (BinOp::Rem, 5),
+        // the bit operators bind as in Rust: `|`, then `^`, `&`, the shifts (Milestone 326)
+        "|" => (BinOp::BitOr, 4),
+        "^" => (BinOp::BitXor, 5),
+        "&" => (BinOp::BitAnd, 6),
+        "<<" => (BinOp::Shl, 7),
+        ">>" => (BinOp::Shr, 7),
+        "+" => (BinOp::Add, 8),
+        "-" => (BinOp::Sub, 8),
+        "*" => (BinOp::Mul, 9),
+        "/" => (BinOp::Div, 9),
+        "%" => (BinOp::Rem, 9),
         _ => return None,
     })
 }

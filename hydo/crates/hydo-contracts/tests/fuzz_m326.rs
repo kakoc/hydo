@@ -37,6 +37,71 @@ fn skipped<'a>(rep: &'a Report, name: &str) -> &'a str {
         .unwrap_or_else(|| panic!("{name}: {:?}", rep.skipped))
 }
 
+#[test]
+fn the_bit_operators_read_as_in_rust() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m326-bits");
+    let fns = [
+        "is_nan",
+        "flip",
+        "flip_signed",
+        "times_four",
+        "both",
+        "low_bits",
+    ];
+    let mut args: Vec<&str> = Vec::new();
+    for f in &fns {
+        args.extend(["--fn", f]);
+    }
+    let (code, rep) = fuzz_m326(t.path(), &args);
+    assert!(rep.skipped.is_empty(), "{:?}", rep.skipped);
+    for f in &fns[..5] {
+        let r = one(&rep, &format!("::{f}"));
+        assert_eq!(r.verdict, "held", "{r:?}");
+        assert!(r.held.iter().all(|h| h.undecided == 0), "{r:?}");
+    }
+    // the planted mask breaks the clause, and the shrink keeps one of bits 8 to 11
+    let low = one(&rep, "::low_bits");
+    assert_eq!(low.verdict, "broken", "{low:?}");
+    assert_eq!(code, 1);
+    // precedence as in Rust: `&` before `==`, the shifts before `&`, `|` loosest
+    use hydo_contracts::lang::parse_expr;
+    use hydo_contracts::plan::BinOp;
+    match parse_expr("a & b == c").unwrap() {
+        hydo_contracts::lang::Ast::Bin(BinOp::Eq, l, _) => {
+            assert!(matches!(
+                *l,
+                hydo_contracts::lang::Ast::Bin(BinOp::BitAnd, ..)
+            ))
+        }
+        e => panic!("{e:?}"),
+    }
+    match parse_expr("a | b ^ c & d << 1").unwrap() {
+        hydo_contracts::lang::Ast::Bin(BinOp::BitOr, _, r) => match *r {
+            hydo_contracts::lang::Ast::Bin(BinOp::BitXor, _, r) => {
+                assert!(matches!(
+                    *r,
+                    hydo_contracts::lang::Ast::Bin(BinOp::BitAnd, ..)
+                ))
+            }
+            e => panic!("{e:?}"),
+        },
+        e => panic!("{e:?}"),
+    }
+    assert_eq!(BinOp::Shl.bits(1, 127), None);
+    assert_eq!(BinOp::Shl.bits(3, 4), Some(48));
+    assert_eq!(BinOp::Shr.bits(-8, 1), Some(-4));
+    assert_eq!(BinOp::Shr.bits(5, 200), Some(0));
+    // a run's contracts read them too
+    use hydo_contracts::eval::{eval, V};
+    use hydo_contracts::plan::{Expr, Ty};
+    let e = Expr::Bin(
+        BinOp::BitAnd,
+        Box::new(Expr::In(0, Ty::U(2))),
+        Box::new(Expr::Int("31744".into())),
+    );
+    assert_eq!(eval(&e, &[Some(0xfc01)], None), Ok(V::Int(0x7c00)));
+}
+
 /// A copy of the fixture at `dir/crate`, with `edit` applied to its `src/lib.rs`.
 fn fixture_copy(dir: &Path, edit: &dyn Fn(String) -> String) -> std::path::PathBuf {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fuzz-m326");
