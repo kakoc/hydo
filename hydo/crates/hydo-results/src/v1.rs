@@ -3204,8 +3204,8 @@ pub struct StatsDoc {
     /// The image explored, as `exploration.json` names it.
     pub image: String,
     pub engine: Engine,
-    /// The explorer's strategy (`random`, `swarm`, ...) and its seeds (`lo-hi`; absent for a
-    /// sweep).
+    /// The explorer's strategy (`random`, `swarm`, ...) and its seeds (`lo-hi`; absent when
+    /// the exploration was given no seed range).
     pub strategy: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seeds: Option<String>,
@@ -3409,7 +3409,7 @@ pub struct StatsKind {
     /// The kind, by the manifest's word (`kill`, `pause`, `network`, `oneway`, `cut`, `clock`,
     /// `disk`, `freeze`, `protocol`, `corrupt`, `powerloss`) or hydo's own (`upgrade`, `block`
     /// for faults of the disk's blocks, `timing` for tick and turn tokens, `setting` for a
-    /// manifest knob, `reaction` for a reaction whose action has no kind).
+    /// setting of the manifest (`R=`), `reaction` for a reaction whose action has no kind).
     pub kind: String,
     /// The kind in a few words.
     pub words: String,
@@ -3438,7 +3438,7 @@ pub struct StatsNever {
 
 /// How many first runs fit in a time budget (added in Milestone 336), from what this
 /// exploration measured on its machine. The count for `workers` workers and `shards` parts is
-/// `shards × floor((budget − starting_s) × workers ÷ job_s × (1 − shrink_share))`: each part
+/// `shards × ⌊(budget − starting_s) × workers ÷ job_s × (1 − shrink_share)⌋`: each part
 /// runs on a machine like this one, its workers start once, and re-runs and shrinks take the
 /// same share of their time as here.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]

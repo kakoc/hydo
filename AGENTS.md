@@ -1664,6 +1664,29 @@ schedule's `K=` or `P=` on that service is left out. On Meilisearch, which has o
 it to `A=meili.edit_acked:kill-now-meilisearch` with no other fault. The reference is MANIFEST.md
 "Reactions"; the details are in `docs/HISTORY.md` Milestones 305 and 309 (open item 154).
 
+**Statistics of an exploration (M336, tentative number).** `hydo explore` and `hydo explore
+--merge` write `stats.json` beside `exploration.json` (results type `stats`, an addition). It is
+the host's record of the runs, so no run, fingerprint, or verdict moves. It has four parts:
+
+- The curve of new behaviour: the distinct fingerprints, verdicts, property outcomes, error
+  kinds, and error paths after each first run in seed order. The last quarter of the runs, at
+  least 10, is judged `growing` or `flat`; the fingerprints are not judged.
+- The cost: the engine's seconds by role and the share that re-runs and shrinks took. It also has
+  the engine's clock, the host CPU and memory, and each worker's time busy, starting, waiting, and
+  idle.
+- The faults drawn, with the kinds that `faults:` allows and no schedule drew.
+- How many first runs fit in a budget with N workers or N shards. `seeds_from: history` counts
+  with the same function.
+
+`hydo stats [DIR] [--json] [--budget T] [--workers N] [--shards N]` prints it. `hydo report`
+prints a short section, and `hydo report --html` draws one inline SVG chart per judged measure.
+The Redis quickstart's seeds 1-60 ran on the Mac engine (swarm, 4 workers, 62 s). The curve was
+flat over the last 15 runs: 4 verdicts, the last new one at run 13, and 2 property outcomes. Re-runs and shrinks
+took 39 % of the busy time, and an hour on 4 workers fits about 3,945 first runs. Pauses, one-way
+network faults and clock jumps were never drawn (`--new-faults`). The reference is `hydo guide
+workflow`, "How much was explored, and whether to run more"; the details are in
+`docs/HISTORY.md` Milestone 336 (open item 167).
+
 **Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 64 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
 facts and commands of `README.md` and the quickstarts. Release step 6a is a docs review by a
@@ -2957,6 +2980,19 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       that names them. `<replica>` and `<database>` keep their roles' rules.
     - The test code of JavaScript is found by `describe(`, `it(` and `test(` at a line's start,
       so a product function named `test` called there is left out too.
+167. Statistics of an exploration (M336, tentative number). What is left:
+    - Guest time is not in the cost: the explorer has no guest clock for a run on every engine.
+      The engine's clock is VM exits on the Mac and KVM and hvx's own units on hvx.
+    - The host CPU and the memory are the whole explorer's and its engine processes', not one
+      run's. An engine in the explorer's process, as hvx's, counts with the explorer.
+    - The estimate assumes that each shard runs on a machine like this one and that shrinking
+      takes the same share of a longer exploration. It leaves out a shard's build and download.
+    - Only the Mac engine ran it on a VM, with an image without `errors:` and without watched
+      error paths. hvx and KVM did not run it; the scripted engine covers the error kinds.
+    - An exploration made before M336 has no `stats.json`, and `hydo stats` says so instead of
+      reading `events.jsonl`.
+    - The waits for the Mac's shared VM lock are outside hydo, so the workers' time does not show
+      them.
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -3907,6 +3943,12 @@ build machine, before 2026-10-13.
   `v<version>` carries `hydo-skill-<version>.tar.gz`, and `hydo skill update` and `hydo update`
   take the skill from the same release list. A skill of the old line 1.0.0 to 2.4.0 counts as
   older than any hydo version. The `skill-v` releases go after 0.5.0. Nothing recorded moved
+- M336 (tentative number): statistics of an exploration. `stats.json` holds the curve of new
+  behaviour with a judgement, the cost by role and by worker, the faults drawn against
+  `faults:`, and how many runs fit in a budget; `hydo explore --merge` merges it. `hydo stats`
+  prints it, and `hydo report` and its page show it with inline SVG charts. The Redis
+  quickstart's seeds 1-60 on the Mac engine were flat over the last 15 runs, and its 2-part merge
+  gave the same curve. Nothing recorded moved
 
 ## Where to look
 

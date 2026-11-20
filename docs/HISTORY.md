@@ -19268,3 +19268,121 @@ Deleting the `skill-v` releases after 0.5.0 ends it. No real release carries the
 `claude plugin update` from 2.4.0 to a lower version ran only as the documentation describes it.
 Nothing recorded moved.
 
+
+## Milestone 336 (tentative number): statistics of an exploration
+
+The user asked for the statistics of an exploration. A person, and later a program that reads
+hydo's files, needs to see how much was explored and decide how much more to run, with how many
+workers or shards. Before, `exploration.json` counted the schedules, the failures and the wall
+time, and nothing said whether more seeds would show anything new.
+
+What was built. `hydo explore` writes `stats.json` beside `exploration.json`. It is a new
+document of the results format (`StatsDoc`, type `stats`, an addition). Every number in it is the
+host's record of the runs, so no run, fingerprint or verdict moved. It has four parts:
+
+- The curve of new behaviour (`StatsCurve`). After each first run in seed order, it counts what
+  the runs showed so far:
+  - the distinct run fingerprints;
+  - the distinct verdicts, by kind and signature;
+  - the distinct property outcomes (`<id>: held`, `<id>: failed`, `<id>: reached`);
+  - the distinct error kinds, for an image built with `errors:`;
+  - the distinct error paths, when the engine watched them.
+
+  It keeps the counts after 1, 2, 4, 8, ... runs, after every `total/64`-th run, and after the
+  last. It also keeps the run numbers at which each judged measure grew. The judgement looks at
+  the last quarter of the runs, at least 10, and gives `growing`, `flat` or `too-few` with one
+  sentence. The fingerprints are counted but not judged, because two schedules almost always give
+  two runs.
+- The cost (`StatsCost`). It has the runs and the engine's seconds by role: first runs, re-runs,
+  shrink runs, shrink runs of error kinds, and others. It has the spread of a first run's seconds
+  and the engine's clock over the first runs, read from their control transcripts (VM exits on
+  the Mac and KVM engines). The host CPU seconds and the largest resident memory of the explorer
+  and of one engine process come from `getrusage`. Each worker's time busy, starting its engine,
+  waiting for a quiet window, and idle comes from the pool's new ledger (`pool::Ledger`), with the
+  share of the busy time that re-runs and shrinks took.
+- The faults drawn (`StatsCoverage`). Each fault kind of the first runs' schedules has its runs,
+  its targets, and its workload steps. The kinds that the manifest's `faults:` allows and no
+  schedule drew are listed with the option that draws them, and so are the services that no fault
+  named.
+- The estimate (`StatsEstimate`). It says how many first runs fit in a budget:
+  `shards × ⌊(budget − start) × workers ÷ job × (1 − share)⌋`. It works out an hour and
+  eight hours on the exploration's workers, an hour on the workers this machine fits, and an hour
+  on 4 and 20 shards. `hydo ci run`'s `seeds_from: history` now counts with the same function
+  (`hydo_explore::stats::fit_count`).
+
+`stats.json` also lists each first run with its seconds, its clock, and what it showed first
+(`StatsRun`). `hydo explore --merge` reads the parts' files and makes the statistics of the whole
+range. It puts the runs in seed order and keeps each key at its first run, so the curve is the one
+that an exploration of the whole range gives. The costs and the coverage add up, and each part's
+workers keep their part number. A part's own `stats.json` goes to `parts/<n>/`.
+
+Where it shows. `hydo stats [DIR] [--json] [--budget TIME] [--workers N] [--shards N]` is a
+command of its own, because it answers another question than `hydo report`. The report says what
+broke, and the statistics say whether to run more, and on what. `hydo report <explore dir>`
+prints a short section "How much was explored" and names `hydo stats`. The section has the cost,
+the judgement, the kinds never drawn and an hour's estimate. `hydo report --html` has the same
+section with one small chart per judged measure. The charts are inline SVG: a step line with a
+dot at each run that grew, and the judgement's window shaded. The numbers and the faults drawn
+are two folded tables. The page still loads nothing and runs no new script. `hydo guide workflow`
+has the section "How much was explored, and whether to run more", which says how to read the
+curve.
+
+What a flat curve means, in the guide's words: more seeds of the same strategy and options mostly
+repeat what these runs showed. It does not say that the system has no more bugs. Other fault
+kinds, other strategies, a longer workload, or other checks can still find more.
+
+The proof on the scripted engine. The scenario `merge_equals_one_exploration` now also checks
+the statistics. The exploration of seeds 1-60 has 60 runs, four measures, shrink runs, three
+workers, and fault kinds with targets and steps. The merge of its seven parts has the same curve,
+the same runs with the same new keys, and the same coverage, with 21 workers in 7 parts. Unit
+tests cover the curve and its judgement, the merge's renewal of keys, the reading of fault
+tokens, the budget rule, and the property outcomes.
+
+The proof on the Mac engine. The Redis quickstart (`~/.hydo/examples/redis`, built by the
+released 0.4.1, epoch 4, 1,024 MiB of guest RAM) was explored with `hydo explore --seeds 1-60
+--strategy swarm --workers 4`. Its `stats.json` is the example
+`hydo/schema/examples/results/v1/mac-redis-stats/`:
+
+- The curve was flat over the last 15 runs: 4 distinct verdicts, which grew at runs 1, 2, 12 and
+  13, and 2 property outcomes, at runs 1 and 2. All 60 runs had their own fingerprint.
+- The cost: 60 first runs took 66.7 s of the engine, 24 re-runs 27.1 s, and 9 shrink runs 14.9 s.
+  Re-runs and shrinks took 39 % of the workers' busy time. A first run took 1.11 s of the engine
+  on average (median 1.4 s, the longest 3.1 s) and 23,184 VM exits. The host CPU was 152 s for 62
+  s of wall time. The largest engine process had 3,109 MiB resident and the explorer 742 MiB.
+  The workers were busy 89 % of their time, starting their engines 7 %, and idle 4 %.
+- The faults drawn: disk faults in 48 runs, network faults in 35 (at 15 of the 20 workload
+  steps), power cuts in 34 (17 steps), crashes in 29 (11 steps), and the setting `R=` in 26. The
+  manifest allows pauses, one-way network faults and clock jumps, and no schedule drew them: the
+  swarm strategy draws them only with `--new-faults`.
+- The estimate: a first run took 2.21 s on one worker and a worker 4.3 s to start, so an hour on
+  4 workers fits about 3,945 first runs. The exploration measured 3,658 first runs an hour while
+  its first runs ran.
+- The same seeds in 2 parts (`--shard 1/2` and `2/2`) and `hydo explore --merge` gave the same
+  curve, the same runs with the same new keys, and the same faults drawn. The merge has 18 shrink
+  runs, because each part shrank its own failures (open item 153).
+- An earlier exploration of the same seeds, on a busier machine, took 108.7 s instead of 62 s and
+  gave the same 24 failures and the same curve.
+- `hydo run` gave the quickstart's fingerprints `05f433ee427f8e3c` (`disk=none | run`) and
+  `2174995ebfb4d2d6` (`disk=cut | run C=12 R=everysec`).
+
+The explorer's goldens did not move, because `stats.json` is a file of its own, outside
+`exploration.json` and `events.jsonl`. The main help of `hydo` gained the lines of `hydo stats`:
+11 answers of `cli_matches_golden`, the main help on both platforms. `results-v1.json` gained the
+new types, and `hydo-schema-compat` passes. The page's test reads the example: two charts, the
+plain words, nothing loaded, and `hydo stats`'s lines within 80 columns.
+
+What is left (open item 167):
+
+- Guest time is not in the cost. The explorer has no guest clock for a run on every engine; the
+  engine's clock is VM exits on the Mac and KVM and hvx's own units on hvx.
+- The host CPU and the memory are the whole explorer's and its engine processes', not one run's.
+  An engine in the explorer's process, as hvx's, counts with the explorer.
+- The estimate assumes that each shard runs on a machine like this one, and that shrinking takes
+  the same share of a longer exploration. It does not count the build and the download of a
+  shard on a runner.
+- Only the Mac engine ran it. hvx and KVM, an image with `errors:`, and an image whose error paths
+  the engine watched did not run with it on a VM; the scripted engine covers the error kinds.
+- An exploration made before this milestone has no `stats.json`, and `hydo stats` says so instead
+  of reading `events.jsonl`.
+- The waits for the Mac's shared VM lock are outside hydo, so the workers' time does not show
+  them; the engine's own waits are inside its start.

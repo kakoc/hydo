@@ -283,6 +283,18 @@ hydo stats <explore dir> --budget 2h --workers 4 --shards 8
 hydo stats <explore dir> --json               # the document, with the asked estimate
 ```
 
+On the Mac engine the Redis quickstart's `hydo explore --seeds 1-60 --strategy swarm --workers 4`
+took 62 s, and `hydo stats` began with this:
+
+```text
+New behaviour
+  Flat over the last 15 runs: no new verdict or property outcome since run 13 of
+    60.
+  60 distinct run fingerprints (almost every run gives a new one; not judged)
+  4 distinct verdicts, the last new one at run 13
+  2 distinct property outcomes, the last new one at run 2
+```
+
 Read the curve this way:
 
 - The fingerprints grow with almost every run, because two different schedules almost always
@@ -297,10 +309,10 @@ Read the curve this way:
   strategies, a longer workload, or other checks can still find more. Try the kinds that the
   faults drawn list as never drawn before you add seeds.
 
-The estimate counts `shards × floor((budget − start) × workers ÷ job × (1 − share))`. Here `job`
-is a first run's seconds on one worker, `start` is a worker's start, and `share` is the part of
-the busy time that re-runs and shrinks took. It assumes that each shard runs on a machine like
-this one. `seeds_from: history` of `hydo ci run` uses the same rule. `hydo explore --merge` makes
+The estimate counts `shards × ⌊(budget − start) × workers ÷ job × (1 − share)⌋`, rounded
+down. Here `job` is a first run's seconds on one worker, and `start` is a worker's start. `share`
+is the part of the busy time that re-runs and shrinks took. The estimate assumes that each shard
+runs on a machine like this one. `seeds_from: history` of `hydo ci run` uses the same rule. `hydo explore --merge` makes
 the statistics of the whole range from the parts' files, with the curve that one exploration of
 the range gives.
 

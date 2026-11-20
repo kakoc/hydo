@@ -7365,7 +7365,7 @@
           "$ref": "#/$defs/Engine"
         },
         "strategy": {
-          "description": "The explorer's strategy (`random`, `swarm`, ...) and its seeds (`lo-hi`; absent for a\nsweep).",
+          "description": "The explorer's strategy (`random`, `swarm`, ...) and its seeds (`lo-hi`; absent when\nthe exploration was given no seed range).",
           "type": "string"
         },
         "seeds": {
@@ -7802,7 +7802,7 @@
       "type": "object",
       "properties": {
         "kind": {
-          "description": "The kind, by the manifest's word (`kill`, `pause`, `network`, `oneway`, `cut`, `clock`,\n`disk`, `freeze`, `protocol`, `corrupt`, `powerloss`) or hydo's own (`upgrade`, `block`\nfor faults of the disk's blocks, `timing` for tick and turn tokens, `setting` for a\nmanifest knob, `reaction` for a reaction whose action has no kind).",
+          "description": "The kind, by the manifest's word (`kill`, `pause`, `network`, `oneway`, `cut`, `clock`,\n`disk`, `freeze`, `protocol`, `corrupt`, `powerloss`) or hydo's own (`upgrade`, `block`\nfor faults of the disk's blocks, `timing` for tick and turn tokens, `setting` for a\nsetting of the manifest (`R=`), `reaction` for a reaction whose action has no kind).",
           "type": "string"
         },
         "words": {
@@ -7871,7 +7871,7 @@
       ]
     },
     "StatsEstimate": {
-      "description": "How many first runs fit in a time budget (added in Milestone 336), from what this\nexploration measured on its machine. The count for `workers` workers and `shards` parts is\n`shards × floor((budget − starting_s) × workers ÷ job_s × (1 − shrink_share))`: each part\nruns on a machine like this one, its workers start once, and re-runs and shrinks take the\nsame share of their time as here.",
+      "description": "How many first runs fit in a time budget (added in Milestone 336), from what this\nexploration measured on its machine. The count for `workers` workers and `shards` parts is\n`shards × ⌊(budget − starting_s) × workers ÷ job_s × (1 − shrink_share)⌋`: each part\nruns on a machine like this one, its workers start once, and re-runs and shrinks take the\nsame share of their time as here.",
       "type": "object",
       "properties": {
         "job_s": {

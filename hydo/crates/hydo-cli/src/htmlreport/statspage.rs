@@ -40,7 +40,7 @@ fn chart(s: &StatsDoc, m: &str) -> String {
          <span class=\"muted\">{} after {} runs</span></figcaption>\n<svg viewBox=\"0 0 {W} {H}\" \
          width=\"100%\" style=\"max-width:{W}px;display:block\" role=\"img\" aria-label=\"{}: {} \
          after {} runs\">\n",
-        esc(&cap(measure_words(m))),
+        esc(&capital(measure_words(m))),
         pts.last().map(|p| p.1).unwrap_or(0),
         total,
         esc(measure_words(m)),
@@ -88,7 +88,7 @@ fn chart(s: &StatsDoc, m: &str) -> String {
     o
 }
 
-fn cap(s: &str) -> String {
+fn capital(s: &str) -> String {
     let mut c = s.chars();
     match c.next() {
         Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
