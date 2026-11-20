@@ -800,6 +800,10 @@ impl Engine for AgentEngine {
         self.inner.fingerprint_scheme()
     }
 
+    fn worker_memory(&self, spec: &BootSpec) -> hydo_engine::WorkerMemory {
+        self.inner.worker_memory(spec)
+    }
+
     fn max_workers(&self, spec: &BootSpec) -> usize {
         self.inner.max_workers(spec)
     }

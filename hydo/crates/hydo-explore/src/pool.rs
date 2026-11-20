@@ -59,6 +59,46 @@ pub struct Host {
     pub pool: hydo_config::run::Pool,
     /// The image's function contracts (`<image>.contracts.json`, Milestone 241).
     pub contracts: Option<std::sync::Arc<hydo_contracts::plan::Plan>>,
+    /// How many workers boot at once ([`BootGate`], Milestone 335).
+    pub boots: BootGate,
+}
+
+/// At most `n` workers of a pool boot at once (`BootGate::default()`: any number). A Mac engine
+/// worker holds all of its guest's RAM while it boots and only the pages its runs write after
+/// its first snapshot (Milestone 335, docs/design/mac-cow.md), so the explorer lets only as many
+/// boot together as the machine has memory for.
+#[derive(Clone, Default)]
+pub struct BootGate {
+    n: usize,
+    busy: Arc<(Mutex<usize>, Condvar)>,
+}
+
+impl BootGate {
+    pub fn new(n: usize) -> BootGate {
+        BootGate {
+            n,
+            busy: Arc::default(),
+        }
+    }
+
+    /// `f` once fewer than `n` others are inside.
+    fn through<T>(&self, f: impl FnOnce() -> T) -> T {
+        if self.n == 0 {
+            return f();
+        }
+        let (m, cv) = &*self.busy;
+        {
+            let mut b = m.lock().unwrap_or_else(|e| e.into_inner());
+            while *b >= self.n {
+                b = cv.wait(b).unwrap_or_else(|e| e.into_inner());
+            }
+            *b += 1;
+        }
+        let r = f();
+        *m.lock().unwrap_or_else(|e| e.into_inner()) -= 1;
+        cv.notify_one();
+        r
+    }
 }
 
 pub struct Pool {
@@ -651,7 +691,10 @@ fn take(q: &(Mutex<Queue>, Condvar)) -> Option<Job> {
 fn start(i: usize, engine: &dyn Engine, spec: &BootSpec, h: &Host) -> Option<Box<dyn Worker>> {
     let outdir = &h.outdir;
     quiet_wait(h.pool.quiet_file.as_deref());
-    match engine.start(spec, &outdir.join(format!("worker-{i}.err"))) {
+    let started = h
+        .boots
+        .through(|| engine.start(spec, &outdir.join(format!("worker-{i}.err"))));
+    match started {
         Ok(w) => Some(w),
         Err(e) => {
             let line = match &e {
@@ -800,5 +843,43 @@ fn give_up(q: &(Mutex<Queue>, Condvar)) {
     drop(g);
     for j in jobs {
         let _ = j.reply.send((j.tag, j.text, error_result("", 0)));
+    }
+}
+
+#[cfg(test)]
+mod boot_gate_tests {
+    use super::BootGate;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    #[test]
+    fn at_most_n_go_through_at_once() {
+        for n in [1usize, 2, 0] {
+            let g = BootGate::new(n);
+            let inside = Arc::new(AtomicUsize::new(0));
+            let most = Arc::new(AtomicUsize::new(0));
+            let hs: Vec<_> = (0..6)
+                .map(|_| {
+                    let (g, inside, most) = (g.clone(), inside.clone(), most.clone());
+                    std::thread::spawn(move || {
+                        g.through(|| {
+                            let now = inside.fetch_add(1, Ordering::SeqCst) + 1;
+                            most.fetch_max(now, Ordering::SeqCst);
+                            std::thread::sleep(std::time::Duration::from_millis(30));
+                            inside.fetch_sub(1, Ordering::SeqCst);
+                        })
+                    })
+                })
+                .collect();
+            for h in hs {
+                h.join().unwrap();
+            }
+            let m = most.load(Ordering::SeqCst);
+            if n == 0 {
+                assert!(m >= 2, "no limit: {m}");
+            } else {
+                assert!(m <= n, "{m} inside with a gate of {n}");
+            }
+        }
     }
 }

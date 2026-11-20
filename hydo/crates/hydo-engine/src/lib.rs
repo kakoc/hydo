@@ -74,8 +74,8 @@
 //!   implementation (for example one that skips all-zero pages while computing the same value)
 //!   lives in the engine and keeps the name, so every recorded baseline still compares.
 //! - **The pool size comes from the machine.** [`Engine::max_workers`] answers how many workers
-//!   this machine can run for a spec: min(hardware threads, free memory / memory per worker),
-//!   not a fixed number ([`machine_workers`]).
+//!   this machine can run for a spec: min(hardware threads, (free memory less what the workers
+//!   share) / memory per worker, [`Engine::worker_memory`]), not a fixed number.
 
 pub mod hvm;
 pub mod hvm_inproc;
@@ -324,10 +324,17 @@ pub trait Engine {
         "fnv1a64-v1"
     }
 
-    /// How many workers this machine can run at once for `spec`: min(hardware threads, available
-    /// memory / memory per worker). Callers size their pool with it instead of a fixed number.
+    /// What `spec`'s workers need of this machine's memory ([`WorkerMemory`]; the default: twice
+    /// the guest RAM plus 256 MiB per worker, nothing shared).
+    fn worker_memory(&self, spec: &BootSpec) -> WorkerMemory {
+        WorkerMemory::copies(spec.ram_mib as u64)
+    }
+
+    /// How many workers this machine can run at once for `spec`: min(hardware threads, the
+    /// workers whose [`Engine::worker_memory`] fits into the available memory). Callers size
+    /// their pool with it instead of a fixed number.
     fn max_workers(&self, spec: &BootSpec) -> usize {
-        machine_workers(spec.ram_mib as u64 * 2 + 256)
+        self.worker_memory(spec).machine_workers()
     }
 }
 
@@ -367,9 +374,52 @@ pub trait ControlledEngine {
         "fnv1a64-v1"
     }
 
+    /// What `spec`'s workers need of this machine's memory ([`Engine::worker_memory`]).
+    fn worker_memory(&self, spec: &BootSpec) -> WorkerMemory {
+        WorkerMemory::copies(spec.ram_mib as u64)
+    }
+
     /// How many workers this machine can run at once for `spec` ([`Engine::max_workers`]).
     fn max_workers(&self, spec: &BootSpec) -> usize {
-        machine_workers(spec.ram_mib as u64 * 2 + 256)
+        self.worker_memory(spec).machine_workers()
+    }
+}
+
+/// What the workers of one pool need of the machine's memory, in MiB: `shared` once for all of
+/// them (the Mac engine's RAM bases, which every worker maps, Milestone 335) and `per_worker`
+/// for each.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WorkerMemory {
+    pub shared: u64,
+    pub per_worker: u64,
+}
+
+impl WorkerMemory {
+    /// A worker that keeps its own guest RAM and one more copy of it, and 256 MiB of its own.
+    pub fn copies(ram_mib: u64) -> WorkerMemory {
+        WorkerMemory {
+            shared: 0,
+            per_worker: ram_mib * 2 + 256,
+        }
+    }
+
+    /// The memory `n` workers need.
+    pub fn total(&self, n: usize) -> u64 {
+        self.shared + n as u64 * self.per_worker
+    }
+
+    /// The workers that fit into `avail` MiB, at least 1.
+    pub fn fit(&self, avail: u64) -> usize {
+        (avail.saturating_sub(self.shared) / self.per_worker.max(1)).max(1) as usize
+    }
+
+    /// min(hardware threads, the workers that fit into the available memory), at least 1.
+    pub fn machine_workers(&self) -> usize {
+        let threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        let by_mem = available_mib().map(|m| self.fit(m)).unwrap_or(threads);
+        threads.min(by_mem).max(1)
     }
 }
 
@@ -844,5 +894,26 @@ mod stdout_tests {
         f.args(["-c", "echo x; exit 3"]);
         assert_eq!(stdout_of(f), None);
         assert!(super::host_cpu().is_some());
+    }
+}
+
+#[cfg(test)]
+mod worker_memory_tests {
+    use super::WorkerMemory;
+
+    #[test]
+    fn the_shared_part_counts_once() {
+        let copies = WorkerMemory::copies(1024);
+        assert_eq!(copies.total(4), 4 * 2304);
+        assert_eq!(copies.fit(8 * 1024), 3);
+        let shared = crate::hvm::worker_memory(4096, true);
+        assert_eq!(shared.total(1) + 3 * shared.per_worker, shared.total(4));
+        assert_eq!(shared.fit(shared.total(5)), 5);
+        // at least one, whatever the machine has
+        assert_eq!(shared.fit(100), 1);
+        assert_eq!(
+            crate::hvm::worker_memory(4096, false),
+            WorkerMemory::copies(4096)
+        );
     }
 }

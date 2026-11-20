@@ -1048,7 +1048,7 @@ fn make_pool(cx: &Cx) -> Pool {
             Err(e) => die(&format!("hydo: {e}")),
         }
     };
-    let (n, spec) = size_pool(cx, engine.as_ref(), spec);
+    let (n, spec, boots) = size_pool(cx, engine.as_ref(), spec);
     let host = Host {
         outdir: cx.out.clone(),
         onboard: cx.env.root.join("hydo").join("onboard"),
@@ -1059,6 +1059,7 @@ fn make_pool(cx: &Cx) -> Pool {
             Some(Err(e)) => die(&format!("hydo: {e}")),
             None => None,
         },
+        boots: crate::pool::BootGate::new(boots),
     };
     let (cache_image, cache_engine) = if cx.env.config.pool.cache.is_some() {
         cache_identity(cx)
@@ -1142,7 +1143,8 @@ fn program_ids(engine: Option<&Path>) -> String {
 /// The pool size and the snapshot store (docs/PERF-RUN-COST.md section 7): a worker holds its VM
 /// (guest RAM plus the image copied into kernel memory) and, in memory, S0 and S1 (twice RAM and
 /// the data partition, here estimated by the image size).
-fn size_pool(cx: &Cx, engine: &dyn Engine, mut spec: BootSpec) -> (usize, BootSpec) {
+/// The third value is how many workers may boot at once (0: any number; Milestone 335).
+fn size_pool(cx: &Cx, engine: &dyn Engine, mut spec: BootSpec) -> (usize, BootSpec, usize) {
     let img_mib = std::fs::metadata(&spec.image)
         .map(|m| m.len() >> 20)
         .unwrap_or(0);
@@ -1171,31 +1173,69 @@ fn size_pool(cx: &Cx, engine: &dyn Engine, mut spec: BootSpec) -> (usize, BootSp
     // KVM engines load the image into the guest's RAM, which they map as plain memory that the
     // host gives page by page as the guest touches it (Milestone 316: on a Mac a 4096 MiB guest
     // was said to need 4831 MiB, its 479 MiB image counted beside its RAM, and the run fitted)
-    let per = if hvx { per_mem } else { ram + 256 };
-    if let Some(av) = avail.filter(|&m| m < n as u64 * per) {
+    // Milestone 335: the Mac engine's workers share the snapshots' RAM bases and each holds the
+    // pages its runs write (hydo_engine::hvm::worker_memory, docs/design/mac-cow.md)
+    let need = if hvx {
+        hydo_engine::WorkerMemory {
+            shared: 0,
+            per_worker: per_mem,
+        }
+    } else if engine.kind() == hydo_engine::EngineKind::Hvm
+        && engine.worker_memory(&spec).shared > 0
+    {
+        engine.worker_memory(&spec)
+    } else {
+        hydo_engine::WorkerMemory {
+            shared: 0,
+            per_worker: ram + 256,
+        }
+    };
+    if let Some(av) = avail.filter(|&m| m < need.total(n)) {
+        let shared = if need.shared > 0 {
+            format!(
+                " ({} MiB of snapshots that the workers share, and {} MiB per worker)",
+                need.shared, need.per_worker
+            )
+        } else {
+            String::new()
+        };
         eprintln!(
-            "warning: {n} worker{} with {ram} MiB guests may use up to about {} MiB as the guests \
-             touch their memory, and this machine has {av} MiB free or reclaimable now: if a \
-             worker cannot make its VM, run with --workers {}",
+            "warning: {n} worker{} with {ram} MiB guests may use up to about {} MiB{shared} as \
+             the guests touch their memory, and this machine has {av} MiB free or reclaimable \
+             now: if a worker cannot make its VM, run with --workers {}",
             if n == 1 { "" } else { "s" },
-            n as u64 * per,
-            (av / per.max(1)).max(1)
+            need.total(n),
+            need.fit(av)
         );
     }
+    // a Mac engine worker holds all of its guest's RAM until its first snapshot: only as many
+    // boot at once as fit beside what the others need while they run
+    let boots = match avail {
+        Some(av) if need.shared > 0 => {
+            let extra = (ram + 256).saturating_sub(need.per_worker).max(1);
+            (av.saturating_sub(need.total(n)) / extra).clamp(1, n.max(1) as u64) as usize
+        }
+        _ => 0,
+    };
     if memory {
         spec.snapshots = SnapshotStore::Memory;
     }
     eprintln!(
-        "pool: {n} worker{}{}, snapshots {}",
+        "pool: {n} worker{}{}, snapshots {}{}",
         if n == 1 { "" } else { "s" },
         if cx.a.workers.is_some() {
             ""
         } else {
             " (sized from this machine)"
         },
-        if memory { "in memory" } else { "in files" }
+        if memory { "in memory" } else { "in files" },
+        if boots > 0 && boots < n {
+            format!(", {boots} booting at once")
+        } else {
+            String::new()
+        }
     );
-    (n.max(1), spec)
+    (n.max(1), spec, boots)
 }
 
 /// The size of a hydo image's data partition (the second MBR entry; hydo-build puts the root at

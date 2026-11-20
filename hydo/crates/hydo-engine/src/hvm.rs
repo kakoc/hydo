@@ -263,9 +263,39 @@ pub fn image_has_tc(image: &Path) -> Result<bool, ImageError> {
     Ok(false)
 }
 
+impl Hvm {
+    /// Whether the engine's snapshots are RAM bases that its workers share (`HVM_RAM_SHARE`,
+    /// on unless `0`; Milestone 335).
+    pub fn shares_ram(&self) -> bool {
+        !hydo_config::hvm::Options::from_env(&self.engine_env()).no_ram_share
+    }
+}
+
+/// What the Mac engine's workers of a guest of `ram_mib` need (Milestone 335,
+/// docs/design/mac-cow.md "What a worker costs"). With RAM bases the workers share S0's and S1's
+/// bases: the guest's pages that are not zero, measured at 6 % (Redis, 1 GiB) to 26 % (Meilisearch,
+/// 2 GiB) of its RAM each, counted here as half of the RAM for both. A worker holds the pages its
+/// runs write and its own heap: at most 132 MiB on Redis and 1,172 MiB on Meilisearch, whose
+/// runs write half of its RAM, counted as half of the RAM and 256 MiB. Without, a worker holds its
+/// guest RAM and its snapshots' copies.
+pub fn worker_memory(ram_mib: u64, shared: bool) -> crate::WorkerMemory {
+    if shared {
+        crate::WorkerMemory {
+            shared: ram_mib / 2,
+            per_worker: ram_mib / 2 + 256,
+        }
+    } else {
+        crate::WorkerMemory::copies(ram_mib)
+    }
+}
+
 impl ControlledEngine for Hvm {
     fn kind(&self) -> EngineKind {
         EngineKind::Hvm
+    }
+
+    fn worker_memory(&self, spec: &BootSpec) -> crate::WorkerMemory {
+        worker_memory(spec.ram_mib as u64, self.shares_ram())
     }
 
     fn start_controlled(
