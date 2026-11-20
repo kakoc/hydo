@@ -163,6 +163,7 @@ showed without a fault.
 | kill | `K=` | Hatchet#5527 (an engine); River#1602 (PostgreSQL); Lago#6901 and Blnk's lost commits (Redis) |
 | kill with a delayed answer | `K=` and `H=...:delay=` | Saleor#20022 (the worker, while the payment app is slow) |
 | pause of the workload or of one thread | `P=workload`, `P=workload/<thread>` | etcd's flaky test 22796; Qdrant's flaky test 10200 |
+| pause of a service past its failure detector | `P=<svc>@<step>+<n>` | a user's query engine: a worker marked dead for good, so queries never end |
 | protocol faults on a fake | `H=` | web-shop's flaky test (`delay`), its double order (`drop`), its stuck spinner (`status=500`) |
 | storage faults of one service | `G=`, `L=`, `L=...:strict` | NATS 3.2 (two nodes' corrupted blocks), 3.3 (a zeroed snapshot), 3.5 (one node's power loss) |
 | none | | Blnk's overdraft limit (concurrent draws); Formance's account race; Memos's share link over plain HTTP ([memos#6575](https://github.com/usememos/memos/issues/6575)) |
@@ -172,9 +173,12 @@ What the table shows:
 - **Clock steps gave the most new reports.** Valkey, Temporal, and River each measured a duration
   on the wall clock. Run the clock audit, `hydo rules scan --kind clock`, before the exploration,
   and keep `clock` in `faults:` (`hydo guide faults`).
-- **No finding needed a pause of a service alone.** In Hatchet a pause of an engine for 15 s
-  broke nothing, and a kill at the same step lost acknowledged runs. The pauses that failed a test
-  by themselves were aimed at the workload or at one of its threads.
+- **A long pause of a service finds what a kill hides.** In Hatchet a pause of an engine for
+  15 s broke nothing, and a kill at the same step lost acknowledged runs. A user onboarded a
+  distributed query engine on 2026-11-20. There a pause of one worker for 8 s, past the failure
+  detector's timeout, left a scheduler's mark of the worker as dead for good. A kill gives the
+  worker a new identity, which the mark does not name (`hydo guide strategies`, "Pauses of a
+  service past its failure detector").
 - **Disk errors and lying disks break the disk model.** In Blnk, Formance, Valkey and Lago, every
   failure with `disk=ioerr` or `disk=lying` was the disk's loss or a database that refused to
   start. Run `--durable-only` once the first exploration shows such failures.
@@ -200,11 +204,17 @@ judgment of findings.
 ### Phase 1: scouting
 
 1. Read the project's README, its Compose file, and its documentation of guarantees.
-2. Write down the promises that a fault can break, in the project's own words.
-3. Check the criteria and the red flags of section 1.
-4. Read the project's open issues about crashes, restarts, clocks, and retries. They show where
+2. Write down the promises that a fault can break, in the project's own words. When nobody who
+   owns the system can confirm them, derive them from the deployment manifests and the code
+   (timeouts, leases, replication), and mark them "unconfirmed by the owner" in `RESULTS.md`.
+3. Read the deployment manifests (Helm values, Kustomize overlays, the platform's environment
+   files). List the replica count of each service, the size of each cluster, and the features
+   that production turns on, such as caches. The folder copies this shape, scaled down only in
+   memory (`hydo guide strategies`, "Production's topology").
+4. Check the criteria and the red flags of section 1.
+5. Read the project's open issues about crashes, restarts, clocks, and retries. They show where
    the maintainers expect trouble.
-5. Run `hydo rules scan` on a checkout of the project. It lists the schema, the state columns,
+6. Run `hydo rules scan` on a checkout of the project. It lists the schema, the state columns,
    the API and the documented promises with file and line.
 
 **Checkpoint after scouting.** Go on when the project meets every criterion and has at least one
@@ -216,7 +226,10 @@ promise that a fault can break. Otherwise stop, and write one paragraph with the
    `hydo onboard --compose FILE`.
 2. Run `sh hydo/fetch-images.sh`, which copies the images in once.
 3. Write the folder with the skill (`plugin/skills/onboard/SKILL.md`, step 3).
-4. Run `hydo build hydo/hydo.yaml --check` after every file, until it prints `OK`.
+4. Run `hydo build hydo/hydo.yaml --check` after every file, until it prints `OK`. Fix every
+   warning that the image services' roots do not fit in the guest's RAM or disk before the first
+   run. A root that does not fit stops the guest at boot with an error that names another cause
+   (`hydo guide services`).
 5. Build the image with `hydo build hydo/hydo.yaml`.
 6. Run `hydo run "disk=none | run"` twice. Both runs must pass with the same fingerprint (`fp=`).
 
@@ -229,34 +242,43 @@ hours. Otherwise stop. Record each blocker as a gap of hydo in the example's `RE
 
 ### Phase 3: exploration and shrinking
 
-1. Validate the proposed rules on clean runs:
+1. Give each type of outcome that the workload records as unknown an `eventually_` check of
+   how it must end. Add a check that a completed operation's result stays readable after the
+   heal (`hydo guide strategies`, "How each unknown outcome ends"). The user's query engine
+   passed every run until these two checks were written.
+2. Validate the proposed rules on clean runs:
 
    ```sh
    hydo rules check hydo/rules.yaml --mutate
    ```
 
-2. Run the clock audit and the schedules of its first three places:
+3. Run the clock audit and the schedules of its first three places:
 
    ```sh
    hydo rules scan --kind clock
    hydo explore --schedule "<schedule from the audit>"
    ```
 
-3. Explore with the process strategy and the new fault kinds:
+4. Explore with the process strategy and the new fault kinds:
 
    ```sh
    hydo explore --seeds 1-20 --strategy process --new-faults
    ```
 
-4. Read the problems with `hydo report`, and the minimal schedules with `hydo report --details`.
-5. Fix each failure that is a mistake of the rules, rebuild, and explore the next seeds.
-6. Add the options that fit the project. `hydo guide strategies` says which ones found bugs in
+5. Read the problems with `hydo report`, and the minimal schedules with `hydo report --details`.
+6. Fix each failure that is a mistake of the rules, rebuild, and explore the next seeds.
+7. Add the options that fit the project. `hydo guide strategies` says which ones found bugs in
    systems of the same type:
    - `--cluster-faults` for the services of `groups:`;
    - `--more-faults` on hvx;
    - `--storage-faults` for services with `storage:`;
    - `--protocol-faults` for fakes and emulators.
-7. Run a swarm exploration last, with `--strategy swarm --new-faults`.
+8. Run a swarm exploration last, with `--strategy swarm --new-faults`.
+
+A first exploration that finds nothing is not the answer. Run a second round with more seeds (60
+or more), the techniques of `hydo guide strategies` for the system's type, and production's shape
+if the first round scaled it down. The user's query engine passed 20 seeds in the first round and
+failed in two ways in the second round's 60 seeds.
 
 Run the blind explorations on GitHub's KVM runners when the example builds an x86_64 image on
 Linux. Keep this Mac and the bare-metal machine for the directed runs, such as `hydo explore

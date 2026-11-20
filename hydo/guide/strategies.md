@@ -17,6 +17,7 @@ results page: new as far as the search found, known, by design, or a deployment 
 | database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse |
 | log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults | Redpanda, NATS |
 | job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate |
+| distributed query or compute engine with schedulers and workers | an accepted query ends; a completed query's result stays readable | production's topology and features; checks of how each unknown outcome ends; pauses of a worker past its failure detector; kills of the worker that holds the results | a user's query engine |
 | ledger or billing system | the books match the acknowledged operations; a limit holds | the generic rule beside domain rules; concurrent clients without faults; value properties | Blnk, Lago, Formance Ledger |
 | service that calls outside APIs | a payment or a mail takes effect once | protocol faults on fakes and emulators; a kill while an answer is late | web-shop, checkout, openapi-payouts, Saleor |
 | device updater | the device boots a complete slot of an allowed version | reactions at the update's events; reboots and added disks; a scan of a reaction's delay | SWUpdate, Mender |
@@ -25,15 +26,73 @@ results page: new as far as the search found, known, by design, or a deployment 
 | flaky test | the test passes on every run | a pause of one thread; turn lengths and forced preemption points | Qdrant, nats-server, etcd |
 | cluster that upgrades in place | every member starts on the new version | upgrades | etcd |
 
-Three findings hold for every type of system:
+These findings hold for every type of system:
 
+- Run the system in production's shape: its replica counts, its cluster sizes, and its features
+  turned on (the entry "Production's topology").
 - Write the generic rule first. It found more than any other rule in Lago, Formance Ledger, and
   Blnk.
+- Check how each operation ends that the client records as unknown (the entry "How each unknown
+  outcome ends").
 - Explore with `--strategy process` first and `--strategy swarm` last (the entry "The
   explorer's strategy").
 - Run each durability setting at its durable value. A loss under a relaxed setting is the
   setting's documented cost. `hydo explore --configs` explores every value and labels such a
   loss (the entry "Settings that trade durability").
+- Do not stop at one clean exploration. A user's query engine passed 20 seeds and then failed 2
+  ways in 60 seeds, with production's shape and checks of the unknown outcomes.
+
+## The system's shape
+
+### Production's topology
+
+- **What it is.** The `hydo/` folder runs each service as many times as production does, each
+  cluster at production's size, and the features that production turns on. Only the memory
+  sizes shrink to fit the guest.
+- **What to write.** Read the deployment manifests: the Helm values, the Kustomize overlays, and
+  the platform's environment files. List each service's replica count, each cluster's size, and
+  each feature that production turns on, for example its caches. Then give `hydo.yaml` one
+  service per replica (`scheduler_1`, `scheduler_2`), a `groups:` entry per cluster, and the same
+  feature settings. Shrink heaps, cache sizes, and buffer pools, never the counts. `hydo k8s`
+  gives a StatefulSet one service per replica, but a Deployment one service only, so add the
+  other replicas by hand (`hydo guide workflow`, "From Kubernetes manifests").
+- **When it fits.** Any system with replicas, a cluster of its own, or features behind flags.
+- **What it found.** A user's onboarding of a distributed query engine (2026-11-20, the Mac
+  engine). The first round ran one control-plane node, one scheduler, and the caches off. It
+  explored 20 seeds and found nothing. The second round ran production's shape: two schedulers,
+  a control plane of three Raft nodes, and the result replication and the caches on. It
+  explored 60 seeds with the checks of the entry "How each unknown outcome ends" and found two
+  bugs. Each shrank to a small schedule and replayed with one fingerprint:
+  - A pause of one worker for 8 s, past the failure detector's timeout, left a query running
+    forever (the entry "Pauses of a service past its failure detector").
+  - A kill of the worker that held a completed query's results, after a pause of one scheduler,
+    left the query completed and its results unreadable.
+- **What it misses.** A shape that does not fit in the guest's 8 GiB at most. The second round
+  changed the shape, the seeds, and the checks at once, so its runs do not say which part each
+  bug needed.
+- **Cost.** Memory. With ten services in a guest of 6,144 MiB, the Mac ran one worker at about
+  50 s a schedule, so 60 seeds took about an hour. Services of one image share one root with
+  `root.share_images: true` (`hydo guide services`).
+
+### The features behind a flag
+
+- **What it is.** A feature that production turns on and a test setup leaves off, such as a
+  cache, runs code that no fault reaches while it is off. Turn each such feature on.
+- **What to write.** The production value of each flag in the service's `env:`. For an object
+  store, run one whose answers the cache relies on. A cache that keeps its manifests with
+  conditional writes, create-if-absent (`If-None-Match`) and update-if-the-ETag-matches
+  (`If-Match`), needs a store that refuses a write whose condition fails.
+- **When it fits.** A system with caches, result replication, or other features that its
+  deployment manifests turn on.
+- **What it found.** In the user's query engine, the caches of fragments, entries, and
+  predicates write their manifests to the object store with conditional writes. In the first
+  round the caches were off, so that code never ran. The two bugs of the second round came with
+  the caches on, and no bug was tied to the caches alone.
+- **What it misses.** hydo's S3 emulator (`emulators:` with `use: s3`, `rclone serve s3`) was not
+  checked for conditional writes. If it ignores the two headers, every race of two writes
+  succeeds, and the system's handling of a conflict never runs. The user ran the object store
+  MinIO as a service of its own instead.
+- **Cost.** The feature's memory and its setup.
 
 ## Checks
 
@@ -66,6 +125,43 @@ Three findings hold for every type of system:
   mechanism. Lago's billing rules named the mechanism when they failed.
 - **Cost.** The client must record each operation in a form that the check can replay. The check
   was 156 lines of Go in Formance and 380 in Blnk. It runs on every engine.
+
+### How each unknown outcome ends
+
+- **What it is.** The client records an operation as unknown when it did not see the end: a
+  query still running at the client's timeout, or a result read that failed. No check judges
+  whether an unknown operation was applied, because either answer is correct. So an operation
+  that never ends is a broken promise that nobody checks. For each type of unknown outcome,
+  write the `eventually_` check that says how it must end.
+- **What to write.** Let the workload record each operation under the id that the system gave
+  it, so that a check can ask the system about it. Then write two checks (`hydo guide checks`):
+  - An `eventually_` check that every accepted operation reaches a final state. Set `within=`
+    longer than the system's own timeout for that operation.
+  - An `eventually_` check that the result of each operation that the client saw complete is
+    still readable after the heal.
+
+  ```sh
+  #!/bin/sh
+  # hydo: within=600 after=heal poll=10
+  # hydo-msg: every accepted query ends as completed or failed
+  for id in $(awk '{o[$1] = $2} END {for (i in o) if (o[i] == "unknown") print i}' "$HYDO_OUTCOMES"); do
+    state=$(/bin/client status "$id") || exit 2
+    case $state in completed|failed) ;; *) echo "query $id is still $state"; exit 1 ;; esac
+  done
+  ```
+
+- **When it fits.** A system that accepts an operation and finishes it later: a query engine, a
+  job runner, a workflow engine, a batch scheduler.
+- **What it found.** The user's query engine (the entry "Production's topology"). The first
+  round's workload recorded a stuck query and an unreadable result as unknown, so no run could
+  fail on them. With the two checks, the second round found both bugs: a query that stays
+  running after a worker's pause, and a completed query whose results are gone after a kill.
+- **What it misses.** `$HYDO_OUTCOMES` is empty in the recovery boot after a power cut unless
+  `guest.outcomes_after_cut: true` is set (`hydo guide composer`). A check that asks about every
+  operation on every poll starts many processes. In the user's first version, the run ended as
+  `ERROR check: exit budget exhausted` while queries were stuck. Stop at the first operation
+  that has not ended, as the example does.
+- **Cost.** One status call per operation and poll. It runs on every engine.
 
 ### Domain rules from the project's sources
 
@@ -326,15 +422,44 @@ Three findings hold for every type of system:
     loses a refund request with its Celery task on every run. Each fault alone passes.
   - Lago (known lago-api#6901): a swarm schedule that killed and paused Redis
     during a cancellation.
+  - A user's query engine: a kill of the worker that held a completed query's results came after
+    a pause of one scheduler. The query stayed completed, and every read of its results failed.
+    Only the check that a completed result stays readable saw it (the entry "How each unknown outcome
+    ends").
 - **What it misses.** A kill comes through the guest agent, so the service's threads run on
   until the agent runs. Meilisearch's index swap that runs twice (finding 1) needs
   the server stopped between two LMDB commits. Reactions that killed it at 18 delays after a
   swap, an edit, or an addition all passed. A reaction's `kill-now-<svc>` kills before the
   service runs on, and broke it at 13 and 14 ms after the swap's `202` (section "Reactions at
-  console events"). A pause of a service
-  alone found nothing: a 15 s pause of a Hatchet engine
-  broke nothing, and a kill at the same step lost runs. The restart of a `K=` fault ignores the
-  service's restart policy (River, seed 17).
+  console events"). A 15 s pause of a Hatchet engine broke nothing, and a kill at the same step
+  lost runs. A kill starts the process with a new identity, so it hides state that the system
+  keeps by a worker's identity (the entry "Pauses of a service past its failure detector"). The
+  restart of a `K=` fault ignores the service's restart policy (River, seed 17).
+- **Cost.** It runs on every engine.
+
+### Pauses of a service past its failure detector
+
+- **What it is.** `P=<svc>@<step>+<n>` stops a service's processes for `n` workload steps, and
+  the processes go on afterwards with the same process ids and the same identity. A pause
+  longer than the timeout of a health check, a heartbeat, or a lease makes the peers declare the
+  service dead, and then the service comes back as itself. State that the peers keep by the
+  service's identity then has to clear itself. A kill hides such state, because the restarted
+  process registers with a new identity.
+- **What to write.** Read the failure detector's timeout from the system's configuration. Keep
+  `pause` in `faults:` and explore with `--new-faults`, which draws pauses by steps. For a
+  directed run, give the pause enough steps to outlast the timeout, or a length in
+  milliseconds: `P=worker_2@28~0:12000` for a timeout of 8 s (`hydo guide faults`).
+- **When it fits.** A scheduler or a coordinator that tracks its workers by heartbeats or leases,
+  and workers that keep their identity across a stop.
+- **What it found.** The user's query engine (the entry "Production's topology"): a pause of one
+  worker for 8 s, past the failure detector's timeout. A scheduler marked the worker dead and
+  never cleared the mark, because it keeps the mark by the worker's id, which changes only at a
+  restart. Queries stayed running forever. The exploration of 60 seeds with `--strategy process`
+  found it blind, and the shrinker reduced a schedule of 4 faults to `P=worker_2@28+2` alone.
+- **What it misses.** A pause shorter than the timeout changes nothing that the peers see. A
+  15 s pause of a Hatchet engine broke nothing, and a kill at the same step lost runs (the entry
+  "Kills of the process that holds acknowledged work"). The pause needs the check that every
+  accepted operation ends. Without it, a stuck query was an unknown outcome, and the run passed.
 - **Cost.** It runs on every engine.
 
 ### Clock steps and the clock audit

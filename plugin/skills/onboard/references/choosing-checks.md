@@ -11,7 +11,8 @@ Start from what the user said must never happen, then go through this list:
 2. **Exactly once**: every acknowledged operation is applied once, not zero times and not twice
    (retries, duplicate deliveries, idempotency keys).
 3. **Failed means not applied**: an operation the system reported as failed left no effect. (An
-   operation whose outcome the client did not learn may have either; do not check it either way.)
+   operation whose outcome the client did not learn may have either; do not check it either way.
+   Do check that it ends: item 7.)
 4. **Domain rules**: no negative balance, totals conserved, no order without its items, unique
    keys unique. Propose them from the project's own sources and validate them with hydo
    ([proposing-rules.md](proposing-rules.md)); the domain lists in `hydo guide workloads` are a
@@ -20,7 +21,11 @@ Start from what the user said must never happen, then go through this list:
 5. **Monotonic reads**: a version, counter or offset that a client saw never goes back.
 6. **Caches agree with the store**: a cache never serves a value the store does not hold
    (allowing for its documented staleness).
-7. **Liveness**: after the faults stop, the system answers again within a bound.
+7. **Liveness**: after the faults stop, the system answers again within a bound. Every
+   operation the client recorded as unknown is a promise that nobody checks until you write how
+   it must end: an `eventually_` check that each accepted operation reaches a final state, with
+   `within=` above the system's own timeout, and one that each completed operation's result is
+   still readable after the heal (`hydo guide strategies`, "How each unknown outcome ends").
 8. **Side effects outside**: an outside service (a payment, an e-mail) is called at most once per
    operation, and every acknowledged operation's effect happened.
 9. **History**: when clients read and write registers or lists, a recorded history checked for

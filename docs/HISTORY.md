@@ -18952,3 +18952,93 @@ The worst problems, in order:
 A bug planted in smallvec's `swap_remove` broke its contract on 25 of 1,000 calls and shrank to
 six elements and the index 1. The page lists nine fixes. Open items 139 and 163 have what is left.
 Nothing recorded moved.
+
+## Milestone 330 (tentative number): what a user's second onboarding round taught the strategies and the skill
+
+A user onboarded a distributed query engine of their own with hydo 0.4.1 on the Mac engine
+(2026-11-20). The system has schedulers, workers, a control plane of three Raft nodes, an object
+store, and caches. The project is private, so no tracked file names it, its services, or its
+files. This milestone puts what the user's two rounds taught into `hydo guide strategies`, the
+onboarding skill, and the playbook. No code changed.
+
+**The evidence.** The first round ran one control-plane node, one scheduler, the caches off, and
+a workload that recorded a stuck query and an unreadable result as unknown. It explored 20 seeds
+and found no bug. The second round ran production's shape: two schedulers, three control-plane
+nodes, and the replication of results and the caches on. It added two `eventually_` checks:
+every accepted query reaches a final state, and a completed query's result stays readable after
+the heal. It explored 60 seeds with `--strategy process` and found two bugs. Each shrank to a
+small schedule and replayed with one fingerprint:
+
+- A pause of one worker for 8 s, past the failure detector's timeout. A scheduler marked the
+  worker dead and never cleared the mark, because it keeps the mark by the worker's id, which
+  changes only at a restart. Queries stayed running forever. The shrinker reduced a schedule of
+  4 faults to the pause alone.
+- A kill of the worker that held a completed query's results, after a pause of one scheduler.
+  The query stayed completed, and every read of its results failed.
+
+The guide's entry on kills had said that a pause of a service alone found nothing (a 15 s pause
+of a Hatchet engine). The first bug is a counter-example: a kill gives the worker a new identity,
+which the stale mark does not name, so only a pause shows the mark.
+
+**The guide.** `hydo/guide/strategies.md`:
+
+- A new section "The system's shape" with two entries. "Production's topology": copy the replica
+  counts, the cluster sizes, and the enabled features from the deployment manifests, and shrink
+  only the memory; `hydo k8s` gives a Deployment one service only. "The features behind a flag":
+  a cache that production turns on runs code, here conditional writes of its manifests to the
+  object store, that no fault reaches while it is off. hydo's S3 emulator was not checked for
+  conditional writes, and the user ran MinIO as a service instead.
+- A new check entry, "How each unknown outcome ends": an outcome that the client records as
+  unknown is a property that no check judges. For each, an `eventually_` check says how it must
+  end, with `within=` above the system's own timeout, and a second check says that a completed
+  result stays readable. Its example stops at the first operation that has not ended, because
+  the user's first version, which asked about every query on every poll, ended a run as `ERROR
+  check: exit budget exhausted`.
+- A new fault entry, "Pauses of a service past its failure detector", after the kills. The kills
+  entry gains the second bug and the counter-example.
+- The table "Start here" gains a row for a distributed query or compute engine. The findings
+  for every type of system gain production's shape, the unknown outcomes, and a second round
+  after a clean exploration.
+
+`hydo/guide/checks.md`, "What not to check", says that whether an unknown operation ends is a
+property, with a pointer to the entry.
+
+**The skill.** `plugin/skills/onboard/`:
+
+- Step 1: when the user is not the system's owner, derive the promises from the deployment
+  manifests and the code (timeouts, leases, retries, replication), and mark each "unconfirmed by
+  the owner" in the report.
+- Step 3.3 and `references/inventory.md`: copy production's shape from the deployment manifests,
+  scaled down only in memory, and tell the user each difference.
+- Step 3.4 and `references/choosing-checks.md` (items 3 and 7): the unknown-outcome rule and the
+  check that a completed result stays readable.
+- Step 4: read the RAM and disk warnings of `hydo build --check` (Milestone 324) before the first
+  run (round 1's item 11, a root too large for the guest's RAM that the verdict blamed on the
+  network). After a first exploration without a finding, run a second round with more seeds, the
+  strategies' fault families, the liveness checks, and production's shape before reporting "no
+  bugs".
+- Step 5: the report names the unconfirmed promises, the differences from production's shape,
+  and the explorations of each round.
+
+The skill keeps its version, 2.4.0, in `metadata.version`, `plugin/.claude-plugin/plugin.json`
+and the marketplace entry: the user is deciding the skill's version scheme, and the lead sets it
+at the merge. `skill_check::` checks that the three agree, not that a content change raises them.
+
+**The playbook.** `docs/ONBOARDING-PLAYBOOK.md`: section 3's table gains the pause of a service
+past its failure detector, and its lesson on pauses names the counter-example. Phase 1 derives
+unconfirmed promises and reads the deployment manifests for the shape. Phase 2 fixes the build's
+RAM warnings before the first run. Phase 3 starts with the checks of the unknown outcomes and
+ends with a second round before a report of no bugs.
+
+**Checks.** The CLI golden `cli.jsonl` moved in 8 answers of `hydo skill install`, 4 on each
+platform. Only the hashes of the three changed skill files differ: SKILL.md,
+`references/choosing-checks.md`, and `references/inventory.md`. The guide's topics have no
+answer there. `docs/USE-CASES.md` gains three questions for a backend team. On this Mac:
+`hydo`'s whole test program (`cli_matches_golden`, `agents_equivalence`, and `docs::` among
+it), `hydo-agents`'s `skill_check::` and `public_content::`, `sh ci/vale.sh`, and `sh
+ci/consolidate-tests.sh --check`. Nothing recorded moved: no engine, image, guest program, or
+example changed.
+
+**What is left.** The user's other items are outside this milestone: among them, the S3
+emulator's conditional writes, `hydo explore` exiting 0 when it refuses for memory, and the
+inspect sessions that hold guest RAM.
