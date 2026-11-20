@@ -119,7 +119,7 @@ pub struct Cli {
 pub const RELEASE_URL: &str = "https://github.com/kakoc/hydo/releases/download";
 
 /// The default of `HYDO_RELEASE_API`: the project's releases as JSON (GitHub's API), where
-/// `hydo skill update` finds the newest skill release.
+/// `hydo update` and `hydo skill update` find the newest release, which carries the skill.
 pub const RELEASE_API: &str = "https://api.github.com/repos/kakoc/hydo/releases";
 
 /// The install cache of the `hydo` command (Milestone 162, docs/design/install-cache.md).

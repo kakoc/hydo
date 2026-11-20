@@ -1,8 +1,9 @@
 # Update hydo and its onboarding skill
 
 `hydo update` brings hydo and every copy of its onboarding skill to the newest release. The
-onboarding skill is the process an AI tool follows to write a project's `hydo/` folder, and it
-has releases of its own. `hydo update` uses the network only when you run it.
+onboarding skill is the process an AI tool follows to write a project's `hydo/` folder. From
+hydo 0.5.0 on, the skill has hydo's version and comes in hydo's release. `hydo update` uses the
+network only when you run it.
 
 ## See what is newer
 
@@ -58,8 +59,14 @@ an archive with another sha256, leaves the installed hydo as it was.
 
 ## Where the skill is updated
 
-Every copy is brought to the newest skill release (tag `skill-v<version>`), checked by sha256
-in the same way as `hydo skill update` checks it:
+Every copy is brought to the skill of the hydo release that `hydo update` installs: the asset
+`hydo-skill-<version>.tar.gz` of the release `v<version>`, checked by the sha256 that the
+release's `SHA256SUMS` names. `hydo skill update` fetches it in the same way.
+
+Until hydo 0.4.1 the skill had versions of its own, 1.0.0 to 2.4.0. hydo counts such a copy as
+older than any hydo version. So a copy of skill 2.4.0 is updated to 0.5.0.
+
+The skill is updated in these places:
 
 - the copies in `.claude/skills/hydo` and `.agents/skills/onboard` of your home and of the
   repository you run `hydo update` in;
@@ -102,6 +109,17 @@ Then update the skill: `hydo skill update` for the copies, and `claude plugin ma
 hydo` and `claude plugin update hydo@hydo` for Claude Code's plugin. From then on, `hydo update`
 does all of it.
 
+## Upgrading from hydo 0.4.1 to 0.5.0 or newer
+
+hydo 0.4.1 reads the skill from the old skill releases only, so its `hydo update` updates hydo
+and leaves the skill as it was. Run `hydo update` once more with the new hydo: it brings every
+copy of the skill to the new version.
+
+Claude Code offers the new version of its plugin `hydo@hydo` because the version string
+changed, also from 2.4.0 to the lower 0.5.0. If `claude plugin update hydo@hydo` says that the
+plugin is at the latest version, run `claude plugin marketplace update hydo` first. If it still
+says so, run `claude plugin uninstall hydo@hydo`, then `claude plugin install hydo@hydo`.
+
 ## The line in hydo doctor
 
 `hydo doctor` prints one line when a newer hydo release exists, with the command `hydo update`.
@@ -133,8 +151,7 @@ writes the token. A token needs no scopes: the release list is public.
 
 hydo also makes fewer requests:
 
-- Each command reads the list once. The newest hydo release and the newest skill release come
-  from the same list.
+- Each command reads the list once. The newest hydo release also carries the newest skill.
 - The answer is kept in `~/.hydo/update-check.json`. A command in the next 10 minutes takes the
   kept answer and says so in its first line. `hydo doctor` takes an answer of the last day.
 - At the limit, `hydo doctor` prints nothing about it, keeps its earlier answer, and does not look

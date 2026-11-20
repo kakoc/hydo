@@ -1,22 +1,46 @@
-//! The skill's own releases (Milestone 170): the onboarding skill is released separately from
-//! hydo, as the GitHub release `skill-v<version>` with two assets, `hydo-skill-<version>.tar.gz`
-//! (the Claude Code plugin folder as `hydo/`, with the skill in `hydo/skills/onboard/`; Milestone
-//! 229) and `SHA256SUMS`. [`pack`] makes the archive reproducibly (the same bytes from the same
+//! The skill's release archive. Since Milestone 332 the onboarding skill has hydo's version and
+//! ships in hydo's own GitHub release `v<version>`, beside the tarballs: the asset
+//! `hydo-skill-<version>.tar.gz` (the Claude Code plugin folder as `hydo/`, with the skill in
+//! `hydo/skills/onboard/`; Milestone 229), whose sha256 is a line of the release's `SHA256SUMS`.
+//! From Milestone 170 to hydo 0.4.1 the skill had a version line of its own, 1.0.0 to 2.4.0,
+//! released as `skill-v<version>`; [`skill_lt`] orders every version of that line before every
+//! version of hydo's. [`pack`] makes the archive reproducibly (the same bytes from the same
 //! folder on any machine: sorted entries, every time 0, owner 0:0, modes 0644 or 0755, gzip
 //! without a name or time); [`unpack`] takes one apart for `hydo skill update`, refusing anything
 //! but plain files and directories below `hydo/`.
 
-use crate::{is_hydo_skill_md, skill_version, Fail, PLUGIN, SKILL, SKILL_IN_PLUGIN};
+use crate::{is_hydo_skill_md, skill_version, version_lt, Fail, PLUGIN, SKILL, SKILL_IN_PLUGIN};
 use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Component, Path, PathBuf};
 
-/// The tag of a skill release: `skill-v<version>`.
-pub const TAG_PREFIX: &str = "skill-v";
-
 /// The archive of a skill release.
 pub fn archive_name(version: &str) -> String {
     format!("hydo-skill-{version}.tar.gz")
+}
+
+/// The first and the last version of the skill's own version line, which ended with hydo 0.4.1
+/// (tags `skill-v1.0.0` to `skill-v2.4.0`). From hydo 0.5.0 on the skill has hydo's version.
+pub const OLD_LINE: (&str, &str) = ("1.0.0", "2.4.0");
+
+/// The first hydo release that carries the skill.
+pub const FIRST_IN_HYDO: &str = "0.5.0";
+
+/// Whether `v` is a version of the skill's own, ended line (1.0.0 to 2.4.0). hydo's own version
+/// must never fall in this range: the `skill_check::` tests refuse a `hydo/VERSION` there.
+pub fn old_line(v: &str) -> bool {
+    !version_lt(v, OLD_LINE.0) && !version_lt(OLD_LINE.1, v)
+}
+
+/// Whether skill version `a` is older than `b`. Every version of the ended line 1.0.0 to 2.4.0
+/// is older than every version with hydo's numbers, so a copy of skill 2.4.0 is behind 0.5.0;
+/// within one line the numbers decide.
+pub fn skill_lt(a: &str, b: &str) -> bool {
+    match (old_line(a), old_line(b)) {
+        (true, false) => true,
+        (false, true) => false,
+        _ => version_lt(a, b),
+    }
 }
 
 /// The most an archive may unpack to (bytes, entries): a skill is a few text files.
@@ -262,6 +286,25 @@ mod tests {
         std::fs::write(s.join("SKILL.md"), md(version)).unwrap();
         std::fs::write(s.join("references/a.md"), "a\n").unwrap();
         p
+    }
+
+    #[test]
+    fn the_ended_line_is_older_than_hydo_s_versions() {
+        for old in ["1.0.0", "1.2.0", "2.0.0", "2.3.3", "2.4.0"] {
+            assert!(old_line(old), "{old}");
+            for new in ["0.5.0", "0.5.1", "0.10.0", "2.4.1", "3.0.0"] {
+                assert!(skill_lt(old, new), "{old} < {new}");
+                assert!(!skill_lt(new, old), "{new} !< {old}");
+            }
+        }
+        for new in ["0.1.0", "0.4.1", "0.5.0", "0.99.0", "2.4.1", "3.0.0"] {
+            assert!(!old_line(new), "{new}");
+        }
+        assert!(skill_lt("2.3.3", "2.4.0"));
+        assert!(skill_lt("0.5.0", "0.5.1"));
+        assert!(skill_lt("0.9.0", "0.10.0"));
+        assert!(!skill_lt("0.5.0", "0.5.0"));
+        assert!(!old_line(FIRST_IN_HYDO));
     }
 
     #[test]

@@ -227,6 +227,12 @@ these places:
 - PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.4.1`.
 - The skill release `skill-v2.4.0` (the plugin `hydo`, command `/hydo:onboard`).
 
+Since M332 the skill has hydo's version: its four version fields equal `hydo/VERSION` (0.4.1
+now, `skill_check::` checks it). From 0.5.0 on the release `v<version>` carries the asset
+`hydo-skill-<version>.tar.gz`, which both `build-release.sh` scripts make. 0.5.0 is the first
+release with it. After it, the lead deletes the releases `skill-v1.0.0` to `skill-v2.4.0` and
+their tags (docs/RELEASING.md, "Once, after 0.5.0 is published").
+
 The release 0.4.1 is 0.4.0 with `hydo update` (M315), the five fixes of M316, and the skill
 2.4.0. It came early, so that the manual upgrade from 0.4.0 is the last one (user, 2026-11-18).
 Its fingerprint epoch is 4. It was cut from 0.4.0's release commit on the branch
@@ -508,7 +514,12 @@ command, kept for 10 minutes in `~/.hydo/update-check.json` (a day for `hydo doc
 asked with `GH_TOKEN`, `GITHUB_TOKEN` or `gh auth token` when one is there. The token goes to
 `https://api.github.com` only. At GitHub's limit for requests without a login, `hydo update` and
 `hydo skill update` say so in one line with the reset time. They exit 4 (could not check), and
-the doctor stays quiet until the reset.
+the doctor stays quiet until the reset. Since M332 the skill comes from hydo's own release: `hydo
+update` takes the skill of the release it installs, `hydo skill update` that of the newest
+release, both from `<release URL>/v<version>/hydo-skill-<version>.tar.gz`, checked by the
+release's `SHA256SUMS`. A copy or a plugin install of the old line 1.0.0 to 2.4.0 counts as older
+than any hydo version (`hydo_agents::release::skill_lt`). hydo 0.4.1 reads only `skill-v`
+releases, so a user of 0.4.1 runs `hydo update` twice to reach 0.5.0's skill.
 
 **Rules nobody wrote (M236, first version).** The skill proposes a project's business rules from
 its own sources instead of a list per domain, and hydo validates them before the owner sees
@@ -1972,9 +1983,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 103. The plain report page (M228). A fresh reader's review is fixed. Every error verdict but a
     failed restart gets the title `The run stopped early`. A service's own log is not in an
     exploration's files, so the page can only name the command that shows it.
-104. `hydo onboard` and the plugin `hydo` (M229). The skill release `skill-v2.0.0` was published
-    on 2026-11-14, and `hydo skill update` installs it. `hydo onboard` ran only on the Mac, and
-    the messages tutorial did not run on Linux. 0.3.3 is the first published hydo with it.
+104. `hydo onboard` and the plugin `hydo` (M229). `hydo onboard` ran only on the Mac, and the
+    messages tutorial did not run on Linux. 0.3.3 is the first published hydo with it. Since
+    M332 the skill has hydo's version and ships in hydo's release; the old skill releases
+    `skill-v1.0.0` to `skill-v2.4.0` wait for deletion after 0.5.0 is published.
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
     milestone and the values it moves; the pass removes the lines.
@@ -2773,6 +2785,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       the real check. GitHub's secondary limit (a 403 with `retry-after` and requests left) is
       reported as a plain HTTP 403. A command does not fall back to an older kept answer at the
       limit. The skill's `references/install.md` does not name the exit status 4.
+    - The skill in hydo's release (M332). No published release carries the skill's archive yet;
+      0.5.0 is the first. Until the `skill-v` releases are deleted, hydo 0.4.1 compares the
+      plugin's 0.4.1 on `main` with `skill-v2.4.0` and offers a Claude Code plugin update that
+      changes nothing. That `claude plugin update` installs 0.5.0 over 2.4.0, a lower version,
+      rests on Claude Code's documentation only; no run tried it.
 162. The fixes of a user's onboarding with 0.4.0 (M316, M317, tentative numbers). What is left:
     - The missing `/dev/shm` of the user's recovery boot has its cause since M317. An image
       service's launcher and its `hydo-oci` helpers bound the system folders outside the lock of
@@ -3854,6 +3871,11 @@ build machine, before 2026-10-13.
   detector. The skill and the playbook ask for production's shape and for promises from the
   manifests when no owner answers. They read the build's RAM warnings before the first run and
   ask for a second round before a report of no bugs. The skill's version is unchanged. Nothing recorded moved
+- M332 (tentative number): the onboarding skill has hydo's version. Its four version fields equal
+  `hydo/VERSION`, and `skill_check::` fails when they differ. From 0.5.0 on the release
+  `v<version>` carries `hydo-skill-<version>.tar.gz`, and `hydo skill update` and `hydo update`
+  take the skill from the same release list. A skill of the old line 1.0.0 to 2.4.0 counts as
+  older than any hydo version. The `skill-v` releases go after 0.5.0. Nothing recorded moved
 
 ## Where to look
 
@@ -3881,9 +3903,9 @@ build machine, before 2026-10-13.
   passing.
 - To onboard a project, follow the skill `plugin/skills/onboard/SKILL.md`. After a change, run
   `cargo test -p hydo-agents --test it skill_check:: -- --nocapture`. Put a fact about hydo into
-  `hydo/guide/`, never into the skill. A skill change raises its `metadata.version`, the
-  version in `plugin/.claude-plugin/plugin.json` and the marketplace entry's version together
-  (`docs/RELEASING.md`).
+  `hydo/guide/`, never into the skill. Since M332 the skill has hydo's version, and a skill
+  change ships with the next hydo release. That release's version bump raises the skill's four
+  version fields together (`docs/RELEASING.md`, "The onboarding skill").
 - To write documentation, follow the skill `skills/hydo-docs/SKILL.md` and run `sh ci/vale.sh`.
 - For kernel and VMX work, use the Intel SDM Vol. 3C (the VMX chapters), the KVM source, and the
   tutorial series Hypervisor From Scratch.

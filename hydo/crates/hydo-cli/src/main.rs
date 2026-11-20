@@ -61,7 +61,7 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
     hydo skill   install --agent claude|codex|cursor|copilot|gemini|all [--user] | --to DIR
                                                    copy the onboarding skill where an AI tool reads skills
     hydo skill   update [--check] [--agent NAME | --to DIR] [--version V]
-                                                   fetch the newest skill release (sha256-verified), install it
+                                                   fetch the newest release's skill (sha256-verified), install it
     hydo setup   [--check | --verify] [--add-to-path] [--offline]
                                                    make this unpacked release usable (install.sh runs it);
                                                    a damaged file is restored from the release's archive
@@ -139,7 +139,7 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
     hydo skill   install --agent claude|codex|cursor|copilot|gemini|all [--user] | --to DIR
                                                    copy the onboarding skill where an AI tool reads skills
     hydo skill   update [--check] [--agent NAME | --to DIR] [--version V]
-                                                   fetch the newest skill release (sha256-verified), install it
+                                                   fetch the newest release's skill (sha256-verified), install it
     hydo setup   [--check | --verify] [--add-to-path] [--offline]
                                                    make this unpacked release usable (install.sh runs it);
                                                    a damaged file is restored from the release's archive

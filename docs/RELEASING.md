@@ -1,20 +1,23 @@
 # Releasing hydo
 
 The steps of a release, in order. Each release is two tarballs, the two sources archives that
-accompany them and, since 0.2.0, the Mac programs' signatures asset
-`hydo-mac-<version>-signatures.tar.gz` (docs/design/signing.md); nothing is published until
-step 7, and step 8 points the Homebrew tap at the new Mac tarball. Creating the GitHub release
-in step 7 creates the tag `v<version>`, which starts the release workflow: it publishes the
-registry packages (step 10) with trusted publishing, so no registry token or security key is
-needed. The onboarding skill is released on its own (the last section). The history of how
-each step was first done is in docs/HISTORY.md (Milestones 149, 150, 153–158, 168 and 170).
+accompany them, since 0.2.0 the Mac programs' signatures asset
+`hydo-mac-<version>-signatures.tar.gz` (docs/design/signing.md), and from 0.5.0 on the
+onboarding skill's archive `hydo-skill-<version>.tar.gz` (the last section). Nothing is
+published until step 7, and step 8 points the Homebrew tap at the new Mac tarball. Creating the
+GitHub release in step 7 creates the tag `v<version>`, which starts the release workflow: it
+publishes the registry packages (step 10) with trusted publishing, so no registry token or
+security key is needed. The history of how each step was first done is in docs/HISTORY.md
+(Milestones 149, 150, 153–158, 168, 170 and 332).
 docs/PUBLISHING.md lists every place hydo is published.
 
 ## 1. Before building
 
 1. Decide the version (`hydo/VERSION`, and `HYDO_VERSION` for the release scripts; AGENTS.md open
    item 40 says what a version change moves). The SDKs carry the same version (docs/PUBLISHING.md,
-   "The next version", lists the files and the images a version change moves).
+   "The next version", lists the files and the images a version change moves). So does the
+   onboarding skill since Milestone 332: raise its four version fields in the same commit (the
+   last section, step 3).
    The numbering rule (the user, 2026-11-15) has two parts:
    - A release raises the middle number: 0.4.0, then 0.5.0.
    - A release of small fixes raises the last number: 0.4.1.
@@ -120,6 +123,10 @@ filled once from the machine with the Nix store paths).
 - The two builds of each platform must give the same sha256 for the tarball and for the
   sources archive. The Mac tarball is unsigned at this point (the linker's ad-hoc signatures);
   step 2a makes the published one.
+- From 0.5.0 on, each build also writes the onboarding skill's archive
+  `hydo-skill-<version>.tar.gz` into its output folder (`hydo/dist/skill/build-skill-release.sh`,
+  which refuses a skill whose version is not `hydo/VERSION`). All four builds must give it the
+  same sha256.
 
 ## 2a. Sign and notarize the Mac programs (since 0.2.0)
 
@@ -184,9 +191,11 @@ as they are. Scan the signed Mac tarball (not only the unsigned one) and the sig
 
 ## 6. Collect and record
 
-- Put the five files (the two tarballs, the Mac one signed, the two sources archives and the
-  signatures asset) into `hydo/dist/out/` of the main checkout (the previous ones into
-  `hydo/dist/out/before/`) and write `SHA256SUMS` with all five lines.
+- Put the six files (the two tarballs, the Mac one signed, the two sources archives, the
+  signatures asset and, from 0.5.0 on, the skill's archive `hydo-skill-<version>.tar.gz`) into
+  `hydo/dist/out/` of the main checkout (the previous ones into `hydo/dist/out/before/`). Write
+  `SHA256SUMS` with all six lines. `hydo skill update` and `hydo update` find the skill's
+  sha256 in this file.
 - Record the values: AGENTS.md (the current tarballs, a milestone line and the index),
   docs/HISTORY.md (a milestone section), the release READMEs (`hydo/dist/*/README.md`).
 
@@ -211,7 +220,7 @@ that does not match the release ships with it.
 
 ## 7. Publish (the user decides)
 
-Create the GitHub release for the tag of the final commit and upload all five files and
+Create the GitHub release for the tag of the final commit and upload all six files and
 `SHA256SUMS`, in one command:
 
 ```sh
@@ -219,8 +228,11 @@ gh release create v<version> --target <full commit hash> --title "hydo <version>
   --notes-file <notes> hydo/dist/out/hydo-linux-<version>.tar.gz \
   hydo/dist/out/hydo-linux-<version>-sources.tar.gz hydo/dist/out/hydo-mac-<version>.tar.gz \
   hydo/dist/out/hydo-mac-<version>-sources.tar.gz hydo/dist/out/hydo-mac-<version>-signatures.tar.gz \
-  hydo/dist/out/SHA256SUMS
+  hydo/dist/out/hydo-skill-<version>.tar.gz hydo/dist/out/SHA256SUMS
 ```
+
+From 0.5.0 on, the release workflow's `check` job also requires the skill's archive
+(`hydo/dist/registries.sh release`).
 
 `gh` uploads the files to a draft and publishes it when all are there; publishing creates the
 tag `v<version>` on that commit, and the new tag starts the release workflow (step 10). This is
@@ -310,54 +322,76 @@ publish by hand with the commands of docs/PUBLISHING.md, in the same order; that
 registry's token or login, and npm asks for the second factor at every publish. An uploaded
 version can never be replaced on any registry (only yanked, deprecated or retracted).
 
-## Releasing the onboarding skill (separate from hydo releases)
+## The onboarding skill (ships with each hydo release)
 
 The onboarding skill `onboard` (Milestone 170; named `onboard` since Milestone 229) is the
 process of onboarding a project; hydo's facts are in the guide built into each `hydo`
 (`hydo/guide/`, `hydo guide`). It lives in the Claude Code plugin folder `plugin/`:
 `plugin/.claude-plugin/plugin.json` names the plugin `hydo`, and `plugin/skills/onboard/` is the
-skill in the Agent Skills format. In Claude Code its command is `/hydo:onboard`. The skill has its
-own version (`metadata.version` in its `SKILL.md`) and its own releases, and a new skill version
-needs no new hydo. A change of the skill alone never needs the steps above; a hydo release ships
-the plugin folder as it is in the tree (`plugin/` and inside `bin/hydo`). Users get a skill release
-in two ways:
+skill in the Agent Skills format. In Claude Code its command is `/hydo:onboard`.
 
-- **Claude Code** reads the marketplace `.claude-plugin/marketplace.json` at the repository root
-  (there since hydo 0.2.0's release commit) with `/plugin marketplace add kakoc/hydo`, then
-  `/plugin install hydo@hydo`. Its plugin entry names the folder `./plugin` and the version.
-  Claude Code offers an update when that version changes on the default branch (`claude plugin
-  update hydo@hydo`, the `/plugin` panel, or by itself when the user turned on auto-update for
-  the marketplace, which is off by default for marketplaces outside Anthropic's), so pushing the
-  bumped version to `main` is the release for Claude Code users. `hydo skill install --agent
-  claude` (and `hydo onboard`) copies the same plugin folder to `.claude/skills/hydo`, which
-  Claude Code loads as the plugin `hydo` too.
-- **Codex, Cursor, GitHub Copilot and Gemini CLI** get the skill folder with `hydo skill install
-  --agent <tool>` (the version carried by their hydo) and later `hydo skill update`, which fetches
-  the newest GitHub release tagged `skill-v<version>`, checks its archive against the release's
-  `SHA256SUMS` and installs it.
+Since Milestone 332 the skill has hydo's version and no releases of its own. Four version
+fields equal `hydo/VERSION`: `metadata.version` and `metadata.hydo-min` in `SKILL.md`, the
+`version` of `plugin/.claude-plugin/plugin.json`, and the `version` of the plugin entry in
+`.claude-plugin/marketplace.json`. A skill change ships with the next hydo release, and a small
+skill fix ships with a patch release such as 0.5.1. Users get the skill in three ways:
 
-Steps, on a commit of `main` that holds the new skill:
+- **Inside hydo.** Each tarball carries the plugin folder (`plugin/`, and a copy inside
+  `bin/hydo`). `hydo skill install --agent <tool>` and `hydo onboard` copy it.
+- **From hydo's GitHub release.** From 0.5.0 on, the release `v<version>` has the asset
+  `hydo-skill-<version>.tar.gz` (the plugin folder as `hydo/`), with its line in the release's
+  `SHA256SUMS`. `hydo skill update` and `hydo update` read the release list once, take the
+  newest `v<x>.<y>.<z>` release, check the archive by that line, and install it. Codex, Cursor,
+  GitHub Copilot and Gemini CLI get updates this way.
+- **From Claude Code's marketplace.** Claude Code reads `.claude-plugin/marketplace.json` on
+  `main` (`/plugin marketplace add kakoc/hydo`, then `/plugin install hydo@hydo`). It installs a
+  new copy when the plugin's version string differs from the installed one, so a lower version
+  counts too. The update comes with `claude plugin update hydo@hydo`, the `/plugin` panel,
+  `hydo update`, or auto-update, which is off by default for this marketplace.
+
+The skill's old releases `skill-v1.0.0` to `skill-v2.4.0` had a version line of their own.
+`hydo skill update` and `hydo update` treat every installed version from 1.0.0 to 2.4.0 as older
+than any hydo version (`hydo_agents::release::skill_lt`), and the skill's step 0 asks `hydo
+update --check`. So a copy of 2.4.0 is updated to 0.5.0. hydo's own version must never fall
+from 1.0.0 to 2.4.0, and `skill_check::` refuses a `hydo/VERSION` in that range.
+
+Steps of a skill change:
 
 1. Edit the skill. Keep it process only: every key, command, option or limit of hydo belongs in
-   `hydo/guide/` (where a new hydo version ships it), and the skill names it as `hydo guide
-   <topic>`. If the skill needs a guide topic that only a newer hydo has, raise
-   `metadata.hydo-min` to that hydo's version and say in the step what the user should upgrade.
-2. Raise `metadata.version` in `plugin/skills/onboard/SKILL.md`, `version` in
-   `plugin/.claude-plugin/plugin.json` and `version` of the plugin entry in
-   `.claude-plugin/marketplace.json` to the same new version (a fix: the third number; a new step
-   or reference: the second; a renamed skill, plugin or command: the first).
-   `cargo test -p hydo-agents --test it skill_check::` refuses different versions, an unknown
-   `hydo guide` topic and anything in the plugin folder that Claude Code would load as another
-   plugin component; `claude plugin validate .` and `claude plugin validate plugin` must pass.
-3. Commit and merge to `main`.
-4. `sh hydo/dist/skill/build-skill-release.sh` writes `hydo/dist/out/skill/hydo-skill-<version>.tar.gz`
-   (the plugin folder as `hydo/`) and `SHA256SUMS` (it packs twice and compares, and refuses
-   uncommitted skill changes).
-5. (the user decides) Tag the commit `skill-v<version>`, create a GitHub release for the tag (not
-   marked as the latest release, so that `releases/latest` stays a hydo release), and upload both
-   files. Never replace the assets of a published skill release: publish a new version instead.
-6. Check: `hydo skill update --check --to <a folder with the previous version>` reports the new
-   version (exit status 3), and `hydo skill update --to <that folder>` installs it.
+   `hydo/guide/`, and the skill names it as `hydo guide <topic>`.
+2. Merge the change to `main`. Its version stays hydo's current one until the next release.
+3. In the commit that raises `hydo/VERSION` (step 1 of the release), raise the four version
+   fields to the same version. `cargo test -p hydo-agents --test it skill_check::` refuses a
+   skill whose version differs from `hydo/VERSION`, an unknown `hydo guide` topic, and anything
+   in the plugin folder that Claude Code would load as another plugin component. `sh
+   hydo/dist/registries.sh versions <version>` checks the four fields too. `claude plugin
+   validate .` and `claude plugin validate plugin` must pass.
+4. Bring the commit that raises the version to `main` together with step 7. Claude Code users
+   get the new skill as soon as `main` has it, and its step 0 then asks for the hydo of its
+   version, which must be published by then.
+5. The builds of step 2 write `hydo-skill-<version>.tar.gz`, and steps 6 and 7 publish it.
+6. After step 7, check the update. `hydo skill update --check --to <a folder with the previous
+   version>` exits with status 3, and `hydo skill update --to <that folder>` installs the new
+   version.
 
-If step 5 is skipped, Claude Code users still get the new version from `main` (step 3), but
-`hydo skill update` keeps installing the previous release.
+If a release lacks the skill's archive, `hydo skill update` names the missing file and changes
+nothing. Claude Code users still get the skill from `main`.
+
+### Once, after 0.5.0 is published
+
+These steps finish the move from the skill's own releases (Milestone 332). The lead does them;
+they delete public releases, which the user allowed on 2026-11-20.
+
+1. Write a "Before you upgrade" line into 0.5.0's release notes: "`hydo update` of 0.4.1
+   updates hydo only. Run `hydo update` once more with 0.5.0 to bring every copy of the skill to
+   0.5.0." hydo 0.4.1 reads the skill from `skill-v` releases only, and its plan shows this line.
+2. Delete the old skill releases and their tags, `skill-v1.0.0` to `skill-v2.4.0` (`gh release
+   list` names them): `gh release delete skill-v<version> --cleanup-tag --yes` for each. After
+   this, hydo 0.4.1 finds no skill release and leaves every copy as it is.
+3. Check from a copy of skill 2.4.0: `hydo update --check` of 0.5.0 names it with `2.4.0 ->
+   0.5.0`, and `hydo update --yes` installs 0.5.0.
+
+If Claude Code does not offer 0.5.0 to an install of 2.4.0, the user runs `claude plugin
+marketplace update hydo`, then `claude plugin update hydo@hydo`. If that still says that the
+plugin is at the latest version, the user runs `claude plugin uninstall hydo@hydo`, then `claude
+plugin install hydo@hydo`.

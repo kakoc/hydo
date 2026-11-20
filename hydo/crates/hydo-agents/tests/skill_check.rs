@@ -12,7 +12,9 @@
 //!    1-1024 chars; compatibility 1-500 chars; metadata a map of strings; only the allowed
 //!    frontmatter keys; SKILL.md under 500 lines; every relative file it links exists and is one
 //!    level deep (references/x.md, assets/x, scripts/x).
-//! 3. The skill's own release: `metadata.version` and `metadata.hydo-min` are versions,
+//! 3. The skill's release: `metadata.version` and `metadata.hydo-min` are hydo's version
+//!    (`hydo/VERSION`, Milestone 332; the skill ships in hydo's release), which never falls in the
+//!    skill's ended version line 1.0.0 to 2.4.0,
 //!    `plugin/.claude-plugin/plugin.json` names the plugin `hydo` with the same version, the
 //!    marketplace `.claude-plugin/marketplace.json` lists `./plugin` as `hydo` of the same
 //!    version, and the plugin folder holds nothing Claude Code would load as another component.
@@ -338,7 +340,10 @@ fn json(p: &Path, shown: &str, r: &mut Report) -> Option<serde_json::Value> {
 /// `metadata.hydo-min`) are dotted numbers; the plugin folder `plugin/` is the Claude Code plugin
 /// `hydo` (`.claude-plugin/plugin.json`) of the same version, holding nothing but its manifest and
 /// `skills/`; and the marketplace `.claude-plugin/marketplace.json` lists it as `hydo` from
-/// `./plugin`, of the same version.
+/// `./plugin`, of the same version. Since Milestone 332 that version is hydo's own
+/// (`hydo/VERSION`), and `metadata.hydo-min` equals it: the skill ships in hydo's release and
+/// needs the hydo of its version. `hydo/VERSION` never falls in the skill's ended version line
+/// 1.0.0 to 2.4.0, which `hydo skill update` and `hydo update` order before every hydo version.
 fn check_plugin(root: &Path, d: &Path, r: &mut Report) {
     let name = d.file_name().unwrap().to_string_lossy().into_owned();
     let text = std::fs::read_to_string(d.join("SKILL.md")).unwrap_or_default();
@@ -347,12 +352,23 @@ fn check_plugin(root: &Path, d: &Path, r: &mut Report) {
         Some(V::M(m)) => m.clone(),
         _ => BTreeMap::new(),
     };
-    let num = Regex::new(r"^[0-9]+\.[0-9]+\.[0-9]+$").unwrap();
+    let hydo = std::fs::read_to_string(root.join("hydo/VERSION"))
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+    if hydo_agents::release::old_line(&hydo) {
+        r.bad.push(format!(
+            "hydo/VERSION is {hydo}, a version of the skill's ended line {} to {}; hydo update \
+             would take a skill of this version for an old one (hydo_agents::release::OLD_LINE)",
+            hydo_agents::release::OLD_LINE.0,
+            hydo_agents::release::OLD_LINE.1
+        ));
+    }
     for k in ["version", "hydo-min"] {
         match meta.get(k) {
-            Some(v) if num.is_match(v) => {}
+            Some(v) if *v == hydo => {}
             v => r.bad.push(format!(
-                "{name}: metadata.{k} must be a version like 1.0.0 (got {v:?})"
+                "{name}: metadata.{k} must be hydo's version {hydo:?} of hydo/VERSION (got {v:?}); \
+                 the skill has hydo's version (docs/RELEASING.md, \"The onboarding skill\")"
             )),
         }
     }
@@ -384,7 +400,7 @@ fn check_plugin(root: &Path, d: &Path, r: &mut Report) {
         }
     }
     // The marketplace is `.claude-plugin/marketplace.json` (live since hydo 0.2.0; docs/RELEASING.md,
-    // "Releasing the onboarding skill").
+    // "The onboarding skill").
     let Some(m) = json(
         &root.join(".claude-plugin/marketplace.json"),
         ".claude-plugin/marketplace.json",
@@ -551,6 +567,7 @@ fn copy_tree() -> TmpDir {
             .success();
         assert!(ok, "cp {from}");
     }
+    std::fs::copy(t.join("hydo/VERSION"), d.join("hydo/VERSION")).unwrap();
     // The copy has the marketplace at its live place, as the tree does.
     let mp = t.join(".claude-plugin/marketplace.json");
     assert!(mp.exists(), "the marketplace file");
@@ -695,23 +712,57 @@ fn a_skill_version_the_plugin_does_not_have_fails() {
             t.replacen(&format!("  version: \"{v}\""), "  version: \"9.9.9\"", 1)
         })
     });
-    assert_eq!(bad.len(), 2, "{bad:?}");
+    assert_eq!(bad.len(), 3, "{bad:?}");
     assert!(
         bad[0].starts_with(&format!(
-            "plugin/.claude-plugin/plugin.json gives version \"{v}\", onboard's SKILL.md Some(\"9.9.9\")"
+            "onboard: metadata.version must be hydo's version \"{v}\" of hydo/VERSION (got Some(\"9.9.9\"))"
         )),
         "{bad:?}"
     );
     assert!(
         bad[1].starts_with(&format!(
+            "plugin/.claude-plugin/plugin.json gives version \"{v}\", onboard's SKILL.md Some(\"9.9.9\")"
+        )),
+        "{bad:?}"
+    );
+    assert!(
+        bad[2].starts_with(&format!(
             ".claude-plugin/marketplace.json gives the plugin version \"{v}\""
         )),
         "{bad:?}"
     );
-    let bad = bad_after(|d| edit_skill(d, |t| t.replacen("  hydo-min: \"0.1.0\"\n", "", 1)));
-    assert_eq!(
-        bad,
-        ["onboard: metadata.hydo-min must be a version like 1.0.0 (got None)"]
+    let bad =
+        bad_after(|d| edit_skill(d, |t| t.replacen(&format!("  hydo-min: \"{v}\"\n"), "", 1)));
+    assert_eq!(bad.len(), 1, "{bad:?}");
+    assert!(
+        bad[0].starts_with(&format!(
+            "onboard: metadata.hydo-min must be hydo's version \"{v}\" of hydo/VERSION (got None)"
+        )),
+        "{bad:?}"
+    );
+}
+
+#[test]
+fn a_new_hydo_version_must_change_the_skill_s_version_too() {
+    // Milestone 332: a version bump of hydo alone fails, so hydo/VERSION and the three version
+    // fields change together
+    let bad = bad_after(|d| std::fs::write(d.join("hydo/VERSION"), "0.99.0\n").unwrap());
+    assert_eq!(bad.len(), 2, "{bad:?}");
+    assert!(
+        bad[0].starts_with("onboard: metadata.version must be hydo's version \"0.99.0\""),
+        "{bad:?}"
+    );
+    assert!(
+        bad[1].starts_with("onboard: metadata.hydo-min must be hydo's version \"0.99.0\""),
+        "{bad:?}"
+    );
+    // hydo's version never lies in the skill's ended line, which would read as older
+    let bad = bad_after(|d| std::fs::write(d.join("hydo/VERSION"), "2.0.0\n").unwrap());
+    assert!(
+        bad[0].starts_with(
+            "hydo/VERSION is 2.0.0, a version of the skill's ended line 1.0.0 to 2.4.0"
+        ),
+        "{bad:?}"
     );
 }
 

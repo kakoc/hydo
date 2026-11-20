@@ -434,14 +434,15 @@ variables! {
     /// archives and guest kernels by sha256), `versions/<version>/` (releases `hydo setup --get`
     /// installed), `bin/hydo` (the current one). An empty value means the default.
     HYDO_HOME: Cli, User, "path", "~/.hydo", "hydo-cli";
-    /// Where releases are fetched from: `<value>/v<version>/<file>` (hydo, also `hydo update`),
-    /// and `<value>/skill-v<version>/<file>` (the onboarding skill, `hydo skill update`). HTTPS only
-    /// (plain `http://` only to a loopback host). An empty value means the default.
+    /// Where releases are fetched from: `<value>/v<version>/<file>` (hydo, also `hydo update`,
+    /// and since Milestone 332 the onboarding skill's `hydo-skill-<version>.tar.gz` of the same
+    /// release for `hydo skill update`). HTTPS only (plain `http://` only to a loopback host). An
+    /// empty value means the default.
     HYDO_RELEASE_URL: Cli, User, "URL", "https://github.com/kakoc/hydo/releases/download", "hydo-cli";
-    /// Where `hydo skill update` lists the releases to find the newest skill release (tags
-    /// `skill-v<version>`), and `hydo update` and `hydo doctor` the newest hydo release (tags
-    /// `v<version>`): a GitHub releases API URL answering a JSON list. HTTPS only (plain
-    /// `http://` only to a loopback host). An empty value means the default.
+    /// Where `hydo update`, `hydo skill update` and `hydo doctor` list the releases to find the
+    /// newest hydo release (tags `v<version>`), which also carries the newest onboarding skill:
+    /// a GitHub releases API URL answering a JSON list. HTTPS only (plain `http://` only to a
+    /// loopback host). An empty value means the default.
     HYDO_RELEASE_API: Cli, User, "URL", "https://api.github.com/repos/kakoc/hydo/releases", "hydo-cli";
     /// Set and not `0`: never use the network (`hydo setup`, the kernel lookup of runs, `hydo skill
     /// update`); what the install cache does not have is refused with its URL (`--offline` does

@@ -1,8 +1,9 @@
 //! The project's release list from GitHub's API (Milestone 322), as `hydo update`, `hydo skill
 //! update` and `hydo doctor`'s look for a newer release read it.
 //!
-//! - One request per command. The newest hydo release (`v<x>.<y>.<z>`) and the newest skill
-//!   release (`skill-v<version>`) come from the same list, and the answer is kept in
+//! - One request per command. The newest hydo release (`v<x>.<y>.<z>`) is also the newest skill
+//!   release: since Milestone 332 the skill has hydo's version and ships in hydo's release (the
+//!   old `skill-v<version>` releases are not read). The answer is kept in
 //!   `~/.hydo/update-check.json` ([`CHECK_FILE`]). A command takes a kept answer of the last
 //!   [`FRESH`] seconds without a request; `hydo doctor` takes one of the last day.
 //! - A token. `GH_TOKEN`, else `GITHUB_TOKEN`, else the output of `gh auth token --hostname
@@ -43,8 +44,6 @@ pub const DAY: u64 = 24 * 3600;
 pub struct List {
     /// The hydo releases, oldest first.
     pub hydo: Vec<Release>,
-    /// The newest skill release.
-    pub skill: Option<String>,
     /// For a kept answer: how many seconds ago it was read.
     pub age: Option<u64>,
 }
@@ -53,9 +52,13 @@ impl List {
     pub fn parse(body: &[u8]) -> Result<List, String> {
         Ok(List {
             hydo: hydo_releases(body)?,
-            skill: crate::skillupdate::newest_in(body)?,
             age: None,
         })
+    }
+
+    /// The newest skill release: the newest hydo release, whose asset the skill is.
+    pub fn skill(&self) -> Option<String> {
+        self.hydo.last().map(|r| r.version.clone())
     }
 
     /// The line that says a kept answer was used, if it was.
@@ -273,13 +276,14 @@ fn doc_of(api: &str, at: u64, l: &List) -> serde_json::Value {
         "checked": at,
         "api": api,
         "newest": l.hydo.last().map(|r| r.version.clone()),
-        "skill": l.skill,
         "releases": releases,
     })
 }
 
 /// A kept answer for `api` younger than `max_age` seconds at `now`, as a list. A kept failed
-/// look, or one an older hydo wrote (without `releases`), is no list.
+/// look, or one an older hydo wrote (without `releases`), is no list. Its `skill` key, which a
+/// hydo before Milestone 332 wrote with the newest `skill-v` release, is not read; this hydo
+/// writes none, so an older hydo that reads this hydo's answer finds no skill release in it.
 fn kept_list(k: &serde_json::Value, api: &str, now: u64, max_age: u64) -> Option<List> {
     let checked = k["checked"].as_u64()?;
     if k["api"].as_str() != Some(api) || checked > now || now - checked >= max_age {
@@ -297,7 +301,6 @@ fn kept_list(k: &serde_json::Value, api: &str, now: u64, max_age: u64) -> Option
         .collect::<Option<Vec<_>>>()?;
     Some(List {
         hydo,
-        skill: k["skill"].as_str().map(str::to_string),
         age: Some(now - checked),
     })
 }

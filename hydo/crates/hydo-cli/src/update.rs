@@ -2,8 +2,11 @@
 //! copy of its onboarding skill to the newest release, in one command.
 //!
 //! 1. The target is the newest release `v<major>.<minor>.<patch>` in the project's release list
-//!    (`HYDO_RELEASE_API`; drafts, pre-releases and the skill's `skill-v` releases are skipped),
-//!    or `--version V`. The newest skill release (`skill-v<version>`) comes from the same list.
+//!    (`HYDO_RELEASE_API`; drafts, pre-releases and the old `skill-v` releases are skipped), or
+//!    `--version V`. Since Milestone 332 the skill has hydo's version and ships in hydo's
+//!    release, so the skill's target is the same release: its asset `hydo-skill-<version>.tar.gz`.
+//!    A copy or a plugin install of the old skill line 1.0.0 to 2.4.0 counts as older
+//!    ([`hydo_agents::release::skill_lt`]).
 //! 2. How this hydo was installed is read from its own program's path ([`kind_of`]):
 //!    - Homebrew (a keg under `<prefix>/Cellar/hydo/`): `brew update` when the formula is older
 //!      than the target, then `brew upgrade kakoc/tap/hydo`; the formula runs `hydo setup`.
@@ -22,7 +25,7 @@
 //!      by hand are printed.
 //!
 //!    Then `hydo doctor` of the new hydo runs (install.sh runs it itself).
-//! 3. Every copy of the skill is brought to the newest skill release: the copies `hydo skill
+//! 3. Every copy of the skill is brought to the target's skill: the copies `hydo skill
 //!    update` knows (this repository's and the home's `.claude/skills` and `.agents/skills`),
 //!    the `skills/hydo` of each Claude Code configuration folder, and every copy in the registry
 //!    of copies (`hydo_agents::copies`); a registry line whose copy is gone is dropped. In each
@@ -49,6 +52,7 @@ use crate::fetch::{Fetcher, Options};
 use crate::releaselist::{self, Auth};
 use crate::skillupdate::Source;
 use hydo_agents::copies::{self, PluginInstall, MARKETPLACE, PLUGIN_ID};
+use hydo_agents::release::skill_lt;
 use hydo_agents::{version_at, version_lt, SKILL};
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
@@ -59,16 +63,18 @@ pub const USAGE: &str = "usage: hydo update [--check] [--yes] [--version V] [--o
   (cargo install hydo --locked --version V), or the release archive and its install.sh (only
   this platform's archive is downloaded, and it is checked by sha256 against the release's
   SHA256SUMS over TLS). A hydo built in a checkout is left as it is, with the commands to update it.
-  The skill is updated in this repository's and your home's .claude/skills and .agents/skills, in
-  every Claude Code configuration folder (CLAUDE_CONFIG_DIR, ~/.claude, ~/.claude-*), in every
-  folder where hydo installed it before (~/.hydo/skill-copies.txt), and as Claude Code's plugin
-  hydo@hydo (claude plugin update). Start a new session of your AI tool afterwards.
+  The skill has hydo's version and comes from the same release (a skill 2.x, of its old version
+  line, is older than any hydo version). It is updated in this repository's and your home's
+  .claude/skills and .agents/skills, in every Claude Code configuration folder
+  (CLAUDE_CONFIG_DIR, ~/.claude, ~/.claude-*), in every folder where hydo installed it before
+  (~/.hydo/skill-copies.txt), and as Claude Code's plugin hydo@hydo (claude plugin update).
+  Start a new session of your AI tool afterwards.
   --check: only report; exit status 0 when everything is current, 3 when something is newer,
            4 when the release list could not be read (also at GitHub's limit for requests
            without a login: GH_TOKEN, GITHUB_TOKEN or `gh auth login` lifts it)
   --yes:   do it without asking (without --yes a terminal is asked once; elsewhere hydo update
            prints the plan, changes nothing, and exits with status 3)
-  --version V: install hydo V instead of the newest release
+  --version V: install hydo V, and its skill, instead of the newest release
   It uses the network only when you run it (HYDO_OFFLINE or --offline: it refuses).
 ";
 
@@ -275,7 +281,7 @@ fn behind(v: Option<&str>, want: Option<&str>) -> bool {
     match (v, want) {
         (_, None) => false,
         (None, Some(_)) => true,
-        (Some(v), Some(w)) => version_lt(v, w),
+        (Some(v), Some(w)) => skill_lt(v, w),
     }
 }
 
@@ -885,7 +891,6 @@ fn update(
     answer: &mut dyn FnMut() -> bool,
 ) -> Result<i32, String> {
     let releases = &list.hydo;
-    let skill = list.skill.clone();
     let target = match &a.version {
         Some(v) => {
             if !releases.iter().any(|r| r.version == *v) {
@@ -900,8 +905,10 @@ fn update(
             }
             Some(v.clone())
         }
-        None => releases.last().map(|r| r.version.clone()),
+        None => list.skill(),
     };
+    // the skill ships in hydo's release, with hydo's version (Milestone 332)
+    let skill = target.clone();
     let kind = kind_of(&env.exe, env.checkout.as_deref(), &env.cache_home, &env.own);
     let hydo_behind = match (&target, &a.version) {
         (Some(t), Some(_)) => *t != env.own,

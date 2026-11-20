@@ -23,7 +23,6 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 const NEW: &str = "0.9.0";
-const SKILL_NEW: &str = "2.9.0";
 
 fn platform() -> &'static str {
     if cfg!(target_os = "macos") {
@@ -269,7 +268,8 @@ struct Case {
 }
 
 impl Case {
-    /// A case whose server lists hydo `newest` (and 0.4.0's predecessor) and the skill 2.9.0.
+    /// A case whose server lists hydo `newest`, with its skill, (and an old 0.1.0) and the old
+    /// skill release `skill-v2.9.0`.
     fn new(tag: &str, newest: &str) -> Case {
         let top = TmpDir::fresh(std::env::temp_dir().canonicalize().unwrap().join(format!(
             "hydo-update-{}-{}-{tag}",
@@ -299,8 +299,9 @@ impl Case {
         std::fs::read_to_string(self.log_path()).unwrap_or_default()
     }
 
-    /// The release list, hydo `newest`'s archive and SHA256SUMS (`good`: with the archive's
-    /// sha256), and the skill release.
+    /// The release list, hydo `newest`'s archive, its skill archive (Milestone 332: the skill
+    /// has hydo's version and ships in hydo's release) and SHA256SUMS (`good`: with the hydo
+    /// archive's sha256). The list also names an old `skill-v` release, which nothing may read.
     fn publish(&self, newest: &str, good: bool) {
         let plat = platform();
         let top = format!("hydo-{plat}-{newest}");
@@ -323,28 +324,25 @@ impl Case {
         // the release has more assets; only this platform's archive may be fetched
         self.srv
             .put(&format!("/dl/v{newest}/{name}-sources.tar.gz"), b"big");
+        // the skill archive of the same release
+        let src = self.top.join(format!("skill-src-{newest}/hydo"));
+        plugin_at(&src, newest);
+        let (a, v) = hydo_agents::release::pack(&src).unwrap();
+        assert_eq!(v, newest);
+        let sname = format!("hydo-skill-{newest}.tar.gz");
+        self.srv.put(&format!("/dl/v{newest}/{sname}"), &a);
         self.srv.put(
             &format!("/dl/v{newest}/SHA256SUMS"),
             format!(
-                "{sha}  {name}\n{}  hydo-other-{newest}.tar.gz\n",
-                sha256(b"x")
+                "{sha}  {name}\n{}  hydo-other-{newest}.tar.gz\n{}  {sname}\n",
+                sha256(b"x"),
+                sha256(&a)
             )
             .as_bytes(),
         );
-        // the skill release
-        let src = self.top.join(format!("skill-src-{SKILL_NEW}/hydo"));
-        plugin_at(&src, SKILL_NEW);
-        let (a, v) = hydo_agents::release::pack(&src).unwrap();
-        assert_eq!(v, SKILL_NEW);
-        let sname = format!("hydo-skill-{SKILL_NEW}.tar.gz");
-        self.srv.put(&format!("/dl/skill-v{SKILL_NEW}/{sname}"), &a);
-        self.srv.put(
-            &format!("/dl/skill-v{SKILL_NEW}/SHA256SUMS"),
-            format!("{}  {sname}\n", sha256(&a)).as_bytes(),
-        );
         let list = serde_json::json!([
             {"tag_name": format!("v{newest}"), "body": "# hydo\n\n## Before you upgrade\n\n- Build your images again: they get new fingerprints.\n\n## New\n\n- things\n"},
-            {"tag_name": format!("skill-v{SKILL_NEW}")},
+            {"tag_name": "skill-v2.9.0"},
             {"tag_name": "v0.1.0", "body": "## Before you upgrade\n\n- old notes\n"},
             {"tag_name": "v99.0.0", "draft": true},
         ]);
@@ -590,13 +588,14 @@ fn a_checkout_build_is_left_alone_with_the_commands() {
 #[test]
 fn check_and_the_plan_change_nothing() {
     let c = Case::new("check", NEW);
+    let sn = NEW.to_string();
     let hydo = release_tree(&c, "home/.hydo");
     let copy = c.home().join(".agents/skills/onboard");
     skill_at(&copy, "2.0.0");
     let (rc, out) = c.run(&hydo, &["update", "--check"], &[]);
     assert_eq!(rc, 3, "{out}");
     assert!(
-        out.contains(&format!("{}: onboard 2.0.0 -> {SKILL_NEW}", copy.display())),
+        out.contains(&format!("{}: onboard 2.0.0 -> {sn}", copy.display())),
         "{out}"
     );
     // without --yes and without a terminal: the plan, nothing changed, status 3
@@ -611,16 +610,14 @@ fn check_and_the_plan_change_nothing() {
 #[test]
 fn a_current_install_is_left_as_it_is() {
     let c = Case::new("current", &own());
+    let sn = own();
     let hydo = release_tree(&c, "home/.hydo");
     let copy = c.home().join(".agents/skills/onboard");
-    skill_at(&copy, SKILL_NEW);
+    skill_at(&copy, sn.as_str());
     let (rc, out) = c.run(&hydo, &["update", "--check"], &[]);
     assert_eq!(rc, 0, "{out}");
     assert!(out.contains("the newest release (up to date)"), "{out}");
-    assert!(
-        out.contains(&format!("onboard {SKILL_NEW}, up to date")),
-        "{out}"
-    );
+    assert!(out.contains(&format!("onboard {sn}, up to date")), "{out}");
     let (rc, out) = c.run(&hydo, &["update", "--yes"], &[]);
     assert_eq!(rc, 0, "{out}");
     assert!(out.contains("everything is up to date"), "{out}");
@@ -652,6 +649,7 @@ fn offline_and_an_unreachable_list_change_nothing() {
 #[test]
 fn every_copy_of_the_skill_and_every_marketplace_install_is_updated() {
     let c = Case::new("skills", &own());
+    let sn = own();
     let home = c.home();
     // the first Claude Code folder: settings and a skill copy, no plugin install
     std::fs::create_dir_all(home.join(".claude")).unwrap();
@@ -693,7 +691,7 @@ fn every_copy_of_the_skill_and_every_marketplace_install_is_updated() {
     )
     .unwrap();
     // claude rewrites the folder's list as its update would
-    let after = installed(SKILL_NEW).replace('\'', "'\\''");
+    let after = installed(sn.as_str()).replace('\'', "'\\''");
     c.fake(
         &c.top.join("bin"),
         "claude",
@@ -714,17 +712,14 @@ fn every_copy_of_the_skill_and_every_marketplace_install_is_updated() {
         (to.clone(), "2.1.0"),
     ] {
         assert!(
-            out.contains(&format!(
-                "skill {}: onboard {v} -> {SKILL_NEW}",
-                p.display()
-            )),
+            out.contains(&format!("skill {}: onboard {v} -> {sn}", p.display())),
             "{}: {out}",
             p.display()
         );
     }
     assert!(
         out.contains(&format!(
-            "Claude Code {}: plugin hydo@hydo 2.0.0 -> {SKILL_NEW}",
+            "Claude Code {}: plugin hydo@hydo 2.0.0 -> {sn}",
             work.display()
         )),
         "{out}"
@@ -745,7 +740,7 @@ fn every_copy_of_the_skill_and_every_marketplace_install_is_updated() {
         agents.clone(),
         to.clone(),
     ] {
-        assert_eq!(version_in(&p), SKILL_NEW, "{}", p.display());
+        assert_eq!(version_in(&p), sn.as_str(), "{}", p.display());
     }
     let log = c.log();
     let cfg = format!("CLAUDE_CONFIG_DIR={}", work.display());
@@ -764,7 +759,7 @@ fn every_copy_of_the_skill_and_every_marketplace_install_is_updated() {
     );
     assert!(
         out.contains(&format!(
-            "Claude Code {}: plugin hydo@hydo 2.0.0 -> {SKILL_NEW} (scope user)",
+            "Claude Code {}: plugin hydo@hydo 2.0.0 -> {sn} (scope user)",
             work.display()
         )),
         "{out}"
@@ -774,7 +769,7 @@ fn every_copy_of_the_skill_and_every_marketplace_install_is_updated() {
     let r = std::fs::read_to_string(&reg).unwrap();
     assert!(!r.contains(&gone.display().to_string()), "{r}");
     for p in [&to, &agents] {
-        assert!(r.contains(&format!("{SKILL_NEW}\t{}", p.display())), "{r}");
+        assert!(r.contains(&format!("{sn}\t{}", p.display())), "{r}");
     }
     // a second run: everything is current
     let (rc, out) = c.run(hydo, &["update", "--check"], &env);
@@ -784,6 +779,7 @@ fn every_copy_of_the_skill_and_every_marketplace_install_is_updated() {
 #[test]
 fn skill_install_and_update_register_their_copies() {
     let c = Case::new("register", &own());
+    let sn = own();
     let hydo = Path::new(env!("CARGO_BIN_EXE_hydo"));
     let to = c.top.join("custom");
     let (rc, out) = c.run(
@@ -803,10 +799,7 @@ fn skill_install_and_update_register_their_copies() {
     let (rc, out) = c.run(hydo, &["skill", "update"], &[]);
     assert_eq!(rc, 0, "{out}");
     let reg = std::fs::read_to_string(c.home().join(".hydo/skill-copies.txt")).unwrap();
-    assert!(
-        reg.contains(&format!("{SKILL_NEW}\t{}", old.display())),
-        "{reg}"
-    );
+    assert!(reg.contains(&format!("{sn}\t{}", old.display())), "{reg}");
 }
 
 // ---------------------------------------------------------------- hydo doctor's line
@@ -957,6 +950,7 @@ fn at_github_s_limit_the_commands_say_so_and_change_nothing() {
 #[test]
 fn a_token_goes_to_the_api_host_only_and_is_never_shown() {
     let c = Case::new("token", NEW);
+    let sn = NEW.to_string();
     let hydo = release_tree(&c, "home/.hydo");
     let copy = c.home().join(".agents/skills/onboard");
     skill_at(&copy, "2.0.0");
@@ -975,7 +969,7 @@ fn a_token_goes_to_the_api_host_only_and_is_never_shown() {
     let (rc, out) = c.run(&hydo, &["update", "--yes"], &env);
     assert_eq!(rc, 0, "{out}");
     outs.push(out);
-    assert_eq!(version_in(&copy), SKILL_NEW);
+    assert_eq!(version_in(&copy), sn.as_str());
     let bearer = Some(format!("Bearer {token}"));
     assert_eq!(
         api.auth(),
@@ -1066,13 +1060,14 @@ fn gh_auth_token_gives_the_token_when_no_variable_does() {
 #[test]
 fn one_request_for_the_release_list_per_command() {
     let c = Case::new("requests", NEW);
+    let sn = NEW.to_string();
     let hydo = release_tree(&c, "home/.hydo");
     let copy = c.home().join(".agents/skills/onboard");
     skill_at(&copy, "2.0.0");
     // hydo and the skill from one list
     let (rc, out) = c.run(&hydo, &["update", "--yes"], &[]);
     assert_eq!(rc, 0, "{out}");
-    assert_eq!(version_in(&copy), SKILL_NEW);
+    assert_eq!(version_in(&copy), sn.as_str());
     assert_eq!(c.srv.api_requests(), 1);
     // the next commands within minutes take the kept answer, and say so
     let (rc, out) = c.run(&hydo, &["skill", "update", "--check"], &[]);

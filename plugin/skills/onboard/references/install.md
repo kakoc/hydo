@@ -57,6 +57,10 @@ hydo update --check     # what is newer; changes nothing (exit status 3: somethi
 hydo update --yes       # update hydo and the skill
 ```
 
+From hydo 0.5.0 on, this skill has hydo's version and comes in hydo's release. Its older
+versions 1.0.0 to 2.4.0 count as older than any hydo version. hydo 0.4.1 updates only hydo, so
+after its `hydo update`, run `hydo update --check` once more and offer the skill's update.
+
 hydo 0.4.0 and older have no `hydo update` (they print the usage text). Upgrade such a hydo once
 by hand, the same way it was installed:
 
