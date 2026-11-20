@@ -20,11 +20,11 @@
 
 | class | signature | runs | seeds | reproduced |
 |---|---|---|---|---|
-| durable-defaults | `VIOLATION charged twice` | 36 | 37 38 39 40 41 42 43 44 | 36/36 |
+| protocol | `VIOLATION charged twice` | 36 | 37 38 39 40 41 42 43 44 | 36/36 |
 
 ## Minimal reproducers
 
-### durable-defaults: `VIOLATION charged twice`
+### protocol: `VIOLATION charged twice`
 
 - from seed 37, 1 shrink runs
 - minimal schedule: `disk=none dseed=0 | run H=payments.charge@0-1:drop`

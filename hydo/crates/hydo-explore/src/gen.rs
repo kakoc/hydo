@@ -2123,12 +2123,12 @@ impl Ex {
     }
 
     // ------------------------------------------------------------ classes
-    pub fn finding_class(&self, s: &S) -> &'static str {
+    pub fn finding_class(&self, s: &S) -> String {
         if s.disk_is("lying") {
-            return "lying-disk";
+            return "lying-disk".into();
         }
         if s.disk_is("ioerr") {
-            return "io-errors";
+            return "io-errors".into();
         }
         // Milestone 313: a disk that tears, misplaces or loses writes, has bad sectors, or stops
         // answering (torn=, mis=, lse=, hang=, G=...:bad|rot)
@@ -2137,15 +2137,15 @@ impl Ex {
                 .as_ref()
                 .is_some_and(|g| g.how.starts_with("bad") || g.how.starts_with("rot"))
         {
-            return "damaged-disk";
+            return "damaged-disk".into();
         }
         // a service's files corrupted on purpose (G=): the system's own checks are under test
         if s.g.is_some() {
-            return "corrupted-files";
+            return "corrupted-files".into();
         }
         // Milestone 238: a service switched to another version of itself during the run
         if !s.u.is_empty() {
-            return "upgrade";
+            return "upgrade".into();
         }
         let relaxed = match &self.space {
             Some(sp) => sp.unsafe_knob(s),
@@ -2163,13 +2163,42 @@ impl Ex {
             }
         };
         if relaxed && (self.knob_rule_any || s.disk == "cut" || s.l.is_some()) {
-            return "unsafe-knob";
+            return "unsafe-knob".into();
         }
         // M205: a test program (workload.kind: test) failed with no fault that explains it
         if self.space.as_ref().is_some_and(|sp| sp.test) {
-            return "test-failed";
+            return "test-failed".into();
         }
-        "durable-defaults"
+        // Milestone 328: with a power cut the system's durability with its safe settings is
+        // under test (`durable-defaults`); without one, the class names the fault families
+        // (crate::advice::defaults_class reads a parsed schedule the same way)
+        let cut = s.disk == "cut"
+            || s.c.is_some()
+            || s.cf.is_some()
+            || s.l.is_some()
+            || s.a.iter().any(|r| r.kind() == "cut");
+        if cut {
+            return "durable-defaults".into();
+        }
+        let mut had = [false; 6];
+        had[0] = s.k.is_some()
+            || s.p.is_some()
+            || s.x.is_some()
+            || s.f.is_some()
+            || s.a
+                .iter()
+                .any(|r| r.kind() != "cut" && !r.kind().starts_with("clock"));
+        had[1] = s.n.is_some() || s.o.is_some();
+        had[2] = s.t.is_some() || s.a.iter().any(|r| r.kind().starts_with("clock"));
+        had[3] = !s.h.is_empty();
+        had[4] = s.tj.is_some()
+            || s.xt.is_some()
+            || s.pp.is_some()
+            || s.q.is_some()
+            || s.qb.is_some()
+            || s.pct.is_some();
+        had[5] = s.b.is_some();
+        crate::advice::families_class(&had)
     }
 
     // ------------------------------------------------------------ shrinking

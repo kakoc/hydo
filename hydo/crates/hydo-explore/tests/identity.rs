@@ -96,9 +96,10 @@ fn p_answer(ex: &mut Ex, tjk: &str, text: &str) -> String {
         .map(|(a, b)| (a.parse().unwrap(), b.parse().unwrap()));
     let s = ex.parse(text).expect("explore.py parsed it");
     ex.knob_rule_any = false;
-    let cc = ex.finding_class(&s);
+    // explore.py's classes are the groups of Milestone 328's (a fault family was durable-defaults)
+    let cc = hydo_explore::advice::shrink_group(&ex.finding_class(&s)).to_string();
     ex.knob_rule_any = true;
-    let ca = ex.finding_class(&s);
+    let ca = hydo_explore::advice::shrink_group(&ex.finding_class(&s)).to_string();
     let cands: Vec<String> = ex
         .candidates(&s, tjk)
         .iter()

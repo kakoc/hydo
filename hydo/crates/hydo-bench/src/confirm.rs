@@ -4,6 +4,7 @@
 
 use crate::defects::{crash_verdict, sig_match, Set, BASE};
 use crate::pools::Engines;
+use hydo_explore::advice::shrink_group;
 use hydo_explore::gen::Ex;
 use hydo_explore::py::{dumps_line, py_str};
 use hydo_explore::report::verdict_kind;
@@ -61,7 +62,7 @@ pub fn confirm(
             let va = crash_verdict(&dir, &ta, &py_str(&ra["verdict"]), name);
             let class = ex
                 .parse(s)
-                .map(|p| ex.finding_class(&p))
+                .map(|p| shrink_group(&ex.finding_class(&p)).to_string())
                 .map_err(|e| e.to_string())?;
             let mut rec = Map::new();
             rec.insert("defect".into(), json!(name));

@@ -2646,12 +2646,18 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                         .collect();
                     repro_batches.push(pool.batch(&ritems, true));
                     let key = (py_str(&rec["class"]), sig_key(&v));
+                    // Milestone 328: one shrink per group of classes and signature, as before
+                    // the classes of the fault families
+                    let group = (
+                        crate::advice::shrink_group(&key.0).to_string(),
+                        key.1.clone(),
+                    );
                     // --shrink-causes N (M225): later failures of a key are shrunk too while
                     // their fault kinds differ from those already chosen, up to N per key
                     let cause = fault_kinds(&py_str(&rec["schedule"]));
-                    let chosen = match reps.iter_mut().find(|(k, _)| *k == key) {
+                    let chosen = match reps.iter_mut().find(|(k, _)| *k == group) {
                         None => {
-                            reps.push((key.clone(), vec![cause.clone()]));
+                            reps.push((group, vec![cause.clone()]));
                             true
                         }
                         Some((_, cs)) => {

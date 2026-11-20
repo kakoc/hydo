@@ -2151,8 +2151,12 @@ fn class_words(c: &str, schedule: &str) -> Option<&'static str> {
         "corrupted-files" => "A service's files were corrupted on purpose (G=): the system's own checks of its data are under test.",
         "upgrade" => "A service was switched to another version of itself during the run (U=), as in a rolling upgrade or a rollback.",
         "unsafe-knob" => "A setting that trades safety for speed (a setting of the project's manifest, such as R=everysec) met a power cut or lost writes.",
-        "durable-defaults" => "The system failed with its safe settings and a working disk: the most serious class.",
+        "durable-defaults" => "The system failed with its safe settings and a working disk, in a run with a power cut: the most serious class.",
         "refused" => "The engine cannot run this schedule, so it is not a failure of the system.",
+        "no-fault" => "The system failed with its safe settings and a working disk, in a run without a fault.",
+        // Milestone 328: the fault families of a run without a power cut (process, network,
+        // clock, protocol, timing, buggify, joined by +)
+        c if advice::safe_settings(c) => "The system failed with its safe settings and a working disk, under the fault families the class names: process (kills, pauses, freezes), network, clock (clock steps), protocol (an outside service's faults), timing (the guest's tick and vCPU timing) or buggify.",
         _ => return None,
     })
 }
@@ -2392,12 +2396,7 @@ fn held_of(pr: &story::Project, first: &[&Run], total: u64) -> Option<Held> {
     let passed = first.iter().filter(|r| r.verdict.kind == "ok").count();
     let durable: Vec<&&Run> = first
         .iter()
-        .filter(|r| {
-            matches!(
-                story::class_of(r, pr).as_str(),
-                "durable-defaults" | "test-failed"
-            )
-        })
+        .filter(|r| advice::safe_settings(&story::class_of(r, pr)))
         .collect();
     let bad = durable.iter().filter(|r| r.verdict.kind != "ok").count();
     let durable = (!durable.is_empty() && bad == 0 && passed < first.len()).then(|| {
@@ -2437,7 +2436,10 @@ pub fn exploration_story<'a>(
     // failures grouped by class and signature, in the order of their first seed
     let mut groups: Vec<((String, String), Vec<&Failure>)> = Vec::new();
     for f in &doc.failures {
-        let k = (class_of(f), f.signature.clone());
+        let k = (
+            advice::shrink_group(&class_of(f)).to_string(),
+            f.signature.clone(),
+        );
         match groups.iter_mut().find(|(g, _)| *g == k) {
             Some((_, v)) => v.push(f),
             None => groups.push((k, vec![f])),
@@ -2447,7 +2449,7 @@ pub fn exploration_story<'a>(
     groups.sort_by_key(|((c, sig), _)| {
         !doc.shrinks
             .iter()
-            .any(|x| &x.class == c && &x.signature == sig)
+            .any(|x| advice::shrink_group(&x.class) == c.as_str() && &x.signature == sig)
     });
     // the groups as problems: groups that read the same for a reader are one problem
     let mut probs: Vec<Prob> = Vec::new();
@@ -2455,7 +2457,7 @@ pub fn exploration_story<'a>(
         let sh = doc
             .shrinks
             .iter()
-            .find(|x| &x.class == c && &x.signature == sig);
+            .find(|x| advice::shrink_group(&x.class) == c.as_str() && &x.signature == sig);
         let schedule = sh
             .map(|x| x.minimal.clone())
             .unwrap_or_else(|| fs[0].run.schedule.clone());
@@ -2468,7 +2470,7 @@ pub fn exploration_story<'a>(
         {
             Some(m) => m,
             None if c.is_empty() => story::class_of(&fs[0].run, &pr),
-            None => c.clone(),
+            None => class_of(fs[0]),
         };
         let what = story::what_of(&fs[0].run, &pr);
         let p = advice::problem(
@@ -3058,7 +3060,7 @@ fn exploration_details(
         let shrunk = |c: &str, sig: &str| {
             doc.shrinks
                 .iter()
-                .any(|x| x.class == c && x.signature == sig)
+                .any(|x| advice::shrink_group(&x.class) == c && x.signature == sig)
         };
         // a group without a minimal schedule of its own is shown in the card of the first group
         // of its problem (one problem under two verdicts: `ERROR redis restart failed` and
@@ -3079,7 +3081,7 @@ fn exploration_details(
             let minimal = doc
                 .shrinks
                 .iter()
-                .find(|x| &x.class == c && &x.signature == sig)
+                .find(|x| advice::shrink_group(&x.class) == c.as_str() && &x.signature == sig)
                 .map(|x| x.minimal.clone())
                 .unwrap_or_else(|| "not shrunk".into());
             rows.push((
@@ -3087,7 +3089,7 @@ fn exploration_details(
                 vec![
                     format!("<a href=\"#f{}\">{}</a>", card_of[i] + 1, i + 1),
                     format!("<a href=\"#p{0}\">problem {0}</a>", problem_of[i]),
-                    esc(c),
+                    esc(&class_of(fs[0])),
                     format!("<span class=\"t\">{}</span>", esc(sig)),
                     fs.len().to_string(),
                     format!(
@@ -3119,7 +3121,7 @@ fn exploration_details(
             let sh = doc
                 .shrinks
                 .iter()
-                .find(|x| &x.class == c && &x.signature == sig);
+                .find(|x| advice::shrink_group(&x.class) == c.as_str() && &x.signature == sig);
             let also: Vec<(&str, usize)> = (i + 1..groups.len())
                 .filter(|&j| card_of[j] == i)
                 .map(|j| (groups[j].0 .1.as_str(), groups[j].1.len()))
@@ -3128,7 +3130,7 @@ fn exploration_details(
                 i + 1,
                 dir,
                 doc,
-                (c, sig),
+                (&class_of(fs[0]), sig),
                 fs,
                 &also,
                 sh,

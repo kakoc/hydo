@@ -636,7 +636,11 @@ pub fn merge(dirs: &[PathBuf], out: &Path) -> Result<Exploration, String> {
     let mut reps: Vec<((String, String), Vec<String>)> = Vec::new();
     let mut chosen: Vec<(usize, i64)> = Vec::new();
     for (i, f) in &failures {
-        let key = (f.run.class.clone().unwrap_or_default(), f.signature.clone());
+        let class = f.run.class.clone().unwrap_or_default();
+        let key = (
+            crate::advice::shrink_group(&class).to_string(),
+            f.signature.clone(),
+        );
         let cause = fault_kinds(&f.run.schedule);
         let pick = match reps.iter_mut().find(|(k, _)| *k == key) {
             None => {
