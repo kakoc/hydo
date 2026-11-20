@@ -1345,9 +1345,11 @@ Who sees what:
 
 - The workload, the checks and a service that runs in the guest's own root see the mount, also
   with `network: bridge`, because a service's network namespace shares the guest's mounts.
-- An image service (`image:`) runs in the image's root, which gets `/sys` by a bind that leaves
-  the mount out. Its programs read the `0::/` line, which is what Seastar and Dragonfly need, but
-  they find no files under `/sys/fs/cgroup`.
+- An image service (`image:`) runs in the image's root. From the fingerprint epoch 5
+  (Milestone 338) the root gets `/sys` by a recursive bind, so its programs find the cgroup2
+  files under `/sys/fs/cgroup` too. An image built before gets `/sys` by a bind that leaves the
+  mount out: its programs read the `0::/` line, which is what Seastar and Dragonfly need, and
+  find no files under `/sys/fs/cgroup`.
 - hydo sets no limits. Every process is in the root cgroup, which has no `memory.max` or
   `cpu.max`, so a program that looks for its limits finds none and uses the guest's memory and
   CPUs.
