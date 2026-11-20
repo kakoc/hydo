@@ -134,4 +134,6 @@ reachable, unreachable, eventually), and both kinds of record mix on the console
   lines, or a sequence number the client writes. A check that sorts by the system's times fails
   under a clock fault without a bug, or misses a bug.
 - Anything that depends on operations marked `unknown`: the system may or may not have applied
-  them, and either is correct.
+  them, and either is correct. Whether such an operation ends is a property, though: an
+  `eventually_` check says how it must end (`hydo guide strategies`, "How each unknown outcome
+  ends").

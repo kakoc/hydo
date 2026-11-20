@@ -86,6 +86,11 @@ of a common shape (ordering keys, leases, deduplication ids, groups). If you can
 project's documentation and state your assumptions in the report. Do not invent guarantees the
 project does not make.
 
+When the user is not the system's owner and cannot say what must never happen, derive the
+promises yourself. Read the deployment manifests and the code: the timeouts, the leases, the
+retries, and the replication settings say what the system means to keep. Mark each such promise
+"unconfirmed by the owner" in the report.
+
 ## 2. Inventory the project
 
 Follow [references/inventory.md](references/inventory.md): every process, its program, its port,
@@ -97,10 +102,19 @@ its data directory, its dependencies, and the file where you found each fact. Sh
 2. Decide where every program comes from: the guest has no network, so each program must be in
    the image (`hydo guide workflow`, "Where each program comes from").
 3. One service per long-running process (`hydo guide services`). Give each the restart behaviour
-   and the durability settings it has in production.
+   and the durability settings it has in production. Copy production's shape too: read the
+   deployment manifests (Helm values, Kustomize overlays, the platform's environment files) and
+   list each service's replica count, each cluster's size, and each enabled feature, such as a
+   cache or the replication of results. The folder must match them, scaled down only in memory
+   (`hydo guide strategies`, "Production's topology" and "The features behind a flag"). Tell
+   the user every place where the folder differs from production, and why.
 4. One workload command per client operation (`hydo guide composer`). Each command records what
    the client saw: acknowledged, failed for certain, or unknown (a timeout is unknown). Derive
-   every choice from the seed hydo gives, never from the clock. **Before writing a client for a
+   every choice from the seed hydo gives, never from the clock. An outcome recorded as unknown is
+   a property that no check judges: for each kind of unknown outcome (a query still running, a
+   result that cannot be read), plan in step 5 the `eventually_` check that says how it must end,
+   and a check that a completed operation's result stays readable after the heal (`hydo guide
+   strategies`, "How each unknown outcome ends"). **Before writing a client for a
    SQL database** (PostgreSQL, MySQL, SQLite or libSQL behind sqld), run `hydo sql-gen` (`hydo
    guide workloads`): it writes ready-made workloads with their checks and the outcome rules, and
    claims what the endpoints' roles allow. Write your own commands only for the operations it does
@@ -135,6 +149,12 @@ It must print `OK` before you go on.
 
 ## 4. Build and run (when the user wants it)
 
+Before the first run, read every warning of `hydo build hydo/hydo.yaml --check`. It compares the
+image services' unpacked roots with the guest's RAM or disk, and a root that does not fit stops
+the guest at boot with a message about something else. Fix such a warning first (`hydo guide
+services`, `guest.ram_mib`). An older hydo does not warn: then compare the images' unpacked sizes
+with the limits as that topic says.
+
 Use the "Build and run" commands of `hydo guide workflow`: build the image, run one schedule
 without faults twice (it must pass, with the same fingerprint both times), validate the proposed
 rules (`hydo rules check hydo/rules.yaml --mutate`, step 3 of
@@ -150,6 +170,17 @@ run that fails points at the folder or at a real bug. Before changing anything, 
 failed run at the stop that matters (`hydo guide inspect`). Do not add debug commands to the
 image to find a cause: that changes the run's timing, and the failure can go away.
 
+When the first exploration finds nothing, do not report "no bugs" yet. Run a second round, and
+tell the user what it adds:
+
+- more seeds, 60 or more;
+- the fault families that `hydo guide strategies` names for this type of system, such as pauses
+  longer than the failure detector's timeout;
+- the liveness checks of step 3.4, if the first round lacked them;
+- production's shape, if the first round scaled it down.
+
+Report "no bugs" only after the second round, with what each round ran.
+
 ## 5. Report
 
 Give the user: the folder you wrote; the inventory; **each check, for review** (the checks are
@@ -157,9 +188,11 @@ the part that needs human judgment; say which ones you are unsure about and why)
 rules as `hydo rules check` reported them: the ones that hold, plain words first, with their
 evidence, and apart the ones that failed without faults, each a wrong rule or a bug; the places
 of the clock audit, with the schedules you ran and their verdicts; the knobs; the
-pitfalls you found and what you did about them; what you could not determine (unknown readiness
-checks, unclear data directories, missing programs, ambiguous promises), each with what happens if
-it stays as it is; the hydo version you used; and the exact build and first-run commands.
+pitfalls you found and what you did about them; each promise you derived without the owner,
+marked "unconfirmed by the owner"; each place where the folder differs from production's shape;
+the explorations of each round, with their seeds and options; what you could not determine
+(unknown readiness checks, unclear data directories, missing programs, ambiguous promises), each
+with what happens if it stays as it is; the hydo version you used; and the exact build and first-run commands.
 
 ## Platforms
 

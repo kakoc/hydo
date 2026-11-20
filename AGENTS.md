@@ -438,7 +438,13 @@ the process; every hydo fact is in the guide `hydo/guide/`, printed by `hydo gui
 docs/ONBOARD.md is the user's page. `docs/ONBOARDING-PLAYBOOK.md` is the process for an onboarding
 of a real project, from the choice of a target to the upstream report (M281). `hydo guide
 strategies` lists the checks and faults that found bugs, each with its evidence, so that an
-onboarding chooses them from what worked (M293). The assertion SDKs are in `sdk/`
+onboarding chooses them from what worked (M293). M330 (tentative number) added four entries
+from a user's second onboarding round, which found two bugs where the first round found none.
+They are production's topology, the features behind a flag, the checks of how each unknown
+outcome ends, and pauses past a failure detector. The skill copies
+production's shape from the deployment manifests and marks promises that no owner confirmed. It
+reads the build's RAM warnings before the first run and asks for a second round before it
+reports no bugs. Its version stays until the lead sets it. The assertion SDKs are in `sdk/`
 (Rust is the reference), with the shared cases in `sdk/cases/`. `sdk/README.md` is for SDK
 maintainers: the shared cases, and the Go module with its frozen copy in `hydo/stack` (section
 "The Go module and the frozen copy in `hydo/stack`"). Every code example on the package pages is a
@@ -3842,6 +3848,12 @@ build machine, before 2026-10-13.
   unread `A::Item` values gives a false `broken`; associated types of a type parameter, private
   error fields, and fallible or argument-free constructors stop contracts on the API. Nothing
   recorded moved
+- M330 (tentative number): what a user's second onboarding round of a distributed query engine
+  taught. `hydo guide strategies` gains four entries: production's topology, the features behind
+  a flag, the checks of how each unknown outcome ends, and pauses of a service past its failure
+  detector. The skill and the playbook ask for production's shape and for promises from the
+  manifests when no owner answers. They read the build's RAM warnings before the first run and
+  ask for a second round before a report of no bugs. The skill's version is unchanged. Nothing recorded moved
 
 ## Where to look
 
