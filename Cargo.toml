@@ -93,6 +93,14 @@ codegen-units = 16
 incremental = false
 strip = false # symbols kept for test backtraces
 
+# Development builds and tests carry no debug information (user, 2026-11-20): it was 29 GB of the
+# 34 GB of target/debug on the Mac, and no debugger was used on hydo itself. A panic still names its
+# file and line, and a backtrace its functions. For one build with it: CARGO_PROFILE_DEV_DEBUG=true
+# (full) or =line-tables-only (file and line in backtraces). `hydo fuzz` and contracts read the
+# debug information of the programs they test, which they build with their own profiles.
+[profile.dev]
+debug = false
+
 # The gRPC client's tests generate deeply nested messages (recursive schemas); unoptimized,
 # they take minutes. Only debug builds are affected (the release client is built with --release).
 [profile.dev.package.hydo-grpc]

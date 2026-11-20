@@ -97,6 +97,9 @@ It stops with a message that names the file when the file is missing (M151).
 
 - An M2 Pro with macOS 26.4.1. The Mac engine needs no root.
 - Run `. ~/.cargo/env` before you use cargo.
+- Development builds carry no debug information (`[profile.dev]` in `Cargo.toml`), to keep
+  `target/` small. A panic still names its file and line. For a debugger or file and line in a
+  backtrace, build once with `CARGO_PROFILE_DEV_DEBUG=true` or `=line-tables-only`.
 - The Developer ID key and the notarization profile `hydo-notary` are in the keychain.
   `docs/design/signing.md` says how a Mac release is signed.
 
