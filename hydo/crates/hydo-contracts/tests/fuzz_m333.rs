@@ -59,3 +59,22 @@ fn a_comparison_with_values_not_read_is_not_judged_never_broken() {
         assert!(why.contains("Wrapping<u8>"), "{why}");
     }
 }
+
+#[test]
+fn an_associated_type_of_a_type_parameter_reads_through_its_with_line() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m333-assoc");
+    let (_, rep) = run_fns(&t, &["small::"], &[]);
+    assert!(rep.skipped.is_empty(), "{:?}", rep.skipped);
+    // a parameter (`push`), a result (`pop`, `into_vec`), and a closure's argument (`retain`)
+    for f in ["::push", "::pop", "::into_vec", "::retain"] {
+        let r = one(&rep, f);
+        assert_eq!(r.verdict, "held", "{r:?}");
+        assert!(r.held.iter().all(|h| h.undecided == 0), "{r:?}");
+    }
+    // `<A as Store>::Item` is `A::Item`
+    use hydo_contracts::fuzz::rust::{parse_ty, TyAst};
+    assert_eq!(
+        parse_ty("<A as Store>::Item").unwrap(),
+        TyAst::Path(vec!["A".into(), "Item".into()], vec![])
+    );
+}

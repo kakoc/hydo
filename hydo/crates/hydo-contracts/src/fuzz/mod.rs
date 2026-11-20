@@ -524,6 +524,7 @@ fn closure_param(
     closures: &BTreeMap<String, rust::FnBound>,
     subst: &BTreeMap<String, TyAst>,
     res: &rust::Resolver,
+    items: &rust::Items,
 ) -> Option<Result<FTy, String>> {
     let mut base = t;
     while let TyAst::Ref(_, x) = base {
@@ -536,8 +537,13 @@ fn closure_param(
     };
     let b = rust::FnBound {
         once: b.once,
-        args: b.args.iter().map(|a| rust::subst_ty(a, subst)).collect(),
-        ret: rust::subst_ty(&b.ret, subst),
+        // `FnMut(&mut A::Item) -> bool` with `with A = [u8; 4]` (Milestone 333)
+        args: b
+            .args
+            .iter()
+            .map(|a| rust::subst_param_assoc(&rust::subst_ty(a, subst), subst, items))
+            .collect(),
+        ret: rust::subst_param_assoc(&rust::subst_ty(&b.ret, subst), subst, items),
     };
     let ret = res.resolve(&b.ret);
     if let Err(why) = ret.generable() {
@@ -766,12 +772,15 @@ fn read_fn(
         _ => None,
     };
     let fix = |t: &TyAst, ret: bool| -> TyAst {
-        match &self_ty {
+        let t = match &self_ty {
             Some(st) => rust::subst_assoc(t, &|n: &str| {
                 rust::assoc_type(items, st, trait_of.as_deref(), &sig.name, n, ret)
             }),
             None => t.clone(),
-        }
+        };
+        // a type parameter's associated type through its `with` line's type: smallvec's
+        // `A::Item` with `with A = [u8; 4]` is `u8` (Milestone 333)
+        rust::subst_param_assoc(&t, &subst, items)
     };
     let mut params = Vec::new();
     if let Some(r) = sig.receiver {
@@ -802,7 +811,7 @@ fn read_fn(
     }
     for (n, t) in &sig.params {
         let t = &fix(t, false);
-        let ty = match closure_param(t, &closures, &subst, &res) {
+        let ty = match closure_param(t, &closures, &subst, &res, items) {
             Some(c) => c.map_err(|why| format!("the parameter `{n}`: {why}"))?,
             None => res.resolve(t),
         };

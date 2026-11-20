@@ -807,6 +807,29 @@ pub fn parse_ty(s: &str) -> Result<TyAst, String> {
                 .collect::<Result<_, _>>()?,
         ));
     }
+    // `<A as Array>::Item`, a type parameter's associated type with its trait named
+    // (Milestone 333): read as `A::Item`
+    if s.starts_with('<') {
+        if let Some(e) = matching(s, 0, '<', '>') {
+            let (inner, rest) = (&s[1..e], s[e + 1..].trim());
+            if let (Some((base, _)), Some(r)) = (inner.split_once(" as "), rest.strip_prefix("::"))
+            {
+                if let Ok(TyAst::Path(mut segs, a)) = parse_ty(base) {
+                    let more: Vec<String> = r.split("::").map(|x| x.trim().to_string()).collect();
+                    if a.is_empty()
+                        && segs.len() == 1
+                        && more.iter().all(|x| {
+                            !x.is_empty() && x.chars().all(|c| c.is_alphanumeric() || c == '_')
+                        })
+                    {
+                        segs.extend(more);
+                        return Ok(TyAst::Path(segs, vec![]));
+                    }
+                }
+            }
+        }
+        return Ok(TyAst::Other(s.into()));
+    }
     let first = s.split_whitespace().next().unwrap_or("");
     if matches!(first, "impl" | "dyn") || s.starts_with('*') || s.starts_with("fn(") {
         return Ok(TyAst::Other(s.into()));
@@ -1014,6 +1037,9 @@ fn use_tree(
 pub struct ImplDef {
     pub ty: TyAst,
     pub tr: Option<TyAst>,
+    /// The block's type parameters (`T` and `N` of `impl<T, const N: usize>`), for an
+    /// associated type of a type parameter's type (Milestone 333).
+    pub generics: Vec<String>,
     pub assoc: Vec<(String, TyAst)>,
     pub rets: Vec<(String, Option<TyAst>)>,
     /// The block's functions without a receiver, each with whether it is `pub`, for the
@@ -1054,26 +1080,36 @@ pub fn assoc_type(
     name: &str,
     ret: bool,
 ) -> Option<TyAst> {
-    let own = |i: &&ImplDef| {
-        same_ty(&i.ty, self_ty)
-            && match (tr, &i.tr) {
-                (Some(t), Some(it)) => trait_name(it) == t,
-                (None, None) => true,
-                _ => false,
-            }
+    // the block's type parameters bound to the parts of the type (`impl<T> Add<T> for
+    // NotNan<T>` for `NotNan<f64>`; Milestone 333)
+    let fits = |i: &ImplDef| -> Option<BTreeMap<String, TyAst>> {
+        let mut map = BTreeMap::new();
+        unify(&i.ty, self_ty, &i.generics, &mut map).then_some(map)
     };
-    let blocks: Vec<&ImplDef> = items.impls.iter().filter(own).collect();
-    let others = items.impls.iter().filter(|i| same_ty(&i.ty, self_ty));
-    for b in blocks.iter().copied().chain(others) {
+    let own_trait = |i: &ImplDef| match (tr, &i.tr) {
+        (Some(t), Some(it)) => trait_name(it) == t,
+        (None, None) => true,
+        _ => false,
+    };
+    let blocks: Vec<(&ImplDef, BTreeMap<String, TyAst>)> = items
+        .impls
+        .iter()
+        .filter(|i| own_trait(i))
+        .filter_map(|i| fits(i).map(|m| (i, m)))
+        .collect();
+    let others = items.impls.iter().filter_map(|i| fits(i).map(|m| (i, m)));
+    let bound =
+        |t: &TyAst, map: &BTreeMap<String, TyAst>| subst_param_assoc(&subst_ty(t, map), map, items);
+    for (b, map) in blocks.iter().cloned().chain(others) {
         if let Some((_, t)) = b.assoc.iter().find(|(n, _)| n == name) {
-            return Some(t.clone());
+            return Some(bound(t, &map));
         }
     }
     if ret {
-        for b in &blocks {
+        for (b, map) in &blocks {
             if let Some((_, Some(r))) = b.rets.iter().find(|(n, _)| n == method) {
                 if !r.text().contains("Self") {
-                    return Some(r.clone());
+                    return Some(bound(r, map));
                 }
             }
         }
@@ -1249,6 +1285,142 @@ pub fn subst_assoc(t: &TyAst, f: &dyn Fn(&str) -> Option<TyAst>) -> TyAst {
     }
 }
 
+/// Whether the type `pat` of an `impl` block, whose type parameters are `gens`, matches the
+/// type `t` (Milestone 333): each parameter is bound to the part of `t` it stands for, in
+/// `map`. `[T; N]` matches `[u8; 4]` with `T = u8` and `N = 4`; a macro's `$size` matches any
+/// length.
+pub fn unify(pat: &TyAst, t: &TyAst, gens: &[String], map: &mut BTreeMap<String, TyAst>) -> bool {
+    match (pat, t) {
+        (TyAst::Path(s, a), _) if s.len() == 1 && a.is_empty() && gens.contains(&s[0]) => {
+            match map.get(&s[0]) {
+                Some(b) => same_ty(b, t),
+                None => {
+                    map.insert(s[0].clone(), t.clone());
+                    true
+                }
+            }
+        }
+        (TyAst::Path(s, a), TyAst::Path(u, b)) => {
+            s.last() == u.last()
+                && a.len() == b.len()
+                && a.iter().zip(b).all(|(x, y)| unify(x, y, gens, map))
+        }
+        (TyAst::Ref(m, x), TyAst::Ref(n, y)) => m == n && unify(x, y, gens, map),
+        (TyAst::Slice(x), TyAst::Slice(y)) => unify(x, y, gens, map),
+        (TyAst::Array(x, n), TyAst::Array(y, k)) => {
+            let n = n.trim();
+            let len_ok = if gens.iter().any(|g| g == n) {
+                map.insert(
+                    n.to_string(),
+                    TyAst::Path(vec![k.trim().to_string()], vec![]),
+                );
+                true
+            } else {
+                n.starts_with('$') || n.replace('_', "") == k.trim().replace('_', "")
+            };
+            len_ok && unify(x, y, gens, map)
+        }
+        (TyAst::Tuple(x), TyAst::Tuple(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(p, q)| unify(p, q, gens, map))
+        }
+        (p, t) => same_ty(p, t),
+    }
+}
+
+/// What the associated type `name` of the type `t` stands for (Milestone 333): `type <name> =
+/// <type>;` in an `impl` block of the crate whose type matches `t` (smallvec's `impl<T, const
+/// N: usize> Array for [T; N] { type Item = T; }` gives `u8` for `[u8; 4]`), else the standard
+/// library's `Item` of a list (`Vec<T>`, `[T; N]`, `[T]`), `Owned` of `str` and of a slice,
+/// and `Output` of a number.
+pub fn assoc_of(items: &Items, t: &TyAst, name: &str) -> Option<TyAst> {
+    assoc_depth(items, t, name, 0)
+}
+
+fn assoc_depth(items: &Items, t: &TyAst, name: &str, depth: usize) -> Option<TyAst> {
+    if depth > 6 {
+        return None;
+    }
+    let t = match t {
+        TyAst::Ref(_, x) => x,
+        o => o,
+    };
+    for b in &items.impls {
+        let Some((_, a)) = b.assoc.iter().find(|(n, _)| n == name) else {
+            continue;
+        };
+        let mut map = BTreeMap::new();
+        if unify(&b.ty, t, &b.generics, &mut map) {
+            let r = subst_ty(a, &map);
+            // `type Item = A::Item;` of `impl<A: Array> ... for SmallVec<A>`
+            return Some(param_assoc_depth(&r, &map, items, depth + 1));
+        }
+    }
+    let elem = |x: &TyAst| Some(x.clone());
+    match (name, t) {
+        ("Item", TyAst::Array(x, _) | TyAst::Slice(x)) => elem(x),
+        ("Item", TyAst::Path(s, a))
+            if a.len() == 1
+                && matches!(
+                    s.last().map(String::as_str),
+                    Some("Vec" | "VecDeque" | "Option")
+                ) =>
+        {
+            elem(&a[0])
+        }
+        ("Owned", TyAst::Path(s, a)) if a.is_empty() && s.last().is_some_and(|l| l == "str") => {
+            Some(TyAst::Path(vec!["String".into()], vec![]))
+        }
+        ("Owned", TyAst::Slice(x)) => Some(TyAst::Path(vec!["Vec".into()], vec![(**x).clone()])),
+        ("Output", TyAst::Path(s, a))
+            if a.is_empty()
+                && s.len() == 1
+                && matches!(
+                    s[0].as_str(),
+                    "u8" | "u16"
+                        | "u32"
+                        | "u64"
+                        | "u128"
+                        | "usize"
+                        | "i8"
+                        | "i16"
+                        | "i32"
+                        | "i64"
+                        | "i128"
+                        | "isize"
+                        | "f32"
+                        | "f64"
+                ) =>
+        {
+            Some(t.clone())
+        }
+        _ => None,
+    }
+}
+
+/// `t` with each associated type of a type parameter that `s` names replaced by what it stands
+/// for (Milestone 333): `A::Item` with `with A = [u8; 4]` is `u8`. One that hydo cannot
+/// resolve stays as written.
+pub fn subst_param_assoc(t: &TyAst, s: &BTreeMap<String, TyAst>, items: &Items) -> TyAst {
+    param_assoc_depth(t, s, items, 0)
+}
+
+fn param_assoc_depth(t: &TyAst, s: &BTreeMap<String, TyAst>, items: &Items, d: usize) -> TyAst {
+    let r = |x: &TyAst| param_assoc_depth(x, s, items, d);
+    match t {
+        TyAst::Path(segs, args)
+            if segs.len() == 2 && args.is_empty() && s.contains_key(&segs[0]) =>
+        {
+            assoc_depth(items, &s[&segs[0]], &segs[1], d).unwrap_or_else(|| t.clone())
+        }
+        TyAst::Path(segs, args) => TyAst::Path(segs.clone(), args.iter().map(r).collect()),
+        TyAst::Ref(m, x) => TyAst::Ref(*m, Box::new(r(x))),
+        TyAst::Slice(x) => TyAst::Slice(Box::new(r(x))),
+        TyAst::Array(x, n) => TyAst::Array(Box::new(r(x)), n.clone()),
+        TyAst::Tuple(v) => TyAst::Tuple(v.iter().map(r).collect()),
+        TyAst::Other(o) => TyAst::Other(o.clone()),
+    }
+}
+
 /// Add the `impl` blocks of a source (its text and masked text), with their associated types
 /// and their methods' result types (Milestone 318).
 fn read_impls(text: &str, m: &[u8], items: &mut Items) {
@@ -1279,12 +1451,18 @@ fn read_impls(text: &str, m: &[u8], items: &mut Items) {
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
-        let (Some((ty, tr, _)), Some(close)) = (impl_parts(&header), close_of(m, open)) else {
+        let (Some((ty, tr, generics)), Some(close)) = (impl_parts(&header), close_of(m, open))
+        else {
             continue;
         };
+        let generics = generics
+            .iter()
+            .map(|g| g.strip_prefix("const ").unwrap_or(g).trim().to_string())
+            .collect();
         let mut def = ImplDef {
             ty,
             tr,
+            generics,
             assoc: vec![],
             rets: vec![],
             fns: vec![],
@@ -1596,6 +1774,15 @@ pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
             }
             let after = rest.trim_start()[name.len()..].trim_start();
             if kw == "type" {
+                // an associated type of an `impl` block or a trait is no alias of the crate:
+                // smallvec's `type Item = T::Item;` made `A::Item` read as `T::Item`
+                // (Milestone 333)
+                if enclosing(&m, at)
+                    .iter()
+                    .any(|b| impl_parts(&b.header).is_some() || trait_parts(&b.header).is_some())
+                {
+                    continue;
+                }
                 // `type Result<T> = result::Result<Status<T>, Error>;` (Milestone 307)
                 if after.starts_with('<') {
                     let Some(e) = matching(after, 0, '<', '>') else {
@@ -1911,6 +2098,20 @@ impl Resolver<'_> {
                 if segs.len() == 1 && args.is_empty() && self.subst.contains_key(&segs[0]) =>
             {
                 self.res(&self.subst[&segs[0]], stack)
+            }
+            // a type parameter's associated type (`A::Item`; Milestone 333)
+            TyAst::Path(segs, args)
+                if segs.len() == 2 && args.is_empty() && self.subst.contains_key(&segs[0]) =>
+            {
+                match assoc_of(self.items, &self.subst[&segs[0]], &segs[1]) {
+                    Some(a) if stack.len() < 12 => {
+                        stack.push(t.text());
+                        let r = self.res(&a, stack);
+                        stack.pop();
+                        r
+                    }
+                    _ => FTy::Opaque(t.text()),
+                }
             }
             TyAst::Path(segs, args) => {
                 let last = segs.last().map(String::as_str).unwrap_or("");

@@ -160,6 +160,21 @@ pub trait ToSnakeCase: ToOwned {
 }
 ```
 
+An associated type of a type parameter, such as smallvec's `A::Item` or `<A as Array>::Item`,
+is read through the type that the parameter's `with` line names. hydo takes it from the
+crate's `impl` of the trait for that type: smallvec's `impl<T, const N: usize> Array for [T;
+N] { type Item = T; }` makes `A::Item` a `u8` with `with A = [u8; 4]`. Without such an `impl`,
+`Item` of a list or an array is its element. Such a type works in a parameter, in a result,
+and in a generated closure's arguments:
+
+```rust
+// hydo: with A = [u8; 4]
+// hydo: build SmallVec<[u8; 4]> from SmallVec::<[u8; 4]>::from_vec(v: Vec<u8>)
+// hydo: read SmallVec<[u8; 4]> as Vec<u8> by to_vec()
+// hydo: ensures len(self) == old(len(self)) + 1 && self[len(self) - 1] == value
+pub fn push(&mut self, value: A::Item) {
+```
+
 A crate can define one name in two modules, as humantime does with `Error`. hydo then takes the
 type of the function's own module, else the one that a `use` line of its file imports. A path
 names the other one: `crate::duration::Error`.
