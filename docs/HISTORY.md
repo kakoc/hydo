@@ -19922,6 +19922,111 @@ fingerprint for its own text, or the explorer stops drawing a `dseed=` that deci
 second version continues shrink candidates from their own snapshots on the Mac engine and KVM.
 Open item 167 has what is left. Nothing recorded moved.
 
+## Milestone 338 (tentative number): hard links in the root, the root's estimate, `/sys` of an image service, and the pause of threads
+
+Four fixes that give images built at the fingerprint epoch 5 new bytes or new commands, so they
+come before 0.5.0 (user, 2026-11-20). Each fix is its own commit, and each is keyed on the image's
+epoch in `hydo_image::defaults`, so an image built before keeps its bytes and its transcripts.
+The measurements used the Mac engine with this tree's `hydo` and the installed 0.4.1 release's
+engine and guest files. "Before" is the release 0.4.1 (epoch 4), whose builder writes the same
+roots as this tree's before the fixes.
+
+**1. Hard links stay links (open item 162; `cpio_hard_links`).** An arm64 root is a newc cpio
+archive: the initramfs, or the archive that the helper VM unpacks into the root of `guest.root:
+disk`. The builder wrote each path of a file as a whole copy with its own inode, so the busybox
+image's 405 paths of one program became 405 copies of it in the guest's RAM. From epoch 5 the
+paths of one file get one inode number and their count of links, and the first path in sorted
+order carries the bytes. The kernel's unpacker (`init/initramfs.c`, `maybe_link`) links the later
+paths to the first, and so does busybox's `cpio -i`, which unpacks the disk root. A link to a
+file outside the tree counts only the tree's paths. An x86_64 root is made by `mke2fs -d`,
+which keeps hard links already. The measurements, with `network: bridge`:
+
+| image (arm64, one service) | initramfs before | after | `Shmem` before | after |
+|---|---|---|---|---|
+| `busybox:1.36.1` | 259.2 MB | 6.4 MB | 445.9 MiB (2,048 MiB guest) | 13.5 MiB (1,024 MiB guest) |
+| `postgres:16.4` | 149.9 MB | 148.6 MB | 470.9 MiB | 467.3 MiB |
+
+The busybox image's root did not boot in a 1,024 MiB guest before (`Initramfs unpacking failed:
+write error`), and it boots with 0.9 GiB free now. Inside the service, `ls -li` shows
+`/bin/busybox`, `/bin/ls` and `/bin/sh` as one inode with 405 links; PostgreSQL's
+`/usr/bin/perl` and `/usr/bin/perl5.36.0` are one inode with 2. The test `hydo-build`
+`cpio::tests::hard_links_stay_links` checks the headers of both forms.
+
+**2. The root's estimate counts the whole root (open items 162 and 166).** PostgreSQL 16.4 still
+does not fit in 1,024 MiB with its links: its root of 467 MiB is less than half of the RAM, and
+the guest stops with `Initramfs unpacking failed`. The kernel holds the compressed archive in
+RAM while it unpacks it into a tmpfs, which Linux sizes at half of the RAM it has then
+(`totalram_pages() / 2`). `MemTotal` was 935 MiB of 1,024 and 1,942 MiB of 2,048, so PostgreSQL's
+root had room for about 396 MiB. The estimate of Milestone 324 compared the layers with half of
+`guest.ram_mib` and gave no warning. Now:
+
+- `hydo_build::oci::initramfs_room` is half of the RAM less what the kernel keeps (80 MiB and
+  1/56 of the RAM) and less the archive. The test `root_fit::the_room_of_an_initramfs_root` checks
+  it against the four measured cases above: both roots fail in 1,024 MiB and fit in 2,048.
+- The estimate before the build, also with `--check`, counts the layers 8 % higher for their files'
+  whole pages, and adds hydo's own files, 12 MiB unpacked and 5 MiB compressed. The archive is the
+  layers as stored.
+- The build measures the staged root too: each file once, in pages of 4 KiB
+  (`oci::tmpfs_mib`), beside the written `cpio.gz`. It warns when the estimate did not, for
+  example for a large `root.files` tree.
+
+`hydo build --check` of the imported PostgreSQL project with `guest.ram_mib: 1024` now prints:
+
+```text
+hydo-build: warning: the image services' roots need about 440 MiB unpacked (db: 440 MiB), and the
+whole root about 488 MiB of the guest's RAM with hydo's own files. On the Mac engine the root
+lives there: the kernel holds the compressed root, about 150 MiB, while it unpacks it into a
+file system that Linux gives half of the RAM it has then, about 388 MiB of guest.ram_mib: 1024.
+The guest stops at boot with `Initramfs unpacking failed`. To fix it: guest.ram_mib: 1280 or
+more gives the roots the room (now 1024)
+```
+
+With 2,048 MiB, and for the busybox image with 1,024 MiB, it prints no warning. The hvx check of
+the root partition and the data disk is unchanged.
+
+**3. An image service sees cgroup2's files (open item 144; `oci_sys_rbind`).** The launcher's
+block of Milestones 317 and 331, which runs once per boot under the service's lock, binds `/sys`
+with `mount --rbind` from epoch 5. `/proc` and `/dev` stay plain binds. In the busybox and
+PostgreSQL services, `ls /sys/fs/cgroup` listed `cgroup.controllers`, `cgroup.procs`,
+`cpu.stat` and the other files, beside the `0::/` line of `/proc/self/cgroup`. With 0.4.1 the
+folder was empty. The test `oci::tests::sys_is_bound_recursively_from_epoch_5` and the launcher
+goldens check the block; an image built before keeps the plain bind.
+
+**4. The timed pause of threads (open item 80; `pause_largest_session`).** On an image built at
+epoch 5, the timer of `P=workload/<thread>@...` uses the freeze script of a reaction (Milestone
+296). It takes the session with the most processes among the leaders with `HYDO_FROM`, not the
+first in `/proc` order, which can be a watcher of busybox's `timeout`. A thread that ended before
+its move into the cgroup is left out. `agent::plan_of_image` reads the image's epoch into the
+plan (`Plan::pause_largest_session`); a plan read from a manifest keeps the old script, so the
+controller's corpora did not move. A probe ran `timeout 60 sh -c '...'` with 8 sleeps of 3 ms at a
+time, under `P=workload/sh@0~<off>:20`, on the Mac:
+
+| image | `off` 100, 300, 500 |
+|---|---|
+| built by 0.4.1 (epoch 4) | `ERROR P=workload/sh: unexpected output "sh: write error: No such process"` each time |
+| built by this tree (epoch 5) | `OK`, `PAUSED workload/sh (timer, threads 33 sh)` each time |
+
+The probe did not show the watcher's session: both scripts found the workload's session there.
+
+**The pinned reproducers.** On the bare-metal machine, this tree's `hydo` and `hydo-hvx` in
+`~/hydo-m338`, every VM through `~/bin/hvx-run` under umask 022, `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` on the epoch-4
+images in `~/hydo/build/m302` gave `e153f376096a072c` (VIOLATION, order 11) and `6a5c2fe208174af3`
+(OK), their recorded values. The four fixes do not touch an epoch-4 image.
+
+**What moves.** Every image built at epoch 5 has new bytes already. These fixes add, at the
+re-recording pass (open item 105): the Mac images whose roots have hard links, the 7 images with
+image services (their launchers), and the three KVM runs of the Qdrant example's thread pause.
+
+The four commits are `df4692ad` (hard links), `79f6c26a` (the estimate), `352d430f` (`/sys`) and
+`fdbb534d` (the pause of threads).
+
+**What is left.**
+
+- The estimate before the build uses a fixed 8 % for the files' whole pages and fixed sizes for
+  hydo's own files; the build's measure is exact for the tree, not for the kernel's own needs.
+- The x86_64 disk check does not count hydo's own files.
+- The watcher's session of busybox's `timeout` was not shown in a run.
+
 ## Milestone 339 (tentative number): repeated schedules, error shrinks, and `hydo run`'s refusal
 
 The user chose three changes of the explorer and the command line for hydo 0.5.0 on 2026-11-20.

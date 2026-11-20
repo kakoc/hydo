@@ -129,7 +129,7 @@ fn image(d: &Path, text: &str, epoch: u64) -> PathBuf {
     )
     .unwrap();
     let img = d.join(format!("explore-ob-e{epoch}-arm64.cpio.gz"));
-    hydo_build::cpio::write_cpio_gz(&root, &img, 0, None, false).unwrap();
+    hydo_build::cpio::write_cpio_gz(&root, &img, 0, None, false, false).unwrap();
     img
 }
 

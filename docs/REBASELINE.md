@@ -3797,6 +3797,18 @@ shared files in `/tmp` with another service, or with the workload, finds its own
 a verdict can move as well. None of the 7 examples does so: their workloads and checks reach the
 services through `hydo-oci` and `/tmp/hydo`.
 
+**Hard links, `/sys` and the pause of threads (Milestone 338).** Three more changes of epoch 5
+(`hydo_image::defaults`: `cpio_hard_links`, `oci_sys_rbind`, `pause_largest_session`):
+
+- An arm64 root's archive keeps the tree's hard links as links. A Mac image whose root has a
+  file with several paths gets other bytes, and the pass shows which of the 21 Mac images have
+  one. A root without hard links keeps the bytes that the epoch-5 builder gave before.
+- An image service's launcher binds `/sys` recursively. The 7 images with image services move
+  with it (21 runs), whose launchers already move with Milestones 317 and 331.
+- A timed pause of threads on an epoch-5 image sends the reaction's freeze script, so its
+  control transcript and fingerprint move. The runs of the list with `P=workload/<thread>` are
+  three runs of `kvm/qdrant-flaky-buggy` and `kvm/qdrant-flaky-fixed`.
+
 **The pinned reproducers** keep their images and values: this hydo boots the epoch-2 images in
 `~/hydo/build/m204` (`a76d7fe857fdb37c`, `efbde7b57264be0f`) and the epoch-4 images in
 `~/hydo/build/m302` (`e153f376096a072c`, `6a5c2fe208174af3`) as before. They have no image

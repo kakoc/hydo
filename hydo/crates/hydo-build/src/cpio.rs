@@ -2,6 +2,14 @@
 //! 0:0 (or an image service's owners and modes), one fixed mtime, gzip-compressed exactly as
 //! Python's `gzip.GzipFile(filename="", mtime=0, compresslevel=9)` writes it (zlib's deflate at
 //! level 9, the header with XFL=2 and OS=255). Port of hydo_build_arm64.py's `_cpio`.
+//!
+//! Hard links (Milestone 338, from the fingerprint epoch 5,
+//! [`hydo_image::EpochDefaults::cpio_hard_links`]): the paths of the tree that are one file get
+//! one inode number and their count of links, and the first of them in path order carries the
+//! bytes. The kernel's unpacker (`init/initramfs.c`, `maybe_link`) and busybox's `cpio -i` (which
+//! unpacks the root of `guest.root: disk`) make the later paths links to the first. Before, each
+//! path was a file of its own: the busybox image's 400 applets were 400 copies of busybox in the
+//! guest's RAM.
 
 use crate::fsx::{self, io_fail};
 use crate::Fail;
@@ -39,9 +47,25 @@ impl<W: Write> Writer<W> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn ent(
         &mut self,
+        name: &[u8],
+        mode: u32,
+        data: &[u8],
+        nlink: u32,
+        rdev: (u32, u32),
+        meta: Option<&Meta>,
+    ) {
+        let ino = self.ino;
+        self.ino += 1;
+        self.ent_ino(ino, name, mode, data, nlink, rdev, meta);
+    }
+
+    /// An entry with the inode number `ino`; a later link of a file reuses the first's.
+    #[allow(clippy::too_many_arguments)]
+    fn ent_ino(
+        &mut self,
+        ino: u32,
         name: &[u8],
         mut mode: u32,
         data: &[u8],
@@ -59,7 +83,7 @@ impl<W: Write> Writer<W> {
             gid = g;
         }
         let fields = [
-            self.ino,
+            ino,
             mode,
             uid,
             gid,
@@ -77,7 +101,6 @@ impl<W: Write> Writer<W> {
         for v in fields {
             hdr.push_str(&format!("{v:08x}"));
         }
-        self.ino += 1;
         self.put(hdr.as_bytes());
         self.put(&nb);
         let pad = (4 - (110 + nb.len()) % 4) % 4;
@@ -121,13 +144,16 @@ fn paths_of(root: &Path) -> Result<Vec<Vec<u8>>, Fail> {
     Ok(paths)
 }
 
-/// `_cpio(root, out_gz, mtime, meta)`.
+/// `_cpio(root, out_gz, mtime, meta)`. `links`: keep the tree's hard links as links (from the
+/// fingerprint epoch 5, [`hydo_image::EpochDefaults::cpio_hard_links`]); false writes each path
+/// as a file of its own, as before.
 pub fn write_cpio_gz(
     root: &Path,
     out_gz: &Path,
     mtime: u64,
     meta: Option<&Meta>,
     any_zlib: bool,
+    links: bool,
 ) -> Result<(), Fail> {
     let mut w = Writer {
         buf: Vec::new(),
@@ -135,7 +161,7 @@ pub fn write_cpio_gz(
         mtime,
         err: None,
     };
-    archive(root, &mut w, meta)?;
+    archive(root, &mut w, meta, links)?;
     let gz = gzip_python(&w.buf, any_zlib)?;
     fsx::write_bytes(out_gz, &gz)
 }
@@ -148,6 +174,7 @@ pub fn write_cpio_file(
     out: &Path,
     mtime: u64,
     meta: Option<&Meta>,
+    links: bool,
 ) -> Result<u64, Fail> {
     let f = fs::File::create(out).map_err(|e| io_fail("cannot write", out, e))?;
     let mut w = Writer {
@@ -159,7 +186,7 @@ pub fn write_cpio_file(
         mtime,
         err: None,
     };
-    archive(root, &mut w, meta)?;
+    archive(root, &mut w, meta, links)?;
     if let Some(e) = w.err.take() {
         return Err(io_fail("cannot write", out, e));
     }
@@ -193,10 +220,41 @@ fn is_fifo(meta: Option<&Meta>, p: &[u8]) -> bool {
         .is_some_and(|e| e.0 == S_IFIFO)
 }
 
+/// How many paths of the tree each file with more than one link has, by device and inode: the
+/// count its entries carry. A link that leads out of the tree (a file of the host's store linked
+/// into it) does not count.
+fn link_counts(root: &Path, paths: &[Vec<u8>]) -> Result<HashMap<(u64, u64), u32>, Fail> {
+    let mut n: HashMap<(u64, u64), u32> = HashMap::new();
+    for p in paths {
+        let full = root.join(std::ffi::OsStr::from_bytes(p));
+        let st = fs::symlink_metadata(&full).map_err(|e| io_fail("cannot stat", &full, e))?;
+        if st.file_type().is_file() && st.nlink() > 1 {
+            *n.entry((st.dev(), st.ino())).or_default() += 1;
+        }
+    }
+    n.retain(|_, c| *c > 1);
+    Ok(n)
+}
+
 /// Every entry of `root`, sorted, then `dev/console` when the tree has none, then the trailer.
-fn archive<W: Write>(root: &Path, w: &mut Writer<W>, meta: Option<&Meta>) -> Result<(), Fail> {
+/// `links`: a file of several paths is one inode with its count of links, and only its first
+/// path carries the bytes ([`write_cpio_gz`]).
+fn archive<W: Write>(
+    root: &Path,
+    w: &mut Writer<W>,
+    meta: Option<&Meta>,
+    links: bool,
+) -> Result<(), Fail> {
     let mut have_console = false;
-    for p in paths_of(root)? {
+    let paths = paths_of(root)?;
+    let counts = if links {
+        link_counts(root, &paths)?
+    } else {
+        HashMap::new()
+    };
+    // the inode number that each linked file's first entry got
+    let mut first: HashMap<(u64, u64), u32> = HashMap::new();
+    for p in paths {
         let full = root.join(std::ffi::OsStr::from_bytes(&p));
         if std::str::from_utf8(&p).is_err() {
             return Err(Fail::Exit(format!(
@@ -224,6 +282,16 @@ fn archive<W: Write>(root: &Path, w: &mut Writer<W>, meta: Option<&Meta>) -> Res
         } else if is_fifo(meta, &p) {
             // an image service's FIFO (Milestone 316): an empty file in the staged tree
             w.ent(&p, S_IFIFO | (st.mode() & 0o7777), &[], 1, (0, 0), meta);
+        } else if let Some(&n) = counts.get(&(st.dev(), st.ino())) {
+            let mode = S_IFREG | (st.mode() & 0o7777);
+            match first.get(&(st.dev(), st.ino())) {
+                Some(&ino) => w.ent_ino(ino, &p, mode, &[], n, (0, 0), meta),
+                None => {
+                    let data = fs::read(&full).map_err(|e| io_fail("cannot read", &full, e))?;
+                    first.insert((st.dev(), st.ino()), w.ino);
+                    w.ent(&p, mode, &data, n, (0, 0), meta);
+                }
+            }
         } else {
             let data = fs::read(&full).map_err(|e| io_fail("cannot read", &full, e))?;
             w.ent(&p, S_IFREG | (st.mode() & 0o7777), &data, 1, (0, 0), meta);
@@ -278,8 +346,8 @@ mod tests {
         std::os::unix::fs::symlink("init", r.join("sbin-init")).unwrap();
         let mut meta = Meta::new();
         meta.insert("init".into(), (S_IFREG, 0o750, 7, 8));
-        write_cpio_gz(&r, &d.join("a.cpio.gz"), 1, Some(&meta), false).unwrap();
-        let n = write_cpio_file(&r, &d.join("a.cpio"), 1, Some(&meta)).unwrap();
+        write_cpio_gz(&r, &d.join("a.cpio.gz"), 1, Some(&meta), false, true).unwrap();
+        let n = write_cpio_file(&r, &d.join("a.cpio"), 1, Some(&meta), true).unwrap();
         let mut unz = Vec::new();
         flate2::read::GzDecoder::new(fs::File::open(d.join("a.cpio.gz")).unwrap())
             .read_to_end(&mut unz)
@@ -301,7 +369,7 @@ mod tests {
         fs::write(r.join("oci/s/run/file"), "").unwrap();
         let mut meta = Meta::new();
         meta.insert("oci/s/run/pipe".into(), (S_IFIFO, 0o666, 999, 999));
-        let n = write_cpio_file(&r, &d.join("a.cpio"), 1, Some(&meta)).unwrap();
+        let n = write_cpio_file(&r, &d.join("a.cpio"), 1, Some(&meta), true).unwrap();
         let a = fs::read(d.join("a.cpio")).unwrap();
         let _ = fs::remove_dir_all(&d);
         assert_eq!(a.len() as u64, n);
@@ -320,5 +388,70 @@ mod tests {
         };
         assert_eq!(entry("oci/s/run/pipe"), (S_IFIFO | 0o666, 999, 0));
         assert_eq!(entry("oci/s/run/file").0 & S_IFMT, S_IFREG);
+    }
+
+    /// The newc header fields of `name`'s entry: inode, mode, nlink and size.
+    fn fields(a: &[u8], name: &str) -> (u32, u32, u32, u32) {
+        let at = a
+            .windows(name.len() + 1)
+            .position(|w| w == [name.as_bytes(), b"\0"].concat())
+            .unwrap()
+            - 110;
+        let field = |i: usize| {
+            u32::from_str_radix(std::str::from_utf8(&a[at + 6 + 8 * i..][..8]).unwrap(), 16)
+                .unwrap()
+        };
+        (field(0), field(1), field(4), field(6))
+    }
+
+    /// Milestone 338: with `links`, the paths of one file are one inode with their count of
+    /// links, and only the first in path order carries the bytes; without, each path is a whole
+    /// copy, as before epoch 5. A link to a file outside the tree counts only the tree's paths.
+    #[test]
+    fn hard_links_stay_links() {
+        let d = crate::tempdir("hydo-cpio-links-").unwrap();
+        let r = d.join("root");
+        fs::create_dir_all(r.join("bin")).unwrap();
+        fs::write(r.join("bin/busybox"), vec![7u8; 5000]).unwrap();
+        for a in ["ls", "sh", "cat"] {
+            fs::hard_link(r.join("bin/busybox"), r.join("bin").join(a)).unwrap();
+        }
+        fs::write(d.join("outside"), "out\n").unwrap();
+        fs::hard_link(d.join("outside"), r.join("bin/alone")).unwrap();
+        fs::write(r.join("bin/other"), "x\n").unwrap();
+        let old = write_cpio_file(&r, &d.join("old.cpio"), 1, None, false).unwrap();
+        let new = write_cpio_file(&r, &d.join("new.cpio"), 1, None, true).unwrap();
+        let (a, b) = (
+            fs::read(d.join("old.cpio")).unwrap(),
+            fs::read(d.join("new.cpio")).unwrap(),
+        );
+        let _ = fs::remove_dir_all(&d);
+        assert_eq!((a.len() as u64, b.len() as u64), (old, new));
+        // before: four copies of 5000 bytes, each its own inode with one link
+        assert!(old > 20000 && new < 7000, "{old} {new}");
+        let olds: Vec<_> = ["bin/busybox", "bin/cat", "bin/ls", "bin/sh"]
+            .iter()
+            .map(|n| fields(&a, n))
+            .collect();
+        assert!(olds.iter().all(|f| f.2 == 1 && f.3 == 5000));
+        // now: bin/busybox is first in path order and has the bytes; cat, ls and sh link to it
+        let first = fields(&b, "bin/busybox");
+        assert_eq!((first.2, first.3), (4, 5000));
+        for n in ["bin/cat", "bin/ls", "bin/sh"] {
+            assert_eq!(fields(&b, n), (first.0, first.1, 4, 0));
+        }
+        assert_eq!(fields(&b, "bin/alone").2, 1);
+        assert_eq!(fields(&b, "bin/alone").3, 4);
+        // the inode numbers after the links go on without a gap
+        assert_eq!(fields(&b, "bin/other").0, first.0 + 1);
+        // a tree without links gives the same bytes either way
+        let d = crate::tempdir("hydo-cpio-nolinks-").unwrap();
+        fs::create_dir_all(d.join("root/etc")).unwrap();
+        fs::write(d.join("root/etc/a"), "a\n").unwrap();
+        write_cpio_file(&d.join("root"), &d.join("x"), 1, None, false).unwrap();
+        write_cpio_file(&d.join("root"), &d.join("y"), 1, None, true).unwrap();
+        let same = fs::read(d.join("x")).unwrap() == fs::read(d.join("y")).unwrap();
+        let _ = fs::remove_dir_all(&d);
+        assert!(same);
     }
 }

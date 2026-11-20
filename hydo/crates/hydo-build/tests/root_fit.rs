@@ -96,7 +96,8 @@ fn roots_that_do_not_fit_are_named_before_the_build_unpacks_them() {
     .unwrap();
     assert!((48 << 20..(48 << 20) + 65536).contains(&got), "{got}");
 
-    // the Mac: three roots of 49 MiB in a guest of 256 MiB, whose tmpfs root holds 128 MiB
+    // the Mac: three roots of 49 MiB in a guest of 256 MiB. Its tmpfs root holds about 82 MiB:
+    // half of what the kernel leaves while it holds the compressed root (Milestone 338)
     let ram = json!({"guest": {"ram_mib": 256}});
     let w = warnings(&tmp, "arm64", ram.clone());
     assert_eq!(w.len(), 1, "{w:?}");
@@ -104,19 +105,25 @@ fn roots_that_do_not_fit_are_named_before_the_build_unpacks_them() {
     for part in [
         "the image services' roots need about 147 MiB unpacked (scheduler, executor_1 and \
          executor_2: 49 MiB each)",
-        "half of guest.ram_mib (128 of 256 MiB)",
+        "the whole root about 171 MiB of the guest's RAM with hydo's own files",
+        "about 82 MiB of guest.ram_mib: 256",
         "scheduler, executor_1 and executor_2 run one image: root.share_images: true unpacks it \
          once, 49 MiB in all",
     ] {
         assert!(w.contains(part), "{part}\n{w}");
     }
-    assert!(!w.contains("guest.ram_mib: "), "{w}");
+    assert!(!w.contains("or more gives the roots the room"), "{w}");
     // shared, the one tree fits; in a smaller guest only more RAM helps
     let shared = json!({"guest": {"ram_mib": 256}, "root": {"share_images": true}});
     assert_eq!(warnings(&tmp, "arm64", shared), Vec::<String>::new());
     // the root on the disk is the disk's matter, and 147 MiB fit there
     let disk = json!({"guest": {"ram_mib": 256, "root": "disk"}});
     assert_eq!(warnings(&tmp, "arm64", disk), Vec::<String>::new());
+    // Milestone 338: three roots of 49 MiB fit in half of 1024 MiB, and also with the archive
+    assert_eq!(
+        warnings(&tmp, "arm64", json!({"guest": {"ram_mib": 1024}})),
+        Vec::<String>::new()
+    );
 
     // hvx: root and data disk together at most 4096 MiB
     let data = json!({"data": {"size_mib": 4000}});
@@ -136,4 +143,51 @@ fn roots_that_do_not_fit_are_named_before_the_build_unpacks_them() {
         warnings(&tmp, "x86_64", json!({"data": {"size_mib": 3800}})),
         Vec::<String>::new()
     );
+}
+
+/// Milestone 338: the room of an initramfs root against what the Mac engine showed. PostgreSQL
+/// 16.4's root took 467 MiB of `Shmem` beside a 142 MiB archive: it did not fit in 1,024 MiB of
+/// guest RAM (`Initramfs unpacking failed: write error`) and fitted in 2,048. The busybox image's
+/// root as epoch 4 wrote it, 446 MiB beside 247 MiB, did not fit in 1,024 either and fitted in
+/// 2,048.
+#[test]
+fn the_room_of_an_initramfs_root() {
+    use hydo_build::oci::{initramfs_room, initramfs_warning, ram_for_initramfs};
+    assert!(initramfs_room(1024, 142) < 467);
+    assert!(initramfs_room(2048, 142) >= 467);
+    assert!(initramfs_room(1024, 247) < 446);
+    assert!(initramfs_room(2048, 247) >= 446);
+    assert_eq!(ram_for_initramfs(467, 142), 1280);
+    // the busybox image's root as epoch 5 writes it: 14 MiB beside 7 MiB
+    assert_eq!(initramfs_warning(14, 7, 1024, "x"), None);
+    let w = initramfs_warning(467, 142, 1024, "measured on the staged root").unwrap();
+    for part in [
+        "about 467 MiB of the guest's RAM unpacked (measured on the staged root)",
+        "about 142 MiB",
+        "guest.ram_mib: 1280 or more gives the root the room (now 1024)",
+    ] {
+        assert!(w.contains(part), "{part}\n{w}");
+    }
+    let w = initramfs_warning(20000, 9000, 1024, "x").unwrap();
+    assert!(w.contains("guest.root: disk"), "{w}");
+}
+
+/// Milestone 338: a staged root's tmpfs size counts each file once, in whole pages.
+#[test]
+fn a_staged_root_counts_each_file_once_in_pages() {
+    let tmp = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-build-tmpfs-mib-{}", std::process::id())),
+    );
+    let r = tmp.join("root");
+    std::fs::create_dir_all(r.join("bin")).unwrap();
+    std::fs::write(r.join("bin/busybox"), vec![1u8; 3 << 20]).unwrap();
+    for a in 0..100 {
+        std::fs::hard_link(r.join("bin/busybox"), r.join(format!("bin/a{a}"))).unwrap();
+    }
+    for f in 0..512 {
+        std::fs::write(r.join(format!("f{f}")), "x").unwrap();
+    }
+    std::os::unix::fs::symlink("busybox", r.join("bin/sh")).unwrap();
+    // 3 MiB once, and 512 files of one byte in a page each: 2 MiB
+    assert_eq!(hydo_build::oci::tmpfs_mib(&r).unwrap(), 5);
 }

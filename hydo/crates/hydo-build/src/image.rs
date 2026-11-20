@@ -253,7 +253,7 @@ fn mac_mkfs(
             fsx::chmod(&root.join(p), 0o755)?;
         }
         let initrd = tmp.join("mkfs.cpio.gz");
-        crate::cpio::write_cpio_gz(&root, &initrd, fsx::FIXED_MTIME as u64, None, false)?;
+        crate::cpio::write_cpio_gz(&root, &initrd, fsx::FIXED_MTIME as u64, None, false, false)?;
         let abs = crate::abspath(out);
         let p = Command::new(engine)
             .arg("hvm")
@@ -370,7 +370,7 @@ pub fn mac_mkfs_root(
             fsx::chmod(&root.join(p), 0o755)?;
         }
         let initrd = tmp.join("mkfs.cpio.gz");
-        crate::cpio::write_cpio_gz(&root, &initrd, fsx::FIXED_MTIME as u64, None, false)?;
+        crate::cpio::write_cpio_gz(&root, &initrd, fsx::FIXED_MTIME as u64, None, false, false)?;
         let abs = crate::abspath(&helper);
         crate::outln(
             io,

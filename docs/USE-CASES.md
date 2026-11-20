@@ -56,7 +56,7 @@ at release, and after release. The tables below take the chart's techniques in i
 
 | Technique | What hydo has | Status | Evidence |
 |---|---|---|---|
-| Integration tests | The whole system runs in one VM. `hydo onboard`, `hydo compose`, and `hydo k8s` start the project from a repository, a Compose file, or Kubernetes manifests. `hydo.yaml` reads YAML anchors and `<<` merge keys, and an image's FIFOs reach its root, since M316. Images of a private registry are fetched with the credential of `docker login`, and `--from-docker` takes an image from the local Docker, since M320. Since M317 (the fingerprint epoch 5) an image service mounts its system folders once per boot, so a readiness check cannot hide its `/dev/shm`. Since M324 `hydo build` warns when the roots do not fit in the Mac's guest RAM or hvx's disk. Since M331 (the fingerprint epoch 5) each image service has a `/tmp` of its own, as a container has. `hydo compose` then writes `root.share_images: true` for services of one image, so they share one copy of the image's root. | built | M84, M214, M229, M243, M316, M317, M320, M324, M331; every example |
+| Integration tests | The whole system runs in one VM. `hydo onboard`, `hydo compose`, and `hydo k8s` start the project from a repository, a Compose file, or Kubernetes manifests. `hydo.yaml` reads YAML anchors and `<<` merge keys, and an image's FIFOs reach its root, since M316. Images of a private registry are fetched with the credential of `docker login`, and `--from-docker` takes an image from the local Docker, since M320. Since M317 (the fingerprint epoch 5) an image service mounts its system folders once per boot, so a readiness check cannot hide its `/dev/shm`. Since M324 `hydo build` warns when the roots do not fit in the Mac's guest RAM or hvx's disk. Since M331 (the fingerprint epoch 5) each image service has a `/tmp` of its own, as a container has. `hydo compose` then writes `root.share_images: true` for services of one image, so they share one copy of the image's root. Since M338 (the fingerprint epoch 5) an image's hard links stay links in the Mac's root. An image service then sees the cgroup2 files under `/sys/fs/cgroup`, and the warning counts the whole root and its compressed archive. | built | M84, M214, M229, M243, M316, M317, M320, M324, M331, M338; every example |
 | Tap compare | `hydo compare-versions` runs the same schedules on two versions and compares the verdicts, the client's outcomes and histories, and the stored state (`services[].compare`). `hydo versions` replays one finding on several versions. | built | Milestone 298 (Redis settings, Formance Ledger v2.3.24 against v2.4.0); M221 |
 | Load tests | `parallel_driver_` commands run copies of a workload command at once, so races show without faults. Throughput is not hydo's job: time in the VM is virtual, and a guest has at most 8 GiB of RAM. | built for concurrency | M86; `formance-ledger`, `blnk`, `medusa` |
 | Shadowing | Not hydo's job. It sends copies of production traffic to a new version. The nearest command is `hydo compare-versions`, on schedules instead of traffic. | not hydo's job | |
@@ -154,7 +154,7 @@ Ideas that would answer more:
 | Does a function that writes files keep its promise under a power cut? | `hydo fuzz --vm` with a `// hydo: durable` check, which runs again in the recovery boot. | partly built; `fuzz-vm` on hvx (M292) and on the Mac engine (M296, M297) |
 | Does a function that measures a timeout or waits for a thread keep its contract? | `hydo fuzz --vm` steps the clock, pauses the call or its thread, or kills it, a few milliseconds after the call's start (`E=` and `A=fuzz.call+<ms>:<action>`). | partly built; `fuzz-vm` and rs-snowflake on hvx and the Mac engine (M296) |
 | Does a contract hold inside the running system? | `contracts:` in the manifest checks every call at hardware breakpoints, without a change of the run. | partly built; the Mac engine and KVM (M241, M255) |
-| Is a flaky test a real race? | `workload.kind: test` with a pause of one thread (`P=workload/<thread>@...`). | built; `qdrant-flaky-10200` (M226) |
+| Is a flaky test a real race? | `workload.kind: test` with a pause of one thread (`P=workload/<thread>@...`). Since M338 (the fingerprint epoch 5) the pause leaves out a thread that ended before its move and finds the workload behind busybox's `timeout`. | built; `qdrant-flaky-10200` (M226, M338) |
 
 Ideas that would answer more:
 
@@ -400,7 +400,8 @@ that a milestone builds moves into the tables of this page with its new status.
   container.
 - **Why it matters.** A program that sizes itself from `memory.max` or `cpu.max` uses the whole
   guest today, which hides its behaviour at its real size.
-- **What it needs.** A cgroup per service under the cgroup2 mount of M283.
+- **What it needs.** A cgroup per service under the cgroup2 mount of M283. Since M338 an image
+  service sees that mount's files.
 - **Where it came from.** Open item 144.
 
 ### Clocks per service

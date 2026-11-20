@@ -362,6 +362,9 @@ pub struct Prepared {
     /// The plan's saved regressions, for `<image>.regressions.json` (empty when the image's epoch
     /// keeps them inside the image, before epoch 4).
     pub regressions: Vec<serde_json::Value>,
+    /// The estimate of [`oci::root_fit_warnings`] warned already, so the build's measure of the
+    /// staged root (Milestone 338) does not warn a second time.
+    pub fit_warned: bool,
 }
 
 /// hydo-build's `main()` up to the flags: read, `--set`, the composer's plan, validate, the
@@ -405,6 +408,7 @@ pub fn prepare(
         loaded,
         oci,
         regressions,
+        fit_warned: false,
     })
 }
 
@@ -487,6 +491,7 @@ pub fn main_with(ctx: &Ctx, argv: &[String], io: &mut Io) -> i32 {
         );
     }
     let mut p = p;
+    p.fit_warned = !fit.is_empty();
     let r = if a.arch == "arm64" {
         arm64::build(ctx, &mut p, &a.path, &out, Path::new(&a.build_dir), io)
     } else if a.arch != "x86_64" {

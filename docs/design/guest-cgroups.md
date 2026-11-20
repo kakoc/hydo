@@ -161,6 +161,9 @@ From the fingerprint epoch 4 the host controller mounts it at the start of every
 - **A kernel without cgroup2.** The agent's refusal becomes a line of the run's log, and the boot
   goes on. Every engine's kernel for an epoch-4 image has cgroup2.
 
-An image service's root gets `/sys` by a bind mount that is not recursive, so the cgroup2 mount
-does not reach it. Its programs read the `0::/` line, which is all Dragonfly and Seastar need, as
-with the examples' own `setup:` mounts.
+From the fingerprint epoch 5 (Milestone 338) an image service's root gets `/sys` by a recursive
+bind mount (`mount --rbind /sys`), in the launcher's block that runs once per boot. The cgroup2
+mount comes with it, so the service's programs find `cgroup.controllers` and the other files
+under `/sys/fs/cgroup`. An image built before keeps the plain bind: its programs read the `0::/`
+line, which is all Dragonfly and Seastar need, and find no files there. `/proc` and `/dev` stay
+plain binds.
