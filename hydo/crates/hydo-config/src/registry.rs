@@ -642,6 +642,13 @@ variables! {
     HYDO_SVC: Guest, Guest, "name", "", "set by hydo-control";
     /// The service's log file.
     HYDO_LOG: Guest, Guest, "path", "", "set by hydo-control";
+    /// The SDKs' BUGGIFY file (default the guest's `/tmp/hydo-buggify`). From the fingerprint
+    /// epoch 5 an image service's launcher sets it to `/.hydo/tmp/hydo-buggify`, because the
+    /// service has a `/tmp` of its own (Milestone 331).
+    HYDO_BUGGIFY_FILE: Guest, Guest, "path", "/tmp/hydo-buggify", "set by an image service's launcher; read by the Go, Python and JavaScript SDKs";
+    /// Where the shell assertion SDK `hydo_assert.sh` writes its records, or `off`
+    /// (Milestone 329).
+    HYDO_ASSERT_OUT: Guest, Guest, "path", "/dev/console", "read by hydo_assert.sh";
     /// The first step of a workload range.
     HYDO_FROM: Guest, Guest, "integer", "", "set by hydo-control";
     /// The last step of a workload range.

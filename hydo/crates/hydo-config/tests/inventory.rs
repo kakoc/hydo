@@ -179,6 +179,11 @@ const NON_LITERAL_READS: &[(&str, &str)] = &[
         "the module lock's default: SUDO_USER, SUDO_UID, SUDO_GID, HOME",
     ),
     (
+        "hydo-contracts/src/fuzz/cargo.rs",
+        "cargo's own CARGO_PROFILE_<profile>_DEBUG, which `hydo fuzz` sets for its builds unless \
+         the user's environment sets it (Milestone 333)",
+    ),
+    (
         "hydo-contracts/src/fuzz/harness.rs",
         "the text of the test harness that `hydo fuzz` generates for another crate: its reads of \
          HYDO_FUZZ_CASES and HYDO_FUZZ_OUT run in that harness, not in hydo",
