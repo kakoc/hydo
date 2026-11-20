@@ -218,7 +218,17 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.4.1 was published on 2026-11-19 from the release commit `14e09873`, in
+**Releases.** hydo 0.5.0 is prepared for publication from the release commit `4d43a6bd` and
+not published; publishing is the user's decision (docs/RELEASING.md step 7 onward). Its six
+files, `SHA256SUMS` and the prepared material (release notes, Homebrew formula, release-index
+lines) are in `hydo/dist/out/0.5.0/` of the main checkout: `hydo-linux-0.5.0.tar.gz`
+`2b5d45fd…`, `hydo-mac-0.5.0.tar.gz` (signed and notarized) `44860817…`, the two sources
+archives, the signatures asset and `hydo-skill-0.5.0.tar.gz` `5eb0f84d…`. 0.5.0 holds
+Milestones 304 to 314 and 317 to 339 at the fingerprint epoch 5, and the skill with hydo's
+version. Every recorded value was re-recorded at epoch 5 for it (docs/REBASELINE.md section 29).
+The record is the section "The 0.5.0 release, prepared for publication" of `docs/HISTORY.md`.
+
+hydo 0.4.1 was published on 2026-11-19 from the release commit `14e09873`, in
 these places:
 
 - The GitHub release `v0.4.1`: both tarballs, their sources archives, and the Mac signatures.
@@ -227,7 +237,7 @@ these places:
 - PyPI and npm: `hydo-assert`. Go: the tag `sdk/go/v0.4.1`.
 - The skill release `skill-v2.4.0` (the plugin `hydo`, command `/hydo:onboard`).
 
-Since M332 the skill has hydo's version: its four version fields equal `hydo/VERSION` (0.4.1
+Since M332 the skill has hydo's version: its four version fields equal `hydo/VERSION` (0.5.0
 now, `skill_check::` checks it). From 0.5.0 on the release `v<version>` carries the asset
 `hydo-skill-<version>.tar.gz`, which both `build-release.sh` scripts make. 0.5.0 is the first
 release with it. After it, the lead deletes the releases `skill-v1.0.0` to `skill-v2.4.0` and
@@ -4161,6 +4171,13 @@ build machine, before 2026-10-13.
   shrinks a service that does not start again and a workload that does not end, but not the
   system's detection of damage unless asked. `hydo run`'s memory refusal exits 5. Nothing
   recorded moved
+- The 0.5.0 release (no milestone number): prepared, not published. The version is raised
+  with the skill's four version fields, `hydo-world`, `hydo-world-tls` and `hydo-grpc` are
+  re-pinned, and the released project and results schemas are copied. Every recorded value was
+  re-recorded at the fingerprint epoch 5 on hvx, the Mac and KVM, and nine verdict changes were
+  decided. etcd issue 14685's second symptom is in the list again. Both releases were built
+  twice to the same bytes, with the skill's archive for the first time. The Mac one is signed
+  and notarized. Both were verified on hvx and the Mac, and open item 105 is empty
 
 ## Where to look
 
