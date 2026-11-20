@@ -495,12 +495,20 @@ pub fn topics() -> Vec<(String, String)> {
     t
 }
 
+/// The shell assertion SDK (hydo/stack/hydoassert/hydo_assert.sh, through the link in embed/),
+/// printed by `hydo guide hydo_assert.sh` (Milestone 329): a project copies it into its image with
+/// `root.files`, whatever way hydo was installed.
+pub const SHELL_SDK: &[u8] = include_bytes!("../embed/hydo_assert.sh");
+
 /// A path inside the guide named by the user (`hydo guide examples/x`), also in the skill's old
 /// spelling from before Milestone 170 (`references/<topic>.md`, `assets/example-*`,
 /// `assets/hydo-init/*`).
 fn guide_path(a: &str) -> Option<&'static [u8]> {
     if a.starts_with('/') {
         return None;
+    }
+    if a == "hydo_assert.sh" {
+        return Some(SHELL_SDK);
     }
     let n = py::normpath(a);
     if n == "." || n == ".." || n.starts_with("../") {
@@ -543,6 +551,10 @@ fn topic_lines(sk: &Skill, list: bool) -> String {
     line(
         "hydo guide examples/<file>",
         "a file of the examples (start with examples/example-redis-composed/README.md)",
+    );
+    line(
+        "hydo guide hydo_assert.sh",
+        "the shell assertion SDK, to copy into an image (hydo guide sdks)",
     );
     if list {
         line(
@@ -1439,6 +1451,10 @@ mod tests {
         assert!(guide_path("examples/example-redis-composed/hydo/hydo.yaml").is_some());
         assert!(guide_path("../hydo/guide/composer.md").is_none());
         assert!(guide_path("/etc/passwd").is_none());
+        // the shell assertion SDK (Milestone 329)
+        let sdk = std::str::from_utf8(guide_path("hydo_assert.sh").unwrap()).unwrap();
+        assert!(sdk.starts_with("# hydo_assert.sh"), "{sdk}");
+        assert!(sdk.contains("hydo_always()"));
         let w = walk_embedded(embedded::GUIDE, "init/hydo");
         assert_eq!(w[0].0, ".");
         assert!(w.iter().any(|(r, f)| r == "workload" && f.len() == 1));

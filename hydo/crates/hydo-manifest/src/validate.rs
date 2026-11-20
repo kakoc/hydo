@@ -233,6 +233,7 @@ pub(crate) const KNOWN_ROUTE: &[&str] = &[
     "save",
     "load",
     "errors",
+    "if_header",
     "description",
 ];
 pub(crate) const KNOWN_SAVE: &[&str] = &["key", "fields"];
@@ -244,6 +245,8 @@ pub(crate) const KNOWN_PROXY_ROUTE: &[&str] = &[
     "ref",
     "effect",
     "idempotent",
+    "errors",
+    "if_header",
     "description",
 ];
 pub(crate) const KNOWN_HOOK: &[&str] = &[
@@ -1724,6 +1727,23 @@ fn validate_world(m: &Value) -> R<()> {
                     && proto.as_str() != Some("http")
                 {
                     return Err(err(format!("{rw}: idempotent: true only on an http proxy")));
+                }
+                if kind == "proxies"
+                    && proto.as_str() != Some("http")
+                    && ["errors", "if_header"]
+                        .iter()
+                        .any(|k| obj_get(r, k).is_some())
+                {
+                    return Err(err(format!(
+                        "{rw}: errors: and if_header: only on an http proxy"
+                    )));
+                }
+                if let Some(h) = obj_get(r, "if_header") {
+                    if !matches!(h, Value::String(x) if pyre::fullmatch("[A-Za-z0-9-]+", x)) {
+                        return Err(err(format!(
+                            "{rw}: if_header: a header's name (such as If-Match)"
+                        )));
+                    }
                 }
                 if obj_get(r, "idempotent").is_some_and(truthy)
                     && !obj_get(e, "idempotency").is_some_and(truthy)

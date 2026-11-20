@@ -105,6 +105,25 @@ const S3_ROUTES: &[(&str, &str, &str, bool)] = &[
     ("read", "GET", "/*", false),
 ];
 
+/// The s3 proxy's routes of conditional writes (Milestone 329), before `put_object`: a PUT with
+/// `If-None-Match` (create the object only if it is absent) and a PUT with `If-Match` (replace it
+/// only if its ETag is the one given). rclone answers both as S3 does (412 when the condition
+/// fails); the routes let `H=s3.put_if_absent@...:status=412` make a lost race happen.
+const S3_CONDITIONAL: &[(&str, &str, &str)] = &[
+    ("put_if_absent", "If-None-Match", "If-None-Match"),
+    ("put_if_match", "If-Match", "If-Match"),
+];
+
+/// S3's answer to a conditional write whose condition failed, as the `errors:` of an `H=` rule
+/// `status=412` on the s3 proxy's conditional routes (`{seq}`: the request's record number).
+fn s3_precondition_failed(condition: &str) -> String {
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code>\
+         <Message>At least one of the pre-conditions you specified did not hold</Message>\
+         <Condition>{condition}</Condition><RequestId>hydo-{{seq}}</RequestId></Error>"
+    )
+}
+
 /// The catalog, by `use:`.
 pub const CATALOG: &[Entry] = &[
     Entry {
@@ -425,17 +444,22 @@ pub fn expand(m: &mut Value) -> R<()> {
             p["ref"] = r.clone();
         }
         if !e.routes.is_empty() {
-            let routes: Vec<Value> = e
-                .routes
-                .iter()
-                .map(|(n, method, path, idem)| {
-                    let mut r = json!({"name": n, "method": method, "path": path});
-                    if *idem {
-                        r["idempotent"] = Value::Bool(true);
+            let mut routes: Vec<Value> = Vec::new();
+            for (n, method, path, idem) in e.routes {
+                if e.id == "s3" && *n == "put_object" {
+                    for (cn, header, cond) in S3_CONDITIONAL {
+                        routes.push(json!({
+                            "name": cn, "method": "PUT", "path": "/*", "if_header": header,
+                            "errors": {"412": s3_precondition_failed(cond)},
+                        }));
                     }
-                    r
-                })
-                .collect();
+                }
+                let mut r = json!({"name": n, "method": method, "path": path});
+                if *idem {
+                    r["idempotent"] = Value::Bool(true);
+                }
+                routes.push(r);
+            }
             p["routes"] = Value::Array(routes);
         }
         if tls {
@@ -706,6 +730,50 @@ mod tests {
         assert_eq!(p["port"], 2525);
         assert!(p.get("routes").is_none());
         assert_eq!(m["proxies"][2]["port"], 9100);
+    }
+
+    #[test]
+    fn the_s3_proxy_has_routes_of_conditional_writes_that_answer_412() {
+        let m = expanded(json!([{"use": "s3"}]));
+        let routes = m["proxies"][0]["routes"].as_array().unwrap();
+        let names: Vec<&str> = routes.iter().map(|r| r["name"].as_str().unwrap()).collect();
+        assert_eq!(
+            names,
+            [
+                "create_bucket",
+                "put_if_absent",
+                "put_if_match",
+                "put_object",
+                "post",
+                "delete",
+                "head",
+                "read"
+            ]
+        );
+        assert_eq!(routes[1]["if_header"], "If-None-Match");
+        assert_eq!(routes[2]["if_header"], "If-Match");
+        let body = routes[2]["errors"]["412"].as_str().unwrap();
+        assert!(body.starts_with("<?xml"), "{body}");
+        assert!(body.contains("<Code>PreconditionFailed</Code>"), "{body}");
+        assert!(body.contains("<Condition>If-Match</Condition>"), "{body}");
+        // the world's configuration carries them
+        let mut again = m.clone();
+        crate::validate_data(&mut again).unwrap();
+        assert_eq!(again, m);
+    }
+
+    #[test]
+    fn if_header_and_errors_are_for_http_proxy_routes() {
+        let mut m = base(json!([]));
+        m["proxies"] = json!([{"name": "rpc", "port": 6380, "protocol": "grpc", "service": "app",
+            "routes": [{"name": "r", "if_header": "If-Match"}]}]);
+        let e = crate::validate_data(&mut m).unwrap_err().to_string();
+        assert!(e.contains("only on an http proxy"), "{e}");
+        let mut m = base(json!([]));
+        m["proxies"] = json!([{"name": "api", "port": 9001, "to": "127.0.0.1:8080",
+            "routes": [{"name": "r", "if_header": "If Match"}]}]);
+        let e = crate::validate_data(&mut m).unwrap_err().to_string();
+        assert!(e.contains("if_header: a header's name"), "{e}");
     }
 
     #[test]

@@ -176,6 +176,9 @@ echo "$VERSION" > "$REL/hydo/VERSION"     # what a plan's hydo_version: is check
 # the history recorder for shell workloads (MANIFEST.md "History checks")
 mkdir -p "$REL/hydo/history"
 cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
+# the shell assertion SDK, for a project's root.files (hydo guide sdks; also `hydo guide hydo_assert.sh`)
+mkdir -p "$REL/hydo/sdk"
+cp "$TOP/hydo/stack/hydoassert/hydo_assert.sh" "$REL/hydo/sdk/"
 # the assertion protocol the SDKs write and the explorer's property table reads
 cp "$TOP/hydo/ASSERTIONS.md" "$REL/hydo/"
 # the kernel module's sources (hydo module build)

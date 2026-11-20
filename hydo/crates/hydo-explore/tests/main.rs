@@ -21,6 +21,7 @@ mod protocol_cover;
 mod reactive;
 mod refusals;
 mod route_errors;
+mod shell_sdk;
 mod storage_faults;
 mod upgrades;
 mod value_properties;

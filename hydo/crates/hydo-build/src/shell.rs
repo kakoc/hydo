@@ -195,6 +195,7 @@ pub fn world_config(m: &Value) -> String {
                     "save",
                     "load",
                     "errors",
+                    "if_header",
                 ] {
                     if let Some(v) = r.get(k) {
                         d.insert(k.into(), v.clone());

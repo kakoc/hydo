@@ -110,6 +110,7 @@ hydo-explore::reactive                   fast
 hydo-explore::protocol_cover             fast
 hydo-explore::refusals                   fast
 hydo-explore::route_errors               fast
+hydo-explore::shell_sdk                  fast
 hydo-explore::storage_faults             fast
 hydo-explore::upgrades                   fast
 hydo-explore::value_properties           fast
@@ -167,6 +168,7 @@ hydo-world::bin/hydo-world               fast
 hydo-world::fake_errors                  fast
 hydo-world::objects_sign                 fast
 hydo-world::proxy_idempotent             fast
+hydo-world::proxy_s3                     fast
 hydo-world::xcheck                       full
 hydo::agents_equivalence                 fast
 hydo::bin/hydo                           fast

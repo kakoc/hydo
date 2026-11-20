@@ -14,7 +14,7 @@ record and the checks below then work as for a fake.
 |---|---|---|---|
 | `stripe` | stripe-mock 0.206.0 (MIT) | `https://api.stripe.com` (the SDK unchanged), or `http://127.0.0.1:12111` | `payment_intent`, `payment_intent_confirm`, `payment_intent_capture`, `payment_intent_cancel`, `charge`, `refund`, `customer`, `checkout_session`, `subscription`, `invoice`, `transfer`, `payout`, `other_post`, `delete`, `read` |
 | `smtp` | Mailpit 1.33.1 (MIT) | SMTP at `127.0.0.1:1025`; Mailpit's HTTP API at `127.0.0.1:8025` | `conn` (one connection = one message) |
-| `s3` | rclone 1.76.0, `rclone serve s3` (MIT) | `$AWS_ENDPOINT_URL_S3` (`http://127.0.0.1:9000`), path-style | `create_bucket`, `put_object`, `post`, `delete`, `head`, `read` |
+| `s3` | rclone 1.76.0, `rclone serve s3` (MIT) | `$AWS_ENDPOINT_URL_S3` (`http://127.0.0.1:9000`), path-style | `create_bucket`, `put_if_absent`, `put_if_match`, `put_object`, `post`, `delete`, `head`, `read` |
 
 ```yaml
 emulators:
@@ -44,7 +44,14 @@ What the emulators do and do not do:
   real double charges only. stripe-mock sends no webhooks; declare a fake for them.
 - Mailpit keeps the mail it received. A check reads it from its API, for example
   `GET http://127.0.0.1:8025/api/v1/search?query=subject:"Receipt o7"` (`messages_count`).
-- The S3 server keeps objects as files under `/data/<name>`.
+- The S3 server keeps objects as files under `/data/<name>`. It answers conditional writes as S3
+  does. A `PUT` with `If-None-Match: *` over an existing object gets `412 Precondition Failed`. A
+  `PUT` with an `If-Match` ETag that is not the object's also gets 412. Rust's `object_store`
+  sends these for `PutMode::Create` and `PutMode::Update`.
+- A conditional `PUT` is the route `put_if_absent` (`If-None-Match`) or `put_if_match`
+  (`If-Match`). To test the system's handling of a lost race, answer it 412 without reaching
+  the server: `H=s3.put_if_absent@3-6:status=412`. The answer is S3's `PreconditionFailed` XML.
+  `hydo explore --protocol-faults` draws 412 on these routes too.
 - An emulator's state is inside the guest: a power cut loses what it held in memory. The record of
   the proxy survives a cut; a check over an emulator's own state is valid in runs without a cut.
 

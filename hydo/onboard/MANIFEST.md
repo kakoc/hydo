@@ -1783,6 +1783,7 @@ fakes:
         errors:                # optional: the body an H= rule status=<code> answers (templates)
           '404': '{"error":{"type":"not_found"}}'   # a status, a class ('5XX') or default
           default: '{"error":{"type":"api_error"}}'
+        if_header: If-Match    # optional: the route takes only a request with this header
 proxies:
   - name: redisp               # a fault proxy in front of a real service
     port: 6380                 # the system talks to this port instead of the service's
@@ -1790,7 +1791,7 @@ proxies:
     protocol: tcp              # tcp (any protocol; one connection = one request) | http | grpc
     # http/grpc proxies may have ref:, idempotency: and routes: (name/method/path/ref/effect only),
     # which name the requests in the records and as H= targets; a route of an http proxy may also
-    # have idempotent: true (below)
+    # have idempotent: true, errors: and if_header: (below)
 ```
 
 **Idempotent proxy routes** (`idempotent: true` on a route of an `http` proxy with
@@ -1825,7 +1826,13 @@ object after the route's own save, or on a route with only `save:` the saved one
 what the first request stored); a field the object lacks is empty. Objects are carried across a
 power cut with the rest of the world (within its 3000 bytes).
 
-**Error answers** (`errors:` on a fake's route, Milestone 249): an `H=` rule `status=<code>` on
+**Routes by a header** (`if_header:` on a route of a fake or an `http` proxy, Milestone 329): the
+route takes only a request that has this header, whatever its value. A request without it goes on
+to the next route. The s3 emulator's proxy uses it for conditional writes: a `PUT` with
+`If-None-Match` is the route `put_if_absent`, a `PUT` with `If-Match` is `put_if_match`.
+
+**Error answers** (`errors:` on a fake's route, Milestone 249, and on a route of an `http` proxy,
+Milestone 329): an `H=` rule `status=<code>` on
 the route answers with the body of the exact status (`'409'`), else of its class (`'4XX'`,
 `'5XX'`), else of `default`, rendered as an answer (`{obj:<field>}` reads the object the request
 names). Without a match the answer is hydo's own `{"error":"injected by hydo","status":<code>}`.
@@ -1889,7 +1896,7 @@ emulators:
 |---|---|---|---|
 | `stripe` | `docker.io/stripe/stripe-mock`, v0.206.0 | `/bin/stripe-mock -http-port 22111` | http, `idempotency: header:Idempotency-Key`, 15 routes (the POST routes `idempotent: true`), `tls: {hosts: [api.stripe.com]}` |
 | `smtp` | `docker.io/axllent/mailpit`, v1.33.1 | `/mailpit --smtp 127.0.0.1:11025 --listen 127.0.0.1:8025 --smtp-auth-accept-any --smtp-auth-allow-insecure --disable-version-check` | tcp |
-| `s3` | `docker.io/rclone/rclone`, 1.76.0 | `rclone serve s3 --addr 127.0.0.1:19000 /data/<name>`, `setup:` makes the buckets | http, 6 routes |
+| `s3` | `docker.io/rclone/rclone`, 1.76.0 | `rclone serve s3 --addr 127.0.0.1:19000 /data/<name>`, `setup:` makes the buckets | http, 8 routes: `create_bucket`, `put_if_absent`, `put_if_match`, `put_object`, `post`, `delete`, `head`, `read` |
 
 - The service has `image:` (`emulators/<emulator>-<version>-<amd64|arm64>.docker.tar` beside the
   manifest), `entrypoint:`, `ready: tcp:<port>` and `port:`. A second emulator of one kind gets the
@@ -1908,6 +1915,16 @@ emulators:
   `hydo compose` does) gets a line for each name it does not have yet: `<addr> <name>_emulator`
   and `10.89.0.1 <name>`. Before Milestone 316 such a manifest was refused, because the
   emulator's service had no `addr:`.
+- Conditional writes on `s3` (Milestone 329). rclone 1.76.0 answers them as S3 does:
+  - A `PUT` with `If-None-Match: *` over an existing object gets `412 Precondition Failed`.
+  - A `PUT` with `If-Match: <etag>` gets 412 when the ETag is not the object's, and 404 when there
+    is no object.
+  - In 30 rounds of 8 parallel writers with each header on one key, one writer won each round.
+
+  Such a `PUT` is the proxy's route `put_if_absent` (`If-None-Match`) or `put_if_match`
+  (`If-Match`), each with S3's `PreconditionFailed` XML as its 412 answer (`errors:`).
+  `H=s3.put_if_absent@3-6:status=412` answers 412 without reaching rclone, as when another writer
+  won. `hydo explore --protocol-faults` draws 412 on these routes too.
 - The validated data keeps `_emulators` (the expanded names and the image pins). The explorer
   draws no kill, pause, freeze or network fault on an emulator's service; `H=` on the proxy is its
   fault. A schedule written by hand may still name the service.

@@ -21,9 +21,9 @@
 # Unlike the Go SDK this helper does not deduplicate: call it where an event happens once.
 
 _hydo_out() {
-  case "${HYDO_ASSERT_OUT:-/dev/ttyS0}" in
+  case "${HYDO_ASSERT_OUT:-/dev/console}" in
     off) return 0 ;;
-    *) printf '%s\n' "$1" >> "${HYDO_ASSERT_OUT:-/dev/ttyS0}" 2>/dev/null || printf '%s\n' "$1" ;;
+    *) printf '%s\n' "$1" >> "${HYDO_ASSERT_OUT:-/dev/console}" 2>/dev/null || printf '%s\n' "$1" ;;
   esac
 }
 

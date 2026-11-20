@@ -8,4 +8,5 @@ mod tmpdir;
 mod fake_errors;
 mod objects_sign;
 mod proxy_idempotent;
+mod proxy_s3;
 mod xcheck;

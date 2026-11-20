@@ -436,7 +436,11 @@ pub fn answer_bytes(a: &Answer, head: &Head, close: bool) -> Vec<u8> {
         out.extend_from_slice(b"\r\n");
     }
     let allowed = goish::body_allowed(status);
-    let big = a.body.len() > BUFFER_BEFORE_CHUNKING;
+    // a Content-Length the handler set and the body has (a proxied answer, Milestone 329): Go
+    // then writes the body with that length, however large, instead of chunks
+    let set_len = hget(&a.headers, "Content-Length");
+    let known = set_len.is_some_and(|v| v == a.body.len().to_string().as_bytes());
+    let big = a.body.len() > BUFFER_BEFORE_CHUNKING && !known;
     let chunked = allowed && !head_req && big && head.minor >= 1;
     // an HTTP/1.0 answer of unknown length ends with the connection
     let close = close || (allowed && !head_req && big && head.minor == 0);
@@ -445,6 +449,14 @@ pub fn answer_bytes(a: &Answer, head: &Head, close: bool) -> Vec<u8> {
     }
     if allowed && !big && (!a.body.is_empty() || !head_req) {
         out.extend_from_slice(format!("Content-Length: {}\r\n", a.body.len()).as_bytes());
+    } else if head_req && a.body.is_empty() {
+        // Go keeps a handler's Content-Length in the answer to a HEAD: the size of what a GET
+        // would send (a proxied HEAD's, Milestone 329)
+        if let Some(v) = set_len {
+            out.extend_from_slice(b"Content-Length: ");
+            out.extend_from_slice(v);
+            out.extend_from_slice(b"\r\n");
+        }
     }
     if !has("Content-Type") && allowed && !a.body.is_empty() {
         out.extend_from_slice(format!("Content-Type: {}\r\n", sniff(&a.body)).as_bytes());
