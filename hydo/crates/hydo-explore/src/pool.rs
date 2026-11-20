@@ -327,6 +327,8 @@ impl Pool {
     }
 
     fn push(&self, job: Job, high: bool) {
+        // Milestone 328: a stop of the explorer from here on is no refusal (exit status 5)
+        crate::mark_started();
         let (m, cv) = &*self.q;
         let mut q = m.lock().expect("lock");
         if q.alive == 0 {

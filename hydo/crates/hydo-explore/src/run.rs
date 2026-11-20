@@ -60,7 +60,7 @@ pub struct Env {
 
 fn die(msg: &str) -> ! {
     eprintln!("{msg}");
-    crate::exit_die()
+    crate::exit_die_with(msg)
 }
 
 /// Everything the flow needs, set up once.
@@ -259,6 +259,9 @@ pub fn main_with(argv: &[String], env: &Env) -> i32 {
             return 2;
         }
     };
+    // Milestone 328: a stop before the first schedule is a refusal (exit status 5)
+    crate::EXPLORING.store(true, std::sync::atomic::Ordering::Relaxed);
+    crate::JSON_END.store(!env.plain_end, std::sync::atomic::Ordering::Relaxed);
     let mut cx = setup(a, env);
     cx.argv = argv.to_vec();
     run(cx)
