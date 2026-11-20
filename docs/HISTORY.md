@@ -19748,6 +19748,110 @@ frames, the traces and the read-back check cost the rest).
 
 What is left is open item 168.
 
+## Milestone 335 (tentative number): copy-on-write guest RAM on the Mac engine
+
+The user decided on 2026-11-20 to build copy-on-write VMs on the Mac engine (open item 36). An
+explorer worker on the Mac was a whole VM. It held its guest RAM, locked with `mlock`, and S0 and
+S1 in files of their own. The explorer counted twice the guest RAM and 256 MiB per worker. A user
+with a 5 GB guest on a 32 GB Mac got one worker, and 60 seeds took about an hour. The design is
+`docs/design/mac-cow.md`.
+
+What changed in the engine (`hydo/crates/hydo-hvm`):
+
+- A snapshot is a RAM base (`mem::Base`): a file in `HVM_SNAP_DIR` named
+  `ram-v1-<length>-<tree hash>`, which holds the RAM's pages that are not zero and nothing writes
+  after it is made. Another engine whose snapshot has the same bytes finds the file by its name.
+  It uses the file only when each of its extents equals its RAM and its RAM is zero between them.
+  A base is written to a temporary file and linked to its name, so a named file is complete. Each
+  process holds a shared `flock` on its bases, and a base that nobody holds is removed when it is
+  dropped and when an engine starts.
+- Guest RAM is mapped from a base with `mmap(MAP_PRIVATE | MAP_FIXED)`, so the kernel copies a
+  page at its first write. A restore destroys the VM, maps the base again and makes the VM
+  (`Vmm::fresh_vm_from`). Right after a snapshot, guest RAM is mapped from the new base in the same
+  VM and vCPU (`Vmm::rebase`, with `hv_vm_unmap` and `hv_vm_map`), except in the rewind mode. The
+  instruction cache is made coherent over the base's extents.
+- Guest RAM is not locked with RAM bases. A probe locked a private mapping of a 256 MiB file, and
+  its footprint grew by 256 MiB, so `mlock` would copy every page.
+- The RAM's part of a fingerprint still reads every page. The engine does not use
+  `mach_vm_page_range_query` to skip pages, because its answer for a private page that macOS
+  compressed was not shown.
+- `HVM_RAM_SHARE=0` (`hydo-config`, INVENTORY.md) gives the engine of before.
+
+What changed in the explorer: `hydo_engine::WorkerMemory` says what a pool needs, once for all
+workers and per worker, and `Engine::worker_memory` gives it. For the Mac engine with RAM bases
+(`hydo_engine::hvm::worker_memory`) it is half of the guest RAM once and half of the guest RAM and
+256 MiB per worker. A worker still writes all of its guest's RAM before S0, so the pool's new boot
+gate (`pool::BootGate`) lets only as many workers boot at once as fit. The pool line then says
+`, 1 booting at once`. The memory warning names the shared part and the part per worker.
+
+The images of the proofs. The release 0.4.1 built `release/examples/redis` (`31e90668…`) and
+`release/examples/ledger-spin` (`0214abba…`) at the fingerprint epoch 4, the bytes of the list's
+`hvm/release-redis` and `hvm/release-ledger-spin`. The Redis example was also built with
+`guest.ram_mib` 2048 and 4096. Meilisearch's image of Milestone 295's example (2,048 MiB, an image
+service, `network: bridge`) came from a platform run. "Before" is the engine of `main` at
+`14e94083`.
+
+Exactness. Every run below gave the same fingerprints, verdicts and control transcripts:
+
+- The 7 recorded runs of `hvm/release-redis` and the 2 of `hvm/release-ledger-spin` gave their
+  recorded `fp` and `ctl` with RAM bases and with `HVM_RAM_SHARE=0`. The quickstart's two are
+  `05f433ee427f8e3c` (`ctl` `f8953914130df454`) and `2174995ebfb4d2d6` (`20a90cbaf59735ae`).
+  ledger-spin's runs go through the rewind mode.
+- `hydo explore` of Redis seeds 1-40 with its shrinks: before on 4 workers, and after on 4 and on
+  1 worker and with `HVM_RAM_SHARE=0`. The `exploration.json` files are equal but for `--out`,
+  and so are the 64 events of `events.jsonl` (every run's `fp`, `wfp` and `ctl`, the 8 failures,
+  2 shrinks and the replays).
+- Without shrinks: Meilisearch seeds 1-12 (18 events) and 1-60 (84 events), Redis 2,048 MiB seeds
+  1-20 (23 events), Redis 4,096 MiB seeds 1-20 (23) and 1-60 (72). Before ran on 1 or 2 workers,
+  after on 3 to 6.
+- `hydo explore --search state`, Redis seeds 1-30, one worker: the 42 events and the 31 records of
+  `state-search.jsonl` (15 snapshots, 10 branches) are equal but for the jobs' wall times.
+- An `hydo inspect` session at the end of the power-cut run: six looks, each a restore of the
+  stop's snapshot, printed the same 60 lines but for one `wall_ms`.
+
+`hydo-bench rebaseline --check` did not run. Its images are built from this tree at the
+fingerprint epoch 5, whose Mac values wait for the pass (open item 105), and its prefix takes the
+tree's shared `target/release`. The recorded runs above are the list's epoch-4 values.
+
+Memory. `footprint <pid>` was sampled every 3 s for every engine of each exploration, and the
+bases' allocated size came from `du -k`. A worker after its boot:
+
+| Example | Guest RAM | Before | After, median and largest |
+|---|---|---|---|
+| Redis | 1,024 MiB | 1,133 MB, and 1.1 to 2.0 GB of snapshot files | 36 to 113 MB, 137 MB |
+| Redis | 2,048 MiB | 2,119 MB | 119 MB, 129 MB |
+| Redis | 4,096 MiB | 4,118 MB | 68 MB, 87 MB |
+| Meilisearch | 2,048 MiB | 2,155 MB, and 2,220 MB of snapshot files | 171 MB, 1,153 MB |
+
+In an exploration of 16 Meilisearch seeds with its shrinks a worker held 1,058 MB in the median
+and 1,172 MB at most. The cause was not traced. A worker held all of its guest's RAM while it
+booted: 1,252 MB for 1,024 MiB about 1 s after its start, and 102 MB after S0. Each base holds 60
+MB of data for Redis and 535 MB for Meilisearch. The fingerprint reads every page, so a base's
+holes become clean pages of zeros in the page cache, once for all workers: 4,096 of 4,096 MiB for
+a base of the 4,096 MiB guest. A version that mapped only the extents and left the holes anonymous
+was measured and dropped: macOS gives a process its own page for an anonymous page that is read,
+and a 4,096 MiB worker held 3,957 MB in the median.
+
+With 9.4 GB available, the explorer's count gives 4, 2 and 1 workers for 1,024, 2,048 and 4,096
+MiB before, and 11, 6 and 3 after. The schedules per hour with those workers, without shrinks:
+
+| Example, seeds 1-60 | Before | After |
+|---|---|---|
+| Redis, 4,096 MiB | 1 worker, 297 s, 742 schedules an hour | 3 workers, 54 s, 4,143 schedules an hour |
+| Meilisearch, 2,048 MiB | 2 workers, 308 s, 1,285 schedules an hour | 6 workers, 320 s, 1,241 schedules an hour |
+
+Two Meilisearch runs took 115 s and 130 s (`ERROR check: exit budget exhausted`), and they set
+how long the exploration ran on any number of workers. The 6 workers used one core together most of that
+time. A restore no longer compares every page of the RAM and the snapshot. Redis seeds 1-40 with
+shrinks took 65 s before on 4 workers. After, they took 14 to 41 s on 4 workers and 18 to 19 s on
+1 worker. The state search's jobs
+took 42.1 s before and 27.0 s after. Other sessions shared the Mac, with load averages from 4 to
+93, so the times are not exact.
+
+What is left is in open item 36 and in `docs/design/mac-cow.md`, "What is left". hvx and KVM
+workers share nothing between them. A worker still boots on its own. The estimate per worker
+comes from two examples. Nothing recorded moved.
+
 ## Milestone 336 (tentative number): statistics of an exploration
 
 The user asked for the statistics of an exploration. A person, and later a program that reads

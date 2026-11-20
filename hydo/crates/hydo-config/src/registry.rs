@@ -337,7 +337,8 @@ variables! {
     HVM_NET_FAULT_CLASSES: Hvm, Developer, "list", "drop", "hydo-hvm";
     /// The network faults' probability in percent.
     HVM_NET_FAULT_PROB: Hvm, Developer, "number", "100", "hydo-hvm";
-    /// Where the engine makes (and unlinks at once) its snapshot files.
+    /// Where the engine makes its snapshot files: the RAM bases, named by their bytes and kept while
+    /// an engine holds them (Milestone 335), and with `HVM_RAM_SHARE=0` files it unlinks at once.
     HVM_SNAP_DIR: Hvm, User, "path", "/tmp/hvm-snap", "hydo-hvm";
     /// Set: per-component hashes of a run's end state into `<outdir>/<tag>.diag`.
     HVMX_DIAG: Hvm, Developer, "flag: set", "", "hydo-hvm";
@@ -347,6 +348,11 @@ variables! {
     HVMX_CHECK_RESTORE: Hvm, Developer, "flag: set", "", "hydo-hvm";
     /// Set: do not mlock guest RAM.
     HVMX_NO_MLOCK: Hvm, Developer, "flag: set", "", "hydo-hvm";
+    /// `0`: each snapshot keeps its own copy of guest RAM, which a restore copies back (before
+    /// Milestone 335). Otherwise a snapshot is a RAM base in `HVM_SNAP_DIR` that guest RAM is mapped
+    /// from privately (the kernel copies a page at its first write), shared by the engines whose
+    /// snapshot has the same bytes, such as the workers of one exploration; guest RAM is not locked.
+    HVM_RAM_SHARE: Hvm, User, "flag: exactly `0` turns it off", "on", "hydo-hvm";
 
     // ------------------------------------------------------------------ Kvm
     /// Where the KVM engine runs: `process` as the program `hydo-kvm`; else on a thread of this

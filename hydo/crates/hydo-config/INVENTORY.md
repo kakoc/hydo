@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-63 user-facing and 96 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 38 test switches are read by test code; 32 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+64 user-facing and 96 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 38 test switches are read by test code; 32 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -122,11 +122,12 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HVM_NET_FAULT` | developer | number | - | hydo-hvm | The network fault seed. |
 | `HVM_NET_FAULT_CLASSES` | developer | list | drop | hydo-hvm | The network fault classes (`drop,corrupt,dup` or a number). |
 | `HVM_NET_FAULT_PROB` | developer | number | 100 | hydo-hvm | The network faults' probability in percent. |
-| `HVM_SNAP_DIR` | user | path | /tmp/hvm-snap | hydo-hvm | Where the engine makes (and unlinks at once) its snapshot files. |
+| `HVM_SNAP_DIR` | user | path | /tmp/hvm-snap | hydo-hvm | Where the engine makes its snapshot files: the RAM bases, named by their bytes and kept while an engine holds them (Milestone 335), and with `HVM_RAM_SHARE=0` files it unlinks at once. |
 | `HVMX_DIAG` | developer | flag: set | - | hydo-hvm | Set: per-component hashes of a run's end state into `<outdir>/<tag>.diag`. |
 | `HVMX_DIAG_CHUNKS` | developer | list | - | hydo-hvm | With HVMX_DIAG: raw copies of these 1 MiB chunks of RAM (comma-separated offsets). |
 | `HVMX_CHECK_RESTORE` | developer | flag: set | - | hydo-hvm | Set: read the registers back after every restore and report differences. |
 | `HVMX_NO_MLOCK` | developer | flag: set | - | hydo-hvm | Set: do not mlock guest RAM. |
+| `HVM_RAM_SHARE` | user | flag: exactly `0` turns it off | on | hydo-hvm | `0`: each snapshot keeps its own copy of guest RAM, which a restore copies back (before Milestone 335). Otherwise a snapshot is a RAM base in `HVM_SNAP_DIR` that guest RAM is mapped from privately (the kernel copies a page at its first write), shared by the engines whose snapshot has the same bytes, such as the workers of one exploration; guest RAM is not locked. |
 
 ## The KVM engine (`hydo_config::kvm::Engine`, `hydo_config::kvm::Options`)
 

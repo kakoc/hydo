@@ -107,7 +107,7 @@ pub struct Options {
     pub net_fault_classes: Option<String>,
     /// `HVM_NET_FAULT_PROB`.
     pub net_fault_prob: Option<String>,
-    /// `HVM_SNAP_DIR`: where the engine's snapshot files are made and unlinked (default /tmp/hvm-snap).
+    /// `HVM_SNAP_DIR`: where the engine's snapshot files and RAM bases are made (default /tmp/hvm-snap).
     pub snap_dir: Option<String>,
     /// `HVMX_DIAG`, set: per-component hashes of a run's end state into `<tag>.diag`.
     pub diag: bool,
@@ -117,6 +117,10 @@ pub struct Options {
     pub check_restore: bool,
     /// `HVMX_NO_MLOCK`, set: do not lock guest RAM.
     pub no_mlock: bool,
+    /// `HVM_RAM_SHARE`, exactly `0`: each snapshot keeps its own copy of guest RAM, which a restore
+    /// copies back (before Milestone 335); otherwise snapshots are RAM bases that guest RAM is
+    /// mapped from privately and that engines with the same bytes share.
+    pub no_ram_share: bool,
     /// `HYDO_PREEMPT_RECORD`, set and not `0`: a record per forced preemption point.
     pub preempt_record: bool,
     /// `HYDO_CONTRACTS`: the function contracts' plan (Milestone 241).
@@ -166,6 +170,7 @@ impl Options {
             diag_chunks: t(HVMX_DIAG_CHUNKS),
             check_restore: e.is_set(HVMX_CHECK_RESTORE),
             no_mlock: e.is_set(HVMX_NO_MLOCK),
+            no_ram_share: !e.not_0(HVM_RAM_SHARE),
             preempt_record: e.set_not_0(HYDO_PREEMPT_RECORD),
             contracts: t(HYDO_CONTRACTS).filter(|p| !p.is_empty()),
             guest_disks: t(HYDO_GUEST_DISKS).filter(|p| !p.is_empty()),

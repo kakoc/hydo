@@ -759,6 +759,7 @@ fn pool_for(o: &Opts, image: &Path, workers: usize, outdir: &Path) -> Result<Poo
         known: None,
         pool: cfg.pool.clone(),
         contracts: None,
+        boots: Default::default(),
     };
     Ok(Pool::new(
         engine,

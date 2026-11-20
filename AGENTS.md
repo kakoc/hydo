@@ -333,8 +333,13 @@ guest runs, and a fingerprint hashes again only the blocks the run wrote. From t
 the RAM's part is a tree of 4 KiB page hashes, made on half of the cores (M294,
 `hydo_hvm::ramtree`). The KVM engine takes the hashes of the pages that the guest did not write
 since its RAM base from the base. An older image keeps the byte-wise hash of every disk byte and
-one chain of the word-wise mix over RAM. The details are in Milestones 48, 51, 99, 143, 147,
-284, 290, and 294.
+one chain of the word-wise mix over RAM. Since M335 a snapshot is a RAM base: a file in
+`HVM_SNAP_DIR` named by its length and tree hash. Guest RAM is mapped from it privately, so the
+kernel copies a page at its first write. The workers of one exploration find one another's bases
+and share them, a restore maps the base again, and guest RAM is no longer locked. The explorer
+counts half of the guest RAM once, and half of it and 256 MiB per worker. It lets as many workers
+boot at once as fit. `HVM_RAM_SHARE=0` turns it off (`docs/design/mac-cow.md`). The details are
+in Milestones 48, 51, 99, 143, 147, 284, 290, 294, and 335.
 
 **The KVM engine.** `hydo/crates/hydo-kvm` runs the x86_64 images on stock Linux KVM, without the
 module or root, with one vCPU and a patched guest kernel (`bzImage-kvm`). With `--vcpus N` it runs
@@ -1873,8 +1878,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 33. hydo-world's gRPC proxy sends a trailers-only answer without trailers (M111).
 34. The hvx engine: an unreadable console ends a run with `ERROR vm`; Intel PT can fail with
     ENOMEM on the shared machine (M132, M137).
-36. [user decision] Copy-on-write VMs, a shared read-only root, and the host-call port on the Mac
-    engine are not built (M138, M140).
+36. Copy-on-write VMs (M138, M140, M335). On the Mac engine they are built since M335. The
+    workers of one exploration map guest RAM from the snapshots' shared RAM bases, and each holds
+    only the pages it writes (`docs/design/mac-cow.md`). [user decision] What is left:
+    - copy-on-write VMs and a shared read-only root on hvx, which need shared, write-protected
+      pages in the module's RAM and disk arrays;
+    - the host-call port on the Mac engine.
 37. The M48 Mac boot fingerprint was never taken with the Rust engine (M147).
 38. NATS JetStream (M141, M235, M245). On hvx, one VM reaches Jepsen's 3.2, 3.3 and 3.5
     (`examples/nats-jetstream/storage/` and `blocks/`); the Mac runs of 3.1 and 3.4 have no
@@ -4144,6 +4153,13 @@ build machine, before 2026-10-13.
   as the run's timeline. `browser.read_back` checks that the pages show every object the server
   acknowledged, also after a power cut. On hvx it found Vikunja's lost tasks from the home page
   alone. Nothing recorded moved
+- M335 (tentative number): copy-on-write guest RAM on the Mac engine. A snapshot is a RAM base:
+  a file named by its bytes, which the workers of one exploration share. Guest RAM is mapped from
+  it privately, so a worker holds the pages it writes, 68 MB instead of 4,118 MB for a 4,096 MiB
+  Redis guest. The explorer counts the shared part once and lets as many workers boot at once as
+  fit. Redis at 4,096 MiB ran 60 seeds in 54 s on 3 workers instead of 297 s on 1. Every
+  recorded Mac value of the two release images held. `HVM_RAM_SHARE=0` turns it off. Nothing
+  recorded moved
 - M336 (tentative number): statistics of an exploration. `stats.json` holds the curve of new
   behaviour with a judgement, the cost by role and by worker, the faults drawn against
   `faults:`, and how many runs fit in a budget; `hydo explore --merge` merges it. `hydo stats`

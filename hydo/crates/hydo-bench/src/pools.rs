@@ -98,6 +98,7 @@ impl Engines {
             known: None,
             pool: self.config.pool.clone(),
             contracts: None,
+            boots: Default::default(),
         };
         let engine = agent_engine(Arc::new(engine), &spec.image, &self.config.control);
         Pool::new(

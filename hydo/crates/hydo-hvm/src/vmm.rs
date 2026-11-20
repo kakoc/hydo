@@ -421,6 +421,48 @@ impl Vmm {
         self.vcpu_create();
     }
 
+    /// A fresh VM and vCPU around guest RAM mapped again from `b` (Milestone 335): the VM is
+    /// destroyed first, so no stage-2 mapping holds the pages the run wrote, then RAM is mapped
+    /// privately from the base and given to the new VM (`crate::mem`, docs/design/mac-cow.md).
+    pub fn fresh_vm_from(&mut self, b: &crate::mem::Base) {
+        if let Some(v) = self.vcpu.take() {
+            v.destroy();
+        }
+        hv::chk("hv_vm_destroy()", hv::vm_destroy());
+        self.map_from(b);
+        hv::chk("hv_vm_create(NULL)", hv::vm_create());
+        self.map_ram();
+        self.vcpu_create();
+    }
+
+    /// Map guest RAM from `b`, a base of exactly its bytes that a snapshot just made, in the same
+    /// VM and vCPU (Milestone 335): the guest sees the same bytes at the same addresses, and the
+    /// pages the boot wrote stop being this process's own. Not while the spin observer protects
+    /// RAM at stage 2 (its protection and the rewind mode's copies are per page); false then.
+    pub fn rebase(&mut self, b: &crate::mem::Base) -> bool {
+        if self.sp.protected || self.sp.rw_on {
+            return false;
+        }
+        hv::chk(
+            "hv_vm_unmap(RAM_BASE, ram_size)",
+            hv::vm_unmap(RAM_BASE, self.ram_size as usize),
+        );
+        self.map_from(b);
+        self.map_ram();
+        true
+    }
+
+    /// Guest RAM mapped from `b` while no VM maps it, and the instruction cache made coherent
+    /// with the bytes the base placed: its extents (its holes read as zeros).
+    fn map_from(&mut self, b: &crate::mem::Base) {
+        if let Err(e) = self.ram.map_base(b) {
+            fatal(1, &format!("hvmx: map guest RAM from its snapshot: {e}"));
+        }
+        for &(at, n) in b.extents() {
+            crate::hv::icache_invalidate(self.ram.ptr().wrapping_add(at), n);
+        }
+    }
+
     /// A fresh vCPU in the same VM (hvm's branch mode).
     pub fn fresh_vcpu(&mut self) {
         if let Some(v) = self.vcpu.take() {
