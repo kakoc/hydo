@@ -395,8 +395,9 @@ image's bytes do not change with it. A recovery boot and a reboot start from S0 
 mounts nothing, as before (`hydo_image::defaults`, `cgroup2`). A program that reads
 `/proc/self/cgroup` at start (Seastar, Dragonfly) finds its `0::/` line, so the Dragonfly and
 Redpanda examples no longer mount cgroup2 in `setup:`. A pause of threads uses the mount and
-mounts nothing more. An image service's root gets `/sys` by a bind that is not recursive: its
-programs see the `0::/` line but no cgroup2 files. hvx, the Mac engine and KVM (four Intel
+mounts nothing more. An image service's root of an image built before epoch 5 gets `/sys` by a
+bind that is not recursive: its programs see the `0::/` line but no cgroup2 files. From epoch 5
+the bind is recursive, so they see the files too (M338). hvx, the Mac engine and KVM (four Intel
 runners) ran it; a second KVM run of the one-off workflow `tmp-cgroup2-kvm` is open item 144. The reference is MANIFEST.md "The cgroup2
 mount"; the design is the last section of `docs/design/guest-cgroups.md`.
 
@@ -614,6 +615,21 @@ compose` writes `root.share_images: true` again for services of one image. On th
 services of one Dragonfly image, the guest's root took 126 MiB of guest RAM with it and 362 MiB
 without. The reference is MANIFEST.md "Services from a Docker/OCI image"; the details are in
 `docs/HISTORY.md` Milestone 331.
+
+**Hard links, the root's room, `/sys` and the pause of threads (M338, tentative number;
+fingerprint epoch 5).** Four fixes, each its own commit and each keyed on the image's epoch in
+`hydo_image::defaults`:
+- An arm64 root keeps an image's hard links as links (`cpio_hard_links`). The busybox image's
+  initramfs fell from 259 MB to 6.4 MB, and its root from 446 MiB of guest RAM to 14 MiB.
+- `hydo build` and `--check` count the whole root against the Mac's guest RAM: the trees, hydo's
+  own files, and the compressed root. The kernel holds the compressed root while it unpacks it
+  into a tmpfs of half the RAM left (`oci::initramfs_room`). PostgreSQL 16.4 in 1,024 MiB now warns and names
+  1,280 MiB; the build also measures the staged root.
+- An image service binds `/sys` recursively, so it finds the cgroup2 files (`oci_sys_rbind`).
+- A timed pause of threads takes the workload's largest session and leaves out a thread that
+  ended before its move (`pause_largest_session`), as a reaction's freeze does.
+
+The details are in `docs/HISTORY.md` Milestone 338.
 
 **Business rules: what found what (M215).** On Formance Ledger, rules over the ledger's own
 state (balances, moves, effective volumes, overdraft, reverts, bulks, the audit log) found
@@ -1959,15 +1975,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       fingerprint epoch 4 it fails it at 1 of 120 starts (208 ms, M302). With two vCPUs
       no start from 390 to 460 ms failed it on KVM: 50 passed and 21 ended in ERROR. A wider
       window was not searched, and the ERROR's cause was not read.
-    - The freeze script ends the run with an error when a thread it listed exits before it is
-      moved into the cgroup. On the Mac this happened at 11 of the 81 starts, where the test
-      process ends. Fixing it changes the controller's commands for every pause of threads,
-      also on hvx and on epoch-2 images.
-    - The freeze script takes the first session leader with `HYDO_FROM` in the order of
-      `/proc`'s names. busybox's `timeout` leaves a watcher that leads a session of its own
-      with that variable, so a workload that runs `timeout <s> <program>` can lose the pause
-      (M296: a shrink run of `hydo fuzz --vm` stopped nothing). M296's reaction freeze takes the
-      largest session and leaves an ended thread out; the timer keeps its script.
+    - On an image built before epoch 5 the timer's freeze script ends the run with an error. This
+      happens when a thread it listed exits before its move into the cgroup (11 of the 81 starts
+      of Qdrant's test on the Mac). It also takes the first session leader with `HYDO_FROM` in the
+      order of `/proc`'s names, which can be a watcher of busybox's `timeout` (M296). From epoch
+      5 the timer uses the reaction's script, which takes the largest session and leaves an
+      ended thread out (M338). A probe with short-lived processes gave the ERROR at 3 of 3
+      offsets on an epoch-4 image and OK on an epoch-5 image. The watcher's session was not
+      shown in a run, and Qdrant's 81 starts did not run again.
     - A pause of a service's thread, and pauses that repeat in every period of a CPU limit, are
       not built.
     - The blind exploration does not find Qdrant's 1 ms windows: 0 of 300 schedules with starts
@@ -2088,6 +2103,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `hvx/restate-oci`, `hvx/voting`, `hvx/voting-generated`, `hvx/voting-loopback`; 21 runs).
       Their workloads and checks reach the services through `hydo-oci` and `/tmp/hydo`, so no
       verdict is expected to move with it (docs/REBASELINE.md section 29).
+    - Milestone 338 adds three changes of epoch 5. An arm64 root keeps its hard links, so a Mac
+      image whose root has a file of several paths gets other bytes. The image services'
+      launchers bind `/sys` recursively, which moves the same 7 images (21 runs). A timed pause
+      of threads sends the reaction's freeze script, which moves the three runs of
+      `kvm/qdrant-flaky-buggy` and `kvm/qdrant-flaky-fixed` (docs/REBASELINE.md section 29).
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -2551,9 +2571,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       that expected the Mac's exact sleep length. The fixed workflow
       `.github/workflows/tmp-cgroup2-kvm.yml` (branch `tmp-cgroup2-kvm`) also runs the epoch-3
       pause under 0.3.4. Its run is still to come, and no AMD host ran the probe yet.
-    - An image service's root gets `/sys` by a bind that is not recursive (hydo-build's
-      launcher), so its programs read the `0::/` line but find no files under `/sys/fs/cgroup`.
-      A recursive bind would change the launcher of every image service.
+    - An image service's root of an image built before epoch 5 gets `/sys` by a bind that is not
+      recursive, so its programs read the `0::/` line but find no files under `/sys/fs/cgroup`.
+      From epoch 5 the bind is recursive (M338), which ran on the Mac engine only.
     - hydo sets no limits. Every process is in the root cgroup, so a program that sizes itself
       from `memory.max` or `cpu.max` uses the whole guest. Limits per service, as Compose's
       `mem_limit` and `cpus` give a container, are not built.
@@ -2899,9 +2919,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - `hydo compose`'s `guest.ram_mib: 1024` was too small for the PostgreSQL image on the Mac:
       the initramfs did not fit (`Initramfs unpacking failed: write error`), and the run failed
       later with an unrelated message. Since M328 the boot ends at that line with its own ERROR,
-      which names the sizes and `guest.ram_mib`; `hydo build` still does not count the whole
-      root (open item 166). An image's hard links (the
-      busybox image has 400) each become a whole copy in the initramfs.
+      which names the sizes and `guest.ram_mib`. Since M338 `hydo build` and `--check` warn and
+      name 1,280 MiB, and an image's hard links stay links in an epoch-5 root. PostgreSQL's root
+      still needs more than 1,024 MiB: 467 MiB beside a 142 MiB archive.
 163. What the fixes of the third `hydo fuzz` evaluation left (M318 and M326, tentative numbers;
     `docs/design/function-fuzzing-evaluation-3.md`, "After Milestone 326"). What is left:
     - The cause of a test module's compile error is found by the text around the error's
@@ -2995,11 +3015,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `contracts:` key the recorded answers do not list. Twelve are from M329: the known keys of
       a fake's and a proxy's route. The others name the guest keys of later milestones.
 166. The three gaps of a user's onboarding with 0.4.0 (M324, tentative number). What is left:
-    - The roots' estimate counts the image layers only. It leaves out the rest of the root
-      (the agent, busybox, the tools) and the copies that an image's hard links become in the
-      initramfs (open item 162). So M316's PostgreSQL image in 1,024 MiB, which failed to unpack, may get
-      no warning; since M328 its boot says so with the sizes. The half of the RAM is Linux's default for a tmpfs root, read from the kernel,
-      not measured in a VM. No build or VM ran with the change; only `--check` ran.
+    - Since M338 the estimate on the Mac counts the whole root and its compressed archive, and
+      the build measures the staged root. The estimate takes 8 % for the files' whole pages and
+      fixed sizes for hydo's own files (12 MiB, 5 MiB compressed), measured on two images. The
+      x86_64 disk check still counts the image layers only.
     - `hydo compose` keys an image by its manifest digest, so two manifests of one config (one
       image pushed twice) are not proposed for sharing; hydo-build would share them.
     - `hydo compose` writes `root.share_images: true` on since M331. A manifest that it wrote
@@ -4007,6 +4026,12 @@ build machine, before 2026-10-13.
   early faults of 69 % of the failing runs. Shrinks share 10 % to 43 %. A no-go for a tree of
   snapshots; the first version to build takes the result of a repeated schedule. Nothing
   recorded moved
+- M338 (tentative number): four fixes at the fingerprint epoch 5, each its own commit. An arm64
+  root keeps an image's hard links (the busybox image: 259 MB to 6.4 MB of initramfs). The
+  root's estimate counts the whole root and the compressed archive, so PostgreSQL in 1,024 MiB
+  warns. An image service binds `/sys` recursively and sees cgroup2's files. A timed pause of
+  threads leaves out a thread that ended and takes the largest session. The pinned reproducers
+  kept their values; every epoch-5 value waits for the pass (open item 105)
 
 ## Where to look
 
