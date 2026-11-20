@@ -19268,3 +19268,58 @@ Deleting the `skill-v` releases after 0.5.0 ends it. No real release carries the
 `claude plugin update` from 2.4.0 to a lower version ran only as the documentation describes it.
 Nothing recorded moved.
 
+## Milestone 337 (tentative number): shared beginnings of an exploration's runs, research
+
+The question was whether the explorer can run a beginning that many schedules share once, take
+a snapshot where they part, and continue each schedule from it, with every run exact. The
+research note is `hydo/explore/RESEARCH-shared-prefix.md`, and its scripts are in
+`hydo/explore/shared-prefix/`. Nothing of the product changed.
+
+How it was measured. A run's inputs to the guest are its host part and the host controller's
+sends, each at a guest clock value, and the control transcript records every send. Two runs with
+the same host part are the same up to their first differing send. `prefix.py` builds a tree of an
+exploration's runs from their transcripts and measures the clock that an earlier run already ran.
+The data were 15 hvx explorations of nine examples (ClickHouse, Dragonfly, Iggy, Redpanda,
+SurrealDB, TiKV, VictoriaMetrics, seven PostgreSQL image services, and web-shop's walk), read on
+the bare-metal machine without a VM. The planned Mac explorations of the Redis quickstart, the
+composed Redis example, and a state search did not run. The shared Mac VM lock stayed with another
+session for more than 40 minutes, and this Mac's free disk fell to 12 GB with 17.7 GB of swap.
+
+What is shared today. With the explorer's draws, the first runs of 13 explorations of databases
+and queues shared 0.07 % of 12,590 s, even with `dseed=` left out and `disk=cut` counted as
+`disk=none`. By the whole host part they shared nothing, because each seed draws its own `dseed=`.
+The 184 runs of `disk=none | run` of the PostgreSQL exploration had one transcript and 184
+fingerprints: on hvx `fnv_snapshot` hashes the disk's fault seed, classes, and probability, and
+the Mac engine hashes the device's struct with its seed.
+
+What keeps runs apart. The first range of the workload ends at the first fault's step, and its
+program gets `HYDO_TO` of that step. A composed workload draws its own `W=` and a walk its own `I=`
+per schedule, and both differ at the first workload command (0.1 % of a run on Iggy). A setting
+token with a value other than the default and a strict power loss act before step 0. The timing tokens and the disk's policy act from the
+workload's first instruction.
+
+Other draws. Drawing the composition, the walk, and the setting tokens once per exploration would
+save 3.3 % of the first runs' time (an estimated 415 s). Also starting the workload program once
+per step, which needs a new fingerprint epoch, would save 10.9 % (1,366 s). Both lose search, and
+drawing the first fault later loses more: 73 of the 106 failing first runs (69 %) had their first
+fault in the first quarter of the steps.
+
+Shrinks. A shrink's candidates share a beginning with earlier candidates: 43 % of the clock on
+Dragonfly, 28 % on TiKV, and 10 % on web-shop. Only 5 % to 12 % of it is shared with the failing
+run or the last failing candidate. Exact repeats of an earlier schedule took 88 s of Dragonfly's
+418 s of shrinks, 238 s of TiKV's 1,124 s, and 300 s of web-shop's 2,988 s. The PostgreSQL
+exploration drew 13 distinct schedules for 300 seeds, and its repeats took 800 s of 848 s.
+
+The engines. `SNAP`, `RESUME`, and `agent::check_branch` exist since Milestone 212. A snapshot
+keeps the run's disk policy and seed, and no command changes them at a stop. hvx holds 8
+snapshots of every non-zero page and refuses them for `cf=` and timing schedules. The Mac engine
+and KVM hold 64 snapshots of the pages written since S1. Continued runs gave their fingerprints
+again on hvx (6 of 6) and on the Mac (9 of 9 fault and 9 of 9 timing branches) in Milestone 212,
+and KVM has no such proof on a real host.
+
+The recommendation. A tree of snapshots over the first runs is a no-go. The first version to
+build is a change of the explorer only: a repeated schedule takes the earlier result without a
+VM, and the reruns and confirmations keep their VMs. A repeat must not claim the earlier
+fingerprint for its own text, or the explorer stops drawing a `dseed=` that decides nothing. The
+second version continues shrink candidates from their own snapshots on the Mac engine and KVM.
+Open item 167 has what is left. Nothing recorded moved.

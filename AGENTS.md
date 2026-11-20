@@ -1476,6 +1476,18 @@ seconds, it found the benchmark's d7 and d10 in 2 of 5 seed ranges each, and the
 exploration in 3 of 5. Neither found the second symptom of etcd issue 14685 in 5 ranges each.
 Design and numbers: `docs/design/state-search.md`; `docs/HISTORY.md` Milestone 212.
 
+**Shared beginnings of runs (M337, research, tentative number).** A tree of snapshots over an
+exploration's first runs is a no-go. On 13 hvx explorations of databases and queues, 0.07 % of
+12,590 s of first runs repeated an earlier run's beginning. Each schedule draws its own `dseed=`
+(which the fingerprint covers), its own `W=` or `I=`, and its first fault early, which splits the
+workload's first range. Drawing those once per exploration would save 3.3 %, or 10.9 % with one
+workload program per step. It costs search: 69 % of the failing first runs had their first fault
+in the first quarter of the steps. Shrinks share more: 10 % to 43 % of their clock, and 10 % to
+21 % of their seconds were exact repeats of an earlier candidate. The recommended first version
+takes the earlier result for a repeated schedule; the second continues shrink candidates from
+their own snapshots on the Mac engine and KVM. The note is `hydo/explore/RESEARCH-shared-prefix.md`
+(open item 167).
+
 **A failure as one web page (M220).** `hydo report --html [DIR] [-o FILE]` writes one HTML file
 for a run directory, an exploration directory or a `hydo ci run` output directory. It holds its
 style sheet and one small script (the copy buttons) and loads nothing. The page shows the
@@ -2957,6 +2969,22 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       that names them. `<replica>` and `<database>` keep their roles' rules.
     - The test code of JavaScript is found by `describe(`, `it(` and `test(` at a line's start,
       so a product function named `test` called there is left out too.
+167. Shared beginnings of runs (M337, research, tentative number;
+    `hydo/explore/RESEARCH-shared-prefix.md`). Nothing is built. What is left:
+    - A repeated schedule (the same text without the `dseed=` of `disk=none` and `disk=cut`)
+      takes the earlier result without a VM. The repeat must not claim the earlier fingerprint
+      for its own text, because the fingerprint covers the disk's seed on hvx and the Mac.
+    - Shrink candidates that continue from snapshots of earlier candidates at their step ranges,
+      on the Mac engine and KVM. KVM has no proof on a real host that a continued run gives its
+      fingerprint from S1 (open item 85). A snapshot lives in one engine process, and a round's
+      candidates run on all workers.
+    - No engine command changes the disk's policy or seed at a stop, so a run with `disk=cut`
+      and one with `disk=none` share nothing, although the guest sees no difference before the
+      cut.
+    - The measurements read 15 hvx explorations. The planned Mac explorations and the Mac's cost
+      of `SNAP` and `RESUME` did not run: the shared VM lock was taken and the disk was low.
+      KVM explorations were not measured. The wall seconds are estimates from the guest clock,
+      which predicts a run's seconds badly on ClickHouse and Dragonfly.
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -3907,6 +3935,12 @@ build machine, before 2026-10-13.
   `v<version>` carries `hydo-skill-<version>.tar.gz`, and `hydo skill update` and `hydo update`
   take the skill from the same release list. A skill of the old line 1.0.0 to 2.4.0 counts as
   older than any hydo version. The `skill-v` releases go after 0.5.0. Nothing recorded moved
+- M337 (tentative number): research on shared beginnings of runs. On 13 hvx explorations the
+  first runs shared 0.07 % of their time, because each schedule's seed, composition, walk, and
+  early first fault reach the guest at once. Other draws would save 3 % to 11 % and lose the
+  early faults of 69 % of the failing runs. Shrinks share 10 % to 43 %. A no-go for a tree of
+  snapshots; the first version to build takes the result of a repeated schedule. Nothing
+  recorded moved
 
 ## Where to look
 
