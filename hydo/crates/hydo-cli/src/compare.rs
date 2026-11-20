@@ -1081,6 +1081,7 @@ fn drawer(ctx: &Ctx, image: &Path, out: &Path, opts: &[String]) -> hydo_explore:
         } else {
             ctx.config.clone()
         },
+        memory_hint: None,
     };
     hydo_explore::Drawer::new(&full, &env)
         .unwrap_or_else(|e| die(&format!("hydo compare-versions --seeds: {e}")))

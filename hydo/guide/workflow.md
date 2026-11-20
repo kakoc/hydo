@@ -253,8 +253,10 @@ The exit status of `hydo explore` tells a script what happened:
 
 Refusals include a guest that does not fit into this machine's memory, a missing image, and
 options that do not go together. With `--json`, or when stdout is not a terminal, a refusal also
-prints one JSON line, `{"refused": "<reason>", "status": 5}`. Inside `hydo ci run` every stop of
-the explorer is that command's status 2.
+prints one JSON line, `{"refused": "<reason>", "status": 5}`. A refusal for memory names each
+running `hydo inspect` session with its memory and its age, because each session holds a whole
+guest. `hydo inspect stop --all` stops them. Inside `hydo ci run` every stop of the explorer is
+that command's status 2.
 
 ## Which versions have a finding
 

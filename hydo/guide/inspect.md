@@ -104,7 +104,7 @@ marked (`hydo guide values`).
 ## 3. Hold the stop and look (one replay, then cheap calls)
 
 ```sh
-hydo inspect start <run dir> --at run:812       # -> {"session":{"id":"i-3f2a9c1e",...}}
+hydo inspect start <run dir> --at run:812       # -> {"id":"i-3f2a9c1e","session":{...}}
 hydo inspect logs    i-3f2a9c1e redis --lines 80
 hydo inspect exec    i-3f2a9c1e -- redis-cli GET k:11
 hydo inspect exec    i-3f2a9c1e --service db --sh 'psql -U app -c "select * from orders"'
@@ -129,8 +129,13 @@ Some stops cannot be kept as a snapshot: stops after the workload's end, stops i
 boot, and stops under timing tokens (`tj`, `xt`, `pp`, `q`, `cf`, `pct`). Such a session is
 `live`, and calls run one after another on one branch. `--freeze`
 stops every process at the stop first (for reading files and processes exactly; a stopped server
-does not answer queries). A session ends after 15 minutes without a call (`--idle SECS`).
+does not answer queries). A session ends after 5 minutes without a call (`--idle SECS`).
 `hydo inspect list` shows your sessions.
+
+A session holds a whole guest's memory (`guest.ram_mib`) until it ends. While sessions run,
+`hydo run` and `hydo explore` can refuse for memory, and the refusal names each session with its
+memory and its age. `hydo inspect stop --all` stops every session of yours and says how many it
+stopped. The answer of `start` has the session's id at the top, `.id`, and in `.session.id`.
 
 Instead of a session id, every call takes a run directory and `--at`: then it replays, does the one
 thing and ends (each such call costs a replay):

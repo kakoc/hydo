@@ -1017,9 +1017,11 @@ Find where to look (no VM; instant):
 
 Hold a stop (one replay of the run up to it: about as long as the run took to get there):
   hydo inspect start <run dir> [--at end|<conv>:<stop>|<stop>] [--freeze] [--idle SECS]
-                                                 -> a session id; --at end (the default) is the
-                                                 stop where the verdict was given
-  hydo inspect list | status <id> | stop <id>
+                                                 -> a session id (.id); --at end (the default) is
+                                                 the stop where the verdict was given; a session
+                                                 holds the guest's memory until it is stopped or
+                                                 idle for --idle seconds (default 300)
+  hydo inspect list | status <id> | stop <id> | stop --all
 
 Look (each call restores the stop's snapshot, so every call sees the same state; a fraction of a
 second to a few seconds each):
@@ -1121,6 +1123,18 @@ pub fn cmd_inspect(ctx: &Ctx, argv: &[String]) -> i32 {
         "diagnose" => diagnose::cmd(ctx, &rest),
         "start" => session::start(ctx, &rest),
         "list" => session::list(ctx),
+        // Milestone 328: every session of this user
+        "stop" if rest.iter().any(|a| a == "--all") => {
+            if rest.len() == 1 {
+                session::stop_all(ctx)
+            } else {
+                Err(Problem::new(
+                    "usage",
+                    "stop --all takes no session id",
+                    vec!["hydo inspect stop --all".into()],
+                ))
+            }
+        }
         "status" | "stop" | "exec" | "read" | "ls" | "logs" | "ps" | "sockets" | "advance" => {
             call(ctx, &op, &rest)
         }

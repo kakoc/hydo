@@ -19,8 +19,11 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-/// A session's default idle time, seconds.
-pub const IDLE_S: u64 = 900;
+/// A session's default idle time, seconds: 300 since Milestone 328 (900 before). A session holds
+/// a whole guest's memory, and a session that a script or a person forgot held it for 15
+/// minutes, during which `hydo run` and `hydo explore` refused for memory. The calls of one
+/// look come seconds apart, and a session that ended costs one replay to start again.
+pub const IDLE_S: u64 = 300;
 /// How long `start` waits for the replay, seconds (a stack run takes minutes).
 pub const START_WAIT_S: u64 = 3600;
 /// The most engine stops one call may take.
@@ -290,13 +293,32 @@ fn session_doc(ctx: &Ctx, id: &str) -> Option<InspectSession> {
 }
 
 fn server_alive(ctx: &Ctx, id: &str) -> bool {
-    let Some(pid) = read_json(&dir_of(ctx, id).join("session.json"))
-        .and_then(|v| v.get("pid").and_then(Value::as_i64))
-    else {
-        return false;
-    };
+    session_pid(ctx, id).is_some()
+}
+
+/// The process of session `id` while it runs. Milestone 328: the process must still be the
+/// session's (`hydo inspect __serve <id>`), so that a session that ended days ago, whose process
+/// number the system has given to another program since, does not count as running (and `hydo
+/// inspect stop --all` never signals that program).
+fn session_pid(ctx: &Ctx, id: &str) -> Option<i64> {
+    let pid = read_json(&dir_of(ctx, id).join("session.json"))
+        .and_then(|v| v.get("pid").and_then(Value::as_i64))?;
     // SAFETY: kill with signal 0 only checks that the process exists.
-    unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
+    if unsafe { libc::kill(pid as libc::pid_t, 0) } != 0 {
+        return None;
+    }
+    let out = std::process::Command::new("ps")
+        .args(["-o", "command=", "-p", &pid.to_string()])
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output();
+    match out {
+        Ok(o) => (o.status.success()
+            && String::from_utf8_lossy(&o.stdout).contains(&format!("__serve {id}")))
+        .then_some(pid),
+        // no `ps` to ask: the process exists
+        Err(_) => Some(pid),
+    }
 }
 
 /// `hydo inspect start <run dir> [--at P] [--freeze] [--idle S] [--wait S]`.
@@ -320,7 +342,7 @@ pub fn start(ctx: &Ctx, rest: &[String]) -> Result<Value, Problem> {
     write_json(
         &sd.join("request.json"),
         &json!({"run_dir": dir, "at": target.point(), "freeze": freeze, "idle_s": idle,
-                "backend": ctx.backend_name()}),
+                "backend": ctx.backend_name(), "ram_mib": ram_of_eargs(&rec.eargs)}),
     );
     let log = std::fs::File::create(sd.join("server.log"))
         .map_err(|e| Problem::new("engine", e.to_string(), vec![]))?;
@@ -387,8 +409,28 @@ pub fn start(ctx: &Ctx, rest: &[String]) -> Result<Value, Problem> {
     }
 }
 
-/// The ids of the inspection sessions that are running now (each holds a guest's memory).
-pub fn running(ctx: &Ctx) -> Vec<String> {
+/// A running inspection session, as a refusal for memory names it (Milestone 328).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Running {
+    pub id: String,
+    /// Seconds since `hydo inspect start` (None: unknown).
+    pub age_s: Option<u64>,
+    /// The guest memory it holds, `guest.ram_mib` of its run (None: unknown).
+    pub ram_mib: Option<u64>,
+}
+
+/// The guest memory of a recorded run: its engine's `--ram-mib`, else the engines' default.
+fn ram_of_eargs(eargs: &[String]) -> u64 {
+    eargs
+        .windows(2)
+        .find(|w| w[0] == "--ram-mib")
+        .and_then(|w| w[1].parse().ok())
+        .unwrap_or(1024)
+}
+
+/// The inspection sessions of this user that are running now (each holds a guest's memory),
+/// by id.
+pub fn running(ctx: &Ctx) -> Vec<Running> {
     let mut ids: Vec<String> = std::fs::read_dir(home(ctx))
         .into_iter()
         .flatten()
@@ -397,22 +439,166 @@ pub fn running(ctx: &Ctx) -> Vec<String> {
         .filter(|n| n.starts_with("i-") && server_alive(ctx, n))
         .collect();
     ids.sort();
-    ids
+    ids.into_iter()
+        .map(|id| {
+            let req = dir_of(ctx, &id).join("request.json");
+            let age_s = std::fs::metadata(&req)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.elapsed().ok())
+                .map(|d| d.as_secs());
+            // `ram_mib` is in the request of a session started since Milestone 328; an older
+            // one's comes from its run's engine arguments
+            let ram_mib = read_json(&req).and_then(|v| {
+                v["ram_mib"].as_u64().or_else(|| {
+                    let dir = v["run_dir"].as_str()?;
+                    Recorded::load(Path::new(dir))
+                        .ok()
+                        .map(|r| ram_of_eargs(&r.eargs))
+                })
+            });
+            Running { id, age_s, ram_mib }
+        })
+        .collect()
 }
 
-/// The sentence `hydo run` adds when it refuses for the host's memory: the running inspection
-/// sessions that hold a guest, and how to stop them; None when none runs.
-pub fn memory_hint(ids: &[String]) -> Option<String> {
-    let first = ids.first()?;
+/// An age in the largest whole unit: `40 s`, `12 min`, `3 h`, `2 days`.
+pub fn age_words(s: u64) -> String {
+    match s {
+        0..=119 => format!("{s} s"),
+        120..=7199 => format!("{} min", s / 60),
+        7200..=172_799 => format!("{} h", s / 3600),
+        _ => format!("{} days", s / 86_400),
+    }
+}
+
+/// The sentence a refusal for the host's memory adds (`hydo run`, `hydo explore`): the running
+/// inspection sessions that hold a guest, each with its age and its memory, and the line that
+/// stops them all; None when none runs.
+pub fn memory_hint(running: &[Running]) -> Option<String> {
+    let first = running.first()?;
+    let each: Vec<String> = running
+        .iter()
+        .map(|r| {
+            let mut what = Vec::new();
+            if let Some(m) = r.ram_mib {
+                what.push(format!("{m} MiB"));
+            }
+            if let Some(a) = r.age_s {
+                what.push(format!("started {} ago", age_words(a)));
+            }
+            if what.is_empty() {
+                r.id.clone()
+            } else {
+                format!("{} ({})", r.id, what.join(", "))
+            }
+        })
+        .collect();
+    let total: u64 = running.iter().filter_map(|r| r.ram_mib).sum();
+    let n = running.len();
     Some(format!(
-        "{} hydo inspect session{} running and hold{} a guest's memory ({}): `hydo inspect list` \
-         shows {}, and `hydo inspect stop {first}` ends one",
-        ids.len(),
-        if ids.len() == 1 { " is" } else { "s are" },
-        if ids.len() == 1 { "s" } else { "" },
-        ids.join(", "),
-        if ids.len() == 1 { "it" } else { "them" },
+        "{n} hydo inspect session{} running and hold{} guest memory{}: {}. `hydo inspect stop \
+         --all` stops every session, and `hydo inspect stop {}` stops one",
+        if n == 1 { " is" } else { "s are" },
+        if n == 1 { "s" } else { "" },
+        if total > 0 {
+            format!(" ({total} MiB)")
+        } else {
+            String::new()
+        },
+        each.join(", "),
+        first.id,
     ))
+}
+
+/// `hydo inspect stop --all` (Milestone 328): stop every running session of this user. A session
+/// that does not answer within a few seconds (one still replaying its run answers only when the
+/// replay is done) is ended with SIGTERM to its process group, which holds its engine.
+pub fn stop_all(ctx: &Ctx) -> Result<Value, Problem> {
+    let all = running(ctx);
+    let mut stopped = Vec::new();
+    let mut notes = Vec::new();
+    for r in &all {
+        let asked = stop_by_socket(ctx, &r.id, Duration::from_secs(5));
+        if !asked || wait_gone(ctx, &r.id, Duration::from_secs(5)) {
+            if let Some(pid) = session_pid(ctx, &r.id) {
+                // SAFETY: a signal to the session's own process group (it called setsid).
+                unsafe {
+                    libc::kill(-(pid as libc::pid_t), libc::SIGTERM);
+                }
+            }
+        }
+        if wait_gone(ctx, &r.id, Duration::from_secs(10)) {
+            notes.push(format!(
+                "{} did not end; its log: {}",
+                r.id,
+                dir_of(ctx, &r.id).join("server.log").display()
+            ));
+        } else {
+            stopped.push(r.id.clone());
+        }
+    }
+    let total: u64 = all
+        .iter()
+        .filter(|r| stopped.contains(&r.id))
+        .filter_map(|r| r.ram_mib)
+        .sum();
+    notes.insert(
+        0,
+        match stopped.len() {
+            0 if all.is_empty() => "no session was running".to_string(),
+            n => format!(
+                "stopped {n} session{}{}",
+                if n == 1 { "" } else { "s" },
+                if total > 0 {
+                    format!(", which held {total} MiB of guest memory")
+                } else {
+                    String::new()
+                }
+            ),
+        },
+    );
+    let sessions = stopped
+        .iter()
+        .filter_map(|id| {
+            let mut s = session_doc(ctx, id)?;
+            s.status = "ended".into();
+            Some(s)
+        })
+        .collect();
+    Ok(to_value!(&Inspect {
+        op: "stop".into(),
+        sessions,
+        notes,
+        ..Inspect::default()
+    }))
+}
+
+/// Ask session `id` to stop over its socket; false when it did not take the request in `wait`.
+fn stop_by_socket(ctx: &Ctx, id: &str, wait: Duration) -> bool {
+    let Ok(mut s) = UnixStream::connect(sock_of(ctx, id)) else {
+        return false;
+    };
+    let _ = s.set_read_timeout(Some(wait));
+    let _ = s.set_write_timeout(Some(wait));
+    let line = serde_json::to_string(&Req::Stop.to_json()).unwrap_or_default() + "\n";
+    if s.write_all(line.as_bytes()).is_err() {
+        return false;
+    }
+    let mut r = String::new();
+    BufReader::new(s).read_line(&mut r).is_ok()
+}
+
+/// Wait up to `wait` for session `id`'s process to end; true when it still runs.
+fn wait_gone(ctx: &Ctx, id: &str, wait: Duration) -> bool {
+    let end = Instant::now() + wait;
+    while server_alive(ctx, id) {
+        if Instant::now() > end {
+            return true;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    false
 }
 
 /// `hydo inspect list`.
@@ -672,12 +858,13 @@ pub fn serve(ctx: &Ctx, id: &str) -> i32 {
         // an onboarding of Milestone 239 left a session running, and the next `hydo run` was
         // refused for the memory it held
         notes.push(format!(
-            "this session holds the guest's memory (guest.ram_mib) until `hydo inspect stop {}`, \
-             or until it is idle for {} s",
+            "this session holds the guest's memory (guest.ram_mib) until `hydo inspect stop {}` \
+             (or `hydo inspect stop --all`), or until it is idle for {} s",
             d.status.id, d.status.idle_timeout_s
         ));
         let a = Inspect {
             op: "start".into(),
+            id: Some(d.status.id.clone()),
             session: Some(d.status.clone()),
             at: Some(d.status.at.clone()),
             cost: Some(hydo_results::InspectCost {
@@ -962,19 +1149,43 @@ impl Taker for FreezeSnap {
 
 #[cfg(test)]
 mod memory_tests {
+    use super::Running;
+
+    /// Milestone 328: each session with its memory and age, and the line that stops them all.
     #[test]
     fn a_refusal_for_memory_names_the_running_sessions() {
         assert_eq!(super::memory_hint(&[]), None);
+        let one = Running {
+            id: "i-1a2b3c4d".into(),
+            age_s: Some(3 * 3600 + 5),
+            ram_mib: Some(6144),
+        };
         assert_eq!(
-            super::memory_hint(&["i-1a2b3c4d".into()]).as_deref(),
+            super::memory_hint(std::slice::from_ref(&one)).as_deref(),
             Some(
-                "1 hydo inspect session is running and holds a guest's memory (i-1a2b3c4d): \
-                 `hydo inspect list` shows it, and `hydo inspect stop i-1a2b3c4d` ends one"
+                "1 hydo inspect session is running and holds guest memory (6144 MiB): \
+                 i-1a2b3c4d (6144 MiB, started 3 h ago). `hydo inspect stop --all` stops every \
+                 session, and `hydo inspect stop i-1a2b3c4d` stops one"
             )
         );
-        let two = super::memory_hint(&["i-1".into(), "i-2".into()]).unwrap();
-        assert!(two.starts_with(
-            "2 hydo inspect sessions are running and hold a guest's memory (i-1, i-2)"
-        ));
+        let two = super::memory_hint(&[
+            one,
+            Running {
+                id: "i-2".into(),
+                age_s: Some(40),
+                ram_mib: None,
+            },
+        ])
+        .unwrap();
+        assert!(
+            two.starts_with(
+                "2 hydo inspect sessions are running and hold guest memory (6144 MiB): \
+                 i-1a2b3c4d (6144 MiB, started 3 h ago), i-2 (started 40 s ago)."
+            ),
+            "{two}"
+        );
+        assert_eq!(super::age_words(119), "119 s");
+        assert_eq!(super::age_words(600), "10 min");
+        assert_eq!(super::age_words(3 * 86_400), "3 days");
     }
 }

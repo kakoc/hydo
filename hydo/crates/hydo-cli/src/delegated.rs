@@ -150,6 +150,8 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
         } else {
             ctx.config.clone()
         },
+        // Milestone 328: a refusal for memory names the sessions that hold guests
+        memory_hint: crate::inspect::session::memory_hint(&crate::inspect::session::running(ctx)),
     };
     let rc = hydo_explore::main_with(&full, &env);
     if refusing {
