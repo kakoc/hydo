@@ -19646,3 +19646,136 @@ VM, and the reruns and confirmations keep their VMs. A repeat must not claim the
 fingerprint for its own text, or the explorer stops drawing a `dseed=` that decides nothing. The
 second version continues shrink candidates from their own snapshots on the Mac engine and KVM.
 Open item 167 has what is left. Nothing recorded moved.
+
+## Milestone 339 (tentative number): repeated schedules, error shrinks, and `hydo run`'s refusal
+
+The user chose three changes of the explorer and the command line for hydo 0.5.0 on 2026-11-20.
+Each part is its own commit. No engine, image, or recorded value changed.
+
+**1. A repeated schedule takes the earlier result** (commit `80da883e`). Milestone 337 measured
+that exact repeats of an earlier shrink candidate took 10 % to 21 % of the shrinks' seconds, and
+that an exploration of a small fault space repeated 94 % of its first runs
+(`hydo/explore/RESEARCH-shared-prefix.md`, recommendation 1).
+
+- The new module `hydo_explore::repeats` answers a first run (tag `seed-`) or a shrink
+  candidate (`shrink…`, `errshrink-…`) whose schedule the exploration already ran. It takes the
+  earlier run's result and copies its consoles to its own tag, without a VM. A schedule whose
+  run is still in flight is not started twice: the second run waits for the first one's result.
+  A cancelled candidate that another run waits for still runs.
+- The re-runs that check that a failure repeats (`repro-`) and the two confirmations of each
+  minimal schedule (`min-`, `errmin-`) keep their VMs. So does every other run, and a run that
+  lost its engine is no result to repeat.
+- The pool keeps the answers off unless the explorer turns them on, so hydo-bench's pools, the
+  rebaseline among them, run every schedule as before. `hydo explore --rerun-repeats` turns them
+  off.
+- `exploration.json`'s summary counts the runs answered so (`repeats`) and the seconds of their
+  earlier runs (`repeats_saved_s`), a results addition. `report.md` shows both, and `hydo
+  explore --merge` adds up the parts' counts. The counts depend on which runs were in flight
+  together, as the wall times do.
+
+The disk's seed. The engines' fingerprints cover `dseed=` even where it decides nothing, so two
+first runs of `disk=none` with two seeds were one run of the guest with two fingerprints. Two
+ways were open. The first keys the answers on the text without such a seed and reports the
+earlier run's text and fingerprint. Then a first run would name another seed's schedule, and
+the shards of `hydo explore --shard` could not merge into one exploration: a shard without the
+earlier seed runs its own text. The second way, taken here, stops writing a seed that decides
+nothing. The explorer's `sched::dseed_shown` writes `dseed=0` for `disk=none`, and for
+`disk=cut` without a block fault (`torn=`, `mis=`, `lse=`, `hang=`). `disk=ioerr` and
+`disk=lying` keep their seed. The seed is still drawn, so every later draw of a generator is
+unchanged. No recorded value moves: `hydo/onboard/recorded.json` and the saved regressions are
+fixed texts, and `hydo run` keeps a written schedule's `dseed=`. Drawn schedules have new texts
+and so new fingerprints, with the same guest runs.
+
+The proofs:
+
+- The scripted engine. A script ran every scenario of the fake engine with the binary before
+  and after the change. Every run record (tag, role, verdict, class, schedule), every failure
+  with its re-runs, and every shrink and minimal schedule were the same up to the `dseed=`
+  values. 10 % to 30 % of the runs were answered, for example 109 of 382 runs of
+  `stack_swarm_errors_fail` and 44 of 323 of `stack_random_all_streams`.
+- The goldens. The explorer's fake-engine goldens, `identity-*.txt`, `corpus-*.txt`,
+  `reactive.txt`, and hydo-bench's `schedules.golden` were recorded again. After the `dseed=`
+  values and the stream hashes are blanked, each moved line equals the line before (all 72 lines
+  of hydo-bench's file). The fake-engine goldens leave the two counts out. hydo-bench's test now
+  records its file again with `HYDO_BLESS=1`.
+- The new scenario `repeats_take_the_earlier_result` explores the stack (shrinks of several
+  signatures, causes and error kinds) and the AVX2 example's manifest of clock steps only, each
+  with and without `--rerun-repeats`. `exploration.json`, `events.jsonl` and `report.md` are the
+  same file for file. On the AVX2 manifest the random strategy draws `disk=none dseed=0 | run` for
+  all 40 seeds, and one VM runs it: 39 runs are answered. `merge_equals_one_exploration` holds.
+- The Mac engine, on the Redis quickstart (`~/.hydo/examples/redis`, an image built by 0.4.1 at
+  the fingerprint epoch 4, 2 workers, the tree's `hydo` and `hydo-hvm`):
+
+| exploration of seeds 1-40 | runs | answered | their seconds | wall s, answered / in VMs | failures | minimal schedules |
+|---|---|---|---|---|---|---|
+| `--strategy swarm` (the quickstart's) | 65 | 1 shrink candidate | 0.1 | 20.4 / 21.4 | 16 | 2 |
+| `--strategy random --shrink-causes 3` | 67 | 4 first runs and 6 shrink candidates | 1.3 | 17.2 / 20.9 | 8 | 3 |
+| `--strategy process --new-faults` | 40 | none | 0 | 33.0 / 14.9 | 0 | 0 |
+
+With and without `--rerun-repeats`, every run record, its fingerprint, every failure, and every
+minimal schedule was the same. The 4 answered first runs were `disk=none dseed=0 | run`, which
+four seeds drew. The Redis runs take 0.1 s to 0.3 s each on this Mac, so the seconds saved are
+small. The measured shares on hvx are in the research note. The process exploration's wall
+times differ because the Mac was busy with tests during the first one.
+
+**2. The explorer shrinks the system's errors** (commit `a9baeacb`). Until now it shrank
+violations only. A service that never starts again after a crash kept its first schedule, and
+the Redpanda and Temporal onboardings shrank such errors by hand (open items 112 and 142).
+
+- `report::shrinks` decides which first failures are shrunk: a violation, and these errors of
+  the system, by their signature (the verdict with every number left out):
+  - a service that does not start again: `ERROR <svc> restart failed`, also with a reason in
+    parentheses, and `ERROR restart after the faults`;
+  - a workload or a check that does not end: `TIMEOUT workload`, `TIMEOUT check`, `TIMEOUT
+    recovery`, and the Mac engine's `ERROR workload: exit budget exhausted` and `ERROR check:
+    exit budget exhausted`.
+- A candidate keeps an error when it ends with an error of the same signature
+  (`report::same_outcome`), within the shrink's budget of 40 runs. Every other error is
+  hydo's or its engine's, such as a lost worker, a refused schedule, or a setup that failed, and
+  is not shrunk.
+- The system's documented detection of damage is left out by default (`report::detected_damage`).
+  This is a service that does not start again in a run of the class `corrupted-files` (`G=`) or
+  `damaged-disk` (the block faults and `G=...:bad|rot`), or whose restart's reason is `its
+  files were corrupted`. An error kind of the error logs that was first new in such a run is
+  left out too: open items 140 and 158 had explorations whose shrink of detected corruption ran
+  for 25 minutes or more. `hydo explore --shrink-detected-damage` shrinks both.
+- `hydo explore --merge` chooses with the same functions. An `eventually_` check that failed 3
+  tries or more is still a violation (Milestone 328).
+
+The proofs:
+
+- The scripted engine's new scenario `restart_errors_are_shrunk` uses the RAUC example's
+  manifest with `--storage-faults` and the error logs. There a service killed for 3 steps or more
+  does not start again, and a `G=` gives `ERROR device restart failed (its files were
+  corrupted)` with a log line about a checksum. The first error was shrunk to its kill alone,
+  `disk=none dseed=0 | run K=device@4+3` from seed 25 in 12 runs. The detected damage (22 runs)
+  and the checksum's error kind were not shrunk. With `--shrink-detected-damage` both were
+  shrunk to their `G=` alone. Four shards merged gave the same shrinks and error shrinks. Every
+  other scenario kept its golden.
+- The Mac engine, the Redis quickstart's `--strategy swarm` seeds 1-40: `ERROR redis restart
+  failed` (class `io-errors`) shrank from seed 12's `disk=ioerr:3 dseed=fd403ef8d08fa636 | run
+  K=redis@16+1 N=redis@0-8:loss,7%` in 9 runs to `disk=ioerr:3 dseed=fd403ef8d08fa636 | run
+  K=redis@16+1`. `ERROR restart after the faults (redis)` shrank from seed 13 in 11 runs to
+  `disk=ioerr:3 dseed=281cc34161f446f4 | run K=redis@1+1`. Both confirmations of each gave one
+  fingerprint (`4c0e5bbda39117c7`, `f35cff425a07c7c2`). With `--rerun-repeats` the same 79 runs
+  gave the same records.
+
+**3. `hydo run`'s memory refusal exits 5** (commit `ff7b422f`). `hydo explore` exits with status 5
+when it refuses before any schedule (Milestone 328). `hydo run` stopped for a guest that does not
+fit into the machine's memory with status 1. Now `runs::memory_refusal` gives the reason with
+the running `hydo inspect` sessions. `hydo run` checks it before any VM and exits with status 5.
+With the new option `--json` it also prints the explorer's line, `{"refused": "<reason>",
+"status": 5}`. Inside `hydo ci run` the status stays that command's. The proof was on this Mac
+with the Redis quickstart built with `guest.ram_mib: 8192`, while about 5 GiB were available:
+`hydo run --json "disk=none | run"` exited 5 with the JSON line, and without `--json` it exited
+5 with the reason on stderr only. No test forces the refusal, because the reader of an image
+refuses `guest.ram_mib` above 8192 and a test machine's free memory varies.
+
+**Checks.** `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
+the tests of hydo-explore, hydo-results, hydo-schema-compat, hydo-bench, `public_content::`,
+`sh ci/vale.sh` and `ci/consolidate-tests.sh --check` passed. `cargo test -p hydo --test it`
+passed but for `onboard::the_fetch_step_names_the_release_fetcher_when_it_is_not_on_path` and
+`update::a_checkout_build_is_left_alone_with_the_commands`, which fail in a target folder
+outside the checkout.
+
+**What is left.** Open items 142 and 167. Nothing recorded moved.

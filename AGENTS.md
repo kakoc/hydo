@@ -1529,6 +1529,25 @@ takes the earlier result for a repeated schedule; the second continues shrink ca
 their own snapshots on the Mac engine and KVM. The note is `hydo/explore/RESEARCH-shared-prefix.md`
 (open item 167).
 
+**Repeated schedules and error shrinks (M339, tentative number).** Three changes for 0.5.0:
+- A first run or a shrink candidate whose schedule the exploration already ran takes the earlier
+  result and consoles without a VM (`hydo_explore::repeats`). The re-runs and the confirmations
+  keep their VMs, and `--rerun-repeats` runs every one. The explorer writes `dseed=0` where the
+  disk's seed decides nothing (`disk=none`, and `disk=cut` without a block fault), so drawn
+  schedules have new texts. No recorded value or saved regression moved. `exploration.json`
+  counts `repeats` and `repeats_saved_s`. On the Mac the Redis quickstart's random seeds 1-40
+  answered 4 first runs and 6 shrink candidates, with the same records as with VMs.
+- The explorer shrinks a service that does not start again (`ERROR <svc> restart failed`, `ERROR
+  restart after the faults`) and a workload or check that does not end (`TIMEOUT ...`, the Mac's
+  `exit budget exhausted`) by its signature, as a violation. The system's detection of hydo's
+  damage (classes `corrupted-files` and `damaged-disk`) and its error kinds are shrunk only with
+  `--shrink-detected-damage` (`report::shrinks`).
+- `hydo run` refuses a guest that does not fit into memory with status 5, and with `--json` the
+  explorer's JSON line.
+
+The reference is `hydo guide workflow`, sections "A schedule that ran once runs once" and "Which
+failures are shrunk"; the details are in `docs/HISTORY.md` Milestone 339.
+
 **A failure as one web page (M220).** `hydo report --html [DIR] [-o FILE]` writes one HTML file
 for a run directory, an exploration directory or a `hydo ci run` output directory. It holds its
 style sheet and one small script (the copy buttons) and loads nothing. The page shows the
@@ -2124,8 +2143,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 112. The Temporal example (M231). Runs whose `eventually_` checks wait their whole deadline
     while the server logs thousands of errors end `ERROR ... exit budget exhausted` on the Mac
     engine (`HVM_RUN_EXITS` is a developer variable). Since M328 such a run names what ran, and
-    an `eventually_` check that failed 3 tries or more gives its violation instead. The
-    explorer still shrinks no ERROR, and a check cut short after fewer tries stays an ERROR. The
+    an `eventually_` check that failed 3 tries or more gives its violation instead. Since M339
+    the explorer shrinks such an `exit budget exhausted` error by its signature; a check cut
+    short after fewer tries stays an ERROR. The
     importer's `/etc/hosts` has no line for the guest's own hostname, which Docker always gives
     a container; Temporal's entrypoint needed `TEMPORAL_BROADCAST_ADDRESS`. A check cannot tell
     whether its run had a clock step; the example's client records the clock it saw. The
@@ -2484,9 +2504,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `hydo.yaml` (`explore-noclock.yaml`).
     - No way to keep a known bug out of a blind exploration: half of the drawn clock steps go
       back, and each reached a known finding. The example turns the changefeeds off instead.
-    - The explorer shrinks every `ERROR ... restart failed (its files were corrupted)`, which is
-      detected corruption. On hvx seed 3's shrink then wrote nothing for 25 minutes, and the
-      exploration was stopped before its report.
+    - The explorer shrank every error of detected corruption. On hvx seed 3's shrink then wrote
+      nothing for 25 minutes, and the exploration was stopped before its report. Since M339 such
+      an error and its error kinds are shrunk only with `--shrink-detected-damage`; no hvx
+      exploration of the example ran with it.
     - A failed check gives no service log when no service exited.
     - One node only: a cluster needs TiKV, which 4.0 moved to its own repository. `upgrade/` ran
       on hvx only. Of its power cuts inside the 4.0.1 open, which ones hit the conversion itself
@@ -2518,8 +2539,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       it was found on (`hydo explore --schedule`, `repro --transcript`). A directed schedule that
       fails the coordinator between `begin_tx` and `add_partitions` is not built, so it has no
       saved regression.
-    - hydo shrinks only violations. An ERROR (a node that does not start, a drain that cannot
-      finish) is shrunk by hand; `tx.no_hanging` turns the hang into a violation.
+    - Since M339 the explorer shrinks a node that does not start again and a workload that does
+      not end (`TIMEOUT workload`) by the error's signature. No Redpanda exploration ran with it.
+      A candidate of a `TIMEOUT` runs to the timeout, so on hvx a shrink of 40 candidates can
+      take 40 times the workload's timeout; `--no-shrink` turns it off. Other errors, such as a
+      drain's own error line, are not shrunk, and only the Mac engine and the scripted engine ran
+      the error shrinks.
     - A run of `hydo run` from a fresh boot and the explorer's run of the same schedule differ, so
       an explorer failure is replayed with `hydo explore --schedule` or `hydo repro --transcript`.
     - `G=` chooses the damaged file and its place from the seed and the run's files; a byte or a
@@ -2806,8 +2831,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       native run was made.
     - hvx's console holds 64 KiB, so the client names a sample by its write and number and
       writes 6 samples per write. Nothing warns while a run's history records are cut off.
-    - The explorer shrinks every error of detected corruption; the second exploration left `G=`
-      out through `explore-nocorrupt.yaml`. The swarm exploration ran without shrinks.
+    - The explorer shrank every error of detected corruption; the second exploration left `G=`
+      out through `explore-nocorrupt.yaml`. Since M339 it shrinks them only with
+      `--shrink-detected-damage`. The swarm exploration ran without shrinks.
     - The last `T=` of a schedule wins (open item 65), so no schedule steps the clock back and
       forward again. That the deleted month stays deleted is read from the code and the files.
     - The clock audit does not follow `fasttime.UnixTimestamp()` or `time.Now().UnixMilli()`
@@ -3018,10 +3044,16 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The test code of JavaScript is found by `describe(`, `it(` and `test(` at a line's start,
       so a product function named `test` called there is left out too.
 167. Shared beginnings of runs (M337, research, tentative number;
-    `hydo/explore/RESEARCH-shared-prefix.md`). Nothing is built. What is left:
-    - A repeated schedule (the same text without the `dseed=` of `disk=none` and `disk=cut`)
-      takes the earlier result without a VM. The repeat must not claim the earlier fingerprint
-      for its own text, because the fingerprint covers the disk's seed on hvx and the Mac.
+    `hydo/explore/RESEARCH-shared-prefix.md`). Since M339 a repeated schedule takes the earlier
+    result, and the explorer writes `dseed=0` where the seed decides nothing. What is left:
+    - The answers ran on the scripted engine and on the Mac engine's Redis quickstart only,
+      where a run takes 0.1 s to 0.3 s. No hvx or KVM exploration measured the saving, and
+      `hydo-bench` and the state search do not use the answers.
+    - The counts `repeats` and `repeats_saved_s` depend on which runs were in flight together,
+      and a merge adds up its parts', which answer only their own repeats.
+    - Explorations made before M339 have drawn schedules with another `dseed=`, and so other
+      texts and fingerprints than a new exploration of the same seeds. Their verdicts are the
+      same.
     - Shrink candidates that continue from snapshots of earlier candidates at their step ranges,
       on the Mac engine and KVM. KVM has no proof on a real host that a continued run gives its
       fingerprint from S1 (open item 85). A snapshot lives in one engine process, and a round's
@@ -4006,6 +4038,12 @@ build machine, before 2026-10-13.
   early first fault reach the guest at once. Other draws would save 3 % to 11 % and lose the
   early faults of 69 % of the failing runs. Shrinks share 10 % to 43 %. A no-go for a tree of
   snapshots; the first version to build takes the result of a repeated schedule. Nothing
+  recorded moved
+- M339 (tentative number): three explorer and command-line changes for 0.5.0, each its own
+  commit. A first run or shrink candidate whose schedule ran before takes the earlier result
+  without a VM, and drawn schedules write `dseed=0` where the seed decides nothing. The explorer
+  shrinks a service that does not start again and a workload that does not end, but not the
+  system's detection of damage unless asked. `hydo run`'s memory refusal exits 5. Nothing
   recorded moved
 
 ## Where to look
