@@ -144,6 +144,9 @@ thing and ends (each such call costs a replay):
 hydo inspect logs <run dir> redis --at end
 ```
 
+The second such call on one run directory within 10 minutes prints a hint to start a session
+instead: five reads of five logs are then one replay, not five.
+
 Limits:
 
 - Output is cut at `--max-bytes` (default 16 KiB; `truncated: true`).

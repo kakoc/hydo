@@ -275,7 +275,51 @@ pub fn oneshot(ctx: &Ctx, dir: &Path, at: &str, req: Req) -> Result<Value, Probl
     if let Some(n) = v.get_mut("notes").and_then(Value::as_array_mut) {
         n.retain(|x| !x.as_str().is_some_and(|s| s.starts_with("live branch")));
     }
+    if let Some(h) = again_hint(ctx, dir, now_ms(t0) / 1000) {
+        eprintln!("hydo: hint: {h}");
+        if let Some(n) = v.get_mut("notes").and_then(Value::as_array_mut) {
+            n.push(json!(h));
+        } else if let Some(o) = v.as_object_mut() {
+            o.insert("notes".into(), json!([h]));
+        }
+    }
     Ok(v)
+}
+
+/// How long one-shot calls on one run directory count as one look (Milestone 328).
+pub const AGAIN_WINDOW_S: u64 = 600;
+
+/// The hint after the second one-shot call on one run directory within [`AGAIN_WINDOW_S`]
+/// (Milestone 328): each such call replays the whole run, and a user's five `exec` calls to read
+/// five logs took minutes each. The state is one small file per run directory in the sessions'
+/// folder (the run directory itself is never written): the time of the last call.
+fn again_hint(ctx: &Ctx, dir: &Path, took_s: u64) -> Option<String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    again_hint_in(&home(ctx), dir, took_s, now)
+}
+
+/// [`again_hint`] with the sessions' folder and the time given.
+fn again_hint_in(home: &Path, dir: &Path, took_s: u64, now: u64) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    let h = Sha256::digest(dir.display().to_string().as_bytes());
+    let key: String = h[..8].iter().map(|b| format!("{b:02x}")).collect();
+    let _ = std::fs::create_dir_all(home);
+    let mark = home.join(format!(".again-{key}"));
+    let last: Option<u64> = std::fs::read_to_string(&mark)
+        .ok()
+        .and_then(|t| t.trim().parse().ok());
+    let _ = std::fs::write(&mark, format!("{now}\n"));
+    last.filter(|l| now.saturating_sub(*l) <= AGAIN_WINDOW_S)?;
+    Some(format!(
+        "each `hydo inspect <call> {d}` replays the whole run (this one took {took_s} s); \
+         `hydo inspect start {d}` replays it once and keeps the guest for later calls \
+         (`hydo inspect exec <id> ...`, then `hydo inspect stop <id>`)",
+        d = dir.display()
+    ))
 }
 
 /// A fresh directory for an engine's own files.
@@ -1187,5 +1231,33 @@ mod memory_tests {
         assert_eq!(super::age_words(119), "119 s");
         assert_eq!(super::age_words(600), "10 min");
         assert_eq!(super::age_words(3 * 86_400), "3 days");
+    }
+
+    /// Milestone 328: the second one-shot call on a run directory within ten minutes gets the
+    /// hint to start a session; the first, and one after a pause, do not.
+    #[test]
+    fn a_second_one_shot_call_soon_after_the_first_gets_the_hint() {
+        let d = std::env::temp_dir().join(format!("hydo-again-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let home = d.join("inspect");
+        let run = d.join("run");
+        std::fs::create_dir_all(&run).unwrap();
+        assert_eq!(super::again_hint_in(&home, &run, 70, 1000), None);
+        let h = super::again_hint_in(&home, &run, 70, 1000 + 120).unwrap();
+        assert!(
+            h.contains("replays the whole run (this one took 70 s)"),
+            "{h}"
+        );
+        assert!(h.contains("`hydo inspect start "), "{h}");
+        // a call 11 minutes after the one before is a new look
+        assert_eq!(
+            super::again_hint_in(&home, &run, 70, 1120 + super::AGAIN_WINDOW_S + 60),
+            None
+        );
+        // another run directory has its own count
+        let other = d.join("other");
+        std::fs::create_dir_all(&other).unwrap();
+        assert_eq!(super::again_hint_in(&home, &other, 70, 2000), None);
+        let _ = std::fs::remove_dir_all(&d);
     }
 }
