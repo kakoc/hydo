@@ -258,6 +258,11 @@ running `hydo inspect` session with its memory and its age, because each session
 guest. `hydo inspect stop --all` stops them. Inside `hydo ci run` every stop of the explorer is
 that command's status 2.
 
+`hydo run` exits with status 0 whenever its run finished, whatever the verdict. It exits with
+status 5 when it refuses before any VM, because the guest does not fit into this machine's
+memory. With `--json` the refusal is also the same JSON line as the explorer's, `{"refused":
+"<reason>", "status": 5}`.
+
 ### A schedule that ran once runs once
 
 hydo repeats a run exactly, so a schedule that an exploration already ran gives the same result
