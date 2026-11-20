@@ -2418,9 +2418,7 @@ fn shrink_violation(
                     st_map.insert("stable_schedule".into(), json!(cx.render(&ma2)));
                     st_map.insert(
                         "stable_note".into(),
-                        json!(format!(
-                            "the resolved composition is too long for a schedule line; a saved regression carries it as W=@{key} (unconfirmed)"
-                        )),
+                        json!(compose::long_composition_note(&key)),
                     );
                 }
                 conf = c.unwrap_or_else(|| conf_pair(&mt, &mut log));
