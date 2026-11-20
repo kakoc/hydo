@@ -167,6 +167,11 @@ pub struct Finished {
     /// They are not part of the transcript; [`crate::agent::console_text`] puts them between
     /// the report lines, where the shell init's console has them.
     pub console: Vec<(u64, String)>,
+    /// Milestone 328: when the engine ended the run by itself (its exit budget), the verdict
+    /// the controller gives in place of the engine's ([`Controller::engine_ended`]): the engine's
+    /// with what was running, or the violation of an `eventually` check that kept failing. None:
+    /// the engine's verdict stands. The fingerprint and the transcript are the engine's.
+    pub engine_verdict: Option<String>,
 }
 
 /// Why a conversation could not be carried out.
@@ -279,6 +284,9 @@ pub fn run_with(
         };
         let (stop, lines) = match next {
             LinkNext::Done(r) => {
+                let engine_verdict = r
+                    .split_once(" verdict=")
+                    .and_then(|(_, v)| ctl.engine_ended(v.trim()));
                 return Ok(Finished {
                     ending: None,
                     transcript: w.t,
@@ -286,7 +294,8 @@ pub fn run_with(
                     snapshots,
                     last_stop: None,
                     console,
-                })
+                    engine_verdict,
+                });
             }
             LinkNext::Stop { stop, lines } => (stop, lines),
         };
@@ -479,6 +488,7 @@ pub fn run_with(
                             snapshots,
                             last_stop: Some(stop),
                             console,
+                            engine_verdict: None,
                         });
                     }
                 }
@@ -506,6 +516,7 @@ pub fn run_with(
                 snapshots,
                 last_stop: Some(stop),
                 console,
+                engine_verdict: None,
             });
         }
         link.cont()?;

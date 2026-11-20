@@ -263,6 +263,72 @@ struct Host {
     /// own `version:`), and the version it ran before its last upgrade (for a rollback).
     versions: BTreeMap<String, String>,
     prev: BTreeMap<String, String>,
+    /// Milestone 328: what runs now (a final check, an eventually check's monitor, the
+    /// workload's steps), by key, for the verdict of a run that the engine ends by itself.
+    doing: BTreeMap<String, Doing>,
+}
+
+/// The failed tries after which an eventually check that the exit budget cut short counts as
+/// failing ([`budget_verdict`]).
+const KEPT_FAILING: u32 = 3;
+
+/// Something the controller waits for now (Milestone 328, [`budget_verdict`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Doing {
+    /// In words: "the check `x`", "the workload's steps 0 to 29".
+    what: String,
+    /// An eventually check's monitor: the check's id, its anchor and its deadline in seconds.
+    live: Option<(String, String, i64)>,
+    /// The monitor's tries that failed so far.
+    tries: u32,
+    /// The last failed try: its status, its output and the hundredths of a second since the
+    /// anchor when it ended.
+    last: Option<(u32, String, i64)>,
+}
+
+/// Milestone 328: the verdict of a run whose engine ended it with `verdict` because the phase
+/// used up its exit budget, from what was running then; None when nothing the controller knows
+/// of was running, or for any other verdict. An eventually check whose tries all failed until
+/// then gives its violation, as its deadline would have: a user's check started one client per
+/// accepted query at every try while the queries stayed stuck, and the run ended `ERROR check:
+/// exit budget exhausted`, which named neither the check nor the stuck queries (open item 112).
+/// Anything else keeps the engine's words and names what ran. A check that failed fewer than
+/// [`KEPT_FAILING`] tries is only named: it had little time to hold.
+fn budget_verdict(verdict: &str, doing: &BTreeMap<String, Doing>) -> Option<String> {
+    if !verdict.contains("exit budget exhausted") {
+        return None;
+    }
+    let failing = doing
+        .values()
+        .find(|d| d.live.is_some() && d.tries >= KEPT_FAILING && d.last.is_some());
+    if let Some(d) = failing {
+        let (id, after, within) = d.live.clone().unwrap_or_default();
+        let (rc, out, el) = d.last.clone().unwrap_or_default();
+        return Some(format!(
+            "HYDO-ORACLE: VIOLATION [{id}] not satisfied {}s after {after}, deadline {within}s: \
+             the engine's exit budget for the phase ran out after {} failed tries of the check \
+             (last check rc={rc}: {})",
+            liveness::cs(el),
+            d.tries,
+            inv_detail(&out)
+        ));
+    }
+    if doing.is_empty() {
+        return None;
+    }
+    let what: Vec<String> = doing
+        .values()
+        .map(|d| match d.tries {
+            0 => d.what.clone(),
+            1 => format!("{} (1 try had failed)", d.what),
+            n => format!("{} ({n} tries had failed)", d.what),
+        })
+        .collect();
+    Some(format!(
+        "{verdict} while {} ran (the engine's limit of VM exits for one phase of a run; hydo \
+         guide checks, \"The exit budget\")",
+        what.join(" and ")
+    ))
 }
 
 /// One thread of the controller.
@@ -361,6 +427,37 @@ pub const DARK_STOPS: u64 = 200_000;
 pub const DARK_AGENT_VERDICT: &str = "HYDO-ORACLE: ERROR the disk lost power at its flush of cf= \
     while the agent itself waited on it (an L= or G= under way), so the ids for the recovery boot \
     cannot be read";
+
+/// What the guest kernel prints when it cannot unpack its initramfs (init/initramfs.c).
+pub const INITRAMFS_FAILED: &str = "Initramfs unpacking failed:";
+
+/// Milestone 328: the verdict of a boot whose kernel could not unpack the image's initramfs, from
+/// the console line that says so, or None for any other line. On the Mac engine an image's root
+/// is its initramfs, unpacked into guest RAM. A user's image with 10 services unpacked to
+/// 1,885 MiB in a 4,096 MiB guest; the kernel left files out (`write error`), and the run ended
+/// later as `ERROR service network setup failed`, which named the wrong cause.
+pub fn initramfs_verdict(line: &str, fit: Option<&crate::plan::RootFit>) -> Option<String> {
+    let at = line.find(INITRAMFS_FAILED)?;
+    let said = line[at..].trim();
+    if !said.contains("write error") {
+        return Some(format!(
+            "HYDO-ORACLE: ERROR the guest kernel could not unpack the image's root ({said}); \
+             build the image again"
+        ));
+    }
+    // the engines keep 255 bytes of the verdict an END gives
+    let sizes = match fit {
+        Some(f) => format!(
+            ": about {} MiB unpacked beside {} MiB compressed, and guest.ram_mib is {}",
+            f.unpacked_mib, f.compressed_mib, f.ram_mib
+        ),
+        None => String::new(),
+    };
+    Some(format!(
+        "HYDO-ORACLE: ERROR the root does not fit in guest RAM ({said}){sizes}. Raise \
+         guest.ram_mib or shrink the roots (root.share_images)"
+    ))
+}
 
 /// The fault assertions explore_run declares, in its order (type, id, message).
 pub const FAULT_DECLS: [(&str, &str, &str); 6] = [
@@ -462,6 +559,7 @@ impl ScheduleController {
             early: BTreeMap::new(),
             versions: BTreeMap::new(),
             prev: BTreeMap::new(),
+            doing: BTreeMap::new(),
         };
         Ok(ScheduleController {
             flow: Flow::new(host, Part::Main),
@@ -870,6 +968,10 @@ impl Controller for ScheduleController {
         "schedule"
     }
 
+    fn engine_ended(&self, verdict: &str) -> Option<String> {
+        budget_verdict(verdict, &self.flow.shared.doing)
+    }
+
     fn step(&mut self, stop: &StopInfo, seen: &[Seen], out: &mut Out) {
         if self.flow.ended() {
             return;
@@ -886,6 +988,17 @@ impl Controller for ScheduleController {
         let mut new = false;
         for s in seen {
             match s {
+                // Milestone 328: a root that the kernel could not unpack ends the boot at once,
+                // with the cause (files are missing, so what fails later names another one)
+                Seen::Console(line) if line.contains(INITRAMFS_FAILED) => {
+                    let fit = self.flow.shared.ctx.plan.root_fit;
+                    if let Some(v) = initramfs_verdict(line, fit.as_ref()) {
+                        out.report("main", v.clone());
+                        out.end(Ending::Verdict(v));
+                        self.flow.end_now();
+                        return;
+                    }
+                }
                 Seen::Hello(_) => {
                     if self.waiting_hello {
                         self.waiting_hello = false;
@@ -2142,7 +2255,36 @@ fn assert_once(fx: &mut F<'_>, ctx: &Ctx, i: usize, ok: bool, details: &str) {
 /// eval_inv: 0 holds, 1 violated, 2 could not be evaluated; also its output.
 fn eval_inv(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<(u32, String)> {
     let exports = fx.shared.env.clone();
-    eval_inv_with(fx, ctx, i, &exports)
+    let key = format!("inv:{i:04}");
+    let what = format!("the check `{}`", ctx.plan.invariants[i].id);
+    doing(fx, &key, what);
+    let r = eval_inv_with(fx, ctx, i, &exports);
+    if r.is_ok() {
+        done_doing(fx, &key);
+    }
+    r
+}
+
+/// Milestone 328: `key` runs now ([`budget_verdict`]).
+fn doing(fx: &mut F<'_>, key: &str, what: String) {
+    fx.effect(|h, _| {
+        h.doing.insert(
+            key.to_string(),
+            Doing {
+                what,
+                ..Doing::default()
+            },
+        );
+        Memo::Unit
+    });
+}
+
+/// Milestone 328: `key` ended.
+fn done_doing(fx: &mut F<'_>, key: &str) {
+    fx.effect(|h, _| {
+        h.doing.remove(key);
+        Memo::Unit
+    });
 }
 
 /// eval_inv with the exports of the shell process that runs it (a periodic checker's are those
@@ -2376,6 +2518,21 @@ fn step_range_core(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
 }
 
 fn step_range_run(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
+    // Milestone 328: what a run that the engine ends here names
+    let what = if b - a == 1 {
+        format!("the workload's step {a}")
+    } else {
+        format!("the workload's steps {a} to {}", b - 1)
+    };
+    doing(fx, "workload", what);
+    let r = step_range_run_in(fx, ctx, a, b);
+    if r.is_ok() {
+        done_doing(fx, "workload");
+    }
+    r
+}
+
+fn step_range_run_in(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
     // a plan of only checks or regressions keeps the manifest's workload (until 2026-11-08 the
     // composer's empty rounds ran instead, and every check passed)
     let st = if ctx.plan.composed() {
@@ -3556,6 +3713,139 @@ pub const STOPPED_WITHOUT_FAULTS: &str =
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Milestone 328: the kernel's line that it could not unpack the initramfs ends the boot at
+    /// once with its own ERROR, which names the sizes and what to change.
+    #[test]
+    fn a_root_that_did_not_unpack_ends_the_boot_with_its_sizes() {
+        let text = "name: p\nservices:\n  - name: s\n    cmd: /bin/s\n    ready: /bin/true\n\
+                    workload:\n  steps: 2\n  run: echo x\ninvariants:\n  - id: i\n    cmd: /bin/true\n";
+        let mut plan = crate::agent::plan_of_embedded(text, None).unwrap();
+        plan.root_fit = Some(crate::plan::RootFit {
+            unpacked_mib: 1885,
+            compressed_mib: 700,
+            ram_mib: 4096,
+        });
+        let mut c = ScheduleController::boot(plan).unwrap();
+        let stop = StopInfo {
+            n: 45,
+            at: 1000,
+            why: crate::control::Why::Cadence,
+            seen: 0,
+        };
+        let mut out = Out::new(1);
+        c.step(
+            &stop,
+            &[Seen::Console(
+                "[    1.204816] Initramfs unpacking failed: write error".into(),
+            )],
+            &mut out,
+        );
+        let v = match out.into_actions().pop() {
+            Some(crate::control::Action::End(Ending::Verdict(v))) => v,
+            a => panic!("{a:?}"),
+        };
+        assert_eq!(
+            v,
+            "HYDO-ORACLE: ERROR the root does not fit in guest RAM (Initramfs unpacking failed: \
+             write error): about 1885 MiB unpacked beside 700 MiB compressed, and guest.ram_mib \
+             is 4096. Raise guest.ram_mib or shrink the roots (root.share_images)"
+        );
+        // the engines keep 255 bytes of the verdict an END gives (a Mac run cut it there)
+        assert!(v.len() < 245, "{}", v.len());
+        assert!(c.ended());
+        // another reason names it, and other lines change nothing
+        let v = initramfs_verdict(
+            "Initramfs unpacking failed: junk within compressed archive",
+            None,
+        )
+        .unwrap();
+        assert!(v.contains("could not unpack the image's root (Initramfs unpacking failed: junk"));
+        assert_eq!(
+            initramfs_verdict("Freeing initrd memory: 1024K", None),
+            None
+        );
+    }
+
+    /// Milestone 328: the verdict of a run that used up the engine's exit budget.
+    #[test]
+    fn a_used_up_exit_budget_names_what_ran() {
+        let v = "ERROR check: exit budget exhausted";
+        let mut d = BTreeMap::new();
+        assert_eq!(budget_verdict(v, &d), None);
+        d.insert(
+            "inv:0002".to_string(),
+            Doing {
+                what: "the check `final_rows`".into(),
+                ..Doing::default()
+            },
+        );
+        d.insert(
+            "workload".to_string(),
+            Doing {
+                what: "the workload's steps 0 to 29".into(),
+                ..Doing::default()
+            },
+        );
+        assert_eq!(
+            budget_verdict(v, &d).unwrap(),
+            "ERROR check: exit budget exhausted while the check `final_rows` and the workload's \
+             steps 0 to 29 ran (the engine's limit of VM exits for one phase of a run; hydo guide \
+             checks, \"The exit budget\")"
+        );
+        // other verdicts stay the engine's
+        assert_eq!(
+            budget_verdict(
+                "ERROR check: SPIN (guest loops without exits; run invalid)",
+                &d
+            ),
+            None
+        );
+        // an eventually check whose tries failed: its violation
+        d.insert(
+            "live:0003".to_string(),
+            Doing {
+                what: "the eventually check `queries.settle`".into(),
+                live: Some(("queries.settle".into(), "heal".into(), 480)),
+                tries: 37,
+                last: Some((1, "q17 running\n4 queries still running\n".into(), 37012)),
+            },
+        );
+        assert_eq!(
+            budget_verdict(v, &d).unwrap(),
+            "HYDO-ORACLE: VIOLATION [queries.settle] not satisfied 370.12s after heal, deadline \
+             480s: the engine's exit budget for the phase ran out after 37 failed tries of the \
+             check (last check rc=1: 4 queries still running)"
+        );
+        // after fewer than 3 failed tries it names the check only
+        d.get_mut("live:0003").unwrap().tries = 2;
+        assert!(budget_verdict(v, &d).unwrap().contains(
+            "while the check `final_rows` and the eventually check `queries.settle` (2 tries had \
+             failed) and the workload's"
+        ));
+    }
+
+    /// Milestone 328: the unpacked size from a gzip trailer, and none for an image that is no
+    /// gzip file.
+    #[test]
+    fn the_root_size_comes_from_the_gzip_trailer() {
+        let d = std::env::temp_dir().join(format!("hydo-rootfit-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let gz = d.join("x-arm64.cpio.gz");
+        let mut b = vec![0u8; 2 << 20];
+        b.extend_from_slice(&(1885u32 << 20).to_le_bytes());
+        std::fs::write(&gz, &b).unwrap();
+        let f = crate::plan::RootFit::of_image(&gz, 4096).unwrap();
+        assert_eq!(
+            (f.unpacked_mib, f.compressed_mib, f.ram_mib),
+            (1885, 2, 4096)
+        );
+        let disk = d.join("x-disk.img");
+        std::fs::write(&disk, &b).unwrap();
+        assert_eq!(crate::plan::RootFit::of_image(&disk, 4096), None);
+        let _ = std::fs::remove_dir_all(&d);
+    }
 
     #[test]
     fn shell_text_helpers() {

@@ -429,6 +429,19 @@ pub fn key_of(resolved: &str) -> String {
     h.iter().map(|b| format!("{b:02x}")).collect::<String>()[..12].to_string()
 }
 
+/// The note of a minimal schedule whose resolved composition does not fit a schedule line: a
+/// saved regression carries it as `W=@<key>`. The explorer confirmed the failure with the
+/// composition's seed form only, so this form is unconfirmed until it runs; Milestone 328 says
+/// what that means and which commands run it (`hydo save` prints the note).
+pub fn long_composition_note(key: &str) -> String {
+    format!(
+        "the resolved composition is too long for a schedule line; a saved regression carries it \
+         as W=@{key} (unconfirmed: the explorer reproduced this failure with the composition's \
+         seed form and has not run this form; `hydo build` and then `hydo repro --regressions` \
+         run it and say whether it fails the same way)"
+    )
+}
+
 fn resolve_seed(w: &str, meta: &Value, steps: i64) -> Result<Resolved, String> {
     let cmds = commands(meta);
     let d = parse_w(w, meta)?;
@@ -667,4 +680,20 @@ fn resolved_candidates(w: &str) -> Vec<String> {
         }
     }
     dedup_except(out, w)
+}
+
+#[cfg(test)]
+mod tests {
+    /// Milestone 328: the note `hydo save` prints says what `unconfirmed` means and which
+    /// commands confirm the saved form.
+    #[test]
+    fn the_long_composition_note_says_how_to_confirm_it() {
+        let n = super::long_composition_note("b8920245bb74");
+        assert!(n.contains("W=@b8920245bb74 (unconfirmed: "), "{n}");
+        assert!(n.contains("has not run this form"), "{n}");
+        assert!(
+            n.contains("`hydo build` and then `hydo repro --regressions` run it"),
+            "{n}"
+        );
+    }
 }

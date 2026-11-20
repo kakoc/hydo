@@ -1393,9 +1393,14 @@ pub struct Inspect {
     /// `start`, `status`, `list`, `stop`, `exec`, `read`, `ls`, `logs`, `ps`, `sockets`,
     /// `advance`.
     pub op: String,
+    /// `start`: the session's id, the same as `session.id`, where scripts look for an id first
+    /// (added in Milestone 328).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session: Option<InspectSession>,
-    /// `list`: every session of this user.
+    /// `list`: every session of this user; `stop --all`: the sessions it stopped (Milestone
+    /// 328).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sessions: Vec<InspectSession>,
     /// The state the call saw: the session's stop (`snapshot`), or the branch after the earlier

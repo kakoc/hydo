@@ -32,7 +32,8 @@ non-deterministic tool cannot: bring a failed run back to any of its stops and l
 4. **A session is a background process.** `hydo inspect start` starts `hydo inspect __serve <id>`
    detached; it replays once and holds the stop (the worker, or the live conversation) and serves
    one JSON request per connection on a Unix socket in `$HYDO_HOME/inspect/<id>/`. It ends by
-   `stop` or after `--idle` seconds without a call (default 900). A call with a run directory instead
+   `stop` or after `--idle` seconds without a call (default 300 since Milestone 328, 900 before),
+   and `stop --all` ends every session of the user. A call with a run directory instead
    of a session id is one-shot: replay, the call on the live branch, end (no session, a replay per
    call). On hvx a session holds the module lock shared, like a run.
 5. **Calls are agent commands the agent already has.** A command runs with `run` (its stdout and

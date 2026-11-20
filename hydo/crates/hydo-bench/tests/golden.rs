@@ -73,8 +73,10 @@ fn config_line(c: &cells::Cell, label: &str) -> String {
             let s = cut.parse(t).expect("parses");
             format!(
                 "{sd} {} {} {t}",
-                cut.finding_class(&s),
-                any.finding_class(&any.parse(t).expect("parses"))
+                hydo_explore::advice::shrink_group(&cut.finding_class(&s)),
+                hydo_explore::advice::shrink_group(
+                    &any.finding_class(&any.parse(t).expect("parses"))
+                )
             )
         })
         .collect();

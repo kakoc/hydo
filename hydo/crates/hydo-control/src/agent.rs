@@ -400,6 +400,23 @@ pub fn console_text(t: &Transcript, console: &[(u64, String)]) -> String {
     s
 }
 
+/// The RESULT line of a run's conversations: `ctl=<hash>` added before `verdict=`, and the
+/// controller's verdict in place of the engine's when the engine ended the run by itself
+/// (Milestone 328, [`crate::runner::Finished::engine_verdict`]).
+pub fn run_result(r: &RunResult, ran: &crate::drive::Ran) -> RunResult {
+    let c = with_ctl(r, &ran.ctl());
+    match ran.engine_verdict() {
+        Some(v) => {
+            let line = match c.line.split_once(" verdict=") {
+                Some((head, _)) => format!("{head} verdict={}", v.replace('\n', " ")),
+                None => return c,
+            };
+            RunResult::parse(&line).unwrap_or(c)
+        }
+        None => c,
+    }
+}
+
 /// The RESULT line with `ctl=<hash>` added before `verdict=`.
 pub fn with_ctl(r: &RunResult, ctl: &str) -> RunResult {
     let mut line = format!(
@@ -611,12 +628,15 @@ impl AgentEngine {
                 hydo_agent_proto::HOST_PROTOCOLS
             ));
         }
-        let plan = plan_of_image(image).map_err(|e| {
+        let mut plan = plan_of_image(image).map_err(|e| {
             format!(
                 "{}: this agent image cannot be run yet: {e}",
                 image.display()
             )
         })?;
+        // Milestone 328: what a root that does not fit into guest RAM is reported with
+        let ram = image_guest(image).map(|g| g.ram_mib).unwrap_or(1024);
+        plan.root_fit = crate::plan::RootFit::of_image(image, ram as u64);
         Ok(AgentEngine::new(inner, plan))
     }
 
@@ -702,7 +722,7 @@ impl AgentEngine {
         let result = match got {
             Ok((b, Some(ran), result)) => {
                 write_run_files(&spec.outdir, "one", "", &ran, b.as_ref().map(|b| &b.boot));
-                result.map(|r| with_ctl(&r, &ran.ctl()))
+                result.map(|r| run_result(&r, &ran))
             }
             Ok((_, None, result)) => result,
             Err(e) => {
@@ -917,7 +937,7 @@ impl AgentWorker {
             Some(ran) => {
                 let prefix = format!("{tag}.");
                 write_run_files(&self.outdir, tag, &prefix, &ran, None);
-                with_ctl(&r, &ran.ctl())
+                run_result(&r, &ran)
             }
             None => r,
         })
@@ -1021,7 +1041,7 @@ impl AgentWorker {
                 out.ranges = crate::search::ranges(&ran.run.transcript);
                 let prefix = format!("{tag}.");
                 write_run_files(&self.outdir, tag, &prefix, &ran, None);
-                (with_ctl(&r, &ran.ctl()), out)
+                (run_result(&r, &ran), out)
             }
             None => (r, out),
         })

@@ -573,6 +573,26 @@ commit; none moves a recorded value:
   Cargo and Go programs that the manifest's services run. Its schedules name the one service
   that runs a place (`hydo guide faults`).
 
+**Small fixes from a user's second onboarding round (M328, tentative number).** Each fix is its
+own commit; none moves a recorded value:
+- `hydo explore` exits with status 5 when it stops before it runs a schedule. Such a stop is a
+  refusal for memory, a missing image, options that do not go together, or a failed engine.
+  With `--json` it prints one JSON line with the reason (`hydo guide workflow`).
+- `hydo inspect stop --all` stops every session of the user. A refusal of `hydo run` or
+  `hydo explore` for memory names each session with its memory and age. A session ends after
+  300 s without a call (900 before). `hydo inspect start` gives the id also at `.id`.
+- The second one-shot `hydo inspect` call on one run folder within 10 minutes prints a hint to
+  start a session.
+- A failure without a power cut and with the safe settings has a class named for its fault
+  families (`process`, `network+clock`, `no-fault`), not `durable-defaults`. The explorer still
+  shrinks one failure per signature among them, as before.
+- `hydo save`'s note on `W=@<key> (unconfirmed)` says what it means and how to confirm it.
+- A boot whose kernel could not unpack the initramfs ends with its own ERROR, with the root's
+  size and `guest.ram_mib`.
+- A run that uses up the engine's exit budget names the check or the workload steps that ran.
+  An `eventually_` check that failed 3 tries or more gives its violation instead (`hydo guide
+  checks`, "The exit budget").
+
 **Business rules: what found what (M215).** On Formance Ledger, rules over the ledger's own
 state (balances, moves, effective volumes, overdraft, reverts, bulks, the audit log) found
 nothing. A duplicate from a retry without a key, and a payment lost on a lying disk, showed only
@@ -2043,7 +2063,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     temporary init server. The River example ran on hvx only: the Mac engine was not tried.
 112. The Temporal example (M231). Runs whose `eventually_` checks wait their whole deadline
     while the server logs thousands of errors end `ERROR ... exit budget exhausted` on the Mac
-    engine, which hides the check's violation (`HVM_RUN_EXITS` is a developer variable). The
+    engine (`HVM_RUN_EXITS` is a developer variable). Since M328 such a run names what ran, and
+    an `eventually_` check that failed 3 tries or more gives its violation instead. The
+    explorer still shrinks no ERROR, and a check cut short after fewer tries stays an ERROR. The
     importer's `/etc/hosts` has no line for the guest's own hostname, which Docker always gives
     a container; Temporal's entrypoint needed `TEMPORAL_BROADCAST_ADDRESS`. A check cannot tell
     whether its run had a clock step; the example's client records the clock it saw. The
@@ -2581,9 +2603,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - It ran on the Mac engine only, with two settings of one value list each. hvx and KVM, a
       manifest with several settings, and the `pairs` mode on a real project did not run; the
       pairwise set is tested on value counts only.
-    - The explorer names a failure's class by its `knobs:` tokens and disk faults, so a loss
-      under a relaxed build setting has the class `durable-defaults`. The table's label says
-      whether a `tradeoff:` note explains it.
+    - The explorer names a failure's class by its `knobs:` tokens and disk faults. So a loss
+      under a relaxed build setting has the class `durable-defaults` after a power cut. Since
+      M328 such a loss without a power cut has a class of its fault families (`process`,
+      `network+clock`). The table's label says whether a `tradeoff:` note explains it.
     - The label is by values, not by cause: any failure found only with values that have a
       note is labeled the documented trade-off, also a crash with another cause.
     - The combinations run one after another, each with its own worker pool, and each image
@@ -2811,7 +2834,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - No x86_64 image with a FIFO was built; the debugfs commands ran in a Linux container only.
     - `hydo compose`'s `guest.ram_mib: 1024` was too small for the PostgreSQL image on the Mac:
       the initramfs did not fit (`Initramfs unpacking failed: write error`), and the run failed
-      later with an unrelated message. hydo does not warn of it. An image's hard links (the
+      later with an unrelated message. Since M328 the boot ends at that line with its own ERROR,
+      which names the sizes and `guest.ram_mib`; `hydo build` still does not count the whole
+      root (open item 166). An image's hard links (the
       busybox image has 400) each become a whole copy in the initramfs.
 163. What the fixes of the third `hydo fuzz` evaluation left (M318 and M326, tentative numbers;
     `docs/design/function-fuzzing-evaluation-3.md`, "After Milestone 326"). What is left:
@@ -2915,7 +2940,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The roots' estimate counts the image layers only. It leaves out the rest of the root
       (the agent, busybox, the tools) and the copies that an image's hard links become in the
       initramfs (open item 162). So M316's PostgreSQL image in 1,024 MiB, which failed to unpack, may get
-      no warning. The half of the RAM is Linux's default for a tmpfs root, read from the kernel,
+      no warning; since M328 its boot says so with the sizes. The half of the RAM is Linux's default for a tmpfs root, read from the kernel,
       not measured in a VM. No build or VM ran with the change; only `--check` ran.
     - `hydo compose` keys an image by its manifest digest, so two manifests of one config (one
       image pushed twice) are not proposed for sharing; hydo-build would share them.
@@ -3865,6 +3890,12 @@ build machine, before 2026-10-13.
   unread `A::Item` values gives a false `broken`; associated types of a type parameter, private
   error fields, and fallible or argument-free constructors stop contracts on the API. Nothing
   recorded moved
+- M328 (tentative number): small fixes from a user's second onboarding round, each its own
+  commit. `hydo explore` exits 5 when it refuses before any run, with a JSON line. `hydo
+  inspect stop --all`, sessions named with their memory and age, a 300 s idle time, `.id` at
+  the top, and a hint after the second one-shot call. Failure classes name the fault families
+  without a power cut. `hydo save` says what unconfirmed means. A root too big for guest RAM
+  and a used-up exit budget get their own verdicts. Nothing recorded moved
 - M330 (tentative number): what a user's second onboarding round of a distributed query engine
   taught. `hydo guide strategies` gains four entries: production's topology, the features behind
   a flag, the checks of how each unknown outcome ends, and pauses of a service past its failure

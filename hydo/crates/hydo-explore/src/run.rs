@@ -56,11 +56,15 @@ pub struct Env {
     /// summary line is not printed. The documents and report.md are written as always.
     pub plain_end: bool,
     pub config: hydo_config::Config,
+    /// What the caller adds to a refusal for this machine's memory (Milestone 328: `hydo
+    /// explore` names the running `hydo inspect` sessions, which each hold a guest's memory, and
+    /// the line that stops them). None: nothing.
+    pub memory_hint: Option<String>,
 }
 
 fn die(msg: &str) -> ! {
     eprintln!("{msg}");
-    crate::exit_die()
+    crate::exit_die_with(msg)
 }
 
 /// Everything the flow needs, set up once.
@@ -259,6 +263,9 @@ pub fn main_with(argv: &[String], env: &Env) -> i32 {
             return 2;
         }
     };
+    // Milestone 328: a stop before the first schedule is a refusal (exit status 5)
+    crate::EXPLORING.store(true, std::sync::atomic::Ordering::Relaxed);
+    crate::JSON_END.store(!env.plain_end, std::sync::atomic::Ordering::Relaxed);
     let mut cx = setup(a, env);
     cx.argv = argv.to_vec();
     run(cx)
@@ -1154,7 +1161,10 @@ fn size_pool(cx: &Cx, engine: &dyn Engine, mut spec: BootSpec) -> (usize, BootSp
     let memory = hvx && fits;
     // M179: a guest may have 8 GiB; say it before the workers fail to make their VMs
     if let Err(e) = hydo_engine::guest_fits(ram) {
-        die(&format!("explore: {e}"));
+        match &cx.env.memory_hint {
+            Some(h) => die(&format!("explore: {e}. {h}")),
+            None => die(&format!("explore: {e}")),
+        }
     }
     // what one worker holds: its VM, and on hvx S0 and S1 in memory too (the hvx engine keeps
     // them there whatever the store says) and the image copied into kernel memory. The Mac and
@@ -2408,9 +2418,7 @@ fn shrink_violation(
                     st_map.insert("stable_schedule".into(), json!(cx.render(&ma2)));
                     st_map.insert(
                         "stable_note".into(),
-                        json!(format!(
-                            "the resolved composition is too long for a schedule line; a saved regression carries it as W=@{key} (unconfirmed)"
-                        )),
+                        json!(compose::long_composition_note(&key)),
                     );
                 }
                 conf = c.unwrap_or_else(|| conf_pair(&mt, &mut log));
@@ -2638,12 +2646,18 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                         .collect();
                     repro_batches.push(pool.batch(&ritems, true));
                     let key = (py_str(&rec["class"]), sig_key(&v));
+                    // Milestone 328: one shrink per group of classes and signature, as before
+                    // the classes of the fault families
+                    let group = (
+                        crate::advice::shrink_group(&key.0).to_string(),
+                        key.1.clone(),
+                    );
                     // --shrink-causes N (M225): later failures of a key are shrunk too while
                     // their fault kinds differ from those already chosen, up to N per key
                     let cause = fault_kinds(&py_str(&rec["schedule"]));
-                    let chosen = match reps.iter_mut().find(|(k, _)| *k == key) {
+                    let chosen = match reps.iter_mut().find(|(k, _)| *k == group) {
                         None => {
-                            reps.push((key.clone(), vec![cause.clone()]));
+                            reps.push((group, vec![cause.clone()]));
                             true
                         }
                         Some((_, cs)) => {

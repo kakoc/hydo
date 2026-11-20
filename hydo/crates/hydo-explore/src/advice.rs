@@ -23,7 +23,7 @@
 //! [`hydo_schedule::describe`] does, and never hydo's own machinery.
 
 use hydo_schedule::describe::{self, KnobInfo, Part};
-use hydo_schedule::{Disk, GuestToken, Schedule};
+use hydo_schedule::{Disk, GuestToken, ReactAction, Schedule};
 
 /// How much attention a failure needs, most first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -181,38 +181,126 @@ pub fn what_of(verdict: &str, findings: &[hydo_results::Finding]) -> What {
 /// ([`crate::gen::Explorer::finding_class`]) on the schedule and the project's settings. Without
 /// the settings, `R=` other than `always` and `M=` other than `1` count as relaxed, as in the
 /// explorer. `test` is the manifest's `workload.kind: test`.
-pub fn class_of(s: &Schedule, knobs: &[KnobInfo], test: bool) -> &'static str {
+pub fn class_of(s: &Schedule, knobs: &[KnobInfo], test: bool) -> String {
     match s.disk() {
-        Disk::Lying(_) => return "lying-disk",
-        Disk::IoErr(_) => return "io-errors",
+        Disk::Lying(_) => return "lying-disk".into(),
+        Disk::IoErr(_) => return "io-errors".into(),
         _ => {}
     }
     // Milestone 313: the block faults
     if !s.block_faults().is_empty() {
-        return "damaged-disk";
+        return "damaged-disk".into();
     }
     if s.guest
         .iter()
         .any(|t| matches!(t, GuestToken::Corrupt { .. }))
     {
-        return "corrupted-files";
+        return "corrupted-files".into();
     }
     // Milestone 238: a service switched to another version of itself during the run
     if s.guest.iter().any(|t| matches!(t, GuestToken::Upgrade(_))) {
-        return "upgrade";
+        return "upgrade".into();
     }
     let cut = s.disk() == Disk::Cut
         || s.guest
             .iter()
             .any(|t| matches!(t, GuestToken::PowerLoss { .. }));
     if cut && relaxed(s, knobs).is_some() {
-        return "unsafe-knob";
+        return "unsafe-knob".into();
     }
     if test {
-        return "test-failed";
+        return "test-failed".into();
     }
-    "durable-defaults"
+    defaults_class(s)
 }
+
+/// The fault families that name the class of a failure with the system's safe settings and
+/// without a power cut (Milestone 328), in the order a class joins them: `process` (kills,
+/// pauses, freezes, and the reactions that kill or stop), `network` (`N=`, `O=`), `clock` (`T=`,
+/// a reaction's clock step), `protocol` (`H=`), `timing` (the host's tick and vCPU tokens) and
+/// `buggify` (`B=`).
+pub const FAMILIES: [&str; 6] = [
+    "process", "network", "clock", "protocol", "timing", "buggify",
+];
+
+/// The class of a failure without a power cut, from the families it had (flags in
+/// [`FAMILIES`]' order): the families joined by `+` (`process+clock`), or `no-fault`.
+pub fn families_class(had: &[bool; 6]) -> String {
+    let names: Vec<&str> = FAMILIES
+        .iter()
+        .zip(had)
+        .filter(|(_, h)| **h)
+        .map(|(n, _)| *n)
+        .collect();
+    if names.is_empty() {
+        "no-fault".into()
+    } else {
+        names.join("+")
+    }
+}
+
+/// Whether a class is one of a failure with the system's safe settings and a disk that keeps
+/// what it said it wrote: `durable-defaults` (a power cut), a class of [`families_class`], or
+/// `test-failed`. Before Milestone 328 every such failure was `durable-defaults`.
+pub fn safe_settings(class: &str) -> bool {
+    class == "durable-defaults"
+        || class == "test-failed"
+        || class == "no-fault"
+        || class.split('+').all(|f| FAMILIES.contains(&f))
+}
+
+/// The group of a class for choosing which failures an exploration shrinks, one per group and
+/// signature: a class of [`families_class`] is in the group `durable-defaults`, the class every
+/// such failure had before Milestone 328, so that the new names shrink the same failures as
+/// before; every other class is its own group.
+pub fn shrink_group(class: &str) -> &str {
+    if class != "test-failed" && class != "durable-defaults" && safe_settings(class) {
+        "durable-defaults"
+    } else {
+        class
+    }
+}
+
+/// The class of a failure with the system's safe settings (Milestone 328): `durable-defaults`
+/// when the schedule cuts the power (`disk=cut`, `C=`, `cf=`, `L=`, a reaction's cut), where
+/// the system's durability with its defaults is under test; else its fault families
+/// ([`families_class`]). Before, every such failure was `durable-defaults`, also a liveness
+/// failure under a pause with no disk fault.
+pub fn defaults_class(s: &Schedule) -> String {
+    let cut = s.disk() == Disk::Cut
+        || s.has_power_cut()
+        || s.guest
+            .iter()
+            .any(|t| matches!(t, GuestToken::PowerLoss { .. }));
+    if cut {
+        return "durable-defaults".into();
+    }
+    let mut had = [false; 6];
+    for t in &s.guest {
+        match t {
+            GuestToken::Kill { .. }
+            | GuestToken::Pause(_)
+            | GuestToken::TimedKill { .. }
+            | GuestToken::Freeze(_) => had[0] = true,
+            GuestToken::Net { .. } | GuestToken::OneWay { .. } => had[1] = true,
+            GuestToken::Clock { .. } | GuestToken::ClockTo { .. } => had[2] = true,
+            GuestToken::Protocol(_) => had[3] = true,
+            GuestToken::Buggify(_) => had[5] = true,
+            GuestToken::React(r) => match r.action {
+                ReactAction::Clock(_) => had[2] = true,
+                ReactAction::Cut => {}
+                _ => had[0] = true,
+            },
+            _ => {}
+        }
+    }
+    had[4] = s.main_host().iter().any(|t| TIMING_KEYS.contains(&t.key()));
+    families_class(&had)
+}
+
+/// The host tokens of the `timing` family: tick jitter, extra ticks, a shorter tick period,
+/// vCPU turns and forced preemption points.
+pub const TIMING_KEYS: [&str; 8] = ["tj", "tjx", "xt", "xtx", "pp", "q", "qb", "pct"];
 
 /// The first setting of the schedule that is not at its safe value: (its letter, its value).
 pub fn relaxed(s: &Schedule, knobs: &[KnobInfo]) -> Option<(char, String)> {
@@ -725,11 +813,33 @@ mod tests {
             class_of(&s("disk=cut | run C=12 R=always"), &k, false),
             "durable-defaults"
         );
-        // a relaxed setting without a power cut is not the setting's fault
+        // a relaxed setting without a power cut is not the setting's fault; since Milestone 328
+        // such a failure is named by its fault families
         assert_eq!(
             class_of(&s("disk=none | run K=redis@3+1 R=no"), &k, false),
+            "process"
+        );
+        assert_eq!(
+            class_of(&s("disk=none | run L=redis@3+1"), &k, false),
             "durable-defaults"
         );
+        assert_eq!(
+            class_of(
+                &s("disk=none | run P=redis@8+5 N=redis@1-4:loss,61% T=19:-86400"),
+                &k,
+                false
+            ),
+            "process+network+clock"
+        );
+        assert_eq!(
+            class_of(&s("disk=none tj=7 | run A=x@2+5:clock+30"), &k, false),
+            "clock+timing"
+        );
+        assert_eq!(
+            class_of(&s("disk=none | run A=x@2+5:kill-redis"), &k, false),
+            "process"
+        );
+        assert_eq!(class_of(&s("disk=none | run"), &k, false), "no-fault");
         assert_eq!(class_of(&s("disk=none | run"), &k, true), "test-failed");
         // without the manifest: the explorer's rule for R= and M=
         assert_eq!(
@@ -744,6 +854,36 @@ mod tests {
 
     /// Every class with what can fail in it: a label, a title, and words without hydo's own
     /// machinery.
+    /// Milestone 328: which classes are a failure with the safe settings, and the group a class
+    /// is shrunk in (the new family classes with `durable-defaults`, as before).
+    #[test]
+    fn family_classes_are_safe_settings_and_shrink_as_before() {
+        for c in [
+            "durable-defaults",
+            "test-failed",
+            "no-fault",
+            "process",
+            "process+network+clock+protocol+timing+buggify",
+        ] {
+            assert!(safe_settings(c), "{c}");
+        }
+        for c in [
+            "unsafe-knob",
+            "lying-disk",
+            "io-errors",
+            "refused",
+            "process+disk",
+        ] {
+            assert!(!safe_settings(c), "{c}");
+        }
+        assert_eq!(shrink_group("process+clock"), "durable-defaults");
+        assert_eq!(shrink_group("no-fault"), "durable-defaults");
+        assert_eq!(shrink_group("durable-defaults"), "durable-defaults");
+        assert_eq!(shrink_group("test-failed"), "test-failed");
+        assert_eq!(shrink_group("unsafe-knob"), "unsafe-knob");
+        assert_eq!(families_class(&[false; 6]), "no-fault");
+    }
+
     #[test]
     fn every_class_has_advice() {
         let k = knobs();
@@ -770,6 +910,12 @@ mod tests {
             (
                 "durable-defaults",
                 "disk=none | run K=redis@3+2",
+                Attention::Look,
+            ),
+            ("process", "disk=none | run K=redis@3+2", Attention::Look),
+            (
+                "process+network",
+                "disk=none | run P=redis@3+2 N=redis@1-4:loss,50%",
                 Attention::Look,
             ),
             ("refused", "disk=none | run", Attention::Expected),

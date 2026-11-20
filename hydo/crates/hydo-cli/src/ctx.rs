@@ -261,11 +261,19 @@ pub fn die(msg: &str) -> ! {
 }
 
 /// The exit status of [`die`]: 1, or 2 inside `hydo ci run` (its status for a run that could not
-/// be completed, kept apart from 1, a run that failed by the team's policy).
+/// be completed, kept apart from 1, a run that failed by the team's policy), or 5
+/// ([`hydo_explore::REFUSED`]) while `hydo explore` has run no schedule yet (Milestone 328).
 pub static DIE_CODE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(1);
+
+/// A stop with [`hydo_explore::REFUSED`] also prints the refusal as one JSON line on stdout
+/// (`hydo explore --json`, or stdout that is not a terminal; Milestone 328).
+pub static REFUSAL_JSON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 pub fn die_rc(msg: &str, rc: i32) -> ! {
     eprintln!("hydo: {msg}");
+    if rc == hydo_explore::REFUSED && REFUSAL_JSON.load(std::sync::atomic::Ordering::Relaxed) {
+        println!("{}", hydo_explore::refused_line(msg.trim()));
+    }
     std::process::exit(rc)
 }
 

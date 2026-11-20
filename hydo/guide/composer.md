@@ -145,7 +145,14 @@ writes the composition in its resolved form, for example
 `W=:p2,r200,cparallel_driver_transfer,7.4.0.721476632,...`. It lists each command run by id,
 with its round, its entry number, and its `HYDO_SEED`. A long one
 is written as `W=@<key>` plus a `# compose: <resolved form>` line, which `hydo build` writes
-beside the image with the regression. The file also records `# command-sha: <id> <hash>` for each command used. So:
+beside the image with the regression. The file also records `# command-sha: <id> <hash>` for each command used.
+
+`hydo save` then prints a note that ends `W=@<key> (unconfirmed: ...)`. Unconfirmed means that
+the explorer reproduced the failure with the composition's seed form, `W=<seed>,...`, and never
+ran the saved form. Run `hydo build` and then `hydo repro --regressions`: the saved form runs, and
+the regression fails if it does not end as its `# expect:` line says.
+
+Because a saved regression names its commands by id:
 
 - Do not rename a command that a saved regression uses: a missing id fails that regression
   with a message that names the command (the image still builds). Restore the command, or

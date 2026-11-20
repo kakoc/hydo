@@ -217,7 +217,7 @@ pub fn class_of(run: &Run, pr: &Project) -> String {
         return c.clone();
     }
     match Schedule::parse(&run.schedule) {
-        Ok(s) => advice::class_of(&s, &pr.knobs, pr.test).to_string(),
+        Ok(s) => advice::class_of(&s, &pr.knobs, pr.test),
         Err(_) => "durable-defaults".into(),
     }
 }

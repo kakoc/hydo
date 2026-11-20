@@ -20,11 +20,12 @@
 
 | class | signature | runs | seeds | reproduced |
 |---|---|---|---|---|
-| durable-defaults | `VIOLATION front lost an order` | 20 | 21 22 23 24 25 26 27 28 | 20/20 |
+| process | `VIOLATION front lost an order` | 12 | 21 23 25 26 27 28 29 31 | 12/12 |
+| process+timing | `VIOLATION front lost an order` | 8 | 22 24 30 33 34 35 36 39 | 8/8 |
 
 ## Minimal reproducers
 
-### durable-defaults: `VIOLATION front lost an order`
+### process: `VIOLATION front lost an order`
 
 - from seed 21, 25 shrink runs
 - minimal schedule: `disk=none dseed=0 | run Q=2 X=front@0~0`

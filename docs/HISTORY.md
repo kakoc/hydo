@@ -18953,6 +18953,161 @@ A bug planted in smallvec's `swap_remove` broke its contract on 25 of 1,000 call
 six elements and the index 1. The page lists nine fixes. Open items 139 and 163 have what is left.
 Nothing recorded moved.
 
+## Milestone 328 (tentative number): small fixes from a user's second onboarding round
+
+A user onboarded a private system of their own with hydo 0.4.1 on the Mac, in two rounds, and
+wrote down what hydo did wrong. The first round's items 1 to 10 are Milestones 316, 317, 320
+and 324. This milestone fixes the first round's items 11 and 12 and six items of the second
+round. The system is private, so each case was made again with public material: the Redis
+example of the Mac release, a file of random bytes, and the scripted engines of the tests. Each
+fix is its own commit. None moves a recorded value, and the fingerprint epoch stays 5.
+
+**1. `hydo explore` that refuses exits with status 5.** The user's exploration printed `explore:
+one guest of 6144 MiB (guest.ram_mib) needs about 6400 MiB of this machine's memory, and it has
+5813 MiB available now` and wrote no report. A script could not tell the stop from an
+exploration that ran. Every stop before the explorer hands its first schedule to the pool now
+exits with status 5 (`hydo_explore::REFUSED`). Such stops are a refusal for memory, a missing
+image, options that do not go together, a `--sweep` that the image cannot run, and an engine
+that does not start. With `--json`, or when stdout is not a terminal, the stop also prints one JSON line,
+`{"refused": "<reason>", "status": 5}`. The status collides with none of the others: 0 is an
+exploration that ran, 1 a stop after runs, 2 a bad option, 3 and 4 the "nothing judged" and
+"could not check" of `hydo fuzz` and `hydo update`, and 100 a check's violation. Inside `hydo ci
+run` every stop keeps that command's status 2. `hydo compare-versions` and the benchmark, which
+use the explorer as a library, keep their status. `hydo guide workflow` lists the statuses. The
+test `hydo::explore_refusal` runs a missing image and `--search state --sweep freeze` on the
+scripted engine (status 5 and the JSON line, no report) and a wrong option (status 2, no JSON
+line).
+
+**2. Inspection sessions that hold guest memory.** The user's `hydo inspect list` showed old
+sessions, and a script that read the session id from the wrong key left a session open. Each
+session holds a whole guest until it ends.
+
+- `hydo inspect stop --all` stops every running session of the user. It asks each over its
+  socket. A session that does not answer in 5 s, such as one still replaying its run, gets
+  SIGTERM to its process group, which holds its engine. The answer lists the sessions it
+  stopped and says how many and how much memory they held.
+- A session counts as running only while its process is still `hydo inspect __serve <id>`.
+  Before, a session that ended days ago counted as running when the system had given its
+  process number to another program, and `stop --all` would have signalled that program.
+- The refusals of `hydo run` and `hydo explore` for memory name each running session with its
+  memory and its age, and end with the line that stops them all.
+- The idle time of a session is 300 s, not 900 s. The calls of one look come seconds apart, and
+  a session that ended costs one replay to start again. A forgotten session held its guest for
+  15 minutes, and runs and explorations refused for memory meanwhile.
+- `hydo inspect start`'s answer has the id also at the top, `.id`, beside `.session.id`. It is
+  an addition to the results format, and `hydo-schema-compat` passes against the released
+  schema.
+
+The test `hydo::inspect_sessions` stops two stand-in sessions. It leaves alone a third, whose
+process number belongs to the test itself. On this Mac, `hydo inspect start` of a Redis run
+answered `.id` and `.session.id` both `i-253783c6`, with `idle_timeout_s` 300, and `hydo
+inspect stop --all` answered `stopped 1 session, which held 1024 MiB of guest memory`.
+
+**3. A hint after the second one-shot call.** Each `hydo inspect exec <run dir>` replays the
+whole run, and on the user's project each took minutes. After the second one-shot call on one
+run directory within 10 minutes, hydo prints a hint on stderr, and in the answer's notes, to
+start a session with `hydo inspect start`. The state is one small file per run directory in the
+sessions' folder, holding the time of the last call, so the run directory stays unwritten. On
+this Mac the second `hydo inspect exec <run> -- redis-cli DBSIZE` printed the hint, and the
+first did not.
+
+**4. The class of a failure names its fault families.** Every failure of the user's report had
+the class `durable-defaults`, also a liveness failure under a pause without a disk fault. The
+class meant that the system failed with its safe settings and a working disk. From now on
+`durable-defaults` is kept for such a failure in a run with a power cut (`disk=cut`, `C=`,
+`cf=`, `L=`, or a reaction's cut), where the system's durability with its defaults is under
+test. Any other such failure is named for its fault families, joined by `+` in a fixed order:
+
+- `process`: kills, pauses, freezes, and reactions that kill or stop;
+- `network` and `clock`;
+- `protocol`: an outside service's faults (`H=`);
+- `timing`: the tick and vCPU tokens;
+- `buggify`.
+
+A failure without a fault is `no-fault`. A schedule with a kill, a network loss, a pause and a
+clock step reads `process+network+clock`, and a minimal schedule that needs only the pause
+reads `process`.
+
+The class does not feed a CI finding key, and `hydo/known-findings.yaml` and
+`hydo/onboard/recorded.json` hold no class. It does choose which failures an exploration
+shrinks: one per class and signature. So the new classes are one group with `durable-defaults`
+(`advice::shrink_group`), and an exploration shrinks the same failures as before. The report
+page groups failures the same way and shows each group's own class. The benchmark and the
+explorer's identity test with explore.py's answers read the group, so their goldens did not
+move. A saved regression's file name starts with its class, so a regression saved from now on
+can get a new name; the files already saved keep theirs.
+
+**5. `hydo save`'s unconfirmed form.** A composition too long for one schedule line is saved as
+`W=@<key>`, and `hydo save` printed `(unconfirmed)` without saying what it means. The note now
+says that the explorer reproduced the failure with the composition's seed form and never ran
+the saved form, and that `hydo build` and then `hydo repro --regressions` run it. `hydo guide
+composer`, section "Regressions", says the same.
+
+**6. A root too big for guest RAM.** On the Mac an image's root is its initramfs, which the
+kernel unpacks into guest RAM. The user's 10 image services unpacked to 1,885 MiB in a 4,096 MiB
+guest. The kernel printed `Initramfs unpacking failed: write error` and left files out, and the
+run ended later as `ERROR service network setup failed`. The controller now ends the boot at
+that console line with an ERROR of its own. It names the root's unpacked size (from the gzip
+trailer), the compressed copy that the kernel holds beside it while it unpacks, and
+`guest.ram_mib`. It says to raise `guest.ram_mib` or to make the roots smaller. Another reason
+of the kernel's says that the image's root could not be unpacked. The verdict stays under the
+255 bytes that the engines keep of the verdict that ends a run; the first version was longer, and
+a Mac run cut it there. On this Mac the Redis example with a 400 MiB
+file of random bytes and `guest.ram_mib: 768` ended with 0.4.1 as `HYDO-ORACLE: ERROR service
+start (redis)`, the wrong cause, and with this tree as:
+
+```text
+RESULT one fp=c8a3a8601f81176c ... stops=33 ... verdict=HYDO-ORACLE: ERROR the root does not
+fit in guest RAM (Initramfs unpacking failed: write error): about 423 MiB unpacked beside 409
+MiB compressed, and guest.ram_mib is 768. Raise guest.ram_mib or shrink the roots
+(root.share_images)
+```
+
+**7. A used-up exit budget.** The Mac and KVM engines end a phase of a run after 50,000,000 VM
+exits with `ERROR <phase>: exit budget exhausted`. The user's `eventually_` check started one
+client per accepted query at every try while queries stayed stuck. The run ended `ERROR check:
+exit budget exhausted`, which named neither the check nor the limit. The controller now keeps
+what it waits for: each final check, each `eventually_` check's monitor with its failed tries
+and its last output, and the workload's steps. When the engine ends the run by itself, the
+controller's verdict replaces the engine's in the RESULT line (`Controller::engine_ended`). The
+fingerprint and the transcript stay the engine's.
+
+- An `eventually_` check that failed 3 tries or more gives its violation: `VIOLATION [<id>] not
+  satisfied <t>s after <anchor>, deadline <d>s: the engine's exit budget for the phase ran out
+  after <n> failed tries of the check (last check rc=1: <its last line>)`.
+- Otherwise the engine's words stay, and the verdict names what ran (`... exhausted while the
+  check <id> ran`).
+
+Neither part needed an engine change. `hydo guide checks` has a section "The exit budget" on how
+to keep a check inside it. The test `hydo-control::engine_end` ends the scripted engine's run at
+chosen stops of a plan with an `eventually_` check that never holds. On this Mac the Redis
+example with an `eventually_` check that runs 100 clients per try and never holds, and
+`HVM_RUN_EXITS=3000000`, ended with 0.4.1 as `ERROR check: exit budget exhausted`. With this
+tree it ended as `HYDO-ORACLE: VIOLATION [queries.settle] not satisfied 252.41s after heal,
+deadline 600s: the engine's exit budget for the phase ran out after 245 failed tries of the
+check (last check rc=1: 3 queries still running)`. The two runs had the same fingerprint
+`31a06d63e97092d4` and the same control hash `312d9848c1455e1b`.
+
+The Redis example without faults gave its recorded Mac fingerprint `05f433ee427f8e3c` with this
+tree.
+
+**Goldens.** Re-recorded for these changes only, each checked line by line:
+
+- 6 answers of `tests/golden/cli.jsonl`: `hydo explore` without an image, with a missing image,
+  and with an image that no engine here runs, on Linux and the Mac. Each now exits 5 and prints
+  the JSON line. 2 more: `hydo guide composer` on both platforms.
+- `hydo/schema/results-v1.json`: the new field `id` of an inspect answer, and the words on
+  `sessions`.
+- The explorer's fake-engine goldens (`hydo-explore/tests/golden/fake/`, 58 files): the
+  classes only. In the verbatim files `durable-defaults` became `protocol`, `no-fault`,
+  `process`, and `process+timing`. In the scenario `stack_sweep_frontkill` one row of 20
+  failures became rows of 12 and 8, with the same minimal schedule.
+
+The control transcripts did not change: `hydo-control`'s corpus tests passed unchanged, and the
+two Redis runs of part 7 had the same control hash.
+
+**What is left.** Open items 112, 150, 162 and 166 say what stays of each part.
+
 ## Milestone 330 (tentative number): what a user's second onboarding round taught the strategies and the skill
 
 A user onboarded a distributed query engine of their own with hydo 0.4.1 on the Mac engine
@@ -19112,3 +19267,4 @@ with the release `skill-v2.4.0`, so it offers a Claude Code plugin update that c
 Deleting the `skill-v` releases after 0.5.0 ends it. No real release carries the skill yet, and
 `claude plugin update` from 2.4.0 to a lower version ran only as the documentation describes it.
 Nothing recorded moved.
+

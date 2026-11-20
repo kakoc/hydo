@@ -285,6 +285,52 @@ pub struct Plan {
     /// walker repeats those actions. Not a manifest key: the host sets it for a run whose walk
     /// records, and None leaves every run as it was.
     pub walk_script: Option<String>,
+    /// Milestone 328: the sizes that decide whether an image's root fits into guest RAM, for an
+    /// image whose root is its initramfs (the Mac engine's `*-arm64.cpio.gz`). The controller
+    /// names them when the guest kernel says that it could not unpack the initramfs. Not a
+    /// manifest key: the host reads them from the image; None leaves every run as it was.
+    pub root_fit: Option<RootFit>,
+}
+
+/// The sizes of an image whose root is unpacked into guest RAM ([`Plan::root_fit`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RootFit {
+    /// The initramfs unpacked, MiB (the gzip trailer's size).
+    pub unpacked_mib: u64,
+    /// The compressed initramfs, MiB, which the kernel holds in RAM while it unpacks.
+    pub compressed_mib: u64,
+    /// `guest.ram_mib`.
+    pub ram_mib: u64,
+}
+
+impl RootFit {
+    /// The sizes of `image` when it is a gzip-compressed initramfs (`*.cpio.gz`) whose trailer
+    /// gives its unpacked size; None for any other image (hvx and KVM keep the root on a disk).
+    pub fn of_image(image: &std::path::Path, ram_mib: u64) -> Option<RootFit> {
+        use std::io::{Read, Seek, SeekFrom};
+        if !image.to_string_lossy().ends_with(".gz") {
+            return None;
+        }
+        let mut f = std::fs::File::open(image).ok()?;
+        let len = f.metadata().ok()?.len();
+        if len < 18 {
+            return None;
+        }
+        f.seek(SeekFrom::End(-4)).ok()?;
+        let mut b = [0u8; 4];
+        f.read_exact(&mut b).ok()?;
+        let mut isize = u32::from_le_bytes(b) as u64;
+        // the trailer keeps the size modulo 4 GiB; a root that unpacks to less than its
+        // compressed size wrapped around once (a guest has at most 8 GiB)
+        if isize < len {
+            isize += 1 << 32;
+        }
+        Some(RootFit {
+            unpacked_mib: isize >> 20,
+            compressed_mib: len >> 20,
+            ram_mib,
+        })
+    }
 }
 
 /// `perf:` (Milestone 237, schedule/perf.rs).
@@ -704,6 +750,7 @@ impl Plan {
             screens: hydo_manifest::browser::screens_dir(d),
             walk: hydo_manifest::browser::walks(d),
             walk_script: None,
+            root_fit: None,
             invariants,
             knobs,
             buggify: m.buggify,

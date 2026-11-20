@@ -242,6 +242,22 @@ kernel's messages. Then look inside the run with `hydo inspect` (`hydo guide ins
 change the image. The
 full build also checks the backend's limits (the arm64 build refuses `guest.cpu: v3`).
 
+The exit status of `hydo explore` tells a script what happened:
+
+| Status | Meaning |
+|---|---|
+| 0 | The exploration ran. Its failures, if any, are in the report. |
+| 1 | The explorer stopped after it had run schedules, for example because an engine failed. |
+| 2 | An option is wrong. The line before the status names it. |
+| 5 | The exploration refused before it ran any schedule, and it wrote no report. |
+
+Refusals include a guest that does not fit into this machine's memory, a missing image, and
+options that do not go together. With `--json`, or when stdout is not a terminal, a refusal also
+prints one JSON line, `{"refused": "<reason>", "status": 5}`. A refusal for memory names each
+running `hydo inspect` session with its memory and its age, because each session holds a whole
+guest. `hydo inspect stop --all` stops them. Inside `hydo ci run` every stop of the explorer is
+that command's status 2.
+
 ## Which versions have a finding
 
 `hydo versions` says in which versions of the system a finding is present. It replays the

@@ -10,6 +10,7 @@
 
 use crate::defects::{crash_verdict, sig_match, Set};
 use crate::pools::Engines;
+use hydo_explore::advice::shrink_group;
 use hydo_explore::gen::Ex;
 use hydo_explore::pool::{Pool, Res};
 use hydo_explore::py::{dumps_line, fl, py_str, round1};
@@ -175,7 +176,7 @@ pub fn make_rec(
     let tag = format!("seed-{sd}");
     let class = ex
         .parse(text)
-        .map(|s| ex.finding_class(&s))
+        .map(|s| shrink_group(&ex.finding_class(&s)).to_string())
         .unwrap_or_else(|e| panic!("cannot read the schedule {text:?}: {e}"));
     let mut rec = Map::new();
     rec.insert("seed".into(), json!(sd));

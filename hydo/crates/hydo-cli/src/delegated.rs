@@ -61,6 +61,15 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
         }
         return rc;
     }
+    // Milestone 328: a stop before the explorer runs a schedule (no image, no engine, the
+    // machine's memory) is a refusal, exit status 5 with a JSON line for a program; inside
+    // `hydo ci run` (DIE_CODE 2) the status stays that run's
+    use std::sync::atomic::Ordering::Relaxed;
+    let refusing = crate::ctx::DIE_CODE.load(Relaxed) == 1;
+    if refusing {
+        crate::ctx::DIE_CODE.store(hydo_explore::REFUSED, Relaxed);
+        crate::ctx::REFUSAL_JSON.store(!plain, Relaxed);
+    }
     // `--no-diagnose`: no replay that reads the failing service's log of a problem whose runs
     // stopped with an error (Milestone 247; as `hydo run --no-diagnose`)
     let diagnose = !argv.iter().any(|a| a == "--no-diagnose");
@@ -141,8 +150,13 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
         } else {
             ctx.config.clone()
         },
+        // Milestone 328: a refusal for memory names the sessions that hold guests
+        memory_hint: crate::inspect::session::memory_hint(&crate::inspect::session::running(ctx)),
     };
     let rc = hydo_explore::main_with(&full, &env);
+    if refusing {
+        crate::ctx::DIE_CODE.store(1, Relaxed);
+    }
     let i = args.iter().position(|a| a == "--out").unwrap_or(0);
     let out = args.get(i + 1).cloned().unwrap_or_default();
     let report = pjoin(&out, "report.md");

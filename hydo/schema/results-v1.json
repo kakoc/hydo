@@ -4141,6 +4141,13 @@
           "description": "`start`, `status`, `list`, `stop`, `exec`, `read`, `ls`, `logs`, `ps`, `sockets`,\n`advance`.",
           "type": "string"
         },
+        "id": {
+          "description": "`start`: the session's id, the same as `session.id`, where scripts look for an id first\n(added in Milestone 328).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "session": {
           "anyOf": [
             {
@@ -4152,7 +4159,7 @@
           ]
         },
         "sessions": {
-          "description": "`list`: every session of this user.",
+          "description": "`list`: every session of this user; `stop --all`: the sessions it stopped (Milestone\n328).",
           "type": "array",
           "items": {
             "$ref": "#/$defs/InspectSession"

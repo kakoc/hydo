@@ -32,6 +32,7 @@ fn main() {
         cli: false,
         plain_end: false,
         config,
+        memory_hint: None,
     };
     std::process::exit(hydo_explore::main_with(&argv, &env));
 }

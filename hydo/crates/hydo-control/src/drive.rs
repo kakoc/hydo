@@ -181,6 +181,14 @@ impl Ran {
         &self.in_order().last().expect("the run").result
     }
 
+    /// Milestone 328: the controller's verdict in place of the engine's, when the engine ended
+    /// the last conversation by itself ([`Finished::engine_verdict`]).
+    pub fn engine_verdict(&self) -> Option<&str> {
+        self.in_order()
+            .last()
+            .and_then(|f| f.engine_verdict.as_deref())
+    }
+
     /// The run's control hash (`ctl=`): the run conversation's transcript hash, or with a recovery
     /// boot the first 16 hex digits of SHA-256 over both hashes ("`<run>` `<recovery>`"). With
     /// reboots (Milestone 263), the same over every conversation's hash in order.
