@@ -48,13 +48,14 @@ holds the whole report.
 - `// hydo: with T = i64`: the type that a type parameter takes. It names the parameters of a
   generic function, of a generic `impl` block, and of a trait. `with Self = i64` names the type
   that a trait's method is fuzzed on (section "Trait methods"). A const generic parameter
-  takes its value the same way: `with N = 16`.
+  takes its value the same way: `with N = 16`. A `with` line for a name that is no type
+  parameter is refused with the names that are.
 - `// hydo: build <Type> from <constructor>(<name>: <type>, ...)` and `// hydo: read <Type> as
   <type> by <method>()`: how hydo makes and reads a value of a type that it cannot generate
   field by field (section "Values built by a constructor").
 
 An expression reads parameters, fields, `result`, integers, floating-point numbers (`0.5`),
-strings, `old(e)` (the value at the call's entry), and the functions `len`, `is_some`, `is_none`,
+strings, a string's bytes by index (`text[0] >= 48`), `old(e)` (the value at the call's entry), and the functions `len`, `is_some`, `is_none`,
 `is_ok`, `is_err`, `some`, `ok` and `err`. `hydo fuzz` also reads `matches(e, <pattern>)` and
 `sorted(v)` (sections "Enumerations" and "Sorted inputs"). The operators are `||`, `&&`, the
 comparisons, the bit operators `|`, `^`, `&`, `<<` and `>>`, `+ - * / %`, `!` and unary `-`.
@@ -111,8 +112,9 @@ hydo:   the call gave: result = Ok(Complete((2, 0)))
 ```
 
 A variant or a field that the type does not have is refused before the run. The refusal names
-the variants or the fields that the type has. A
-variant is never compared with `==`: write `matches()`. An `input` line names a variant's field
+the variants or the fields that the type has. Two
+values of one enumeration compare with `==` (`result == self`), and a variant's name is
+written with `matches()`. An `input` line names a variant's field
 as `op.Clamp.lo`.
 
 ## Trait methods
@@ -337,6 +339,11 @@ hydo generates the list in order, so no input is thrown away for it:
 pub fn search(v: &[u32], x: u32) -> Option<usize> {
 ```
 
+## An index inside its list
+
+`requires index < len(v)` (or `<=`) makes hydo generate the index inside the list, so that
+few inputs are thrown away for it. An index into an empty list still breaks such a clause.
+
 ## Lists of one length
 
 `requires len(a) == len(b)` makes hydo generate `b` with the length of `a`, so that no input is
@@ -386,7 +393,9 @@ of bytes takes text examples too, as their bytes, and a report shows it as a byt
   Plane, is among them too. A `chars` part of an `input` line replaces the three sets.
 - Some lists repeat one value with a few others among it.
 - A floating-point number is 0, -0, 1, -1, a half, the type's smallest or largest value, an
-  infinity, NaN, a small fraction, a value of the `in` range, or any bits.
+  infinity, NaN, a small fraction, a value of the `in` range, or any bits. In about one input
+  in six, two values of one width are made equal, or both NaN with other bits, as a comparison
+  of two floats needs.
 - A value that a clause compares with a list's element is put at a random place of the list.
 
 ## The verdicts
@@ -473,6 +482,11 @@ the call, or a generated closure. `DIR/harness/<function>.log` keeps the whole o
 failed build, and `DIR/harness/<function>.rs` the test module's text. `--show-harness` prints
 the log. `DIR/build.log` keeps every build of the run, each under a numbered heading.
 
+hydo's copy of the crate allows dead code, with `#![allow(dead_code)]` on the first line of
+its root file. A helper that only the functions that `--fn` leaves out call then does not stop
+a crate that denies warnings. `--features F` builds the crate with `--features F`, such as
+`--features parsing,formatting` for time's parsers.
+
 When the copy does not build without any test module, hydo builds the crate with its own
 `Cargo.toml` to find the cause. If the crate builds, the message says that hydo's copy is the
 cause and names the first error. The message gives the first error's place in your files. For
@@ -484,8 +498,10 @@ the crate's own code, such as its test module, and gives the command that tells:
 ## Choose the functions
 
 `--fn NAME` takes a function's name or the end of its path (`hex::encode`). With `::` after it,
-it takes a module or a type: `--fn codec::` fuzzes every contracted function of the module
-`codec`, and `--fn Ledger::` every method of `Ledger`. A name that names no function but a
+it takes a module, a type or a trait: `--fn codec::` fuzzes every contracted function of the
+module `codec`, `--fn Ledger::` every method of `Ledger`, and `--fn Engine::` every method of
+`impl Engine for ...` and of the trait `Engine`. A function's name starts with the crate's
+name as Rust paths write it, `ordered_float::`, not the package's. A name that names no function but a
 module, such as `--fn hydo_props`, selects that module's functions, and a line says so.
 
 ## See the inputs
@@ -602,7 +618,7 @@ hydo then shrinks the input in a run of one step under the same faults and print
 that replays the smallest one:
 
 ```text
-hydo: durability check broken: fuzz-vm::save: fuzz-vm::save_survives: ensures result (line 161) on 750 calls in 4 runs, first under `disk=cut dseed=b6a3ee203ddfdea3 | run C=14`
+hydo: durability check broken: fuzz_vm::save: fuzz_vm::save_survives: ensures result (line 161) on 750 calls in 4 runs, first under `disk=cut dseed=b6a3ee203ddfdea3 | run C=14`
 hydo:   input: text = "A"
 hydo:   gave: result = Some(false)
 hydo:   smallest input (1 shrink step): text = ""

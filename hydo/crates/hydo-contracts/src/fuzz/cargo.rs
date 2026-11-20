@@ -18,6 +18,8 @@ pub struct Cargo {
     pub toolchain: Option<String>,
     /// Build the harness with `--release` (no overflow checks, no debug assertions).
     pub release: bool,
+    /// `--features`: the crate's features to turn on (Milestone 333).
+    pub features: Option<String>,
 }
 
 impl Cargo {
@@ -183,6 +185,16 @@ impl Pkg {
     }
 
     /// The source files of the package (`.rs` files outside `target/`).
+    /// The crate's name as Rust paths write it (Milestone 333): the library's name
+    /// (`ordered_float` of the package `ordered-float`), else the package's with `_` for `-`.
+    pub fn crate_name(&self) -> String {
+        self.targets
+            .iter()
+            .find(|t| t.kind == "lib")
+            .map_or_else(|| self.name.clone(), |t| t.name.clone())
+            .replace('-', "_")
+    }
+
     pub fn sources(&self) -> Vec<PathBuf> {
         let mut out = Vec::new();
         walk(&self.dir, &mut |p| {
@@ -742,6 +754,9 @@ pub fn build(
     if cargo.release {
         c.arg("--release");
     }
+    if let Some(f) = &cargo.features {
+        c.args(["--features", f]);
+    }
     if target.kind == "bin" {
         c.args(["--bin", &target.name]);
     } else {
@@ -869,6 +884,9 @@ pub fn original_builds(
     }
     if cargo.release {
         c.arg("--release");
+    }
+    if let Some(f) = &cargo.features {
+        c.args(["--features", f]);
     }
     if target.kind == "bin" {
         c.args(["--bin", &target.name]);

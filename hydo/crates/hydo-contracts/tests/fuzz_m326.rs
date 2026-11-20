@@ -179,7 +179,7 @@ fn fn_names_a_module_or_a_path_prefix() {
     let (_, rep) = fuzz_m326(t.path(), &["--fn", "units"]);
     let mut got: Vec<&str> = rep.functions.iter().map(|f| f.function.as_str()).collect();
     got.sort();
-    assert_eq!(got, ["fuzz-m326::units::unit"], "{rep:?}");
+    assert_eq!(got, ["fuzz_m326::units::unit"], "{rep:?}");
     assert!(
         rep.skipped
             .iter()

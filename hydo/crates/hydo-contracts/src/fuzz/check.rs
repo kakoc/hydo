@@ -114,6 +114,13 @@ fn eval_raw(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
                     }
                     l[k as usize].clone()
                 }
+                // a string's byte (Milestone 333): `text[0] >= 48`
+                Val::Str(s) => {
+                    if k < 0 || k as u128 >= s.len() as u128 {
+                        return Err(format!("index {k} is past the length {}", s.len()));
+                    }
+                    Val::Int(s.as_bytes()[k as usize] as i128)
+                }
                 _ => return Err("an element of a value that is not a list".into()),
             }
         }
@@ -189,7 +196,9 @@ fn eval_raw(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
                             ));
                         }
                     }
-                    if matches!(l, Val::Enum(..)) || matches!(r, Val::Enum(..)) {
+                    // two values of one enumeration compare as values (Milestone 333); a
+                    // variant's name is written with `matches(<value>, <pattern>)`
+                    if matches!(l, Val::Enum(..)) != matches!(r, Val::Enum(..)) {
                         return Err(
                             "a variant is compared with `matches(<value>, <pattern>)`".into()
                         );
@@ -490,6 +499,19 @@ pub fn sorted_hints(a: &Ast, h: &mut Hints) {
             if let Some(p) = path_of(x) {
                 if !h.sorted.contains(&p) {
                     h.sorted.push(p);
+                }
+            }
+        }
+        // an index inside its list (Milestone 333): `index < len(self.v)`, `len(v) > i`
+        Ast::Bin(op @ (BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge), x, y) => {
+            let (i, l, incl) = match (op, &**x, &**y) {
+                (BinOp::Lt | BinOp::Le, i, Ast::Call(Builtin::Len, l)) => (i, l, *op == BinOp::Le),
+                (BinOp::Gt | BinOp::Ge, Ast::Call(Builtin::Len, l), i) => (i, l, *op == BinOp::Ge),
+                _ => return,
+            };
+            if let (Some(i), Some(l)) = (path_of(i), path_of(l)) {
+                if !i.ends_with("#len") && !h.below_len.iter().any(|(a, b, _)| (a, b) == (&i, &l)) {
+                    h.below_len.push((i, l, incl));
                 }
             }
         }

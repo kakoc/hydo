@@ -9,3 +9,7 @@ publish = false
 
 # its own workspace (not part of the repository root's)
 [workspace]
+
+# a feature that `hydo fuzz --features extra` turns on
+[features]
+extra = []

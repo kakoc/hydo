@@ -1,5 +1,8 @@
 //! The seventh fixture of `hydo fuzz` (Milestone 333): what the fourth evaluation found, each
-//! with a contract.
+//! with a contract. It denies warnings, as ordered-float does, so that a helper that only the
+//! functions that --fn leaves out call would stop the copy's build without hydo's
+//! `#![allow(dead_code)]`.
+#![deny(warnings)]
 
 // ---------------------------------------------------------------- values that hydo does not read
 
@@ -356,4 +359,76 @@ pub mod small {
             self.items.clone()
         }
     }
+}
+
+// ---------------------------------------------------------------- the smaller items
+
+/// A `with` line for a name that is no type parameter is refused.
+// hydo: with Item = u8
+// hydo: ensures result == x
+pub fn same_u8(x: u8) -> u8 {
+    x
+}
+
+/// A nested `input` path through a built value names its constructor's arguments.
+// hydo: input v.note like "a"
+// hydo: ensures result >= v.major
+pub fn ver_major(v: &ver::Ver) -> u128 {
+    v.major as u128
+}
+
+/// A string's byte by its index.
+// hydo: ensures is_none(result) || some(result) == s[0]
+pub fn first_byte(s: &str) -> Option<u8> {
+    s.bytes().next()
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Dir {
+    North,
+    East,
+    South,
+    West,
+}
+
+/// Two values of one enumeration compare with `==`.
+// hydo: ensures result == d
+pub fn turn_four(d: Dir) -> Dir {
+    let t = |d: Dir| match d {
+        Dir::North => Dir::East,
+        Dir::East => Dir::South,
+        Dir::South => Dir::West,
+        Dir::West => Dir::North,
+    };
+    t(t(t(t(d))))
+}
+
+/// Two floats that are both NaN: the contract is wrong exactly then.
+// hydo: ensures !result
+pub fn both_nan(a: f64, b: f64) -> bool {
+    a.is_nan() && b.is_nan()
+}
+
+/// An index that `requires` keeps inside its list is generated there.
+// hydo: requires index < len(v)
+// hydo: ensures result == v[index]
+pub fn at(v: Vec<u8>, index: usize) -> u8 {
+    v[index]
+}
+
+/// A helper that only `uses_helper` calls: `--fn first_byte` leaves it unused.
+fn helper(x: u8) -> u8 {
+    x.wrapping_add(1)
+}
+
+// hydo: ensures result == x || x == 255
+pub fn uses_helper(x: u8) -> u8 {
+    helper(x).wrapping_sub(1)
+}
+
+/// Whether the feature `extra` is on: the contract holds with `--features extra` only.
+// hydo: ensures result
+pub fn extra_on(x: u8) -> bool {
+    let _ = x;
+    cfg!(feature = "extra")
 }
