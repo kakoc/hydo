@@ -120,7 +120,7 @@ pub const META: &str = "_browser";
 /// Where the project folder and hydo's helpers are in the guest (and in the browser's root).
 pub const WEB_DIR: &str = "/opt/hydo/web";
 
-/// Where the pages' record is (the guest's /tmp, which every image root shares).
+/// Where the pages' record is (the guest's /tmp/hydo, which every image root shares).
 pub const RECORD_DIR: &str = "/tmp/hydo/web";
 
 /// Where a recording replay finds the actions it repeats (Milestone 270): the host writes the

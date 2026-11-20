@@ -180,8 +180,8 @@ root:                          # what goes on the read-only root filesystem
       port 8080
   dirs: [/etc/myapp]           # empty directories to create
   share_images: true           # image services with the same image (config digest) share one
-                               # unpacked tree, each on its own mount of it with its own /tmp,
-                               # /data and mounts (default false: one copy per service;
+                               # unpacked tree, each on its own mount of it with its own /tmp
+                               # and mounts (default false: one copy per service;
                                # `hydo compose` writes true when services share an image)
   fix_pyc: false               # Python bytecode caches (__pycache__/*.pyc that check their
                                # source's time) get the image's fixed file time, so Python uses
@@ -389,11 +389,19 @@ What the build does:
   read-only root (or, with `writable: true`, into the service's writable layer: below), and the
   service runs chrooted there, as in Docker. Images with different C
   libraries can coexist, and busybox, `/sbin/init` and the rest of the hydo root are untouched.
-- `/proc`, `/sys`, `/dev`, `/tmp` and `/data` of the guest are bind-mounted into that root.
+- `/proc`, `/sys`, `/dev` and `/data` of the guest are bind-mounted into that root.
   `/data` is the data disk (the fault target): point the program's data directory there (it
-  is the image's `WorkingDir` in many official images). `/tmp` is shared, so `$HYDO_ACKED`
-  etc. are the same files inside. `/etc/hosts` in the image is replaced by
-  `127.0.0.1 localhost` (Docker also writes it at run time).
+  is the image's `WorkingDir` in many official images). `/etc/hosts` in the image is replaced
+  by `127.0.0.1 localhost` (Docker also writes it at run time).
+- **Each image service has a `/tmp` of its own**, as a container has (from the fingerprint epoch
+  5, Milestone 331). It is the guest's folder `/tmp/oci/<service>`: a file the service writes to
+  its `/tmp/x` is `/tmp/oci/<service>/x` for the workload, the checks and `logs:`. The guest's
+  `/tmp/hydo` is bound at the service's `/tmp/hydo`, so `$HYDO_ACKED`, `$HYDO_LOG` and the other
+  run files are the same files inside. The guest's own `/tmp`, which every service shares, is
+  at `/.hydo/tmp`, and `$HYDO_BUGGIFY_FILE` points at its `hydo-buggify` unless the service's
+  `env:` sets it. Two services of one image then never meet each other's lock files or sockets
+  in `/tmp`: TiKV locks a file named after its listen address there. An image built before
+  epoch 5 binds the guest's `/tmp` itself, so every image service shares it.
 - **Defaults from the image config, overridable in the manifest:** `ENTRYPOINT` + `CMD`
   (Docker semantics: `cmd:` replaces `CMD`; `entrypoint:` replaces `ENTRYPOINT` and drops
   `CMD`), `Env` (`env:` adds or overrides by name; `HOME` is the user's home from the image's
@@ -2999,8 +3007,8 @@ copies the image's directory in. A `dst` the image lacks is created in the image
 (below `/proc`, `/sys`, `/dev`, `/tmp`, `/data` at run time); a `dst` that is a symlink in the image
 is resolved inside the image root, never through to the guest's own directory. Paths use
 `[A-Za-z0-9._@+=,:/-]` only. From the fingerprint epoch 5 (Milestone 317) the launcher binds the
-guest's `/proc`, `/sys`, `/dev`, `/tmp` and `/data` into the service's root in the same block,
-under the same lock and before the entries, so a `hydo-oci` call that starts with the service,
+guest's `/proc`, `/sys`, `/dev` and `/data`, and the service's own `/tmp` (Milestone 331), into
+the service's root in the same block, under the same lock and before the entries, so a `hydo-oci` call that starts with the service,
 such as its readiness check, never binds one of them again over an entry such as the `/dev/shm`
 tmpfs. An image built before keeps the launcher it was built with. `dst: /data` is allowed only for a `src:` below `/data` and without `copy_up` (Milestone
 141): that data-disk directory becomes the service's `/data`, so the nodes of a cluster, each with

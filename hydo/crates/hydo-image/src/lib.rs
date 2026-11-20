@@ -66,7 +66,8 @@ pub const VERSION: u64 = 1;
 /// (Milestone 290) the Mac and KVM engines' fingerprints hash the disks by a tree of block hashes.
 /// Epoch 5 (Milestone 317): an image service's launcher mounts its system folders once per boot,
 /// under the lock of its `mounts:` ([`EpochDefaults::oci_mounts_once`]), and (Milestone 323) hvx
-/// boots an x86_64 image's guest with its TSC as the clock ([`EpochDefaults::exact_tick`]).
+/// boots an x86_64 image's guest with its TSC as the clock ([`EpochDefaults::exact_tick`]), and
+/// (Milestone 331) each image service has a `/tmp` of its own ([`EpochDefaults::oci_own_tmp`]).
 pub const EPOCH: u64 = 5;
 
 /// The epoch of a run, exploration or cache entry that recorded none (written before M155).
@@ -119,6 +120,15 @@ pub struct EpochDefaults {
     /// `/dev/shm` tmpfs (open item 162). From epoch 5 (Milestone 317). It decides the bytes of a
     /// new image only: an image built before keeps its launcher inside it.
     pub oci_mounts_once: bool,
+    /// hydo-build writes each image service's launcher and `hydo-oci` helper so that the
+    /// service's `/tmp` is its own, as a container's is: the guest's folder `/tmp/oci/<service>`,
+    /// with the guest's `/tmp/hydo` bound at its `/tmp/hydo` (where `$HYDO_ACKED` and the other
+    /// run files are) and the guest's `/tmp` at `/.hydo/tmp`. Before, every image service had
+    /// the guest's `/tmp` itself, so two services of one image met each other's files there: a
+    /// program that locks a file named after its port in `/tmp` (TiKV) found the lock of its
+    /// sibling (open item 147, which `root.share_images` was blamed for). From epoch 5
+    /// (Milestone 331). It decides the bytes of a new image only.
+    pub oci_own_tmp: bool,
     /// What an absent `guest.exact_tick` means for an x86_64 image: hydo-build writes
     /// `/etc/hydo/exact-tick` with `tsc`, and the hvx engine boots the guest kernel with
     /// `tsc=reliable` and a virtual TSC that moves 1 us per step. The guest's clocks are then the
@@ -143,6 +153,7 @@ pub fn defaults(epoch: u64, arch: &str) -> EpochDefaults {
         disk_tree: epoch >= 4,
         ram_tree: epoch >= 4,
         oci_mounts_once: epoch >= 5,
+        oci_own_tmp: epoch >= 5,
         exact_tick: epoch >= 5 && arch == "x86_64",
     }
 }
@@ -568,6 +579,7 @@ mod tests {
         assert!(!defaults(4, "arm64").regressions_in_image);
         assert!(!one.oci_mounts_once && !two.oci_mounts_once && !three.oci_mounts_once);
         assert!(!four.oci_mounts_once);
+        assert!(!one.oci_own_tmp && !two.oci_own_tmp && !three.oci_own_tmp && !four.oci_own_tmp);
         // epoch 5 (M317, M323): the image services' launchers mount the system folders once, and
         // hvx's guest keeps time with its TSC; the rest as at epoch 4
         assert!(!one.exact_tick && !two.exact_tick && !three.exact_tick && !four.exact_tick);
@@ -576,11 +588,13 @@ mod tests {
             five,
             EpochDefaults {
                 oci_mounts_once: true,
+                oci_own_tmp: true,
                 exact_tick: true,
                 ..four
             }
         );
         assert!(defaults(5, "arm64").oci_mounts_once);
+        assert!(defaults(5, "arm64").oci_own_tmp);
         // hvx runs x86_64 images only
         assert!(!defaults(5, "arm64").exact_tick);
         assert_eq!(defaults(EPOCH, "x86_64"), five);

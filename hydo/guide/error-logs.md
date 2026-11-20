@@ -13,7 +13,8 @@ services:
   - name: mysql
     ...
     errors:
-      files: [/tmp/mysqld.err]   # a log file the service writes itself (MySQL log-error=, a Java app's log file)
+      files: [/tmp/mysqld.err]   # a log file the service writes itself (MySQL log-error=, a Java app's log file);
+                                 # an image service's /tmp/x is /tmp/oci/<service>/x here (fingerprint epoch 5)
   - name: redis
     ...
     errors:
