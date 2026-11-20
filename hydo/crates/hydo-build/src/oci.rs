@@ -625,6 +625,16 @@ impl Image {
         Ok(total)
     }
 
+    /// The bytes of the image's layers as they are stored, compressed (Milestone 338): about
+    /// what the image adds to a compressed initramfs, which is gzip at level 9 too.
+    pub fn stored_bytes(&self) -> R<u64> {
+        let mut total = 0u64;
+        for (name, _) in &self.layers {
+            total += self.src.ends(&self.path, name)?.0;
+        }
+        Ok(total)
+    }
+
     fn config_section(&self) -> Value {
         sget(&self.config, "config")
             .filter(|c| py::truthy(c))
@@ -1853,6 +1863,88 @@ fn share_words(groups: &[String]) -> String {
     }
 }
 
+/// Milestone 338: about how many MiB of an arm64 root hydo's own files take besides the image
+/// services' trees: the agent, busybox, `tc`, `ip` and `iptables` with their libraries, and each
+/// tree's copy of busybox. Measured on the Mac engine: a root of the busybox image (2 MiB) took
+/// 13.5 MiB of `Shmem` with `network: bridge`.
+pub const ROOT_BASE_MIB: u64 = 12;
+/// The same files compressed in the initramfs (the busybox image's root was 6.1 MiB).
+pub const ROOT_BASE_GZ_MIB: u64 = 5;
+
+/// The MiB that the Linux guest kernel keeps of `ram` MiB of guest RAM before the root is
+/// unpacked: its own code and data and a page struct per page. `MemTotal` was 935 MiB of 1,024
+/// and 1,942 MiB of 2,048 on the Mac engine; this errs a few MiB high.
+fn kernel_keeps(ram: u64) -> u64 {
+    80 + ram / 56
+}
+
+/// Milestone 338: the MiB that an initramfs root of `ram` MiB of guest RAM may take unpacked
+/// when its archive is `zipped` MiB. The kernel holds the archive in RAM while it unpacks it,
+/// into a tmpfs that Linux gives half of the RAM it has then (`totalram_pages() / 2`), so the
+/// archive halves the room twice. PostgreSQL 16.4's root of 467 MiB beside its 142 MiB archive
+/// failed with `Initramfs unpacking failed` in 1,024 MiB (room for about 396 MiB) and fitted in
+/// 2,048.
+pub fn initramfs_room(ram: u64, zipped: u64) -> u64 {
+    ram.saturating_sub(kernel_keeps(ram) + zipped) / 2
+}
+
+/// The least `guest.ram_mib`, in steps of 256 MiB, whose [`initramfs_room`] holds a root of
+/// `unpacked` MiB with an archive of `zipped` MiB.
+pub fn ram_for_initramfs(unpacked: u64, zipped: u64) -> u64 {
+    let mut ram = 256;
+    while initramfs_room(ram, zipped) < unpacked {
+        ram += 256;
+    }
+    ram
+}
+
+/// The MiB of guest RAM that the files of a staged root take in a tmpfs: each file once (a hard
+/// link's other paths take nothing, as the archive of the fingerprint epoch 5 writes them), in
+/// whole pages of 4 KiB (Milestone 338).
+pub fn tmpfs_mib(root: &Path) -> Result<u64, Fail> {
+    use std::os::unix::fs::MetadataExt;
+    let mut seen = std::collections::HashSet::new();
+    let mut bytes = 0u64;
+    for w in fsx::walk(root)? {
+        for f in &w.files {
+            let p = w.dir.join(f);
+            let Ok(st) = fs::symlink_metadata(&p) else {
+                continue;
+            };
+            if st.file_type().is_file() && (st.nlink() < 2 || seen.insert((st.dev(), st.ino()))) {
+                bytes += st.len().div_ceil(4096) * 4096;
+            }
+        }
+    }
+    Ok(mib_of(bytes))
+}
+
+/// Milestone 338: the warning for an initramfs root of `unpacked` MiB with an archive of
+/// `zipped` MiB in `ram` MiB of guest RAM, or None when it fits. `what` names the root's parts.
+pub fn initramfs_warning(unpacked: u64, zipped: u64, ram: u64, what: &str) -> Option<String> {
+    let room = initramfs_room(ram, zipped);
+    if unpacked <= room {
+        return None;
+    }
+    let need = ram_for_initramfs(unpacked, zipped);
+    let max = hydo_manifest::RAM_MIB_MAX as u64;
+    let fix = if need > max {
+        format!(
+            "even at the most guest RAM, {max} MiB, the root does not fit: put the root on the \
+             disk with guest.root: disk"
+        )
+    } else {
+        format!("guest.ram_mib: {need} or more gives the root the room (now {ram})")
+    };
+    Some(format!(
+        "the root takes about {unpacked} MiB of the guest's RAM unpacked ({what}), and on the \
+         Mac engine the root lives there: the kernel holds the compressed root, about {zipped} \
+         MiB, while it unpacks it into a file system that Linux gives half of the RAM it has \
+         then, about {room} MiB of guest.ram_mib: {ram}. The guest stops at boot with \
+         `Initramfs unpacking failed`. To fix it: {fix}"
+    ))
+}
+
 /// Milestone 324: whether the image services' roots fit where the engine keeps them, before the
 /// build unpacks them. Four services of one 1.2 GB image gave four roots in the initramfs, a
 /// 2.0 GB `cpio.gz`, and roots that did not fit in the Mac's guest RAM; the hvx engine takes at
@@ -1861,7 +1953,10 @@ fn share_words(groups: &[String]) -> String {
 /// estimate needs no unpacking and runs for `--check` too.
 ///
 /// - arm64 with the root in the initramfs: the root is a tmpfs in the guest's RAM, which Linux
-///   gives at most half of `guest.ram_mib`.
+///   gives at most half of what it has while it holds the compressed root
+///   ([`initramfs_room`]). Since Milestone 338 the estimate counts the whole root: the trees, 8 %
+///   more for their files' whole pages, and hydo's own files ([`ROOT_BASE_MIB`]); the archive
+///   is the layers as stored and hydo's own files compressed ([`ROOT_BASE_GZ_MIB`]).
 /// - x86_64, and arm64 with `guest.root: disk`: the root partition (1.3 times its content, as
 ///   the build sizes it) and the data disk must fit in [`crate::image::DISK_MAX_BYTES`].
 ///
@@ -1873,6 +1968,8 @@ pub fn root_fit_warnings(oci: &[OciService], m: &Value, arch: &str) -> Vec<Strin
     let share = m.get("root").and_then(|r| r.get("share_images")) == Some(&Value::Bool(true));
     // the images by config digest, in service order, with their services and size
     let mut images: Vec<(String, Vec<String>, Vec<bool>, u64)> = Vec::new();
+    // each image's layers as stored, in MiB (Milestone 338)
+    let mut stored: Vec<u64> = Vec::new();
     for o in oci {
         let d = &o.img.config_digest;
         match images.iter_mut().find(|x| &x.0 == d) {
@@ -1884,7 +1981,11 @@ pub fn root_fit_warnings(oci: &[OciService], m: &Value, arch: &str) -> Vec<Strin
                 let Ok(n) = o.img.unpacked_bytes() else {
                     return Vec::new();
                 };
+                let Ok(z) = o.img.stored_bytes() else {
+                    return Vec::new();
+                };
                 images.push((d.clone(), vec![o.svc.clone()], vec![o.writable], mib_of(n)));
+                stored.push(mib_of(z));
             }
         }
     }
@@ -1928,12 +2029,33 @@ pub fn root_fit_warnings(oci: &[OciService], m: &Value, arch: &str) -> Vec<Strin
     let get = |sec: &str, k: &str| m.get(sec).and_then(|s| s.get(k)).and_then(Value::as_u64);
     if !on_x86 && !crate::arm64::root_on_disk(m) {
         let ram = get("guest", "ram_mib").unwrap_or(1024);
-        let half = ram / 2;
-        if root_now <= half {
+        // the whole root unpacked, and its archive (Milestone 338)
+        let whole = |trees: u64, shared: bool| -> (u64, u64) {
+            let zipped: u64 = images
+                .iter()
+                .zip(&stored)
+                .map(|((_, _, w, _), z)| {
+                    let plain = w.iter().filter(|x| !**x).count() as u64;
+                    let own = w.len() as u64 - plain;
+                    z * (if shared { plain.min(1) } else { plain } + own)
+                })
+                .sum();
+            (
+                (trees * 108).div_ceil(100) + ROOT_BASE_MIB,
+                zipped + ROOT_BASE_GZ_MIB,
+            )
+        };
+        let (unpacked, zipped) = whole(root_now, share);
+        let room = initramfs_room(ram, zipped);
+        if unpacked <= room {
             return Vec::new();
         }
-        let target = if can_share { root_shared } else { root_now };
-        let need = (2 * target).div_ceil(256) * 256;
+        let (su, sz) = whole(root_shared, true);
+        let need = if can_share {
+            ram_for_initramfs(su, sz)
+        } else {
+            ram_for_initramfs(unpacked, zipped)
+        };
         let max = hydo_manifest::RAM_MIB_MAX as u64;
         let mut fix = Vec::new();
         if can_share {
@@ -1944,8 +2066,8 @@ pub fn root_fit_warnings(oci: &[OciService], m: &Value, arch: &str) -> Vec<Strin
         }
         if need > max {
             fix.push(format!(
-                "even at the most guest RAM, {max} MiB, the roots do not fit in half of it: put \
-                 the root on the disk with guest.root: disk"
+                "even at the most guest RAM, {max} MiB, the roots do not fit: put the root on \
+                 the disk with guest.root: disk"
             ));
         } else if need > ram {
             fix.push(format!(
@@ -1953,10 +2075,12 @@ pub fn root_fit_warnings(oci: &[OciService], m: &Value, arch: &str) -> Vec<Strin
             ));
         }
         return vec![format!(
-            "the image services' roots need about {root_now} MiB unpacked ({}), and on the Mac \
-             engine the root lives in the guest's RAM, where Linux gives it at most half of \
-             guest.ram_mib ({half} of {ram} MiB): the guest stops at boot with `Initramfs \
-             unpacking failed`. To fix it: {}",
+            "the image services' roots need about {root_now} MiB unpacked ({}), and the whole \
+             root about {unpacked} MiB of the guest's RAM with hydo's own files. On the Mac \
+             engine the root lives there: the kernel holds the compressed root, about {zipped} \
+             MiB, while it unpacks it into a file system that Linux gives half of the RAM it has \
+             then, about {room} MiB of guest.ram_mib: {ram}. The guest stops at boot with \
+             `Initramfs unpacking failed`. To fix it: {}",
             detail.join("; "),
             fix.join("; ")
         )];

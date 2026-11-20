@@ -645,6 +645,26 @@ pub fn build(
                 true,
                 links(),
             )?;
+            // Milestone 338: the staged root itself against the guest's RAM, also without image
+            // services (root.files, root.nix), unless the estimate before the build warned
+            if !p.fit_warned {
+                let ram = pyv::get(section(&m, "guest")?, "ram_mib")?
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(1024);
+                let zipped = std::fs::metadata(&cpio)
+                    .map_err(|e| io_fail("cannot stat", &cpio, e))?
+                    .len()
+                    .div_ceil(1 << 20);
+                let unpacked = crate::oci::tmpfs_mib(&r)?;
+                if let Some(w) = crate::oci::initramfs_warning(
+                    unpacked,
+                    zipped,
+                    ram,
+                    "measured on the staged root",
+                ) {
+                    crate::errln(io, &format!("hydo-build: warning: {w}"));
+                }
+            }
             outln(
                 io,
                 &format!(

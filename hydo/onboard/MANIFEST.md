@@ -2918,10 +2918,12 @@ image keeps working after hydo is upgraded").
   tree; `hydo compose` writes it for them, and it is opt-in because it changes the image's
   bytes). `hydo build` and `hydo build
   --check` estimate each image's unpacked size from its layers and warn, with the estimate in
-  MiB, when the roots exceed half of `guest.ram_mib` on the Mac (the initramfs root is a tmpfs,
-  which Linux gives half of the RAM) or when the root partition and the data disk exceed the
-  4,096 MiB that hvx takes (Milestone 324); no xattrs/capabilities or devices
-  from layers (FIFOs since Milestone 316); no zstd layers.
+  MiB, when the root partition and the data disk exceed the 4,096 MiB that hvx takes
+  (Milestone 324). On the Mac they warn when the whole root does not fit in the guest's RAM:
+  the image services' trees, hydo's own files, and the compressed root, which the kernel holds
+  while it unpacks the root into a tmpfs of half the RAM left (Milestone 338). `hydo build`
+  also measures the staged root itself. No xattrs/capabilities or devices from layers (FIFOs
+  since Milestone 316); no zstd layers.
 - An image's hard links stay links in the root from the fingerprint epoch 5 (Milestone 338).
   Before, each path of an arm64 root was a whole copy: the 400 applets of the busybox image
   took 446 MiB of guest RAM, and 14 MiB with the links.
