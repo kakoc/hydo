@@ -3813,3 +3813,71 @@ services through `hydo-oci` and `/tmp/hydo`.
 `~/hydo/build/m204` (`a76d7fe857fdb37c`, `efbde7b57264be0f`) and the epoch-4 images in
 `~/hydo/build/m302` (`e153f376096a072c`, `6a5c2fe208174af3`) as before. They have no image
 service.
+
+**The re-recording pass (hydo 0.5.0, 2026-11-20).** `hydo-bench rebaseline --write --thorough`
+re-recorded the list on the three engines, with the quick 0.5.0 candidates as `--release`
+(docs/HISTORY.md, the section on the prepared 0.5.0 release); its `epoch` is 5. Every image was
+built twice with the same bytes, and every run gave the same values twice from fresh boots.
+
+- hvx (the bare-metal machine, a tree unpacked under umask 022, the module
+  `91D86B693F4D4035C368F9B`, 9,005 s: builds 2,837 s, runs 6,168 s): all 43 images have new
+  bytes, and all 141 runs moved. The guest's clock follows the virtual TSC (Milestone 323), so
+  every boot's timing and every fingerprint moved. Seven verdicts changed (below).
+- The Mac (`hvm`, 1,066 s: builds 509 s, runs 557 s, two VMs at a time with the copy-on-write
+  workers of Milestone 335): all 21 images have new bytes, and all 76 runs have new
+  fingerprints. 7 `ctl` values moved, those of the image services' runs (`hvm/voting`,
+  `hvm/redis-oci`), whose launchers bind their system folders once per boot and give each
+  service its own `/tmp` (Milestones 317, 331 and 338). No verdict changed; one verdict line
+  differs in its numbers (`hvm/voting` `C=12`: 60.84 s after the heal instead of 60.66 s).
+- KVM: the values come from AMD EPYC hosts on GitHub's runners (run 44751184557: the 9V45 and
+  9V74; run 44755347384: three 7763 hosts, which gave the same values). All 6 images and all 19
+  runs moved, the `ctl` values of the three pauses of Qdrant's thread among them (the freeze
+  script of Milestone 338). Two verdicts changed (below). The four Intel Xeon 6975P-C hosts give other
+  fingerprints with the same verdicts and `ctl` values, and the list does not record them. The
+  quickstart's power cut loses `k:1` at the steps it lost it at epoch 4.
+
+Each verdict change was decided as in sections 20 and 26: a change of the same class is
+accepted, and a finding that a schedule no longer shows gets a new schedule that shows it. The
+searches for new schedules ran one VM at a time on the pass's images.
+
+- `hvx/stack-errors-fix` `disk=ioerr:5 dseed=1 | run`: ERROR `restart after the faults`, now of
+  redis again, as at epoch 3, instead of mysql. The class is the same, and it is accepted.
+- `hvx/etcd-hc-3.5.5` `K=etcd1@10+1 P=etcd3@26+1`: the history check `etcd.kv_linearizable` now
+  breaks: a read of `k30` that no order of the operations explains. This is etcd issue 14685's
+  second symptom, which the image's release has, and 3.5.6 passes the schedule. It is accepted.
+- `hvx/qdrant-flaky-buggy` `disk=none | run` on 4 vCPUs: the test passes now; at epoch 4 it
+  failed with `Timeout waiting for update queue to empty`. The 35 operations drain within the
+  test's 2 seconds of guest time with the exact clock, also at the turn lengths `q=30000`,
+  `q=100000` and `q=300000`, of which the last two failed before. That failure came with hvx's
+  old guest clock, not with the test's race, so the OK is accepted (the example's RESULTS.md).
+- `hvx/redis-live` `P=redis@17~0:20000`: the liveness check holds now. Pauses of 20 s before
+  steps 12, 14 and 15 miss the 10 s deadline (10.02 s), and pauses before steps 13, 16, 18 and 19
+  and pauses of 25 s and 30 s before steps 16 to 18 hold. `P=redis@15~0:20000` replaces it
+  (VIOLATION `[redis.pending_resolved] not satisfied 10.02s after heal`, `189c7545810ab88b`).
+  The comment in `hydo-live.yaml` keeps step 18, because the manifest's text is inside the image.
+- `hvx/nats-flaky-buggy` `q=19726` on 2 vCPUs: the test fails now. At epoch 5 it fails at most
+  turn lengths. The default turn sweep (27 runs) found the boundary between `q=18813` (OK,
+  `8906517ac7452a59`) and `q=18870` (VIOLATION, `a94f7147f418291f`), and these replace `q=19726`
+  and `q=19783`. The fixed test passes at `q=18870` (`f2baba63173fab8b`).
+- `hvx/etcd-3.5.5` `disk=cut dseed=1 | run C=30` and `K=etcd2@25+1 P=etcd1@23+1`: both pass now. A
+  hand sweep of 30 schedules on the epoch-5 image reached both symptoms of etcd issue 14685.
+  `C=20` replaces `C=30` (VIOLATION `members disagree: revisions 66 66 67`, `86b9fce1b00c8bc3`),
+  and `K=etcd2@25+1 P=etcd1@27+1` replaces the other. It gives the second symptom, which no
+  schedule of the epoch-4 sweep reached: a client read revision 87 through etcd3 after 88
+  through etcd2 (`client.revisions_monotonic`, `5c53a18ec56646d5`). 3.5.6 passes both. The
+  example's RESULTS.md has the sweep.
+- `kvm/qdrant-flaky-buggy` `P=workload/tests::wal_reco@0~208:500`: the test passes now, and the
+  start at 207 ms fails. An epoch-5 image freezes the threads with the reaction's freeze script
+  (Milestone 338), which moves the pause by about 1 ms of guest time. `pause-check.sh` (run
+  44755347384, four hosts) found one failing start of 120 from 190 to 309 ms: 207 ms (VIOLATION
+  `length: 0, op_num: Some(500)`, `1e3a56d501f794a2`). The pause at 207 ms and its neighbour at
+  208 ms (OK, `c5d668284fd59fd6`) take the two entries' places, and the fixed test is recorded at
+  207 ms (`ead409a459af4d68`).
+
+**The pinned reproducers after the pass** keep their images and values: on hvx the epoch-2
+images in `~/hydo/build/m204` give `a76d7fe857fdb37c` and `efbde7b57264be0f`, and the epoch-4
+images in `~/hydo/build/m302` give `e153f376096a072c` and `6a5c2fe208174af3`, with the pass's
+programs. Their epoch-5 images (`4b78d7a8…` and `8951cf69…`, the list's `stack-old` and
+`stack-fix`, copied to `~/hydo/build/rel050`) give `b6e78273b1d21304`
+(VIOLATION, order 11) and `b531d6bcaa8489b7` (OK) on hvx, and `4b9f52b31c1a58b4` and
+`8672be7cd62d3d75` on KVM (AMD).

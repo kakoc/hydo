@@ -284,3 +284,30 @@ list now records one of them for both releases, each run twice from a fresh boot
 |---|---|---|
 | 3.5.5 | VIOLATION `etcd.members_agree`: members disagree, revisions 100 101 100 | `485e22a75d37bda7` |
 | 3.5.6 | OK, acked=90, every invariant holds | `e7334f935e51ecad` |
+
+## The fingerprint epoch 5 (hydo 0.5.0)
+
+At the fingerprint epoch 5 hvx keeps the guest's time with the virtual TSC (`guest.exact_tick`),
+and the timing moved again: `C=30` and `K=etcd2@25+1 P=etcd1@23+1` pass on 3.5.5. A hand sweep of
+30 schedules on the epoch-5 images reached both symptoms:
+
+- Kills right after a defrag (`K=etcd<n>@<5,10,15,20,25>+2`): 7 of 15 broke `etcd.members_agree`
+  on 3.5.5.
+- Power cuts (`disk=cut dseed=1 | run C=<k>`): the cuts before steps 5, 10, 15 and 20 broke
+  `etcd.members_agree`, and the cuts before steps 25 to 29 passed.
+- etcd2 killed before step 25 and etcd1 paused for one step: the pauses before steps 21 and 24
+  passed, the pauses before steps 22 and 26 broke `etcd.members_agree`, and the pause before step
+  27 gave the second symptom, `client.revisions_monotonic`.
+
+The list records a schedule of each symptom for both releases, each run twice:
+
+| image | schedule | verdict | fingerprint |
+|---|---|---|---|
+| 3.5.5 | `disk=cut dseed=1 \| run C=20` | VIOLATION `etcd.members_agree`: members disagree, revisions 66 66 67 | `86b9fce1b00c8bc3` |
+| 3.5.6 | `disk=cut dseed=1 \| run C=20` | OK, acked=60, every invariant holds | `52b58e5924fe0572` |
+| 3.5.5 | `disk=none dseed=1 \| run K=etcd2@25+1 P=etcd1@27+1` | VIOLATION `client.revisions_monotonic`: a client read revision 87 through etcd3 after 88 through etcd2 | `5c53a18ec56646d5` |
+| 3.5.6 | `disk=none dseed=1 \| run K=etcd2@25+1 P=etcd1@27+1` | OK, acked=90, every invariant holds | `c15f92136c816111` |
+
+The history check of `hydo-hist.yaml` (`etcd.kv_linearizable`) now breaks on 3.5.5 with `K=etcd1@10+1
+P=etcd3@26+1`, the second symptom seen as a read that no order of the operations explains, and
+3.5.6 passes it.

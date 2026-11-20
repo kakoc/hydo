@@ -203,6 +203,14 @@ sibling test `test_wal_replay_tolerates_corrupt_tail_entry` (issue 10103, on Win
 is the same slowness or an artifact of the turn scheduler was not checked. The fixed program
 passes, because its test waits for the worker with `plunge_async` before the 2-second loop.
 
+At the fingerprint epoch 5 (hydo 0.5.0) the buggy test passes on 4 vCPUs. An image built at epoch
+5 keeps the guest's time with the virtual TSC (`guest.exact_tick`), and the 35 operations drain
+within the 2 seconds: `disk=none | run` with `--vcpus 4` and the default turns, and with
+`q=30000`, `q=100000` and `q=300000`, all ended OK with `length: 35`. So that failure came with
+hvx's old guest clock, not with the test's own race. Why the old clock made the drain take
+longer was not traced.
+`hydo/onboard/recorded.json` keeps the 4-vCPU schedule with its new verdict, OK.
+
 ### On hvx: a pause of the test's thread (Milestone 226)
 
 The timed pause can name threads of the workload: `P=workload/<thread name>@<at>~<off>:<dur>`
@@ -313,6 +321,22 @@ To run the failing schedule at epoch 4:
 ```sh
 hydo build hydo.yaml
 hydo run --backend kvm "disk=none | run P=workload/tests::wal_reco@0~208:500"
+```
+
+At the fingerprint epoch 5 (hydo 0.5.0) the start at 208 ms passes and 207 ms fails. An image
+built at epoch 5 freezes the threads with the script of a reaction's freeze, which takes the
+workload's largest session, so the pause begins about 1 ms of guest time later. `pause-check.sh`
+ran on GitHub's runners (run 44755347384: three AMD EPYC 7763 hosts and one Intel Xeon 6975P-C).
+The reload still came at 3.33 s of guest uptime. Of the 120 starts from 190 to 309 ms only 207 ms
+failed, on every host, with `length: 0, op_num: Some(500)` (`1e3a56d501f794a2` on AMD), and no
+start ended in ERROR. The start at 208 ms passed with `length: 27` (`c5d668284fd59fd6`). The fixed
+test passed with the pause at 207 ms (`ead409a459af4d68`), and so did a pause of the whole
+workload. `hydo/onboard/recorded.json` now holds the pause at 207 ms and its neighbour at 208 ms.
+To run the failing schedule at epoch 5:
+
+```sh
+hydo build hydo.yaml
+hydo run --backend kvm "disk=none | run P=workload/tests::wal_reco@0~207:500"
 ```
 
 With two vCPUs no start from 390 to 460 ms failed the test: 50 passed, and 21 (390 to 410 ms)

@@ -261,24 +261,25 @@ const USER_PAGES: &[&str] = &[
 /// where it is recorded. Add a value here only with its source.
 const CITED_ELSEWHERE: &[(&str, &str)] = &[
     (
-        "fb8f826f99c291ed",
-        "wfp of the Redis example's clean run on hvx at the fingerprint epoch 4, recorded with fp \
-         2f9186af5e3be2b1 (docs/HISTORY.md, Milestone 302)",
+        "87738d589202f285",
+        "wfp of the Redis example's clean run on hvx at the fingerprint epoch 5, recorded with fp \
+         cce52f9e8565f6e2 (docs/HISTORY.md, the 0.5.0 release)",
     ),
     (
-        "ffe9697f49bd79e3",
-        "wfp of the Redis power cut on hvx at the fingerprint epoch 4, recorded with fp \
-         d299dc487ceb5e3c (Milestone 302)",
+        "ec8dfde036b545ee",
+        "wfp of the Redis power cut on hvx at the fingerprint epoch 5, recorded with fp \
+         8bee301c59ad1b12 (the 0.5.0 release)",
     ),
     (
-        "1b5da9cd7de7df13",
+        "fd403ef8d08fa636",
+        "dseed of the Redis quickstart exploration's minimal schedule for a restart after disk \
+         errors (seed 12 of 1-20, swarm, on hvx and KVM at the fingerprint epoch 5; docs/HISTORY.md, \
+         the 0.5.0 release)",
+    ),
+    (
+        "ba29f78daa80a520",
         "fp of the messages tutorial's clean run on the Mac engine, twice, at the fingerprint \
-         epoch 4 (docs/ONBOARD.md; docs/HISTORY.md, Milestone 302)",
-    ),
-    (
-        "362259904816818c",
-        "dseed of the messages tutorial exploration's minimal schedule (seed 20 of 1-20 on the \
-         Mac engine; the same milestone)",
+         epoch 5 (docs/ONBOARD.md; docs/HISTORY.md, the 0.5.0 release)",
     ),
 ];
 

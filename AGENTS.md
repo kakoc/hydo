@@ -288,7 +288,8 @@ dry-runs the packages on every pull request that changes one. The details are in
 **Fingerprints.** The fingerprint epoch is 5 (M317; 4 from M269, 3 from M234, 2 from M204, 1
 from M155). An image built at epoch 5 has the image services' launchers of M317, which mount the
 system folders once per boot. Since M331 they also give each image service a `/tmp` of its own. On hvx an x86_64 image built at epoch 5 keeps time with its TSC
-(M323, `guest.exact_tick`). The recorded values are still epoch 4's (open item 105). An image built at epoch 3 or later boots the Mac and KVM guest kernels
+(M323, `guest.exact_tick`). The 0.5.0 release's pass re-recorded every value of the list at
+epoch 5 (docs/REBASELINE.md section 29). An image built at epoch 3 or later boots the Mac and KVM guest kernels
 with cgroups. An image built
 at epoch 4 carries no saved regression: `hydo build` writes them beside it, as
 `<image>.regressions.json`, so saving or editing one leaves the image's bytes and the other
@@ -301,12 +302,14 @@ re-recorded every value of the list at epoch 4. The pinned reproducers are
 machine. Their epoch-3 images (`b498b9c8…` and `c8fc9b42…`, in `~/hydo/build/m244`) give the same
 two values on hvx. Their epoch-4 images (`728e344c…` and `b83e3d39…`, in `~/hydo/build/m302`)
 give `e153f376096a072c` and `6a5c2fe208174af3` on hvx and `66da20bdbfafd6d2` and
-`0bcce788f5ef3f4d` on KVM (AMD). Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
+`0bcce788f5ef3f4d` on KVM (AMD). Their epoch-5 images (`4b78d7a8…` and `8951cf69…`, in
+`~/hydo/build/rel050`) give `b6e78273b1d21304` and `b531d6bcaa8489b7` on hvx and
+`4b9f52b31c1a58b4` and `8672be7cd62d3d75` on KVM (AMD). Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
 `ba0aa0612502a1df` under this hydo, because an image keeps the defaults of its own epoch
 (`hydo_image::defaults`). `hydo/onboard/examples/stack/build-reproducers.sh` rebuilds both
-images. The quickstart's Redis example gives `05f433ee427f8e3c` (OK) and `2174995ebfb4d2d6`
-(`C=12 R=everysec`, `k:0` lost) on the Mac, and `7adecc09c07aaaa4` and `fd41aeb199057728` (`k:1`
-lost) on KVM (AMD). Every recorded example value is in `hydo/onboard/recorded.json`, and
+images. The quickstart's Redis example gives `cce52f9e8565f6e2` (OK) and `8bee301c59ad1b12`
+(`C=12 R=everysec`, `k:1` lost) on hvx, `cc6abeb1ec4e4f29` and `b9a2d62ab3eaf0cb` (`k:0` lost)
+on the Mac, and `d2e4da56c54ce2a1` and `af9a168ee9d9071c` (`k:1` lost) on KVM (AMD). Every recorded example value is in `hydo/onboard/recorded.json`, and
 `hydo-bench rebaseline` checks or re-records them (`docs/REBASELINE.md` "How to re-baseline").
 
 **The hvx engine.** The module (`hv/hvx/hvx.c`, ABI `hvx_abi.h`) boots Linux 6.6.35
@@ -1831,8 +1834,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
    times (M65).
 8. etcd 3.5.5: why issue 14685's second symptom needs a later pause of another member was not
    investigated (M78). At the fingerprint epoch 4 no schedule of a 90-schedule sweep reached the
-   second symptom, so the list shows the issue by its first symptom (M302). A search with timed
-   kills and pauses inside a step was not run.
+   second symptom (M302). At epoch 5 a sweep of 30 schedules reached it again with
+   `K=etcd2@25+1 P=etcd1@27+1`, and the list shows the issue by both symptoms (the 0.5.0
+   release). A search with timed kills and pauses inside a step was not run.
 9. Explorer gaps. The oracle reads Kafka before its restart after a kill at the last order (M55).
    The `xt` shrinker keeps a seeded policy (M49). An OK verdict shows only the first invariant's
    details (M47).
@@ -2047,7 +2051,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A pause of threads runs on the Mac and KVM engines since M234 (the fingerprint epoch 3:
       guest kernels with cgroups). It fails Qdrant's test on the Mac at 11 of 81 starts. On KVM
       with one vCPU it fails it at 1 of 81 starts (239 ms) on four AMD and Intel hosts. At the
-      fingerprint epoch 4 it fails it at 1 of 120 starts (208 ms, M302). With two vCPUs
+      fingerprint epoch 4 it fails it at 1 of 120 starts (208 ms, M302). At epoch 5 it fails it
+      at 1 of 120 (207 ms, the 0.5.0 release). With two vCPUs
       no start from 390 to 460 ms failed it on KVM: 50 passed and 21 ended in ERROR. A wider
       window was not searched, and the ERROR's cause was not read.
     - On an image built before epoch 5 the timer's freeze script ends the run with an error. This
@@ -2152,37 +2157,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `skill-v1.0.0` to `skill-v2.4.0` wait for deletion after 0.5.0 is published.
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
-    milestone and the values it moves; the pass removes the lines.
-    - Milestone 317 raised the fingerprint epoch to 5. Every image of the list gets new bytes
-      when it is built (its record says epoch 5): hvm 21, kvm 6 and hvx 43. The image services'
-      images also get the new launcher: `hvm/voting` and `hvm/redis-oci` (7 runs), and
-      `hvx/redis-oci`, `hvx/restate-oci`, `hvx/voting`, `hvx/voting-generated` and
-      `hvx/voting-loopback` (14 runs). On hvx those 14 runs are expected to move; the 76 Mac and
-      19 KVM runs are likely to move. The pass records the list at epoch 5 and fills
-      docs/REBASELINE.md section 29.
-    - The list's epoch-4 values are the ones of the release 0.4.1, since its branch was merged
-      (docs/REBASELINE.md section 28). Its re-pins of `hydo-world`, `hydo-world-tls` and
-      `hydo-grpc` moved 9 of 43 hvx images (30 of 141 runs) and 9 of 21 Mac images (36 of 76
-      runs). No KVM value moved. These values describe images built at epoch 4. At epoch 5 the
-      same images carry the programs of 0.4.1, so the re-pin moves nothing more there. The
-      release 0.5.0 re-pins these programs again with its version, and the pass runs after that.
-    - Milestone 323 makes every x86_64 image built at epoch 5 keep time with its TSC on hvx
-      (`/etc/hydo/exact-tick` with `tsc`). So every hvx run of the list moves at epoch 5: all
-      43 images and their runs, with a new guest clock, not only new bytes. A verdict can move
-      too, because the guest's timeouts now follow the virtual TSC. The KVM images get the file
-      as new bytes, which the KVM engine ignores; the Mac images do not change.
-    - Milestone 331 gives every image service of an image built at epoch 5 a `/tmp` of its own
-      (`oci_own_tmp`). It writes a new launcher, a new folder `/.hydo/tmp` in each image's
-      tree, and `HYDO_BUGGIFY_FILE` in the service's environment. It moves the same 7 images with image
-      services as Milestone 317 (`hvm/voting`, `hvm/redis-oci`, `hvx/redis-oci`,
-      `hvx/restate-oci`, `hvx/voting`, `hvx/voting-generated`, `hvx/voting-loopback`; 21 runs).
-      Their workloads and checks reach the services through `hydo-oci` and `/tmp/hydo`, so no
-      verdict is expected to move with it (docs/REBASELINE.md section 29).
-    - Milestone 338 adds three changes of epoch 5. An arm64 root keeps its hard links, so a Mac
-      image whose root has a file of several paths gets other bytes. The image services'
-      launchers bind `/sys` recursively, which moves the same 7 images (21 runs). A timed pause
-      of threads sends the reaction's freeze script, which moves the three runs of
-      `kvm/qdrant-flaky-buggy` and `kvm/qdrant-flaky-fixed` (docs/REBASELINE.md section 29).
+    milestone and the values it moves; the pass removes the lines. Empty since the 0.5.0
+    release's pass (docs/REBASELINE.md section 29).
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -3064,13 +3040,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     Since M323 an x86_64 image built at epoch 5 keeps time with its TSC. What is left:
     - An image built before epoch 5 keeps the gap of 152 ns a tick. A busy guest there still
       runs its clock slowly after some minutes of uptime. Rebuilding the image at epoch 5 fixes
-      it; the re-recording pass rebuilds the examples (open item 105).
+      it; the 0.5.0 release's pass rebuilt the examples.
     - The KVM engine's guest kernel was checked by its source only: its clocksource and its timer
       read one exit clock in nanoseconds. No KVM run measured a long busy run. The Mac engine's
       probe showed no gap.
     - The TSC clock ran on the probe, the stack of the pinned reproducers, ClickHouse seed 20,
-      and an epoch-5 Redis image with `T=`, `tj=`, `xt=`, `pp=` and two vCPUs. No exploration ran
-      with it, and the hvx examples' verdicts at epoch 5 come with the pass.
+      and an epoch-5 Redis image with `T=`, `tj=`, `xt=`, `pp=` and two vCPUs. It ran on every hvx
+      example of the list in the 0.5.0 release's pass, where 7 verdicts changed, each decided.
+      Only the quickstart's exploration ran with it.
     - A clock read still costs the guest 2 µs, and every counted exit 1 µs. A program that reads
       the clock in a tight loop sees its time run 2 µs per read.
     - Seeds 27 and 40 of the ClickHouse explorations did not run with either clock. Seed 33 ran

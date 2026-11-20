@@ -221,7 +221,7 @@ hydo run "disk=none | run"
 hydo run "disk=none | run"
 ```
 
-On the Mac engine both runs printed `fp=1b5da9cd7de7df13` and the verdict `OK`. `hydo report
+On the Mac engine both runs printed `fp=ba29f78daa80a520` and the verdict `OK`. `hydo report
 --details` with the run directory shows each claim and how many cases it judged:
 
 ```text
@@ -254,11 +254,11 @@ It also prints `hydo: warning: 2 passing first runs may have checked nothing`: i
 the client recorded no acknowledged message, so their checks had nothing to judge. The warning
 says nothing about the failure.
 `hydo report` says the same in words; `--details` shows the minimal schedule and the verdict.
-`dseed=` is the seed of the disk's faults. The schedule's last word, `W=...`, is written by hydo: it records which client commands ran and in
+`dseed=` is the seed of the disk's faults; `dseed=0` means that it decides nothing in this schedule. The schedule's last word, `W=...`, is written by hydo: it records which client commands ran and in
 which order, so that a replay runs the same ones. Copy it as it is.
 
 ```text
-- minimal schedule: `disk=cut dseed=362259904816818c | run C=10 S=never W=:p1,r50,cparallel_driver_produce,1.1.0.1802048978`
+- minimal schedule: `disk=cut dseed=0 | run C=10 S=never W=:p1,r50,cparallel_driver_produce,1.1.0.1802048978`
 - verdict: `HYDO-ORACLE: VIOLATION [queue.no-loss] m1 was acknowledged to process 1 at 0.111 s and never delivered in channel orders, which was drained`
 ```
 
