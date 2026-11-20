@@ -553,6 +553,19 @@ commit; none moves a recorded value:
   Cargo and Go programs that the manifest's services run. Its schedules name the one service
   that runs a place (`hydo guide faults`).
 
+**The s3 emulator and the shell assertion SDK (M329, tentative number).** Three gaps of a
+user's onboarding with 0.4.1, each fix its own commit; none moves a recorded value:
+- An `http` proxy keeps the service's `Content-Length` and forwards whole request bodies (up to
+  512 MiB). Before, a `HEAD` through the s3 proxy had no size, so rclone deleted each object it
+  had uploaded and `object_store` failed; bodies were cut to 1 MiB (open item 162).
+- rclone 1.76.0 answers `If-None-Match: *` and `If-Match` as S3 does (412). The s3 proxy's
+  routes `put_if_absent` and `put_if_match` (the route key `if_header:`, and `errors:` on an
+  `http` proxy's route, format-1 additions) let `H=s3.put_if_absent@3-6:status=412` make a lost
+  race, and `--protocol-faults` draws 412 there.
+- Both releases ship the shell assertion SDK as `hydo/sdk/hydo_assert.sh`, and `hydo guide
+  hydo_assert.sh` prints it; `hydo guide sdks` puts it into an image with `root.files`. Its
+  records reach the property table of `result.json` (a Mac engine run).
+
 **Business rules: what found what (M215).** On Formance Ledger, rules over the ledger's own
 state (balances, moves, effective volumes, overdraft, reverts, bulks, the audit log) found
 nothing. A duplicate from a retry without a key, and a payment lost on a lying disk, showed only
@@ -2064,7 +2077,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     SMTP proxy records connections, not messages. An emulator's state is lost at a power cut.
     vercel-labs/emulate (Stripe and Resend with state, and many other providers) needs an image
     with Node.js 24 that hydo would build and pin. The changed `hydo-world` reaches a release at
-    its next re-pin.
+    its next re-pin; so does M329's (the proxy's `Content-Length` and whole bodies, `if_header:`,
+    and `errors:` on an `http` proxy's route). M329's fix and the s3 proxy's conditional routes
+    ran through `hydo-world` natively and in its tests, against the pinned rclone under Docker,
+    not in a VM.
 117. The clock audit (M248). It reads text, so a reading that passes through an interface with
     several implementations, a channel or a queue is not followed. Its schedules place the steps
     at fixed workload steps. Only the Valkey schedules ran; the Temporal and River schedules, and
@@ -2777,11 +2793,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The diagnosis's environment rule reads the last log lines only. A service whose log names
       both a permission error and a damaged file keeps the claim of lost data, and a service
       that logs nothing gets no sentence.
-    - Through the s3 emulator's proxy, rclone's PUTs stored empty objects, on loopback with 0.4.0
-      too; reads and bucket lists went through. How the proxy handles rclone's upload was not
-      traced (a signed streaming body, or `Expect: 100-continue`). An image service sees the
-      emulators' names only when it mounts the manifest's `/etc/hosts`, as `hydo compose`'s
-      services do.
+    - The s3 proxy's empty objects had their cause in M329: the proxy dropped the service's
+      `Content-Length`, so rclone read a size of 0 after each upload and deleted the object. The
+      fix reaches the guest with the next re-pin of `hydo-world` (open item 116). An image
+      service sees the emulators' names only when it mounts the manifest's `/etc/hosts`, as
+      `hydo compose`'s services do.
     - No x86_64 image with a FIFO was built; the debugfs commands ran in a Linux container only.
     - `hydo compose`'s `guest.ram_mib: 1024` was too small for the PostgreSQL image on the Mac:
       the initramfs did not fit (`Initramfs unpacking failed: write error`), and the run failed
@@ -2883,8 +2899,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       error, but no run used such a Docker.
     - `hydo build` compares no image file with the lock file, for any image. A changed file is
       caught by `hydo compose` and fetch-images.sh only.
-    - hydo-build's equivalence corpus has six mismatches from M306 (two mutants with a
-      `contracts:` key the recorded answers do not list).
+    - hydo-build's equivalence corpus has 39 mismatches. Six are from M306: two mutants with a
+      `contracts:` key the recorded answers do not list. Twelve are from M329: the known keys of
+      a fake's and a proxy's route. The others name the guest keys of later milestones.
 166. The three gaps of a user's onboarding with 0.4.0 (M324, tentative number). What is left:
     - The roots' estimate counts the image layers only. It leaves out the rest of the root
       (the agent, busybox, the tools) and the copies that an image's hard links become in the
@@ -3839,6 +3856,11 @@ build machine, before 2026-10-13.
   unread `A::Item` values gives a false `broken`; associated types of a type parameter, private
   error fields, and fallible or argument-free constructors stop contracts on the API. Nothing
   recorded moved
+- M329 (tentative number): three gaps of a user's onboarding with 0.4.1. The s3 emulator's
+  proxy keeps the service's `Content-Length` and whole bodies, so uploads through it no longer
+  vanish (open item 162). rclone answers conditional writes 412 as S3 does, and the routes
+  `put_if_absent` and `put_if_match` let an `H=` rule answer them 412. Both releases ship the
+  shell assertion SDK, and `hydo guide hydo_assert.sh` prints it. Nothing recorded moved
 
 ## Where to look
 

@@ -18952,3 +18952,112 @@ The worst problems, in order:
 A bug planted in smallvec's `swap_remove` broke its contract on 25 of 1,000 calls and shrank to
 six elements and the index 1. The page lists nine fixes. Open items 139 and 163 have what is left.
 Nothing recorded moved.
+
+## Milestone 329 (tentative number): conditional writes on the s3 emulator, the s3 proxy's lost uploads, and the shell assertion SDK
+
+A user's onboarding with 0.4.1 on the Mac named three gaps. The user's system writes S3 objects
+with Rust's `object_store` and its conditional writes, and the user did not know whether the s3
+emulator honours them. Through the s3 emulator's proxy, uploads stored
+empty objects (open item 162). And `hydo guide sdks` named the shell assertion SDK
+`hydo/stack/hydoassert/hydo_assert.sh`, which no release ships. Each fix is its own commit.
+
+**The s3 proxy's lost uploads (open item 162).** The pinned rclone 1.76.0 ran under Docker on this
+Mac, with this tree's `hydo-world` as its proxy, and four clients wrote objects through the proxy
+and directly. The cause was the proxy's answer, not the request body:
+
+- The proxy dropped the service's `Content-Length` from every answer. An answer to a `HEAD` has no
+  body, so it went out with no size at all. rclone 1.76.0 as a client reads the size after each
+  upload: it read 0, printed `corrupted on transfer: sizes differ src 6 vs dst 0`, and deleted the
+  object it had just written, three times. `object_store` 0.14.2 failed every `head()` with
+  `MissingContentLength`.
+- An answer body over 2,048 bytes went out chunked without `Content-Length`, as Go's server writes
+  a handler's answer of unknown length. `object_store`'s `get()` of such an object failed with
+  `MissingContentLength` too.
+- The proxy cut every request body to its first 1 MiB, as a fake does. The AWS CLI's `PUT` of
+  3,000,000 bytes failed with `IncompleteBody`, and a body cut that way would be a shorter object.
+
+Now the proxy keeps the service's `Content-Length`: in the answer to a `HEAD` it is written as the
+service sent it, and an answer with a body of that length goes out with it, not chunked. Go's
+server does the same with a `Content-Length` that a handler sets. An `http` proxy forwards the whole
+request body, up to 512 MiB, and answers a larger one `413`. A fake still reads the first 1 MiB.
+The `aws-chunked` bodies of the AWS SDKs' signed streaming uploads and `Expect: 100-continue` were
+forwarded correctly before and after.
+
+**What rclone does with conditional writes.** `object_store` sends `If-None-Match: *` for
+`PutMode::Create` and `If-Match: <etag>` for `PutMode::Update`. rclone 1.76.0 answered both as S3
+does, directly and through the proxy, with `curl` and with `object_store` 0.14.2:
+
+| Request | rclone 1.76.0 |
+|---|---|
+| `If-None-Match: *`, a new key | 200 |
+| `If-None-Match: *`, an existing key | 412 `PreconditionFailed`; `object_store`: `AlreadyExists` |
+| `If-Match` with the object's ETag | 200 |
+| `If-Match` with another ETag | 412; `object_store`: `Precondition` |
+| `If-Match` on a missing key | 404 |
+
+In 30 rounds of 8 parallel writers of one new key with `If-None-Match: *`, one writer won each
+round. In 30 rounds of 8 parallel updates of one key with its ETag, one won each round. The same
+held through the proxy. So no newer rclone is needed, and nothing was re-pinned.
+
+**`H=` faults that answer 412.** A system's code for a lost race runs only when another writer
+wins. Two format-1 additions let a project make that happen:
+
+- `if_header:` on a route of a fake or an `http` proxy: the route takes only a request with that
+  header.
+- `errors:` on a route of an `http` proxy, as on a fake's route since Milestone 249.
+
+The s3 emulator's proxy now has the routes `put_if_absent` (a `PUT` with `If-None-Match`) and
+`put_if_match` (a `PUT` with `If-Match`) before `put_object`. Each answers an `H=` rule
+`status=412` with S3's `PreconditionFailed` XML, as `application/xml`, without reaching rclone:
+`H=s3.put_if_absent@3-6:status=412`. `hydo explore --protocol-faults` draws the statuses of an
+`http` proxy's `errors:` too, so it draws 412 on these routes. A manifest with an s3 emulator
+gets two more `H=` targets, so the explorer draws other schedules for it. No recorded example
+has an s3 emulator: the checkout example is not in `hydo/onboard/recorded.json`.
+
+**The shell assertion SDK.** Both release trees ship it as `hydo/sdk/hydo_assert.sh`
+(`build-release.sh` of each platform), and every `hydo` prints it with `hydo guide
+hydo_assert.sh`, from a link in `hydo-agents`' `embed/`, so a `cargo install` has it too. `hydo
+guide sdks` has the recipe: copy it into the project, list it in `root.files`, and source it in
+the workload. hydo puts it into no image by itself, so no image's bytes move. The SDK's default
+output is now `/dev/console`, which every engine's guest has, instead of `/dev/ttyS0`, which only
+the x86_64 guests have. No image carries the SDK, so no recorded value moved.
+
+**Evidence.**
+
+- Native, under Docker with the pinned rclone image (arm64 digest `fbcca19e…`) and this tree's
+  `hydo-world` as the proxy on this Mac:
+  - before the fix: rclone 1.76.0's `copyto` of a 6-byte file through the proxy failed as above and
+    left no object; `object_store`'s `head()` failed; the AWS CLI's 3 MB `PUT` failed with
+    `IncompleteBody`.
+  - after it: rclone's `copyto` of 6 bytes and of 20,000,000 bytes in 5 MB parts read back equal
+    (`rclone cat | cmp`); `object_store` created, updated, read a 3 MB object and a multipart object
+    of two 5 MiB parts with the right sizes; the AWS CLI's 3 MB `PUT` stored 3,000,000 bytes.
+  - The AWS CLI's multipart upload (its CRT client) failed directly against rclone too, with
+    `AWS_ERROR_S3_MISSING_UPLOAD_ID`, so it is no fault of the proxy.
+- `hydo-world`'s test `proxy_s3::the_s3_proxy_carries_real_clients_uploads` runs the request
+  shapes through the `hydo-world` program in front of a small S3 service in the test: rclone's
+  `PUT` and `HEAD`, the AWS SDKs' `aws-chunked` body after `Expect: 100-continue`, a 3 MB body
+  with `HEAD` and `GET`, and the conditional routes with an `H=` rule `status=412`. The unit test
+  `a_route_with_if_header_fits_only_a_request_with_the_header`, the manifest's
+  `the_s3_proxy_has_routes_of_conditional_writes_that_answer_412` and
+  `if_header_and_errors_are_for_http_proxy_routes`. `xcheck`'s transcript of the Go version did
+  not move.
+- The shell SDK: the test `shell_sdk::the_shell_sdk_s_records_and_a_raw_line_reach_the_property_table`
+  of `hydo-explore` runs every function of the SDK with the host's tools and reads the records
+  into the property table. On the Mac engine, with the released 0.4.1, a workload that sourced
+  the SDK from `root.files` and wrote one raw `printf 'HYDO-ASSERT {...}' > /dev/console` line
+  gave a `result.json` whose property table listed `shell.step_ran` (`always`), `shell.reached`
+  (`reachable`), `shell.tmp_writable` (`eventually`) and `raw.printf` (`sometimes`), each `PASS`.
+  The SDK before the change gave the same table there.
+
+**What moved.** No recorded value. The changed `hydo-world` (the proxy's `Content-Length`, whole
+bodies, `if_header:`, the proxies' `errors:`) reaches a release at its next re-pin. A proxied
+request body over 1 MiB now changes the record's `body=` hash, which no recorded run has. The
+explorer's corpus golden (`hydo-explore`'s `corpus-full.txt`) is re-recorded, because the checkout
+example's manifest has two more `H=` targets. hydo-build's and hydo-manifest's equivalence
+corpora, which already failed (open items 115 and 165), get the new known keys of a route in 12
+and more answers; they were not re-recorded.
+
+**What is left.** Open item 116: the proxy's fix and the conditional routes ran through
+`hydo-world` natively and in its tests, not in a VM, because a VM run needs the re-pinned
+`hydo-world` in the guest.
