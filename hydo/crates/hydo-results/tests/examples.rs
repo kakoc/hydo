@@ -224,6 +224,9 @@ fn note(s: &mut Seen, r: &Record) {
         Record::Configs(_) => {
             s.types.insert("configs".into());
         }
+        Record::Stats(_) => {
+            s.types.insert("stats".into());
+        }
     }
 }
 

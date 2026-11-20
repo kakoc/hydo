@@ -19,6 +19,8 @@
 //!   runs first differ. `diff.txt` next to it is its view for people.
 //! - `compare.json` (`hydo compare-versions`; added in Milestone 298): one [`CompareDoc`]
 //!   document, the schedules run on two versions of the system and what differs between them.
+//! - `stats.json` next to `exploration.json` (added in Milestone 336): one [`StatsDoc`]
+//!   document, how much an exploration explored, what it cost and which faults it drew.
 //!
 //! Every record and document is a JSON object with `"v"` (the format version, 1) and `"type"`.
 //! Within a version only additions are made: new optional fields and new record types. A field
@@ -74,6 +76,19 @@ pub fn configs_of(dir: &std::path::Path) -> Option<v1::ConfigsDoc> {
     let text = std::fs::read_to_string(dir.join(CONFIGS_DOC)).ok()?;
     match reader::document(&text).ok()? {
         reader::Record::Configs(d) => Some(*d),
+        _ => None,
+    }
+}
+
+/// An exploration's statistics (added in Milestone 336): how much it explored, what it cost,
+/// which faults it drew, and how many first runs fit in a time budget.
+pub const STATS_DOC: &str = "stats.json";
+
+/// The `stats.json` of an exploration's directory, if it has one that reads.
+pub fn stats_of(dir: &std::path::Path) -> Option<v1::StatsDoc> {
+    let text = std::fs::read_to_string(dir.join(STATS_DOC)).ok()?;
+    match reader::document(&text).ok()? {
+        reader::Record::Stats(d) => Some(*d),
         _ => None,
     }
 }

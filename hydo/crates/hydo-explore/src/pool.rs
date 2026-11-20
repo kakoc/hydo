@@ -61,10 +61,37 @@ pub struct Host {
     pub contracts: Option<std::sync::Arc<hydo_contracts::plan::Plan>>,
 }
 
+/// One worker's time (Milestone 336, the statistics of `stats.json`): measured by its thread on
+/// the host's clock, so it changes nothing of a run.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct WorkerTime {
+    /// Seconds starting the engine: the boot to S1, and every start after an engine exited.
+    pub starting_s: f64,
+    /// Seconds running jobs (a run and the host's checks of it).
+    pub busy_s: f64,
+    /// Seconds in the quiet window before a job (`$HYDO_QUIET_FILE`).
+    pub waiting_s: f64,
+    /// Seconds from the thread's start to its end.
+    pub life_s: f64,
+    pub jobs: u64,
+    /// Engine starts after the first one.
+    pub restarts: u64,
+}
+
+/// The pool's record of its workers' time and of each job's seconds (Milestone 336).
+#[derive(Debug, Default)]
+pub struct Ledger {
+    pub workers: Vec<WorkerTime>,
+    /// Each job's seconds on its worker, by tag (the last job of a tag wins).
+    pub jobs: HashMap<String, f64>,
+}
+
 pub struct Pool {
     q: Arc<(Mutex<Queue>, Condvar)>,
     threads: Vec<std::thread::JoinHandle<()>>,
     pub boot_secs: Arc<Mutex<Vec<Option<f64>>>>,
+    /// The workers' time and each job's seconds (Milestone 336); complete after [`Pool::close`].
+    pub ledger: Arc<Mutex<Ledger>>,
     pub host: Host,
     cache: Mutex<CacheState>,
     pub cache_hits: Mutex<usize>,
@@ -295,23 +322,29 @@ impl Pool {
             Condvar::new(),
         ));
         let boot_secs = Arc::new(Mutex::new(vec![None; n]));
+        let ledger = Arc::new(Mutex::new(Ledger {
+            workers: vec![WorkerTime::default(); n],
+            jobs: HashMap::new(),
+        }));
         let mut threads = Vec::new();
         for i in 0..n {
-            let (q2, eng, sp, h, bs) = (
+            let (q2, eng, sp, h, bs, lg) = (
                 q.clone(),
                 engine.clone(),
                 spec.clone(),
                 host.clone(),
                 boot_secs.clone(),
+                ledger.clone(),
             );
             threads.push(std::thread::spawn(move || {
-                worker_main(i, q2, eng, sp, h, bs)
+                worker_main(i, q2, eng, sp, h, bs, lg)
             }));
         }
         let p = Pool {
             q,
             threads,
             boot_secs,
+            ledger,
             host,
             cache: Mutex::new(CacheState::default()),
             cache_hits: Mutex::new(0),
@@ -672,12 +705,25 @@ fn worker_main(
     spec: BootSpec,
     h: Host,
     boot: Arc<Mutex<Vec<Option<f64>>>>,
+    ledger: Arc<Mutex<Ledger>>,
 ) {
+    // Milestone 336: the worker's time, on the host's clock
+    let born = Instant::now();
+    let mut tm = WorkerTime::default();
+    let done = |tm: &mut WorkerTime| {
+        tm.life_s = born.elapsed().as_secs_f64();
+        if let Some(x) = ledger.lock().expect("lock").workers.get_mut(i) {
+            *x = tm.clone();
+        }
+    };
+    let t = Instant::now();
     let mut w = start(i, engine.as_ref(), &spec, &h);
+    tm.starting_s += t.elapsed().as_secs_f64();
     if let Some(x) = &w {
         boot.lock().expect("lock")[i] = Some(x.boot_secs());
     }
     if w.is_none() {
+        done(&mut tm);
         give_up(&q);
         return;
     }
@@ -685,7 +731,11 @@ fn worker_main(
         if job.cancel.load(Ordering::SeqCst) {
             continue;
         }
+        let t = Instant::now();
         quiet_wait(h.pool.quiet_file.as_deref());
+        tm.waiting_s += t.elapsed().as_secs_f64();
+        let job_t0 = Instant::now();
+        let mut restart_s = 0.0;
         let mut res = None;
         let mut state: Option<(hydo_engine::SearchRun, f64)> = None;
         for attempt in 0..2 {
@@ -745,10 +795,13 @@ fn worker_main(
                         "worker {i}: engine exited during {} ({e}); restarting it",
                         job.tag
                     );
+                    let t = Instant::now();
                     if let Some(old) = w.take() {
                         let _ = old.close();
                     }
                     w = start(i, engine.as_ref(), &spec, &h);
+                    restart_s += t.elapsed().as_secs_f64();
+                    tm.restarts += 1;
                 }
             }
         }
@@ -762,8 +815,18 @@ fn worker_main(
             host_contracts(&h, &job.tag, &mut res);
             host_errlog(&h, &job.tag, &job.text, &mut res);
         }
+        let job_s = (job_t0.elapsed().as_secs_f64() - restart_s).max(0.0);
+        tm.starting_s += restart_s;
+        tm.busy_s += job_s;
+        tm.jobs += 1;
+        ledger
+            .lock()
+            .expect("lock")
+            .jobs
+            .insert(job.tag.clone(), job_s);
         let _ = job.reply.send((job.tag, job.text, res));
         if w.is_none() {
+            done(&mut tm);
             give_up(&q);
             return;
         }
@@ -771,6 +834,7 @@ fn worker_main(
     if let Some(x) = w {
         let _ = x.close();
     }
+    done(&mut tm);
 }
 
 /// A state search run's record as the result carries it.

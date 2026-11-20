@@ -258,6 +258,52 @@ running `hydo inspect` session with its memory and its age, because each session
 guest. `hydo inspect stop --all` stops them. Inside `hydo ci run` every stop of the explorer is
 that command's status 2.
 
+## How much was explored, and whether to run more
+
+`hydo explore` writes `stats.json` beside `exploration.json`. `hydo stats` prints it in words,
+`hydo report` prints its short form, and `hydo report --html` draws its curve. The file is a
+record of the host, so it changes no run, no fingerprint, and no verdict. It has four parts:
+
+- The curve of new behaviour. After each first run in seed order, it counts the distinct
+  fingerprints, verdicts, property outcomes (`<id>: held`, `<id>: failed`), error kinds, and
+  error paths that the runs showed so far. A measure that the image does not record is left out.
+- The cost. It gives the engine's seconds of the first runs, the re-runs and the shrinks, and the
+  share of the workers' busy time that went to re-runs and shrinks. It also gives the engine's
+  clock (VM exits on the Mac and KVM engines), the host CPU, and the largest resident memory.
+  Each worker's time is split into busy, starting its engine, waiting for a quiet window, and
+  idle.
+- The faults drawn. Each fault kind has its runs, its targets, and its workload steps. The kinds
+  that `faults:` allows and no schedule drew are listed, each with the option that draws it.
+- An estimate. It says how many first runs fit in a time budget with N workers, or on N machines
+  with `--shard I/N`.
+
+```sh
+hydo stats                                    # hydo-out/explore
+hydo stats <explore dir> --budget 2h --workers 4 --shards 8
+hydo stats <explore dir> --json               # the document, with the asked estimate
+```
+
+Read the curve this way:
+
+- The fingerprints grow with almost every run, because two different schedules almost always
+  give two different runs. The judgement leaves them out.
+- The judgement looks at the last quarter of the runs, at least 10 of them. It is `growing` when
+  a verdict, a property outcome, an error kind or an error path first showed there. It is `flat`
+  otherwise, and it names the run where the curve last grew.
+- A growing curve says that the last runs still showed new behaviour, so more seeds of the same
+  options can show more. Raise `--seeds`.
+- A flat curve says that more seeds of the same strategy and options mostly repeat what these
+  runs showed. It does not say that the system has no more bugs. Other fault kinds, other
+  strategies, a longer workload, or other checks can still find more. Try the kinds that the
+  faults drawn list as never drawn before you add seeds.
+
+The estimate counts `shards × floor((budget − start) × workers ÷ job × (1 − share))`. Here `job`
+is a first run's seconds on one worker, `start` is a worker's start, and `share` is the part of
+the busy time that re-runs and shrinks took. It assumes that each shard runs on a machine like
+this one. `seeds_from: history` of `hydo ci run` uses the same rule. `hydo explore --merge` makes
+the statistics of the whole range from the parts' files, with the curve that one exploration of
+the range gives.
+
 ## Which versions have a finding
 
 `hydo versions` says in which versions of the system a finding is present. It replays the

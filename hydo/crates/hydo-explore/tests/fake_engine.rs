@@ -751,6 +751,7 @@ fn merge_scenario() {
             );
         }
     }
+    stats_of_merge(&single, &merged, n);
     let doc: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(merged.join("exploration.json")).unwrap())
             .unwrap();
@@ -783,6 +784,69 @@ fn merge_scenario() {
     let err = String::from_utf8_lossy(&o.stderr);
     assert!(err.contains("not one exploration"), "{err}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The statistics (Milestone 336): one exploration's `stats.json` counts its first runs, their
+/// cost and the faults they drew; the merge of its parts gives the same curve, the same first
+/// runs with what each showed first, and the same faults drawn, and records its parts' workers.
+fn stats_of_merge(single: &Path, merged: &Path, parts: usize) {
+    let read = |d: &Path| -> serde_json::Value {
+        serde_json::from_str(&std::fs::read_to_string(d.join("stats.json")).unwrap()).unwrap()
+    };
+    let (one, m) = (read(single), read(merged));
+    assert_eq!(one["type"], "stats");
+    assert_eq!(one["schedules"], 60);
+    assert_eq!(one["runs"].as_array().unwrap().len(), 60);
+    let measures = one["curve"]["measures"].as_array().unwrap();
+    for x in ["fingerprints", "verdicts", "properties", "error_kinds"] {
+        assert!(measures.iter().any(|v| v == x), "{x}: {measures:?}");
+    }
+    // the last point counts every first run's verdict and fingerprint
+    let last = one["curve"]["points"].as_array().unwrap().last().unwrap();
+    assert_eq!(last["runs"], 60);
+    assert!(last["counts"]["verdicts"].as_u64().unwrap() >= 2, "{last}");
+    assert!(!one["curve"]["judgement"].as_str().unwrap().is_empty());
+    assert!(
+        one["cost"]["runs"]["shrink"].as_u64().unwrap() > 0,
+        "{}",
+        one["cost"]
+    );
+    assert_eq!(one["cost"]["workers"].as_array().unwrap().len(), 3);
+    assert!(one["cost"]["shrink_share"].as_f64().unwrap() > 0.0);
+    assert!(one["estimate"]["fits"].as_array().unwrap().len() >= 4);
+    // the faults drawn: the kinds of the schedules, with targets and steps
+    let kinds = one["coverage"]["kinds"].as_array().unwrap();
+    assert!(!kinds.is_empty());
+    assert!(
+        kinds
+            .iter()
+            .any(|k| !k["steps"].as_array().unwrap().is_empty()),
+        "{kinds:?}"
+    );
+    // the merge: the same curve, keys and coverage as the exploration of the whole range
+    assert_eq!(m["shards"], parts);
+    assert_eq!(m["curve"], one["curve"]);
+    let keys = |d: &serde_json::Value| -> Vec<serde_json::Value> {
+        d["runs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| {
+                let mut r = r.clone();
+                let o = r.as_object_mut().unwrap();
+                for k in ["vm_s", "job_s", "clock"] {
+                    o.remove(k);
+                }
+                r
+            })
+            .collect()
+    };
+    assert_eq!(keys(&m), keys(&one));
+    assert_eq!(m["coverage"], one["coverage"]);
+    assert_eq!(m["cost"]["runs"]["first"], 60);
+    let ws = m["cost"]["workers"].as_array().unwrap();
+    assert_eq!(ws.len(), 3 * parts);
+    assert_eq!(ws.last().unwrap()["part"], parts);
 }
 
 /// `--time-limit` (stage 2 of docs/design/ci.md, section 7.3) stops drawing first runs at a seed

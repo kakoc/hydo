@@ -346,7 +346,8 @@ fn choose_seeds(
             0.0
         };
     let fit = if per > 0.0 {
-        (left.max(0.0) / per).floor() as u64
+        // the rule of hydo stats' estimate (Milestone 336) with one measured second per seed
+        hydo_explore::stats::fit_count(left, per)
     } else {
         hi - lo + 1
     };

@@ -18,6 +18,7 @@
 mod comparepage;
 pub mod history;
 mod page;
+mod statspage;
 mod story;
 #[cfg(test)]
 mod tests;
@@ -2934,6 +2935,14 @@ fn exploration_page(
         body.push_str(&format!(
             "<div class=\"card\">\n{}</div>\n",
             paths_html(c, &shown)
+        ));
+    }
+    // how much was explored (Milestone 336)
+    if let Some(s) = hydo_results::stats_of(dir) {
+        body.push_str(&h2("stats", "How much was explored"));
+        body.push_str(&format!(
+            "<div class=\"card\">\n{}</div>\n",
+            statspage::html(&s, &shown)
         ));
     }
     // next

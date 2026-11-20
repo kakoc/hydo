@@ -3173,6 +3173,305 @@ pub struct ConfigsDoc {
     pub summary: String,
 }
 
+// ------------------------------------------------------------------ exploration statistics
+
+tag!(StatsType, "stats");
+
+/// The values of [`StatsCurve::trend`] hydo writes (Milestone 336).
+pub mod trend {
+    /// A judged measure grew within the last `window` first runs.
+    pub const GROWING: &str = "growing";
+    /// No judged measure grew within the last `window` first runs.
+    pub const FLAT: &str = "flat";
+    /// Fewer first runs than a judgement needs.
+    pub const TOO_FEW: &str = "too-few";
+}
+
+/// `stats.json` in an exploration's directory (`hydo explore`, `hydo explore --merge`; added in
+/// Milestone 336): how much the exploration explored and what it cost, so that a person, or a
+/// program that reads hydo's files, can decide how much more to run. Every number is the host's
+/// record of the runs; nothing in it changes a run, a fingerprint or a verdict. `hydo stats
+/// <explore dir>` prints it in words.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StatsDoc {
+    pub v: V1,
+    #[serde(rename = "type")]
+    pub ty: StatsType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hydo_version: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<u64>,
+    /// The image explored, as `exploration.json` names it.
+    pub image: String,
+    pub engine: Engine,
+    /// The explorer's strategy (`random`, `swarm`, ...) and its seeds (`lo-hi`; absent for a
+    /// sweep).
+    pub strategy: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seeds: Option<String>,
+    /// The first runs counted, refused ones included.
+    pub schedules: u64,
+    /// The parts a merge was made from (`hydo explore --merge`); absent for one exploration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shards: Option<u64>,
+    /// The curve of new behaviour.
+    pub curve: StatsCurve,
+    /// What the runs cost.
+    pub cost: StatsCost,
+    /// Which faults the schedules drew, against what the manifest allows.
+    pub coverage: StatsCoverage,
+    /// How many first runs fit in a time budget.
+    pub estimate: StatsEstimate,
+    /// Each first run in seed order: its cost and what it showed first. A merge of parts reads
+    /// them to make the curve of the whole range again.
+    #[serde(default)]
+    pub runs: Vec<StatsRun>,
+}
+
+/// The curve of new behaviour (added in Milestone 336): after each first run in seed order, how
+/// many distinct things the runs showed so far. The measures, in this order:
+///
+/// - `fingerprints`: distinct run fingerprints. Two schedules that differ almost always give
+///   two fingerprints, so this measure grows with nearly every run and is not judged.
+/// - `verdicts`: distinct verdicts, by kind and signature (`ok: OK`, `violation: ...`).
+/// - `properties`: distinct outcomes of a property or check (`<id>: held`, `<id>: failed`,
+///   `<id>: reached`).
+/// - `error_kinds`: distinct error kinds of the services' logs (images built with `errors:`).
+/// - `error_paths`: distinct error-handling places that ran (engines that watch them).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StatsCurve {
+    /// The measures the runs recorded, in the order above.
+    pub measures: Vec<String>,
+    /// The counts after 1, 2, 4, 8, ... first runs, after every `total/64`-th one (at least
+    /// every one), and after the last, in increasing order.
+    pub points: Vec<StatsPoint>,
+    /// Each judged measure's first-run numbers (1 is the first in seed order) at which it grew.
+    #[serde(default)]
+    pub grew_at: BTreeMap<String, Vec<u64>>,
+    /// The last first runs the judgement looks at: a quarter of them, at least 10.
+    pub window: u64,
+    /// `growing`, `flat` or `too-few` ([`trend`]).
+    pub trend: String,
+    /// The judgement in one sentence.
+    pub judgement: String,
+}
+
+/// The counts of the curve after `runs` first runs (added in Milestone 336).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StatsPoint {
+    pub runs: u64,
+    /// One count per measure of [`StatsCurve::measures`], by its name.
+    pub counts: BTreeMap<String, u64>,
+}
+
+/// One first run of the statistics (added in Milestone 336).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StatsRun {
+    pub seed: i64,
+    /// The engine's own seconds for the run (`secs`).
+    pub vm_s: f64,
+    /// The worker's seconds for the job: the run and the host's checks of it. Absent for a run
+    /// answered from the result cache.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub job_s: Option<f64>,
+    /// How far the engine's clock moved in the run's conversations ([`StatsCost::clock_unit`]),
+    /// when the run left control transcripts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock: Option<u64>,
+    /// The engine refused the schedule: it tested nothing, and it shows nothing new.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub refused: bool,
+    /// What the run showed that no earlier first run in seed order showed, by measure.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub verdicts: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub error_kinds: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub error_paths: Vec<u32>,
+}
+
+/// What an exploration's runs cost (added in Milestone 336). Seconds are the host's wall
+/// seconds.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StatsCost {
+    /// The exploration's wall time.
+    pub wall_s: f64,
+    /// The runs made, by role: `first`, `rerun`, `shrink` (shrink candidates and minimal
+    /// schedules), `error-shrink` and `other` (probes, traces).
+    #[serde(default)]
+    pub runs: BTreeMap<String, u64>,
+    /// The engine's seconds of the runs, in total and by the same roles.
+    pub vm_s: f64,
+    #[serde(default)]
+    pub vm_s_by_role: BTreeMap<String, f64>,
+    /// The share of the workers' busy time that went to re-running and shrinking failures, from
+    /// 0 to 1.
+    pub shrink_share: f64,
+    /// A first run's engine seconds: the mean, the median, the 90th percentile and the largest.
+    pub first_run_s: StatsSpread,
+    /// The engine's clock over the first runs: in total and per run on average, and its unit
+    /// (`exits` on the Mac and KVM engines, `instructions` of hvx's instruction clock); absent
+    /// when the runs left no control transcripts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock_per_run: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock_unit: Option<String>,
+    /// The host CPU seconds of the explorer and the engines it started (user and system time;
+    /// an engine that runs in the explorer's process counts with it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_cpu_s: Option<f64>,
+    /// The guest RAM of one worker, the largest resident memory of one engine process (an
+    /// engine in a process of its own, as on the Mac), and the explorer process's largest
+    /// resident memory, in MiB, as the host's process accounting reports them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub guest_ram_mib: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine_peak_mib: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub explorer_peak_mib: Option<u64>,
+    /// The first runs answered from the result cache (`HYDO_EXPLORE_CACHE`), which cost no VM.
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub cached: u64,
+    /// Each worker's time ([`StatsWorker`]), and their sums.
+    #[serde(default)]
+    pub workers: Vec<StatsWorker>,
+    pub busy_s: f64,
+    pub starting_s: f64,
+    pub waiting_s: f64,
+    pub idle_s: f64,
+}
+
+/// A spread of values (added in Milestone 336).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StatsSpread {
+    pub mean: f64,
+    pub median: f64,
+    pub p90: f64,
+    pub max: f64,
+}
+
+/// One worker's time (added in Milestone 336): `busy_s` running jobs, `starting_s` starting its
+/// engine (the boot to S1, and every start after an engine exited; an engine's wait for a lock
+/// or for memory is inside it), `waiting_s` in a quiet window (`HYDO_QUIET_FILE`), and `idle_s`
+/// with no job to take.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StatsWorker {
+    pub worker: u64,
+    /// The part of a merge it belongs to, from 1; absent for one exploration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<u64>,
+    pub jobs: u64,
+    /// The engine starts after the first one (an engine that exited during a run).
+    #[serde(default, skip_serializing_if = "is_zero_u64")]
+    pub restarts: u64,
+    pub busy_s: f64,
+    pub starting_s: f64,
+    pub waiting_s: f64,
+    pub idle_s: f64,
+}
+
+/// Which faults the first runs drew (added in Milestone 336), against what the manifest
+/// allows: its `faults:` and its services.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StatsCoverage {
+    /// The manifest's fault kinds (`faults:`, or the kinds hydo allows without the list), and
+    /// its services that faults may name (one-shot jobs left out); empty for an image without
+    /// a manifest.
+    #[serde(default)]
+    pub allowed: Vec<String>,
+    #[serde(default)]
+    pub services: Vec<String>,
+    /// The workload's steps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steps: Option<u64>,
+    /// The first runs without any fault.
+    pub without_faults: u64,
+    /// Each kind the schedules drew, the kind of the most runs first.
+    #[serde(default)]
+    pub kinds: Vec<StatsKind>,
+    /// The allowed kinds no schedule drew, each with the explorer option that draws it.
+    #[serde(default)]
+    pub never: Vec<StatsNever>,
+    /// The allowed services that no fault named.
+    #[serde(default)]
+    pub services_never: Vec<String>,
+}
+
+/// One fault kind across the first runs (added in Milestone 336).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StatsKind {
+    /// The kind, by the manifest's word (`kill`, `pause`, `network`, `oneway`, `cut`, `clock`,
+    /// `disk`, `freeze`, `protocol`, `corrupt`, `powerloss`) or hydo's own (`upgrade`, `block`
+    /// for faults of the disk's blocks, `timing` for tick and turn tokens, `setting` for a
+    /// manifest knob, `reaction` for a reaction whose action has no kind).
+    pub kind: String,
+    /// The kind in a few words.
+    pub words: String,
+    /// The first runs that drew it.
+    pub runs: u64,
+    /// The targets its tokens named (services, links, routes), each with its count of runs.
+    #[serde(default)]
+    pub targets: BTreeMap<String, u64>,
+    /// The workload steps its tokens start at, each once, in increasing order.
+    #[serde(default)]
+    pub steps: Vec<u64>,
+    /// Whether the manifest's `faults:` names it (false for hydo's own kinds).
+    pub allowed: bool,
+}
+
+/// An allowed fault kind that no schedule drew (added in Milestone 336).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StatsNever {
+    pub kind: String,
+    pub words: String,
+    /// The `hydo explore` option that draws it; absent when the seeds drew none although the
+    /// options draw it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub option: Option<String>,
+}
+
+/// How many first runs fit in a time budget (added in Milestone 336), from what this
+/// exploration measured on its machine. The count for `workers` workers and `shards` parts is
+/// `shards × floor((budget − starting_s) × workers ÷ job_s × (1 − shrink_share))`: each part
+/// runs on a machine like this one, its workers start once, and re-runs and shrinks take the
+/// same share of their time as here.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StatsEstimate {
+    /// A first run's job seconds on one worker (the mean), a worker's start, and the share of
+    /// the busy time that re-runs and shrinks took.
+    pub job_s: f64,
+    pub starting_s: f64,
+    pub shrink_share: f64,
+    /// The workers this exploration used, and about how many this machine fits for this guest
+    /// now (its hardware threads, and its free memory at twice the guest RAM and 256 MiB a
+    /// worker).
+    pub workers: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub machine_workers: Option<u64>,
+    /// First runs an hour on this exploration's workers, as measured: the first runs over the
+    /// time their batch took.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub measured_per_hour: Option<f64>,
+    /// Some budgets worked out.
+    #[serde(default)]
+    pub fits: Vec<StatsFit>,
+}
+
+/// The first runs that fit in one budget (added in Milestone 336).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StatsFit {
+    pub budget_s: f64,
+    pub workers: u64,
+    pub shards: u64,
+    pub runs: u64,
+}
+
 /// Any version-1 record or document (the schema's root).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(untagged)]
@@ -3201,6 +3500,8 @@ pub enum AnyV1 {
     Compare(Box<CompareDoc>),
     /// `hydo explore --configs` (added in Milestone 299).
     Configs(Box<ConfigsDoc>),
+    /// `stats.json` of an exploration (added in Milestone 336).
+    Stats(Box<StatsDoc>),
 }
 
 impl Run {
