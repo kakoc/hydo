@@ -882,6 +882,8 @@ pub struct StructDef {
     pub public: Vec<bool>,
     /// The module that defines the structure (`["identifier"]`; empty for the crate's root).
     pub module: Vec<String>,
+    /// Whether the structure is declared with a `pub` visibility (Milestone 333).
+    pub is_pub: bool,
 }
 
 /// How a variant of an enumeration is written: `A`, `A(u8, u8)` or `A { x: u8 }`.
@@ -909,6 +911,8 @@ pub struct EnumDef {
     pub params: Vec<String>,
     pub variants: Vec<VariantDef>,
     pub module: Vec<String>,
+    /// Whether the enumeration is declared with a `pub` visibility (Milestone 333).
+    pub is_pub: bool,
 }
 
 /// A `build` line (Milestone 307): the constructor's path and its arguments.
@@ -948,6 +952,8 @@ pub struct Items {
     pub uses: BTreeMap<Vec<String>, BTreeMap<String, Vec<Vec<String>>>>,
     /// The structures with `#[derive(Default)]` (Milestone 326).
     pub defaults: std::collections::BTreeSet<String>,
+    /// The `use` lines of each module, an inline module apart from its file's (Milestone 333).
+    pub uses_exact: BTreeMap<Vec<String>, BTreeMap<String, Vec<Vec<String>>>>,
 }
 
 /// Add the names a `use` tree imports (`a::b::{C, d::E as F, self}`) to `out`: each name with
@@ -1124,6 +1130,16 @@ pub fn assoc_type(
         });
     }
     None
+}
+
+/// Whether the item whose keyword comes right after `before` (the text up to it) is declared
+/// with a `pub` visibility (Milestone 333): the words since the item before, a block's `{` or a
+/// `;`, attributes left out.
+fn item_is_pub(before: &str) -> bool {
+    let tail = &before[before.rfind([';', '}', '{']).map_or(0, |i| i + 1)..];
+    strip_attrs(tail)
+        .split_whitespace()
+        .any(|w| w.starts_with("pub"))
 }
 
 /// Whether the item that starts after `before` (the text since its block's `{`) is declared
@@ -1721,6 +1737,7 @@ pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
             params,
             variants,
             module,
+            is_pub: item_is_pub(&ms[..at]),
         };
         items
             .all_enums
@@ -1747,6 +1764,13 @@ pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
             let mut here = module.to_vec();
             here.extend(inline_modules(&m, at));
             use_tree(&[], &tree.join(" "), &here, &mut names);
+            // the same by the inline module the line stands in (Milestone 333)
+            use_tree(
+                &[],
+                &tree.join(" "),
+                &here,
+                items.uses_exact.entry(here.clone()).or_default(),
+            );
         }
         if !names.is_empty() {
             let e = items.uses.entry(module.to_vec()).or_default();
@@ -1858,6 +1882,7 @@ pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
                     fields,
                     public,
                     module,
+                    is_pub: item_is_pub(&ms[..at]),
                 };
                 items
                     .all_structs
@@ -2231,6 +2256,9 @@ impl Resolver<'_> {
                         if d.generic || stack.iter().any(|s| s == name) {
                             return FTy::Opaque(t.text());
                         }
+                        let Some(path) = self.written(segs, &d.module, name, d.is_pub) else {
+                            return FTy::Opaque(t.text());
+                        };
                         stack.push(name.into());
                         let seen = self.module.starts_with(&d.module);
                         let fields = d
@@ -2256,7 +2284,7 @@ impl Resolver<'_> {
                             .collect();
                         stack.pop();
                         FTy::Struct {
-                            path: segs.join("::"),
+                            path,
                             tuple: d.tuple,
                             fields,
                         }
@@ -2264,6 +2292,47 @@ impl Resolver<'_> {
                 }
             }
         }
+    }
+
+    /// How the harness writes a type of the crate that is written as `segs` and defined in
+    /// `module` (Milestone 333): as written when the function's module names it so, else by its
+    /// path from the crate's root. semver's `Error` has a field of `ErrorKind`, which the
+    /// private module `error` defines and the root does not import, so the harness writes
+    /// `crate::error::ErrorKind`. None when the harness cannot name it at all: a private item of
+    /// a module that is not the function's or one of its ancestors.
+    fn written(
+        &self,
+        segs: &[String],
+        module: &[String],
+        name: &str,
+        is_pub: bool,
+    ) -> Option<String> {
+        if !is_pub && !self.module.starts_with(module) {
+            return None;
+        }
+        if segs.len() > 1 || module == self.module {
+            return Some(segs.join("::"));
+        }
+        let imported = self.items.uses_exact.get(self.module).is_some_and(|u| {
+            // a `use` of the item itself, or a glob import of its module
+            u.get(name).is_some_and(|ps| {
+                ps.iter().any(|p| {
+                    p.split_last()
+                        .is_some_and(|(l, m)| l == name && m == module)
+                })
+            }) || u.get("*").is_some_and(|gs| gs.iter().any(|g| g == module))
+        });
+        if imported {
+            return Some(segs.join("::"));
+        }
+        Some(
+            ["crate".to_string()]
+                .into_iter()
+                .chain(module.iter().cloned())
+                .chain([name.to_string()])
+                .collect::<Vec<_>>()
+                .join("::"),
+        )
     }
 
     /// The modules where a type written as `segs` may be defined, the likeliest first
@@ -2415,6 +2484,9 @@ impl Resolver<'_> {
         if stack.contains(&e.name) || e.params.iter().any(|p| p.starts_with("const ")) {
             return FTy::Opaque(t.text());
         }
+        let Some(path) = self.written(segs, &e.module, &e.name, e.is_pub) else {
+            return FTy::Opaque(t.text());
+        };
         let targs: Vec<TyAst> = args.iter().map(|a| subst_ty(a, self.subst)).collect();
         let map: BTreeMap<String, TyAst> = e
             .params
@@ -2448,7 +2520,7 @@ impl Resolver<'_> {
         let args = targs.iter().map(|a| self.res(a, stack)).collect();
         stack.pop();
         FTy::Enum {
-            path: segs.join("::"),
+            path,
             args,
             variants,
         }

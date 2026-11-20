@@ -70,7 +70,12 @@ the program's own code is refused.
 A type that a `with` line names is written as the function's module writes it. byteorder's
 `io.rs` does not import `BigEndian`, so its contracts write `with T = crate::BigEndian`. hydo
 finds a type's definition through the module's `use` lines, a glob import (`use a::*`), and a
-renamed re-export (`pub use a::B as C`).
+renamed re-export (`pub use a::B as C`). The test module writes a type of the crate that the
+function's module does not import by its path from the crate's root. semver's `Error` has a
+field of `ErrorKind`, which its private module `error` defines, so a parser's `Err` value
+builds and reads as `crate::error::ErrorKind`, and `matches(err(result).kind, Empty)` reads
+it. A private type of a module that is neither the function's module nor one of its parents
+is not read.
 
 ## Enumerations
 

@@ -61,6 +61,16 @@ fn a_comparison_with_values_not_read_is_not_judged_never_broken() {
 }
 
 #[test]
+fn an_error_with_a_field_of_a_private_module_builds_and_reads() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m333-perr");
+    let (_, rep) = run_fns(&t, &["digits"], &[]);
+    assert!(rep.skipped.is_empty(), "{:?}", rep.skipped);
+    let r = one(&rep, "::digits");
+    assert_eq!(r.verdict, "held", "{r:?}");
+    assert!(r.held.iter().all(|h| h.undecided == 0), "{r:?}");
+}
+
+#[test]
 fn an_associated_type_of_a_type_parameter_reads_through_its_with_line() {
     let t = TmpDir::new("hydo-contracts-fuzz-m333-assoc");
     let (_, rep) = run_fns(&t, &["small::"], &[]);

@@ -18,6 +18,49 @@ pub fn wrapped_some(v: Vec<u8>) -> Option<Vec<std::num::Wrapping<u8>>> {
     Some(v.into_iter().map(std::num::Wrapping).collect())
 }
 
+// ---------------------------------------------------------------- errors of private modules
+
+/// An error as semver's: a `pub(crate)` field of a type that a private module defines and the
+/// crate's root does not import.
+mod kinds {
+    #[derive(Debug)]
+    pub(crate) enum Kind {
+        Empty,
+        NotDigit(usize),
+    }
+}
+
+mod perr {
+    use crate::kinds::Kind;
+
+    #[derive(Debug)]
+    pub struct Error {
+        pub(crate) kind: Kind,
+    }
+
+    impl Error {
+        pub(crate) fn new(kind: Kind) -> Error {
+            Error { kind }
+        }
+    }
+}
+
+pub use perr::Error;
+
+/// A parser whose error has such a field: its harness builds, and a clause reads the error.
+// hydo: input text like "7", "42", "", "x1"
+// hydo: ensures is_err(result) || text != ""
+// hydo: ensures !matches(result, Err(_)) || text != "" || matches(err(result).kind, Empty)
+pub fn digits(text: &str) -> Result<u64, Error> {
+    if text.is_empty() {
+        return Err(Error::new(kinds::Kind::Empty));
+    }
+    match text.bytes().position(|b| !b.is_ascii_digit()) {
+        Some(i) => Err(Error::new(kinds::Kind::NotDigit(i))),
+        None => text.parse().map_err(|_| Error::new(kinds::Kind::NotDigit(0))),
+    }
+}
+
 // ---------------------------------------------------------------- associated types
 
 /// A container generic over a trait with an associated type, as smallvec's `SmallVec<A:
