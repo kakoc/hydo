@@ -591,6 +591,21 @@ that a milestone builds moves into the tables of this page with its new status.
 - **What it needs.** The work counts of M198 (`docs/design/cost-tracking.md`) or the guest's retired branches of `perf:` (M237), and quotas per organization.
 - **Where it came from.** The user, 2026-11-18: what hydo lacks to be a hosted service end to end.
 
+### Shrinks that skip what they already ran
+
+- **What it is.** The explorer takes the earlier result for a schedule it already ran, and a
+  shrink candidate continues from a snapshot of an earlier candidate where their commands part.
+- **Why it matters.** Shrinks took 27 % to 83 % of the seconds of the three measured
+  explorations that shrank. 10 % to 21 % of the shrinks' seconds repeated an earlier schedule
+  exactly, and 10 % to 43 % of their guest clock was already run by an earlier candidate. The
+  first runs of an exploration share almost nothing: 0.07 % of 12,590 s.
+- **What it needs.** A schedule without the `dseed=` that decides nothing, or a repeat reported
+  by the earlier schedule's text, because the fingerprint covers the disk's seed. For the
+  snapshots, a proof on the Mac engine and on KVM that a continued candidate gives its
+  fingerprint from S1.
+- **Where it came from.** Milestone 337 (tentative number), `hydo/explore/RESEARCH-shared-prefix.md`;
+  open item 167.
+
 ## How to keep this page current
 
 Every milestone that builds or changes a capability updates its rows here: the status, the
