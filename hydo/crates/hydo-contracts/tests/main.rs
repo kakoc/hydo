@@ -10,6 +10,7 @@ mod eval;
 mod fuzz;
 mod fuzz_m318;
 mod fuzz_m326;
+mod fuzz_m333;
 mod keeps;
 mod lang;
 mod paths;

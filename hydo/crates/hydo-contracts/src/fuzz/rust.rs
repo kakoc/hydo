@@ -1776,6 +1776,28 @@ impl FTy {
         }
     }
 
+    /// The first part of the type that hydo does not read, as its text (Milestone 333): an
+    /// opaque type, a field it cannot name, or a built value without a `read` line, also inside
+    /// a list, an option, a tuple or a structure.
+    pub fn unread_part(&self) -> Option<String> {
+        match self {
+            FTy::Opaque(t) => Some(t.clone()),
+            FTy::Hidden(_) => Some("a private field".into()),
+            FTy::Built { ty, read: None, .. } => Some(ty.clone()),
+            FTy::Built {
+                read: Some((t, _)), ..
+            } => t.unread_part(),
+            FTy::List(x) | FTy::Array(x, _) | FTy::Opt(x) | FTy::Boxed(_, x) => x.unread_part(),
+            FTy::Res(a, b) => a.unread_part().or_else(|| b.unread_part()),
+            FTy::Tuple(v) => v.iter().find_map(FTy::unread_part),
+            FTy::Struct { fields, .. } => fields.iter().find_map(|(_, t)| t.unread_part()),
+            FTy::Enum { variants, .. } => variants
+                .iter()
+                .find_map(|v| v.fields.iter().find_map(|(_, t)| t.unread_part())),
+            _ => None,
+        }
+    }
+
     /// The owned Rust type, as the harness writes it.
     pub fn rust(&self) -> String {
         match self {

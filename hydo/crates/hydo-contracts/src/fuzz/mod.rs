@@ -996,6 +996,11 @@ fn bit_not(a: &Ast, params: &[harness::Param], ret: &FTy) -> Ast {
 /// clause is undecided (Milestone 318): `result` of `Self::Owned`, or a built value without a
 /// `read` line.
 fn unread_in(a: &Ast, params: &[harness::Param], ret: &FTy) -> Option<String> {
+    unread_top(a, params, ret).or_else(|| unread_deep(a, params, ret))
+}
+
+/// The first place that a clause reads whose own type hydo does not read.
+fn unread_top(a: &Ast, params: &[harness::Param], ret: &FTy) -> Option<String> {
     let place = matches!(
         a,
         Ast::Name(_)
@@ -1030,9 +1035,30 @@ fn unread_in(a: &Ast, params: &[harness::Param], ret: &FTy) -> Option<String> {
         | Ast::Old(x)
         | Ast::Not(x)
         | Ast::Neg(x)
-        | Ast::Matches(x, _) => unread_in(x, params, ret),
+        | Ast::Matches(x, _) => unread_top(x, params, ret),
         Ast::Index(x, y) | Ast::Bin(_, x, y) => {
-            unread_in(x, params, ret).or_else(|| unread_in(y, params, ret))
+            unread_top(x, params, ret).or_else(|| unread_top(y, params, ret))
+        }
+        _ => None,
+    }
+}
+
+/// The first side of a comparison whose value holds a part that hydo does not read
+/// (Milestone 333): `result` of `Vec<A::Item>` compared with `old(self)`.
+fn unread_deep(a: &Ast, params: &[harness::Param], ret: &FTy) -> Option<String> {
+    match a {
+        Ast::Bin(BinOp::Eq | BinOp::Ne, x, y) => [x, y].into_iter().find_map(|s| {
+            let part = type_of(s, params, ret)?.unread_part()?;
+            Some(format!(
+                "`{s}` holds values of the type `{part}`, which hydo does not read, so it \
+                 compares no such value"
+            ))
+        }),
+        Ast::Bin(_, x, y) | Ast::Index(x, y) => {
+            unread_deep(x, params, ret).or_else(|| unread_deep(y, params, ret))
+        }
+        Ast::Not(x) | Ast::Neg(x) | Ast::Old(x) | Ast::Call(_, x) | Ast::Field(x, _) => {
+            unread_deep(x, params, ret)
         }
         _ => None,
     }

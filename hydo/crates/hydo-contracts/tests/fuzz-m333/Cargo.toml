@@ -1,0 +1,11 @@
+# The seventh fixture of the fuzzing tests (tests/fuzz_m333.rs, Milestone 333): what the fourth
+# evaluation of `hydo fuzz` found.
+[package]
+name = "fuzz-m333"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+publish = false
+
+# its own workspace (not part of the repository root's)
+[workspace]

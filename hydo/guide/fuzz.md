@@ -338,7 +338,9 @@ of bytes takes text examples too, as their bytes, and a report shows it as a byt
 | `vacuous` | A clause held without being checked: see below. | 3 |
 
 A clause is undecided on a call when it reads a value of a type that hydo does not read, such as
-a structure of another crate without a `read` line. Such a value shows as `<not read>`. A clause that is decided on fewer than
+a structure of another crate without a `read` line. Such a value shows as `<not read>`. A
+comparison of a list, an option or a structure that holds such a value is undecided too, and
+the reason names the type that hydo does not read. A clause that is decided on fewer than
 `--min-reach` calls (default 1 % of `--cases`) gives `not judged`, with the reason.
 
 A clause `a || ... || z` holds without checking `z` when a part before it is true. The report

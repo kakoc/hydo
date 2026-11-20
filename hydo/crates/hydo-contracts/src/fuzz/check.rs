@@ -174,7 +174,10 @@ fn eval_raw(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
             }
             match op {
                 BinOp::Eq | BinOp::Ne => {
-                    if l == Val::Opaque || r == Val::Opaque {
+                    // also a list, an option or a structure that holds such a value: hydo
+                    // cannot tell two of them apart, so the clause is undecided, never broken
+                    // (Milestone 333)
+                    if has_unread(&l) || has_unread(&r) {
                         return Err("a comparison with a value of a type not read".into());
                     }
                     // values of two kinds are never equal by accident: hydo cannot compare
@@ -223,13 +226,28 @@ fn eval_raw(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
     })
 }
 
+/// Whether a value is or holds a value of a type that hydo does not read (Milestone 333): an
+/// opaque value, or a built value that no `read` line read.
+pub fn has_unread(v: &Val) -> bool {
+    match v {
+        Val::Opaque | Val::Built(None, _) => true,
+        Val::Built(Some(x), _) => has_unread(x),
+        Val::List(l) | Val::Tuple(l) => l.iter().any(has_unread),
+        Val::Opt(Some(x)) | Val::Res(Ok(x)) | Val::Res(Err(x)) => has_unread(x),
+        Val::Struct(f) | Val::Enum(_, f) => f.iter().any(|(_, x)| has_unread(x)),
+        _ => false,
+    }
+}
+
 /// Whether each element of a list is at most the next (Milestone 307): integers, floating-point
 /// values and strings compare as values; a NaN is in order with nothing.
 fn sorted(l: &[Val]) -> Result<bool, Undecided> {
     for w in l.windows(2) {
         let le = match (&w[0], &w[1]) {
+            (a, b) if has_unread(a) || has_unread(b) => {
+                return Err("a value of a type not read".into())
+            }
             (Val::Str(a), Val::Str(b)) => a <= b,
-            (Val::Opaque, _) | (_, Val::Opaque) => return Err("a value of a type not read".into()),
             (a, b) => matches!(float_op(BinOp::Le, a, b)?, Val::Bool(true)),
         };
         if !le {
