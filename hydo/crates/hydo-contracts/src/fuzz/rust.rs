@@ -876,6 +876,10 @@ fn top_eq(t: &str) -> bool {
 pub struct StructDef {
     pub name: String,
     pub generic: bool,
+    /// The type parameters (`T` of `OrderedFloat<T>`), lifetimes left out (Milestone 333).
+    pub params: Vec<String>,
+    /// Whether the structure has a lifetime parameter (`Word<'a>`; Milestone 333).
+    pub lifetimes: bool,
     pub tuple: bool,
     pub fields: Vec<(String, TyAst)>,
     /// Whether each field is declared with a `pub` visibility (`pub`, `pub(crate)`, ...).
@@ -959,6 +963,16 @@ pub struct Items {
     /// The result types of the functions outside `impl` blocks and traits, by name, for a
     /// `build` line's constructor that returns a `Result` or an `Option` (Milestone 333).
     pub free_fns: BTreeMap<String, Vec<Option<TyAst>>>,
+}
+
+/// A structure's name from its path as the harness writes it: the last segment, without the
+/// type arguments of a generic one (`OrderedFloat::<f64>` gives `OrderedFloat`; Milestone 333).
+pub fn struct_name(path: &str) -> &str {
+    let p = match path.find("::<") {
+        Some(i) if path.ends_with('>') => &path[..i],
+        _ => path,
+    };
+    p.rsplit("::").next().unwrap_or(p)
 }
 
 /// A path split at its `::` outside angle brackets (`SmallVec::<[u8; 4]>::from_vec` gives
@@ -1701,6 +1715,11 @@ fn parse_fields(body: &str, tuple: bool) -> Option<(Vec<(String, TyAst)>, Vec<bo
 fn parse_variants(body: &str) -> Option<Vec<VariantDef>> {
     let mut out = Vec::new();
     for v in split_top(body, ',') {
+        // a variant that a feature may leave out (`#[cfg(feature = "hyphenation")]`) is never
+        // generated; a value of it reads as not read (Milestone 333)
+        if v.contains("#[cfg(") {
+            continue;
+        }
         let v = strip_attrs(v.trim());
         if v.is_empty() {
             continue;
@@ -1983,15 +2002,24 @@ pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
                 }
                 continue;
             }
-            let generic = after.starts_with('<');
-            let after = if generic {
+            let mut params = Vec::new();
+            let mut lifetimes = false;
+            let after = if after.starts_with('<') {
                 match matching(after, 0, '<', '>') {
-                    Some(e) => after[e + 1..].trim_start(),
+                    Some(e) => {
+                        params = generic_names(&after[1..e]);
+                        lifetimes = split_top(&after[1..e], ',')
+                            .iter()
+                            .any(|g| g.trim().starts_with('\''));
+                        after[e + 1..].trim_start()
+                    }
                     None => continue,
                 }
             } else {
                 after
             };
+            // a structure with lifetime parameters only is no generic one (Milestone 333)
+            let generic = !params.is_empty();
             let after = match find_word(after, "where") {
                 Some(0) => match after.find('{') {
                     Some(o) => &after[o..],
@@ -2025,6 +2053,8 @@ pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
                 let def = StructDef {
                     name: name.clone(),
                     generic,
+                    params,
+                    lifetimes,
                     tuple,
                     fields,
                     public,
@@ -2346,6 +2376,8 @@ impl Resolver<'_> {
                     ),
                     ("Result", 2) => FTy::Res(Box::new(arg(0, stack)), Box::new(arg(1, stack))),
                     ("Box" | "Rc" | "Arc", 1) => FTy::Boxed(last.into(), Box::new(arg(0, stack))),
+                    // `Cow<str>` and `Cow<[T]>`: the value they hold (Milestone 333)
+                    ("Cow", 1) => FTy::Boxed("Cow".into(), Box::new(arg(0, stack))),
                     ("Self", 0) => match self.self_ty {
                         Some(s) if !matches!(s, TyAst::Path(p, _) if p.last().map(String::as_str) == Some("Self")) => {
                             self.res(s, stack)
@@ -2394,7 +2426,7 @@ impl Resolver<'_> {
                             Some(Def::E(e)) => (None, Some(e)),
                             None => (self.items.structs.get(name), self.items.enums.get(name)),
                         };
-                        let Some(d) = s_def.filter(|_| n == 0) else {
+                        let Some(d) = s_def.filter(|d| n == 0 || d.params.len() == n) else {
                             if let Some(e) = e_def {
                                 return self.enumeration(e, segs, args, t, stack);
                             }
@@ -2403,44 +2435,97 @@ impl Resolver<'_> {
                             }
                             return FTy::Opaque(t.text());
                         };
-                        if d.generic || stack.iter().any(|s| s == name) {
-                            return FTy::Opaque(t.text());
+                        let view = self.structure(d, segs, args, t, stack);
+                        // a structure with a lifetime parameter or a reference field (textwrap's
+                        // `Options<'a>`): read field by field, never built so, since a generated
+                        // field owns its value (Milestone 333)
+                        let refs = d.fields.iter().any(|(_, f)| matches!(f, TyAst::Ref(..)));
+                        if matches!(view, FTy::Struct { .. }) && (d.lifetimes || refs) {
+                            return FTy::Built {
+                                ty: subst_ty(t, self.subst).text(),
+                                build: None,
+                                read: Some((Box::new(view), String::new())),
+                            };
                         }
-                        let Some(path) = self.written(segs, &d.module, name, d.is_pub) else {
-                            return FTy::Opaque(t.text());
-                        };
-                        stack.push(name.into());
-                        let seen = self.module.starts_with(&d.module);
-                        let fields = d
-                            .fields
-                            .iter()
-                            .zip(d.public.iter().chain(std::iter::repeat(&true)))
-                            .map(|((n, ft), &public)| {
-                                if public || seen {
-                                    return (n.clone(), self.res(ft, stack));
-                                }
-                                let m = if d.module.is_empty() {
-                                    "the crate's root".to_string()
-                                } else {
-                                    format!("`{}`", d.module.join("::"))
-                                };
-                                let why = format!(
-                                    "the field `{n}` of `{name}` is private to the module {m}, \
-                                     so the harness cannot build the value: {}",
-                                    build_advice(self.items, &segs.join("::"), name)
-                                );
-                                (n.clone(), FTy::Hidden(why))
-                            })
-                            .collect();
-                        stack.pop();
-                        FTy::Struct {
-                            path,
-                            tuple: d.tuple,
-                            fields,
-                        }
+                        view
                     }
                 }
             }
+        }
+    }
+
+    /// A structure of the crate field by field: each field that the harness's module can name
+    /// with its type, and the others hidden. A generic structure's type parameters take the
+    /// type's arguments when every field is `pub` (ordered-float's `OrderedFloat<T>(pub T)`
+    /// with `with T = f64`; Milestone 333), and the path names them (`OrderedFloat::<f64>`);
+    /// one with a private field stays unread, so that its constructor keeps its invariant.
+    fn structure(
+        &self,
+        d: &StructDef,
+        segs: &[String],
+        args: &[TyAst],
+        t: &TyAst,
+        stack: &mut Vec<String>,
+    ) -> FTy {
+        let name = d.name.as_str();
+        if stack.iter().any(|s| s == name) {
+            return FTy::Opaque(t.text());
+        }
+        if d.generic
+            && (d.params.len() != args.len()
+                || d.params.iter().any(|p| p.starts_with("const "))
+                || !d.public.iter().all(|p| *p))
+        {
+            return FTy::Opaque(t.text());
+        }
+        let Some(path) = self.written(segs, &d.module, name, d.is_pub) else {
+            return FTy::Opaque(t.text());
+        };
+        let targs: Vec<TyAst> = args.iter().map(|a| subst_ty(a, self.subst)).collect();
+        let map: BTreeMap<String, TyAst> = d.params.iter().cloned().zip(targs.clone()).collect();
+        let inner = Resolver {
+            items: self.items,
+            self_ty: self.self_ty,
+            module: self.module,
+            subst: &map,
+        };
+        let fres: &Resolver = if d.generic { &inner } else { self };
+        let path = if d.generic {
+            format!(
+                "{path}::<{}>",
+                targs.iter().map(TyAst::text).collect::<Vec<_>>().join(", ")
+            )
+        } else {
+            path
+        };
+        stack.push(name.into());
+        let seen = self.module.starts_with(&d.module);
+        let fields = d
+            .fields
+            .iter()
+            .zip(d.public.iter().chain(std::iter::repeat(&true)))
+            .map(|((n, ft), &public)| {
+                if public || seen {
+                    return (n.clone(), fres.res(ft, stack));
+                }
+                let m = if d.module.is_empty() {
+                    "the crate's root".to_string()
+                } else {
+                    format!("`{}`", d.module.join("::"))
+                };
+                let why = format!(
+                    "the field `{n}` of `{name}` is private to the module {m}, so the harness \
+                     cannot build the value: {}",
+                    build_advice(self.items, &segs.join("::"), name)
+                );
+                (n.clone(), FTy::Hidden(why))
+            })
+            .collect();
+        stack.pop();
+        FTy::Struct {
+            path,
+            tuple: d.tuple,
+            fields,
         }
     }
 
@@ -2616,9 +2701,35 @@ impl Resolver<'_> {
             .get(name)
             .map(|(v, m)| (Box::new(self.res(v, stack)), m.clone()));
         stack.pop();
+        // without a `read` line, the fields that the harness's module can name (semver's
+        // `Version { major, minor, patch, .. }`; Milestone 333)
+        let read = read.or_else(|| {
+            let d = self.items.structs.get(name)?;
+            let (segs, args) = match t {
+                TyAst::Path(s, a) => (s.clone(), a.clone()),
+                TyAst::Ref(_, x) => match &**x {
+                    TyAst::Path(s, a) => (s.clone(), a.clone()),
+                    _ => return None,
+                },
+                _ => return None,
+            };
+            let v = self.structure(d, &segs, &args, t, stack);
+            match &v {
+                FTy::Struct { fields, .. }
+                    if fields
+                        .iter()
+                        .any(|(_, f)| !matches!(f, FTy::Hidden(_) | FTy::Opaque(_))) =>
+                {
+                    Some((Box::new(v), String::new()))
+                }
+                _ => None,
+            }
+        });
+        // the `with` lines' types in the type's text (`OrderedFloat<T>` with `with T = f64`;
+        // Milestone 333)
         let ty = match t {
-            TyAst::Ref(_, x) => x.text(),
-            o => o.text(),
+            TyAst::Ref(_, x) => subst_ty(x, self.subst).text(),
+            o => subst_ty(o, self.subst).text(),
         };
         FTy::Built { ty, build, read }
     }

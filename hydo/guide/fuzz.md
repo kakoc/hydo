@@ -184,6 +184,20 @@ A crate can define one name in two modules, as humantime does with `Error`. hydo
 type of the function's own module, else the one that a `use` line of its file imports. A path
 names the other one: `crate::duration::Error`.
 
+## Generic structures and lifetimes
+
+hydo generates a generic structure field by field when each of its fields is `pub`, with the
+types of the `with` lines. ordered-float's `OrderedFloat<T>(pub T)` with `with T = f64` is an
+`f64`, and a clause reads it as `self.0`. A `with` line's type also stands in the parameters'
+types, so `fn eq(&self, other: &OrderedFloat<T>)` takes an `OrderedFloat<f64>`. With `with T
+= &[u8]`, a parameter `input: T` takes a slice. A generic structure with a private field needs
+a `build` line, so that its constructor keeps what it checks (ordered-float's `NotNan` holds
+no NaN).
+
+A structure with a lifetime parameter or a reference field, such as textwrap's `Options<'a>`,
+is read field by field as a result: `result.width == width`. As a parameter it needs a `build`
+line. `Cow<str>` and `Cow<[T]>` read as the text or the list they hold.
+
 ## Values built by a constructor
 
 A type with a pointer or with private fields of another module cannot be generated field by
@@ -208,9 +222,11 @@ pub fn split_to(&mut self, at: usize) -> Self {
 - A report shows a built input as its constructor's call, `self = Bytes::copy_from_slice(b"ab")`.
 
 - An element of a list of built values, or a field of one, is read through the `read` line
-  too: `len(self) == 0 || result[0] == self[0]` compares half's `f16` as its `u16` bits. A
-  built value without a `read` line is not compared: the clause is `not judged`, with the
-  `read` line to write.
+  too: `len(self) == 0 || result[0] == self[0]` compares half's `f16` as its `u16` bits.
+- Without a `read` line, a clause reads the structure's fields that the test module can name.
+  semver's `Version` has public `major`, `minor` and `patch`, so `result.major == major` reads
+  them. A built value without a `read` line and without such fields is not compared: the
+  clause is `not judged`, with the `read` line to write.
 
 A constructor may take no argument (`build VersionReq from VersionReq::default()`). It may
 also return a `Result` or an `Option` of the type, which parsers and date types do. hydo then passes
@@ -429,7 +445,8 @@ pub fn display_roundtrip(text: &str) -> Option<bool> {
   module, without a `build` line;
 - a closure whose result hydo cannot generate, and a closure of a generic `impl` block's type
   parameter;
-- a parameter of a generic structure without a `build` line, a `char`, or a map.
+- a parameter of a generic structure with a private field or a lifetime parameter without a
+  `build` line, a `char`, or a map.
 
 A result of such a type is read in part, and a clause that reads the rest is undecided. hydo
 builds the test module in a `#![no_std]` crate too. The copy keeps the crate's `[lints]`

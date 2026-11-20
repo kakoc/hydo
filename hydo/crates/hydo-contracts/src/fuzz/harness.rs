@@ -169,6 +169,15 @@ fn allow_list(s: &Spec) -> String {
 /// The owned type as the harness writes it.
 fn rty(t: &FTy) -> String {
     match t {
+        // a `Cow` of the unsized type that the value is (Milestone 333)
+        FTy::Boxed(k, x) if k == "Cow" => {
+            let b = match &**x {
+                FTy::Str => "str".to_string(),
+                FTy::List(e) => format!("[{}]", rty(e)),
+                o => rty(o),
+            };
+            format!("self::std::borrow::Cow<'static, {b}>")
+        }
         FTy::Boxed(k, x) => {
             let p = match k.as_str() {
                 "Rc" => "self::std::rc::Rc",
@@ -224,6 +233,9 @@ fn dec(t: &FTy) -> String {
             } else {
                 format!("({})", p.join(", "))
             }
+        }
+        FTy::Boxed(k, x) if k == "Cow" => {
+            format!("self::std::borrow::Cow::Owned({})", dec(x))
         }
         FTy::Boxed(_, x) => {
             let p = rty(t);
@@ -402,6 +414,7 @@ fn enc(t: &FTy, v: &str, d: usize) -> String {
             let f = match k.as_str() {
                 "Rc" => "unrc",
                 "Arc" => "unarc",
+                "Cow" => "uncow",
                 _ => "unbox",
             };
             format!("{{ let {x} = {f}({v}); {} }}", enc(e, &x, d + 1))
@@ -457,9 +470,14 @@ fn enc(t: &FTy, v: &str, d: usize) -> String {
                     body.join(" ")
                 );
             }
-            format!("match {v} {{ {arms}}}")
+            // a variant that a `cfg` left out of the definition hydo read (Milestone 333)
+            format!("match {v} {{ {arms}#[allow(unreachable_patterns)] _ => o.push_str(\"X \"), }}")
         }
         // through the `read` line's method, or not read (Milestone 307)
+        // a structure read field by field (Milestone 333)
+        FTy::Built {
+            read: Some((t, m)), ..
+        } if m.is_empty() => enc(t, v, d),
         FTy::Built {
             read: Some((t, m)), ..
         } => {
@@ -519,6 +537,7 @@ const COMMON: &str = concat!(
     "impl<T> __HydoTake<T> for self::std::option::Option<T> { fn __hydo_take(self) -> T { match self { self::std::option::Option::Some(v) => v, self::std::option::Option::None => self::std::panic::resume_unwind(self::std::boxed::Box::new(__HydoRefused)) } } } ",
     "fn unrc<T: ?Sized>(b: &self::std::rc::Rc<T>) -> &T { b } ",
     "fn unarc<T: ?Sized>(b: &self::std::sync::Arc<T>) -> &T { b } ",
+    "fn uncow<'a, B: ?Sized + self::std::borrow::ToOwned>(b: &'a self::std::borrow::Cow<'_, B>) -> &'a B { b } ",
     "const EVENT: &[u8] = b\"HYDO-ASSERT {\\\"t\\\":\\\"reachable\\\",\\\"id\\\":\\\"fuzz.call\\\",\\\"ok\\\":true,\\\"msg\\\":\\\"a call of hydo fuzz --vm started\\\"}\\n\"; ",
     "static LAST: self::std::sync::Mutex<self::std::option::Option<(self::std::string::String, self::std::string::String)>> = self::std::sync::Mutex::new(self::std::option::Option::None); ",
     "#[test] fn run() { ",

@@ -101,6 +101,24 @@ fn constructors_without_arguments_and_fallible_ones_build() {
 }
 
 #[test]
+fn the_with_lines_types_reach_the_parameters_types() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m333-with");
+    let fns = [
+        "lt", "add", "first_of", "opts", "cowed", "cow_len", "ver_sum", "ver_of",
+    ];
+    let (_, rep) = run_fns(&t, &fns, &[]);
+    assert!(rep.skipped.is_empty(), "{:?}", rep.skipped);
+    for f in fns {
+        let r = one(&rep, &format!("::{f}"));
+        assert_eq!(r.verdict, "held", "{r:?}");
+        assert!(r.held.iter().all(|h| h.undecided == 0), "{r:?}");
+    }
+    // the method of a generic structure's `impl` block is named with the `with` line's type
+    let lt = one(&rep, "::lt");
+    assert!(lt.function.contains("Wrap<f64>"), "{lt:?}");
+}
+
+#[test]
 fn an_associated_type_of_a_type_parameter_reads_through_its_with_line() {
     let t = TmpDir::new("hydo-contracts-fuzz-m333-assoc");
     let (_, rep) = run_fns(&t, &["small::"], &[]);

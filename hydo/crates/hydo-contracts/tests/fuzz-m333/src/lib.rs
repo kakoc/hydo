@@ -172,6 +172,110 @@ pub fn num_zero(n: &num::Num) -> u8 {
     0
 }
 
+// ---------------------------------------------------------------- generic `impl` blocks
+
+/// A generic structure whose field is public, as ordered-float's `OrderedFloat<T>(pub T)`: with
+/// `with T = f64` hydo generates it field by field.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Wrap<T>(pub T);
+
+impl<T: Copy + PartialOrd> Wrap<T> {
+    /// `&Wrap<T>` takes the `with` line's type.
+    // hydo: with T = f64
+    // hydo: ensures result == (self.0 < other.0)
+    pub fn lt(&self, other: &Wrap<T>) -> bool {
+        self.0 < other.0
+    }
+}
+
+/// `Self::Output` of this `impl`, not of another type's `impl` of `Neg`.
+impl<T: std::ops::Add<Output = T>> std::ops::Add<T> for Wrap<T> {
+    type Output = Self;
+
+    // hydo: with T = i64
+    // hydo: input self.0 in -1000..=1000
+    // hydo: input other in -1000..=1000
+    // hydo: ensures result.0 == self.0 + other
+    fn add(self, other: T) -> Self::Output {
+        Wrap(self.0 + other)
+    }
+}
+
+pub struct Other(pub u8);
+
+impl std::ops::Neg for Other {
+    type Output = u8;
+
+    fn neg(self) -> u8 {
+        0u8.wrapping_sub(self.0)
+    }
+}
+
+/// `with T = &[u8]` passes a slice.
+// hydo: with T = &[u8]
+// hydo: ensures is_none(result) || some(result) == input[0]
+pub fn first_of<T: AsRef<[u8]>>(input: T) -> Option<u8> {
+    input.as_ref().first().copied()
+}
+
+/// A structure with a lifetime parameter, read field by field, as textwrap's `Options<'a>`.
+pub struct Opts<'a> {
+    pub width: usize,
+    pub indent: &'a str,
+}
+
+// hydo: ensures result.width == width && result.indent == ""
+pub fn opts(width: usize) -> Opts<'static> {
+    Opts { width, indent: "" }
+}
+
+/// `Cow<str>` reads as its text, as textwrap's `wrap` returns `Vec<Cow<str>>`.
+// hydo: ensures len(result) == 1 && result[0] == s
+pub fn cowed(s: &str) -> Vec<std::borrow::Cow<'_, str>> {
+    vec![std::borrow::Cow::Borrowed(s)]
+}
+
+/// A `Cow` parameter takes a generated value.
+// hydo: ensures result == len(c)
+pub fn cow_len(c: std::borrow::Cow<'_, [u8]>) -> usize {
+    c.len()
+}
+
+/// A type that a `build` line builds, whose public fields a clause reads without a `read`
+/// line, as semver's `Version`.
+pub mod ver {
+    pub struct Ver {
+        pub major: u64,
+        pub minor: u64,
+        note: String,
+    }
+
+    impl Ver {
+        pub fn new(major: u64, minor: u64) -> Ver {
+            Ver {
+                major,
+                minor,
+                note: String::new(),
+            }
+        }
+
+        pub fn note(&self) -> &str {
+            &self.note
+        }
+    }
+}
+
+// hydo: build ver::Ver from ver::Ver::new(major: u64, minor: u64)
+// hydo: ensures result == v.major + v.minor
+pub fn ver_sum(v: &ver::Ver) -> u128 {
+    v.major as u128 + v.minor as u128 + v.note().len() as u128
+}
+
+// hydo: ensures result.major == major && result.minor == 0
+pub fn ver_of(major: u64) -> ver::Ver {
+    ver::Ver::new(major, 0)
+}
+
 // ---------------------------------------------------------------- associated types
 
 /// A container generic over a trait with an associated type, as smallvec's `SmallVec<A:

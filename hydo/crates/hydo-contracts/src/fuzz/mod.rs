@@ -826,7 +826,8 @@ fn read_fn(
         };
         ty.generable()
             .map_err(|why| refusal(&format!("the parameter `{n}`"), t, why, items))?;
-        let (pass, inner) = passes(t);
+        // `input: T` with `with T = &[u8]` takes a slice, not a `Vec<u8>` (Milestone 333)
+        let (pass, inner) = passes(&rust::subst_ty(t, &subst));
         params.push(harness::Param {
             name: n.clone(),
             pass,
@@ -1221,7 +1222,7 @@ fn check_pat(p: &lang::Pat, t: &FTy) -> Result<(), String> {
             named_fields(n, ps, &v.fields)
         }
         (Pat::Fields(n, ps), FTy::Struct { path, fields, .. }) => {
-            let name = path.rsplit("::").next().unwrap_or(path);
+            let name = rust::struct_name(path);
             if n != name {
                 return Err(format!("the value is a `{name}`, not a `{n}`"));
             }

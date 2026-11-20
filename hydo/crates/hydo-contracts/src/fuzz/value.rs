@@ -275,7 +275,7 @@ pub fn show(v: &Val, t: &FTy) -> String {
                 fields,
             },
         ) => {
-            let name = path.rsplit("::").next().unwrap_or(path);
+            let name = super::rust::struct_name(path);
             if *tuple {
                 let p: Vec<String> = fv
                     .iter()
@@ -618,7 +618,7 @@ impl Reader<'_> {
                 fields,
             } => {
                 let name = self.ident();
-                let want = path.rsplit("::").next().unwrap_or(path);
+                let want = super::rust::struct_name(path);
                 if name != want {
                     return Err(format!("expected `{want}`, found `{name}`"));
                 }
