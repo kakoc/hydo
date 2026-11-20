@@ -281,7 +281,7 @@ engine's wall limit of 900 s. A read that arrives costs about a tenth of a secon
   Memos's seed 46 had 524,990 bytes. Only one step is recorded still: the videos of every step
   of a Memos walk would pass 2 MB.
 
-### The failing run's own frames (Milestone 334)
+### The failing run's own frames, and the pages read back (Milestone 334)
 
 A recording replay is a second run. It repeats the failing run's actions but not their timing,
 so a failure that depends on the timing can pass in it, and then no video shows the failure
@@ -328,6 +328,36 @@ frames per step, each with its action and its path. The step that a failing chec
 the test "walk step 3") is marked, and so is every frame with notes. The video of `,rec`
 follows when there is one. The page of an exploration shows each failure's filmstrip from
 `consoles/<tag>.screens/` in the failure's details, under its timeline.
+
+The walk also checks the server against the pages. A rule over the database says whether the
+server kept what it acknowledged; it does not say whether a user can still see it. `browser.read_back`
+names the objects and how a page shows them:
+
+- The walker already writes `<METHOD>:<path>=<id>` to `$HYDO_ACKED` for each id of a write's
+  JSON answer (Milestone 273). An entry of `objects` takes the words whose `<METHOD> <path>` its
+  regular expression `writes` matches. Its named groups, such as `(?<project>\d+)`, and the id
+  fill `page`, the path of the page that lists the object, and `shows`, a Playwright selector.
+  An object stays out when a later acknowledged write matches `unless`, by default a `DELETE`
+  of `<kind>/<id>`.
+- The invariant `<name>.acked_shown` runs `node walk.mjs --read-back "$HYDO_ACKED"` in the
+  browser's service, after the other page checks: in a recovery boot it makes the record folder
+  that they read as "no page ran in this boot". It runs at the end of a run and in the recovery
+  boot, whose `$HYDO_ACKED` starts with the first boot's words.
+- A fresh browser takes the walk's saved session. A recovery boot has none, so the check runs
+  `read_back.setup`, or the walk's own setup. A walk whose setup creates an account (Vikunja's)
+  needs a setup that signs in.
+- Each page is opened once, and the check waits up to `wait_ms` (10 s) for all of its objects,
+  so a page that loads its list late does not count as a loss. A page that lacks an object gets
+  a screenshot, `read-back-<n>.png`, named in the finding, and a frame in the filmstrip.
+- The default entry (`read_back: true`) guesses: every object a POST or a PUT returned, on the
+  start page, as a link that ends with `/<kind>/<id>`. An app that shows its objects elsewhere
+  needs its own entry, or the default gives a false finding. So the check is not on by default
+  for every walk.
+
+The check cannot see an object that the app shows only on a page it does not open, such as a
+second page of a long list, or an object that the app hides on purpose, such as a done task. A
+cascade of a delete, such as a project's tasks, needs `unless`. It judges that an object is
+there, not that its content is right.
 
 ## Sources
 

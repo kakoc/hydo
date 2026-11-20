@@ -63,13 +63,15 @@ pub fn signature(v: &str) -> String {
 /// (`VIOLATION [<browser>.no_page_errors] ...`, hydo-manifest's `browser` expansion): only their
 /// signatures blank ids, so that every other finding keeps the signature it had.
 pub fn page_violation(v: &str) -> bool {
-    const PAGE: [&str; 6] = [
+    const PAGE: [&str; 7] = [
         "no_page_errors",
         "busy_ends",
         "failures_shown",
         "no_bad_text",
         "screens_match",
         "tests_pass",
+        // Milestone 334: its sentence names the object's id, as `the task 4` or `the order o1`
+        "acked_shown",
     ];
     verdict_kind(v) == "violation"
         && v.split_once("VIOLATION [")

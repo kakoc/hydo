@@ -173,6 +173,62 @@ under the problem. The page links each problem's recording, its video, its trace
 `repro.spec.ts`, in `replays/rec-<k>/screens/`. The minimal schedule without `rec` still shows
 the failure, and its run's filmstrip and traces show it action by action.
 
+### Check that the pages show what the server stored
+
+The five properties below judge what a page did. `browser.read_back` adds a sixth check,
+`browser.acked_shown`: every object whose id the server returned in a write that it answered as
+done is shown on its page. It runs at the end of the run and, after a power cut, in the recovery
+boot. It opens the pages in a fresh browser, with the walk's session or after its own setup
+steps, and looks for each object's id.
+
+```yaml
+browser:
+  explore: ...
+  read_back:
+    setup:                     # sign in again when the check has no session of the walk
+      - {open: /login}
+      - {fill: Username Or Email Address, with: hydo}
+      - {fill: Password, with: hydo-pass-1}
+      - {click: Login}
+      - {see: Current Tasks}
+    objects:
+      - writes: '^(POST|PUT) /api/v[12]/projects/(?<project>\d+)/tasks(/bulk)?$'
+        name: task             # the word for the object in the finding
+        page: /                # the page that lists such an object
+        shows: 'a[href$="/tasks/{id}"]'   # a Playwright selector: how the page shows it
+        unless: '^DELETE /api/v[12]/(tasks/{id}|projects/{project})$'
+    wait_ms: 10000             # how long a page may take to show its objects
+```
+
+- `writes` is a regular expression over `<METHOD> <path>` of an acknowledged write whose JSON
+  answer returned an id, the `<METHOD>:<path>=<id>` words of `$HYDO_ACKED`.
+- `page`, `shows` and `unless` take `{id}` and the named groups of `writes`, such as
+  `{project}`.
+- `unless` names a later acknowledged write that removes the object on purpose.
+- `read_back: true` takes the defaults: every object that a POST or a PUT returned an id of,
+  on the walk's start page, shown by a link whose path ends with `/<kind>/<id>`. The kind is
+  the last word of the write's path, such as `orders`.
+
+A finding names the object, the write and the page, and the run directory keeps a screenshot of
+that page:
+
+```text
+The page / does not show the task 4 that the server acknowledged (POST
+/api/v2/projects/1/tasks/bulk answered with its id): no element matches a[href$="/tasks/4"] after
+10.0 s; 2 of 5 acknowledged objects are not shown. Screenshot: screens/read-back-1.png in the
+run directory.
+```
+
+What the check cannot judge:
+
+- an object that the app shows only on a page it does not open, such as a second page of a long
+  list, a closed folder, or a filter;
+- an object that the app hides on purpose, such as a done or archived one, or one that another
+  object took along when it was deleted, unless `unless` names that write;
+- an object whose write returned no id, and a change to an object that keeps its id, such as a
+  new title;
+- that the page shows the object's content right: only its presence.
+
 ## The properties
 
 Each one is an invariant named `<browser>.<property>`; an empty list in `watch:` turns it off.
@@ -184,6 +240,7 @@ Each one is an invariant named `<browser>.<property>`; an empty list in `watch:`
 | `browser.busy_ends` | a busy element stays for `busy_max_ms` (default 10000), or is still on the screen when its test ends after a failed request that the page did not send again. A busy element ends with its document: a reload, a back to another page, or a link out ends it |
 | `browser.failures_shown` | a request fails (an answer of 500 or more, or no answer) and within `failures_within_ms` (default 5000) the page shows no error element and does not send the request again. With `watch.failures_of`, a regular expression over the path or over `<METHOD> <path>`, only the requests it matches count: `^(POST|PATCH|DELETE) /api/` names the writes of an API whose reads use the same paths. When the pattern matches none of the requests the pages sent, the run warns: `hydo: warning: ... judged no failed request`. |
 | `browser.no_bad_text` | a page prints a watched text (default `NaN`, `undefined`, `[object Object]`, `Invalid Date`) |
+| `browser.acked_shown` | with `browser.read_back`: an object whose id the server returned in an acknowledged write is not on its page. The check runs at the end of the run and after a power cut ("Check that the pages show what the server stored") |
 
 A finding reads like this:
 

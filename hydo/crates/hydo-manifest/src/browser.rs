@@ -46,8 +46,13 @@ pub const KNOWN: &[&str] = &[
     "screens",
     "screens_ref",
     "explore",
+    "read_back",
     "description",
 ];
+
+/// The keys of `browser.read_back` (Milestone 334) and of one of its `objects:`.
+pub const KNOWN_READ_BACK: &[&str] = &["objects", "setup", "wait_ms"];
+pub const KNOWN_READ_BACK_OBJECT: &[&str] = &["writes", "name", "page", "shows", "unless"];
 
 /// The keys of `browser.explore` (Milestone 258, docs/design/ui-exploration.md).
 pub const KNOWN_EXPLORE: &[&str] = &[
@@ -360,6 +365,15 @@ pub fn expand(m: &mut Value) -> R<()> {
         None => None,
         Some(e) => Some(explore_cfg(e, m)?),
     };
+    let read_back = match get(&b, "read_back") {
+        None => None,
+        Some(_) if explore.is_none() => {
+            return Err(err(
+                "browser.read_back: only with browser.explore (the walk writes the acknowledged writes that it reads)",
+            ))
+        }
+        Some(v) => read_back_cfg(v)?,
+    };
     let tests = match get(&b, "tests") {
         Some(Value::String(s)) if !s.is_empty() => {
             if explore.is_some() {
@@ -545,6 +559,9 @@ pub fn expand(m: &mut Value) -> R<()> {
     if let Some(x) = &explore {
         let mut cfg = x.cfg.clone();
         cfg["text"] = json!(text);
+        if let Some(rb) = &read_back {
+            cfg["read_back"] = rb.clone();
+        }
         senv["HYDO_WEB_WALK"] = Value::String(serde_json::to_string(&cfg).unwrap_or_default());
     }
     for (k, v) in env {
@@ -701,6 +718,17 @@ pub fn expand(m: &mut Value) -> R<()> {
             "cmd": check("tests"),
         }));
     }
+    // Milestone 334: the pages show what the server acknowledged. After the other page checks: it
+    // makes the record folder in a recovery boot, where they find none and judge nothing
+    if read_back.is_some() {
+        invs.push(json!({
+            "id": format!("{name}.acked_shown"),
+            "msg": "every object that the server acknowledged and browser.read_back names is shown on its page, at the end of the run and after a power cut",
+            "cmd": format!(
+                "hydo-oci {name} /bin/sh -c 'mkdir -p {RECORD_DIR}/home && cd {WALK_DIR} && exec node walk.mjs --read-back \"$1\"' sh \"$HYDO_ACKED\""
+            ),
+        }));
+    }
 
     let Some(o) = m.as_object_mut() else {
         return Ok(());
@@ -806,7 +834,7 @@ pub fn expand(m: &mut Value) -> R<()> {
     Ok(())
 }
 
-/// A list of setup steps (`browser.explore.setup`): each one of open,
+/// A list of setup steps (`browser.explore.setup`, `browser.read_back.setup`): each one of open,
 /// click (with role:), fill (with with:), press, see or wait.
 fn setup_steps(v: Option<&Value>, wh: &str) -> R<Vec<Value>> {
     let mut setup = Vec::new();
@@ -851,6 +879,79 @@ fn setup_steps(v: Option<&Value>, wh: &str) -> R<Vec<Value>> {
         }
     }
     Ok(setup)
+}
+
+/// `browser.read_back` (Milestone 334, docs/design/ui-exploration.md): which acknowledged objects
+/// the pages must show, where, and how. `true` takes one entry of defaults: every object that a
+/// POST or PUT returned an id of, on the walk's start page, shown as a link whose path ends with
+/// `/<kind>/<id>` (the kind is the last word of the write's path, such as `orders`). The
+/// walker's `--read-back` mode reads the result as `read_back` of `$HYDO_WEB_WALK`.
+fn read_back_cfg(v: &Value) -> R<Option<Value>> {
+    let wh = "browser.read_back";
+    let o = match v {
+        Value::Bool(false) => return Ok(None),
+        Value::Bool(true) => return Ok(Some(json!({"wait_ms": 10_000, "objects": [{}]}))),
+        Value::Object(_) => v,
+        _ => {
+            return Err(err(
+                "browser.read_back: true, or a mapping {objects: [{writes: <regular expression over METHOD path>, page: <path>, shows: <selector>}], setup: [...], wait_ms: <ms>}",
+            ))
+        }
+    };
+    crate::validate::unknown(o, KNOWN_READ_BACK, wh)?;
+    let wait = ms(get(o, "wait_ms"), "browser.read_back.wait_ms", 10_000)?;
+    let mut out = json!({"wait_ms": wait});
+    if let Some(st) = get(o, "setup") {
+        out["setup"] = json!(setup_steps(Some(st), "browser.read_back.setup")?);
+    }
+    let mut objs = Vec::new();
+    // {id} and the named groups stand for values; a regular expression is checked with a word
+    // in their place
+    let names = regex::Regex::new(r"\{[A-Za-z_][A-Za-z0-9_]*\}").expect("a pattern");
+    match get(o, "objects") {
+        None => objs.push(json!({})),
+        Some(Value::Array(a)) if !a.is_empty() => {
+            for (i, e) in a.iter().enumerate() {
+                let w = format!("browser.read_back.objects[{i}]");
+                if !e.is_object() {
+                    return Err(err(format!(
+                        "{w}: a mapping such as {{writes: '^POST /api/orders$', page: '/orders/{{id}}', shows: 'text=Order {{id}}'}}"
+                    )));
+                }
+                crate::validate::unknown(e, KNOWN_READ_BACK_OBJECT, &w)?;
+                let mut one = Map::new();
+                for k in KNOWN_READ_BACK_OBJECT {
+                    match get(e, k) {
+                        None => {}
+                        Some(Value::String(x)) if !x.trim().is_empty() && !x.contains('\n') => {
+                            let probe = names.replace_all(x, "x");
+                            if (*k == "writes" || *k == "unless") && regex::Regex::new(&probe).is_err() {
+                                return Err(err(format!(
+                                    "{w}.{k}: {} is not a regular expression",
+                                    repr_str(x)
+                                )));
+                            }
+                            if *k == "page" && !x.starts_with('/') {
+                                return Err(err(format!(
+                                    "{w}.page: a path of the app such as /orders/{{id}} (with {{id}} and the named groups of writes:)"
+                                )));
+                            }
+                            one.insert(k.to_string(), json!(x));
+                        }
+                        Some(_) => return Err(err(format!("{w}.{k}: a string on one line"))),
+                    }
+                }
+                objs.push(Value::Object(one));
+            }
+        }
+        Some(_) => {
+            return Err(err(
+                "browser.read_back.objects: a list of entries, each {writes:, name:, page:, shows:, unless:}",
+            ))
+        }
+    }
+    out["objects"] = json!(objs);
+    Ok(Some(out))
 }
 
 /// A validated `browser.explore`: the walker's configuration ($HYDO_WEB_WALK) and the walk's
@@ -1357,8 +1458,6 @@ mod tests {
             WALK_STUB
         );
         assert_eq!(t["/opt/hydo/web/hydo/hook.cjs"], HOOK);
-        // Milestone 334: the mark of a walker that keeps a filmstrip
-        assert_eq!(t[format!("/{FILM_MARK}")], FILM_MARK_TEXT);
         let cfg: Value =
             serde_json::from_str(m["services"][0]["env"]["HYDO_WEB_WALK"].as_str().unwrap())
                 .unwrap();
@@ -1454,6 +1553,161 @@ mod tests {
             let e = expand(&mut m).unwrap_err().message;
             assert!(e.contains(want), "{e}");
         }
+    }
+
+    /// Milestone 334: `read_back` adds the check `<name>.acked_shown` after the other page
+    /// checks, gives the walker its entries, and marks the image as one whose walker keeps a
+    /// filmstrip; without the key a walk has neither the check nor the entries.
+    #[test]
+    fn read_back_adds_the_check_that_the_pages_show_what_was_acknowledged() {
+        let walk = |rb: Option<Value>| {
+            let mut b = json!({"explore": {"start": "http://localhost:3000/shop"}});
+            if let Some(r) = rb {
+                b["read_back"] = r;
+            }
+            let mut m = base(b);
+            expand(&mut m).map(|_| m)
+        };
+        let ids = |m: &Value| -> Vec<String> {
+            m["invariants"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|i| i["id"].as_str().unwrap().to_string())
+                .collect()
+        };
+        let cfg = |m: &Value| -> Value {
+            serde_json::from_str(m["services"][0]["env"]["HYDO_WEB_WALK"].as_str().unwrap())
+                .unwrap()
+        };
+        let plain = walk(None).unwrap();
+        assert!(!ids(&plain).iter().any(|i| i.ends_with("acked_shown")));
+        assert!(cfg(&plain).get("read_back").is_none());
+        // every walk's image has the filmstrip's mark
+        assert_eq!(
+            plain["root"]["text"][format!("/{FILM_MARK}")],
+            FILM_MARK_TEXT
+        );
+        let on = walk(Some(json!(true))).unwrap();
+        let all = ids(&on);
+        assert_eq!(all.last().unwrap(), "browser.acked_shown");
+        let inv = on["invariants"].as_array().unwrap().last().unwrap().clone();
+        assert!(
+            inv["cmd"]
+                .as_str()
+                .unwrap()
+                .contains("exec node walk.mjs --read-back \"$1\"' sh \"$HYDO_ACKED\""),
+            "{inv}"
+        );
+        assert_eq!(
+            cfg(&on)["read_back"],
+            json!({"wait_ms": 10000, "objects": [{}]})
+        );
+        let spec = walk(Some(json!({
+            "setup": [{"open": "/login"}, {"fill": "User", "with": "a"}],
+            "wait_ms": 3000,
+            "objects": [{"writes": "^POST /api/p/(?<p>\\d+)/tasks$", "page": "/p/{p}", "shows": "a[href$=\"/t/{id}\"]", "name": "task"}],
+        })))
+        .unwrap();
+        let rb = &cfg(&spec)["read_back"];
+        assert_eq!(rb["wait_ms"], 3000);
+        assert_eq!(rb["setup"][1]["with"], "a");
+        assert_eq!(rb["objects"][0]["page"], "/p/{p}");
+        assert!(walk(Some(json!(false)))
+            .map(|m| !ids(&m).iter().any(|i| i.ends_with("acked_shown")))
+            .unwrap());
+        for (rb, want) in [
+            (json!({"objects": [{"writes": "(x"}]}), "regular expression"),
+            (
+                json!({"objects": [{"page": "orders"}]}),
+                "a path of the app",
+            ),
+            (json!({"objects": [{"nope": "x"}]}), "unknown field"),
+            (json!({"objects": []}), "a list of entries"),
+            (json!({"setup": [{"fill": "x"}]}), "with:"),
+            (json!(3), "true, or a mapping"),
+        ] {
+            let e = walk(Some(rb)).unwrap_err().message;
+            assert!(e.contains(want), "{e}");
+        }
+        let mut tests = base(json!({"tests": "e2e", "read_back": true}));
+        assert!(expand(&mut tests)
+            .unwrap_err()
+            .message
+            .contains("only with browser.explore"));
+    }
+
+    /// `node walk.mjs --read-back <acked> --list` over the given words and `read_back` entries:
+    /// the objects the check would look for. None when this machine has no `node`.
+    fn read_back_list(acked: &str, rb: Value) -> Option<Value> {
+        let dir = std::env::temp_dir().join(format!(
+            "hydo-manifest-read-back-{}-{}",
+            std::process::id(),
+            acked.len()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("walk.mjs"), WALK).unwrap();
+        std::fs::write(dir.join("acked"), acked).unwrap();
+        let cfg = json!({"start": "http://localhost:3000/home", "read_back": rb});
+        let out = std::process::Command::new("node")
+            .arg(dir.join("walk.mjs"))
+            .arg("--read-back")
+            .arg(dir.join("acked"))
+            .arg("--list")
+            .env("HYDO_WEB_DIR", dir.join("web"))
+            .env("HYDO_WEB_WALK", cfg.to_string())
+            .output()
+            .ok();
+        let _ = std::fs::remove_dir_all(&dir);
+        let out = out?;
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        Some(serde_json::from_slice(&out.stdout).unwrap())
+    }
+
+    /// Milestone 334: which acknowledged objects the read-back check looks for, and where.
+    #[test]
+    fn read_back_looks_for_the_objects_that_the_writes_returned() {
+        let acked = "bulk\nPOST:/api/v2/projects/1/tasks/bulk=6\nPOST:/api/v2/projects/1/tasks/bulk=7\n\
+                     PATCH:/api/v2/projects/1=1\nCreateMemo:memos/T5k4x8o5\nDELETE:/api/v1/tasks/7\n\
+                     POST:/api/v2/projects/3/tasks/bulk=8\nDELETE:/api/v1/projects/3\nPOST:/api/orders=o1\n";
+        // the defaults: every object a POST or PUT returned, on the start page, as a link
+        let Some(d) = read_back_list(acked, json!({"objects": [{}]})) else {
+            return; // no node here
+        };
+        let objs = d["objects"].as_array().unwrap();
+        let names: Vec<&str> = objs.iter().map(|o| o["name"].as_str().unwrap()).collect();
+        assert_eq!(names, ["task 6", "task 8", "order o1"], "{d}");
+        assert_eq!(objs[0]["page"], "/home");
+        assert_eq!(
+            objs[0]["shows"],
+            "a[href$=\"/tasks/6\"], a[href*=\"/tasks/6/\"]"
+        );
+        assert_eq!(
+            objs[2]["shows"],
+            "a[href$=\"/orders/o1\"], a[href*=\"/orders/o1/\"]"
+        );
+        assert_eq!(d["left_out"][0], "task 7 (DELETE /api/v1/tasks/7)");
+        // an entry with its page, its selector and a removal by another kind of write
+        let d = read_back_list(
+            acked,
+            json!({"objects": [{
+                "writes": "^POST /api/v2/projects/(?<project>\\d+)/tasks/bulk$",
+                "name": "task",
+                "page": "/projects/{project}",
+                "shows": "a[href$=\"/tasks/{id}\"]",
+                "unless": "^DELETE /api/v[12]/(tasks/{id}|projects/{project})$",
+            }]}),
+        )
+        .unwrap();
+        let objs = d["objects"].as_array().unwrap();
+        assert_eq!(objs.len(), 1, "{d}");
+        assert_eq!(objs[0]["page"], "/projects/1");
+        assert_eq!(objs[0]["shows"], "a[href$=\"/tasks/6\"]");
+        assert_eq!(d["left_out"].as_array().unwrap().len(), 2);
     }
 
     #[test]
