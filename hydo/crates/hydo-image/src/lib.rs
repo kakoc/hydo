@@ -67,7 +67,8 @@ pub const VERSION: u64 = 1;
 /// Epoch 5 (Milestone 317): an image service's launcher mounts its system folders once per boot,
 /// under the lock of its `mounts:` ([`EpochDefaults::oci_mounts_once`]), and (Milestone 323) hvx
 /// boots an x86_64 image's guest with its TSC as the clock ([`EpochDefaults::exact_tick`]), and
-/// (Milestone 331) each image service has a `/tmp` of its own ([`EpochDefaults::oci_own_tmp`]).
+/// (Milestone 331) each image service has a `/tmp` of its own ([`EpochDefaults::oci_own_tmp`]),
+/// and (Milestone 338) an arm64 root keeps its hard links ([`EpochDefaults::cpio_hard_links`]).
 pub const EPOCH: u64 = 5;
 
 /// The epoch of a run, exploration or cache entry that recorded none (written before M155).
@@ -138,6 +139,13 @@ pub struct EpochDefaults {
     /// 323). It decides the bytes of a new image only: an image built before has no such file
     /// and boots as it did. The Mac and KVM engines ignore the file.
     pub exact_tick: bool,
+    /// hydo-build writes the arm64 root's newc archive (the initramfs, and the archive that the
+    /// root of `guest.root: disk` is unpacked from) with the tree's hard links as links: one
+    /// inode with its count of links, the bytes in its first entry only. Before, each path of a
+    /// file was a whole copy, and the busybox image's 400 applets took 400 copies of busybox in
+    /// the guest's RAM (open item 162). From epoch 5 (Milestone 338). It decides the bytes of a
+    /// new image only. An x86_64 root is made by `mke2fs -d`, which has always kept them.
+    pub cpio_hard_links: bool,
 }
 
 /// The defaults of an image built at `epoch` for `arch` (`x86_64` or `arm64`).
@@ -155,6 +163,7 @@ pub fn defaults(epoch: u64, arch: &str) -> EpochDefaults {
         oci_mounts_once: epoch >= 5,
         oci_own_tmp: epoch >= 5,
         exact_tick: epoch >= 5 && arch == "x86_64",
+        cpio_hard_links: epoch >= 5,
     }
 }
 
@@ -583,6 +592,9 @@ mod tests {
         // epoch 5 (M317, M323): the image services' launchers mount the system folders once, and
         // hvx's guest keeps time with its TSC; the rest as at epoch 4
         assert!(!one.exact_tick && !two.exact_tick && !three.exact_tick && !four.exact_tick);
+        for d in [one, two, three, four] {
+            assert!(!d.cpio_hard_links);
+        }
         let five = defaults(5, "x86_64");
         assert_eq!(
             five,
@@ -590,9 +602,11 @@ mod tests {
                 oci_mounts_once: true,
                 oci_own_tmp: true,
                 exact_tick: true,
+                cpio_hard_links: true,
                 ..four
             }
         );
+        assert!(defaults(5, "arm64").cpio_hard_links);
         assert!(defaults(5, "arm64").oci_mounts_once);
         assert!(defaults(5, "arm64").oci_own_tmp);
         // hvx runs x86_64 images only

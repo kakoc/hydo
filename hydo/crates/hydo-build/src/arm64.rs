@@ -186,6 +186,12 @@ pub fn needs_netns_kernel(m: &serde_json::Value) -> bool {
     shell::has_netns(m) || shell::has_links(m) || shell::has_freeze(m)
 }
 
+/// Whether this hydo's arm64 roots keep their hard links as links (Milestone 338, from the
+/// fingerprint epoch 5, [`hydo_image::EpochDefaults::cpio_hard_links`]).
+fn links() -> bool {
+    hydo_image::defaults(hydo_image::EPOCH, "arm64").cpio_hard_links
+}
+
 /// `guest.root` (Milestone 284): the root is a read-only file system on the disk, not the
 /// initramfs. The default is the disk for an image with `browser:` (the Playwright image is
 /// about 3 GB unpacked, more than guest RAM should hold), else memory, as before.
@@ -237,7 +243,7 @@ fn disk_root(
         .transpose()?
         .unwrap_or(0);
     let archive = bdir.join(format!("{out}-arm64-root.cpio"));
-    let alen = crate::cpio::write_cpio_file(r, &archive, fsx::FIXED_MTIME as u64, meta)?;
+    let alen = crate::cpio::write_cpio_file(r, &archive, fsx::FIXED_MTIME as u64, meta, links())?;
     let mib: u64 = if size != 0 {
         size as u64
     } else {
@@ -273,7 +279,7 @@ fn disk_root(
     fsx::write_text(&b.join("init"), DISK_ROOT_INIT)?;
     fsx::chmod(&b.join("init"), 0o755)?;
     fsx::fix_mtimes(&b)?;
-    crate::cpio::write_cpio_gz(&b, cpio, fsx::FIXED_MTIME as u64, None, true)?;
+    crate::cpio::write_cpio_gz(&b, cpio, fsx::FIXED_MTIME as u64, None, true, links())?;
     fsx::force_remove(&b)?;
     // the tree is in the archive now: a root of gigabytes is not kept beside the helper VM's disk
     fsx::force_remove(r)?;
@@ -631,7 +637,14 @@ pub fn build(
             );
         }
         None => {
-            crate::cpio::write_cpio_gz(&r, &cpio, fsx::FIXED_MTIME as u64, meta.as_ref(), true)?;
+            crate::cpio::write_cpio_gz(
+                &r,
+                &cpio,
+                fsx::FIXED_MTIME as u64,
+                meta.as_ref(),
+                true,
+                links(),
+            )?;
             outln(
                 io,
                 &format!(

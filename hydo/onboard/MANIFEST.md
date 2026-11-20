@@ -2922,6 +2922,9 @@ image keeps working after hydo is upgraded").
   which Linux gives half of the RAM) or when the root partition and the data disk exceed the
   4,096 MiB that hvx takes (Milestone 324); no xattrs/capabilities or devices
   from layers (FIFOs since Milestone 316); no zstd layers.
+- An image's hard links stay links in the root from the fingerprint epoch 5 (Milestone 338).
+  Before, each path of an arm64 root was a whole copy: the 400 applets of the busybox image
+  took 446 MiB of guest RAM, and 14 MiB with the links.
 - The guest console keeps 64 KiB per VM on hvx (the kernel module's buffer; `hydo run` warns
   when a run wrote more) and 4 MiB on the KVM engine and the Mac: a workload that prints every
   acknowledged id should print short ids, or the done marker can be lost.
