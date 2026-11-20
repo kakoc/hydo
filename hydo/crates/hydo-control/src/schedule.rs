@@ -445,19 +445,17 @@ pub fn initramfs_verdict(line: &str, fit: Option<&crate::plan::RootFit>) -> Opti
              build the image again"
         ));
     }
-    // the engines keep a verdict line of at most 300 bytes (hvm's last_verdict)
+    // the engines keep 255 bytes of the verdict an END gives
     let sizes = match fit {
         Some(f) => format!(
-            ": it unpacks to about {} MiB beside its {} MiB compressed copy, and guest.ram_mib is \
-             {}",
+            ": about {} MiB unpacked beside {} MiB compressed, and guest.ram_mib is {}",
             f.unpacked_mib, f.compressed_mib, f.ram_mib
         ),
         None => String::new(),
     };
     Some(format!(
-        "HYDO-ORACLE: ERROR the image's root does not fit into guest RAM ({said}){sizes}. Raise \
-         guest.ram_mib, or make the roots smaller (root.share_images: true for services of one \
-         image)"
+        "HYDO-ORACLE: ERROR the root does not fit in guest RAM ({said}){sizes}. Raise \
+         guest.ram_mib or shrink the roots (root.share_images)"
     ))
 }
 
@@ -3749,13 +3747,12 @@ mod tests {
         };
         assert_eq!(
             v,
-            "HYDO-ORACLE: ERROR the image's root does not fit into guest RAM (Initramfs unpacking \
-             failed: write error): it unpacks to about 1885 MiB beside its 700 MiB compressed \
-             copy, and guest.ram_mib is 4096. Raise guest.ram_mib, or make the roots smaller \
-             (root.share_images: true for services of one image)"
+            "HYDO-ORACLE: ERROR the root does not fit in guest RAM (Initramfs unpacking failed: \
+             write error): about 1885 MiB unpacked beside 700 MiB compressed, and guest.ram_mib \
+             is 4096. Raise guest.ram_mib or shrink the roots (root.share_images)"
         );
-        // the engines keep 300 bytes of a verdict line
-        assert!(v.len() < 300, "{}", v.len());
+        // the engines keep 255 bytes of the verdict an END gives (a Mac run cut it there)
+        assert!(v.len() < 245, "{}", v.len());
         assert!(c.ended());
         // another reason names it, and other lines change nothing
         let v = initramfs_verdict(
