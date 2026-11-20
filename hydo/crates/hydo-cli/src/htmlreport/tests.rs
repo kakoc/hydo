@@ -1018,3 +1018,60 @@ fn a_passing_run_repeats_as_a_run() {
         "This run repeats exactly, every time you run it:"
     );
 }
+
+/// The statistics of an exploration (Milestone 336), from the Redis quickstart's exploration of
+/// seeds 1-60 on the Mac engine (`hydo/schema/examples/results/v1/mac-redis-stats/`): the page's
+/// section "How much was explored" with one inline SVG chart per judged measure, in plain words
+/// and loading nothing; the terminal's short section; and `hydo stats`'s words within 80
+/// columns, with an asked budget.
+#[test]
+fn an_exploration_with_its_statistics() {
+    let dir = crate_dir().join("../../schema/examples/results/v1/mac-redis-stats");
+    let html = page_of(&dir, "hydo-out/explore", None);
+    loads_nothing(&html);
+    small(&html, 96);
+    plain_words(&html);
+    no_machine_paths_and_links_resolve(&html);
+    for want in [
+        "id=\"stats\"",
+        "How much was explored",
+        "60 runs on this Mac with 4 workers",
+        "Flat over the last 15 runs",
+        "<b>Verdicts</b>",
+        "<b>Property outcomes</b>",
+        "<svg viewBox=",
+        "<title>new at run 1</title>",
+        "(<code>--new-faults</code> draws them)",
+        "The curve as numbers",
+        "The faults drawn",
+        "<code>hydo stats hydo-out/explore</code>",
+    ] {
+        assert!(html.contains(want), "the page lacks {want:?}");
+    }
+    assert_eq!(html.matches("<svg viewBox=").count(), 2);
+    // the terminal's short section and its command
+    let doc = hydo_results::reader::read_exploration(&dir.join("exploration.json")).unwrap();
+    let t = text::exploration(&dir, &doc, None, "hydo-out/explore");
+    let sec = &t[t.find("How much was explored:\n").expect(&t)..];
+    assert!(sec.contains("Flat over the last 15 runs"), "{sec}");
+    assert!(sec.contains("(--new-faults draws them)"), "{sec}");
+    assert!(
+        t.contains("The cost, the faults drawn and how many runs fit: hydo stats\n"),
+        "{t}"
+    );
+    // `hydo stats`
+    let s = hydo_results::stats_of(&dir).unwrap();
+    let words = hydo_explore::stats::text(&s, &[(7200.0, 4, 8)]);
+    for want in [
+        "New behaviour\n",
+        "Cost\n",
+        "Faults drawn\n",
+        "How many runs fit\n",
+        "2 h, 4 workers on each of 8 machines: about ",
+    ] {
+        assert!(words.contains(want), "hydo stats lacks {want:?}:\n{words}");
+    }
+    for l in words.lines() {
+        assert!(l.chars().count() <= 80, "a line over 80 columns: {l}");
+    }
+}

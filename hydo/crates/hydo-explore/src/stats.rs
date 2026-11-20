@@ -1017,37 +1017,57 @@ fn engine_name(e: &Engine) -> &'static str {
     }
 }
 
+/// The allowed fault kinds that no schedule drew, in one sentence: one phrase per option that
+/// draws them, in the order of the list. None when every allowed kind was drawn.
+fn never_line(d: &StatsDoc) -> Option<String> {
+    if d.coverage.never.is_empty() {
+        return None;
+    }
+    let mut by: Vec<(Option<&str>, Vec<String>)> = Vec::new();
+    for n in &d.coverage.never {
+        let o = n.option.as_deref();
+        match by.iter_mut().find(|(x, _)| *x == o) {
+            Some((_, ws)) => ws.push(n.words.clone()),
+            None => by.push((o, vec![n.words.clone()])),
+        }
+    }
+    let ws: Vec<String> = by
+        .into_iter()
+        .map(|(o, ws)| {
+            let l = hydo_schedule::describe::and_list(&ws);
+            match o {
+                Some(o) => format!("{l} (`{o}` draws them)"),
+                None => format!("{l} (more seeds can draw them)"),
+            }
+        })
+        .collect();
+    Some(format!(
+        "Never drawn, though the project allows them: {}.",
+        ws.join("; ")
+    ))
+}
+
 /// The short section of `hydo report <explore dir>`: how much was explored, whether the curve is
 /// still rising, and what an hour more gives. Plain words; `hydo stats` has the rest.
 pub fn short_text(d: &StatsDoc) -> Vec<String> {
     let c = &d.cost;
     let mut out = vec![format!(
-        "{} runs {} with {} worker{} in {}, {} of the virtual machines' time. The workers spent \
-         {} of their busy time running failures again and shrinking them.",
+        "{} runs {} with {} worker{}{} in {}, {} of the virtual machines' time. The workers \
+         spent {} of their busy time running failures again and shrinking them.",
         d.schedules,
         place_words(&d.engine),
         d.estimate.workers,
         if d.estimate.workers == 1 { "" } else { "s" },
+        match d.shards {
+            Some(n) => format!(" in each of {n} parts"),
+            None => String::new(),
+        },
         secs_words(c.wall_s),
         secs_words(c.vm_s),
         pct(c.shrink_share)
     )];
     out.push(d.curve.judgement.clone());
-    if !d.coverage.never.is_empty() {
-        let ws: Vec<String> = d
-            .coverage
-            .never
-            .iter()
-            .map(|n| match &n.option {
-                Some(o) => format!("{} ({o})", n.words),
-                None => n.words.clone(),
-            })
-            .collect();
-        out.push(format!(
-            "Never drawn, though the project allows them: {}.",
-            hydo_schedule::describe::and_list(&ws)
-        ));
-    }
+    out.extend(never_line(d));
     if let Some(f) = d.estimate.fits.first() {
         out.push(format!(
             "An hour more on {} worker{} fits about {} runs.",
@@ -1090,7 +1110,7 @@ fn wrap_lines(t: &str) -> String {
 
 /// `hydo stats <explore dir>` in words.
 pub fn text(d: &StatsDoc, asked: &[(f64, u64, u64)]) -> String {
-    wrap_lines(&text_lines(d, asked))
+    wrap_lines(&text_lines(d, asked).replace('`', ""))
 }
 
 fn text_lines(d: &StatsDoc, asked: &[(f64, u64, u64)]) -> String {
@@ -1274,15 +1294,8 @@ fn text_lines(d: &StatsDoc, asked: &[(f64, u64, u64)]) -> String {
             cv.without_faults, d.schedules
         ));
     }
-    for n in &cv.never {
-        o.push_str(&format!(
-            "  Never drawn: {}, which faults: allows{}.\n",
-            n.words,
-            n.option
-                .as_ref()
-                .map(|x| format!("; {x} draws them"))
-                .unwrap_or_else(|| "; more seeds may draw them".into())
-        ));
+    if let Some(l) = never_line(d) {
+        o.push_str(&format!("  {l}\n"));
     }
     if !cv.services_never.is_empty() {
         o.push_str(&format!(

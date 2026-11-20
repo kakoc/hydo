@@ -299,6 +299,7 @@ fn every_example_parses_and_is_valid() {
         "values",
         "compare",
         "configs",
+        "stats",
     ] {
         assert!(seen.types.contains(t), "no example has a {t} record");
     }

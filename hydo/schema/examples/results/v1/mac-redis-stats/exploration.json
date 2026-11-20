@@ -1,0 +1,1958 @@
+{
+  "v": 1,
+  "type": "exploration",
+  "hydo_version": "0.4.1",
+  "epoch": 5,
+  "mode": "seeds",
+  "config": {
+    "strategy": "swarm",
+    "seeds": "1-60",
+    "argv": [
+      "--backend",
+      "hvm",
+      "--hvm-kernel",
+      "/opt/hydo/store/84ea22e8ee85b59c91f07405ee0b48cc7758b1815c26b8174a447f708430b0f9/Image-explore-cg",
+      "--image",
+      "/work/hydo-out/explore-ob-redis-arm64.cpio.gz",
+      "--seeds",
+      "1-60",
+      "--strategy",
+      "swarm",
+      "--workers",
+      "4",
+      "--out",
+      "hydo-out/explore"
+    ]
+  },
+  "image": {
+    "path": "/work/hydo-out/explore-ob-redis-arm64.cpio.gz",
+    "sha256": "31e906681736ecadbde793ac9687d79279d07d36c65156e1f10f76afa1be1b38",
+    "epoch": 4,
+    "kernel": "Image-explore-cg (Linux 6.6.35, sha256 84ea22e8ee85b59c91f07405ee0b48cc7758b1815c26b8174a447f708430b0f9)",
+    "built_by": {
+      "version": "0.4.1",
+      "commit": "14e098736a19814f3e4e56f9c5a5e0d0ce54fc05"
+    },
+    "manifest_sha256": "b07d4641642318f7cba6760bad19f49130a84f3bfc279408db5e1e6036c78930"
+  },
+  "engine": {
+    "backend": "hvm",
+    "args": [],
+    "ram_mib": 1024,
+    "vcpus": 1,
+    "cpu": "v2",
+    "workers": 4,
+    "host_cpu": {
+      "vendor": "Apple",
+      "model": "Apple M2 Pro"
+    }
+  },
+  "summary": {
+    "schedules": 60,
+    "sweep_wall_s": 59.1,
+    "runs_per_hour": 3657.5,
+    "mean_run_s": 1.1,
+    "worker_boot_s": 3.9,
+    "total_wall_s": 61.6,
+    "failures": 24,
+    "reproduced": 24
+  },
+  "failures": [
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-1",
+          "fp": "a89cbf1caf792f81",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:6 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-1",
+        "seed": 1,
+        "role": "first",
+        "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run K=redis@12+2 C=20",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:6 lost"
+        },
+        "fingerprints": {
+          "fp": "a89cbf1caf792f81",
+          "wfp": "b2fcb90056d9ff5e",
+          "ctl": "ecfe153a0386f80d"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:6 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:6 lost"
+              }
+            }
+          }
+        ],
+        "secs": 1.6,
+        "worker": 2,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-1.log",
+            "consoles/seed-1.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "d92fd650d6f4e361",
+            "sends": 15,
+            "stops": 21,
+            "transcript": "consoles/seed-1.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "9663427a33312318",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-1.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-4",
+          "fp": "17de5ed21eb61347",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-4",
+        "seed": 4,
+        "role": "first",
+        "schedule": "disk=lying:8 dseed=b3c71c31800079a2 | run N=redis@10-19:duplicate,26%,loss,20% C=4",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        },
+        "fingerprints": {
+          "fp": "17de5ed21eb61347",
+          "wfp": "aa0b44879b1a9cf1",
+          "ctl": "a019273d8bddb46a"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:0 lost"
+              }
+            }
+          }
+        ],
+        "secs": 2.0,
+        "worker": 1,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-4.log",
+            "consoles/seed-4.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "974f97861892dca1",
+            "sends": 9,
+            "stops": 11,
+            "transcript": "consoles/seed-4.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "5d92f4529d5dfffc",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-4.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-5",
+          "fp": "9e2ce885165b1bc1",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-5",
+        "seed": 5,
+        "role": "first",
+        "schedule": "disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no",
+        "class": "unsafe-knob",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        },
+        "fingerprints": {
+          "fp": "9e2ce885165b1bc1",
+          "wfp": "a2093976119e33e1",
+          "ctl": "3a704aaf23b5fa14"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:0 lost"
+              }
+            }
+          }
+        ],
+        "secs": 1.7,
+        "worker": 0,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-5.log",
+            "consoles/seed-5.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "a853678a242b5b77",
+            "sends": 10,
+            "stops": 13,
+            "transcript": "consoles/seed-5.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "55e3ed43d00328ce",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-5.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-8",
+          "fp": "b94a1b66cc4a1680",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-8",
+        "seed": 8,
+        "role": "first",
+        "schedule": "disk=lying:4 dseed=17144527b62d669c | run N=redis@8-11:loss,11%,corrupt,7% C=17 R=everysec",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        },
+        "fingerprints": {
+          "fp": "b94a1b66cc4a1680",
+          "wfp": "eb2ff7ea1688f555",
+          "ctl": "cd789b2b240a6266"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:0 lost"
+              }
+            }
+          }
+        ],
+        "secs": 3.1,
+        "worker": 2,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-8.log",
+            "consoles/seed-8.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "2ce0e981768cd343",
+            "sends": 23,
+            "stops": 37,
+            "transcript": "consoles/seed-8.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "7d90e8618ec0e439",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-8.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-9",
+          "fp": "2408e0beb5790b98",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-9",
+        "seed": 9,
+        "role": "first",
+        "schedule": "disk=cut dseed=7e8960d2c111f878 | run K=redis@6+4 C=4 R=everysec",
+        "class": "unsafe-knob",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        },
+        "fingerprints": {
+          "fp": "2408e0beb5790b98",
+          "wfp": "38b891acddd1762f",
+          "ctl": "47bdbd5005e70768"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:0 lost"
+              }
+            }
+          }
+        ],
+        "secs": 2.3,
+        "worker": 0,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-9.log",
+            "consoles/seed-9.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "7009a0c1940947ab",
+            "sends": 10,
+            "stops": 13,
+            "transcript": "consoles/seed-9.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "591e5642a1c75aaf",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-9.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "ERROR redis restart failed",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-12",
+          "fp": "8e7341ff8e9bbb89",
+          "verdict": "HYDO-ORACLE: ERROR redis restart failed"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-12",
+        "seed": 12,
+        "role": "first",
+        "schedule": "disk=ioerr:3 dseed=fd403ef8d08fa636 | run K=redis@16+1 N=redis@0-8:loss,7%",
+        "class": "io-errors",
+        "verdict": {
+          "kind": "error",
+          "text": "HYDO-ORACLE: ERROR redis restart failed"
+        },
+        "fingerprints": {
+          "fp": "8e7341ff8e9bbb89",
+          "wfp": "89291b90ac643ea0",
+          "ctl": "895ae65dfe5d3d30"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "ERROR redis restart failed",
+            "status": "error",
+            "message": "HYDO-ORACLE: ERROR redis restart failed",
+            "details": {
+              "signature": "ERROR redis restart failed"
+            }
+          }
+        ],
+        "secs": 0.2,
+        "worker": 1,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-12.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "895ae65dfe5d3d30",
+            "sends": 22,
+            "stops": 37,
+            "transcript": "consoles/seed-12.control.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "ERROR restart after the faults (redis)",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-13",
+          "fp": "6f5087c4351f86b9",
+          "verdict": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-13",
+        "seed": 13,
+        "role": "first",
+        "schedule": "disk=ioerr:3 dseed=281cc34161f446f4 | run K=redis@1+1 N=redis@18-19:delay,187ms,corrupt,5%",
+        "class": "io-errors",
+        "verdict": {
+          "kind": "error",
+          "text": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        },
+        "fingerprints": {
+          "fp": "6f5087c4351f86b9",
+          "wfp": "0970ff6a1fd682f0",
+          "ctl": "3a82beff03fd1eeb"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "ERROR restart after the faults (redis)",
+            "status": "error",
+            "message": "HYDO-ORACLE: ERROR restart after the faults (redis)",
+            "details": {
+              "signature": "ERROR restart after the faults (redis)"
+            }
+          }
+        ],
+        "secs": 0.4,
+        "worker": 3,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-13.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "3a82beff03fd1eeb",
+            "sends": 27,
+            "stops": 46,
+            "transcript": "consoles/seed-13.control.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-14",
+          "fp": "3a6d2b419b7a973d",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:6 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-14",
+        "seed": 14,
+        "role": "first",
+        "schedule": "disk=lying:9 dseed=399290d513dd84d6 | run C=11",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:6 lost"
+        },
+        "fingerprints": {
+          "fp": "3a6d2b419b7a973d",
+          "wfp": "1a6423420b650781",
+          "ctl": "b0aab36553b94ab7"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:6 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:6 lost"
+              }
+            }
+          }
+        ],
+        "secs": 1.9,
+        "worker": 0,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-14.log",
+            "consoles/seed-14.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "46bebe214a415ef4",
+            "sends": 9,
+            "stops": 11,
+            "transcript": "consoles/seed-14.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "6f7039855230a787",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-14.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "ERROR restart after the faults (redis)",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-17",
+          "fp": "4e85f43866a2dc8f",
+          "verdict": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-17",
+        "seed": 17,
+        "role": "first",
+        "schedule": "disk=ioerr:2 dseed=de2648859907e743 | run K=redis@13+3 N=redis@18-19:delay,20ms,reorder,25%,duplicate,17% R=everysec",
+        "class": "io-errors",
+        "verdict": {
+          "kind": "error",
+          "text": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        },
+        "fingerprints": {
+          "fp": "4e85f43866a2dc8f",
+          "wfp": "62d02d39cb8535d1",
+          "ctl": "e7b25548314ccd0d"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "ERROR restart after the faults (redis)",
+            "status": "error",
+            "message": "HYDO-ORACLE: ERROR restart after the faults (redis)",
+            "details": {
+              "signature": "ERROR restart after the faults (redis)"
+            }
+          }
+        ],
+        "secs": 0.3,
+        "worker": 0,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-17.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "e7b25548314ccd0d",
+            "sends": 30,
+            "stops": 51,
+            "transcript": "consoles/seed-17.control.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-18",
+          "fp": "7d9b90a3c34ec0f3",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-18",
+        "seed": 18,
+        "role": "first",
+        "schedule": "disk=lying:9 dseed=78c9bb2d421fee74 | run K=redis@6+4 N=redis@14-20:corrupt,8% C=8 R=no",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        },
+        "fingerprints": {
+          "fp": "7d9b90a3c34ec0f3",
+          "wfp": "1112cdb86ca95d1a",
+          "ctl": "0d2fdaa2a95150af"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:0 lost"
+              }
+            }
+          }
+        ],
+        "secs": 2.2,
+        "worker": 2,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-18.log",
+            "consoles/seed-18.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "84d8ef53b0103495",
+            "sends": 12,
+            "stops": 16,
+            "transcript": "consoles/seed-18.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "97f4d563871d2d51",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-18.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-19",
+          "fp": "954c5e9d110e2051",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-19",
+        "seed": 19,
+        "role": "first",
+        "schedule": "disk=lying:12 dseed=b3c3d806a5d34604 | run N=redis@12-20:delay,114ms,loss,44% C=5",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost"
+        },
+        "fingerprints": {
+          "fp": "954c5e9d110e2051",
+          "wfp": "2a4ce2e3ef9193fd",
+          "ctl": "37a1e1e899a6f559"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:1 lost"
+              }
+            }
+          }
+        ],
+        "secs": 1.4,
+        "worker": 3,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-19.log",
+            "consoles/seed-19.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "70371777dfd4bb2b",
+            "sends": 9,
+            "stops": 11,
+            "transcript": "consoles/seed-19.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "12dbb348ab4b2013",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-19.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "ERROR restart after the faults (redis)",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-25",
+          "fp": "d03edda6ca6892c6",
+          "verdict": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-25",
+        "seed": 25,
+        "role": "first",
+        "schedule": "disk=ioerr:3 dseed=689f05f483a044f2 | run K=redis@12+1 N=redis@6-8:loss,13%,duplicate,49%",
+        "class": "io-errors",
+        "verdict": {
+          "kind": "error",
+          "text": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        },
+        "fingerprints": {
+          "fp": "d03edda6ca6892c6",
+          "wfp": "d3c676f61f3c7c0d",
+          "ctl": "d9dd8301b3d4bc97"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "ERROR restart after the faults (redis)",
+            "status": "error",
+            "message": "HYDO-ORACLE: ERROR restart after the faults (redis)",
+            "details": {
+              "signature": "ERROR restart after the faults (redis)"
+            }
+          }
+        ],
+        "secs": 0.2,
+        "worker": 2,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-25.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "d9dd8301b3d4bc97",
+            "sends": 27,
+            "stops": 46,
+            "transcript": "consoles/seed-25.control.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "ERROR restart after the faults (redis)",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-28",
+          "fp": "142d0dcc4c581e90",
+          "verdict": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-28",
+        "seed": 28,
+        "role": "first",
+        "schedule": "disk=ioerr:2 dseed=b613668d49c766aa | run",
+        "class": "io-errors",
+        "verdict": {
+          "kind": "error",
+          "text": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        },
+        "fingerprints": {
+          "fp": "142d0dcc4c581e90",
+          "wfp": "4378feda114a18ff",
+          "ctl": "8c16500c552cd132"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "ERROR restart after the faults (redis)",
+            "status": "error",
+            "message": "HYDO-ORACLE: ERROR restart after the faults (redis)",
+            "details": {
+              "signature": "ERROR restart after the faults (redis)"
+            }
+          }
+        ],
+        "secs": 0.1,
+        "worker": 1,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-28.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "8c16500c552cd132",
+            "sends": 8,
+            "stops": 12,
+            "transcript": "consoles/seed-28.control.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-38",
+          "fp": "50f77a78f661479a",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-38",
+        "seed": 38,
+        "role": "first",
+        "schedule": "disk=cut dseed=d82f06888e3f4c60 | run C=18 R=everysec",
+        "class": "unsafe-knob",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        },
+        "fingerprints": {
+          "fp": "50f77a78f661479a",
+          "wfp": "b59605087ef4498b",
+          "ctl": "f70f49d569bcfedb"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:0 lost"
+              }
+            }
+          }
+        ],
+        "secs": 1.8,
+        "worker": 2,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-38.log",
+            "consoles/seed-38.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "3035d4de6d29d90e",
+            "sends": 10,
+            "stops": 13,
+            "transcript": "consoles/seed-38.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "3881699b3bb20751",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-38.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-39",
+          "fp": "350b2a2dde8017da",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-39",
+        "seed": 39,
+        "role": "first",
+        "schedule": "disk=cut dseed=d08ca26dec069238 | run C=7 R=everysec",
+        "class": "unsafe-knob",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        },
+        "fingerprints": {
+          "fp": "350b2a2dde8017da",
+          "wfp": "020db7755f981e15",
+          "ctl": "7e42bc65bb6e00bc"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:0 lost"
+              }
+            }
+          }
+        ],
+        "secs": 2.1,
+        "worker": 1,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-39.log",
+            "consoles/seed-39.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "f5cff84512df759b",
+            "sends": 10,
+            "stops": 13,
+            "transcript": "consoles/seed-39.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "b3213cd13a15db6e",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-39.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "ERROR restart after the faults (redis)",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-40",
+          "fp": "2a1570e1adc96e06",
+          "verdict": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-40",
+        "seed": 40,
+        "role": "first",
+        "schedule": "disk=ioerr:2 dseed=681a6a310b0ef08d | run K=redis@1+1 R=everysec",
+        "class": "io-errors",
+        "verdict": {
+          "kind": "error",
+          "text": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        },
+        "fingerprints": {
+          "fp": "2a1570e1adc96e06",
+          "wfp": "2e9bf8bf63256c6a",
+          "ctl": "efa3e07aa2cdb870"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "ERROR restart after the faults (redis)",
+            "status": "error",
+            "message": "HYDO-ORACLE: ERROR restart after the faults (redis)",
+            "details": {
+              "signature": "ERROR restart after the faults (redis)"
+            }
+          }
+        ],
+        "secs": 0.1,
+        "worker": 3,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-40.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "efa3e07aa2cdb870",
+            "sends": 15,
+            "stops": 24,
+            "transcript": "consoles/seed-40.control.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-42",
+          "fp": "f5bbb5bc5de32d90",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-42",
+        "seed": 42,
+        "role": "first",
+        "schedule": "disk=lying:4 dseed=3ad321e37b2251e8 | run C=10 R=no",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        },
+        "fingerprints": {
+          "fp": "f5bbb5bc5de32d90",
+          "wfp": "ee0e64fdf183d113",
+          "ctl": "c163265b0a4cbdfa"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:0 lost"
+              }
+            }
+          }
+        ],
+        "secs": 1.7,
+        "worker": 0,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-42.log",
+            "consoles/seed-42.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "50f92a89740efe87",
+            "sends": 10,
+            "stops": 13,
+            "transcript": "consoles/seed-42.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "28daecdd73e8b9d5",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-42.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "ERROR restart after the faults (redis)",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-44",
+          "fp": "e6dad1c2cad6a7c9",
+          "verdict": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-44",
+        "seed": 44,
+        "role": "first",
+        "schedule": "disk=ioerr:2 dseed=6e83c10be45533b6 | run K=redis@11+2 N=redis@4-6:corrupt,8% R=everysec",
+        "class": "io-errors",
+        "verdict": {
+          "kind": "error",
+          "text": "HYDO-ORACLE: ERROR restart after the faults (redis)"
+        },
+        "fingerprints": {
+          "fp": "e6dad1c2cad6a7c9",
+          "wfp": "b398982af00c1207",
+          "ctl": "616866cca17b5380"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "ERROR restart after the faults (redis)",
+            "status": "error",
+            "message": "HYDO-ORACLE: ERROR restart after the faults (redis)",
+            "details": {
+              "signature": "ERROR restart after the faults (redis)"
+            }
+          }
+        ],
+        "secs": 0.3,
+        "worker": 0,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-44.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "616866cca17b5380",
+            "sends": 28,
+            "stops": 48,
+            "transcript": "consoles/seed-44.control.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "ERROR redis restart failed",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-48",
+          "fp": "f537ec9690423525",
+          "verdict": "HYDO-ORACLE: ERROR redis restart failed"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-48",
+        "seed": 48,
+        "role": "first",
+        "schedule": "disk=ioerr:3 dseed=724427aafa8ad21f | run K=redis@11+4",
+        "class": "io-errors",
+        "verdict": {
+          "kind": "error",
+          "text": "HYDO-ORACLE: ERROR redis restart failed"
+        },
+        "fingerprints": {
+          "fp": "f537ec9690423525",
+          "wfp": "23765eabf196eaf8",
+          "ctl": "a9b3c930331807a3"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "ERROR redis restart failed",
+            "status": "error",
+            "message": "HYDO-ORACLE: ERROR redis restart failed",
+            "details": {
+              "signature": "ERROR redis restart failed"
+            }
+          }
+        ],
+        "secs": 0.1,
+        "worker": 1,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-48.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "a9b3c930331807a3",
+            "sends": 10,
+            "stops": 15,
+            "transcript": "consoles/seed-48.control.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-49",
+          "fp": "df751fe51753b5a3",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:5 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-49",
+        "seed": 49,
+        "role": "first",
+        "schedule": "disk=lying:8 dseed=9a722853c1119451 | run K=redis@1+2 C=11",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:5 lost"
+        },
+        "fingerprints": {
+          "fp": "df751fe51753b5a3",
+          "wfp": "58a825ca734bd08c",
+          "ctl": "239e417f07ad01ae"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:5 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:5 lost"
+              }
+            }
+          }
+        ],
+        "secs": 1.6,
+        "worker": 0,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-49.log",
+            "consoles/seed-49.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "b2ed836e6358c24f",
+            "sends": 15,
+            "stops": 21,
+            "transcript": "consoles/seed-49.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "0a835511780d9627",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-49.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-51",
+          "fp": "e247ccdbd18c46c9",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:2 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-51",
+        "seed": 51,
+        "role": "first",
+        "schedule": "disk=lying:12 dseed=cd791dfcad454506 | run K=redis@12+2 C=10",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:2 lost"
+        },
+        "fingerprints": {
+          "fp": "e247ccdbd18c46c9",
+          "wfp": "eed79e001007562c",
+          "ctl": "2c3a3dcc2212474e"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:2 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:2 lost"
+              }
+            }
+          }
+        ],
+        "secs": 1.6,
+        "worker": 2,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-51.log",
+            "consoles/seed-51.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "3ed1dc02303422bf",
+            "sends": 9,
+            "stops": 11,
+            "transcript": "consoles/seed-51.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "1bc36a694c16fb58",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-51.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-52",
+          "fp": "d3de56c907681153",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:10 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-52",
+        "seed": 52,
+        "role": "first",
+        "schedule": "disk=cut dseed=35d041630b4df93b | run N=redis@4-10:loss,57%,delay,20ms,reorder,10% C=16 R=everysec",
+        "class": "unsafe-knob",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:10 lost"
+        },
+        "fingerprints": {
+          "fp": "d3de56c907681153",
+          "wfp": "afa99a7b33e5a74d",
+          "ctl": "45d1567741720bb1"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:10 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:10 lost"
+              }
+            }
+          }
+        ],
+        "secs": 1.6,
+        "worker": 3,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-52.log",
+            "consoles/seed-52.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "5f0ea85cc39e8f09",
+            "sends": 27,
+            "stops": 43,
+            "transcript": "consoles/seed-52.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "73e3c290e6cd4462",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-52.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-53",
+          "fp": "b0146e98cbdebad0",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:6 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-53",
+        "seed": 53,
+        "role": "first",
+        "schedule": "disk=lying:10 dseed=cfcd47959ee05686 | run K=redis@7+4 C=13",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:6 lost"
+        },
+        "fingerprints": {
+          "fp": "b0146e98cbdebad0",
+          "wfp": "18a4b139dce0da4b",
+          "ctl": "908de3a36b2589c4"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:6 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:6 lost"
+              }
+            }
+          }
+        ],
+        "secs": 1.0,
+        "worker": 1,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-53.log",
+            "consoles/seed-53.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "4bb44046adcb76fd",
+            "sends": 15,
+            "stops": 21,
+            "transcript": "consoles/seed-53.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "d455e169eda7dc2e",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-53.control.recovery.jsonl"
+          }
+        ]
+      }
+    },
+    {
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "reproduced": true,
+      "reproductions": [
+        {
+          "tag": "repro-58",
+          "fp": "f6e437c75ebeb4af",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        }
+      ],
+      "run": {
+        "v": 1,
+        "type": "run",
+        "tag": "seed-58",
+        "seed": 58,
+        "role": "first",
+        "schedule": "disk=lying:6 dseed=9540e9542df99c4a | run C=5 R=no",
+        "class": "lying-disk",
+        "verdict": {
+          "kind": "violation",
+          "text": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        },
+        "fingerprints": {
+          "fp": "f6e437c75ebeb4af",
+          "wfp": "b83ec19e652984e9",
+          "ctl": "ad3078769f146b36"
+        },
+        "findings": [
+          {
+            "kind": "invariant",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+            "details": {
+              "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost"
+            }
+          },
+          {
+            "kind": "assertion",
+            "id": "redis.acked_writes_survive",
+            "status": "violation",
+            "message": "every SET the client saw acknowledged reads back with its value",
+            "details": {
+              "assertion": "always",
+              "details": {
+                "out": "key k:0 lost"
+              }
+            }
+          }
+        ],
+        "secs": 1.1,
+        "worker": 3,
+        "artifacts": {
+          "consoles": [
+            "consoles/seed-58.log",
+            "consoles/seed-58.recovery.log"
+          ]
+        },
+        "control": [
+          {
+            "conversation": "run",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "2c6491093a552e02",
+            "sends": 10,
+            "stops": 13,
+            "transcript": "consoles/seed-58.control.jsonl"
+          },
+          {
+            "conversation": "recovery",
+            "controller": "schedule",
+            "cadence": "rb=64",
+            "hash": "e20ee388ffc7a60e",
+            "sends": 8,
+            "stops": 11,
+            "transcript": "consoles/seed-58.control.recovery.jsonl"
+          }
+        ]
+      }
+    }
+  ],
+  "shrinks": [
+    {
+      "v": 1,
+      "type": "shrink",
+      "class": "lying-disk",
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "from_seed": 1,
+      "minimal": "disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20",
+      "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:6 lost",
+      "tries": 6,
+      "min_class": "lying-disk",
+      "min_verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:6 lost",
+      "confirmations": [
+        {
+          "tag": "min-a",
+          "fp": "76b6366c86d97b76",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:6 lost"
+        },
+        {
+          "tag": "min-b",
+          "fp": "76b6366c86d97b76",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:6 lost"
+        }
+      ],
+      "identical": true,
+      "repro_command": "`hydo run --image /work/hydo-out/explore-ob-redis-arm64.cpio.gz \"disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20\"`"
+    },
+    {
+      "v": 1,
+      "type": "shrink",
+      "class": "unsafe-knob",
+      "signature": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "from_seed": 5,
+      "minimal": "disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no",
+      "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+      "tries": 2,
+      "min_class": "unsafe-knob",
+      "min_verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+      "confirmations": [
+        {
+          "tag": "min2-a",
+          "fp": "9e2ce885165b1bc1",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        },
+        {
+          "tag": "min2-b",
+          "fp": "9e2ce885165b1bc1",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+        }
+      ],
+      "identical": true,
+      "repro_command": "`hydo run --image /work/hydo-out/explore-ob-redis-arm64.cpio.gz \"disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no\"`"
+    }
+  ],
+  "properties": {
+    "runs": 60,
+    "setup_complete_runs": 0,
+    "violations": 1,
+    "properties": [
+      {
+        "id": "fault.paused",
+        "assertion": "reachable",
+        "message": "a service was paused (SIGSTOP)",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.pause_mid_request",
+        "assertion": "sometimes",
+        "message": "a pause began while a client request was in flight",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.clock_back",
+        "assertion": "reachable",
+        "message": "the realtime clock was stepped backwards",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.clock_fwd",
+        "assertion": "reachable",
+        "message": "the realtime clock was stepped forwards",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.oneway_req",
+        "assertion": "reachable",
+        "message": "a one-way network fault hit the req direction",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "fault.oneway_resp",
+        "assertion": "reachable",
+        "message": "a one-way network fault hit the resp direction",
+        "declared": true,
+        "passes": 0,
+        "fails": 0,
+        "runs_passed": 0,
+        "runs_failed": 0,
+        "verdict": "NOT EXERCISED",
+        "status": "not-exercised"
+      },
+      {
+        "id": "redis.acked_writes_survive",
+        "assertion": "always",
+        "message": "every SET the client saw acknowledged reads back with its value",
+        "declared": false,
+        "passes": 36,
+        "fails": 16,
+        "runs_passed": 36,
+        "runs_failed": 16,
+        "verdict": "FAIL",
+        "status": "violation",
+        "first_failure": "{\"out\":\"key k:6 lost\"}"
+      }
+    ]
+  },
+  "liveness": [],
+  "artifacts": {
+    "events": "events.jsonl",
+    "report": "report.md",
+    "consoles": "consoles"
+  }
+}

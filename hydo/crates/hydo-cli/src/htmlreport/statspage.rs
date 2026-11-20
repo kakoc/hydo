@@ -3,7 +3,7 @@
 //! inline SVG (the page loads nothing and runs no script for it; each point's numbers are in its
 //! `<title>`, which a browser shows on hover), the numbers as a table, and the faults drawn.
 
-use super::page::{code, esc, table};
+use super::page::{code, esc, md, table};
 use hydo_explore::stats::{measure_words, short_text, FINGERPRINTS};
 use hydo_results::StatsDoc;
 
@@ -100,7 +100,7 @@ fn cap(s: &str) -> String {
 pub fn html(s: &StatsDoc, shown: &str) -> String {
     let mut o = String::new();
     for l in short_text(s) {
-        o.push_str(&format!("<p>{}</p>\n", esc(&l)));
+        o.push_str(&format!("<p>{}</p>\n", md(&l)));
     }
     let judged: Vec<&String> = s
         .curve

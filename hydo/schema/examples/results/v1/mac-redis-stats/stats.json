@@ -1,0 +1,1195 @@
+{
+  "v": 1,
+  "type": "stats",
+  "hydo_version": "0.4.1",
+  "epoch": 5,
+  "image": "/work/hydo-out/explore-ob-redis-arm64.cpio.gz",
+  "engine": {
+    "backend": "hvm",
+    "args": [],
+    "ram_mib": 1024,
+    "vcpus": 1,
+    "cpu": "v2",
+    "workers": 4,
+    "host_cpu": {
+      "vendor": "Apple",
+      "model": "Apple M2 Pro"
+    }
+  },
+  "strategy": "swarm",
+  "seeds": "1-60",
+  "schedules": 60,
+  "curve": {
+    "measures": [
+      "fingerprints",
+      "verdicts",
+      "properties"
+    ],
+    "points": [
+      {
+        "runs": 1,
+        "counts": {
+          "fingerprints": 1,
+          "properties": 1,
+          "verdicts": 1
+        }
+      },
+      {
+        "runs": 2,
+        "counts": {
+          "fingerprints": 2,
+          "properties": 2,
+          "verdicts": 2
+        }
+      },
+      {
+        "runs": 3,
+        "counts": {
+          "fingerprints": 3,
+          "properties": 2,
+          "verdicts": 2
+        }
+      },
+      {
+        "runs": 4,
+        "counts": {
+          "fingerprints": 4,
+          "properties": 2,
+          "verdicts": 2
+        }
+      },
+      {
+        "runs": 5,
+        "counts": {
+          "fingerprints": 5,
+          "properties": 2,
+          "verdicts": 2
+        }
+      },
+      {
+        "runs": 6,
+        "counts": {
+          "fingerprints": 6,
+          "properties": 2,
+          "verdicts": 2
+        }
+      },
+      {
+        "runs": 7,
+        "counts": {
+          "fingerprints": 7,
+          "properties": 2,
+          "verdicts": 2
+        }
+      },
+      {
+        "runs": 8,
+        "counts": {
+          "fingerprints": 8,
+          "properties": 2,
+          "verdicts": 2
+        }
+      },
+      {
+        "runs": 9,
+        "counts": {
+          "fingerprints": 9,
+          "properties": 2,
+          "verdicts": 2
+        }
+      },
+      {
+        "runs": 10,
+        "counts": {
+          "fingerprints": 10,
+          "properties": 2,
+          "verdicts": 2
+        }
+      },
+      {
+        "runs": 11,
+        "counts": {
+          "fingerprints": 11,
+          "properties": 2,
+          "verdicts": 2
+        }
+      },
+      {
+        "runs": 12,
+        "counts": {
+          "fingerprints": 12,
+          "properties": 2,
+          "verdicts": 3
+        }
+      },
+      {
+        "runs": 13,
+        "counts": {
+          "fingerprints": 13,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 14,
+        "counts": {
+          "fingerprints": 14,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 15,
+        "counts": {
+          "fingerprints": 15,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 16,
+        "counts": {
+          "fingerprints": 16,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 17,
+        "counts": {
+          "fingerprints": 17,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 18,
+        "counts": {
+          "fingerprints": 18,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 19,
+        "counts": {
+          "fingerprints": 19,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 20,
+        "counts": {
+          "fingerprints": 20,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 21,
+        "counts": {
+          "fingerprints": 21,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 22,
+        "counts": {
+          "fingerprints": 22,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 23,
+        "counts": {
+          "fingerprints": 23,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 24,
+        "counts": {
+          "fingerprints": 24,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 25,
+        "counts": {
+          "fingerprints": 25,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 26,
+        "counts": {
+          "fingerprints": 26,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 27,
+        "counts": {
+          "fingerprints": 27,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 28,
+        "counts": {
+          "fingerprints": 28,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 29,
+        "counts": {
+          "fingerprints": 29,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 30,
+        "counts": {
+          "fingerprints": 30,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 31,
+        "counts": {
+          "fingerprints": 31,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 32,
+        "counts": {
+          "fingerprints": 32,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 33,
+        "counts": {
+          "fingerprints": 33,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 34,
+        "counts": {
+          "fingerprints": 34,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 35,
+        "counts": {
+          "fingerprints": 35,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 36,
+        "counts": {
+          "fingerprints": 36,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 37,
+        "counts": {
+          "fingerprints": 37,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 38,
+        "counts": {
+          "fingerprints": 38,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 39,
+        "counts": {
+          "fingerprints": 39,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 40,
+        "counts": {
+          "fingerprints": 40,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 41,
+        "counts": {
+          "fingerprints": 41,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 42,
+        "counts": {
+          "fingerprints": 42,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 43,
+        "counts": {
+          "fingerprints": 43,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 44,
+        "counts": {
+          "fingerprints": 44,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 45,
+        "counts": {
+          "fingerprints": 45,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 46,
+        "counts": {
+          "fingerprints": 46,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 47,
+        "counts": {
+          "fingerprints": 47,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 48,
+        "counts": {
+          "fingerprints": 48,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 49,
+        "counts": {
+          "fingerprints": 49,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 50,
+        "counts": {
+          "fingerprints": 50,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 51,
+        "counts": {
+          "fingerprints": 51,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 52,
+        "counts": {
+          "fingerprints": 52,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 53,
+        "counts": {
+          "fingerprints": 53,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 54,
+        "counts": {
+          "fingerprints": 54,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 55,
+        "counts": {
+          "fingerprints": 55,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 56,
+        "counts": {
+          "fingerprints": 56,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 57,
+        "counts": {
+          "fingerprints": 57,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 58,
+        "counts": {
+          "fingerprints": 58,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 59,
+        "counts": {
+          "fingerprints": 59,
+          "properties": 2,
+          "verdicts": 4
+        }
+      },
+      {
+        "runs": 60,
+        "counts": {
+          "fingerprints": 60,
+          "properties": 2,
+          "verdicts": 4
+        }
+      }
+    ],
+    "grew_at": {
+      "properties": [
+        1,
+        2
+      ],
+      "verdicts": [
+        1,
+        2,
+        12,
+        13
+      ]
+    },
+    "window": 15,
+    "trend": "flat",
+    "judgement": "Flat over the last 15 runs: no new verdict or property outcome since run 13 of 60."
+  },
+  "cost": {
+    "wall_s": 61.6,
+    "runs": {
+      "first": 60,
+      "rerun": 24,
+      "shrink": 9
+    },
+    "vm_s": 108.7,
+    "vm_s_by_role": {
+      "first": 66.7,
+      "rerun": 27.1,
+      "shrink": 14.9
+    },
+    "shrink_share": 0.394,
+    "first_run_s": {
+      "mean": 1.112,
+      "median": 1.4,
+      "p90": 2.2,
+      "max": 3.1
+    },
+    "clock": 1391040,
+    "clock_per_run": 23184,
+    "clock_unit": "exits",
+    "host_cpu_s": 152.1,
+    "guest_ram_mib": 1024,
+    "engine_peak_mib": 3109,
+    "explorer_peak_mib": 742,
+    "workers": [
+      {
+        "worker": 0,
+        "jobs": 27,
+        "busy_s": 54.0,
+        "starting_s": 4.6,
+        "waiting_s": 0.0,
+        "idle_s": 2.6
+      },
+      {
+        "worker": 1,
+        "jobs": 25,
+        "busy_s": 54.9,
+        "starting_s": 4.6,
+        "waiting_s": 0.0,
+        "idle_s": 1.6
+      },
+      {
+        "worker": 2,
+        "jobs": 21,
+        "busy_s": 55.3,
+        "starting_s": 3.4,
+        "waiting_s": 0.0,
+        "idle_s": 2.4
+      },
+      {
+        "worker": 3,
+        "jobs": 23,
+        "busy_s": 54.6,
+        "starting_s": 4.5,
+        "waiting_s": 0.0,
+        "idle_s": 2.0
+      }
+    ],
+    "busy_s": 218.8,
+    "starting_s": 17.1,
+    "waiting_s": 0.0,
+    "idle_s": 8.6
+  },
+  "coverage": {
+    "allowed": [
+      "kill",
+      "pause",
+      "network",
+      "oneway",
+      "cut",
+      "clock",
+      "disk"
+    ],
+    "services": [
+      "redis"
+    ],
+    "steps": 20,
+    "without_faults": 0,
+    "kinds": [
+      {
+        "kind": "disk",
+        "words": "disk faults",
+        "runs": 48,
+        "targets": {},
+        "steps": [],
+        "allowed": true
+      },
+      {
+        "kind": "network",
+        "words": "network faults",
+        "runs": 35,
+        "targets": {
+          "redis": 35
+        },
+        "steps": [
+          0,
+          1,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          12,
+          13,
+          14,
+          15,
+          16,
+          18
+        ],
+        "allowed": true
+      },
+      {
+        "kind": "cut",
+        "words": "power cuts",
+        "runs": 34,
+        "targets": {},
+        "steps": [
+          1,
+          3,
+          4,
+          5,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          16,
+          17,
+          18,
+          19,
+          20
+        ],
+        "allowed": true
+      },
+      {
+        "kind": "kill",
+        "words": "crashes",
+        "runs": 29,
+        "targets": {
+          "redis": 29
+        },
+        "steps": [
+          0,
+          1,
+          2,
+          4,
+          6,
+          7,
+          9,
+          11,
+          12,
+          13,
+          16
+        ],
+        "allowed": true
+      },
+      {
+        "kind": "setting",
+        "words": "settings",
+        "runs": 26,
+        "targets": {
+          "R=everysec": 17,
+          "R=no": 9
+        },
+        "steps": [],
+        "allowed": false
+      }
+    ],
+    "never": [
+      {
+        "kind": "pause",
+        "words": "pauses",
+        "option": "--new-faults"
+      },
+      {
+        "kind": "oneway",
+        "words": "one-way network faults",
+        "option": "--new-faults"
+      },
+      {
+        "kind": "clock",
+        "words": "clock jumps",
+        "option": "--new-faults"
+      }
+    ],
+    "services_never": []
+  },
+  "estimate": {
+    "job_s": 2.209,
+    "starting_s": 4.3,
+    "shrink_share": 0.394,
+    "workers": 4,
+    "machine_workers": 4,
+    "measured_per_hour": 3657.5,
+    "fits": [
+      {
+        "budget_s": 3600.0,
+        "workers": 4,
+        "shards": 1,
+        "runs": 3945
+      },
+      {
+        "budget_s": 28800.0,
+        "workers": 4,
+        "shards": 1,
+        "runs": 31598
+      },
+      {
+        "budget_s": 3600.0,
+        "workers": 4,
+        "shards": 4,
+        "runs": 15780
+      },
+      {
+        "budget_s": 3600.0,
+        "workers": 4,
+        "shards": 20,
+        "runs": 78900
+      }
+    ]
+  },
+  "runs": [
+    {
+      "seed": 1,
+      "vm_s": 1.6,
+      "job_s": 2.06,
+      "clock": 27712,
+      "fingerprint": "a89cbf1caf792f81",
+      "verdicts": [
+        "violation: VIOLATION [redis.acked_writes_survive] key k:# lost"
+      ],
+      "properties": [
+        "redis.acked_writes_survive: failed"
+      ]
+    },
+    {
+      "seed": 2,
+      "vm_s": 2.1,
+      "job_s": 2.493,
+      "clock": 22720,
+      "fingerprint": "a2cc16e8858e3b57",
+      "verdicts": [
+        "ok: OK invariants=# held (redis.acked_writes_survive: acked=# all present)"
+      ],
+      "properties": [
+        "redis.acked_writes_survive: held"
+      ]
+    },
+    {
+      "seed": 3,
+      "vm_s": 0.3,
+      "job_s": 0.743,
+      "clock": 45696,
+      "fingerprint": "cdd82c78486550b1"
+    },
+    {
+      "seed": 4,
+      "vm_s": 2.0,
+      "job_s": 2.334,
+      "clock": 11520,
+      "fingerprint": "17de5ed21eb61347"
+    },
+    {
+      "seed": 5,
+      "vm_s": 1.7,
+      "job_s": 1.982,
+      "clock": 11968,
+      "fingerprint": "9e2ce885165b1bc1"
+    },
+    {
+      "seed": 6,
+      "vm_s": 0.2,
+      "job_s": 1.592,
+      "clock": 9600,
+      "fingerprint": "151e2225a4ca5d82"
+    },
+    {
+      "seed": 7,
+      "vm_s": 0.2,
+      "job_s": 2.164,
+      "clock": 9600,
+      "fingerprint": "40b24bfd0b9c3160"
+    },
+    {
+      "seed": 8,
+      "vm_s": 3.1,
+      "job_s": 5.558,
+      "clock": 27328,
+      "fingerprint": "b94a1b66cc4a1680"
+    },
+    {
+      "seed": 9,
+      "vm_s": 2.3,
+      "job_s": 5.4,
+      "clock": 11200,
+      "fingerprint": "2408e0beb5790b98"
+    },
+    {
+      "seed": 10,
+      "vm_s": 2.0,
+      "job_s": 4.812,
+      "clock": 35712,
+      "fingerprint": "ba6dd58f3f34b1a1"
+    },
+    {
+      "seed": 11,
+      "vm_s": 0.3,
+      "job_s": 2.158,
+      "clock": 20544,
+      "fingerprint": "f0639c6ff88399b0"
+    },
+    {
+      "seed": 12,
+      "vm_s": 0.2,
+      "job_s": 2.153,
+      "clock": 22144,
+      "fingerprint": "8e7341ff8e9bbb89",
+      "verdicts": [
+        "error: ERROR redis restart failed"
+      ]
+    },
+    {
+      "seed": 13,
+      "vm_s": 0.4,
+      "job_s": 2.316,
+      "clock": 31104,
+      "fingerprint": "6f5087c4351f86b9",
+      "verdicts": [
+        "error: ERROR restart after the faults (redis)"
+      ]
+    },
+    {
+      "seed": 14,
+      "vm_s": 1.9,
+      "job_s": 2.47,
+      "clock": 15360,
+      "fingerprint": "3a6d2b419b7a973d"
+    },
+    {
+      "seed": 15,
+      "vm_s": 2.8,
+      "job_s": 3.284,
+      "clock": 20416,
+      "fingerprint": "32e12e5b42e755d4"
+    },
+    {
+      "seed": 16,
+      "vm_s": 1.7,
+      "job_s": 2.533,
+      "clock": 36032,
+      "fingerprint": "dc51057be40a9c3b"
+    },
+    {
+      "seed": 17,
+      "vm_s": 0.3,
+      "job_s": 1.308,
+      "clock": 34752,
+      "fingerprint": "4e85f43866a2dc8f"
+    },
+    {
+      "seed": 18,
+      "vm_s": 2.2,
+      "job_s": 3.192,
+      "clock": 13632,
+      "fingerprint": "7d9b90a3c34ec0f3"
+    },
+    {
+      "seed": 19,
+      "vm_s": 1.4,
+      "job_s": 3.177,
+      "clock": 12096,
+      "fingerprint": "954c5e9d110e2051"
+    },
+    {
+      "seed": 20,
+      "vm_s": 0.3,
+      "job_s": 1.642,
+      "clock": 29376,
+      "fingerprint": "721aec6862107f54"
+    },
+    {
+      "seed": 21,
+      "vm_s": 1.8,
+      "job_s": 3.102,
+      "clock": 11520,
+      "fingerprint": "6a7d72c607299496"
+    },
+    {
+      "seed": 22,
+      "vm_s": 0.3,
+      "job_s": 1.855,
+      "clock": 26752,
+      "fingerprint": "70b7400a0c53263e"
+    },
+    {
+      "seed": 23,
+      "vm_s": 0.2,
+      "job_s": 2.221,
+      "clock": 20736,
+      "fingerprint": "5e0215e7192dcce1"
+    },
+    {
+      "seed": 24,
+      "vm_s": 0.2,
+      "job_s": 1.117,
+      "clock": 23296,
+      "fingerprint": "043175cd443f8848"
+    },
+    {
+      "seed": 25,
+      "vm_s": 0.2,
+      "job_s": 2.169,
+      "clock": 32704,
+      "fingerprint": "d03edda6ca6892c6"
+    },
+    {
+      "seed": 26,
+      "vm_s": 1.8,
+      "job_s": 2.318,
+      "clock": 46400,
+      "fingerprint": "de1a92ae398cbfdc"
+    },
+    {
+      "seed": 27,
+      "vm_s": 0.2,
+      "job_s": 1.534,
+      "clock": 32448,
+      "fingerprint": "23d0e59aa72523e2"
+    },
+    {
+      "seed": 28,
+      "vm_s": 0.1,
+      "job_s": 0.708,
+      "clock": 12032,
+      "fingerprint": "142d0dcc4c581e90"
+    },
+    {
+      "seed": 29,
+      "vm_s": 0.2,
+      "job_s": 0.594,
+      "clock": 42816,
+      "fingerprint": "9a9b251f808cde97"
+    },
+    {
+      "seed": 30,
+      "vm_s": 1.9,
+      "job_s": 2.222,
+      "clock": 21056,
+      "fingerprint": "40d795400954d42b"
+    },
+    {
+      "seed": 31,
+      "vm_s": 0.4,
+      "job_s": 1.124,
+      "clock": 36288,
+      "fingerprint": "d7153b24a1289b8b"
+    },
+    {
+      "seed": 32,
+      "vm_s": 0.2,
+      "job_s": 0.497,
+      "clock": 9664,
+      "fingerprint": "122566cf120768f8"
+    },
+    {
+      "seed": 33,
+      "vm_s": 2.3,
+      "job_s": 2.641,
+      "clock": 10368,
+      "fingerprint": "ee46d956e2c182b6"
+    },
+    {
+      "seed": 34,
+      "vm_s": 2.4,
+      "job_s": 2.694,
+      "clock": 29184,
+      "fingerprint": "93cfb76f020ee3b3"
+    },
+    {
+      "seed": 35,
+      "vm_s": 1.4,
+      "job_s": 3.656,
+      "clock": 15680,
+      "fingerprint": "356a8b4ec8628f50"
+    },
+    {
+      "seed": 36,
+      "vm_s": 0.4,
+      "job_s": 1.569,
+      "clock": 39104,
+      "fingerprint": "dd1d75169609b801"
+    },
+    {
+      "seed": 37,
+      "vm_s": 2.3,
+      "job_s": 3.366,
+      "clock": 20864,
+      "fingerprint": "78af15cf9e9e8ab5"
+    },
+    {
+      "seed": 38,
+      "vm_s": 1.8,
+      "job_s": 2.657,
+      "clock": 13824,
+      "fingerprint": "50f77a78f661479a"
+    },
+    {
+      "seed": 39,
+      "vm_s": 2.1,
+      "job_s": 3.405,
+      "clock": 11776,
+      "fingerprint": "350b2a2dde8017da"
+    },
+    {
+      "seed": 40,
+      "vm_s": 0.1,
+      "job_s": 2.149,
+      "clock": 16384,
+      "fingerprint": "2a1570e1adc96e06"
+    },
+    {
+      "seed": 41,
+      "vm_s": 1.8,
+      "job_s": 2.737,
+      "clock": 24000,
+      "fingerprint": "6bf0f92f7ff9b7e9"
+    },
+    {
+      "seed": 42,
+      "vm_s": 1.7,
+      "job_s": 2.405,
+      "clock": 12096,
+      "fingerprint": "f5bbb5bc5de32d90"
+    },
+    {
+      "seed": 43,
+      "vm_s": 0.2,
+      "job_s": 1.445,
+      "clock": 22208,
+      "fingerprint": "8cc318b6354e801d"
+    },
+    {
+      "seed": 44,
+      "vm_s": 0.3,
+      "job_s": 1.472,
+      "clock": 32896,
+      "fingerprint": "e6dad1c2cad6a7c9"
+    },
+    {
+      "seed": 45,
+      "vm_s": 1.7,
+      "job_s": 2.989,
+      "clock": 42048,
+      "fingerprint": "ec6c3d0870dfe7c5"
+    },
+    {
+      "seed": 46,
+      "vm_s": 1.6,
+      "job_s": 2.287,
+      "clock": 12608,
+      "fingerprint": "fae79cf00fa89597"
+    },
+    {
+      "seed": 47,
+      "vm_s": 0.2,
+      "job_s": 0.534,
+      "clock": 40448,
+      "fingerprint": "6eef1cecb469e2d5"
+    },
+    {
+      "seed": 48,
+      "vm_s": 0.1,
+      "job_s": 0.471,
+      "clock": 9600,
+      "fingerprint": "f537ec9690423525"
+    },
+    {
+      "seed": 49,
+      "vm_s": 1.6,
+      "job_s": 1.836,
+      "clock": 22784,
+      "fingerprint": "df751fe51753b5a3"
+    },
+    {
+      "seed": 50,
+      "vm_s": 0.6,
+      "job_s": 0.899,
+      "clock": 14080,
+      "fingerprint": "aca7c6691b4ba180"
+    },
+    {
+      "seed": 51,
+      "vm_s": 1.6,
+      "job_s": 2.571,
+      "clock": 14592,
+      "fingerprint": "e247ccdbd18c46c9"
+    },
+    {
+      "seed": 52,
+      "vm_s": 1.6,
+      "job_s": 2.911,
+      "clock": 39680,
+      "fingerprint": "d3de56c907681153"
+    },
+    {
+      "seed": 53,
+      "vm_s": 1.0,
+      "job_s": 1.369,
+      "clock": 23424,
+      "fingerprint": "b0146e98cbdebad0"
+    },
+    {
+      "seed": 54,
+      "vm_s": 0.2,
+      "job_s": 0.825,
+      "clock": 25536,
+      "fingerprint": "e6b42ea795b5d921"
+    },
+    {
+      "seed": 55,
+      "vm_s": 1.4,
+      "job_s": 2.44,
+      "clock": 26496,
+      "fingerprint": "80a97342ef5bd44e"
+    },
+    {
+      "seed": 56,
+      "vm_s": 0.2,
+      "job_s": 1.311,
+      "clock": 22016,
+      "fingerprint": "40bae3b4653d96e8"
+    },
+    {
+      "seed": 57,
+      "vm_s": 1.5,
+      "job_s": 3.507,
+      "clock": 20928,
+      "fingerprint": "5b0d334f18f1f1d6"
+    },
+    {
+      "seed": 58,
+      "vm_s": 1.1,
+      "job_s": 2.578,
+      "clock": 11456,
+      "fingerprint": "f6e437c75ebeb4af"
+    },
+    {
+      "seed": 59,
+      "vm_s": 0.8,
+      "job_s": 1.977,
+      "clock": 23296,
+      "fingerprint": "ed4f1c5f8ebaebb6"
+    },
+    {
+      "seed": 60,
+      "vm_s": 0.2,
+      "job_s": 1.024,
+      "clock": 29440,
+      "fingerprint": "6bff4fff7accbae5"
+    }
+  ]
+}
