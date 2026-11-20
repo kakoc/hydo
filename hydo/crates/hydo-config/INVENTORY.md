@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-63 user-facing and 96 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 37 test switches are read by test code; 30 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+63 user-facing and 96 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 37 test switches are read by test code; 32 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -270,6 +270,8 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_FAILED` | guest | list | - | set by hydo-control; read by commands, hydo-read | The failed ids. |
 | `HYDO_SVC` | guest | name | - | set by hydo-control | The service a command is about. |
 | `HYDO_LOG` | guest | path | - | set by hydo-control | The service's log file. |
+| `HYDO_BUGGIFY_FILE` | guest | path | /tmp/hydo-buggify | set by an image service's launcher; read by the Go, Python and JavaScript SDKs | The SDKs' BUGGIFY file (default the guest's `/tmp/hydo-buggify`). From the fingerprint epoch 5 an image service's launcher sets it to `/.hydo/tmp/hydo-buggify`, because the service has a `/tmp` of its own (Milestone 331). |
+| `HYDO_ASSERT_OUT` | guest | path | /dev/console | read by hydo_assert.sh | Where the shell assertion SDK `hydo_assert.sh` writes its records, or `off` (Milestone 329). |
 | `HYDO_FROM` | guest | integer | - | set by hydo-control | The first step of a workload range. |
 | `HYDO_TO` | guest | integer | - | set by hydo-control | The last step of a workload range. |
 | `HYDO_PERF` | guest | path | - | set by hydo-control with perf:; read by the workload | With `perf:` (Milestone 237): the file a workload call appends its own numbers to, one `<name> <value> [<unit>]` line each; `hydo run` puts them into `result.json` `perf`. |
