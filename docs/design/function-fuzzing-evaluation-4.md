@@ -365,3 +365,114 @@ In the order of the frictions:
    - explain a refused nested `input` path;
    - select trait methods with `--fn <Trait>::`, and take `--features`;
    - name the crate by its library name, and allow `dead_code` in hydo's copy.
+
+## After Milestone 333
+
+Milestone 333 made the fixes of the preceding list, each its own commit. The proof ran on fresh
+copies of the six crates from cargo's registry folder, at the versions of the section on the
+crates. The contracts are the evaluator's first ones, the lines that the evaluator wrote
+before any workaround, kept in the evaluator's scratch folder. They have no helper
+constructor, and they keep the lines that did not build, such as `build VersionReq from
+VersionReq::default()`. Two property files needed one change each to build: smallvec's
+`io::Write` property left out (the `write` feature is off), and an ambiguous `from` in
+ordered-float's written with its trait. The runs used seed 1 and 1,000 inputs on the Mac.
+"Before" is `main` at `99aba8ed`, the start of the milestone.
+
+| Crate | Library contracts | Before: fuzzed | Before: verdicts | After: fuzzed | After: verdicts |
+|---|---|---|---|---|---|
+| semver 1.0.28 | 9 | 2 | 1 held, 1 not judged | 9 | 8 held, 1 broken |
+| base64 0.23.1 | 11 | 4 | 4 held | 4 | 4 held |
+| smallvec 1.16.5 | 18 | 9 | 5 held, 3 not judged, 1 broken (hydo's error) | 18 | 18 held |
+| time 0.3.55 | 23 | 23 | 19 held, 2 not judged, 1 vacuous, 1 broken | 23 | 21 held, 1 vacuous, 1 broken |
+| textwrap 0.16.4 | 11 | 11 | 7 held, 3 not judged, 1 broken (known) | 11 | 10 held, 1 broken (known) |
+| ordered-float 5.5.1 | 16 | 2 | 1 held, 1 not judged | 11 | 9 held, 1 broken (known), 1 not judged |
+
+hydo fuzzed 51 of the 88 contracts before and 76 after. No verdict after is hydo's own error.
+The 56 property functions of the scratch folder gave the same verdicts before and after. Of
+them, 49 held, and 7 broke on the evaluator's own wrong properties or on the known bugs.
+
+The broken verdicts after:
+
+- semver's `Comparator::matches` broke on `Comparator { op: Exact, major: 0, minor: None,
+  patch: Some(0), .. }`, a value that the type's comments forbid. The evaluator's first contract
+  was wrong, as the section on semver says.
+- time's `SignedDuration::abs` broke at `seconds = -9223372036854775808`, the documented
+  saturation. The contract was wrong.
+- textwrap's `wrap_columns` and ordered-float's `PartialEq<T>::eq` are known upstream bugs, in
+  the section below.
+
+The 12 functions that were not fuzzed after have no `build` line in the first contracts, and
+each refusal names a line that builds. base64's 7 engine methods get `build GeneralPurpose from
+GeneralPurpose::new(alphabet: &Alphabet, config: GeneralPurposeConfig)`, and ordered-float's 5
+methods of `NotNan` get `build NotNan from NotNan::new(val: T)`. A second run added the lines
+that the refusals name, and nothing else:
+
+| Crate | Lines added | Fuzzed | Verdicts |
+|---|---|---|---|
+| base64 | `GeneralPurpose::new(...)`, `Alphabet::new(alphabet: &str)` (a `Result`), `GeneralPurposeConfig::new()` (no argument) | 11 of 11 | 4 held, 1 not judged, 6 too few inputs |
+| ordered-float | `NotNan::new(val: T)` (a `Result`), `read NotNan as f64 by into_inner()` | 16 of 16 | 9 held, 1 broken (known), 1 not judged, 5 too few inputs |
+| time | `Date::from_julian_day(jd: i32)` (a `Result`) in place of the helper `hydo_props::date` | 23 of 23 | 21 held, 1 vacuous, 1 broken |
+
+With these lines all 88 contracts build, and none needs a helper in the test module. The `too
+few inputs` verdicts are the contracts' own. base64's `Alphabet::new` refuses random text, so
+1,000 of 1,000 inputs were thrown away in each contract without an `input` line for the
+alphabet. ordered-float's `requires self.0 == self.0` reads no argument of `NotNan::new`. The
+report said both, for example `1000 of 1000 inputs were thrown away: a build line's
+constructor gave Err or None`.
+
+### The known upstream issues
+
+All three showed again:
+
+- textwrap's `wrap_columns` panicked with the evaluation's smallest input, `text = "\u{1f600}",
+  columns = 4, total_width_or_options = 10, left_gap = "", middle_gap = "a", right_gap = ""`
+  (pull request 647).
+- textwrap's `dedent_undoes_indent` broke at `s = "a\n\t"` (pull request 654).
+- ordered-float's `PartialEq<T>::eq` broke on 1,000 calls, at `self = OrderedFloat(NaN), other
+  = NaN` (issue 143). The evaluation found it only on 20,000 calls, and before the milestone
+  hydo did not fuzz the function at all on the first contracts.
+
+### What changed, by the list's fixes
+
+1. smallvec's `into_vec` held on 1,000 calls with every clause decided: `A::Item` is a `u8`
+   now. A comparison of values that hydo does not read is undecided, and the reason names the
+   type: `result holds values of the type std::num::Wrapping<u8>, which hydo does not read`.
+2. All 18 smallvec contracts ran, `retain`'s closure among them, and each held.
+3. semver's five parsers built and ran. A clause reads the error: the test module writes
+   `crate::error::ErrorKind`.
+4. `VersionReq::default()` built. semver's `Prerelease::new` and time's `Date::from_julian_day`
+   build values as `build` lines, and their `Err` inputs are counted apart from `requires`. The
+   refusals proposed `<OrderedFloat<_> as From<OrderedFloat<f32>>>::from(...)` with its trait,
+   no `new_unchecked`, and no `$src`.
+5. `OrderedFloat<T>(pub T)` with `with T = f64` is generated field by field, and
+   `&OrderedFloat<T>` takes an `OrderedFloat<f64>`.
+6. textwrap's `Word::from` and `Options::new` held, read field by field, and `wrap`'s
+   `Vec<Cow<str>>` reads as a list of strings. semver's `Version::new` held, since a clause
+   reads `result.major` without a `read` line. time's `Month::nth_next` and `Weekday::nth_next`
+   held with `result == self`.
+7. `with T = &[u8]` passes a slice.
+8. Two NaNs come in about one input in twelve of a function with two floats. An index that
+   `requires index < len(v)` names is generated inside the list.
+9. `with Item = u8` is refused with the names of the type parameters. `--fn Engine::` selects
+   base64's engine methods, `--features` passes the crate's features, the reports name
+   `ordered_float::`, and the copy allows dead code.
+
+### The third evaluation's either again
+
+either 1.19.0 of the [third evaluation](function-fuzzing-evaluation-3.md) ran with 14 contracts
+written again from that page, with seed 1 and 1,000 inputs. Before, 13 held, and `left_and`'s
+`!matches(self, Left(_)) || result == other` was `not judged`, because two values of one
+enumeration did not compare. After, all 14 held. The fixtures of Milestones 318 and 326, which
+hold the shapes of the third evaluation's six crates, passed unchanged.
+
+### What is left
+
+Open item 163 lists what is left. The largest gaps:
+
+- A constructor without arguments and builder methods (base64's
+  `GeneralPurposeConfig::new().with_encode_padding(pad)`) is no line that hydo generates, so
+  contracts that read such an option need a helper.
+- An `input` line holds for its own contract only, so each contract of a crate needs the line
+  for a constructor's argument that the constructor refuses at random.
+- A `build` line holds for the type's last name, so two types of one name in two modules share
+  one line.
