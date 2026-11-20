@@ -2173,7 +2173,7 @@ R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	^ --arch arm64 --check	run	0	#ae0840b3cca6cf22/231	^
 R	^	^ --arch arm64 --print-shell	run	0	#acaf7405be948095/1278	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/case166.json --arch x86_64 --check	run	1	""	"hydo-build: hydo_version: the plan needs hydo at least 1.0, …#9eda512c119f4b8a"
+R	^	<tmp>/case166.json --arch x86_64 --check	run	1	""	"hydo-build: hydo_version: the plan needs hydo at least 1.0, …#12ea408e7748fcc1"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -6238,7 +6238,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00912.json --arch arm64 --check	run	1	""	"hydo-build: test.round_ms: a whole number in [10, 60000] (got '')\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant00913.json --arch x86_64 --check	run	1	""	"hydo-build: hydo_version: the plan needs hydo 12 or newer, t…#e4ee921e18b98664"
+R	^	<tmp>/mutant00913.json --arch x86_64 --check	run	1	""	"hydo-build: hydo_version: the plan needs hydo 12 or newer, t…#de55ef1a23d865d4"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant00914.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
@@ -8335,7 +8335,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01611.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant01612.json --arch arm64 --check	run	1	""	"hydo-build: hydo_version: the plan needs hydo 4096 or newer,…#2f63031a93e50595"
+R	^	<tmp>/mutant01612.json --arch arm64 --check	run	1	""	"hydo-build: hydo_version: the plan needs hydo 4096 or newer,…#ba39c9ef352ca334"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant01613.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
