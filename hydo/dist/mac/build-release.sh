@@ -176,6 +176,9 @@ cp "$TOP/hydo/onboard/MANIFEST.md" "$REL/hydo/onboard/"
 echo "$VERSION" > "$REL/hydo/VERSION"     # what a plan's hydo_version: is checked against
 mkdir -p "$REL/hydo/history"
 cp "$TOP/hydo/history/hydo_hist.sh" "$REL/hydo/history/"
+# the shell assertion SDK, for a project's root.files (hydo guide sdks; also `hydo guide hydo_assert.sh`)
+mkdir -p "$REL/hydo/sdk"
+cp "$TOP/hydo/stack/hydoassert/hydo_assert.sh" "$REL/hydo/sdk/"
 # (the property table is made by the explorer itself since M115: no hydo/assert tool in the release)
 cp "$TOP/hv/hvm/hv.entitlements" "$REL/hv/hvm/"
 # the arm64 kernels: hydo-build records the kernel an image needs (the second one for service

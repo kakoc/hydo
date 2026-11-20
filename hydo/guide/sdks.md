@@ -18,7 +18,35 @@ property (Rust also `hydo_always_cmp!`).
 | Rust | `sdk/rust` (crate `hydo-assert`, standard library only; macros `hydo_always!`, `hydo_buggify!`, `declare!`; `hydo_assert::history`) | `hydo-assert = "<version>"` once published, or `hydo-assert = { path = ".../sdk/rust" }` |
 | Python 3.8+ | `sdk/python` (distribution `hydo-assert`, import `hydo_assert`, standard library only, thread- and asyncio-safe); history recorder `hydo_assert.history` | `pip install hydo-assert` once published, or `pip install ./sdk/python`, or copy `src/hydo_assert/` into the image |
 | JavaScript / TypeScript (Node.js) | `sdk/js` (package `hydo-assert`, CommonJS and ESM, types, no dependencies); history recorder `hydo-assert/history` | `npm install hydo-assert` once published, or `"hydo-assert": "file:.../sdk/js"`; in the image copy `package.json`, `index.js`, `index.mjs` (and `history.js`, `history.mjs` for the recorder) to `node_modules/hydo-assert/` |
-| shell (busybox sh) | `hydo/stack/hydoassert/hydo_assert.sh` | source it; no deduplication, no BUGGIFY |
+| shell (busybox sh) | `hydo/stack/hydoassert/hydo_assert.sh`; a release has it as `hydo/sdk/hydo_assert.sh`, and every `hydo` prints it with `hydo guide hydo_assert.sh` | copy it into the image and source it (below); no deduplication, no BUGGIFY |
+
+### The shell SDK in an image
+
+hydo does not put the shell SDK into an image by itself. Copy it into the project and list it in
+`root.files`:
+
+```sh
+hydo guide hydo_assert.sh > hydo/hydo_assert.sh
+```
+
+```yaml
+root:
+  files:
+    - {src: hydo_assert.sh, dst: /etc/hydo_assert.sh}
+workload:
+  run: |
+    . /etc/hydo_assert.sh
+    hydo_decl always shop.order_kept "an acknowledged order is still there"
+    hydo_always shop.order_kept "an acknowledged order is still there" /bin/shopctl get o1
+    hydo_sometimes shop.retry_won "a retry succeeded" /bin/shopctl retried o1
+```
+
+Each function writes one `HYDO-ASSERT` line to `/dev/console`, or to the file that
+`HYDO_ASSERT_OUT` names. A program may also write the line itself:
+`printf 'HYDO-ASSERT {"t":"sometimes","id":"raw.line","ok":true,"msg":"..."}\n' > /dev/console`.
+Both forms reach the property table of `result.json`. On the Mac engine one run of such a
+workload listed `always`, `sometimes`, `reachable` and `eventually` properties from the SDK, and
+the `printf` line, each `PASS`. The functions need `/bin/busybox`, which every image has.
 
 Use assertions for properties only the program can see (a code path that must never run, a
 retry that should sometimes succeed, a recovery path that should be reached). Check files cover

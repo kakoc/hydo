@@ -277,13 +277,15 @@ fn guide_names(root: &Path) -> Vec<String> {
         .filter_map(|n| n.strip_suffix(".md").map(str::to_string))
         .collect();
     v.extend(["manifest", "schema", "skill", "examples", "init"].map(String::from));
+    // the shell assertion SDK, a file the binary carries (Milestone 329)
+    v.push("hydo_assert.sh".into());
     v
 }
 
 /// Every `hydo guide <name>` written in the files below `dir` names something the guide has.
 fn guide_mentions(root: &Path, dir: &Path, what: &str, r: &mut Report) {
     let known = guide_names(root);
-    let re = Regex::new(r"hydo guide ([a-z][a-z0-9-]*)").unwrap();
+    let re = Regex::new(r"hydo guide ([a-z][a-z0-9-]*(?:_[a-z0-9_]*\.sh)?)").unwrap();
     let mut stack = vec![dir.to_path_buf()];
     let mut n = 0;
     while let Some(d) = stack.pop() {
