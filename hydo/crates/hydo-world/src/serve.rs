@@ -302,7 +302,13 @@ async fn http_conn(w: Arc<World>, idx: usize, mut s: TcpStream) {
                 return;
             }
         };
-        body.truncate(1 << 20);
+        let proxy = endpoint(&w, idx).kind == "proxy";
+        if proxy && body.len() > PROXY_BODY_MAX {
+            let a = http1::error_answer("hydo proxy: a request body over 512 MiB", 413);
+            let _ = c.write(&http1::answer_bytes(&a, &head, true)).await;
+            return;
+        }
+        body.truncate(body_limit(proxy));
         let close = http1::wants_close(&head) || !whole;
         let mut headers = head.headers.clone();
         headers.retain(|(k, _)| k != "Host");
@@ -322,8 +328,10 @@ async fn http_conn(w: Arc<World>, idx: usize, mut s: TcpStream) {
         match out {
             Outcome::Answer(a) => {
                 // an HTTP/1.0 answer without a length ends with the connection
-                let close =
-                    close || (head.minor == 0 && a.body.len() > 2048 && head.method != "HEAD");
+                let known = hget(&a.headers, "Content-Length")
+                    .is_some_and(|v| v == a.body.len().to_string().as_bytes());
+                let close = close
+                    || (head.minor == 0 && a.body.len() > 2048 && head.method != "HEAD" && !known);
                 if c.write(&http1::answer_bytes(&a, &head, close))
                     .await
                     .is_err()
@@ -371,7 +379,7 @@ async fn h2_stream(
         respond.send_reset(h2::Reason::PROTOCOL_ERROR);
         return;
     };
-    let body = h2x::read_body(&mut body, 1 << 20).await;
+    let body = h2x::read_body(&mut body, body_limit(endpoint(&w, idx).kind == "proxy")).await;
     let method = parts.method.as_str().to_string();
     let rq = InReq {
         method: method.clone(),
@@ -444,6 +452,20 @@ pub const HOP: [&str; 7] = [
 pub fn is_hop(k: &str) -> bool {
     HOP.contains(&k)
 }
+
+/// How much of a request body the handler keeps. A fake reads the first 1 MiB, as the Go version
+/// did. An HTTP proxy forwards the whole body: an S3 object or a multipart part is often larger,
+/// and a cut body would reach the service as a shorter object (Milestone 329).
+fn body_limit(proxy: bool) -> usize {
+    if proxy {
+        PROXY_BODY_MAX
+    } else {
+        1 << 20
+    }
+}
+
+/// The largest request body an HTTP proxy forwards; a larger one gets 413.
+const PROXY_BODY_MAX: usize = 512 << 20;
 
 /// The fake and HTTP-proxy handler (Go's `handler`).
 async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> Outcome {
@@ -766,9 +788,13 @@ async fn forward(e: &Endpoint, rq: &InReq) -> Result<http1::Resp, String> {
     http1::roundtrip(&req, true).await
 }
 
+/// The service's answer as the proxy's own, with the service's Content-Length (Milestone 329).
+/// In the answer to a HEAD it is the size of the object, which S3 clients read there; in an
+/// answer with a body it keeps a large body from going out chunked, and S3 clients read an
+/// object's size from it.
 fn copy_response(a: &mut Answer, resp: http1::Resp) {
     for (k, v) in resp.headers {
-        if !is_hop(&k) && k != "Content-Length" {
+        if !is_hop(&k) {
             a.headers.push((k, v));
         }
     }
