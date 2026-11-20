@@ -468,6 +468,61 @@ fn a_walk_shows_its_video_its_trace_and_its_test() {
     assert_eq!(html.matches("<img ").count(), 0);
 }
 
+/// Milestone 334: the filmstrip of a walk is the run's timeline, one row of frames per step; the
+/// step that the finding names and a frame with notes are marked, and the read-back check's
+/// frames come last.
+#[test]
+fn a_walk_shows_its_filmstrip_step_by_step() {
+    let run = Run::new(
+        "disk=none | run C=2 I=1",
+        hydo_results::Verdict {
+            kind: "violation".into(),
+            text:
+                "HYDO-ORACLE: VIOLATION [browser.acked_shown] The page / does not show the task 4"
+                    .into(),
+            ..Default::default()
+        },
+        "0123456789abcdef",
+    );
+    let d = std::env::temp_dir().join(format!("hydo-htmlreport-film-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join("screens")).unwrap();
+    let _rm = Rm(d.clone());
+    hydo_results::write_document(&d.join(hydo_results::RUN_DOC), &run).unwrap();
+    for f in [
+        "film-0-start.jpg",
+        "film-0-000.jpg",
+        "film-1-000.jpg",
+        "film-check-001.jpg",
+    ] {
+        std::fs::write(d.join("screens").join(f), [0xff, 0xd8, 0xff]).unwrap();
+    }
+    std::fs::write(
+        d.join("screens/film.jsonl"),
+        "{\"step\":0,\"k\":\"start\",\"file\":\"film-0-start.jpg\",\"what\":\"open /\",\"url\":\"/\",\"notes\":[]}\n\
+         {\"step\":0,\"k\":0,\"file\":\"film-0-000.jpg\",\"what\":\"click button \\\"Add <task>\\\"\",\"url\":\"/\",\"notes\":[\"POST /api/x got no answer (net::ERR_FAILED)\"]}\n\
+         {\"step\":1,\"k\":0,\"file\":\"film-1-000.jpg\",\"what\":\"wait 1 s\",\"url\":\"/tasks\",\"notes\":[]}\n\
+         {\"step\":null,\"k\":1,\"file\":\"film-check-001.jpg\",\"what\":\"look on / for 5 acknowledged objects: 2 not shown\",\"url\":\"/\",\"notes\":[],\"failed\":true}\n",
+    )
+    .unwrap();
+    let html = page_of(&d, "d", None);
+    let s = &html[html
+        .find("The walk, action by action")
+        .expect("the filmstrip")..];
+    assert!(s.find("Step 0").unwrap() < s.find("Step 1").unwrap());
+    assert!(s.find("Step 1").unwrap() < s.find("The read-back check").unwrap());
+    assert_eq!(s.matches("src=\"data:image/jpeg;base64,/9j/\"").count(), 4);
+    assert!(
+        s.contains("<b>0.0</b> click button &quot;Add &lt;task&gt;&quot;"),
+        "{s}"
+    );
+    assert!(s.contains("POST /api/x got no answer"));
+    assert!(s.contains("screens/film.jsonl"));
+    // without a filmstrip, no section
+    std::fs::remove_file(d.join("screens/film.jsonl")).unwrap();
+    assert!(!page_of(&d, "d", None).contains("The walk, action by action"));
+}
+
 #[test]
 fn how_a_neighbour_was_made() {
     let a = "disk=cut | run C=12 R=everysec";

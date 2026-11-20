@@ -71,6 +71,16 @@ pub const KNOWN_SETUP: &[&str] = &[
 /// Where the walker and its playwright-core are in the guest (and in the browser's root).
 pub const WALK_DIR: &str = "/opt/hydo/web/walk";
 
+/// The file by which an image says that its walker keeps the filmstrip and the traces of
+/// Milestone 334, in its root without the leading slash. It is in `/etc/hydo`, which the host
+/// reads also from the small initramfs of a Mac image whose root is on its disk. The controller
+/// copies a filmstrip only out of an image that has it.
+pub const FILM_MARK: &str = "etc/hydo/walk-film";
+
+/// The text of [`FILM_MARK`].
+pub const FILM_MARK_TEXT: &str =
+    "The walker of this image keeps a filmstrip of every action and a trace of every step (Milestone 334).\n";
+
 /// hydo's walker, and the stand-in for `@playwright/test` through which the unchanged watcher
 /// names a walk's step.
 pub const WALK: &str = include_str!("browser/walk.mjs");
@@ -759,6 +769,10 @@ pub fn expand(m: &mut Value) -> R<()> {
     if explore.is_some() {
         let stub = format!("{WALK_DIR}/node_modules/@playwright/test");
         t.insert(format!("{WALK_DIR}/walk.mjs"), Value::String(WALK.into()));
+        t.insert(
+            format!("/{FILM_MARK}"),
+            Value::String(FILM_MARK_TEXT.into()),
+        );
         t.insert(format!("{stub}/index.js"), Value::String(WALK_STUB.into()));
         t.insert(
             format!("{stub}/package.json"),
@@ -790,6 +804,53 @@ pub fn expand(m: &mut Value) -> R<()> {
     }
     o.insert(META.into(), meta);
     Ok(())
+}
+
+/// A list of setup steps (`browser.explore.setup`): each one of open,
+/// click (with role:), fill (with with:), press, see or wait.
+fn setup_steps(v: Option<&Value>, wh: &str) -> R<Vec<Value>> {
+    let mut setup = Vec::new();
+    match v {
+        None => {}
+        Some(Value::Array(a)) => {
+            for (i, s) in a.iter().enumerate() {
+                let w = format!("{wh}[{i}]");
+                if !s.is_object() {
+                    return Err(err(format!("{w}: a mapping such as {{open: /login}}")));
+                }
+                crate::validate::unknown(s, KNOWN_SETUP, &w)?;
+                let acts: Vec<&str> = ["open", "click", "fill", "press", "see", "wait"]
+                    .into_iter()
+                    .filter(|k| get(s, k).is_some())
+                    .collect();
+                if acts.len() != 1 {
+                    return Err(err(format!(
+                        "{w}: one of open, click, fill (with with:), press, see or wait"
+                    )));
+                }
+                let mut one = Map::new();
+                for (k, v) in s.as_object().into_iter().flatten() {
+                    if k == "wait" {
+                        one.insert(k.clone(), json!(ms(Some(v), &format!("{w}.wait"), 0)?));
+                    } else if v.is_string() || v.is_number() || v.is_boolean() {
+                        one.insert(k.clone(), Value::String(str_of(v)));
+                    } else {
+                        return Err(err(format!("{w}.{k}: a string")));
+                    }
+                }
+                if acts[0] == "fill" && !one.contains_key("with") {
+                    return Err(err(format!("{w}: fill needs with: <the value to type>")));
+                }
+                setup.push(Value::Object(one));
+            }
+        }
+        Some(_) => {
+            return Err(err(format!(
+                "{wh}: a list of steps, such as [{{open: /login}}, {{fill: Username, with: demo}}, {{click: Sign in}}]"
+            )))
+        }
+    }
+    Ok(setup)
 }
 
 /// A validated `browser.explore`: the walker's configuration ($HYDO_WEB_WALK) and the walk's
@@ -878,47 +939,7 @@ fn explore_cfg(e: &Value, m: &Value) -> R<Explore> {
             ))
         }
     };
-    let mut setup = Vec::new();
-    match get(e, "setup") {
-        None => {}
-        Some(Value::Array(a)) => {
-            for (i, s) in a.iter().enumerate() {
-                let w = format!("browser.explore.setup[{i}]");
-                if !s.is_object() {
-                    return Err(err(format!("{w}: a mapping such as {{open: /login}}")));
-                }
-                crate::validate::unknown(s, KNOWN_SETUP, &w)?;
-                let acts: Vec<&str> = ["open", "click", "fill", "press", "see", "wait"]
-                    .into_iter()
-                    .filter(|k| get(s, k).is_some())
-                    .collect();
-                if acts.len() != 1 {
-                    return Err(err(format!(
-                        "{w}: one of open, click, fill (with with:), press, see or wait"
-                    )));
-                }
-                let mut one = Map::new();
-                for (k, v) in s.as_object().into_iter().flatten() {
-                    if k == "wait" {
-                        one.insert(k.clone(), json!(ms(Some(v), &format!("{w}.wait"), 0)?));
-                    } else if v.is_string() || v.is_number() || v.is_boolean() {
-                        one.insert(k.clone(), Value::String(str_of(v)));
-                    } else {
-                        return Err(err(format!("{w}.{k}: a string")));
-                    }
-                }
-                if acts[0] == "fill" && !one.contains_key("with") {
-                    return Err(err(format!("{w}: fill needs with: <the value to type>")));
-                }
-                setup.push(Value::Object(one));
-            }
-        }
-        Some(_) => {
-            return Err(err(
-                "browser.explore.setup: a list of steps, such as [{open: /login}, {fill: Username, with: demo}, {click: Sign in}]",
-            ))
-        }
-    }
+    let setup = setup_steps(get(e, "setup"), "browser.explore.setup")?;
     // the fakes' routes, for repro.spec.ts: an H= fault on a route becomes a page.route
     let mut routes = Map::new();
     if let Some(Value::Array(fakes)) = m.get("fakes") {
@@ -1336,6 +1357,8 @@ mod tests {
             WALK_STUB
         );
         assert_eq!(t["/opt/hydo/web/hydo/hook.cjs"], HOOK);
+        // Milestone 334: the mark of a walker that keeps a filmstrip
+        assert_eq!(t[format!("/{FILM_MARK}")], FILM_MARK_TEXT);
         let cfg: Value =
             serde_json::from_str(m["services"][0]["env"]["HYDO_WEB_WALK"].as_str().unwrap())
                 .unwrap();

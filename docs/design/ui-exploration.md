@@ -218,9 +218,9 @@ without faults are walks without faults; the rules see the state that the walk l
   DOM snapshots without screenshots), which `npx playwright show-trace` opens with the DOM and
   the requests at every action [10]. With `,rec` alone it records the last step that takes an
   action. A shrunk walk often leaves its last steps without actions; Milestone 258 recorded the
-  last workload step all the same. Only one step is recorded, because the controller copies the
-  files through the agent after the verdict, at most 1 MiB of them (below). The whole walk is in
-  `repro.spec.ts`. Recording costs guest time, so a run with `rec` is a run of its own, with its
+  last workload step all the same. Only one step's video is recorded, because the controller
+  copies the files through the agent after the verdict (below). The whole walk is in
+  `repro.spec.ts`, and since Milestone 334 in the filmstrip of every run (the last section). Recording costs guest time, so a run with `rec` is a run of its own, with its
   own fingerprint. `hydo explore` does not record during the exploration. At its end it runs
   each minimal schedule with a walk once more with recording on, into `replays/rec-<k>/`, and
   says whether that run ended with the same verdict. A page's finding names the test of its
@@ -280,6 +280,54 @@ engine's wall limit of 900 s. A read that arrives costs about a tenth of a secon
 - The walker keeps a video or a trace of up to 640 KB (200 KB before); the last-step video of
   Memos's seed 46 had 524,990 bytes. Only one step is recorded still: the videos of every step
   of a Memos walk would pass 2 MB.
+
+### The failing run's own frames (Milestone 334)
+
+A recording replay is a second run. It repeats the failing run's actions but not their timing,
+so a failure that depends on the timing can pass in it, and then no video shows the failure
+(Milestone 301). A walk that a power cut ends left nothing at all, because its files stay in the
+first boot's `/tmp`, which the recovery boot does not have (Vikunja's finding 1, Milestone 273).
+Since this milestone the failing run carries its own evidence:
+
+- **A frame after every action.** After the page opens and after each action, the walker takes a
+  JPEG of the viewport at three eighths of its size (480 by 270 pixels, quality 50) through the
+  page's DevTools session, `Page.captureScreenshot` with a clip that scales. It is not
+  Playwright's `page.screenshot`, which a trace records as an action of the walk. A frame of a
+  Vikunja page has 3 to 8 KB. Each frame gets one line in `film.jsonl`: the step, the action's
+  number, the file, its size, the action's sentence, the page's path, the guest's time, and the
+  `notes` of what the watcher recorded since the frame before. The notes are the uncaught
+  errors, the failed requests and the error elements that appeared, read from `events.jsonl`,
+  which the watcher writes in the same process.
+- **A trace of every step.** Every step records a Playwright trace with DOM snapshots and
+  without screenshots. Its index line says `only: failed`, so the controller copies it only when
+  the boot's verdict is not OK. A Vikunja step's trace had 400 to 600 KB.
+- **The copy is pipelined and larger.** The controller reads `film.jsonl`, then every frame
+  whose size its line gives in windows of 16 reads, before it waits for their replies; a read
+  that waits alone costs about a tenth of a second on hvx. A boot of such an image copies at
+  most 5 MiB (`screens::BOOT_BYTES`), and one file up to 3 MiB (`screens::FILE_MAX`). As hex
+  with its notes, that is about 10.5 MiB of the agent's channel. The hvx engine keeps 16 MiB of
+  agent lines per boot. The Mac and KVM engines keep 32 MiB of console since this milestone (4
+  MiB before). A boot that wrote more than 4 MiB of console lost the agent's later lines before
+  and never reached its verdict, so no recorded value moves.
+- **A power cut takes the frames along.** At a host power cut (`C=`, a reaction's `:cut`, and the
+  flush of `cf=`), after the ids are read and with every service frozen, the controller copies
+  the filmstrip and the trace of the last step before the engine cuts the power. `/tmp` is a
+  tmpfs, so the reads touch no disk, also when the disk has lost its power at a `cf=` flush.
+  The recovery boot copies its own files after its verdict, and the run directory gets both:
+  `film.jsonl` of the recovery boot follows the first boot's.
+- **Only an image that has the walker copies.** The plan of a run comes from the image's
+  manifest, read by the running hydo. So the controller cannot tell an image's walker from the
+  manifest. The expansion of `browser.explore` writes `/etc/hydo/walk-film`, and `plan_of_image`
+  reads it, in the ext4 root of an x86_64 image and in the small initramfs of a Mac image whose
+  root is on its disk. An image without the file sends the commands that it sent before, with
+  the copy of Milestone 264. The fingerprint epoch could not decide: an image built at epoch 5
+  before this milestone has the older walker.
+
+`hydo report --html` of a run shows the filmstrip as "The walk, action by action": one row of
+frames per step, each with its action and its path. The step that a failing check names ("during
+the test "walk step 3") is marked, and so is every frame with notes. The video of `,rec`
+follows when there is one. The page of an exploration shows each failure's filmstrip from
+`consoles/<tag>.screens/` in the failure's details, under its timeline.
 
 ## Sources
 

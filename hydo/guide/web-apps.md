@@ -138,13 +138,25 @@ starts with them too.
 Every run leaves the walk as a Playwright test, `screens/repro.spec.ts` in the run directory.
 Run it against your own instance without hydo: `BASE_URL=http://localhost:5230 npx playwright
 test repro.spec.ts`. An `H=` fault on a fake's route is a `page.route` handler in it; a fault of
-the backend, such as a kill, is a comment at the step where hydo made it. At its end `hydo
-explore` runs each minimal schedule with a walk once more with recording on, into
-`replays/rec-<k>/`. That run also records a video and a Playwright trace of the step in which
-the finding happened, `I=<seed>,rec<step>`. For a finding during step 2, `npx playwright
-show-trace screens/walk-step-2.trace.zip` opens the trace. A finding that names no step
-records the last step that takes an action (`I=<seed>,rec`). `hydo report --html` of that
-folder shows the video and the test.
+the backend, such as a kill, is a comment at the step where hydo made it.
+
+Every run also keeps a filmstrip of the walk. After the page opens and after every action, the
+walker saves a small screenshot of the page (480 by 270 pixels, `screens/film-<step>-<k>.jpg`)
+and one line in `screens/film.jsonl`. The line has the action's sentence, the page's path, and what went wrong
+since the action before: an uncaught error, a failed request, an error shown. `hydo report
+--html <run dir>` shows the filmstrip as the run's timeline, step by step, and marks the step
+that the finding names. These are frames of the run itself, so they show the failure even when
+it depends on the walk's timing. When the run fails, `screens/` also has a Playwright trace of
+every step, `walk-step-<step>.trace.zip`: `npx playwright show-trace
+screens/walk-step-2.trace.zip` opens step 2 with the DOM and the requests at every action. A
+power cut does not lose them: hydo copies the filmstrip and the trace of the last step out of
+the guest before it cuts the power. The page of an exploration shows each failure's filmstrip in
+the failure's details.
+
+At its end `hydo explore` runs each minimal schedule with a walk once more with recording on,
+into `replays/rec-<k>/`. That run records a video of the step in which the finding happened,
+`I=<seed>,rec<step>`. A finding that names no step records the last step that takes an action
+(`I=<seed>,rec`). `hydo report --html` of that folder shows the video and the test.
 
 Recording slows the browser, so a walk with `rec` does not choose its actions again: it repeats
 the actions of the same schedule without `rec`. `hydo explore` takes them from the failing run's
@@ -159,7 +171,7 @@ failure that depends on the walk's timing can pass in the recording. `hydo explo
 the recording did not fail, and `hydo report` and `hydo report --html` of the exploration say it
 under the problem. The page links each problem's recording, its video, its trace and its
 `repro.spec.ts`, in `replays/rec-<k>/screens/`. The minimal schedule without `rec` still shows
-the failure.
+the failure, and its run's filmstrip and traces show it action by action.
 
 ## The properties
 

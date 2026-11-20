@@ -2031,10 +2031,17 @@ browser:
   names). A walk with `rec` repeats the actions of the same schedule without `rec`, which each
   run prints as `hydo-web: walk-act <step>.<k> <json>` lines; the host writes them to
   `/tmp/hydo/web/walk-script.txt` before the first step, and an action whose control is not on
-  the page is left out with a line that says so (Milestone 270). A recording of more than
-  640 KB stays in the guest, and a run copies at most 1 MiB of files out of it; a file that
-  does not fit stays in the guest with a `HYDO-SCREEN-LEFT` line in the console (Milestone
-  264).
+  the page is left out with a line that says so (Milestone 270).
+- Since Milestone 334 every run also writes the filmstrip: `screens/film-<step>-<k>.jpg`, a
+  480 by 270 screenshot after the page opens and after each action, and one line per frame in
+  `screens/film.jsonl` (`step`, `k`, `file`, `bytes`, `what`, `url`, `t`, `notes`, and
+  `failed` for an action that was not done). Every step records a Playwright trace,
+  `walk-step-<i>.trace.zip`, which the run directory gets only when the verdict is not OK. At a
+  power cut the controller copies the filmstrip and the last step's trace before the cut.
+  `root.text` gains `/etc/hydo/walk-film`, by which the controller knows such a walker. A boot
+  of such an image copies at most 5 MiB of files out of the guest, each file up to 3 MiB; an
+  image built before keeps the copy of Milestone 264, at most 1 MiB per run. A file that does
+  not fit stays in the guest with a `HYDO-SCREEN-LEFT` line in the console.
 - `I=<seed>,x<step>.<k>` leaves out action k of a step, and `x<step>.<k>-<last>` actions k to
   last (Milestone 264); the shrinker writes such walks. A time or a date in a control's name
   ("1 minute ago", `2026-10-16 00:00:42`) counts as one word when the walk chooses, so that a

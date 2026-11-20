@@ -70,8 +70,11 @@ pub const STEP_DEFAULT: u64 = 2500;
 /// The guest's tick period (CONFIG_HZ_250): tick jitter counts ticks of this length.
 pub const TJ_PERIOD: u64 = 4_000_000;
 pub const TJ_MAX_EXPLICIT: usize = 32;
-/// The console capture.
-pub const CONSOLE_MAX: usize = 1 << 22;
+/// The console capture: 32 MiB since Milestone 334 (4 MiB before), so that a walk's filmstrip
+/// and traces fit as the agent's hex lines after the verdict (hydo-control's
+/// `screens::BOOT_BYTES`). Only a boot that writes more than 4 MiB of console sees the change,
+/// and such a boot lost the agent's later lines before and never reached its verdict.
+pub const CONSOLE_MAX: usize = 1 << 25;
 
 /// The kernel command line of an image's boot (hydo-hvx's `ROOTFS_CMDLINE` without what this
 /// kernel does not know, plus the virtio-mmio device and no I/O delay port), before the devices

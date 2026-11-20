@@ -195,7 +195,9 @@ What did not work at first, and what changed because of it:
   `HYDO-SCREEN` note. The host writes the files into the run directory's `screens/` and keeps a
   short line without the bytes in the console and the transcript. A note is covered by no
   fingerprint and no control-transcript hash, and the reads come after the verdict, so they
-  decide nothing. A manifest without `browser:` sends the same commands as before.
+  decide nothing. A manifest without `browser:` sends the same commands as before. Since
+  Milestone 334 an image whose walker keeps a filmstrip copies more per boot, in windows of
+  reads, and also at a power cut (docs/design/ui-exploration.md, the last section).
 - **The comparison is exact and runs in the guest.** `screens: compare` puts the reference folder
   into the image, and the invariant `<name>.screens_match` compares each screenshot with the file
   of the same name. A deterministic run draws the same pixels on every run, so the rule needs no

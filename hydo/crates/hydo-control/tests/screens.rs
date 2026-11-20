@@ -142,6 +142,143 @@ fn without_browser_nothing_is_read() {
     assert!(notes(&a.run.fin.transcript).is_empty());
 }
 
+/// A plan of a walk whose image keeps a filmstrip (Milestone 334), with `check` as its one final
+/// check.
+fn film_plan(check: &str) -> Plan {
+    let text = format!(
+        "name: web\nservices:\n  - name: kv\n    cmd: kv-server\n    ready: kv-ping\n\
+         workload:\n  steps: 2\n  run: client HYDO_FAKE_SHOTS HYDO_FAKE_FILM\ninvariants:\n  - id: all.done\n    final: true\n    cmd: {check}\n"
+    );
+    let m = hydo_manifest::from_embedded(&text, None).unwrap();
+    let mut p = Plan::from_manifest(&m).unwrap();
+    assert!(
+        !p.film,
+        "only an image with the walker's mark has a filmstrip"
+    );
+    p.screens = Some("/tmp/hydo/web/shots".into());
+    p.walk = true;
+    p.film = true;
+    p
+}
+
+fn shot_reads(items: &[Item]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for (p, hex) in reads(items) {
+        if let Some(f) = p.strip_prefix("/tmp/hydo/web/shots/") {
+            let f = format!("{f}{}", if hex { "" } else { " (text)" });
+            if out.last() != Some(&f) {
+                out.push(f);
+            }
+        }
+    }
+    out
+}
+
+/// Milestone 334: an image with a filmstrip copies the index's files, then `film.jsonl` and its
+/// frames, after the verdict; the traces of the steps only when the run failed, the latest step
+/// first. The notes come after the verdict, and a replay gives the same transcript.
+#[test]
+fn a_walk_s_filmstrip_comes_out_and_its_traces_only_when_it_fails() {
+    let s = Schedule::parse("disk=none | run").unwrap();
+    let ok = film_plan("final-check");
+    let b = support::boot(&ok, "kv").unwrap();
+    let a = support::run_schedule(&b, &s).unwrap();
+    assert!(
+        matches!(&a.run.fin.ending, Some(Ending::Verdict(v)) if v.starts_with("HYDO-ORACLE: OK")),
+        "{:?}",
+        a.run.fin.ending
+    );
+    assert_eq!(
+        shot_reads(&a.run.items),
+        [
+            "index.jsonl (text)",
+            "step-0-1.png",
+            "step-1-1.png",
+            "film.jsonl (text)",
+            "film.jsonl",
+            "film-0-000.jpg",
+            "film-0-001.jpg",
+            "film-1-000.jpg",
+            "film-1-001.jpg",
+        ]
+    );
+    let lines = hydo_control::agent::console_text(&a.run.fin.transcript, &[]);
+    assert!(lines.find("HYDO-ORACLE: OK").unwrap() < lines.find("HYDO-SCREEN").unwrap());
+    let d = TmpDir::fresh(std::env::temp_dir().join(format!("hydo-film-{}", std::process::id())));
+    hydo_control::agent::take_screens(&a.run.fin.transcript, &d.join("screens"));
+    let film = std::fs::read_to_string(d.join("screens/film.jsonl")).unwrap();
+    assert_eq!(film.lines().count(), 4);
+    assert_eq!(
+        std::fs::read_to_string(d.join("screens/film-1-001.jpg")).unwrap(),
+        "JPG 1.1"
+    );
+    // a second transcript's filmstrip follows the first one's (a recovery boot's read-back)
+    hydo_control::agent::take_screens(&a.run.fin.transcript, &d.join("screens"));
+    let film2 = std::fs::read_to_string(d.join("screens/film.jsonl")).unwrap();
+    assert_eq!(film2.lines().count(), 8);
+    let index = std::fs::read_to_string(d.join("screens/index.jsonl")).unwrap();
+    assert_eq!(
+        index.lines().filter(|l| l.contains("step-0-1.png")).count(),
+        1
+    );
+    let _ = std::fs::remove_dir_all(&d);
+    let again = support::run_schedule(&b, &s).unwrap();
+    assert_eq!(a.run.fin.transcript, again.run.fin.transcript);
+    // a check that the scripted agent fails: the traces follow, step 1 first
+    let failing = (0..200)
+        .map(|n| format!("final-check-{n}"))
+        .find_map(|c| {
+            let p = film_plan(&c);
+            let b = support::boot(&p, "kv").ok()?;
+            let r = support::run_schedule(&b, &s).ok()?;
+            matches!(&r.run.fin.ending, Some(Ending::Verdict(v)) if v.starts_with("HYDO-ORACLE: VIOLATION"))
+                .then_some(r)
+        })
+        .expect("a check name that the scripted agent fails");
+    let got = shot_reads(&failing.run.items);
+    assert_eq!(
+        got[got.len() - 2..],
+        ["walk-step-1.trace.zip", "walk-step-0.trace.zip"]
+    );
+}
+
+/// Milestone 334: a power cut copies the filmstrip and the last step's trace out of the first
+/// boot before the cut, with every service frozen; an image without a filmstrip reads nothing
+/// there.
+#[test]
+fn a_power_cut_takes_the_filmstrip_out_before_the_cut() {
+    let s = Schedule::parse("disk=none | run C=1").unwrap();
+    let p = film_plan("final-check");
+    let b = support::boot(&p, "kv").unwrap();
+    let a = support::run_schedule(&b, &s).unwrap();
+    assert!(
+        matches!(&a.run.fin.ending, Some(Ending::PowerCut { .. })),
+        "{:?}",
+        a.run.fin.ending
+    );
+    assert_eq!(
+        shot_reads(&a.run.items),
+        [
+            "index.jsonl (text)",
+            "step-0-1.png",
+            "film.jsonl (text)",
+            "film.jsonl",
+            "film-0-000.jpg",
+            "film-0-001.jpg",
+            "walk-step-0.trace.zip",
+        ]
+    );
+    let lines = hydo_control::agent::console_text(&a.run.fin.transcript, &[]);
+    assert!(
+        lines.find("HYDO-SCREEN").unwrap() < lines.find("hydo-explore-workload-done cut").unwrap()
+    );
+    let mut old = film_plan("final-check");
+    old.film = false;
+    let b = support::boot(&old, "kv").unwrap();
+    let a = support::run_schedule(&b, &s).unwrap();
+    assert!(shot_reads(&a.run.items).is_empty());
+}
+
 /// The writes of a run's items to one guest file: (the text, whether it appends).
 fn writes_to(items: &[Item], file: &str) -> Vec<(String, bool)> {
     items

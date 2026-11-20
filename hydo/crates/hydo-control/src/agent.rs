@@ -175,6 +175,13 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
             cp.saved = crate::schedule::composer::saved_of(&regs);
         }
     }
+    // Milestone 334: the filmstrip and the traces of a walk come from the image's own walker; an
+    // image built before this milestone has the walker before them, and its runs copy what they
+    // copied (its fingerprint epoch cannot say: an epoch-5 image may have either walker)
+    if plan.walk {
+        plan.film =
+            hydo_engine::image::embedded_file(image, hydo_manifest::browser::FILM_MARK).is_ok();
+    }
     // Milestone 283: without `guest.cgroup2` the image's epoch decides (the mount from epoch 4)
     if plan.cgroup2.is_none() {
         plan.cgroup2 = Some(hydo_engine::image::image_defaults(image).1.cgroup2);
@@ -466,11 +473,14 @@ pub fn write_run_files(dir: &Path, tag: &str, prefix: &str, ran: &Ran, boot: Opt
     let [b, r, rc] = transcript_files(prefix);
     let _ = std::fs::write(dir.join(&r.1), run_t.to_jsonl());
     if let Some(rec) = &ran.recovery {
+        // Milestone 334: the recovery boot's files (the read-back check's pages) join the first
+        // boot's, whose filmstrip the controller copied out before the power cut
+        let rec_t = take_screens(&rec.transcript, &dir.join(format!("{prefix}screens")));
         let _ = std::fs::write(
             dir.join(format!("{tag}.recovery.log")),
-            console_text(&rec.transcript, &rec.console) + &more(true),
+            console_text(&rec_t, &rec.console) + &more(true),
         );
-        let _ = std::fs::write(dir.join(&rc.1), rec.transcript.to_jsonl());
+        let _ = std::fs::write(dir.join(&rc.1), rec_t.to_jsonl());
     }
     for (i, (_, f)) in ran.reboots.iter().enumerate() {
         let _ = std::fs::write(
@@ -484,9 +494,10 @@ pub fn write_run_files(dir: &Path, tag: &str, prefix: &str, ran: &Ran, boot: Opt
 }
 
 /// The screenshot notes of a transcript (`HYDO-SCREEN`, schedule/screens.rs) written as files
-/// into `out`, with `index.jsonl` (one line per file, without its bytes); the transcript comes
-/// back with each such note cut to its short line. A transcript without such notes comes back
-/// as it is, and `out` is not made.
+/// into `out`, with `index.jsonl` (one line per file, without its bytes; appended to, so that a
+/// recovery boot's files join the first boot's); the transcript comes back with each such note
+/// cut to its short line. A transcript without such notes comes back as it is, and `out` is not
+/// made.
 pub fn take_screens(t: &Transcript, out: &Path) -> Transcript {
     use crate::transcript::Record;
     let mut t = t.clone();
@@ -495,7 +506,15 @@ pub fn take_screens(t: &Transcript, out: &Path) -> Transcript {
         if let Record::Note { line, .. } = r {
             if let Some((file, bytes, short)) = crate::schedule::screens::of_note(line) {
                 let _ = std::fs::create_dir_all(out);
-                let _ = std::fs::write(out.join(&file), bytes);
+                if file == crate::schedule::screens::FILM {
+                    // a recovery boot's filmstrip (the read-back check's pages) follows the
+                    // first boot's, which the controller copied at the power cut
+                    let mut all = std::fs::read(out.join(&file)).unwrap_or_default();
+                    all.extend_from_slice(&bytes);
+                    let _ = std::fs::write(out.join(&file), all);
+                } else {
+                    let _ = std::fs::write(out.join(&file), bytes);
+                }
                 index.push_str(&short.to_string());
                 index.push('\n');
                 *line = format!("{} {short}", crate::schedule::screens::NOTE);
@@ -503,7 +522,15 @@ pub fn take_screens(t: &Transcript, out: &Path) -> Transcript {
         }
     }
     if !index.is_empty() {
-        let _ = std::fs::write(out.join("index.jsonl"), index);
+        let path = out.join("index.jsonl");
+        let mut all = std::fs::read_to_string(&path).unwrap_or_default();
+        for l in index.lines() {
+            if !all.lines().any(|x| x == l) {
+                all.push_str(l);
+                all.push('\n');
+            }
+        }
+        let _ = std::fs::write(&path, all);
     }
     t
 }

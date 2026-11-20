@@ -24,6 +24,12 @@
 // to $HYDO_WEB_DIR/walk-script.txt, instead of choosing them again (Milestone 270). Every run
 // prints each action it took as a `walk-act <step>.<k> <json>` line for that script.
 //
+// Since Milestone 334 every run keeps a filmstrip of the walk: after the page opens and after
+// every action a small JPEG of the page (480×270, film-<step>-<k>.jpg) and one line in
+// film.jsonl with the action's sentence, the page's path and what the watcher saw go wrong since
+// the action before. Every step also records a Playwright trace, which the controller copies out
+// only when the run fails (index line `only: failed`).
+//
 // The configuration is $HYDO_WEB_WALK (JSON, written by the expansion of `browser.explore`):
 //   start, actions, setup, avoid, within, values, settle_ms, quiet_ms, text, routes
 import fs from 'node:fs';
@@ -108,7 +114,7 @@ const log = (line) => process.stdout.write(`hydo-web: ${line}\n`);
 function event(ev) {
   fs.appendFileSync(path.join(dir, 'events.jsonl'), JSON.stringify({ t: Date.now(), ...ev }) + '\n');
 }
-function indexLine(file, why) {
+function indexLine(file, why, extra = {}) {
   const index = path.join(shots, 'index.jsonl');
   let have = '';
   try {
@@ -117,8 +123,88 @@ function indexLine(file, why) {
     have = '';
   }
   if (!have.split('\n').some((l) => l.includes(`"file":${JSON.stringify(file)}`))) {
-    fs.appendFileSync(index, JSON.stringify({ file, test: title, url: '', why }) + '\n');
+    fs.appendFileSync(index, JSON.stringify({ file, test: title, url: '', why, ...extra }) + '\n');
   }
+}
+
+// ------------------------------------------------------------------ the filmstrip (Milestone 334)
+// After the page opens and after every action: a JPEG of the viewport at three eighths of its size
+// (480×270, a few kilobytes), taken through the page's DevTools session so that the page itself
+// does not change, and one line in film.jsonl. The controller copies both out of the guest after
+// the verdict, and at a power cut before the cut, so that `hydo report --html` shows the walk of
+// the failing run action by action. A frame that cannot be taken (the page went away) keeps its
+// line without a file.
+const FILM = path.join(shots, 'film.jsonl');
+const EVENTS = path.join(dir, 'events.jsonl');
+let eventsRead = 0;
+let cdp = null;
+const shortPath = (u) => {
+  try {
+    const x = new URL(u);
+    return x.protocol === 'about:' ? u : x.pathname + x.search;
+  } catch {
+    return String(u || '');
+  }
+};
+function eventsSoFar() {
+  try {
+    eventsRead = fs.statSync(EVENTS).size;
+  } catch {
+    eventsRead = 0;
+  }
+}
+// what the watcher (hook.cjs, in this process) recorded since the frame before: the errors, the
+// failed requests and the error elements that appeared
+function newNotes() {
+  let buf;
+  try {
+    buf = fs.readFileSync(EVENTS);
+  } catch {
+    return [];
+  }
+  const text = buf.subarray(eventsRead).toString('utf8');
+  const end = text.lastIndexOf('\n');
+  if (end < 0) return [];
+  eventsRead += Buffer.byteLength(text.slice(0, end + 1));
+  const out = [];
+  const what = { exception: 'uncaught exception', rejection: 'unhandled promise rejection', console: 'console.error' };
+  for (const l of text.slice(0, end).split('\n')) {
+    let e;
+    try {
+      e = JSON.parse(l);
+    } catch {
+      continue;
+    }
+    if (e.kind === 'error') out.push(`${what[e.what] || 'error'}: ${String(e.message).slice(0, 160)}`);
+    else if (e.kind === 'request' && (e.status === undefined || e.status >= 500)) {
+      out.push(`${e.method} ${e.path} ${e.status !== undefined ? `answered ${e.status}` : `got no answer (${e.error})`}`);
+    } else if (e.kind === 'alert' && e.on) out.push(`error shown: ${String(e.text || e.selector).slice(0, 160)}`);
+  }
+  return out.slice(0, 8);
+}
+async function frame(page, k, what, extra = {}) {
+  const name = `film-${step}-${typeof k === 'number' ? String(k).padStart(3, '0') : k}.jpg`;
+  let file;
+  for (let i = 0; i < 2 && !file; i++) {
+    try {
+      cdp ??= await page.context().newCDPSession(page);
+      const m = await cdp.send('Page.getLayoutMetrics');
+      const v = m.cssVisualViewport || m.visualViewport;
+      const r = await cdp.send('Page.captureScreenshot', {
+        format: 'jpeg',
+        quality: 50,
+        clip: { x: v.pageX, y: v.pageY, width: v.clientWidth, height: v.clientHeight, scale: 0.375 },
+      });
+      const jpeg = Buffer.from(r.data, 'base64');
+      fs.writeFileSync(path.join(shots, name), jpeg);
+      file = name;
+      extra = { ...extra, bytes: jpeg.length };
+    } catch {
+      cdp = null; // a new document in another process: a new session, once
+    }
+  }
+  const line = { step, k, file, what, url: shortPath(page.url()), t: Date.now(), notes: newNotes(), ...extra };
+  fs.appendFileSync(FILM, JSON.stringify(line) + '\n');
 }
 
 // The walk as Playwright code, for repro.spec.ts: each step's lines in walk/repro-<step>.json.
@@ -373,10 +459,9 @@ const KINDS = [
   ['wait', 1],
 ];
 const T = { timeout: 3000 };
-// the largest video or trace that the controller copies out. The controller copies at most 1 MiB
-// of files per run (hydo-control's screens::MAX_BYTES, Milestone 264): the test, a trace and a
-// video of this size fit
-const RECORDING_MAX = 640 * 1024;
+// the largest video or trace that the controller copies out (hydo-control's screens::FILE_MAX,
+// Milestone 334: 640 KiB before, when a run copied at most 1 MiB of files in all)
+const RECORDING_MAX = 3 * 1024 * 1024;
 // the names of controls that only close an overlay
 const DISMISS = /^(close|cancel|dismiss|skip|not now|no thanks|×|✕)$/i;
 // the names of buttons that commit what a form holds
@@ -891,18 +976,21 @@ async function main() {
   const opts = { viewport: { width: 1280, height: 720 }, locale: 'en-US', timezoneId: 'UTC' };
   if (state && state.storage) opts.storageState = state.storage;
   // the controller copies these files out through the agent, about 1.5 KB per call, after the
-  // verdict and at most 1 MiB of them: a video and a trace (DOM snapshots, no screenshots) of the
-  // last step that takes an action, where a walk's failure shows most often (Milestone 264: a
-  // shrunk walk leaves the steps after its failure without actions)
+  // verdict: with rec, a video of the last step that takes an action, where a walk's failure
+  // shows most often (Milestone 264: a shrunk walk leaves the steps after its failure without
+  // actions). Since Milestone 334 every step records a trace (DOM snapshots, no screenshots),
+  // which the controller copies only when the run fails; with rec the recorded step's trace is
+  // copied always, as before.
   const nsteps = cfg.steps || 1;
   const acts = (s) => Array.from({ length: actions }, (_, k) => k).some((k) => !walk.skip.has(`${s}.${k}`));
   let lastActive = nsteps - 1;
   while (lastActive > 0 && !acts(lastActive)) lastActive--;
   // rec<s> names the step to record (Milestone 267: the step whose failure the replay shows)
-  const tracing = walk.rec && step === (walk.recStep ?? lastActive);
-  if (tracing) opts.recordVideo = { dir: path.join(own, 'video'), size: { width: 640, height: 360 } };
+  const recording = walk.rec && step === (walk.recStep ?? lastActive);
+  if (recording) opts.recordVideo = { dir: path.join(own, 'video'), size: { width: 640, height: 360 } };
   const context = await browser.newContext(opts);
-  if (tracing) await context.tracing.start({ screenshots: false, snapshots: true, title });
+  await context.tracing.start({ screenshots: false, snapshots: true, title });
+  eventsSoFar();
   // What the server acknowledged: every write, answered 2xx. A write is a request under
   // watch.requests whose path matches watch.failures_of, or without that key every request that
   // is not a GET. Each goes to walk/acks.jsonl with the printable text of the request and the
@@ -998,6 +1086,7 @@ async function main() {
     code.push(`// not done in hydo's run: ${error}`);
   }
   const signedIn = status === 'passed';
+  await frame(page, 'start', signedIn ? `open ${shortPath(page.url())}` : error, signedIn ? {} : { failed: true });
   if (walk.rec && !script) {
     log(`walk ${step}: this recording has no script of the run it replays (${SCRIPT}), so the walk chooses its actions again and may take others`);
   }
@@ -1021,6 +1110,7 @@ async function main() {
     log(`walk ${step}.${k}: ${done.what}`);
     log(`walk-act ${step}.${k} ${JSON.stringify(done.act)}`);
     code.push(...done.lines);
+    await frame(page, k, done.what, done.act.failed || done.act.missing ? { failed: true } : {});
   }
   if (script) {
     log(`walk ${step}: the recording replay ${missed ? `left out ${missed} action${missed === 1 ? '' : 's'}` : 'repeated every action'} of the run it replays`);
@@ -1036,7 +1126,7 @@ async function main() {
   }
   // A recording larger than this stays in the guest: the copy out of it must fit the run's copy
   // budget, and a trace's snapshots carry the app's scripts and styles (Memos's: megabytes).
-  const keep = (file, why) => {
+  const keep = (file, why, extra) => {
     let size = 0;
     try {
       size = fs.statSync(path.join(shots, file)).size;
@@ -1047,12 +1137,13 @@ async function main() {
       log(`walk ${step}: ${file} has ${size} bytes, more than ${RECORDING_MAX}; it stays in the guest (${path.join(shots, file)})`);
       return;
     }
-    indexLine(file, why);
+    indexLine(file, why, extra);
   };
-  if (tracing) {
+  {
     const trace = `walk-step-${step}.trace.zip`;
     await context.tracing.stop({ path: path.join(shots, trace) }).catch(() => {});
-    keep(trace, 'the Playwright trace of the walk (npx playwright show-trace)');
+    // only: failed (Milestone 334): the controller copies it when the run fails, or at a power cut
+    keep(trace, `the Playwright trace of step ${step} of the walk (npx playwright show-trace)`, recording ? {} : { only: 'failed', step });
   }
   const video = page.video();
   await context.close();

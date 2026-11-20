@@ -16,8 +16,11 @@ pub const UART_INTID: usize = 32 + UART_SPI as usize;
 pub const NIRQ: usize = 64;
 /// what the guest reads from CNTFRQ_EL0 (host value, constant)
 pub const CNTFRQ: u64 = 24_000_000;
-/// the console capture
-pub const CONSOLE_MAX: usize = 1 << 22;
+/// the console capture: 32 MiB since Milestone 334 (4 MiB before), so that a walk's filmstrip
+/// and traces fit as the agent's hex lines after the verdict (hydo-control's
+/// `screens::BOOT_BYTES`). Only a boot that writes more than 4 MiB of console sees the change,
+/// and such a boot lost the agent's later lines before and never reached its verdict.
+pub const CONSOLE_MAX: usize = 1 << 25;
 /// tick jitter's tick period: CONFIG_HZ_250
 pub const TJ_PERIOD: u64 = CNTFRQ / 250;
 pub const TJ_MAX_EXPLICIT: usize = 32;
