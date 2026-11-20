@@ -19307,6 +19307,132 @@ example changed.
 emulator's conditional writes, `hydo explore` exiting 0 when it refuses for memory, and the
 inspect sessions that hold guest RAM.
 
+## Milestone 331 (tentative number): each image service's own `/tmp`, and `root.share_images` on again
+
+A user's onboarding with 0.4.1 on the Mac found exploration speed bound by memory. A guest of
+5 GB gave the explorer one worker, at about 50 s per schedule. Each service of one image got a
+copy of the image's root, and on the Mac the root lives in the guest's RAM.
+`root.share_images: true` gives the services of one image one unpacked tree. Since Milestone 324
+`hydo compose` writes it commented out, because of open item 147: in the TiKV example
+(Milestone 287), with the key on, each store found the other stores' address lock in `/tmp`,
+although MANIFEST.md said that each service of a shared tree has its own `/tmp`. This milestone
+finds the cause, gives each image service its own `/tmp` from the fingerprint epoch 5, measures
+what sharing saves, and has `hydo compose` write the key on again.
+
+**The cause.** The key was not the cause. Every image service's launcher
+(`/etc/hydo/oci/<service>/run`) and its `hydo-oci` helper (`exec`) bind the guest's `/proc`,
+`/sys`, `/dev`, `/tmp` and `/data` into the service's root (`hydo-build/src/oci.rs`, `BINDS`).
+The bind of `/tmp` is the guest's own `/tmp`, so every image service sees one `/tmp`, with
+`root.share_images` and without it. MANIFEST.md said so in its section on image services ("`/tmp`
+is shared, so `$HYDO_ACKED` etc. are the same files inside"), and its comment of
+`root.share_images` said the opposite ("each on its own mount of it with its own /tmp"). It was
+a bind of its own, of the same folder. The TiKV example never ran without the key, because three
+copies of the image did not fit the engine's disk, so only runs with the key showed the lock.
+
+**The reproduction.** On the Mac engine, with the public image `alpine:3.20` (`docker save
+--platform linux/arm64`) and `guest.ram_mib: 2048`. Three services of the image, `s1` to `s3`,
+each run the same shell command, as TiKV locks a file named after its listen address. When
+`/tmp/addr.lock` exists, the command prints `addr in use by <the name in the file>` and exits 1.
+Otherwise it writes its name to `/tmp/addr.lock` and to `/tmp/own.<name>`, and sleeps. A check
+lists each service's `/tmp` through `hydo-oci` and fails when a service sees another's
+file. `disk=none | run` gave:
+
+| hydo | `root.share_images` | verdict |
+|---|---|---|
+| 0.4.1 (epoch 4) | false | `ERROR service start (s2)`: `addr in use by s1` |
+| 0.4.1 (epoch 4) | true | `ERROR service start (s2)`: `addr in use by s1` |
+| this tree (epoch 5) before the fix | true | `ERROR service start (s2)`: `addr in use by s1` |
+| this tree (epoch 5) with the fix | true | `OK`; each service sees only `addr.lock`, `hydo` and its own file |
+| this tree (epoch 5) with the fix | false | `OK`, the same |
+
+With the fix and the key on, `K=s2@1+1` and `disk=cut | run C=1` passed too: a restart and a
+recovery boot bind the service's own `/tmp` again.
+
+**The fix.** From the fingerprint epoch 5 (`hydo_image::defaults`, the new `oci_own_tmp`) the
+launcher's block of Milestone 317, under the service's lock and once per boot, binds the
+service's own `/tmp`:
+
+```sh
+for d in proc sys dev; do hmnt $R/$d || $BB mount --bind /$d $R/$d || exit 125; done
+hmnt $R/tmp || { $BB mkdir -p /tmp/oci/s2 && $BB chmod 1777 /tmp/oci/s2 && $BB mount --bind /tmp/oci/s2 $R/tmp; } || exit 125
+hmnt $R/tmp/hydo || { $BB mkdir -p /tmp/hydo $R/tmp/hydo && $BB mount --bind /tmp/hydo $R/tmp/hydo; } || exit 125
+hmnt $R/.hydo/tmp || $BB mount --bind /tmp $R/.hydo/tmp || exit 125
+hmnt $R/data || $BB mount --bind /data $R/data || exit 125
+```
+
+- The service's `/tmp` is the guest's folder `/tmp/oci/<service>`, mode 1777, so the workload,
+  the checks and `logs:` find a file the service writes to its `/tmp/x` at `/tmp/oci/<service>/x`.
+  It is in the guest's `/tmp`, so a power cut loses it as before, and a restart keeps it, as
+  Docker keeps a container's `/tmp` across a restart.
+- The guest's `/tmp/hydo` is bound at the service's `/tmp/hydo`: `$HYDO_ACKED`, `$HYDO_OUTCOMES`,
+  `$HYDO_FAILED`, `$HYDO_LOG`, the launcher's lock and done files, and the pages' records of
+  `browser:` (`/tmp/hydo/web`) are the same files inside and outside.
+- The guest's own `/tmp` is bound at `/.hydo/tmp`, a new folder of the image's tree beside hydo's
+  busybox. The SDKs read the BUGGIFY configuration from the guest's `/tmp/hydo-buggify`, which the
+  controller writes, so the launcher passes `HYDO_BUGGIFY_FILE=/.hydo/tmp/hydo-buggify` unless
+  the service's `env:` sets the variable. A project whose services shared files in `/tmp` can
+  use `/.hydo/tmp` too.
+
+An image built before epoch 5 keeps its launcher and binds the guest's `/tmp`. The test
+`hydo-build` `oci::tests::each_image_service_has_its_own_tmp_from_epoch_5` runs the launchers of
+epochs 4 and 5, with and without a shared tree, with a busybox stand-in that records the mounts.
+Milestone 317's test of the shared tmpfs passes with the new block. The example
+`compose-voting-browser` (in no recorded list) read the browser's screenshots in the guest's
+`/tmp/gui/shots`; its workload now reads them in `/tmp/oci/browser/gui/shots`.
+
+**What sharing saves.** On the Mac engine, with the public image `ghcr.io/dragonflydb/dragonfly:v2.1.0`
+(arm64, 8 layers, 4,084 entries), three services that only sleep, and `guest.ram_mib: 2048`. The
+workload printed `/proc/meminfo` after the services started:
+
+| | initramfs | `Shmem` | `MemAvailable` |
+|---|---|---|---|
+| `root.share_images: false` | 146.5 MiB | 362.3 MiB | 1,548.3 MiB |
+| `root.share_images: true` | 51.0 MiB | 125.6 MiB | 1,789.5 MiB |
+
+The initramfs root is a tmpfs, so its files count as `Shmem`. Each copy of the image's root took
+about 118 MiB of guest RAM, and sharing gave 241 MiB back. The values were the same at epoch 4
+(0.4.1) and at epoch 5, within 3 MiB. For the explorer on a Mac, a worker needs about twice
+`guest.ram_mib` plus 256 MiB of the host (`hydo_engine::Engine::max_workers`). So each MiB that
+sharing takes off the guest saves 2 MiB per worker. Sharing does not make the guest smaller by
+itself: the project's `guest.ram_mib` is the user's. For four services of an image of 1,201 MiB
+unpacked (Milestone 324's proof), sharing takes 3,603 MiB of roots off the guest. A guest that
+held four copies can then be about 3.5 GiB smaller, and a worker about 7 GiB smaller. On the
+user's Mac, with 5.8 GB free, a 5 GB guest gave one worker. A 2.5 GB guest would give two.
+
+**`hydo compose`.** It writes `root.share_images: true` again for services of one image, with a
+comment that names the services of each image and says what the key does:
+
+```yaml
+  # kv_0, kv_1 and kv_2 run one image, registry.example.com/kv/server:2.1.
+  # They share one unpacked copy of their image in the root, each service with its own
+  # /tmp and mounts. false gives each service a copy of its own, and on the Mac the root
+  # lives in the guest's RAM (MANIFEST.md, "root").
+  share_images: true
+```
+
+The importer's goldens were recorded again for these lines only: the 28 cases of
+`hydo-compose/tests/golden.json` that Milestone 324 moved, and `tests/golden/k8s-cluster.yaml`.
+hydo-build's `tests/golden/oci/answers.json` was recorded again for the new launchers and the
+folder `/.hydo/tmp` only, and the CLI golden for the new text of `hydo guide manifest`. MANIFEST.md (the
+`root:` comment, the section on image services, the compose table, `mounts:`), `hydo guide
+services`, `hazards` and `error-logs` say what an image service's `/tmp` is now.
+
+**What moves.** Every image built at epoch 5 with an image service has a new launcher, a new
+folder `/.hydo/tmp` in its tree, and the variable `HYDO_BUGGIFY_FILE` in its services'
+environment. These are the 7 images that Milestone 317 moves already (`hvm/voting`,
+`hvm/redis-oci`, `hvx/redis-oci`, `hvx/restate-oci`, `hvx/voting`, `hvx/voting-generated`,
+`hvx/voting-loopback`; 21 runs). Their workloads and checks reach the services through `hydo-oci`
+and `/tmp/hydo`, so no verdict is expected to move. They wait for the pass before 0.5.0 (open item
+105, docs/REBASELINE.md section 29). A manifest that `hydo compose` writes is input, and the
+examples' Compose-made manifests were not written again.
+
+**What is left** (open items 147 and 166). The TiKV example did not run again at epoch 5. A
+manifest that `hydo compose` wrote from Milestone 324 to this one keeps the line commented out.
+A `logs:` or `errors.files` path under an image service's `/tmp` must name `/tmp/oci/<service>/`;
+hydo does not map it. A socket that an image service makes in its `/tmp` is not reachable at the
+same path from the workload. hvx and KVM did not run the new launcher; it is the same shell on
+every engine.
+
 ## Milestone 332 (tentative number): the onboarding skill has hydo's version
 
 The user decided on 2026-11-20 that the onboarding skill's version is hydo's version from hydo

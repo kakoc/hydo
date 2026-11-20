@@ -140,12 +140,13 @@ services:
 workload:
   steps: 20
   run: |
-    mkdir -p /tmp/gui/shots /tmp/gui/home
+    # the browser's /tmp is the guest's /tmp/oci/browser (MANIFEST.md, "Docker/OCI images")
+    mkdir -p /tmp/gui /tmp/oci/browser/gui/shots /tmp/oci/browser/gui/home
     out=/tmp/gui/vote-$HYDO_FROM.txt
     hydo-oci browser /opt/gui/hydo-gui vote $HYDO_FROM $HYDO_TO > $out 2>> /tmp/gui/driver.err
     while read -r id clicked screen why; do
       c=${clicked#clicked=}; s=${screen#screen=}
-      shot=-; [ -f /tmp/gui/shots/$id.png ] && shot=$(sha256sum /tmp/gui/shots/$id.png | cut -c1-16)
+      shot=-; [ -f /tmp/oci/browser/gui/shots/$id.png ] && shot=$(sha256sum /tmp/oci/browser/gui/shots/$id.png | cut -c1-16)
       if [ "$s" = "$c" ]; then
         echo $id-$s >> $HYDO_ACKED; echo "$id ack" >> $HYDO_OUTCOMES
       else
@@ -159,7 +160,7 @@ workload:
 shell: |
   # The two sides of "the screen agrees with the backend". A check that cannot decide exits 2.
   db_votes() {   # sets got="<voter> <vote>" lines; 0 = read, 3 = no votes table yet, 2 = db down
-    mkdir -p /tmp/gui/home
+    mkdir -p /tmp/gui /tmp/oci/browser/gui/home
     got=$(hydo-oci db psql -U postgres -tAc "select id || ' ' || vote from votes" 2>/tmp/gui-db.err) && return 0
     got=""
     grep -q 'relation "votes" does not exist' /tmp/gui-db.err && return 3

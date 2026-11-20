@@ -287,7 +287,7 @@ dry-runs the packages on every pull request that changes one. The details are in
 
 **Fingerprints.** The fingerprint epoch is 5 (M317; 4 from M269, 3 from M234, 2 from M204, 1
 from M155). An image built at epoch 5 has the image services' launchers of M317, which mount the
-system folders once per boot. On hvx an x86_64 image built at epoch 5 keeps time with its TSC
+system folders once per boot. Since M331 they also give each image service a `/tmp` of its own. On hvx an x86_64 image built at epoch 5 keeps time with its TSC
 (M323, `guest.exact_tick`). The recorded values are still epoch 4's (open item 105). An image built at epoch 3 or later boots the Mac and KVM guest kernels
 with cgroups. An image built
 at epoch 4 carries no saved regression: `hydo build` writes them beside it, as
@@ -560,8 +560,8 @@ real registry. Reference: `hydo guide workflow`.
 
 **Three gaps of a user's onboarding with 0.4.0 (M324, tentative number).** Each fix is its own
 commit; none moves a recorded value:
-- `hydo compose` writes `root.share_images: true`, commented out, with a comment that says why
-  and when to turn it on, for services of one image (not on by itself because of open item 147).
+- `hydo compose` writes `root.share_images: true` for services of one image, with a comment of
+  what it does (commented out from M324 to M331, open item 147).
   `hydo build` estimates each image's unpacked size from its layers, also with `--check`. It
   warns when the roots exceed half of `guest.ram_mib` on the Mac. On hvx it warns when the root
   and the data disk exceed 4096 MiB (MANIFEST.md, "Limits of v1").
@@ -604,6 +604,16 @@ user's onboarding with 0.4.1, each fix its own commit; none moves a recorded val
 - Both releases ship the shell assertion SDK as `hydo/sdk/hydo_assert.sh`, and `hydo guide
   hydo_assert.sh` prints it; `hydo guide sdks` puts it into an image with `root.files`. Its
   records reach the property table of `result.json` (a Mac engine run).
+**Each image service's own `/tmp` (M331, tentative number; fingerprint epoch 5).** An image
+service of an image built at epoch 5 has a `/tmp` of its own, as a container has. It is the
+guest's folder `/tmp/oci/<service>` (`hydo_image::defaults`, `oci_own_tmp`). The guest's
+`/tmp/hydo` is bound at its `/tmp/hydo` (the run files), and the guest's `/tmp` at `/.hydo/tmp`. Before, every
+image service bound the guest's own `/tmp`, so services of one image met each other's lock files
+there, with `root.share_images` and without it (TiKV's address lock, open item 147). `hydo
+compose` writes `root.share_images: true` again for services of one image. On the Mac, with three
+services of one Dragonfly image, the guest's root took 126 MiB of guest RAM with it and 362 MiB
+without. The reference is MANIFEST.md "Services from a Docker/OCI image"; the details are in
+`docs/HISTORY.md` Milestone 331.
 
 **Business rules: what found what (M215).** On Formance Ledger, rules over the ledger's own
 state (balances, moves, effective volumes, overdraft, reverts, bulks, the audit log) found
@@ -2040,6 +2050,13 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       43 images and their runs, with a new guest clock, not only new bytes. A verdict can move
       too, because the guest's timeouts now follow the virtual TSC. The KVM images get the file
       as new bytes, which the KVM engine ignores; the Mac images do not change.
+    - Milestone 331 gives every image service of an image built at epoch 5 a `/tmp` of its own
+      (`oci_own_tmp`). It writes a new launcher, a new folder `/.hydo/tmp` in each image's
+      tree, and `HYDO_BUGGIFY_FILE` in the service's environment. It moves the same 7 images with image
+      services as Milestone 317 (`hvm/voting`, `hvm/redis-oci`, `hvx/redis-oci`,
+      `hvx/restate-oci`, `hvx/voting`, `hvx/voting-generated`, `hvx/voting-loopback`; 21 runs).
+      Their workloads and checks reach the services through `hydo-oci` and `/tmp/hydo`, so no
+      verdict is expected to move with it (docs/REBASELINE.md section 29).
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -2568,10 +2585,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Finding 2 (tikv/pd#11596) is known and fixed on PD's master only. A power cut shortly
       after any start of PD reaches it, so explorations with power cuts meet it often until a
       release has the fix.
-    - With `root.share_images: true`, TiKV's address lock in `/tmp` was found by the other
-      stores of the same image, although MANIFEST.md gives each service its own `/tmp`. So
-      `hydo compose` writes `share_images` commented out (M324), and `hydo build` names it only
-      when the roots do not fit. Whether M317's mounts under one lock changed it was not tested.
+    - TiKV's address lock in `/tmp` was found by the other stores. M331 traced it: every image
+      service had the guest's own `/tmp`, with `root.share_images` and without it. From the
+      fingerprint epoch 5 each image service has its own, and `hydo compose` writes
+      `share_images: true` again. The example was not run again at epoch 5: its stores still
+      listen on their own addresses, which needs no change.
     - TiKV's gRPC client did not reach PD by service name in the guest; the cause was not
       traced. The example names PD and the stores by address.
     - `hydo rules scan --kind clock` does not see a timestamp compared with a time to live
@@ -2960,6 +2978,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       not measured in a VM. No build or VM ran with the change; only `--check` ran.
     - `hydo compose` keys an image by its manifest digest, so two manifests of one config (one
       image pushed twice) are not proposed for sharing; hydo-build would share them.
+    - `hydo compose` writes `root.share_images: true` on since M331. A manifest that it wrote
+      from M324 to M331 keeps the line commented out until the user turns it on.
     - `hydo inspect diagnose <explore dir> --run` ran only through the scripted engine, and the
       exploration's own transcripts in the test were the Redis run's, copied in. No real
       exploration of an agent image was diagnosed. `--evidence` needs the run directory.
@@ -3923,6 +3943,13 @@ build machine, before 2026-10-13.
   detector. The skill and the playbook ask for production's shape and for promises from the
   manifests when no owner answers. They read the build's RAM warnings before the first run and
   ask for a second round before a report of no bugs. The skill's version is unchanged. Nothing recorded moved
+- M331 (tentative number): each image service has a `/tmp` of its own from the fingerprint epoch
+  5. Open item 147 blamed `root.share_images` for TiKV's lock files that met in `/tmp`. But every
+  image service bound the guest's own `/tmp`, shared or not, as three services of one image
+  showed on the Mac at epochs 4 and 5. The service's `/tmp` is now `/tmp/oci/<service>`, with
+  `/tmp/hydo` bound inside. `hydo compose` writes `share_images: true` again: three Dragonfly
+  services left 241 MiB more guest RAM with it. The 7 images with image services wait for the
+  pass (open item 105)
 - M332 (tentative number): the onboarding skill has hydo's version. Its four version fields equal
   `hydo/VERSION`, and `skill_check::` fails when they differ. From 0.5.0 on the release
   `v<version>` carries `hydo-skill-<version>.tar.gz`, and `hydo skill update` and `hydo update`

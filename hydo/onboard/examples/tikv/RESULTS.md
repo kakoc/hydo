@@ -38,7 +38,8 @@ tikv/tikv and tikv/pd.
   stores. One failure was a mistake of the example's
   readiness checks (section "The explorations").
 - **What hydo lacked.** Three copies of one big image did not fit the engine's disk, TiKV's gRPC
-  client did not reach PD by name, the services of a shared image tree shared one `/tmp`, a
+  client did not reach PD by name, the stores shared one `/tmp` (every image service did before
+  the fingerprint epoch 5, Milestone 331), a
   killed group's members are restarted one at a time with each readiness check in turn, and an
   explorer worker of a 7,680 MiB guest needs about 19 GB of the host. Section "What hydo lacked".
 
@@ -117,9 +118,10 @@ them a gap of hydo or of the import (section "What hydo lacked"):
    PD's `--advertise-client-urls`). With names, TiKV's gRPC client did not reach PD: every call
    ended in `DEADLINE_EXCEEDED` for three minutes, while PD answered HTTP by name.
 3. Each store listens on its own address (`--addr=10.89.0.14:20160`, not `0.0.0.0:20160`). TiKV
-   locks a file named after its listen address in `/tmp`, and the stores of one shared image tree
-   found the same file: `0.0.0.0_20160 already in use, maybe another instance is binding with
-   this address`.
+   locks a file named after its listen address in `/tmp`, and the stores found the same file:
+   `0.0.0.0_20160 already in use, maybe another instance is binding with this address`. The
+   cause was not the shared tree: every image service had the guest's own `/tmp` then. From the
+   fingerprint epoch 5 each image service has a `/tmp` of its own (Milestone 331).
 4. 7,680 MiB of guest RAM. Each store held about 2 GB at its start, also with a 64 MB block
    cache and `memory-usage-limit = "1GB"`. At 5,120 MiB the guest's out-of-memory killer ended
    one store 42 s after the boot.

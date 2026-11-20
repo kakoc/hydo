@@ -41,7 +41,9 @@ Check each item and report what you found.
   the checks connect from 10.89.0.1. External addresses do not exist.
 - **Writable paths.** Only `/data` (persistent, the fault target) and `/tmp` (lost at a power
   cut) are writable. Point data, logs, sockets, and PID files there. An image service also gets
-  the writable paths of its `mounts:`.
+  the writable paths of its `mounts:`. Since the fingerprint epoch 5 an image service's `/tmp` is
+  its own, as a container's is. The workload and the checks find its files under
+  `/tmp/oci/<service>/`, and a socket there is not reachable at its `/tmp` path from outside.
 - **CPU features.** The guest CPU is x86-64-v2 by default (SSE4.2, POPCNT). It has no AVX and
   no AVX2. Binaries built for x86-64-v3, or that need AVX at start, stop with one of these
   messages: `illegal instruction`, `invalid opcode`, `CPU ISA level is lower than required`. Set `guest.cpu: v3` (x86_64 only;

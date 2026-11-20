@@ -3787,6 +3787,16 @@ file as new bytes, which the KVM engine ignores. The Mac images do not change wi
 built at epoch 4 boots with the old command line and step: the pinned reproducers and the
 release's Redis example of section 26 gave their values on hvx with M323's engine.
 
+**Each image service's own `/tmp` (Milestone 331).** From epoch 5 an image service's launcher
+also binds the guest's folder `/tmp/oci/<service>` as the service's `/tmp`, the guest's
+`/tmp/hydo` at its `/tmp/hydo`, and the guest's `/tmp` at `/.hydo/tmp`, a new folder in the
+image's tree (`hydo_image::defaults`, `oci_own_tmp`). The service's environment gets
+`HYDO_BUGGIFY_FILE=/.hydo/tmp/hydo-buggify`. The same 7 images with image services move with it
+(21 runs), whose launchers already move with Milestone 317. A program of such an image that
+shared files in `/tmp` with another service, or with the workload, finds its own `/tmp` now, so
+a verdict can move as well. None of the 7 examples does so: their workloads and checks reach the
+services through `hydo-oci` and `/tmp/hydo`.
+
 **The pinned reproducers** keep their images and values: this hydo boots the epoch-2 images in
 `~/hydo/build/m204` (`a76d7fe857fdb37c`, `efbde7b57264be0f`) and the epoch-4 images in
 `~/hydo/build/m302` (`e153f376096a072c`, `6a5c2fe208174af3`) as before. They have no image
