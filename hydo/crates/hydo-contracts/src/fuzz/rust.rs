@@ -920,6 +920,8 @@ pub struct EnumDef {
 pub struct BuildDef {
     pub ctor: String,
     pub args: Vec<(String, TyAst)>,
+    /// The constructor returns a `Result` or an `Option` (Milestone 333).
+    pub fallible: bool,
 }
 
 /// The structures and type aliases of a crate's sources.
@@ -954,6 +956,68 @@ pub struct Items {
     pub defaults: std::collections::BTreeSet<String>,
     /// The `use` lines of each module, an inline module apart from its file's (Milestone 333).
     pub uses_exact: BTreeMap<Vec<String>, BTreeMap<String, Vec<Vec<String>>>>,
+    /// The result types of the functions outside `impl` blocks and traits, by name, for a
+    /// `build` line's constructor that returns a `Result` or an `Option` (Milestone 333).
+    pub free_fns: BTreeMap<String, Vec<Option<TyAst>>>,
+}
+
+/// A path split at its `::` outside angle brackets (`SmallVec::<[u8; 4]>::from_vec` gives
+/// `SmallVec`, `<[u8; 4]>` and `from_vec`).
+fn path_segments(p: &str) -> Vec<String> {
+    let (mut out, mut cur, mut d) = (Vec::new(), String::new(), 0i32);
+    let b: Vec<char> = p.chars().collect();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            '<' => d += 1,
+            '>' => d -= 1,
+            ':' if d == 0 && b.get(i + 1) == Some(&':') => {
+                out.push(std::mem::take(&mut cur).trim().to_string());
+                i += 2;
+                continue;
+            }
+            _ => {}
+        }
+        cur.push(b[i]);
+        i += 1;
+    }
+    out.push(cur.trim().to_string());
+    out.retain(|x| !x.is_empty());
+    out
+}
+
+/// Whether a `build` line's constructor returns a `Result` or an `Option` (Milestone 333), as
+/// the crate's sources write it: the function of the type's `impl` blocks (`Prerelease::new`),
+/// or a function outside them (`hydo_props::date`); `TryFrom::try_from` and
+/// `FromStr::from_str` named with their trait (`<X as TryFrom<u8>>::try_from`) too.
+pub fn ctor_fallible(items: &Items, ctor: &str) -> bool {
+    let segs = path_segments(ctor);
+    let Some(name) = segs.last() else {
+        return false;
+    };
+    let fallible = |r: &Option<TyAst>| matches!(r, Some(TyAst::Path(s, _)) if s.last().is_some_and(|l| l == "Result" || l == "Option"));
+    if segs.first().is_some_and(|f| f.starts_with('<')) {
+        return matches!(name.as_str(), "try_from" | "from_str");
+    }
+    let types: Vec<&String> = segs[..segs.len() - 1]
+        .iter()
+        .filter(|x| !x.starts_with('<'))
+        .collect();
+    if let Some(ty) = types.last() {
+        let key = type_key(ty);
+        for b in &items.impls {
+            if type_key(&b.ty.text()) != key {
+                continue;
+            }
+            if let Some((_, r)) = b.rets.iter().find(|(n, _)| n == name) {
+                return fallible(r);
+            }
+        }
+    }
+    items
+        .free_fns
+        .get(name.as_str())
+        .is_some_and(|rs| !rs.is_empty() && rs.iter().all(fallible))
 }
 
 /// Add the names a `use` tree imports (`a::b::{C, d::E as F, self}`) to `out`: each name with
@@ -1157,30 +1221,63 @@ fn is_pub_before(before: &str) -> bool {
 /// method that reads the value. `path` is the type as the function writes it.
 pub fn build_advice(items: &Items, path: &str, name: &str) -> String {
     let is_it = |t: &TyAst| matches!(t, TyAst::Path(s, _) if s.last().is_some_and(|l| l == name));
-    let returns_it = |r: &Option<TyAst>| matches!(r, Some(TyAst::Path(s, _)) if s.last().is_some_and(|l| l == "Self" || l == name));
+    let is_self = |t: &TyAst| matches!(t, TyAst::Path(s, _) if s.last().is_some_and(|l| l == "Self" || l == name));
+    // the type itself, or (Milestone 333) a `Result` or an `Option` of it, whose `Err` or
+    // `None` throws the input away: ranked after the constructors that always give one
+    let returns_it = |r: &Option<TyAst>| -> Option<u8> {
+        match r {
+            Some(t) if is_self(t) => Some(0),
+            Some(TyAst::Path(s, a))
+                if s.last().is_some_and(|l| l == "Result" || l == "Option")
+                    && a.first().is_some_and(is_self) =>
+            {
+                Some(10)
+            }
+            _ => None,
+        }
+    };
+    // a macro's metavariable (`$src`) is no type, and a line that names one does not build
+    // (Milestone 333)
     let usable = |t: &TyAst| {
         let x = t.text();
-        !(x.contains("Self") || x.contains("impl ") || x.contains("dyn ") || x.contains("&mut"))
+        !(x.contains("Self")
+            || x.contains("impl ")
+            || x.contains("dyn ")
+            || x.contains("&mut")
+            || x.contains('$'))
     };
+    // another trait of the type with a function `from` (num-traits' `NumCast` beside `From`)
+    // makes `Type::from` ambiguous: the line then names the trait (Milestone 333)
+    let other_from = items.impls.iter().any(|b| {
+        is_it(&b.ty)
+            && b.tr.as_ref().is_some_and(|t| trait_name(t) != "From")
+            && b.rets.iter().any(|(n, _)| n == "from")
+    });
     let mut ctors: Vec<(u8, String)> = Vec::new();
     for b in items.impls.iter().filter(|b| is_it(&b.ty)) {
         match &b.tr {
             None => {
                 for (public, sig) in &b.fns {
                     let generic = sig.generics.iter().any(|g| g != "where");
+                    // an `unsafe` function is no constructor that a line can name
+                    // (Milestone 333)
+                    let Some(fallible) = returns_it(&sig.ret) else {
+                        continue;
+                    };
                     if !*public
                         || generic
-                        || !returns_it(&sig.ret)
+                        || sig.is_unsafe
                         || !sig.params.iter().all(|(_, t)| usable(t))
                     {
                         continue;
                     }
-                    let rank = match sig.name.as_str() {
-                        "new" => 0,
-                        n if n.starts_with("from_") => 1,
-                        n if n.starts_with("with_") => 2,
-                        _ => 3,
-                    };
+                    let rank = fallible
+                        + match sig.name.as_str() {
+                            "new" => 0,
+                            n if n.starts_with("from_") => 1,
+                            n if n.starts_with("with_") => 2,
+                            _ => 3,
+                        };
                     let args: Vec<String> = sig
                         .params
                         .iter()
@@ -1191,19 +1288,38 @@ pub fn build_advice(items: &Items, path: &str, name: &str) -> String {
             }
             Some(tr) if trait_name(tr) == "From" => {
                 if let TyAst::Path(_, a) = tr {
-                    if let Some(x) = a.first().filter(|x| usable(x)) {
-                        ctors.push((4, format!("{path}::from(v: {})", x.text())));
+                    // a type parameter of the block (`impl<T> From<T> for OrderedFloat<T>`)
+                    // is no type that a line can name
+                    if let Some(x) = a
+                        .first()
+                        .filter(|x| usable(x) && !b.generics.iter().any(|g| g == &x.text()))
+                    {
+                        let line = if other_from {
+                            let holes = match &b.ty {
+                                TyAst::Path(_, ta) if !ta.is_empty() => {
+                                    format!("<{}>", vec!["_"; ta.len()].join(", "))
+                                }
+                                _ => String::new(),
+                            };
+                            format!("<{path}{holes} as From<{0}>>::from(v: {0})", x.text())
+                        } else {
+                            format!("{path}::from(v: {})", x.text())
+                        };
+                        // a conversion from the same type of other arguments
+                        // (`OrderedFloat<f32>`) needs that one built first
+                        let rank = if x.text().contains(name) { 12 } else { 4 };
+                        ctors.push((rank, line));
                     }
                 }
             }
             Some(tr) if trait_name(tr) == "Default" => {
-                ctors.push((5, format!("{path}::default()")));
+                ctors.push((20, format!("{path}::default()")));
             }
             _ => {}
         }
     }
     if items.defaults.contains(name) {
-        ctors.push((5, format!("{path}::default()")));
+        ctors.push((20, format!("{path}::default()")));
     }
     ctors.sort();
     ctors.dedup_by(|a, b| a.1 == b.1);
@@ -1504,7 +1620,12 @@ fn read_impls(text: &str, m: &[u8], items: &mut Items) {
                             }
                         }
                     } else if rest.starts_with("fn ") {
-                        if let Ok(sig) = signature(text, m, k) {
+                        if let Ok(mut sig) = signature(text, m, k) {
+                            // `pub unsafe fn`: the words before `fn` (Milestone 333)
+                            let before = &ms[open + 1..k];
+                            let tail = &before[before.rfind([';', '}']).map_or(0, |i| i + 1)..];
+                            sig.is_unsafe |=
+                                strip_attrs(tail).split_whitespace().any(|w| w == "unsafe");
                             def.rets.push((sig.name.clone(), sig.ret.clone()));
                             let public = is_pub_before(&ms[open + 1..k]);
                             match (sig.receiver, &sig.ret) {
@@ -1747,6 +1868,32 @@ pub fn read_items_in(text: &str, module: &[String], items: &mut Items) {
         items.enums.entry(name).or_insert(def);
     }
     read_impls(text, &m, items);
+    // the functions outside `impl` blocks and traits, for their result types (Milestone 333)
+    {
+        let mut from = 0;
+        while let Some(p) = ms[from..].find("fn ") {
+            let at = from + p;
+            from = at + 3;
+            if at > 0 && id(b[at - 1]) {
+                continue;
+            }
+            if enclosing(&m, at)
+                .iter()
+                .any(|b| impl_parts(&b.header).is_some() || trait_parts(&b.header).is_some())
+            {
+                continue;
+            }
+            if let Ok(sig) = signature(text, &m, at) {
+                if sig.receiver.is_none() {
+                    items
+                        .free_fns
+                        .entry(sig.name.clone())
+                        .or_default()
+                        .push(sig.ret);
+                }
+            }
+        }
+    }
     // `use crate::duration::Error;` and the like, for the names of the file's module
     {
         let mut from = 0;
@@ -2054,6 +2201,9 @@ pub struct Variant {
 pub struct Ctor {
     pub path: String,
     pub args: Vec<(String, FTy, Pass)>,
+    /// The constructor returns a `Result` or an `Option`: the harness takes its `Ok` or `Some`
+    /// value, and throws the input away on `Err` or `None` (Milestone 333).
+    pub fallible: bool,
 }
 
 /// `t` with each type parameter that `s` names replaced by its type.
@@ -2452,6 +2602,7 @@ impl Resolver<'_> {
         }
         stack.push(name.into());
         let build = self.items.builds.get(name).map(|b| Ctor {
+            fallible: b.fallible,
             path: b.ctor.clone(),
             args: b
                 .args

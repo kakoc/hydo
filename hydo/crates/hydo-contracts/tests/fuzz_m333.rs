@@ -71,6 +71,36 @@ fn an_error_with_a_field_of_a_private_module_builds_and_reads() {
 }
 
 #[test]
+fn constructors_without_arguments_and_fallible_ones_build() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m333-ctors");
+    let (_, rep) = run_fns(&t, &["req_len", "pre_text", "tiny_of", "num_zero"], &[]);
+    // a constructor without arguments
+    let r = one(&rep, "::req_len");
+    assert_eq!(r.verdict, "held", "{r:?}");
+    // one that returns a `Result`, and one that returns an `Option`: an `Err` or a `None`
+    // throws the input away, counted apart from `requires`
+    for f in ["::pre_text", "::tiny_of"] {
+        let r = one(&rep, f);
+        assert_eq!(r.verdict, "held", "{r:?}");
+        let z = r.rejected_by.iter().find(|x| x.line == 0);
+        assert!(z.is_some_and(|z| z.inputs > 0), "{r:?}");
+        assert!(r.calls + z.unwrap().inputs <= r.cases, "{r:?}");
+        assert!(r.calls >= 30, "{r:?}");
+    }
+    // `)?` says so of a constructor that hydo does not find in the crate's sources
+    let (cs, errs) =
+        hydo_contracts::lang::scan("// hydo: build A from other::a(x: u8)?\npub fn f() {}\n");
+    assert!(errs.is_empty(), "{errs:?}");
+    assert!(cs[0].builds[0].fallible, "{cs:?}");
+    assert_eq!(cs[0].builds[0].ctor, "other::a");
+    // the refusal proposes only lines that build
+    let why = skipped(&rep, "num_zero");
+    assert!(!why.contains("new_unchecked"), "{why}");
+    assert!(why.contains("num::Num::try_new(x: u8)"), "{why}");
+    assert!(why.contains("<num::Num as From<u8>>::from(v: u8)"), "{why}");
+}
+
+#[test]
 fn an_associated_type_of_a_type_parameter_reads_through_its_with_line() {
     let t = TmpDir::new("hydo-contracts-fuzz-m333-assoc");
     let (_, rep) = run_fns(&t, &["small::"], &[]);

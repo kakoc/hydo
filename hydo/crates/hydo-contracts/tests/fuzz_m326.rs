@@ -308,6 +308,7 @@ fn closures_of_two_arguments_comparisons_and_options_are_generated() {
     let t = FTy::Built {
         ty: "_".into(),
         build: Some(Ctor {
+            fallible: false,
             path: c.path(),
             args: vec![
                 ("shape".into(), int("u8", 8), Pass::Value),

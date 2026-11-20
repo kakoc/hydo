@@ -270,10 +270,13 @@ pub fn find_all(
                         )),
                     }
                 }
+                // a constructor that returns a `Result` or an `Option` (Milestone 333)
+                let fallible = b.fallible || rust::ctor_fallible(&items, &b.ctor);
                 items
                     .builds
                     .entry(rust::type_key(&b.ty))
                     .or_insert(rust::BuildDef {
+                        fallible,
                         ctor: b.ctor.clone(),
                         args,
                     });
@@ -564,6 +567,7 @@ fn closure_param(
     Some(Ok(FTy::Built {
         ty: "_".into(),
         build: Some(rust::Ctor {
+            fallible: false,
             path: c.path(),
             args: vec![
                 ("shape".into(), shape, Pass::Value),
@@ -586,9 +590,14 @@ fn refusal(what: &str, t: &TyAst, why: String, items: &rust::Items) -> String {
     let container = matches!(base, TyAst::Path(s, _) if s.last().is_some_and(|l| {
         matches!(l.as_str(), "Vec" | "Option" | "Box" | "Rc" | "Arc" | "Result")
     }));
+    // a type that a `build` line already builds: the type of the constructor's argument that
+    // the reason names, so that the advice is not the line already written (base64's
+    // `GeneralPurpose::new(alphabet: &Alphabet, ...)` needs a line for `Alphabet`; Milestone
+    // 333)
+    let built = items.builds.contains_key(&rust::type_key(&base.text()));
     let named = matches!(base, TyAst::Path(..))
         .then(|| base.text())
-        .filter(|_| !container)
+        .filter(|_| !container && !built)
         .or_else(|| {
             why.strip_prefix("hydo cannot generate a value of `")
                 .and_then(|r| r.split('`').next())
@@ -1472,6 +1481,9 @@ pub enum Outcome {
     Hung,
     /// The call was not made: earlier calls did not return ([`MAX_HUNG`]).
     NotRun,
+    /// The call was not made: a `build` line's constructor gave `Err` or `None` for the input,
+    /// which is thrown away (Milestone 333).
+    Refused,
 }
 
 /// What a failing call broke: a clause (its index in the contract), a panic at a location, or
@@ -1746,7 +1758,7 @@ impl Fn {
             Outcome::Panicked { location, .. } => j.failures.push(Failure::Panic(location.clone())),
             Outcome::Ended => j.failures.push(Failure::Ended),
             Outcome::Hung => j.failures.push(Failure::Hung),
-            Outcome::NotRun => {}
+            Outcome::NotRun | Outcome::Refused => {}
         }
         j
     }
@@ -1785,6 +1797,9 @@ impl Fn {
             Outcome::Ended => "the process ended during the call".into(),
             Outcome::Hung => "the call did not return within the timeout".into(),
             Outcome::NotRun => "the call was not made".into(),
+            Outcome::Refused => {
+                "the call was not made: a `build` line's constructor gave `Err` or `None`".into()
+            }
         }
     }
 
@@ -2133,6 +2148,7 @@ impl<'a> Runner<'a> {
         let mut w = rest.split_ascii_whitespace();
         match w.next() {
             Some("R") => self.f.returned(&mut w),
+            Some("Z") => Ok(Outcome::Refused),
             Some("P") => {
                 let mut s = || match value::decode(&FTy::Str, &mut w) {
                     Ok(Val::Str(s)) => s,
@@ -2320,8 +2336,12 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64, lim: Limits) -> Result<FnRepo
             }
         })
         .collect();
-    let (mut calls, mut failed_calls) = (0u64, 0u64);
+    let (mut calls, mut failed_calls, mut refused) = (0u64, 0u64, 0u64);
     for (i, (a, o)) in inputs.iter().zip(&outs).enumerate() {
+        if *o == Outcome::Refused {
+            refused += 1;
+            continue;
+        }
         if *o != Outcome::NotRun {
             calls += 1;
         }
@@ -2425,6 +2445,14 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64, lim: Limits) -> Result<FnRepo
             }
         })
         .collect();
+    // the inputs that a `build` line's constructor refused (Milestone 333)
+    if refused > 0 {
+        rejected_by.push(Rejection {
+            text: "a `build` line's constructor gave `Err` or `None`".into(),
+            line: 0,
+            inputs: refused,
+        });
+    }
     rejected_by.sort_by(|a, b| b.inputs.cmp(&a.inputs).then(a.line.cmp(&b.line)));
     let verdict = if !broken.is_empty() {
         "broken"
@@ -2478,7 +2506,15 @@ fn samples(f: &Fn, inputs: &[Vec<Val>], n: usize) -> Vec<String> {
 fn advice(f: &Fn, rep: &FnReport, lim: Limits) -> Vec<String> {
     let mut out = Vec::new();
     if rep.calls < lim.min_inputs {
-        if let Some(top) = rep.rejected_by.first() {
+        if let Some(z) = rep.rejected_by.first().filter(|x| x.line == 0) {
+            // most inputs were refused by a constructor (Milestone 333)
+            out.push(format!(
+                "{} of {} inputs were thrown away because {}: add `input` lines for the \
+                 constructor's arguments, such as `input <param>.<argument> like \"...\"` with \
+                 values that it takes",
+                z.inputs, rep.cases, z.text
+            ));
+        } else if let Some(top) = rep.rejected_by.first() {
             let mut lines = input_lines_for(f, top.line);
             for c in f.contract.clauses.iter().filter(|c| c.line == top.line) {
                 string_eqs(&c.ast, &mut lines);
@@ -3615,7 +3651,14 @@ fn print_report(r: &FnReport, f: &Fn, o: &Opts, lim: Limits) {
         generated,
         pct(r.rejected, generated)
     );
-    if let Some(top) = r.rejected_by.first() {
+    // the inputs that a `build` line's constructor refused (Milestone 333)
+    if let Some(z) = r.rejected_by.iter().find(|x| x.line == 0) {
+        println!(
+            "hydo:   {} of {} inputs were thrown away: {}",
+            z.inputs, r.cases, z.text
+        );
+    }
+    if let Some(top) = r.rejected_by.iter().find(|x| x.line != 0) {
         if r.rejected * 2 > generated {
             println!(
                 "hydo:   most were turned away by `requires {}` (line {}): {} inputs",
@@ -3649,10 +3692,15 @@ fn print_report(r: &FnReport, f: &Fn, o: &Opts, lim: Limits) {
             o.replay_flags()
         );
     }
-    if r.calls < r.cases {
+    let refused = r
+        .rejected_by
+        .iter()
+        .find(|x| x.line == 0)
+        .map_or(0, |x| x.inputs);
+    if r.calls + refused < r.cases {
         println!(
             "hydo:   {} inputs were not run after {MAX_HUNG} calls that did not return",
-            r.cases - r.calls
+            r.cases - r.calls - refused
         );
     }
     for h in &r.held {

@@ -212,16 +212,42 @@ pub fn split_to(&mut self, at: usize) -> Self {
   built value without a `read` line is not compared: the clause is `not judged`, with the
   `read` line to write.
 
+A constructor may take no argument (`build VersionReq from VersionReq::default()`). It may
+also return a `Result` or an `Option` of the type, which parsers and date types do. hydo then passes
+the `Ok` or `Some` value, and throws away an input for which the constructor gives `Err` or
+`None`. The report counts those inputs apart from `requires`:
+
+```rust
+// hydo: build Prerelease from Prerelease::new(text: &str)
+// hydo: read Prerelease as String by to_string()
+// hydo: input self.text like "alpha", "rc.1", "x.7.z.92"
+```
+
+```text
+hydo:   212 of 1000 inputs were thrown away: a `build` line's constructor gave `Err` or `None`
+```
+
+hydo reads the constructor's result type from the crate's sources. For a function that it does
+not find, such as one of another crate, end the line with `?`: `build Date from
+time_helpers::date(jd: i32)?`.
+
 A constructor that panics on an input ends the call with a panic at the constructor. Narrow its
 arguments with `input` lines: chrono's `NaiveDate::from_ymd(year: i32, month: u32, day: u32)`
 needs `input self.month in 1..=12` and `input self.day in 1..=28`. A type without a `build` line
 is refused with the line to write. For a structure with a private field, the refusal names
-the crate's public constructor with its parameters, `new` first, then `from_*`, `with_*`,
-`From` and `Default`, and a method for the `read` line:
+the crate's public constructor with its parameters and a method for the `read` line. The
+constructors come in this order: `new`, `from_*`, `with_*`, the others, `From`, those that
+return a `Result` or an `Option`, and `Default`. It names no `unsafe` function and no line of a macro. When another trait
+of the type has a function `from` too, it names the trait: `<OrderedFloat<_> as
+From<f64>>::from(v: f64)`. For half's `f16`:
 
 ```text
 the field `0` of `f16` is private to the module `binary16`, so the harness cannot build the value: write `// hydo: build f16 from f16::from_bits(bits: u16)` (a public constructor of the crate; the others are `f16::from_f32(value: f32)`, `f16::from_f64(value: f64)`), and `// hydo: read f16 as u16 by to_bits()` for a clause that reads the value
 ```
+
+A type can have a `build` line already, with a constructor's argument of a type that hydo
+cannot generate. The refusal then names a line for the argument's type: base64's
+`GeneralPurpose::new(alphabet: &Alphabet, ...)` gets a line for `Alphabet`.
 
 When the crate has no constructor that hydo can call, the refusal says so: add one, or write
 a property function.

@@ -1007,6 +1007,7 @@ fn the_harness_builds_enumerations_constructed_values_and_references_to_referenc
     let blob = FTy::Built {
         ty: "Blob".into(),
         build: Some(Ctor {
+            fallible: false,
             path: "Blob::from_vec".into(),
             args: vec![(
                 "v".into(),

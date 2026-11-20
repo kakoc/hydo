@@ -142,6 +142,7 @@ fn a_generated_closure_shows_and_reads_back_the_same() {
     let t = FTy::Built {
         ty: "_".into(),
         build: Some(Ctor {
+            fallible: false,
             path: c.path(),
             args: vec![
                 ("shape".into(), int("u8", 8), Pass::Value),

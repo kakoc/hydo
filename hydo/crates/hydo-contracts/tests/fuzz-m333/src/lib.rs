@@ -61,6 +61,117 @@ pub fn digits(text: &str) -> Result<u64, Error> {
     }
 }
 
+// ---------------------------------------------------------------- constructors
+
+/// Values with private fields, built by a constructor without arguments, by one that returns
+/// a `Result`, and by one that returns an `Option`.
+pub mod made {
+    #[derive(Default)]
+    pub struct Req {
+        parts: Vec<u8>,
+    }
+
+    impl Req {
+        pub fn len(&self) -> usize {
+            self.parts.len()
+        }
+
+        pub fn is_empty(&self) -> bool {
+            self.parts.is_empty()
+        }
+    }
+
+    /// A pre-release text: ASCII letters and digits only, as semver's `Prerelease::new`.
+    pub struct Pre(String);
+
+    impl Pre {
+        pub fn new(text: &str) -> Result<Pre, String> {
+            if text.bytes().all(|b| b.is_ascii_alphanumeric()) {
+                Ok(Pre(text.to_string()))
+            } else {
+                Err(format!("not alphanumeric: {text}"))
+            }
+        }
+
+        pub fn as_str(&self) -> &str {
+            &self.0
+        }
+    }
+
+    /// A number below 100.
+    pub struct Tiny(u8);
+
+    pub fn tiny(n: u8) -> Option<Tiny> {
+        (n < 100).then_some(Tiny(n))
+    }
+
+    impl Tiny {
+        pub fn get(&self) -> u8 {
+            self.0
+        }
+    }
+}
+
+// hydo: build made::Req from made::Req::default()
+// hydo: ensures result == 0
+pub fn req_len(r: &made::Req) -> usize {
+    r.len()
+}
+
+// hydo: build made::Pre from made::Pre::new(text: &str)
+// hydo: read made::Pre as String by as_str()
+// hydo: ensures len(result) == len(p)
+pub fn pre_text(p: &made::Pre) -> String {
+    p.as_str().to_string()
+}
+
+// hydo: build made::Tiny from made::tiny(n: u8)
+// hydo: read made::Tiny as u8 by get()
+// hydo: ensures result < 100
+pub fn tiny_of(s: &made::Tiny) -> u8 {
+    s.get()
+}
+
+/// A type whose refusal proposes only lines that build: no `unsafe` function, a qualified
+/// `From` beside another trait's `from`, and a constructor that returns an `Option`.
+pub mod num {
+    pub struct Num(u8);
+
+    impl Num {
+        /// # Safety
+        /// None needed; it is `unsafe` as ordered-float's `NotNan::new_unchecked` is.
+        pub unsafe fn new_unchecked(x: u8) -> Num {
+            Num(x)
+        }
+
+        pub fn try_new(x: u8) -> Option<Num> {
+            (x < 200).then_some(Num(x))
+        }
+    }
+
+    impl From<u8> for Num {
+        fn from(x: u8) -> Num {
+            Num(x / 2)
+        }
+    }
+
+    pub trait Cast: Sized {
+        fn from(x: i64) -> Option<Self>;
+    }
+
+    impl Cast for Num {
+        fn from(x: i64) -> Option<Num> {
+            u8::try_from(x).ok().map(Num)
+        }
+    }
+}
+
+// hydo: ensures result == 0
+pub fn num_zero(n: &num::Num) -> u8 {
+    let _ = n;
+    0
+}
+
 // ---------------------------------------------------------------- associated types
 
 /// A container generic over a trait with an associated type, as smallvec's `SmallVec<A:
