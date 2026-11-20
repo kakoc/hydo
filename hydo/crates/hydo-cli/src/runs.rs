@@ -275,6 +275,23 @@ pub fn mac_kernel_for(ctx: &Ctx, image: &Path, quiet: bool) -> PathBuf {
     k
 }
 
+/// Why a guest of the engine options `eargs` does not fit into this machine's memory now, with
+/// the running `hydo inspect` sessions, each of which holds a guest until it is stopped
+/// (Milestones 179 and 239); None when it fits.
+pub fn memory_refusal(ctx: &Ctx, eargs: &[String]) -> Option<String> {
+    let ram = eargs
+        .windows(2)
+        .find(|w| w[0] == "--ram-mib")
+        .and_then(|w| w[1].parse().ok())
+        .unwrap_or(1024);
+    let e = hydo_engine::guest_fits(ram).err()?;
+    let running = crate::inspect::session::running(ctx);
+    Some(match crate::inspect::session::memory_hint(&running) {
+        Some(h) => format!("{e}. {h}"),
+        None => format!("{e}. No hydo inspect session is running."),
+    })
+}
+
 /// This platform's engine for `image` and the boot spec of a run into `outdir` with the engine
 /// options `eargs` (`hydo run`'s choice: hvx, or KVM with `--backend kvm`, on Linux; hvm on the
 /// Mac). Dies with `hydo: ` when the engine or the image's kernel is missing.
@@ -286,18 +303,8 @@ pub fn controlled_engine(
     quiet: bool,
 ) -> (Arc<dyn ControlledEngine + Send + Sync>, BootSpec) {
     // M179: a guest may have up to 8 GiB; refuse before the engine fails to make the VM
-    let ram = eargs
-        .windows(2)
-        .find(|w| w[0] == "--ram-mib")
-        .and_then(|w| w[1].parse().ok())
-        .unwrap_or(1024);
-    if let Err(e) = hydo_engine::guest_fits(ram) {
-        // a session of `hydo inspect` holds a guest until it is stopped (Milestone 239)
-        let running = crate::inspect::session::running(ctx);
-        match crate::inspect::session::memory_hint(&running) {
-            Some(h) => die(&format!("{e}. {h}")),
-            None => die(&format!("{e}. No hydo inspect session is running.")),
-        }
+    if let Some(why) = memory_refusal(ctx, eargs) {
+        die(&why);
     }
     match ctx.platform {
         Platform::Linux if ctx.kvm => {
@@ -996,18 +1003,33 @@ fn new_run_dir() -> PathBuf {
     d
 }
 
+/// Stop `hydo run` before any VM with the refusal `why`: exit status 5
+/// ([`hydo_explore::REFUSED`]), and with `json` the line `{"refused": "<why>", "status": 5}` on
+/// stdout. Inside `hydo ci run` the status stays that command's ([`crate::ctx::DIE_CODE`]).
+fn refuse(why: &str, json: bool) -> ! {
+    use std::sync::atomic::Ordering::Relaxed;
+    if crate::ctx::DIE_CODE.load(Relaxed) != 1 {
+        die(why);
+    }
+    crate::ctx::REFUSAL_JSON.store(json, Relaxed);
+    crate::ctx::die_rc(why, hydo_explore::REFUSED)
+}
+
 pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     if argv.iter().any(|a| a == "-h" || a == "--help") {
         println!(
             "usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR] [--known-errors FILE] \
-             [--no-diagnose] [--memory] [--vcpus N] [--turn-margin N]{}\n{RUN_OPTS_HELP}\n  \
+             [--no-diagnose] [--memory] [--json] [--vcpus N] [--turn-margin N]{}\n{RUN_OPTS_HELP}\n  \
              --memory         after the run, print each service's peak memory (one more replay\n                   \
-             to the run's end; the run itself is unchanged)\n  runs one schedule from a fresh boot, e.g. hydo run \"disk=cut | run C=12 \
+             to the run's end; the run itself is unchanged)\n  \
+             --json           a refusal is also one JSON line on stdout, {{\"refused\": \"<reason>\", \"status\": 5}}\n  \
+             runs one schedule from a fresh boot, e.g. hydo run \"disk=cut | run C=12 \
              R=everysec\".\n  IMG defaults to the one image `hydo build` wrote in ./hydo-out (or ./.hydo). \
              The run's\n  directory (result.json, consoles) is printed; `hydo repro <run dir>` repeats it.\n  \
              The exit status is 0 whenever the run finished, whatever its verdict (OK, VIOLATION or\n  \
-             ERROR); a script reads the verdict from result.json (verdict.kind). `hydo guide faults` lists the\n  \
-             schedule tokens.",
+             ERROR); a script reads the verdict from result.json (verdict.kind). It is 5 when the run\n  \
+             is refused before any VM, because the guest does not fit into this machine's memory.\n  \
+             `hydo guide faults` lists the schedule tokens.",
             if ctx.platform == Platform::Linux {
                 " [--backend hvx|kvm]"
             } else {
@@ -1033,6 +1055,13 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         }
         None => false,
     };
+    let json = match args.iter().position(|a| a == "--json") {
+        Some(i) => {
+            args.remove(i);
+            true
+        }
+        None => false,
+    };
     let opts = RunOpts::take(ctx, &mut args);
     let image = find_image(ctx, &mut args);
     if args.len() != 1 {
@@ -1041,6 +1070,11 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     let sched = args[0].clone();
     let outdir = outdir.map(PathBuf::from).unwrap_or_else(new_run_dir);
     let eargs = opts.eargs(&image);
+    // Milestone 339: a guest that does not fit into this machine's memory is a refusal, exit
+    // status 5 as for `hydo explore` (Milestone 328), with its JSON line under `--json`
+    if let Some(why) = memory_refusal(ctx, &eargs) {
+        refuse(&why, json);
+    }
     if let Ok(Some(r)) = hydo_engine::image::image_record(&image) {
         if r.epoch != hydo_image::EPOCH {
             println!(

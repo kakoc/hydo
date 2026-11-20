@@ -258,6 +258,53 @@ running `hydo inspect` session with its memory and its age, because each session
 guest. `hydo inspect stop --all` stops them. Inside `hydo ci run` every stop of the explorer is
 that command's status 2.
 
+`hydo run` exits with status 0 whenever its run finished, whatever the verdict. It exits with
+status 5 when it refuses before any VM, because the guest does not fit into this machine's
+memory. With `--json` the refusal is also the same JSON line as the explorer's, `{"refused":
+"<reason>", "status": 5}`.
+
+### A schedule that ran once runs once
+
+hydo repeats a run exactly, so a schedule that an exploration already ran gives the same result
+again. The shrinker often tries a candidate that an earlier round tried, and a project with few
+fault kinds draws one schedule for many seeds. `hydo explore` runs such a schedule once. A later
+first run or shrink candidate with the same text takes the earlier run's verdict, fingerprint and
+consoles, without a VM. Two kinds of runs always get their own VM: the re-runs that check that a
+failure repeats, and the two confirmations of each minimal schedule.
+
+- `exploration.json` counts these runs in its summary as `repeats`, with `repeats_saved_s`, the
+  seconds that their earlier runs took. `report.md` shows both.
+- The disk's seed `dseed=` decides only the faults of `disk=ioerr`, `disk=lying`, and the block
+  faults (`torn=`, `mis=`, `lse=`, `hang=`). Where it decides nothing, the explorer writes
+  `dseed=0`, so that two such schedules have one text. A schedule that you write keeps its own
+  `dseed=` in `hydo run`.
+- `--rerun-repeats` runs every repeated schedule in a VM again.
+
+### Which failures are shrunk
+
+`hydo explore` shrinks the first failure of each kind to a minimal schedule: the fewest and
+smallest faults that still give the same failure. It shrinks a check's violation, and since
+hydo 0.5.0 also these errors of your system, by their words with every number left out:
+
+- a service that does not start again: `ERROR <service> restart failed` (also with its reason in
+  parentheses) and `ERROR restart after the faults`;
+- a workload or a check that does not end: `TIMEOUT workload`, `TIMEOUT check`, `TIMEOUT
+  recovery`, and on the Mac engine `ERROR workload: exit budget exhausted` and `ERROR check: exit
+  budget exhausted`.
+
+So a service that never starts again after a crash gets its minimal schedule, as a lost write
+does. A shrink candidate keeps the failure when it ends with the same error. The errors of hydo
+and of its engine, for example a lost worker or a schedule that the engine refuses, are not
+shrunk.
+
+hydo can damage a service's files (`G=`) or its disk's blocks (`torn=`, `mis=`, `lse=`, `hang=`,
+`G=...:bad` and `G=...:rot`). A service that does not start again after such damage is usually
+the system's own check that found it, as its documentation promises. hydo recognizes it by the
+failure's class, `corrupted-files` or `damaged-disk`, or by the restart's reason `its files were
+corrupted`. Such an error is not shrunk, because its shrink only shows the damage again. Nor is
+a new error line of the service's log (`hydo guide error-logs`) that first appeared in such a
+run. `--shrink-detected-damage` shrinks both, for a system that must start on damaged files.
+
 ## Which versions have a finding
 
 `hydo versions` says in which versions of the system a finding is present. It replays the

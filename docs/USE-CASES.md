@@ -112,6 +112,7 @@ last line names the ideas that would answer more.
 | Do the books still match the client's operations? | The generic rule and domain rules, proposed by `hydo rules scan` and validated by `hydo rules check`. | built; `blnk`, `lago`, `formance-ledger` |
 | Where did a wrong value come from? | Value history and value properties on the Mac engine. | partly built; `blnk` (M285, M291) |
 | Did the faults reach the error handling at all? | `error_paths: true` records which `if err != nil` bodies, `Err` returns, `?` branches, panics and retry functions ran in each run. `hydo report --paths` lists what only faults reached, against `hydo explore --no-faults`, and what no run reached. | partly built; `blnk` on the Mac engine (M306; open item 155) |
+| What is the smallest schedule after which a service never starts again? | `hydo explore` shrinks a service that does not start again (`ERROR <svc> restart failed`) and a workload or a check that does not end (`TIMEOUT workload`, the Mac engine's `exit budget exhausted`) by the error's signature, as it shrinks a violation. A system's detection of the damage that hydo made is shrunk only with `--shrink-detected-damage`. | built; M339; the Redis quickstart on the Mac engine, the scripted engine |
 | Does the cluster upgrade in place? | `U=` switches a member's version during a run, and `hydo explore --upgrades` draws it. | built; `etcd-upgrade` (M238) |
 | Can hydo run the team's images from a private registry? | `hydo compose` and fetch-images.sh log in with the credential that `docker login` saved: an `auths` entry, or the helper that `credHelpers` or `credsStore` names. `hydo compose --from-docker` saves an image from the local Docker when hydo cannot log in, and pins its digest. | built; tests with a registry in the test process and Docker's `registry:2` (M320; open item 165). No real private registry ran. |
 
@@ -183,6 +184,7 @@ Ideas that would answer more:
 | What is the history of each finding? | `hydo ci record` keeps a store, and `hydo ci page` writes it as one web page. Its headline counts the open findings of every branch, and each run shows when it started. | built; M286, M301; not run on GitHub |
 | Can the pull request show only what it changed? | `hydo ci run` writes `comment.md`, which the GitHub action posts and edits. | built; M286 |
 | Which commit introduced a finding? | `hydo versions --git A..B` replays it per commit, by hand. | partly built; M221 |
+| Does an exploration spend VMs on runs it already ran? | A first run or a shrink candidate whose schedule the exploration already ran takes the earlier result without a VM. `exploration.json` counts `repeats` and `repeats_saved_s`. | built; M339; the Redis quickstart on the Mac engine |
 | Can a long exploration run on many machines at once? | `hydo explore --shard I/N` explores one part of the seeds, and `hydo explore --merge` makes one exploration of the parts. hydo's workflow `explore.yml` runs up to 20 parts on GitHub's KVM runners. | built; M304 (Redis, Redpanda, and Dragonfly on GitHub's runners), M310 |
 
 Ideas that would answer more:
@@ -487,14 +489,6 @@ that a milestone builds moves into the tables of this page with its new status.
   parameters.
 - **Where it came from.** Open items 140 and 141.
 
-### Shrinking a run that ends in error
-
-- **What it is.** The shrinker for a run that ends in `ERROR`, such as a node that does not start
-  or a drain that cannot finish.
-- **Why it matters.** hydo shrinks only violations. Redpanda's errors were shrunk by hand.
-- **What it needs.** A signature for an error that a shrink candidate must keep.
-- **Where it came from.** Open item 142.
-
 ### Upgrades of image services and several upgrades per schedule
 
 - **What it is.** `U=` for a service that runs a Docker image, and more than one `U=` in a drawn
@@ -594,15 +588,14 @@ that a milestone builds moves into the tables of this page with its new status.
 
 ### Shrinks that skip what they already ran
 
-- **What it is.** The explorer takes the earlier result for a schedule it already ran, and a
-  shrink candidate continues from a snapshot of an earlier candidate where their commands part.
+- **What it is.** A shrink candidate continues from a snapshot of an earlier candidate where
+  their commands part. Since Milestone 339 the explorer takes the earlier result for a schedule
+  it already ran, without a snapshot.
 - **Why it matters.** Shrinks took 27 % to 83 % of the seconds of the three measured
   explorations that shrank. 10 % to 21 % of the shrinks' seconds repeated an earlier schedule
   exactly, and 10 % to 43 % of their guest clock was already run by an earlier candidate. The
   first runs of an exploration share almost nothing: 0.07 % of 12,590 s.
-- **What it needs.** A schedule without the `dseed=` that decides nothing, or a repeat reported
-  by the earlier schedule's text, because the fingerprint covers the disk's seed. For the
-  snapshots, a proof on the Mac engine and on KVM that a continued candidate gives its
+- **What it needs.** A proof on the Mac engine and on KVM that a continued candidate gives its
   fingerprint from S1.
 - **Where it came from.** Milestone 337 (tentative number), `hydo/explore/RESEARCH-shared-prefix.md`;
   open item 167.

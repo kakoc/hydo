@@ -109,16 +109,16 @@ fn the_manifest_decides_which_storage_faults() {
     // a hand-written token for a service without storage is dropped by the space's filter
     let e = ex(&manifest(None), true);
     let s = e
-        .parse("disk=none dseed=1 | run G=n3@4+1:flip L=n1@5+1")
+        .parse("disk=none dseed=0 | run G=n3@4+1:flip L=n1@5+1")
         .unwrap();
     assert!(s.g.is_some() && s.l.is_some());
-    assert_eq!(e.render(&s), "disk=none dseed=1 | run");
+    assert_eq!(e.render(&s), "disk=none dseed=0 | run");
     let s = e
-        .parse("disk=none dseed=1 | run G=n1@4:zero,len=512,seed=3 L=n2@5+2")
+        .parse("disk=none dseed=0 | run G=n1@4:zero,len=512,seed=3 L=n2@5+2")
         .unwrap();
     assert_eq!(
         e.render(&s),
-        "disk=none dseed=1 | run G=n1@4:zero,len=512,seed=3 L=n2@5+2"
+        "disk=none dseed=0 | run G=n1@4:zero,len=512,seed=3 L=n2@5+2"
     );
     assert_eq!(e.finding_class(&s), "corrupted-files");
 }
@@ -177,7 +177,7 @@ fn several_services_change_only_the_corruption_target() {
     }
     assert!(sel > 0);
     // a hand-written strict L= and a list G=
-    let t = "disk=none dseed=1 | run G=n1,n2@4+1:flip L=n2@5+2:strict";
+    let t = "disk=none dseed=0 | run G=n1,n2@4+1:flip L=n2@5+2:strict";
     let s = plain.parse(t).unwrap();
     assert_eq!(plain.render(&s), t);
     assert_eq!(s.l, Some(("n2".to_string(), 5, 2, true)));
@@ -190,9 +190,9 @@ fn several_services_change_only_the_corruption_target() {
         .any(|c| c.g.as_ref().is_some_and(|x| x.svc == "n1" || x.svc == "n2")));
     // a list naming a service without storage is dropped by the space's filter
     let s = plain
-        .parse("disk=none dseed=1 | run G=n1,n3@4:flip")
+        .parse("disk=none dseed=0 | run G=n1,n3@4:flip")
         .unwrap();
-    assert_eq!(plain.render(&s), "disk=none dseed=1 | run");
+    assert_eq!(plain.render(&s), "disk=none dseed=0 | run");
 }
 
 fn plan(m: &Value) -> hydo_control::Plan {

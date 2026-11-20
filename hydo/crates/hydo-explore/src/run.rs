@@ -25,7 +25,7 @@ use crate::gen::{Backend, Ex};
 use crate::md;
 use crate::pool::{self, has_errlog, Host, Pool, Res};
 use crate::py::{dumps_line, head, py_str, round1};
-use crate::report::{self, assert_failures, same_failure, sig_key, verdict_kind};
+use crate::report::{self, assert_failures, same_outcome, sig_key, verdict_kind};
 use crate::results::{self, Events};
 use crate::sched::S;
 use crate::space::{grpc_targets, Space};
@@ -1065,7 +1065,10 @@ fn make_pool(cx: &Cx) -> Pool {
     } else {
         (cx.image.clone(), cx.engine_args().join(" "))
     };
-    Pool::new(engine, spec, n, host, cache_image, cache_engine)
+    let pool = Pool::new(engine, spec, n, host, cache_image, cache_engine);
+    // Milestone 339: a schedule this exploration already ran takes the earlier result
+    pool.answer_repeats(!cx.a.rerun_repeats);
+    pool
 }
 
 /// What a result in `$HYDO_EXPLORE_CACHE` is a function of, besides its schedule and the
@@ -2249,7 +2252,7 @@ fn shrink(
                 let v = py_str(&r["verdict"]);
                 let kept = match keep {
                     Some(k) => k(&v, r),
-                    None => same_failure(&cur_v, &v),
+                    None => same_outcome(&cur_v, &v),
                 };
                 let mut run = cx.chain_run(ch, &items[next].0, &items[next].1, r, ch.role);
                 run.shrink = Some(ShrinkStep {
@@ -2396,7 +2399,7 @@ fn shrink_violation(
                 let mut c = None;
                 if compose::fits(&st) {
                     let [ca, cb] = conf_pair(&st, &mut log);
-                    if same_failure(&mv, &py_str(&ca.1["verdict"])) && ca.1["fp"] == cb.1["fp"] {
+                    if same_outcome(&mv, &py_str(&ca.1["verdict"])) && ca.1["fp"] == cb.1["fp"] {
                         m = ms;
                         mt = st.clone();
                         st_map.insert("stable_schedule".into(), json!(st));
@@ -2668,7 +2671,11 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                             more
                         }
                     };
-                    if chosen && !a.no_shrink && verdict_kind(&v) == "violation" {
+                    // Milestone 339: an error of the system is shrunk too (report::shrinks)
+                    if chosen
+                        && !a.no_shrink
+                        && report::shrinks(&v, &key.0, a.shrink_detected_damage)
+                    {
                         let k = chains.len();
                         let f = rec.clone();
                         let cause = (a.shrink_causes > 1).then_some(cause);
@@ -2740,8 +2747,25 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
             let agg = hydo_errors::collect(&an_runs);
             let mut handles = Vec::new();
             if !a.no_shrink && a.errors_shrink > 0 {
+                // Milestone 339: a kind first new in a run where the system detected hydo's
+                // damage is not shrunk without --shrink-detected-damage
+                let damaged: Vec<i64> = fails
+                    .iter()
+                    .filter(|(rec, _)| {
+                        report::detected_damage(&py_str(&rec["verdict"]), &py_str(&rec["class"]))
+                    })
+                    .filter_map(|(rec, _)| rec["seed"].as_i64())
+                    .collect();
                 for x in errlog::to_shrink(&agg)
                     .into_iter()
+                    .filter(|x| {
+                        a.shrink_detected_damage
+                            || !x
+                                .first_new
+                                .as_ref()
+                                .and_then(|f| f.0.as_i64())
+                                .is_some_and(|sd| damaged.contains(&sd))
+                    })
                     .take(a.errors_shrink as usize)
                 {
                     handles.push(sc.spawn(move || shrink_errkind(cx, pool, &x)));
@@ -2834,6 +2858,7 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
     let boot = pool.mean_boot();
     let nworkers = pool.workers();
     let cache_hits = *pool.cache_hits.lock().expect("lock");
+    let (repeats, repeats_s) = pool.repeat_stats();
     // the error paths of the first runs (Milestone 306)
     let paths = pool
         .host
@@ -2867,6 +2892,8 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
             (qw > 0.0).then(|| round1(qw))
         },
         cache_hits: (cache_hits > 0).then_some(cache_hits as u64),
+        repeats: (repeats > 0).then_some(repeats),
+        repeats_saved_s: (repeats > 0).then(|| round1(repeats_s)),
         time_limit,
         ..Summary::default()
     };

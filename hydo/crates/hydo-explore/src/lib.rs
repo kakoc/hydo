@@ -35,6 +35,7 @@ pub mod merge;
 pub mod paths;
 pub mod pool;
 pub mod py;
+pub mod repeats;
 pub mod report;
 pub mod results;
 pub mod rng;

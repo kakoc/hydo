@@ -63,6 +63,13 @@ pub fn summary_rows(doc: &Exploration) -> Vec<(String, Value)> {
         if let Some(c) = s.cache_hits {
             put("cache_hits", json!(c));
         }
+        // Milestone 339: runs answered by an earlier run of the same schedule
+        if let Some(c) = s.repeats {
+            put("repeats", json!(c));
+        }
+        if let Some(q) = s.repeats_saved_s {
+            put("repeats_saved_s", fl(q));
+        }
     }
     if e.ram_mib.is_some_and(|m| m != 1024) {
         put("ram_mib", json!(e.ram_mib));

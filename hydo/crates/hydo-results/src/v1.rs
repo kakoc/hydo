@@ -1815,6 +1815,13 @@ pub struct Summary {
     /// First runs answered from `$HYDO_EXPLORE_CACHE`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cache_hits: Option<u64>,
+    /// First runs and shrink candidates whose schedule the exploration had already run, answered
+    /// with the earlier run's result without a VM (added in M339).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeats: Option<u64>,
+    /// The seconds that the earlier runs of those schedules took (added in M339).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeats_saved_s: Option<f64>,
     /// Error kinds new in some run, and runs with a new kind.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_kinds_new: Option<u64>,

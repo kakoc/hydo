@@ -107,14 +107,14 @@ fn a_selector_shrinks_towards_one_service() {
     assert_eq!(e.shrink_target("n1-n2", true), Vec::<String>::new());
     // a hand-written target of a group the project lacks is dropped by the space's filter
     let s = e
-        .parse("disk=none dseed=1 | run K=ghost.all@2+1 N=ghost.halves@1-3:loss,100%")
+        .parse("disk=none dseed=0 | run K=ghost.all@2+1 N=ghost.halves@1-3:loss,100%")
         .unwrap();
-    assert_eq!(e.render(&s), "disk=none dseed=1 | run");
+    assert_eq!(e.render(&s), "disk=none dseed=0 | run");
     let s = e
-        .parse("disk=none dseed=1 | run K=nodes.all@2+1 N=nodes.halves@1-3:loss,100%")
+        .parse("disk=none dseed=0 | run K=nodes.all@2+1 N=nodes.halves@1-3:loss,100%")
         .unwrap();
     assert_eq!(
         e.render(&s),
-        "disk=none dseed=1 | run K=nodes.all@2+1 N=nodes.halves@1-3:loss,100%"
+        "disk=none dseed=0 | run K=nodes.all@2+1 N=nodes.halves@1-3:loss,100%"
     );
 }

@@ -2359,6 +2359,23 @@
           "format": "uint64",
           "minimum": 0
         },
+        "repeats": {
+          "description": "First runs and shrink candidates whose schedule the exploration had already run, answered\nwith the earlier run's result without a VM (added in M339).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "repeats_saved_s": {
+          "description": "The seconds that the earlier runs of those schedules took (added in M339).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
         "error_kinds_new": {
           "description": "Error kinds new in some run, and runs with a new kind.",
           "type": [
