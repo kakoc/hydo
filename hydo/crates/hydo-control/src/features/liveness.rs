@@ -93,7 +93,7 @@ fn up(fx: &mut F<'_>) -> Step<Option<i64>> {
 }
 
 /// Hundredths of a second as `%.2f` prints them.
-fn cs(v: i64) -> String {
+pub(super) fn cs(v: i64) -> String {
     let sign = if v < 0 { "-" } else { "" };
     format!("{sign}{}.{:02}", v.abs() / 100, v.abs() % 100)
 }
@@ -135,6 +135,19 @@ pub(super) fn live_monitor(fx: &mut F<'_>, ctx: &Ctx, m: &Monitor) -> Step<()> {
     let inv = &ctx.plan.invariants[m.i];
     let lv = inv.live.as_ref().expect("an eventually invariant");
     let w = lv.within;
+    // Milestone 328: what a run that the engine ends during the tries names
+    let key = format!("live:{:04}", m.i);
+    fx.effect(|h, _| {
+        h.doing.insert(
+            key.clone(),
+            super::Doing {
+                what: format!("the eventually check `{}`", inv.id),
+                live: Some((inv.id.clone(), lv.after.clone(), w)),
+                ..super::Doing::default()
+            },
+        );
+        Memo::Unit
+    });
     let (r, el, rc, out) = loop {
         // `$BB timeout $((w + 1)) $BB sh -c ". /etc/hydo/prelude.sh; <cmd>" > $H/inv.$i.out 2>&1`
         let mut argv = vec![bb(ctx), "timeout".into(), (w + 1).to_string()];
@@ -159,6 +172,14 @@ pub(super) fn live_monitor(fx: &mut F<'_>, ctx: &Ctx, m: &Monitor) -> Step<()> {
         if el > w * 100 {
             break ("expired", el, ran.status, ran.out);
         }
+        let last = (ran.status, ran.out.clone(), el);
+        fx.effect(|h, _| {
+            if let Some(d) = h.doing.get_mut(&key) {
+                d.tries += 1;
+                d.last = Some(last);
+            }
+            Memo::Unit
+        });
         run(
             fx,
             vec![bb(ctx), "sleep".into(), lv.poll.to_string()],
@@ -174,6 +195,7 @@ pub(super) fn live_monitor(fx: &mut F<'_>, ctx: &Ctx, m: &Monitor) -> Step<()> {
     };
     fx.effect(|h, _| {
         h.live.res.insert(m.i, res);
+        h.doing.remove(&key);
         Memo::Unit
     });
     Ok(())

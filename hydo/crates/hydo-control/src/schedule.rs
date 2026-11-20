@@ -263,6 +263,72 @@ struct Host {
     /// own `version:`), and the version it ran before its last upgrade (for a rollback).
     versions: BTreeMap<String, String>,
     prev: BTreeMap<String, String>,
+    /// Milestone 328: what runs now (a final check, an eventually check's monitor, the
+    /// workload's steps), by key, for the verdict of a run that the engine ends by itself.
+    doing: BTreeMap<String, Doing>,
+}
+
+/// The failed tries after which an eventually check that the exit budget cut short counts as
+/// failing ([`budget_verdict`]).
+const KEPT_FAILING: u32 = 3;
+
+/// Something the controller waits for now (Milestone 328, [`budget_verdict`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Doing {
+    /// In words: "the check `x`", "the workload's steps 0 to 29".
+    what: String,
+    /// An eventually check's monitor: the check's id, its anchor and its deadline in seconds.
+    live: Option<(String, String, i64)>,
+    /// The monitor's tries that failed so far.
+    tries: u32,
+    /// The last failed try: its status, its output and the hundredths of a second since the
+    /// anchor when it ended.
+    last: Option<(u32, String, i64)>,
+}
+
+/// Milestone 328: the verdict of a run whose engine ended it with `verdict` because the phase
+/// used up its exit budget, from what was running then; None when nothing the controller knows
+/// of was running, or for any other verdict. An eventually check whose tries all failed until
+/// then gives its violation, as its deadline would have: a user's check started one client per
+/// accepted query at every try while the queries stayed stuck, and the run ended `ERROR check:
+/// exit budget exhausted`, which named neither the check nor the stuck queries (open item 112).
+/// Anything else keeps the engine's words and names what ran. A check that failed fewer than
+/// [`KEPT_FAILING`] tries is only named: it had little time to hold.
+fn budget_verdict(verdict: &str, doing: &BTreeMap<String, Doing>) -> Option<String> {
+    if !verdict.contains("exit budget exhausted") {
+        return None;
+    }
+    let failing = doing
+        .values()
+        .find(|d| d.live.is_some() && d.tries >= KEPT_FAILING && d.last.is_some());
+    if let Some(d) = failing {
+        let (id, after, within) = d.live.clone().unwrap_or_default();
+        let (rc, out, el) = d.last.clone().unwrap_or_default();
+        return Some(format!(
+            "HYDO-ORACLE: VIOLATION [{id}] not satisfied {}s after {after}, deadline {within}s: \
+             the engine's exit budget for the phase ran out after {} failed tries of the check \
+             (last check rc={rc}: {})",
+            liveness::cs(el),
+            d.tries,
+            inv_detail(&out)
+        ));
+    }
+    if doing.is_empty() {
+        return None;
+    }
+    let what: Vec<String> = doing
+        .values()
+        .map(|d| match d.tries {
+            0 => d.what.clone(),
+            1 => format!("{} (1 try had failed)", d.what),
+            n => format!("{} ({n} tries had failed)", d.what),
+        })
+        .collect();
+    Some(format!(
+        "{verdict} while {} ran (the engine's limit of VM exits for one phase of a run; hydo \
+         guide checks, \"The exit budget\")",
+        what.join(" and ")
+    ))
 }
 
 /// One thread of the controller.
@@ -495,6 +561,7 @@ impl ScheduleController {
             early: BTreeMap::new(),
             versions: BTreeMap::new(),
             prev: BTreeMap::new(),
+            doing: BTreeMap::new(),
         };
         Ok(ScheduleController {
             flow: Flow::new(host, Part::Main),
@@ -901,6 +968,10 @@ fn mount_opts(opts: &str) -> Result<(Vec<MountFlag>, Option<String>), Unsupporte
 impl Controller for ScheduleController {
     fn name(&self) -> &str {
         "schedule"
+    }
+
+    fn engine_ended(&self, verdict: &str) -> Option<String> {
+        budget_verdict(verdict, &self.flow.shared.doing)
     }
 
     fn step(&mut self, stop: &StopInfo, seen: &[Seen], out: &mut Out) {
@@ -2186,7 +2257,36 @@ fn assert_once(fx: &mut F<'_>, ctx: &Ctx, i: usize, ok: bool, details: &str) {
 /// eval_inv: 0 holds, 1 violated, 2 could not be evaluated; also its output.
 fn eval_inv(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<(u32, String)> {
     let exports = fx.shared.env.clone();
-    eval_inv_with(fx, ctx, i, &exports)
+    let key = format!("inv:{i:04}");
+    let what = format!("the check `{}`", ctx.plan.invariants[i].id);
+    doing(fx, &key, what);
+    let r = eval_inv_with(fx, ctx, i, &exports);
+    if r.is_ok() {
+        done_doing(fx, &key);
+    }
+    r
+}
+
+/// Milestone 328: `key` runs now ([`budget_verdict`]).
+fn doing(fx: &mut F<'_>, key: &str, what: String) {
+    fx.effect(|h, _| {
+        h.doing.insert(
+            key.to_string(),
+            Doing {
+                what,
+                ..Doing::default()
+            },
+        );
+        Memo::Unit
+    });
+}
+
+/// Milestone 328: `key` ended.
+fn done_doing(fx: &mut F<'_>, key: &str) {
+    fx.effect(|h, _| {
+        h.doing.remove(key);
+        Memo::Unit
+    });
 }
 
 /// eval_inv with the exports of the shell process that runs it (a periodic checker's are those
@@ -2420,6 +2520,21 @@ fn step_range_core(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
 }
 
 fn step_range_run(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
+    // Milestone 328: what a run that the engine ends here names
+    let what = if b - a == 1 {
+        format!("the workload's step {a}")
+    } else {
+        format!("the workload's steps {a} to {}", b - 1)
+    };
+    doing(fx, "workload", what);
+    let r = step_range_run_in(fx, ctx, a, b);
+    if r.is_ok() {
+        done_doing(fx, "workload");
+    }
+    r
+}
+
+fn step_range_run_in(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
     // a plan of only checks or regressions keeps the manifest's workload (until 2026-11-08 the
     // composer's empty rounds ran instead, and every check passed)
     let st = if ctx.plan.composed() {
@@ -3653,6 +3768,64 @@ mod tests {
             initramfs_verdict("Freeing initrd memory: 1024K", None),
             None
         );
+    }
+
+    /// Milestone 328: the verdict of a run that used up the engine's exit budget.
+    #[test]
+    fn a_used_up_exit_budget_names_what_ran() {
+        let v = "ERROR check: exit budget exhausted";
+        let mut d = BTreeMap::new();
+        assert_eq!(budget_verdict(v, &d), None);
+        d.insert(
+            "inv:0002".to_string(),
+            Doing {
+                what: "the check `final_rows`".into(),
+                ..Doing::default()
+            },
+        );
+        d.insert(
+            "workload".to_string(),
+            Doing {
+                what: "the workload's steps 0 to 29".into(),
+                ..Doing::default()
+            },
+        );
+        assert_eq!(
+            budget_verdict(v, &d).unwrap(),
+            "ERROR check: exit budget exhausted while the check `final_rows` and the workload's \
+             steps 0 to 29 ran (the engine's limit of VM exits for one phase of a run; hydo guide \
+             checks, \"The exit budget\")"
+        );
+        // other verdicts stay the engine's
+        assert_eq!(
+            budget_verdict(
+                "ERROR check: SPIN (guest loops without exits; run invalid)",
+                &d
+            ),
+            None
+        );
+        // an eventually check whose tries failed: its violation
+        d.insert(
+            "live:0003".to_string(),
+            Doing {
+                what: "the eventually check `queries.settle`".into(),
+                live: Some(("queries.settle".into(), "heal".into(), 480)),
+                tries: 37,
+                last: Some((1, "q17 running\n4 queries still running\n".into(), 37012)),
+            },
+        );
+        assert_eq!(
+            budget_verdict(v, &d).unwrap(),
+            "HYDO-ORACLE: VIOLATION [queries.settle] not satisfied 370.12s after heal, deadline \
+             480s: the engine's exit budget for the phase ran out after 37 failed tries of the \
+             check (last check rc=1: 4 queries still running)"
+        );
+        // after fewer than 3 failed tries it names the check only
+        d.get_mut("live:0003").unwrap().tries = 2;
+        assert!(budget_verdict(v, &d).unwrap().contains(
+            "while the check `final_rows` and the eventually check `queries.settle` (2 tries had \
+             failed) and the workload's"
+        ));
     }
 
     /// Milestone 328: the unpacked size from a gzip trailer, and none for an image that is no

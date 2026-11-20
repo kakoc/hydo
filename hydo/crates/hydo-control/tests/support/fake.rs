@@ -214,6 +214,9 @@ pub struct Fake {
     /// in a child process (`run` of busybox `mount`) leaves only that process waiting.
     pub dark_at_mount: bool,
     dark: bool,
+    /// Milestone 328: the engine ends the run by itself at this stop, as when a phase used up
+    /// its exit budget (`ERROR check: exit budget exhausted`).
+    pub end_at: Option<u64>,
 }
 
 impl Fake {
@@ -242,6 +245,7 @@ impl Fake {
             dark_agent: false,
             dark_at_mount: false,
             dark: false,
+            end_at: None,
         };
         f.emit(
             1,
@@ -290,6 +294,7 @@ impl Fake {
             dark_agent: false,
             dark_at_mount: false,
             dark: false,
+            end_at: None,
         }
     }
 
@@ -987,7 +992,8 @@ impl Fake {
         let k = *k;
         let need = self.h(&["need", &script]) % 7;
         let r = self.h(&["live", &script, &k.to_string()]);
-        let ok = need != 6 && k > need;
+        // Milestone 328: a check that never holds, for the tests of an exit budget used up
+        let ok = need != 6 && k > need && !script.contains("HYDO_FAKE_NEVER");
         let mut dur = 4 + r % 30;
         let mut status = if ok {
             0
@@ -1134,6 +1140,13 @@ impl Link for Fake {
                 "the fake stopped {} times: a hang",
                 self.n
             )));
+        }
+        if self.end_at.is_some_and(|e| self.n >= e) {
+            return Ok(LinkNext::Done(
+                "RESULT run fp=0000000000000001 wfp=0000000000000002 secs=0.1 \
+                 verdict=ERROR check: exit budget exhausted"
+                    .into(),
+            ));
         }
         self.pending.sort_by_key(|p| (p.at, p.ord));
         let k = self.pending.iter().take_while(|p| p.at <= self.t).count();

@@ -52,6 +52,23 @@ Use `always_` for properties that can break and heal during the run (stale reads
 balance seen for a moment). An `always_` check runs only while the workload lasts, so keep the
 period short (1 or 2 s) or rely on `final_` checks.
 
+## The exit budget
+
+The Mac and KVM engines count the guest's VM exits. Each phase of a run (the boot, the
+workload, the checks, a recovery boot) may take at most 50,000,000 of them. A phase that uses
+them up ends the run with `ERROR <phase>: exit budget exhausted`. A guest makes exits when it
+starts processes, sends packets, reads the disk and sets timers, so the work of a check counts
+too. For example, a check that starts one client per stuck query at every try can use up the
+budget before its deadline.
+
+The verdict names what ran when the budget ran out, for example the check `<id>` or the
+workload's steps 0 to 29. When an `eventually_` check failed every try until
+then, the run gets that check's violation instead, with its last output:
+`VIOLATION [<id>] not satisfied ... the engine's exit budget for the phase ran out after <n>
+failed tries`. To stay inside the budget, let an `eventually_` check do little per try. Stop
+at the first operation that is still open, and print the count of the rest, instead of asking
+about every operation.
+
 ## Ready-made store readers: `hydo-read` and `hydo-check`
 
 `hydo-read <store> <args>` prints what a store holds as sorted JSON Lines (exit 2 = could not

@@ -359,4 +359,11 @@ pub trait Controller {
     /// Called at every stop with what was seen since the previous stop (empty at most stops);
     /// pushes what to do at this stop into `out`. After an [`Action::End`] it is not called again.
     fn step(&mut self, stop: &StopInfo, seen: &[Seen], out: &mut Out);
+
+    /// The engine ended the run by itself with `verdict` (for example `ERROR check: exit budget
+    /// exhausted`): the verdict to give in its place, or None to keep it (Milestone 328). It
+    /// reads only what the controller already knows, so a replay gives the same answer.
+    fn engine_ended(&self, _verdict: &str) -> Option<String> {
+        None
+    }
 }

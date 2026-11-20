@@ -57,6 +57,7 @@ hydo-control::conversations              fast
 hydo-control::corpus                     full
 hydo-control::corpus_net                 full
 hydo-control::drive                      fast
+hydo-control::engine_end                 fast
 hydo-control::fakes                      fast
 hydo-control::groups                     fast
 hydo-control::image_guest                fast
