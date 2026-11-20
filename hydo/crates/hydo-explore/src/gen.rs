@@ -1874,7 +1874,7 @@ impl Ex {
         format!(
             "disk={} dseed={:x}{}{}{}{} | {}",
             s.disk,
-            s.dseed,
+            crate::sched::dseed_shown(&s),
             s.tj.as_ref().map(render_tj).unwrap_or_default(),
             render_preempt(&s)
                 + &s.cf.map(|c| format!(" cf={c}")).unwrap_or_default()

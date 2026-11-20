@@ -217,6 +217,22 @@ pub struct S {
     pub blk: Vec<String>,
 }
 
+/// The disk's seed that a schedule's text names (Milestone 339): `s.dseed` where it decides a
+/// fault, and 0 where it decides nothing. The disk's seed decides `disk=ioerr:P`'s and
+/// `disk=lying:P`'s requests and the block faults (`torn=`, `mis=`, `lse=`, `hang=`). With
+/// `disk=none`, and with `disk=cut` without a block fault, the guest sees nothing of it, but
+/// every engine's fingerprint covers it, so two such schedules that differ only in it were two
+/// runs of one guest with two fingerprints. With 0 they are one text, and the explorer runs a
+/// repeated text once ([`crate::pool`]). The seed is still drawn, so every later draw of a
+/// generator stays where it was.
+pub fn dseed_shown(s: &S) -> u64 {
+    if (s.disk == "none" || s.disk == "cut") && s.blk.is_empty() {
+        0
+    } else {
+        s.dseed
+    }
+}
+
 /// A G= token: (target, step, steps down or None for in place, the corruption's text). The
 /// target is a service, a list `a,b` or a group's selector `<group>.<selector>` (Milestone 245).
 #[derive(Clone, Debug, PartialEq, Eq)]

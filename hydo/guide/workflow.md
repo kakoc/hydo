@@ -258,6 +258,23 @@ running `hydo inspect` session with its memory and its age, because each session
 guest. `hydo inspect stop --all` stops them. Inside `hydo ci run` every stop of the explorer is
 that command's status 2.
 
+### A schedule that ran once runs once
+
+hydo repeats a run exactly, so a schedule that an exploration already ran gives the same result
+again. The shrinker often tries a candidate that an earlier round tried, and a project with few
+fault kinds draws one schedule for many seeds. `hydo explore` runs such a schedule once. A later
+first run or shrink candidate with the same text takes the earlier run's verdict, fingerprint and
+consoles, without a VM. Two kinds of runs always get their own VM: the re-runs that check that a
+failure repeats, and the two confirmations of each minimal schedule.
+
+- `exploration.json` counts these runs in its summary as `repeats`, with `repeats_saved_s`, the
+  seconds that their earlier runs took. `report.md` shows both.
+- The disk's seed `dseed=` decides only the faults of `disk=ioerr`, `disk=lying`, and the block
+  faults (`torn=`, `mis=`, `lse=`, `hang=`). Where it decides nothing, the explorer writes
+  `dseed=0`, so that two such schedules have one text. A schedule that you write keeps its own
+  `dseed=` in `hydo run`.
+- `--rerun-repeats` runs every repeated schedule in a VM again.
+
 ## Which versions have a finding
 
 `hydo versions` says in which versions of the system a finding is present. It replays the

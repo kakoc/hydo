@@ -885,6 +885,18 @@ pub fn merge(dirs: &[PathBuf], out: &Path) -> Result<Exploration, String> {
             (q > 0.0).then(|| round1(q))
         },
         cache_hits: sums(&|s| s.cache_hits),
+        // Milestone 339: each part answers the repeats of its own runs only
+        repeats: sums(&|s| s.repeats),
+        repeats_saved_s: {
+            let q: f64 = parts
+                .iter()
+                .filter_map(|p| p.doc.summary.repeats_saved_s)
+                .sum();
+            parts
+                .iter()
+                .any(|p| p.doc.summary.repeats.is_some())
+                .then(|| round1(q))
+        },
         runs_with_new_error_kinds: sums(&|s| s.runs_with_new_error_kinds),
         vacuous_passes: sums(&|s| s.vacuous_passes),
         refused: sums(&|s| s.refused),

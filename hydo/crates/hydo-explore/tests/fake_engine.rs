@@ -211,7 +211,13 @@ fn norm(text: &str) -> String {
     let t = re3.replace_all(&t, "").into_owned();
     // the CPU of the machine the test runs on
     let re4 = regex::Regex::new(r#",?\s*"host_cpu": ?\{[^}]*\}"#).unwrap();
-    re4.replace_all(&t, "").into_owned()
+    let t = re4.replace_all(&t, "").into_owned();
+    // Milestone 339: how many runs an earlier run of their schedule answered depends on which
+    // runs were in flight together (repeats_scenario checks them)
+    let re5 = regex::Regex::new(r#",?\s*"repeats(?:_saved_s)?": ?[0-9.]+"#).unwrap();
+    let t = re5.replace_all(&t, "").into_owned();
+    let re6 = regex::Regex::new(r"(?m)^\| repeats(?:_saved_s)? \| [0-9.]+ \|\n").unwrap();
+    re6.replace_all(&t, "").into_owned()
 }
 
 /// What an exploration writes (M115: the results format and report.md, its view for people;
@@ -295,6 +301,9 @@ fn scenario(name: &str, args: &[&str]) {
     }
     if name == MERGE_SCENARIO {
         return merge_scenario();
+    }
+    if name == REPEATS_SCENARIO {
+        return repeats_scenario();
     }
     let dir = scratch(name);
     let out = dir.join("out");
@@ -659,11 +668,106 @@ const SCENARIOS: &[(&str, &[&str])] = &[
     (TIME_LIMIT_SCENARIO, &[]),
     // no golden: merge_scenario() compares a merged exploration with one exploration
     (MERGE_SCENARIO, &[]),
+    // no golden: repeats_scenario() compares an exploration with the same one in VMs only
+    (REPEATS_SCENARIO, &[]),
 ];
 
 const CACHE_SCENARIO: &str = "cache_key_is_the_image_bytes";
 const TIME_LIMIT_SCENARIO: &str = "time_limit_cuts_at_a_seed_boundary";
 const MERGE_SCENARIO: &str = "merge_equals_one_exploration";
+const REPEATS_SCENARIO: &str = "repeats_take_the_earlier_result";
+
+/// Milestone 339: a first run or a shrink candidate whose schedule the exploration already ran
+/// takes the earlier run's result without a VM. The exploration gives the same records, file for
+/// file, as with `--rerun-repeats`, which runs every one of them, and its summary counts the runs
+/// answered so. Two explorations show it: one of the stack with shrinks of several signatures
+/// and causes, error kinds and their shrinks, whose shrink candidates repeat; and one of a
+/// project whose manifest allows clock steps only, where the random strategy draws
+/// `disk=none dseed=0 | run` for every seed (the explorer writes `dseed=0` where the disk's seed
+/// decides nothing).
+fn repeats_scenario() {
+    let dir = scratch(REPEATS_SCENARIO);
+    let explore = |name: &str, args: &[&str], extra: &[&str]| -> PathBuf {
+        let out = dir.join(name);
+        let mut c = Command::new(env!("CARGO_BIN_EXE_hydo-explore"));
+        c.args(args)
+            .args(extra)
+            .args(IMAGE)
+            .args(["--workers", "3", "--out"])
+            .arg(&out);
+        run(&mut c, &dir, &out);
+        out
+    };
+    let summary = |out: &Path| -> serde_json::Value {
+        let t = std::fs::read_to_string(out.join("exploration.json")).unwrap();
+        serde_json::from_str::<serde_json::Value>(&t).unwrap()["summary"].clone()
+    };
+    let stack: &[&str] = &[
+        "--seeds",
+        "1-40",
+        "--strategy",
+        "process",
+        "--new-faults",
+        "--shrink-causes",
+        "2",
+        "--errors-shrink",
+        "3",
+        "--known-errors",
+        KNOWN,
+    ];
+    // the option itself is in the recorded command line
+    let opt = regex::Regex::new(r#"\s*"--rerun-repeats","#).unwrap();
+    let clock: &[&str] = &[
+        "--seeds",
+        "1-40",
+        "--manifest",
+        "hydo/onboard/examples/avx2/hydo.yaml",
+    ];
+    for (name, args) in [("stack", stack), ("clock", clock)] {
+        let once = explore(&format!("{name}-once"), args, &[]);
+        let vms = explore(&format!("{name}-vms"), args, &["--rerun-repeats"]);
+        let (s1, s2) = (summary(&once), summary(&vms));
+        let n = s1["repeats"].as_u64().unwrap_or(0);
+        assert!(s1["repeats_saved_s"].as_f64().unwrap_or(0.0) > 0.0, "{s1}");
+        assert!(s2.get("repeats").is_none(), "--rerun-repeats: {s2}");
+        if name == "stack" {
+            assert!(n >= 10, "the shrinks repeat candidates: {s1}");
+            assert!(s1["failures"].as_u64().unwrap_or(0) > 0, "{s1}");
+        } else {
+            // the 40 first runs are one schedule, all submitted at once: one VM ran it
+            assert_eq!(n, 39, "{s1}");
+        }
+        for f in ["exploration.json", "events.jsonl", "report.md"] {
+            let clean = |out: &Path| {
+                let t = std::fs::read_to_string(out.join(f)).unwrap();
+                let t = opt.replace_all(&t, "").into_owned();
+                norm(&t.replace(&out.display().to_string(), "<out>"))
+            };
+            let (a, b) = (clean(&once), clean(&vms));
+            if a != b {
+                let (la, lb): (Vec<&str>, Vec<&str>) = (a.lines().collect(), b.lines().collect());
+                let i = la
+                    .iter()
+                    .zip(&lb)
+                    .position(|(x, y)| x != y)
+                    .unwrap_or(la.len().min(lb.len()));
+                panic!(
+                    "{name} {f}: the answered repeats differ from their runs at line {}:\n  answered: {}\n  in VMs:   {}",
+                    i + 1,
+                    la.get(i).unwrap_or(&"<end>"),
+                    lb.get(i).unwrap_or(&"<end>")
+                );
+            }
+        }
+        // a repeat gets the earlier run's consoles under its own tag
+        if name == "clock" {
+            let a = std::fs::read(once.join("consoles/seed-1.log")).unwrap();
+            let b = std::fs::read(once.join("consoles/seed-40.log")).unwrap();
+            assert_eq!(a, b);
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
 
 /// `hydo explore --merge` (Milestone 304): the parts of a seed range explored apart with
 /// `--shard I/N` and merged give the exploration of the whole range, file for file

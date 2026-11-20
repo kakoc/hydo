@@ -112,6 +112,12 @@ fn schedules_and_classes_are_run_py_s() {
             ));
         }
     }
+    // HYDO_BLESS=1 records the lines again (Milestone 339: the explorer writes `dseed=0` where
+    // the disk's seed decides nothing, so every stream with such schedules moved)
+    if std::env::var_os("HYDO_BLESS").is_some_and(|v| v == "1") {
+        let p = here().join("tests/golden/schedules.golden");
+        std::fs::write(&p, got.iter().map(|l| format!("{l}\n")).collect::<String>()).unwrap();
+    }
     let want: Vec<String> = golden("schedules.golden")
         .lines()
         .map(str::to_string)

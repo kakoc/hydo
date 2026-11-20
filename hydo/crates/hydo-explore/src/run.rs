@@ -1065,7 +1065,10 @@ fn make_pool(cx: &Cx) -> Pool {
     } else {
         (cx.image.clone(), cx.engine_args().join(" "))
     };
-    Pool::new(engine, spec, n, host, cache_image, cache_engine)
+    let pool = Pool::new(engine, spec, n, host, cache_image, cache_engine);
+    // Milestone 339: a schedule this exploration already ran takes the earlier result
+    pool.answer_repeats(!cx.a.rerun_repeats);
+    pool
 }
 
 /// What a result in `$HYDO_EXPLORE_CACHE` is a function of, besides its schedule and the
@@ -2834,6 +2837,7 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
     let boot = pool.mean_boot();
     let nworkers = pool.workers();
     let cache_hits = *pool.cache_hits.lock().expect("lock");
+    let (repeats, repeats_s) = pool.repeat_stats();
     // the error paths of the first runs (Milestone 306)
     let paths = pool
         .host
@@ -2867,6 +2871,8 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
             (qw > 0.0).then(|| round1(qw))
         },
         cache_hits: (cache_hits > 0).then_some(cache_hits as u64),
+        repeats: (repeats > 0).then_some(repeats),
+        repeats_saved_s: (repeats > 0).then(|| round1(repeats_s)),
         time_limit,
         ..Summary::default()
     };

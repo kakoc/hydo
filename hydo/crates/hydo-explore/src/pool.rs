@@ -15,6 +15,7 @@
 
 use crate::errlog::{self, Known};
 use crate::py::{dumps_line, fl, obj, py_str, repr};
+use crate::repeats::{Ask, Repeats};
 use hydo_engine::{BootSpec, Engine, EngineError, Worker};
 use hydo_schedule::Schedule;
 use regex::Regex;
@@ -71,6 +72,8 @@ pub struct Pool {
     /// The cache key's image and engine options.
     pub cache_image: String,
     pub cache_engine: String,
+    /// The schedules this exploration already ran (Milestone 339, [`crate::repeats`]).
+    repeats: Arc<Mutex<Repeats>>,
 }
 
 #[derive(Default)]
@@ -295,17 +298,19 @@ impl Pool {
             Condvar::new(),
         ));
         let boot_secs = Arc::new(Mutex::new(vec![None; n]));
+        let repeats = Arc::new(Mutex::new(Repeats::default()));
         let mut threads = Vec::new();
         for i in 0..n {
-            let (q2, eng, sp, h, bs) = (
+            let (q2, eng, sp, h, bs, rp) = (
                 q.clone(),
                 engine.clone(),
                 spec.clone(),
                 host.clone(),
                 boot_secs.clone(),
+                repeats.clone(),
             );
             threads.push(std::thread::spawn(move || {
-                worker_main(i, q2, eng, sp, h, bs)
+                worker_main(i, q2, eng, sp, h, bs, rp)
             }));
         }
         let p = Pool {
@@ -317,9 +322,45 @@ impl Pool {
             cache_hits: Mutex::new(0),
             cache_image,
             cache_engine,
+            repeats,
         };
         p.cache_load();
         p
+    }
+
+    /// Answer a first run or a shrink candidate whose schedule this pool already ran with the
+    /// earlier result, without a VM (Milestone 339; off until the explorer turns it on).
+    pub fn answer_repeats(&self, on: bool) {
+        self.repeats.lock().expect("lock").set_on(on);
+    }
+
+    /// (runs answered with an earlier result, the seconds of those earlier runs)
+    pub fn repeat_stats(&self) -> (u64, f64) {
+        self.repeats.lock().expect("lock").stats()
+    }
+
+    /// Submit one run: Some(its answer) when an earlier run of its schedule answers it, None
+    /// when it runs in a VM or waits for the same schedule's run in flight (its answer then
+    /// comes on the job's `reply`, and `pending` counts it).
+    fn submit(&self, job: Job, high: bool, pending: &mut usize) -> Option<Done> {
+        let ask = self.repeats.lock().expect("lock").ask(
+            &self.host.outdir,
+            &job.tag,
+            &job.text,
+            &job.reply,
+            &job.cancel,
+        );
+        match ask {
+            Ask::Ready(r) => return Some((job.tag, job.text, r)),
+            Ask::Wait => {
+                *pending += 1;
+                return None;
+            }
+            Ask::Run => {}
+        }
+        *pending += 1;
+        self.push(job, high);
+        None
     }
 
     pub fn workers(&self) -> usize {
@@ -335,7 +376,7 @@ impl Pool {
             drop(q);
             let raw = "";
             let res = error_result(raw, 0);
-            let _ = job.reply.send((job.tag, job.text, res));
+            deliver(&self.repeats, &self.host.outdir, job, res);
             return;
         }
         if high {
@@ -485,17 +526,16 @@ impl Pool {
                 ready.push_back((tag.clone(), text.clone(), r));
                 continue;
             }
-            pending += 1;
-            self.push(
-                Job {
-                    tag: tag.clone(),
-                    text: text.clone(),
-                    reply: tx.clone(),
-                    cancel: cancel.clone(),
-                    search: None,
-                },
-                high,
-            );
+            let job = Job {
+                tag: tag.clone(),
+                text: text.clone(),
+                reply: tx.clone(),
+                cancel: cancel.clone(),
+                search: None,
+            };
+            if let Some(d) = self.submit(job, high, &mut pending) {
+                ready.push_back(d);
+            }
         }
         Batch {
             pool: self,
@@ -606,17 +646,16 @@ impl Batch<'_> {
             self.ready.push_back((tag.to_string(), text.to_string(), r));
             return;
         }
-        self.pending += 1;
-        self.pool.push(
-            Job {
-                tag: tag.to_string(),
-                text: text.to_string(),
-                reply: self.tx.clone(),
-                cancel: self.cancel.clone(),
-                search: None,
-            },
-            self.high,
-        );
+        let job = Job {
+            tag: tag.to_string(),
+            text: text.to_string(),
+            reply: self.tx.clone(),
+            cancel: self.cancel.clone(),
+            search: None,
+        };
+        if let Some(d) = self.pool.submit(job, self.high, &mut self.pending) {
+            self.ready.push_back(d);
+        }
     }
 
     /// The next finished run of this batch, None when all are done.
@@ -672,17 +711,21 @@ fn worker_main(
     spec: BootSpec,
     h: Host,
     boot: Arc<Mutex<Vec<Option<f64>>>>,
+    reps: Arc<Mutex<Repeats>>,
 ) {
     let mut w = start(i, engine.as_ref(), &spec, &h);
     if let Some(x) = &w {
         boot.lock().expect("lock")[i] = Some(x.boot_secs());
     }
     if w.is_none() {
-        give_up(&q);
+        give_up(&q, &reps, &h.outdir);
         return;
     }
     while let Some(job) = take(&q) {
-        if job.cancel.load(Ordering::SeqCst) {
+        // a cancelled run still runs when another run of its schedule waits for it (M339)
+        if job.cancel.load(Ordering::SeqCst)
+            && !reps.lock().expect("lock").needed(&job.tag, &job.text)
+        {
             continue;
         }
         quiet_wait(h.pool.quiet_file.as_deref());
@@ -762,9 +805,9 @@ fn worker_main(
             host_contracts(&h, &job.tag, &mut res);
             host_errlog(&h, &job.tag, &job.text, &mut res);
         }
-        let _ = job.reply.send((job.tag, job.text, res));
+        deliver(&reps, &h.outdir, job, res);
         if w.is_none() {
-            give_up(&q);
+            give_up(&q, &reps, &h.outdir);
             return;
         }
     }
@@ -788,7 +831,7 @@ fn search_json(sr: &hydo_engine::SearchRun) -> Value {
 }
 
 /// This worker is gone: when it was the last one, answer every queued job with an error result.
-fn give_up(q: &(Mutex<Queue>, Condvar)) {
+fn give_up(q: &(Mutex<Queue>, Condvar), reps: &Mutex<Repeats>, outdir: &Path) {
     let (m, _) = q;
     let mut g = m.lock().expect("lock");
     g.alive -= 1;
@@ -799,6 +842,19 @@ fn give_up(q: &(Mutex<Queue>, Condvar)) {
     jobs.extend(g.low.drain(..));
     drop(g);
     for j in jobs {
-        let _ = j.reply.send((j.tag, j.text, error_result("", 0)));
+        deliver(reps, outdir, j, error_result("", 0));
+    }
+}
+
+/// Send a finished run's result, and the same result to every run that waits for its schedule
+/// (Milestone 339).
+fn deliver(reps: &Mutex<Repeats>, outdir: &Path, job: Job, res: Res) {
+    let more = reps
+        .lock()
+        .expect("lock")
+        .finish(outdir, &job.tag, &job.text, &res);
+    let _ = job.reply.send((job.tag, job.text, res));
+    for (tx, d) in more {
+        let _ = tx.send(d);
     }
 }
