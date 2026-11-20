@@ -69,7 +69,9 @@ pub const VERSION: u64 = 1;
 /// boots an x86_64 image's guest with its TSC as the clock ([`EpochDefaults::exact_tick`]), and
 /// (Milestone 331) each image service has a `/tmp` of its own ([`EpochDefaults::oci_own_tmp`]),
 /// and (Milestone 338) an arm64 root keeps its hard links ([`EpochDefaults::cpio_hard_links`]),
-/// and an image service sees the guest's cgroup2 files ([`EpochDefaults::oci_sys_rbind`]).
+/// an image service sees the guest's cgroup2 files ([`EpochDefaults::oci_sys_rbind`]), and a
+/// timed pause of threads finds the workload as a reaction's does
+/// ([`EpochDefaults::pause_largest_session`]).
 pub const EPOCH: u64 = 5;
 
 /// The epoch of a run, exploration or cache entry that recorded none (written before M155).
@@ -153,6 +155,14 @@ pub struct EpochDefaults {
     /// bind left the mount of `/sys/fs/cgroup` out (open item 144). From epoch 5 (Milestone 338).
     /// It decides the bytes of a new image only.
     pub oci_sys_rbind: bool,
+    /// The host controller's timed pause of threads (`P=workload/<thread>@...`) finds the
+    /// workload's session as a reaction's freeze does, as the session with the most processes
+    /// among the leaders with `HYDO_FROM`, and leaves out a thread that ended before its move
+    /// into the cgroup. Before, it took the first such leader in the order of `/proc` (which can
+    /// be a watcher of busybox's `timeout`) and ended the run with an ERROR at a thread that had
+    /// ended (open item 80). From epoch 5 (Milestone 338). It changes the controller's commands,
+    /// so an image built before keeps its transcripts.
+    pub pause_largest_session: bool,
 }
 
 /// The defaults of an image built at `epoch` for `arch` (`x86_64` or `arm64`).
@@ -172,6 +182,7 @@ pub fn defaults(epoch: u64, arch: &str) -> EpochDefaults {
         exact_tick: epoch >= 5 && arch == "x86_64",
         cpio_hard_links: epoch >= 5,
         oci_sys_rbind: epoch >= 5,
+        pause_largest_session: epoch >= 5,
     }
 }
 
@@ -601,7 +612,7 @@ mod tests {
         // hvx's guest keeps time with its TSC; the rest as at epoch 4
         assert!(!one.exact_tick && !two.exact_tick && !three.exact_tick && !four.exact_tick);
         for d in [one, two, three, four] {
-            assert!(!d.cpio_hard_links && !d.oci_sys_rbind);
+            assert!(!d.cpio_hard_links && !d.oci_sys_rbind && !d.pause_largest_session);
         }
         let five = defaults(5, "x86_64");
         assert_eq!(
@@ -612,6 +623,7 @@ mod tests {
                 exact_tick: true,
                 cpio_hard_links: true,
                 oci_sys_rbind: true,
+                pause_largest_session: true,
                 ..four
             }
         );

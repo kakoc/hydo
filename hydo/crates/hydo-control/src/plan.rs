@@ -239,6 +239,11 @@ pub struct Plan {
     /// absent key means at the image's fingerprint epoch (on from epoch 4,
     /// `hydo_image::EpochDefaults::cgroup2`). None or false: no mount.
     pub cgroup2: Option<bool>,
+    /// A timed pause of threads (`P=workload/<thread>@...`) finds the workload's session as a
+    /// reaction's freeze does and leaves out a thread that ended before its move (Milestone 338,
+    /// `hydo_image::EpochDefaults::pause_largest_session`). False from the manifest;
+    /// `agent::plan_of_image` puts in what the image's fingerprint epoch says (from epoch 5).
+    pub pause_largest_session: bool,
     pub invariants: Vec<PlanInvariant>,
     pub knobs: Vec<PlanKnob>,
     /// `buggify: true`: a B= token is then written to /tmp/hydo-buggify (features/buggify.rs);
@@ -745,6 +750,7 @@ impl Plan {
             outcomes_after_cut: get(guest, "outcomes_after_cut").is_some_and(py::truthy),
             reboot: get(guest, "reboot").is_some_and(py::truthy),
             cgroup2: get(guest, "cgroup2").and_then(Value::as_bool),
+            pause_largest_session: false,
             cost: 0,
             perf: PlanPerf::of(d),
             screens: hydo_manifest::browser::screens_dir(d),

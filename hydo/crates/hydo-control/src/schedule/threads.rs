@@ -82,8 +82,9 @@ EOF
 /// (busybox daemonizes it) and has the workload's environment, `HYDO_FROM` too. The first loop
 /// takes the first such leader in the order of `/proc`'s names, which can be a watcher of a
 /// command inside the workload (`timeout <s> <program>`). The second takes the leader whose
-/// session has the most processes: the workload's. [`FREEZE`] keeps the first, so that every
-/// timed pause of threads sends the commands it sent before.
+/// session has the most processes: the workload's. [`FREEZE`] keeps the first, so that a timed
+/// pause of threads on an image built before the fingerprint epoch 5 sends the commands it sent
+/// before; from epoch 5 the timer takes [`freeze_now`] too (Milestone 338).
 const SESSION_FIRST: &str = r#"r=
 for d in /proc/[0-9]*; do
   read -r s 2>/dev/null <$d/stat || continue
@@ -106,7 +107,7 @@ r=${r#* }
 "#;
 
 /// How [`FREEZE`] moves a thread into the cgroup: a thread that ended after the listing is an
-/// error (open item 80).
+/// error (open item 80; an image built before the fingerprint epoch 5 keeps it).
 const MOVE_STRICT: &str = r#"  echo $t >$D/cgroup.threads || { echo "E the kernel refused to move the thread $t ($c) into $D"; exit 1; }"#;
 /// How a reaction's freeze moves it: a thread that ended meanwhile is left out (Milestone 296).
 /// A reaction acts a few milliseconds after a call's start, when the threads that the call
@@ -114,7 +115,8 @@ const MOVE_STRICT: &str = r#"  echo $t >$D/cgroup.threads || { echo "E the kerne
 const MOVE_ENDED_OK: &str = r#"  echo $t 2>/dev/null >$D/cgroup.threads || { [ -d /proc/$t ] || continue; echo "E the kernel refused to move the thread $t ($c) into $D"; exit 1; }"#;
 
 /// [`FREEZE`] with the session found as [`SESSION_LARGEST`] finds it, and with a thread that
-/// ended before its move left out, for a reaction's freeze.
+/// ended before its move left out, for a reaction's freeze, and from the fingerprint epoch 5 for
+/// the timer's too (Milestone 338, `hydo_image::EpochDefaults::pause_largest_session`).
 fn freeze_now() -> String {
     debug_assert!(FREEZE.contains(SESSION_FIRST) && FREEZE.contains(MOVE_STRICT));
     FREEZE
@@ -200,7 +202,8 @@ pub(super) fn read_frozen(status: u32, out: &str) -> Frozen {
 }
 
 /// The timer of `P=workload/<sel>@<at>~<off>:<dur>`: after `off` ms of guest time, stop the
-/// threads `sel` names, for `dur` ms.
+/// threads `sel` names, for `dur` ms. From the fingerprint epoch 5 (Milestone 338) it finds them
+/// as a reaction does ([`timer_script`]).
 pub(super) fn pause_threads(
     fx: &mut F<'_>,
     ctx: &Ctx,
@@ -215,7 +218,26 @@ pub(super) fn pause_threads(
         e.clone(),
         None,
     )?;
-    freeze_for(fx, ctx, sel, dur, "timer", FREEZE)
+    freeze_for(
+        fx,
+        ctx,
+        sel,
+        dur,
+        "timer",
+        &timer_script(ctx.plan.pause_largest_session),
+    )
+}
+
+/// The timer's freeze script: [`FREEZE`] for an image built before the fingerprint epoch 5, so
+/// that its transcripts stay; from epoch 5 [`freeze_now`], which takes the largest session (not
+/// a watcher of busybox's `timeout`) and leaves out a thread that ended before its move (open
+/// item 80: 11 of 81 starts of Qdrant's test on the Mac ended in an ERROR there).
+fn timer_script(largest: bool) -> String {
+    if largest {
+        freeze_now()
+    } else {
+        FREEZE.to_string()
+    }
 }
 
 /// A reaction's pause of threads (`A=...:stop-workload/<sel>-<ms>`, Milestone 296): the
@@ -427,6 +449,20 @@ mod tests {
             "only the session's search and the move of an ended thread change"
         );
         assert!(KILL.contains(SESSION_LARGEST));
+    }
+
+    /// Milestone 338 (open item 80): the timer of an image built at the fingerprint epoch 5
+    /// freezes as a reaction does; an image built before keeps [`FREEZE`] and its commands.
+    #[test]
+    fn the_timer_freezes_as_a_reaction_from_epoch_5() {
+        assert_eq!(timer_script(false), FREEZE);
+        assert_eq!(timer_script(true), freeze_now());
+        assert!(timer_script(true).contains("[ -d /proc/$t ] || continue"));
+        for e in 1..=4 {
+            assert!(!hydo_image::defaults(e, "x86_64").pause_largest_session);
+        }
+        assert!(hydo_image::defaults(5, "x86_64").pause_largest_session);
+        assert!(hydo_image::defaults(5, "arm64").pause_largest_session);
     }
 
     #[test]
