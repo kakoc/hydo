@@ -22,16 +22,27 @@ pub struct Cargo {
 
 impl Cargo {
     fn cmd(&self) -> Command {
-        if let Some(t) = &self.toolchain {
+        let mut c = if let Some(t) = &self.toolchain {
             // rustup's proxy reads the toolchain from the first argument
             let mut c = Command::new(find_cargo());
             c.arg(format!("+{t}"));
-            return c;
+            c
+        } else {
+            match std::env::var_os("CARGO") {
+                Some(c) => Command::new(c),
+                None => Command::new(find_cargo()),
+            }
+        };
+        // a panic inside the standard library is placed at the crate's frame through the
+        // backtrace, which needs the line tables: a `debug = false` in the user's cargo
+        // configuration would leave the panic at the library's line (Milestone 333)
+        for p in ["DEV", "TEST", "RELEASE", "BENCH"] {
+            let k = format!("CARGO_PROFILE_{p}_DEBUG");
+            if std::env::var_os(&k).is_none() {
+                c.env(k, "1");
+            }
         }
-        match std::env::var_os("CARGO") {
-            Some(c) => Command::new(c),
-            None => Command::new(find_cargo()),
-        }
+        c
     }
 }
 
