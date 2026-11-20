@@ -102,6 +102,7 @@ extern "C" {
     fn hv_vm_create(config: *mut c_void) -> i32;
     fn hv_vm_destroy() -> i32;
     fn hv_vm_map(addr: *mut c_void, ipa: u64, size: usize, flags: u64) -> i32;
+    fn hv_vm_unmap(ipa: u64, size: usize) -> i32;
     fn hv_vm_protect(ipa: u64, size: usize, flags: u64) -> i32;
     fn hv_vcpu_create(vcpu: *mut u64, exit: *mut *const HvExit, config: *mut c_void) -> i32;
     fn hv_vcpu_destroy(vcpu: u64) -> i32;
@@ -148,6 +149,12 @@ pub fn vm_destroy() -> i32 {
 /// `addr..addr+size` must stay mapped (and page aligned) for as long as the VM uses it.
 pub unsafe fn vm_map(addr: *mut u8, ipa: u64, size: usize, flags: u64) -> i32 {
     hv_vm_map(addr.cast(), ipa, size, flags)
+}
+
+/// Remove `size` bytes at `ipa` from the guest (the host memory stays as it is).
+pub fn vm_unmap(ipa: u64, size: usize) -> i32 {
+    // SAFETY: only removes the stage-2 mappings of guest addresses
+    unsafe { hv_vm_unmap(ipa, size) }
 }
 
 pub fn vm_protect(ipa: u64, size: u64, flags: u64) {

@@ -58,7 +58,10 @@
 //!   `spin=rewind` (hydo-control, M130). A schedule that completes plainly gives the same
 //!   fingerprint with the rewind mode on.
 //! - **Guest RAM:** `--ram-mib N` before the mode, else `HVM_MEM_MB`, else 1024 MiB; 256..8192.
-//!   Snapshots keep RAM in an unlinked file in `HVM_SNAP_DIR` (default `/tmp/hvm-snap`).
+//!   Snapshots keep RAM in `HVM_SNAP_DIR` (default `/tmp/hvm-snap`): since Milestone 335 as RAM
+//!   bases that guest RAM is mapped from privately and that engines with the same bytes share
+//!   (`crate::mem`, docs/design/mac-cow.md); with `HVM_RAM_SHARE=0` in an unlinked file each, which
+//!   a restore copies back.
 //! - **The image's epoch:** `--image-epoch N` before the mode (none: this hydo's). An image built
 //!   before the fingerprint epoch 4 hashes its disks byte by byte; from epoch 4 on by their tree
 //!   hash (Milestone 290, [`crate::disk`]).
@@ -73,7 +76,7 @@
 use crate::fnv::{fnv, fnv_u64, mix64, OFFSET};
 use crate::layout::*;
 use crate::machine::{Mach, Pct, Tjit};
-use crate::mem::Mem;
+use crate::mem::{Base, Mem};
 use crate::virtio::{self, disk_cmd_ranges, BlkCfg, F_DROP, F_ERROR, F_UNFLUSHED};
 use crate::vmm::{now_s, VSnap, VmOpts, Vmm, NSR, SR};
 use crate::{catch_fatal, fatal, say, Diag};
@@ -192,12 +195,14 @@ struct Book {
     lo: usize,
 }
 
-/// A snapshot (`struct xsnap`): RAM in an unlinked file, mapped.
+/// A snapshot (`struct xsnap`): RAM in an unlinked file, mapped, or (Milestone 335, the
+/// default) a RAM base that a restore maps guest RAM from (`crate::mem::Base`).
 #[derive(Default)]
 struct XSnap {
     v: VSnap,
     m: Mach,
     ram: Option<Mem>,
+    base: Option<Base>,
     vio: Option<virtio::Save>,
     con: Vec<u8>,
 }
@@ -274,6 +279,9 @@ pub struct Opts {
     pub diag_chunks: Option<String>,
     pub check_restore: bool,
     pub no_mlock: bool,
+    /// HVM_RAM_SHARE (on unless `0`, Milestone 335): snapshots are RAM bases that guest RAM is
+    /// mapped from privately, shared with the other engines that have the same bytes
+    pub share_ram: bool,
     /// HYDO_PREEMPT_RECORD: write `<tag>.preempt.jsonl`, a record per forced preemption point
     pub preempt_record: bool,
 }
@@ -509,7 +517,13 @@ impl Host {
         let snap_dir = self.o.snap_dir.clone();
         // the snapshot takes the guest's own instructions at every error path (M306)
         vm.ct_park();
-        xsnap_take(vm, &mut self.snaps[slot].x, "ctl", &snap_dir);
+        xsnap_take(
+            vm,
+            &mut self.snaps[slot].x,
+            "ctl",
+            &snap_dir,
+            self.o.share_ram,
+        );
         let mut k = self.c.k.clone();
         for s in &mut k.s {
             if s.state == Cs::Typed {
@@ -904,8 +918,21 @@ fn copy_changed(dst: &mut [u8], src: &[u8]) {
 }
 
 /// `xsnap_take`
-fn xsnap_take(vm: &Vmm, s: &mut XSnap, name: &str, snap_dir: &str) {
-    if s.ram.is_none() {
+fn xsnap_take(vm: &mut Vmm, s: &mut XSnap, name: &str, snap_dir: &str, share: bool) {
+    if share {
+        // a new base of the RAM as it is (made before the one it replaces goes, so a base of the
+        // same bytes is found and kept), and guest RAM mapped from it at once, so the pages the
+        // run wrote before the snapshot stop being this engine's own
+        let ram = vm.ram.bytes();
+        let key = crate::ramtree::hash_bytes(OFFSET, ram, crate::ramtree::threads());
+        match Base::make(snap_dir, ram, key, true) {
+            Ok((b, _)) => {
+                vm.rebase(&b);
+                s.base = Some(b);
+            }
+            Err(e) => fatal(1, &format!("hvmx: snapshot {name}: {e}")),
+        }
+    } else if s.ram.is_none() {
         match Mem::file_backed(snap_dir, name, vm.ram_size as usize) {
             Ok(m) => s.ram = Some(m),
             Err(e) => fatal(1, &format!("{e}")),
@@ -913,7 +940,9 @@ fn xsnap_take(vm: &Vmm, s: &mut XSnap, name: &str, snap_dir: &str) {
     }
     s.v = vm.vtake();
     s.m = vm.m;
-    copy_changed(s.ram.as_mut().unwrap().bytes_mut(), vm.ram.bytes());
+    if !share {
+        copy_changed(s.ram.as_mut().unwrap().bytes_mut(), vm.ram.bytes());
+    }
     if vm.vio.attached() {
         s.vio = Some(vm.vio.save());
     }
@@ -922,14 +951,20 @@ fn xsnap_take(vm: &Vmm, s: &mut XSnap, name: &str, snap_dir: &str) {
 
 /// `xsnap_restore`: a fresh VM, not just a fresh vCPU.
 fn xsnap_restore(vm: &mut Vmm, s: &XSnap, check: bool) {
-    vm.fresh_vm();
-    vm.spin_reset();
-    copy_changed(
-        vm.ram.bytes_mut(),
-        s.ram.as_ref().expect("a snapshot").bytes(),
-    );
-    let (p, n) = (vm.ram.ptr(), vm.ram.len());
-    crate::hv::icache_invalidate(p, n);
+    if let Some(b) = &s.base {
+        // the run's pages are dropped, and every page reads the base until it is written
+        vm.fresh_vm_from(b);
+        vm.spin_reset();
+    } else {
+        vm.fresh_vm();
+        vm.spin_reset();
+        copy_changed(
+            vm.ram.bytes_mut(),
+            s.ram.as_ref().expect("a snapshot").bytes(),
+        );
+        let (p, n) = (vm.ram.ptr(), vm.ram.len());
+        crate::hv::icache_invalidate(p, n);
+    }
     vm.vput(&s.v);
     vm.m = s.m;
     let n = vm.m.console_len as usize;
@@ -1784,9 +1819,16 @@ fn engine_main(
         diag_chunks: o.diag_chunks.clone(),
         check_restore: o.check_restore,
         no_mlock: o.no_mlock,
+        share_ram: !o.no_ram_share,
         preempt_record: o.preempt_record,
     };
-    let mut vm = Vmm::new(&vo, &kernel, &initrd, diag.clone(), echo, !o.no_mlock);
+    if o.share_ram {
+        // the bases of engines that ended without removing theirs (a killed worker)
+        crate::mem::remove_stale(&o.snap_dir);
+    }
+    // a locked RAM would be all this engine's own: with RAM bases it is not locked (Milestone 335)
+    let lock = !o.no_mlock && !o.share_ram;
+    let mut vm = Vmm::new(&vo, &kernel, &initrd, diag.clone(), echo, lock);
     // M241: the function contracts' plan, when the image has one
     if let Some(p) = &o_contracts {
         let plan = hydo_contracts::plan::read_plan(std::path::Path::new(p))
