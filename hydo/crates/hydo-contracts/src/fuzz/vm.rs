@@ -293,6 +293,7 @@ fn run_all(o: &Opts) -> Result<i32, String> {
     let cg = cargo::Cargo {
         toolchain: o.toolchain.clone(),
         release: o.release,
+        features: None,
     };
     let pkg = cargo::metadata(&cg, &o.dir)?;
     let sources = pkg.sources();
@@ -400,6 +401,7 @@ fn run_all(o: &Opts) -> Result<i32, String> {
         &super::Set {
             fns: &built,
             others: &[],
+            root: None,
         },
     )?;
     std::env::remove_var("CARGO_BUILD_TARGET");

@@ -305,6 +305,9 @@ pub struct SrcBuild {
     pub ctor: String,
     /// The constructor's arguments: each name and type as written.
     pub args: Vec<(String, String)>,
+    /// `)?` at the line's end (Milestone 333): the constructor returns a `Result` or an
+    /// `Option`, whose `Err` or `None` throws the generated input away.
+    pub fallible: bool,
     pub line: u32,
 }
 
@@ -490,6 +493,10 @@ fn parse_build(t: &str, line: u32) -> Result<SrcBuild, String> {
         .split_once(" from ")
         .ok_or_else(|| format!("`build {t}`: {usage}"))?;
     let (ty, rest) = (ty.trim(), rest.trim());
+    let (rest, fallible) = match rest.strip_suffix('?') {
+        Some(r) => (r.trim_end(), true),
+        None => (rest, false),
+    };
     let open = rest
         .find('(')
         .ok_or_else(|| format!("`build {t}`: {usage}"))?;
@@ -519,6 +526,7 @@ fn parse_build(t: &str, line: u32) -> Result<SrcBuild, String> {
         ty: ty.to_string(),
         ctor: ctor.to_string(),
         args,
+        fallible,
         line,
     })
 }

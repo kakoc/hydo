@@ -48,13 +48,14 @@ holds the whole report.
 - `// hydo: with T = i64`: the type that a type parameter takes. It names the parameters of a
   generic function, of a generic `impl` block, and of a trait. `with Self = i64` names the type
   that a trait's method is fuzzed on (section "Trait methods"). A const generic parameter
-  takes its value the same way: `with N = 16`.
+  takes its value the same way: `with N = 16`. A `with` line for a name that is no type
+  parameter is refused with the names that are.
 - `// hydo: build <Type> from <constructor>(<name>: <type>, ...)` and `// hydo: read <Type> as
   <type> by <method>()`: how hydo makes and reads a value of a type that it cannot generate
   field by field (section "Values built by a constructor").
 
 An expression reads parameters, fields, `result`, integers, floating-point numbers (`0.5`),
-strings, `old(e)` (the value at the call's entry), and the functions `len`, `is_some`, `is_none`,
+strings, a string's bytes by index (`text[0] >= 48`), `old(e)` (the value at the call's entry), and the functions `len`, `is_some`, `is_none`,
 `is_ok`, `is_err`, `some`, `ok` and `err`. `hydo fuzz` also reads `matches(e, <pattern>)` and
 `sorted(v)` (sections "Enumerations" and "Sorted inputs"). The operators are `||`, `&&`, the
 comparisons, the bit operators `|`, `^`, `&`, `<<` and `>>`, `+ - * / %`, `!` and unary `-`.
@@ -70,7 +71,12 @@ the program's own code is refused.
 A type that a `with` line names is written as the function's module writes it. byteorder's
 `io.rs` does not import `BigEndian`, so its contracts write `with T = crate::BigEndian`. hydo
 finds a type's definition through the module's `use` lines, a glob import (`use a::*`), and a
-renamed re-export (`pub use a::B as C`).
+renamed re-export (`pub use a::B as C`). The test module writes a type of the crate that the
+function's module does not import by its path from the crate's root. semver's `Error` has a
+field of `ErrorKind`, which its private module `error` defines, so a parser's `Err` value
+builds and reads as `crate::error::ErrorKind`, and `matches(err(result).kind, Empty)` reads
+it. A private type of a module that is neither the function's module nor one of its parents
+is not read.
 
 ## Enumerations
 
@@ -106,8 +112,9 @@ hydo:   the call gave: result = Ok(Complete((2, 0)))
 ```
 
 A variant or a field that the type does not have is refused before the run. The refusal names
-the variants or the fields that the type has. A
-variant is never compared with `==`: write `matches()`. An `input` line names a variant's field
+the variants or the fields that the type has. Two
+values of one enumeration compare with `==` (`result == self`), and a variant's name is
+written with `matches()`. An `input` line names a variant's field
 as `op.Clamp.lo`.
 
 ## Trait methods
@@ -160,9 +167,38 @@ pub trait ToSnakeCase: ToOwned {
 }
 ```
 
+An associated type of a type parameter, such as smallvec's `A::Item` or `<A as Array>::Item`,
+is read through the type that the parameter's `with` line names. hydo takes it from the
+crate's `impl` of the trait for that type: smallvec's `impl<T, const N: usize> Array for [T;
+N] { type Item = T; }` makes `A::Item` a `u8` with `with A = [u8; 4]`. Without such an `impl`,
+`Item` of a list or an array is its element. Such a type works in a parameter, in a result,
+and in a generated closure's arguments:
+
+```rust
+// hydo: with A = [u8; 4]
+// hydo: build SmallVec<[u8; 4]> from SmallVec::<[u8; 4]>::from_vec(v: Vec<u8>)
+// hydo: read SmallVec<[u8; 4]> as Vec<u8> by to_vec()
+// hydo: ensures len(self) == old(len(self)) + 1 && self[len(self) - 1] == value
+pub fn push(&mut self, value: A::Item) {
+```
+
 A crate can define one name in two modules, as humantime does with `Error`. hydo then takes the
 type of the function's own module, else the one that a `use` line of its file imports. A path
 names the other one: `crate::duration::Error`.
+
+## Generic structures and lifetimes
+
+hydo generates a generic structure field by field when each of its fields is `pub`, with the
+types of the `with` lines. ordered-float's `OrderedFloat<T>(pub T)` with `with T = f64` is an
+`f64`, and a clause reads it as `self.0`. A `with` line's type also stands in the parameters'
+types, so `fn eq(&self, other: &OrderedFloat<T>)` takes an `OrderedFloat<f64>`. With `with T
+= &[u8]`, a parameter `input: T` takes a slice. A generic structure with a private field needs
+a `build` line, so that its constructor keeps what it checks (ordered-float's `NotNan` holds
+no NaN).
+
+A structure with a lifetime parameter or a reference field, such as textwrap's `Options<'a>`,
+is read field by field as a result: `result.width == width`. As a parameter it needs a `build`
+line. `Cow<str>` and `Cow<[T]>` read as the text or the list they hold.
 
 ## Values built by a constructor
 
@@ -188,20 +224,54 @@ pub fn split_to(&mut self, at: usize) -> Self {
 - A report shows a built input as its constructor's call, `self = Bytes::copy_from_slice(b"ab")`.
 
 - An element of a list of built values, or a field of one, is read through the `read` line
-  too: `len(self) == 0 || result[0] == self[0]` compares half's `f16` as its `u16` bits. A
-  built value without a `read` line is not compared: the clause is `not judged`, with the
-  `read` line to write.
+  too: `len(self) == 0 || result[0] == self[0]` compares half's `f16` as its `u16` bits.
+- Without a `read` line, a clause reads the structure's fields that the test module can name.
+  semver's `Version` has public `major`, `minor` and `patch`, so `result.major == major` reads
+  them. A built value without a `read` line and without such fields is not compared: the
+  clause is `not judged`, with the `read` line to write.
+
+A constructor may take no argument (`build VersionReq from VersionReq::default()`). It may
+also return a `Result` or an `Option` of the type, which parsers and date types do. hydo then passes
+the `Ok` or `Some` value, and throws away an input for which the constructor gives `Err` or
+`None`. The report counts those inputs apart from `requires`:
+
+```rust
+// hydo: build Prerelease from Prerelease::new(text: &str)
+// hydo: read Prerelease as String by to_string()
+// hydo: input self.text like "alpha", "rc.1", "x.7.z.92"
+```
+
+```text
+hydo:   212 of 1000 inputs were thrown away: a `build` line's constructor gave `Err` or `None`
+```
+
+A line's type and constructor may be of another module than the function's. When the
+function's module does not import them, the test module names them by their path from the
+crate's root: base64's `engine` module does not import `Alphabet`. A constructor of a generic
+`impl` block takes the type's arguments: `build NotNan from NotNan::new(val: T)` of `impl<T>
+NotNan<T>` passes an `f64` for `NotNan<f64>`, also in `impl NotNan<f64>`, which has no `T`.
+
+hydo reads the constructor's result type from the crate's sources. For a function that it does
+not find, such as one of another crate, end the line with `?`: `build Date from
+time_helpers::date(jd: i32)?`.
 
 A constructor that panics on an input ends the call with a panic at the constructor. Narrow its
 arguments with `input` lines: chrono's `NaiveDate::from_ymd(year: i32, month: u32, day: u32)`
 needs `input self.month in 1..=12` and `input self.day in 1..=28`. A type without a `build` line
 is refused with the line to write. For a structure with a private field, the refusal names
-the crate's public constructor with its parameters, `new` first, then `from_*`, `with_*`,
-`From` and `Default`, and a method for the `read` line:
+the crate's public constructor with its parameters and a method for the `read` line. The
+constructors come in this order: `new`, `from_*`, `with_*`, the others, `From`, those that
+return a `Result` or an `Option`, and `Default`. It names no `unsafe` function and no line of a macro. When another trait
+of the type has a function `from` too, it names the trait: `<OrderedFloat<_> as
+From<f64>>::from(v: f64)`. For half's `f16`:
 
 ```text
 the field `0` of `f16` is private to the module `binary16`, so the harness cannot build the value: write `// hydo: build f16 from f16::from_bits(bits: u16)` (a public constructor of the crate; the others are `f16::from_f32(value: f32)`, `f16::from_f64(value: f64)`), and `// hydo: read f16 as u16 by to_bits()` for a clause that reads the value
 ```
+
+A type can have a `build` line already, with a constructor's argument of a type that hydo
+cannot generate. The refusal then names a line for the argument's type: base64's
+`GeneralPurpose::new(alphabet: &Alphabet, ...)` gets a line for `Alphabet`.
 
 When the crate has no constructor that hydo can call, the refusal says so: add one, or write
 a property function.
@@ -275,6 +345,11 @@ hydo generates the list in order, so no input is thrown away for it:
 pub fn search(v: &[u32], x: u32) -> Option<usize> {
 ```
 
+## An index inside its list
+
+`requires index < len(v)` (or `<=`) makes hydo generate the index inside the list, so that
+few inputs are thrown away for it. An index into an empty list still breaks such a clause.
+
 ## Lists of one length
 
 `requires len(a) == len(b)` makes hydo generate `b` with the length of `a`, so that no input is
@@ -324,7 +399,9 @@ of bytes takes text examples too, as their bytes, and a report shows it as a byt
   Plane, is among them too. A `chars` part of an `input` line replaces the three sets.
 - Some lists repeat one value with a few others among it.
 - A floating-point number is 0, -0, 1, -1, a half, the type's smallest or largest value, an
-  infinity, NaN, a small fraction, a value of the `in` range, or any bits.
+  infinity, NaN, a small fraction, a value of the `in` range, or any bits. In about one input
+  in six, two values of one width are made equal, or both NaN with other bits, as a comparison
+  of two floats needs.
 - A value that a clause compares with a list's element is put at a random place of the list.
 
 ## The verdicts
@@ -338,7 +415,9 @@ of bytes takes text examples too, as their bytes, and a report shows it as a byt
 | `vacuous` | A clause held without being checked: see below. | 3 |
 
 A clause is undecided on a call when it reads a value of a type that hydo does not read, such as
-a structure of another crate without a `read` line. Such a value shows as `<not read>`. A clause that is decided on fewer than
+a structure of another crate without a `read` line. Such a value shows as `<not read>`. A
+comparison of a list, an option or a structure that holds such a value is undecided too, and
+the reason names the type that hydo does not read. A clause that is decided on fewer than
 `--min-reach` calls (default 1 % of `--cases`) gives `not judged`, with the reason.
 
 A clause `a || ... || z` holds without checking `z` when a part before it is true. The report
@@ -381,7 +460,8 @@ pub fn display_roundtrip(text: &str) -> Option<bool> {
   module, without a `build` line;
 - a closure whose result hydo cannot generate, and a closure of a generic `impl` block's type
   parameter;
-- a parameter of a generic structure without a `build` line, a `char`, or a map.
+- a parameter of a generic structure with a private field or a lifetime parameter without a
+  `build` line, a `char`, or a map.
 
 A result of such a type is read in part, and a clause that reads the rest is undecided. hydo
 builds the test module in a `#![no_std]` crate too. The copy keeps the crate's `[lints]`
@@ -408,6 +488,11 @@ the call, or a generated closure. `DIR/harness/<function>.log` keeps the whole o
 failed build, and `DIR/harness/<function>.rs` the test module's text. `--show-harness` prints
 the log. `DIR/build.log` keeps every build of the run, each under a numbered heading.
 
+hydo's copy of the crate allows dead code, with `#![allow(dead_code)]` on the first line of
+its root file. A helper that only the functions that `--fn` leaves out call then does not stop
+a crate that denies warnings. `--features F` builds the crate with `--features F`, such as
+`--features parsing,formatting` for time's parsers.
+
 When the copy does not build without any test module, hydo builds the crate with its own
 `Cargo.toml` to find the cause. If the crate builds, the message says that hydo's copy is the
 cause and names the first error. The message gives the first error's place in your files. For
@@ -419,8 +504,10 @@ the crate's own code, such as its test module, and gives the command that tells:
 ## Choose the functions
 
 `--fn NAME` takes a function's name or the end of its path (`hex::encode`). With `::` after it,
-it takes a module or a type: `--fn codec::` fuzzes every contracted function of the module
-`codec`, and `--fn Ledger::` every method of `Ledger`. A name that names no function but a
+it takes a module, a type or a trait: `--fn codec::` fuzzes every contracted function of the
+module `codec`, `--fn Ledger::` every method of `Ledger`, and `--fn Engine::` every method of
+`impl Engine for ...` and of the trait `Engine`. A function's name starts with the crate's
+name as Rust paths write it, `ordered_float::`, not the package's. A name that names no function but a
 module, such as `--fn hydo_props`, selects that module's functions, and a line says so.
 
 ## See the inputs
@@ -537,7 +624,7 @@ hydo then shrinks the input in a run of one step under the same faults and print
 that replays the smallest one:
 
 ```text
-hydo: durability check broken: fuzz-vm::save: fuzz-vm::save_survives: ensures result (line 161) on 750 calls in 4 runs, first under `disk=cut dseed=b6a3ee203ddfdea3 | run C=14`
+hydo: durability check broken: fuzz_vm::save: fuzz_vm::save_survives: ensures result (line 161) on 750 calls in 4 runs, first under `disk=cut dseed=b6a3ee203ddfdea3 | run C=14`
 hydo:   input: text = "A"
 hydo:   gave: result = Some(false)
 hydo:   smallest input (1 shrink step): text = ""

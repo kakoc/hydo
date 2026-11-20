@@ -1134,6 +1134,25 @@ property functions, and reproduced 3 issues already reported upstream, none new.
 containers (`A::Item`), parsers whose error has private fields, and types that only a fallible
 constructor builds still stop contracts on the API. One verdict was hydo's own false `broken`.
 
+Since M333 (tentative number) the fourth evaluation's fixes are in, each its own commit:
+- A comparison of values that hydo does not read is `not judged`, with the type named.
+- A type parameter's associated type (`A::Item`) resolves through its `with` line's type and
+  the crate's `impl` of the trait, in parameters, results, and closures.
+- An error with a field of a private module builds: the test module writes such a type by its
+  path from the crate's root (`crate::error::ErrorKind`).
+- A `build` line takes no arguments (`X::default()`), and a constructor that returns a `Result`
+  or an `Option`, whose `Err` or `None` throws the input away. The refusals propose only lines
+  that build, also for types of other modules and of generic `impl` blocks.
+- A generic structure whose fields are `pub` is generated with the `with` types, and `with T =
+  &[u8]` passes a slice. Structures with lifetimes, `Cow<str>`, and a built type's public fields
+  are read; two values of one enumeration compare with `==`.
+- The smaller ones: `--features`, `--fn <Trait>::`, the crate's library name in reports, two
+  NaNs together, an index inside its list, and a refused `with` line of no type parameter.
+
+On the evaluator's first contracts, without helpers, hydo fuzzed 76 of the 88 contracts against
+51 before, and with the lines that the refusals name, all 88. No verdict was hydo's own error,
+and the three known issues showed again (the evaluation page, "After Milestone 333").
+
 **Function fuzzing inside the VM (M292 and M296, tentative numbers; a prototype on hvx and on
 the Mac engine).** `hydo fuzz --vm [CRATE_DIR]` makes the calls inside hydo's VM under faults: power
 cuts (`C=`, `cf=` on hvx), disk errors, clock steps, pauses, and since M296 kills. It builds the harness as a static musl program and writes a
@@ -2400,7 +2419,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A fault of a stepped instruction other than #DE, #UD, #GP and #PF leaves the trap flag in
       its frame. Only user mode is counted, so a loop in the guest kernel stays the observer's.
     - The k3s example is not in `hydo/onboard/recorded.json`.
-139. Function fuzzing (M275, M280, M282, M289, M292, M296, M307, M308, M318, M326, M327). What
+139. Function fuzzing (M275, M280, M282, M289, M292, M296, M307, M308, M318, M326, M327, M333). What
     is left:
     - The run inside the VM (`hydo fuzz --vm`, M292, M296) is a prototype that ran on hvx and
       on the Mac engine, not on KVM. What is left of it:
@@ -2444,7 +2463,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A fourth evaluation by a fresh user (M327, `docs/design/function-fuzzing-evaluation-4.md`)
       on six other crates found no new candidate. It reproduced textwrap's `wrap_columns` panic
       (pull request 647), textwrap's `dedent` (pull request 654), and ordered-float's issue 143.
-      Nothing was posted. Open item 163 has the fixes it calls for.
+      Nothing was posted. M333 made the fixes it calls for; open item 163 has what is left.
     - Qdrant's `decompress_sequence` accepts a header of more than 64 bits per value. What
       `decode_untrusted_bytes` returns for such a blob in a release build was not checked, and
       nothing was posted.
@@ -2911,33 +2930,26 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       refusal now names the helper, and with none it says to add one.
     - The proofs used contracts written again from the evaluation page by the one who fixed the
       tool, on the crates.io archives. The fourth evaluation (M327) was that fresh run.
-    - What the fourth evaluation (M327, `docs/design/function-fuzzing-evaluation-4.md`) found,
-      none of it fixed, worst first:
-      - A comparison with a value that hydo does not read can give `broken`: smallvec's
-        `into_vec` broke with `result = [<not read>]`. Elsewhere such a value gives `not judged`.
-      - An associated type of a type parameter's trait (`A::Item`) is refused as a parameter.
-        It is not read as a result, and it does not build in a generated closure. The refusal
-        names `T::Item` and proposes a `build Item` line. 12 of smallvec's 18 contracts gave
-        nothing.
-      - A `Result` whose error type has a field of a private module does not build. No clause
-        read the error of semver's five parsers.
-      - A `build` line without arguments (`X::default()`) does not build. A constructor that
-        returns a `Result` or an `Option` cannot be named. The refusals proposed lines that do
-        not build, such as an ambiguous `from` and an `unsafe` function. Four of six crates
-        needed a helper in the test module.
-      - An `impl` block's type parameter is not put into a parameter's type (`&OrderedFloat<T>`),
-        and `Self::Output` was taken from another `impl`.
-      - Structures with a lifetime parameter, `Cow<str>`, and the public fields of a type that a
-        `build` line builds are not read; two values of one enumeration cannot be compared.
-      - `with T = &[u8]` passes a `Vec<u8>`.
-      - Two floats are both NaN once in about 1,500 calls, and an index compared with a list's
-        length in `requires` is not generated inside it (64 % thrown away).
-      - Smaller ones:
-        - a `with` line for a name that is no type parameter is accepted;
-        - a nested `input` path is refused with `no argument pre`;
-        - `--fn <Trait>::` selects nothing, and there is no `--features`;
-        - a report names the package (`ordered-float::`);
-        - `--fn` can leave a helper unused under `#![deny(warnings)]`.
+    - What M333 left of the fourth evaluation (M327, the evaluation page, "After Milestone
+      333"):
+      - A constructor without arguments and builder methods (base64's
+        `GeneralPurposeConfig::new().with_encode_padding(pad)`) is no line that hydo generates,
+        so a contract that reads such an option needs a helper in the test module.
+      - An `input` line holds for its own contract only. A constructor that refuses random
+        arguments (base64's `Alphabet::new`) needs the line in each contract, else 1,000 of
+        1,000 inputs are thrown away.
+      - A `build` or `read` line holds for the type's last name, so two types of one name in two
+        modules share one line.
+      - An associated type resolves through the crate's `impl` blocks, or as the `Item` of a
+        list or an array; others, such as `Iterator::Item` of a type of the standard library,
+        stay unread.
+      - A structure with a lifetime parameter or a reference field is read, not generated; a
+        generic structure with a private field needs a `build` line.
+      - A variant behind `#[cfg(...)]` is left out whatever the features are.
+      - The two special floats come from the parameters and their fields, not from a list's
+        elements. An index is put inside its list only for `<`, `<=`, `>` and `>=` with `len()`
+        in `requires`.
+      - `--features` does not reach `hydo fuzz --vm`.
 
 164. The guest's clock on hvx (M319 and M323, tentative numbers; `docs/design/guest-clock.md`).
     Since M323 an x86_64 image built at epoch 5 keeps time with its TSC. What is left:
@@ -3983,6 +3995,12 @@ build machine, before 2026-10-13.
   `v<version>` carries `hydo-skill-<version>.tar.gz`, and `hydo skill update` and `hydo update`
   take the skill from the same release list. A skill of the old line 1.0.0 to 2.4.0 counts as
   older than any hydo version. The `skill-v` releases go after 0.5.0. Nothing recorded moved
+- M333 (tentative number): the fixes of the fourth `hydo fuzz` evaluation, each its own commit.
+  No comparison with an unread value breaks; `A::Item` resolves through the `with` line's type;
+  an error with a private module's field builds. `build` lines take no arguments and fallible
+  constructors, and the refusals name lines that build. The `with` types reach parameters'
+  types. On the evaluator's first contracts hydo fuzzed 76 of 88 against 51, and all three known
+  issues showed again. Nothing recorded moved
 - M337 (tentative number): research on shared beginnings of runs. On 13 hvx explorations the
   first runs shared 0.07 % of their time, because each schedule's seed, composition, walk, and
   early first fault reach the guest at once. Other draws would save 3 % to 11 % and lose the

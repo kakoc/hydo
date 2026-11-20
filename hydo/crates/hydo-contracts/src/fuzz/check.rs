@@ -114,6 +114,13 @@ fn eval_raw(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
                     }
                     l[k as usize].clone()
                 }
+                // a string's byte (Milestone 333): `text[0] >= 48`
+                Val::Str(s) => {
+                    if k < 0 || k as u128 >= s.len() as u128 {
+                        return Err(format!("index {k} is past the length {}", s.len()));
+                    }
+                    Val::Int(s.as_bytes()[k as usize] as i128)
+                }
                 _ => return Err("an element of a value that is not a list".into()),
             }
         }
@@ -174,7 +181,10 @@ fn eval_raw(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
             }
             match op {
                 BinOp::Eq | BinOp::Ne => {
-                    if l == Val::Opaque || r == Val::Opaque {
+                    // also a list, an option or a structure that holds such a value: hydo
+                    // cannot tell two of them apart, so the clause is undecided, never broken
+                    // (Milestone 333)
+                    if has_unread(&l) || has_unread(&r) {
                         return Err("a comparison with a value of a type not read".into());
                     }
                     // values of two kinds are never equal by accident: hydo cannot compare
@@ -186,7 +196,9 @@ fn eval_raw(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
                             ));
                         }
                     }
-                    if matches!(l, Val::Enum(..)) || matches!(r, Val::Enum(..)) {
+                    // two values of one enumeration compare as values (Milestone 333); a
+                    // variant's name is written with `matches(<value>, <pattern>)`
+                    if matches!(l, Val::Enum(..)) != matches!(r, Val::Enum(..)) {
                         return Err(
                             "a variant is compared with `matches(<value>, <pattern>)`".into()
                         );
@@ -223,13 +235,28 @@ fn eval_raw(a: &Ast, env: &Env, old: bool) -> Result<Val, Undecided> {
     })
 }
 
+/// Whether a value is or holds a value of a type that hydo does not read (Milestone 333): an
+/// opaque value, or a built value that no `read` line read.
+pub fn has_unread(v: &Val) -> bool {
+    match v {
+        Val::Opaque | Val::Built(None, _) => true,
+        Val::Built(Some(x), _) => has_unread(x),
+        Val::List(l) | Val::Tuple(l) => l.iter().any(has_unread),
+        Val::Opt(Some(x)) | Val::Res(Ok(x)) | Val::Res(Err(x)) => has_unread(x),
+        Val::Struct(f) | Val::Enum(_, f) => f.iter().any(|(_, x)| has_unread(x)),
+        _ => false,
+    }
+}
+
 /// Whether each element of a list is at most the next (Milestone 307): integers, floating-point
 /// values and strings compare as values; a NaN is in order with nothing.
 fn sorted(l: &[Val]) -> Result<bool, Undecided> {
     for w in l.windows(2) {
         let le = match (&w[0], &w[1]) {
+            (a, b) if has_unread(a) || has_unread(b) => {
+                return Err("a value of a type not read".into())
+            }
             (Val::Str(a), Val::Str(b)) => a <= b,
-            (Val::Opaque, _) | (_, Val::Opaque) => return Err("a value of a type not read".into()),
             (a, b) => matches!(float_op(BinOp::Le, a, b)?, Val::Bool(true)),
         };
         if !le {
@@ -472,6 +499,19 @@ pub fn sorted_hints(a: &Ast, h: &mut Hints) {
             if let Some(p) = path_of(x) {
                 if !h.sorted.contains(&p) {
                     h.sorted.push(p);
+                }
+            }
+        }
+        // an index inside its list (Milestone 333): `index < len(self.v)`, `len(v) > i`
+        Ast::Bin(op @ (BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge), x, y) => {
+            let (i, l, incl) = match (op, &**x, &**y) {
+                (BinOp::Lt | BinOp::Le, i, Ast::Call(Builtin::Len, l)) => (i, l, *op == BinOp::Le),
+                (BinOp::Gt | BinOp::Ge, Ast::Call(Builtin::Len, l), i) => (i, l, *op == BinOp::Ge),
+                _ => return,
+            };
+            if let (Some(i), Some(l)) = (path_of(i), path_of(l)) {
+                if !i.ends_with("#len") && !h.below_len.iter().any(|(a, b, _)| (a, b) == (&i, &l)) {
+                    h.below_len.push((i, l, incl));
                 }
             }
         }

@@ -19503,6 +19503,94 @@ Deleting the `skill-v` releases after 0.5.0 ends it. No real release carries the
 `claude plugin update` from 2.4.0 to a lower version ran only as the documentation describes it.
 Nothing recorded moved.
 
+## Milestone 333 (tentative number): what the fourth `hydo fuzz` evaluation found, fixed
+
+The fourth evaluation (Milestone 327, `docs/design/function-fuzzing-evaluation-4.md`) listed
+nine fixes, worst first. This milestone makes them, each its own commit. None changes an
+engine, an image, or a recorded value. The tests are `cargo test -p hydo-contracts --test it
+fuzz_m333::`, on the new fixture `hydo/crates/hydo-contracts/tests/fuzz-m333`.
+
+**0. Line tables.** A `debug = false` for the dev profile in the user's cargo configuration
+left a panic inside the standard library at the library's line, because the backtrace that
+places it at the crate's frame needs the line tables. The harness's builds now set
+`CARGO_PROFILE_<P>_DEBUG=1` unless the environment sets it. Commit `5fad3587`.
+
+**1. No false `broken`.** A comparison of a list, an option, a tuple, or a structure that holds
+a value that hydo does not read is undecided, and the reason names the type. smallvec's
+`into_vec` had broken with `result = [<not read>]`. Commit `e3e01775`.
+
+**2. Associated types of a type parameter.** `A::Item` and `<A as Array>::Item` resolve through
+the `with` line's type and the crate's `impl` of the trait for it, matched by the block's type
+parameters: `impl<T, const N: usize> Array for [T; N] { type Item = T; }` makes `A::Item` a
+`u8` for `with A = [u8; 4]`. It works in parameters, results and closures' arguments. An
+associated type of an `impl` block (`type Item = T::Item;`) no longer counts as a type alias of
+the crate, and `Self::<name>` now binds the block's type parameters
+(`impl<T> Add<T> for NotNan<T>` for `NotNan<f64>`). smallvec's 18 contracts all ran and held.
+Commit `9ec807ce`.
+
+**3. An error with a field of a private module.** The test module writes a type of the crate
+that the function's module does not import by its path from the crate's root
+(`crate::error::ErrorKind`). semver's five parsers built and ran. The `use` lines are also kept
+by the inline module they stand in. Commit `59745d86`.
+
+**4. Constructors.** A `build` line without arguments builds (`VersionReq::default()`). A
+constructor that returns a `Result` or an `Option` is found in the crate's sources, or marked
+with `)?`. The harness passes its `Ok` or `Some` value and answers `Z` for `Err` or `None`, and
+the report counts such inputs apart from `requires`. The refusals leave out `unsafe` functions
+and macro metavariables. They name the trait of an ambiguous `from` and rank `Default` last.
+For a type with a `build` line already, they name a line for the argument's type. Commit `fa8aaba4`.
+
+**5. The `with` lines' types in parameters' types, and more values read.** A generic structure
+whose fields are all `pub` is generated field by field (`OrderedFloat::<f64>`), a built type's
+text takes the `with` types, and `with T = &[u8]` passes a slice. From the evaluation's sixth
+friction:
+
+- a structure with a lifetime parameter or a reference field is read field by field;
+- `Cow<str>` and `Cow<[T]>` read as the value they hold;
+- a built type's public fields read without a `read` line;
+- a variant behind `#[cfg(...)]` is never generated.
+
+Commit `22659074`.
+
+**6. The smaller items.**
+
+- A `with` line of no type parameter is refused.
+- A nested `input` path names the constructor's arguments.
+- `--fn <Trait>::` selects a trait's methods, and `--features F` passes features.
+- Reports name the crate's library name (`ordered_float::`), while the seed keeps the package's
+  name.
+- The copy allows dead code.
+- Two floats are both NaN, or equal, in about one input in six of a function with two of them.
+- An index that `requires index < len(v)` names is generated inside the list.
+- A clause reads a string's byte by index, and two values of one enumeration compare with `==`.
+
+Commit `30da22c8`.
+
+**7. `build` lines across modules and of generic `impl` blocks.** Following the refusals
+without a helper showed two more gaps. A `build` line's type and constructor are written by
+their path from the crate's root when the function's module does not import them (base64's
+`Alphabet` in `engine`). A constructor's `impl` block's type parameters bind to the type's
+arguments, so `NotNan::new(val: T)` takes an `f64` in `impl NotNan<f64>`. Commit `e6d6c8e0`.
+
+**The proof.** The six crates came fresh from cargo's registry folder with the evaluator's first
+contracts, which have no helper, using seed 1 and 1,000 inputs on the Mac. `main` at `99aba8ed`
+fuzzed 51 of the 88 library contracts, and this milestone 76. The other 12 have no `build` line
+in those contracts, and each refusal names a line that builds. With those lines all 88 build
+without a helper. No verdict after is hydo's own error. The 56 property functions kept their
+verdicts. All three known upstream issues showed again: textwrap's pull requests 647 and 654,
+and ordered-float's issue 143, now on 1,000 calls instead of 20,000. The third evaluation's
+either, with 14 contracts written again from its page, went from 13 held and 1 `not judged` to
+14 held. The section "After Milestone 333" of the evaluation page has the tables. Nothing new was
+found, and nothing was posted.
+
+The checks used a target folder outside the checkout, because other sessions shared the
+checkout's. Two tests of `cargo test -p hydo --test it` failed with it from the first check on:
+`onboard::the_fetch_step_names_the_release_fetcher_when_it_is_not_on_path` and
+`update::a_checkout_build_is_left_alone_with_the_commands`. Both read where `hydo` was built,
+which this milestone does not change.
+
+**What is left.** Open item 163. Nothing recorded moved.
+
 ## Milestone 337 (tentative number): shared beginnings of an exploration's runs, research
 
 The question was whether the explorer can run a beginning that many schedules share once, take

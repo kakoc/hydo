@@ -30,7 +30,8 @@ use value::{Hints, Rng, Val};
 /// `hydo fuzz --help`.
 pub const USAGE: &str =
     "usage: hydo fuzz [CRATE_DIR] [--fn NAME]... [--cases N] [--seed S] [--out DIR]
-                 [--target-dir DIR] [--toolchain TC] [--release] [--timeout SECS]
+                 [--target-dir DIR] [--toolchain TC] [--release] [--features F]
+                 [--timeout SECS]
                  [--min-inputs N] [--min-reach N] [--allow-skipped]
                  [--show-inputs N] [--show-harness] [--json]
        hydo fuzz [CRATE_DIR] --fn NAME --input 'NAME = VALUE, ...'
@@ -49,6 +50,7 @@ pub const USAGE: &str =
   --seed S         the generator's seed (default 1)
   --target-dir     cargo's build folder (default DIR/target)
   --toolchain TC   builds with `cargo +TC`
+  --features F     builds the crate with `--features F`, such as `parsing,formatting`
   --release        builds the harness with --release: no overflow checks and no debug
                    assertions, as the program ships (the default is the test profile)
   --timeout SECS   stops a call that takes longer (default 10); after 3 such calls the
@@ -75,8 +77,12 @@ pub const USAGE: &str =
 
 /// One function to fuzz, as read from the sources.
 pub struct Fn {
-    /// `ledger::apply`, `common::delta_pack::compress_sequence`, `Ledger::apply`.
+    /// `ledger::apply`, `common::delta_pack::compress_sequence`, `Ledger::apply`, after the
+    /// crate's name as Rust paths write it (`ordered_float::...`; Milestone 333).
     pub name: String,
+    /// The name with the package's name in front (`ordered-float::...`), which seeds the
+    /// generator, so that a crate's inputs stayed as they were before Milestone 333.
+    pub seed_key: String,
     /// The file, relative to the package.
     pub file: PathBuf,
     pub line: u32,
@@ -240,6 +246,8 @@ pub fn find_all(
         }
     }
     let (mut fns, mut skipped, mut errors) = (Vec::new(), Vec::new(), Vec::new());
+    // the functions are named by the crate's name as Rust paths write it (Milestone 333)
+    let krate = pkg.replace('-', "_");
     // the crate's `build` and `read` lines, for the cause of a harness that does not build
     let mut shared: Vec<Origin> = Vec::new();
     // the `build` and `read` lines hold for the whole crate (Milestone 307)
@@ -270,10 +278,13 @@ pub fn find_all(
                         )),
                     }
                 }
+                // a constructor that returns a `Result` or an `Option` (Milestone 333)
+                let fallible = b.fallible || rust::ctor_fallible(&items, &b.ctor);
                 items
                     .builds
                     .entry(rust::type_key(&b.ty))
                     .or_insert(rust::BuildDef {
+                        fallible,
                         ctor: b.ctor.clone(),
                         args,
                     });
@@ -337,7 +348,7 @@ pub fn find_all(
                 .into_iter()
                 .collect();
             let skip = |why: String| Skipped {
-                name: [pkg.to_string()]
+                name: [krate.clone()]
                     .into_iter()
                     .chain(module.iter().cloned())
                     .chain(owner.iter().cloned())
@@ -364,8 +375,9 @@ pub fn find_all(
                 vec![c.clone()]
             };
             for c in &each {
-                match read_fn(text, &m, c, &items, pkg, &module, &rel) {
+                match read_fn(text, &m, c, &items, &krate, &module, &rel) {
                     Ok(mut f) => {
+                        f.seed_key = format!("{pkg}{}", &f.name[krate.len()..]);
                         f.forbidden = forbidden.clone();
                         // a `&'static mut` parameter needs an `unsafe` block in the harness
                         // (Milestone 326)
@@ -498,6 +510,46 @@ fn with_built(v: &Val, t: &FTy, read: Option<&Val>) -> Val {
     }
 }
 
+/// The floating-point values of a generated parameter (Milestone 333): the parameter itself, a
+/// field of a structure or a tuple, or a constructor's argument, with its path and width.
+fn float_slots(
+    t: &FTy,
+    v: &Val,
+    path: &mut Vec<String>,
+    i: usize,
+    out: &mut Vec<(usize, Vec<String>, u32)>,
+) {
+    if path.len() > 3 {
+        return;
+    }
+    match (t, v) {
+        (FTy::Float { bits }, Val::Float(_)) => out.push((i, path.clone(), *bits)),
+        (FTy::Boxed(_, x), _) => float_slots(x, v, path, i, out),
+        (FTy::Struct { fields, .. }, Val::Struct(fs)) => {
+            for ((n, ft), (_, fv)) in fields.iter().zip(fs) {
+                path.push(n.clone());
+                float_slots(ft, fv, path, i, out);
+                path.pop();
+            }
+        }
+        (FTy::Built { build: Some(c), .. }, Val::Struct(fs)) => {
+            for ((n, ft, _), (_, fv)) in c.args.iter().zip(fs) {
+                path.push(n.clone());
+                float_slots(ft, fv, path, i, out);
+                path.pop();
+            }
+        }
+        (FTy::Tuple(ts), Val::Tuple(vs)) => {
+            for (k, (ft, fv)) in ts.iter().zip(vs).enumerate() {
+                path.push(k.to_string());
+                float_slots(ft, fv, path, i, out);
+                path.pop();
+            }
+        }
+        _ => {}
+    }
+}
+
 /// How a parameter whose type is `t` is passed: the pass, and for a reference to a reference
 /// (`&mut &[u8]`) how the inner reference is made (Milestone 307).
 fn passes(t: &TyAst) -> (Pass, Option<Pass>) {
@@ -524,6 +576,7 @@ fn closure_param(
     closures: &BTreeMap<String, rust::FnBound>,
     subst: &BTreeMap<String, TyAst>,
     res: &rust::Resolver,
+    items: &rust::Items,
 ) -> Option<Result<FTy, String>> {
     let mut base = t;
     while let TyAst::Ref(_, x) = base {
@@ -536,8 +589,13 @@ fn closure_param(
     };
     let b = rust::FnBound {
         once: b.once,
-        args: b.args.iter().map(|a| rust::subst_ty(a, subst)).collect(),
-        ret: rust::subst_ty(&b.ret, subst),
+        // `FnMut(&mut A::Item) -> bool` with `with A = [u8; 4]` (Milestone 333)
+        args: b
+            .args
+            .iter()
+            .map(|a| rust::subst_param_assoc(&rust::subst_ty(a, subst), subst, items))
+            .collect(),
+        ret: rust::subst_param_assoc(&rust::subst_ty(&b.ret, subst), subst, items),
     };
     let ret = res.resolve(&b.ret);
     if let Err(why) = ret.generable() {
@@ -558,6 +616,7 @@ fn closure_param(
     Some(Ok(FTy::Built {
         ty: "_".into(),
         build: Some(rust::Ctor {
+            fallible: false,
             path: c.path(),
             args: vec![
                 ("shape".into(), shape, Pass::Value),
@@ -580,9 +639,14 @@ fn refusal(what: &str, t: &TyAst, why: String, items: &rust::Items) -> String {
     let container = matches!(base, TyAst::Path(s, _) if s.last().is_some_and(|l| {
         matches!(l.as_str(), "Vec" | "Option" | "Box" | "Rc" | "Arc" | "Result")
     }));
+    // a type that a `build` line already builds: the type of the constructor's argument that
+    // the reason names, so that the advice is not the line already written (base64's
+    // `GeneralPurpose::new(alphabet: &Alphabet, ...)` needs a line for `Alphabet`; Milestone
+    // 333)
+    let built = items.builds.contains_key(&rust::type_key(&base.text()));
     let named = matches!(base, TyAst::Path(..))
         .then(|| base.text())
-        .filter(|_| !container)
+        .filter(|_| !container && !built)
         .or_else(|| {
             why.strip_prefix("hydo cannot generate a value of `")
                 .and_then(|r| r.split('`').next())
@@ -716,6 +780,34 @@ fn read_fn(
             )
         });
     }
+    // a `with` line for a name that is no type parameter is refused, not ignored (smallvec's
+    // `with Item = u8`; Milestone 333)
+    let known: Vec<String> = outer
+        .iter()
+        .chain(sig.generics.iter().filter(|g| *g != "where"))
+        .map(|g| bare(g.split([':', '=']).next().unwrap_or("")))
+        .collect();
+    for (n, t) in &c.with {
+        if n != SELF && !known.contains(n) {
+            let list = if known.is_empty() {
+                "it has none".to_string()
+            } else {
+                format!(
+                    "they are {}",
+                    known
+                        .iter()
+                        .map(|k| format!("`{k}`"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            };
+            return Err(format!(
+                "`with {n} = {t}`: `{n}` is no type parameter of the function, of its `impl` \
+                 block or of its trait ({list}); an associated type such as `A::Item` takes \
+                 its type from the `with` line of `A`"
+            ));
+        }
+    }
     // the type `Self` stands for, and the path of the call
     let (self_ty, call_base, owner_name) = match &owner {
         Owner::None => (None, None, None),
@@ -766,12 +858,15 @@ fn read_fn(
         _ => None,
     };
     let fix = |t: &TyAst, ret: bool| -> TyAst {
-        match &self_ty {
+        let t = match &self_ty {
             Some(st) => rust::subst_assoc(t, &|n: &str| {
                 rust::assoc_type(items, st, trait_of.as_deref(), &sig.name, n, ret)
             }),
             None => t.clone(),
-        }
+        };
+        // a type parameter's associated type through its `with` line's type: smallvec's
+        // `A::Item` with `with A = [u8; 4]` is `u8` (Milestone 333)
+        rust::subst_param_assoc(&t, &subst, items)
     };
     let mut params = Vec::new();
     if let Some(r) = sig.receiver {
@@ -802,13 +897,14 @@ fn read_fn(
     }
     for (n, t) in &sig.params {
         let t = &fix(t, false);
-        let ty = match closure_param(t, &closures, &subst, &res) {
+        let ty = match closure_param(t, &closures, &subst, &res, items) {
             Some(c) => c.map_err(|why| format!("the parameter `{n}`: {why}"))?,
             None => res.resolve(t),
         };
         ty.generable()
             .map_err(|why| refusal(&format!("the parameter `{n}`"), t, why, items))?;
-        let (pass, inner) = passes(t);
+        // `input: T` with `with T = &[u8]` takes a slice, not a `Vec<u8>` (Milestone 333)
+        let (pass, inner) = passes(&rust::subst_ty(t, &subst));
         params.push(harness::Param {
             name: n.clone(),
             pass,
@@ -876,6 +972,7 @@ fn read_fn(
         None => rust::close_of(m, sig.body_open).ok_or("the function's body does not end")? + 1,
     };
     Ok(Fn {
+        seed_key: name.clone(),
         name,
         file: rel.to_path_buf(),
         line: c.line,
@@ -996,6 +1093,11 @@ fn bit_not(a: &Ast, params: &[harness::Param], ret: &FTy) -> Ast {
 /// clause is undecided (Milestone 318): `result` of `Self::Owned`, or a built value without a
 /// `read` line.
 fn unread_in(a: &Ast, params: &[harness::Param], ret: &FTy) -> Option<String> {
+    unread_top(a, params, ret).or_else(|| unread_deep(a, params, ret))
+}
+
+/// The first place that a clause reads whose own type hydo does not read.
+fn unread_top(a: &Ast, params: &[harness::Param], ret: &FTy) -> Option<String> {
     let place = matches!(
         a,
         Ast::Name(_)
@@ -1030,9 +1132,30 @@ fn unread_in(a: &Ast, params: &[harness::Param], ret: &FTy) -> Option<String> {
         | Ast::Old(x)
         | Ast::Not(x)
         | Ast::Neg(x)
-        | Ast::Matches(x, _) => unread_in(x, params, ret),
+        | Ast::Matches(x, _) => unread_top(x, params, ret),
         Ast::Index(x, y) | Ast::Bin(_, x, y) => {
-            unread_in(x, params, ret).or_else(|| unread_in(y, params, ret))
+            unread_top(x, params, ret).or_else(|| unread_top(y, params, ret))
+        }
+        _ => None,
+    }
+}
+
+/// The first side of a comparison whose value holds a part that hydo does not read
+/// (Milestone 333): `result` of `Vec<A::Item>` compared with `old(self)`.
+fn unread_deep(a: &Ast, params: &[harness::Param], ret: &FTy) -> Option<String> {
+    match a {
+        Ast::Bin(BinOp::Eq | BinOp::Ne, x, y) => [x, y].into_iter().find_map(|s| {
+            let part = type_of(s, params, ret)?.unread_part()?;
+            Some(format!(
+                "`{s}` holds values of the type `{part}`, which hydo does not read, so it \
+                 compares no such value"
+            ))
+        }),
+        Ast::Bin(_, x, y) | Ast::Index(x, y) => {
+            unread_deep(x, params, ret).or_else(|| unread_deep(y, params, ret))
+        }
+        Ast::Not(x) | Ast::Neg(x) | Ast::Old(x) | Ast::Call(_, x) | Ast::Field(x, _) => {
+            unread_deep(x, params, ret)
         }
         _ => None,
     }
@@ -1177,7 +1300,7 @@ fn check_pat(p: &lang::Pat, t: &FTy) -> Result<(), String> {
             named_fields(n, ps, &v.fields)
         }
         (Pat::Fields(n, ps), FTy::Struct { path, fields, .. }) => {
-            let name = path.rsplit("::").next().unwrap_or(path);
+            let name = rust::struct_name(path);
             if n != name {
                 return Err(format!("the value is a `{name}`, not a `{n}`"));
             }
@@ -1307,12 +1430,28 @@ fn input_ty<'a>(path: &str, params: &'a [harness::Param]) -> Result<&'a FTy, Str
                 continue;
             }
             // a constructor's argument (`self.v`; Milestone 307)
-            FTy::Built { build: Some(c), .. } => c
+            FTy::Built {
+                build: Some(c), ty, ..
+            } => c
                 .args
                 .iter()
                 .find(|(n, _, _)| n == f)
                 .map(|(_, t, _)| t)
-                .ok_or_else(|| format!("no argument `{f}`"))?,
+                .ok_or_else(|| {
+                    // what the path can name instead (Milestone 333)
+                    let args: Vec<String> =
+                        c.args.iter().map(|(n, _, _)| format!("`{n}`")).collect();
+                    format!(
+                        "`{f}` is no argument of `{}`, which builds the `{ty}` here (a `build` \
+                         line): an `input` line names the constructor's arguments{}",
+                        c.path,
+                        if args.is_empty() {
+                            ", and it has none".to_string()
+                        } else {
+                            format!(", {}", args.join(", "))
+                        }
+                    )
+                })?,
             FTy::Struct { fields, .. } => fields
                 .iter()
                 .find(|(n, _)| n == f)
@@ -1437,6 +1576,9 @@ pub enum Outcome {
     Hung,
     /// The call was not made: earlier calls did not return ([`MAX_HUNG`]).
     NotRun,
+    /// The call was not made: a `build` line's constructor gave `Err` or `None` for the input,
+    /// which is thrown away (Milestone 333).
+    Refused,
 }
 
 /// What a failing call broke: a clause (its index in the contract), a panic at a location, or
@@ -1711,7 +1853,7 @@ impl Fn {
             Outcome::Panicked { location, .. } => j.failures.push(Failure::Panic(location.clone())),
             Outcome::Ended => j.failures.push(Failure::Ended),
             Outcome::Hung => j.failures.push(Failure::Hung),
-            Outcome::NotRun => {}
+            Outcome::NotRun | Outcome::Refused => {}
         }
         j
     }
@@ -1750,6 +1892,9 @@ impl Fn {
             Outcome::Ended => "the process ended during the call".into(),
             Outcome::Hung => "the call did not return within the timeout".into(),
             Outcome::NotRun => "the call was not made".into(),
+            Outcome::Refused => {
+                "the call was not made: a `build` line's constructor gave `Err` or `None`".into()
+            }
         }
     }
 
@@ -1827,6 +1972,84 @@ impl Fn {
             if let Some(Val::List(l)) = value::at_mut(&mut args[ib], &pb) {
                 l.truncate(n);
                 l.extend(grown);
+            }
+        }
+        // an integer that `requires index < len(v)` names is put inside the list, so that the
+        // input is not thrown away (Milestone 333)
+        for (ip, lp, incl) in &self.hints.below_len {
+            let (Some((il, pl)), Some((ii, pi))) = (self.split_path(lp), self.split_path(ip))
+            else {
+                continue;
+            };
+            let n = match value::at(&args[il], &pl) {
+                Some(Val::List(l)) => l.len() as u64,
+                Some(Val::Str(s)) => s.len() as u64,
+                _ => continue,
+            };
+            let span = n + *incl as u64;
+            if span == 0 {
+                continue;
+            }
+            let v = g.rng.below(span) as i128;
+            if let Some(slot @ Val::Int(_)) = value::at_mut(&mut args[ii], &pi) {
+                *slot = Val::Int(v);
+            }
+        }
+        // two floating-point values of one width that are both special at once: both NaN, or
+        // one copied into the other, which a comparison of two values needs (two NaNs came
+        // once in about 1,500 calls before; Milestone 333)
+        if k >= 2 {
+            let mut slots: Vec<(usize, Vec<String>, u32)> = Vec::new();
+            for (i, p) in self.params.iter().enumerate() {
+                float_slots(&p.ty, &args[i], &mut Vec::new(), i, &mut slots);
+            }
+            // a value that an `input` line bounds keeps its range
+            slots.retain(|(i, p, _)| {
+                let key = std::iter::once(self.params[*i].name.clone())
+                    .chain(p.iter().cloned())
+                    .collect::<Vec<_>>()
+                    .join(".");
+                !self.hints.domains.contains_key(&key)
+            });
+            // the generator draws only for a function that has two such values, so that the
+            // inputs of every other function stay as they were
+            let pairs = slots
+                .iter()
+                .enumerate()
+                .any(|(i, a)| slots.iter().skip(i + 1).any(|b| b.2 == a.2));
+            if pairs && g.rng.below(6) == 0 {
+                let a = g.rng.below(slots.len() as u64) as usize;
+                let same: Vec<usize> = (0..slots.len())
+                    .filter(|&j| j != a && slots[j].2 == slots[a].2)
+                    .collect();
+                if !same.is_empty() {
+                    let b = same[g.rng.below(same.len() as u64) as usize];
+                    let nan = g.rng.below(2) == 0;
+                    let from = |args: &[Val], s: &(usize, Vec<String>, u32)| {
+                        let p: Vec<&str> = s.1.iter().map(String::as_str).collect();
+                        value::at(&args[s.0], &p).cloned()
+                    };
+                    let va = if nan {
+                        Some(Val::Float(f64::NAN.to_bits()))
+                    } else {
+                        from(&args, &slots[a])
+                    };
+                    for s in [&slots[a], &slots[b]] {
+                        let p: Vec<&str> = s.1.iter().map(String::as_str).collect();
+                        if let (Some(slot), Some(v)) = (value::at_mut(&mut args[s.0], &p), &va) {
+                            *slot = v.clone();
+                        }
+                    }
+                    if nan {
+                        // another NaN's bits for the second, which a hash or `==` may tell
+                        // apart
+                        let s = &slots[b];
+                        let p: Vec<&str> = s.1.iter().map(String::as_str).collect();
+                        if let Some(slot) = value::at_mut(&mut args[s.0], &p) {
+                            *slot = Val::Float((-f64::NAN).to_bits());
+                        }
+                    }
+                }
             }
         }
         // a list that `requires sorted(v)` names is generated in order (Milestone 307)
@@ -2098,6 +2321,7 @@ impl<'a> Runner<'a> {
         let mut w = rest.split_ascii_whitespace();
         match w.next() {
             Some("R") => self.f.returned(&mut w),
+            Some("Z") => Ok(Outcome::Refused),
             Some("P") => {
                 let mut s = || match value::decode(&FTy::Str, &mut w) {
                     Ok(Val::Str(s)) => s,
@@ -2245,7 +2469,7 @@ pub struct Limits {
 /// failure.
 pub fn fuzz(r: &mut Runner, seed: u64, cases: u64, lim: Limits) -> Result<FnReport, String> {
     let f = r.f;
-    let mut rng = Rng::new(seed ^ fnv(&f.name));
+    let mut rng = Rng::new(seed ^ fnv(&f.seed_key));
     let (mut inputs, mut rejected) = (Vec::new(), 0u64);
     let mut by_clause: BTreeMap<usize, u64> = BTreeMap::new();
     let mut k = 0;
@@ -2285,8 +2509,12 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64, lim: Limits) -> Result<FnRepo
             }
         })
         .collect();
-    let (mut calls, mut failed_calls) = (0u64, 0u64);
+    let (mut calls, mut failed_calls, mut refused) = (0u64, 0u64, 0u64);
     for (i, (a, o)) in inputs.iter().zip(&outs).enumerate() {
+        if *o == Outcome::Refused {
+            refused += 1;
+            continue;
+        }
         if *o != Outcome::NotRun {
             calls += 1;
         }
@@ -2390,6 +2618,14 @@ pub fn fuzz(r: &mut Runner, seed: u64, cases: u64, lim: Limits) -> Result<FnRepo
             }
         })
         .collect();
+    // the inputs that a `build` line's constructor refused (Milestone 333)
+    if refused > 0 {
+        rejected_by.push(Rejection {
+            text: "a `build` line's constructor gave `Err` or `None`".into(),
+            line: 0,
+            inputs: refused,
+        });
+    }
     rejected_by.sort_by(|a, b| b.inputs.cmp(&a.inputs).then(a.line.cmp(&b.line)));
     let verdict = if !broken.is_empty() {
         "broken"
@@ -2443,7 +2679,15 @@ fn samples(f: &Fn, inputs: &[Vec<Val>], n: usize) -> Vec<String> {
 fn advice(f: &Fn, rep: &FnReport, lim: Limits) -> Vec<String> {
     let mut out = Vec::new();
     if rep.calls < lim.min_inputs {
-        if let Some(top) = rep.rejected_by.first() {
+        if let Some(z) = rep.rejected_by.first().filter(|x| x.line == 0) {
+            // most inputs were refused by a constructor (Milestone 333)
+            out.push(format!(
+                "{} of {} inputs were thrown away because {}: add `input` lines for the \
+                 constructor's arguments, such as `input <param>.<argument> like \"...\"` with \
+                 values that it takes",
+                z.inputs, rep.cases, z.text
+            ));
+        } else if let Some(top) = rep.rejected_by.first() {
             let mut lines = input_lines_for(f, top.line);
             for c in f.contract.clauses.iter().filter(|c| c.line == top.line) {
                 string_eqs(&c.ast, &mut lines);
@@ -2690,6 +2934,7 @@ struct Opts {
     target_dir: Option<PathBuf>,
     toolchain: Option<String>,
     release: bool,
+    features: Option<String>,
     timeout: u64,
     input: Option<String>,
     list: bool,
@@ -2711,6 +2956,7 @@ fn opts(args: &[String]) -> Result<Opts, String> {
         target_dir: None,
         toolchain: None,
         release: false,
+        features: None,
         timeout: 10,
         input: None,
         list: false,
@@ -2736,6 +2982,7 @@ fn opts(args: &[String]) -> Result<Opts, String> {
             "--out" => o.out = PathBuf::from(val("--out")?),
             "--target-dir" => o.target_dir = Some(PathBuf::from(val("--target-dir")?)),
             "--toolchain" => o.toolchain = Some(val("--toolchain")?),
+            "--features" => o.features = Some(val("--features")?),
             "--timeout" => o.timeout = val("--timeout")?.parse().map_err(|_| "--timeout SECS")?,
             "--input" => o.input = Some(val("--input")?),
             "--min-inputs" => {
@@ -2785,6 +3032,9 @@ impl Opts {
         if let Some(t) = &self.toolchain {
             s.push_str(&format!(" --toolchain {}", shell_quote(t)));
         }
+        if let Some(f) = &self.features {
+            s.push_str(&format!(" --features {}", shell_quote(f)));
+        }
         if let Some(t) = &self.target_dir {
             s.push_str(&format!(
                 " --target-dir {}",
@@ -2813,9 +3063,13 @@ pub fn names_fn(name: &str, w: &str) -> bool {
             return true;
         }
         let rest = name.split_once("::").map_or(name, |x| x.1);
+        // a trait's methods (`Engine::` for `<GeneralPurpose as Engine>::encode`; Milestone
+        // 333)
         return rest.starts_with(&format!("{m}::"))
             || name.starts_with(&format!("{m}::"))
-            || name.contains(&format!("::{m}::"));
+            || name.contains(&format!("::{m}::"))
+            || name.contains(&format!(" as {m}>::"))
+            || name.contains(&format!(" as {m}<"));
     }
     let short = name.rsplit("::").next().unwrap_or(name);
     w == short || w == name || name.ends_with(&format!("::{w}"))
@@ -2887,6 +3141,9 @@ pub(crate) struct Placed {
 pub(crate) struct Set<'a> {
     pub(crate) fns: &'a [Fn],
     pub(crate) others: &'a [Fn],
+    /// The target's root file (`src/lib.rs`), whose first line gets `#![allow(dead_code)]` in
+    /// the copy, unless the crate forbids the lint (Milestone 333).
+    pub(crate) root: Option<&'a Path>,
 }
 
 impl Set<'_> {
@@ -2916,6 +3173,15 @@ fn place(
     let mut by_file: BTreeMap<&Path, Vec<(usize, usize, String)>> = BTreeMap::new();
     for f in fns.iter().chain(set.others) {
         by_file.entry(f.file.as_path()).or_default();
+    }
+    let forbids = fns.iter().chain(set.others).any(|f| {
+        f.forbidden
+            .iter()
+            .any(|l| l == "dead_code" || l == "unused")
+    });
+    let root = set.root.filter(|_| !forbids);
+    if let Some(r) = root {
+        by_file.entry(r).or_default();
     }
     for &k in active {
         let f = &fns[k];
@@ -2957,6 +3223,14 @@ fn place(
             from = at;
         }
         text.push_str(&orig[from..]);
+        // a helper that only the functions that --fn leaves out call is dead code, which a
+        // crate with `#![deny(warnings)]` refuses; the attribute keeps the first line's number
+        if root == Some(file) {
+            text.insert_str(0, "#![allow(dead_code)] ");
+            for p in placed.iter_mut().filter(|p| p.file == file && p.line == 1) {
+                p.cols = (p.cols.0 + 21, p.cols.1 + 21);
+            }
+        }
         let p = copy.join(file);
         std::fs::write(&p, text).map_err(|e| format!("{}: {e}", p.display()))?;
     }
@@ -3185,11 +3459,23 @@ fn run_all(o: &Opts) -> Result<i32, String> {
     let cg = cargo::Cargo {
         toolchain: o.toolchain.clone(),
         release: o.release,
+        features: o.features.clone(),
     };
     let lim = o.limits();
     let pkg = cargo::metadata(&cg, &o.dir)?;
     let sources = pkg.sources();
-    let (fns, mut skipped, errors) = find_all(&pkg.dir, &sources, &pkg.name);
+    let (mut fns, mut skipped, errors) = find_all(&pkg.dir, &sources, &pkg.name);
+    // a library whose name is not its package's (`[lib] name = ...`; Milestone 333)
+    let (krate, plain) = (pkg.crate_name(), pkg.name.replace('-', "_"));
+    if krate != plain {
+        let rename = |n: &mut String| {
+            if let Some(rest) = n.strip_prefix(&plain) {
+                *n = format!("{krate}{rest}");
+            }
+        };
+        fns.iter_mut().for_each(|f| rename(&mut f.name));
+        skipped.iter_mut().for_each(|s| rename(&mut s.name));
+    }
     // Milestone 292: a durability check runs only inside the VM (`hydo fuzz --vm`)
     let (fns, checks) = split_checks(fns, &sources);
     for e in &errors {
@@ -3334,6 +3620,11 @@ fn run_all(o: &Opts) -> Result<i32, String> {
     let others: Vec<Fn> = others.into_iter().filter(in_first).collect();
     std::fs::write(copy.join("Cargo.toml"), cargo::manifest(&pkg, &first))
         .map_err(|e| e.to_string())?;
+    let root: Option<PathBuf> = first
+        .src_path
+        .strip_prefix(&pkg.dir)
+        .ok()
+        .map(Path::to_path_buf);
     let target_dir = o.target_dir.clone().unwrap_or_else(|| out.join("target"));
     // the logs of this run only (Milestone 326)
     let _ = std::fs::remove_file(out.join("build.log"));
@@ -3354,6 +3645,7 @@ fn run_all(o: &Opts) -> Result<i32, String> {
         &Set {
             fns: &fns,
             others: &others,
+            root: root.as_deref(),
         },
     )?;
     for (k, why) in &failed {
@@ -3580,7 +3872,14 @@ fn print_report(r: &FnReport, f: &Fn, o: &Opts, lim: Limits) {
         generated,
         pct(r.rejected, generated)
     );
-    if let Some(top) = r.rejected_by.first() {
+    // the inputs that a `build` line's constructor refused (Milestone 333)
+    if let Some(z) = r.rejected_by.iter().find(|x| x.line == 0) {
+        println!(
+            "hydo:   {} of {} inputs were thrown away: {}",
+            z.inputs, r.cases, z.text
+        );
+    }
+    if let Some(top) = r.rejected_by.iter().find(|x| x.line != 0) {
         if r.rejected * 2 > generated {
             println!(
                 "hydo:   most were turned away by `requires {}` (line {}): {} inputs",
@@ -3614,10 +3913,15 @@ fn print_report(r: &FnReport, f: &Fn, o: &Opts, lim: Limits) {
             o.replay_flags()
         );
     }
-    if r.calls < r.cases {
+    let refused = r
+        .rejected_by
+        .iter()
+        .find(|x| x.line == 0)
+        .map_or(0, |x| x.inputs);
+    if r.calls + refused < r.cases {
         println!(
             "hydo:   {} inputs were not run after {MAX_HUNG} calls that did not return",
-            r.cases - r.calls
+            r.cases - r.calls - refused
         );
     }
     for h in &r.held {

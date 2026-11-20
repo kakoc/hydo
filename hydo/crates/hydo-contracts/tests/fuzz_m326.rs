@@ -179,7 +179,7 @@ fn fn_names_a_module_or_a_path_prefix() {
     let (_, rep) = fuzz_m326(t.path(), &["--fn", "units"]);
     let mut got: Vec<&str> = rep.functions.iter().map(|f| f.function.as_str()).collect();
     got.sort();
-    assert_eq!(got, ["fuzz-m326::units::unit"], "{rep:?}");
+    assert_eq!(got, ["fuzz_m326::units::unit"], "{rep:?}");
     assert!(
         rep.skipped
             .iter()
@@ -308,6 +308,7 @@ fn closures_of_two_arguments_comparisons_and_options_are_generated() {
     let t = FTy::Built {
         ty: "_".into(),
         build: Some(Ctor {
+            fallible: false,
             path: c.path(),
             args: vec![
                 ("shape".into(), int("u8", 8), Pass::Value),

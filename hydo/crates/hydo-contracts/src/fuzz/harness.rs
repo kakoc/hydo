@@ -169,6 +169,15 @@ fn allow_list(s: &Spec) -> String {
 /// The owned type as the harness writes it.
 fn rty(t: &FTy) -> String {
     match t {
+        // a `Cow` of the unsized type that the value is (Milestone 333)
+        FTy::Boxed(k, x) if k == "Cow" => {
+            let b = match &**x {
+                FTy::Str => "str".to_string(),
+                FTy::List(e) => format!("[{}]", rty(e)),
+                o => rty(o),
+            };
+            format!("self::std::borrow::Cow<'static, {b}>")
+        }
         FTy::Boxed(k, x) => {
             let p = match k.as_str() {
                 "Rc" => "self::std::rc::Rc",
@@ -224,6 +233,9 @@ fn dec(t: &FTy) -> String {
             } else {
                 format!("({})", p.join(", "))
             }
+        }
+        FTy::Boxed(k, x) if k == "Cow" => {
+            format!("self::std::borrow::Cow::Owned({})", dec(x))
         }
         FTy::Boxed(_, x) => {
             let p = rty(t);
@@ -346,12 +358,22 @@ fn dec(t: &FTy) -> String {
                     ),
                 })
                 .collect();
+            // a constructor that returns a `Result` or an `Option` gives its `Ok` or `Some`
+            // value, and its `Err` or `None` throws the input away (Milestone 333)
+            let call = format!("{}({})", c.path, args.join(", "));
+            let call = if c.fallible {
+                format!("__HydoTake::__hydo_take({call})")
+            } else {
+                call
+            };
+            // a constructor without arguments (`VersionReq::default()`; Milestone 333)
+            if c.args.is_empty() {
+                return format!("{{ {call} }}");
+            }
             format!(
-                "{{ let mut c: ({},) = ({},); {}({}) }}",
+                "{{ let mut c: ({},) = ({},); {call} }}",
                 tys.join(", "),
                 parts.join(", "),
-                c.path,
-                args.join(", ")
             )
         }
         FTy::Opaque(_) | FTy::Hidden(_) | FTy::Built { .. } => "unreachable!()".into(),
@@ -392,6 +414,7 @@ fn enc(t: &FTy, v: &str, d: usize) -> String {
             let f = match k.as_str() {
                 "Rc" => "unrc",
                 "Arc" => "unarc",
+                "Cow" => "uncow",
                 _ => "unbox",
             };
             format!("{{ let {x} = {f}({v}); {} }}", enc(e, &x, d + 1))
@@ -447,9 +470,14 @@ fn enc(t: &FTy, v: &str, d: usize) -> String {
                     body.join(" ")
                 );
             }
-            format!("match {v} {{ {arms}}}")
+            // a variant that a `cfg` left out of the definition hydo read (Milestone 333)
+            format!("match {v} {{ {arms}#[allow(unreachable_patterns)] _ => o.push_str(\"X \"), }}")
         }
         // through the `read` line's method, or not read (Milestone 307)
+        // a structure read field by field (Milestone 333)
+        FTy::Built {
+            read: Some((t, m)), ..
+        } if m.is_empty() => enc(t, v, d),
         FTy::Built {
             read: Some((t, m)), ..
         } => {
@@ -501,8 +529,15 @@ const COMMON: &str = concat!(
     "fn es(v: &str, o: &mut self::std::string::String) { o.push('s'); for b in v.as_bytes() { let _ = self::std::write!(o, \"{:02x}\", b); } o.push(' '); } ",
     "fn hx(v: &str, o: &mut self::std::string::String) { o.push('s'); for b in v.as_bytes() { let _ = self::std::write!(o, \"{:02x}\", b); } o.push(' '); } ",
     "fn unbox<T: ?Sized>(b: &self::std::boxed::Box<T>) -> &T { b } ",
+    // a `build` line's constructor that gives `Err` or `None` throws the input away: the call
+    // is answered `Z` (Milestone 333)
+    "struct __HydoRefused; ",
+    "trait __HydoTake<T> { fn __hydo_take(self) -> T; } ",
+    "impl<T, E> __HydoTake<T> for self::std::result::Result<T, E> { fn __hydo_take(self) -> T { match self { self::std::result::Result::Ok(v) => v, self::std::result::Result::Err(_) => self::std::panic::resume_unwind(self::std::boxed::Box::new(__HydoRefused)) } } } ",
+    "impl<T> __HydoTake<T> for self::std::option::Option<T> { fn __hydo_take(self) -> T { match self { self::std::option::Option::Some(v) => v, self::std::option::Option::None => self::std::panic::resume_unwind(self::std::boxed::Box::new(__HydoRefused)) } } } ",
     "fn unrc<T: ?Sized>(b: &self::std::rc::Rc<T>) -> &T { b } ",
     "fn unarc<T: ?Sized>(b: &self::std::sync::Arc<T>) -> &T { b } ",
+    "fn uncow<'a, B: ?Sized + self::std::borrow::ToOwned>(b: &'a self::std::borrow::Cow<'_, B>) -> &'a B { b } ",
     "const EVENT: &[u8] = b\"HYDO-ASSERT {\\\"t\\\":\\\"reachable\\\",\\\"id\\\":\\\"fuzz.call\\\",\\\"ok\\\":true,\\\"msg\\\":\\\"a call of hydo fuzz --vm started\\\"}\\n\"; ",
     "static LAST: self::std::sync::Mutex<self::std::option::Option<(self::std::string::String, self::std::string::String)>> = self::std::sync::Mutex::new(self::std::option::Option::None); ",
     "#[test] fn run() { ",
@@ -565,7 +600,7 @@ pub fn module(s: &Spec) -> String {
             b,
             "*LAST.lock().unwrap_or_else(|e| e.into_inner()) = self::std::option::Option::None; \
              let ({},): ({},) = match self::std::panic::catch_unwind(self::std::panic::AssertUnwindSafe(|| ({},))) {{ \
-             self::std::result::Result::Ok(t) => t, self::std::result::Result::Err(_) => {{ {PANICKED} return; }} }}; ",
+             self::std::result::Result::Ok(t) => t, self::std::result::Result::Err(e) => {{ if e.is::<__HydoRefused>() {{ o.push_str(\"Z \"); return; }} {PANICKED} return; }} }}; ",
             names.join(", "),
             tys.join(", "),
             decs.join(", ")
