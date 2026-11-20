@@ -304,3 +304,8 @@ rm -f "$OUTDIR/.sources-missing.tsv"
 CARGO=$(command -v cargo) "$HR" sources mac --repo "$TOP" --version "$VERSION" --cache "$SRC" \
   --out "$OUTDIR/hydo-mac-$VERSION-sources.tar.gz"
 ls -la "$OUTDIR/hydo-mac-$VERSION-sources.tar.gz"
+
+# --- 5. the onboarding skill's archive (Milestone 332): OUTDIR/hydo-skill-<version>.tar.gz, an
+# asset of the same GitHub release v<version>. The skill has hydo's version, and the Linux and the
+# Mac build make the same bytes (docs/RELEASING.md, steps 2 and 6).
+HYDO_VERSION=$VERSION sh "$TOP/hydo/dist/skill/build-skill-release.sh" "$OUTDIR"

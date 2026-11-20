@@ -1,12 +1,15 @@
 //! `hydo skill update [--agent NAME ...] [--to DIR] [--user] [--force] [--version V] [--check]
-//! [--offline]` (Milestone 170): install the newest release of the onboarding skill, which is
-//! released separately from hydo (docs/RELEASING.md, "Releasing the onboarding skill").
+//! [--offline]` (Milestone 170): install the onboarding skill of the newest hydo release.
 //!
-//! The newest release is the highest `skill-v<version>` tag in the project's release list
-//! (`HYDO_RELEASE_API`, GitHub's API; drafts and pre-releases are skipped). Its two assets come
-//! from `<HYDO_RELEASE_URL>/skill-v<version>/`: `SHA256SUMS`, trusted through TLS as the install
-//! cache trusts a release's own sums (Milestone 162), and `hydo-skill-<version>.tar.gz`, accepted
-//! only with the sha256 that file names. The archive is unpacked by `hydo_agents::release::unpack`
+//! Since Milestone 332 the skill has hydo's version and ships in hydo's own release
+//! (docs/RELEASING.md, "The onboarding skill"). The newest release is the highest `v<x>.<y>.<z>`
+//! tag in the project's release list (`HYDO_RELEASE_API`, GitHub's API; drafts and pre-releases
+//! are skipped), the list `hydo update` reads. Its two assets come from
+//! `<HYDO_RELEASE_URL>/v<version>/`: `SHA256SUMS`, trusted through TLS as the install cache
+//! trusts a release's own sums (Milestone 162), and `hydo-skill-<version>.tar.gz`, accepted only
+//! with the sha256 that file names. A copy of the skill's old version line (1.0.0 to 2.4.0, the
+//! releases `skill-v<version>` up to hydo 0.4.1) counts as older than any version with hydo's
+//! numbers ([`hydo_agents::release::skill_lt`]). The archive is unpacked by `hydo_agents::release::unpack`
 //! (plain files and directories below `hydo/`, the plugin folder, only) into a temporary
 //! directory, and each target folder is replaced in one step by `hydo_agents::replace_dir`: a
 //! Claude Code copy (`.claude/skills/hydo`) by the plugin folder, any other (`onboard`) by the
@@ -21,7 +24,7 @@
 use crate::ctx::Ctx;
 use crate::fetch::{Fetcher, Options};
 use crate::releaselist::{self, Auth};
-use hydo_agents::release::{archive_name, unpack, TAG_PREFIX};
+use hydo_agents::release::{archive_name, skill_lt, unpack, FIRST_IN_HYDO};
 use hydo_agents::{readers_of, replace_dir, version_at, version_lt, Where, PLUGIN, SKILL};
 use std::path::{Path, PathBuf};
 
@@ -81,35 +84,6 @@ fn parse(argv: &[String]) -> Result<Args, String> {
     })
 }
 
-/// The newest skill release in a GitHub release list (JSON): the highest `skill-v<version>` tag
-/// that is neither a draft nor a pre-release.
-pub fn newest_in(list: &[u8]) -> Result<Option<String>, String> {
-    let v: serde_json::Value =
-        serde_json::from_slice(list).map_err(|e| format!("the release list is not JSON: {e}"))?;
-    let arr = v
-        .as_array()
-        .ok_or("the release list is not a JSON list of releases")?;
-    let mut best: Option<String> = None;
-    for r in arr {
-        if r["draft"].as_bool() == Some(true) || r["prerelease"].as_bool() == Some(true) {
-            continue;
-        }
-        let Some(v) = r["tag_name"]
-            .as_str()
-            .and_then(|t| t.strip_prefix(TAG_PREFIX))
-        else {
-            continue;
-        };
-        if v.is_empty() || !v.split('.').all(|x| x.parse::<u64>().is_ok()) {
-            continue;
-        }
-        if best.as_deref().is_none_or(|b| version_lt(b, v)) {
-            best = Some(v.to_string());
-        }
-    }
-    Ok(best)
-}
-
 /// Where the skill releases come from, and how they are fetched.
 pub struct Source {
     pub api: String,
@@ -135,7 +109,7 @@ impl Source {
     }
 
     fn url(&self, version: &str, file: &str) -> String {
-        format!("{}/{TAG_PREFIX}{version}/{file}", self.base)
+        crate::fetch::release_url(&self.base, version, file)
     }
 
     /// The release list: one request, or a kept answer of the last minutes.
@@ -160,7 +134,16 @@ impl Source {
             .into_iter()
             .find(|(_, p)| *p == name)
             .map(|(s, _)| s)
-            .ok_or_else(|| format!("{sums_url} does not list {name}"))?;
+            .ok_or_else(|| {
+                if version_lt(version, FIRST_IN_HYDO) {
+                    format!(
+                        "hydo {version}'s release carries no onboarding skill ({sums_url} does \
+                         not list {name}); hydo's releases carry it from {FIRST_IN_HYDO} on"
+                    )
+                } else {
+                    format!("{sums_url} does not list {name}")
+                }
+            })?;
         let part = dir.join(format!("{name}.part"));
         self.fetch.download(
             &self.url(version, &name),
@@ -254,9 +237,9 @@ fn update(
             if let Some(l) = list.kept_line(source.cache.as_deref()) {
                 let _ = writeln!(out, "hydo: {l}");
             }
-            list.skill.ok_or_else(|| {
+            list.skill().ok_or_else(|| {
                 format!(
-                    "{}: no skill release (no tag {TAG_PREFIX}<version>) in the project's releases",
+                    "{}: no hydo release (no tag v<x>.<y>.<z>) in the project's releases",
                     source.api
                 )
             })?
@@ -276,7 +259,7 @@ fn update(
                         format!("{}: not installed (release {wanted})", t.display()),
                     );
                 }
-                Some(v) if version_lt(&v, &wanted) => {
+                Some(v) if skill_lt(&v, &wanted) => {
                     behind = true;
                     say(
                         out,
@@ -302,7 +285,7 @@ fn update(
                 out,
                 format!("hydo: {} is already at {SKILL} {v}", t.display()),
             ),
-            Some(v) if version_lt(&wanted, &v) && a.version.is_none() && !a.w.force => say(
+            Some(v) if skill_lt(&wanted, &v) && a.version.is_none() && !a.w.force => say(
                 out,
                 format!(
                     "hydo: {} has {SKILL} {v}, newer than the newest release {wanted}; kept \

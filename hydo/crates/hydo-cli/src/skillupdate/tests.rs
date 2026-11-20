@@ -156,9 +156,9 @@ fn publish(srv: &Server, d: &Path, version: &str, tags: &[(&str, bool, bool)]) -
     let (a, v) = hydo_agents::release::pack(&src).unwrap();
     assert_eq!(v, version);
     let name = archive_name(version);
-    srv.put(&format!("/dl/skill-v{version}/{name}"), &a);
+    srv.put(&format!("/dl/v{version}/{name}"), &a);
     srv.put(
-        &format!("/dl/skill-v{version}/SHA256SUMS"),
+        &format!("/dl/v{version}/SHA256SUMS"),
         format!("{}  {name}\n", sha256_bytes(&a)).as_bytes(),
     );
     let list: Vec<serde_json::Value> = tags
@@ -195,14 +195,55 @@ fn names(d: &Path) -> Vec<String> {
 }
 
 #[test]
-fn the_newest_release_is_the_highest_skill_tag() {
-    let l = br#"[{"tag_name":"v0.2.0"},{"tag_name":"skill-v1.2.0"},{"tag_name":"skill-v1.10.0"},
-        {"tag_name":"skill-v9.0.0","draft":true},{"tag_name":"skill-v8.0.0","prerelease":true},
-        {"tag_name":"skill-vX"},{"tag_name":"skill-v1.9.9"}]"#;
-    assert_eq!(newest_in(l).unwrap().as_deref(), Some("1.10.0"));
-    assert_eq!(newest_in(br#"[{"tag_name":"v0.1.0"}]"#).unwrap(), None);
-    assert!(newest_in(b"{}").is_err());
-    assert!(newest_in(b"<html>").is_err());
+fn the_newest_skill_release_is_the_newest_hydo_release() {
+    let newest = |l: &[u8]| releaselist::List::parse(l).map(|l| l.skill());
+    // the old skill-v tags are not read, however high their numbers (Milestone 332)
+    let l = br#"[{"tag_name":"v0.2.0"},{"tag_name":"v0.7.0"},{"tag_name":"v0.10.0"},
+        {"tag_name":"v9.0.0","draft":true},{"tag_name":"v8.0.0","prerelease":true},
+        {"tag_name":"vX"},{"tag_name":"v0.9.9"},{"tag_name":"skill-v2.4.0"}]"#;
+    assert_eq!(newest(l).unwrap().as_deref(), Some("0.10.0"));
+    assert_eq!(newest(br#"[{"tag_name":"skill-v2.4.0"}]"#).unwrap(), None);
+    assert!(newest(b"{}").is_err());
+    assert!(newest(b"<html>").is_err());
+}
+
+#[test]
+fn a_copy_of_the_old_skill_line_is_older_than_hydo_s_versions() {
+    let srv = Server::start();
+    let d = scratch();
+    let _rm_d = Rm(d.clone());
+    publish(
+        &srv,
+        &d,
+        "0.5.0",
+        &[("skill-v2.4.0", false, false), ("v0.5.0", false, false)],
+    );
+    let skills = d.join("skills");
+    skill(&skills, "2.4.0");
+    let to = skills.display().to_string();
+    let src = srv.source();
+    let (rc, out, err) = run(&["--check", "--to", &to], Some(&src), &d);
+    assert_eq!(rc, 3, "{out}{err}");
+    assert!(out.contains("2.4.0, release 0.5.0 is newer"), "{out}");
+    let (rc, out, err) = run(&["--to", &to], Some(&src), &d);
+    assert_eq!(rc, 0, "{out}{err}");
+    assert!(out.contains("2.4.0 -> 0.5.0"), "{out}");
+    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("0.5.0"));
+    // a hydo release before 0.5.0 carries no skill, and the message says so
+    publish(&srv, &d, "0.6.0", &[("v0.4.1", false, false)]);
+    srv.put(
+        "/dl/v0.4.1/SHA256SUMS",
+        format!("{}  hydo-mac-0.4.1.tar.gz\n", "0".repeat(64)).as_bytes(),
+    );
+    skill(&skills, "2.4.0");
+    let (rc, _, err) = run(&["--to", &to], Some(&src), &d);
+    assert_eq!(rc, 1);
+    assert!(
+        err.contains("hydo 0.4.1's release carries no onboarding skill"),
+        "{err}"
+    );
+    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("2.4.0"));
+    let _ = std::fs::remove_dir_all(&d);
 }
 
 #[test]
@@ -213,16 +254,16 @@ fn an_older_copy_is_updated_and_nothing_else_is_touched() {
     publish(
         &srv,
         &d,
-        "1.1.0",
+        "0.6.0",
         &[
-            ("skill-v1.0.0", false, false),
-            ("skill-v1.1.0", false, false),
+            ("v0.5.0", false, false),
+            ("v0.6.0", false, false),
             ("v0.1.0", false, false),
         ],
     );
     let skills = d.join("proj/.agents/skills");
-    skill(&skills, "1.0.0");
-    std::fs::write(skills.join(SKILL).join("stale.md"), "from 1.0.0\n").unwrap();
+    skill(&skills, "0.5.0");
+    std::fs::write(skills.join(SKILL).join("stale.md"), "from 0.5.0\n").unwrap();
     std::fs::create_dir_all(skills.join("other-skill")).unwrap();
     std::fs::write(skills.join("other-skill/SKILL.md"), "mine\n").unwrap();
     std::fs::write(skills.join("notes.txt"), "mine\n").unwrap();
@@ -233,20 +274,20 @@ fn an_older_copy_is_updated_and_nothing_else_is_touched() {
 
     let (rc, out, err) = run(&["--check", "--to", &to], Some(&src), &tmp);
     assert_eq!(rc, 3, "{out}{err}");
-    assert!(out.contains("1.0.0, release 1.1.0 is newer"), "{out}");
-    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("1.0.0"));
+    assert!(out.contains("0.5.0, release 0.6.0 is newer"), "{out}");
+    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("0.5.0"));
 
     let (rc, out, err) = run(&["--to", &to], Some(&src), &tmp);
     assert_eq!(rc, 0, "{out}{err}");
     assert!(
-        out.contains("updated") && out.contains("1.0.0 -> 1.1.0"),
+        out.contains("updated") && out.contains("0.5.0 -> 0.6.0"),
         "{out}"
     );
     let t = skills.join(SKILL);
-    assert_eq!(version_at(&t).as_deref(), Some("1.1.0"));
+    assert_eq!(version_at(&t).as_deref(), Some("0.6.0"));
     assert_eq!(
         std::fs::read_to_string(t.join("references/x.md")).unwrap(),
-        "x 1.1.0\n"
+        "x 0.6.0\n"
     );
     assert!(
         !t.join("stale.md").exists(),
@@ -268,7 +309,7 @@ fn an_older_copy_is_updated_and_nothing_else_is_touched() {
     let before = srv.log().len();
     let (rc, out, _) = run(&["--to", &to], Some(&src), &tmp);
     assert_eq!(rc, 0);
-    assert!(out.contains("already at onboard 1.1.0"), "{out}");
+    assert!(out.contains("already at onboard 0.6.0"), "{out}");
     assert_eq!(
         srv.log()[before..],
         ["/api/releases?per_page=100".to_string()]
@@ -283,14 +324,14 @@ fn a_wrong_sha256_is_refused_and_changes_nothing() {
     let srv = Server::start();
     let d = scratch();
     let _rm_d = Rm(d.clone());
-    publish(&srv, &d, "1.1.0", &[("skill-v1.1.0", false, false)]);
-    let name = archive_name("1.1.0");
+    publish(&srv, &d, "0.6.0", &[("v0.6.0", false, false)]);
+    let name = archive_name("0.6.0");
     srv.put(
-        "/dl/skill-v1.1.0/SHA256SUMS",
+        "/dl/v0.6.0/SHA256SUMS",
         format!("{}  {name}\n", "0".repeat(64)).as_bytes(),
     );
     let skills = d.join("skills");
-    skill(&skills, "1.0.0");
+    skill(&skills, "0.5.0");
     let tmp = d.join("tmp");
     std::fs::create_dir_all(&tmp).unwrap();
     let (rc, out, err) = run(
@@ -300,7 +341,7 @@ fn a_wrong_sha256_is_refused_and_changes_nothing() {
     );
     assert_eq!(rc, 1, "{out}{err}");
     assert!(err.contains("sha256") && err.contains("refused"), "{err}");
-    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("1.0.0"));
+    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("0.5.0"));
     assert_eq!(names(&skills), vec![SKILL]);
     assert!(names(&tmp).is_empty());
     let _ = std::fs::remove_dir_all(&d);
@@ -312,7 +353,7 @@ fn offline_it_refuses_without_touching_anything() {
     let d = scratch();
     let _rm_d = Rm(d.clone());
     let skills = d.join("skills");
-    skill(&skills, "1.0.0");
+    skill(&skills, "0.5.0");
     let to = skills.display().to_string();
     let (rc, _, err) = run(&["--to", &to], None, &d);
     assert_eq!(rc, 1);
@@ -322,7 +363,7 @@ fn offline_it_refuses_without_touching_anything() {
     assert_eq!(rc, 1);
     assert!(err.contains("needs the network"), "{err}");
     assert!(srv.log().is_empty(), "no request was made");
-    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("1.0.0"));
+    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("0.5.0"));
     let _ = std::fs::remove_dir_all(&d);
 }
 
@@ -331,26 +372,26 @@ fn a_newer_copy_is_kept_unless_a_version_is_asked_for() {
     let srv = Server::start();
     let d = scratch();
     let _rm_d = Rm(d.clone());
-    publish(&srv, &d, "1.1.0", &[("skill-v1.1.0", false, false)]);
+    publish(&srv, &d, "0.6.0", &[("v0.6.0", false, false)]);
     let skills = d.join("skills");
-    skill(&skills, "2.0.0");
+    skill(&skills, "0.9.0");
     let to = skills.display().to_string();
     let src = srv.source();
     let (rc, out, _) = run(&["--to", &to], Some(&src), &d);
     assert_eq!(rc, 0);
     assert!(
-        out.contains("newer than the newest release 1.1.0; kept"),
+        out.contains("newer than the newest release 0.6.0; kept"),
         "{out}"
     );
-    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("2.0.0"));
-    let (rc, out, err) = run(&["--to", &to, "--version", "1.1.0"], Some(&src), &d);
+    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("0.9.0"));
+    let (rc, out, err) = run(&["--to", &to, "--version", "0.6.0"], Some(&src), &d);
     assert_eq!(rc, 0, "{out}{err}");
-    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("1.1.0"));
+    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("0.6.0"));
     // a version that was not released
-    let (rc, _, err) = run(&["--to", &to, "--version", "3.0.0"], Some(&src), &d);
+    let (rc, _, err) = run(&["--to", &to, "--version", "0.8.0"], Some(&src), &d);
     assert_eq!(rc, 1);
     assert!(err.contains("HTTP 404"), "{err}");
-    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("1.1.0"));
+    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("0.6.0"));
     let _ = std::fs::remove_dir_all(&d);
 }
 
@@ -359,24 +400,24 @@ fn a_release_whose_skill_has_another_version_is_refused() {
     let srv = Server::start();
     let d = scratch();
     let _rm_d = Rm(d.clone());
-    let a = publish(&srv, &d, "1.1.0", &[("skill-v1.2.0", false, false)]);
-    // the archive of 1.1.0 published as 1.2.0
-    let name = archive_name("1.2.0");
-    srv.put(&format!("/dl/skill-v1.2.0/{name}"), &a);
+    let a = publish(&srv, &d, "0.6.0", &[("v0.7.0", false, false)]);
+    // the archive of 0.6.0 published as 0.7.0
+    let name = archive_name("0.7.0");
+    srv.put(&format!("/dl/v0.7.0/{name}"), &a);
     srv.put(
-        "/dl/skill-v1.2.0/SHA256SUMS",
+        "/dl/v0.7.0/SHA256SUMS",
         format!("{}  {name}\n", sha256_bytes(&a)).as_bytes(),
     );
     let skills = d.join("skills");
-    skill(&skills, "1.0.0");
+    skill(&skills, "0.5.0");
     let (rc, _, err) = run(
         &["--to", &skills.display().to_string()],
         Some(&srv.source()),
         &d,
     );
     assert_eq!(rc, 1);
-    assert!(err.contains("not 1.2.0"), "{err}");
-    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("1.0.0"));
+    assert!(err.contains("not 0.7.0"), "{err}");
+    assert_eq!(version_at(&skills.join(SKILL)).as_deref(), Some("0.5.0"));
     let _ = std::fs::remove_dir_all(&d);
 }
 
@@ -385,7 +426,7 @@ fn foreign_folders_links_and_plain_http_are_refused() {
     let srv = Server::start();
     let d = scratch();
     let _rm_d = Rm(d.clone());
-    publish(&srv, &d, "1.1.0", &[("skill-v1.1.0", false, false)]);
+    publish(&srv, &d, "0.6.0", &[("v0.6.0", false, false)]);
     let src = srv.source();
     // a folder of the same name that is another skill
     let other = d.join("a");
@@ -454,10 +495,10 @@ fn each_agent_gets_its_folder() {
 fn a_claude_code_copy_gets_the_plugin_folder_and_others_the_skill() {
     let d = scratch();
     let _rm_d = Rm(d.clone());
-    let src = plugin(&d.join("src"), "1.1.0");
+    let src = plugin(&d.join("src"), "0.6.0");
     // an older plugin copy in .claude/skills/hydo, an older skill copy in .agents/skills/onboard
-    let claude = plugin(&d.join("proj/.claude/skills"), "1.0.0");
-    let agents = skill(&d.join("proj/.agents/skills"), "1.0.0");
+    let claude = plugin(&d.join("proj/.claude/skills"), "0.5.0");
+    let agents = skill(&d.join("proj/.agents/skills"), "0.5.0");
     assert_eq!(
         hydo_agents::replace_dir(&src, &claude, false).unwrap(),
         "updated"
@@ -466,8 +507,8 @@ fn a_claude_code_copy_gets_the_plugin_folder_and_others_the_skill() {
         hydo_agents::replace_dir(&src, &agents, false).unwrap(),
         "updated"
     );
-    assert_eq!(version_at(&claude).as_deref(), Some("1.1.0"));
-    assert_eq!(version_at(&agents).as_deref(), Some("1.1.0"));
+    assert_eq!(version_at(&claude).as_deref(), Some("0.6.0"));
+    assert_eq!(version_at(&agents).as_deref(), Some("0.6.0"));
     assert!(claude.join(".claude-plugin/plugin.json").is_file());
     assert!(claude.join(SKILL_IN_PLUGIN).join("SKILL.md").is_file());
     assert!(agents.join("SKILL.md").is_file() && !agents.join(".claude-plugin").exists());

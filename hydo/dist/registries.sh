@@ -13,10 +13,13 @@
 #       Fails unless every package a release publishes carries VERSION: hydo/VERSION, the
 #       workspace version, every `hydo-*` entry of [workspace.dependencies] (except
 #       hydo-agent-proto, which keeps its own version: docs/PUBLISHING.md), sdk/rust, sdk/python
-#       (pyproject.toml and __version__) and sdk/js.
+#       (pyproject.toml and __version__), sdk/js, and the onboarding skill (Milestone 332: its
+#       SKILL.md's metadata.version and hydo-min, plugin/.claude-plugin/plugin.json and the
+#       marketplace entry in .claude-plugin/marketplace.json).
 #   registries.sh release TAG [WAIT_SECONDS]
-#       Fails unless the GitHub release TAG is published (not a draft) with the four tarballs and
-#       SHA256SUMS uploaded, and SHA256SUMS names every tarball asset; waits up to WAIT_SECONDS
+#       Fails unless the GitHub release TAG is published (not a draft) with the four tarballs,
+#       from 0.5.0 on the skill's hydo-skill-<version>.tar.gz (Milestone 332), and SHA256SUMS
+#       uploaded, and SHA256SUMS names every tarball asset; waits up to WAIT_SECONDS
 #       (default 0) for it. Reads GH_TOKEN or GITHUB_TOKEN when set (a higher rate limit).
 #   registries.sh crate-published NAME VERSION
 #       Exit status 0 when crates.io's index lists NAME VERSION, 1 when not.
@@ -72,6 +75,13 @@ versions() {
   check "sdk/python __version__" "$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' "$f")"
   got=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$TOP/sdk/js/package.json")
   check "sdk/js/package.json version" "$got"
+  f="$TOP/plugin/skills/onboard/SKILL.md"
+  check "the skill's metadata.version" "$(sed -n 's/^  version: "\(.*\)"$/\1/p' "$f" | head -1)"
+  check "the skill's metadata.hydo-min" "$(sed -n 's/^  hydo-min: "\(.*\)"$/\1/p' "$f" | head -1)"
+  check "plugin/.claude-plugin/plugin.json version" \
+    "$(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$TOP/plugin/.claude-plugin/plugin.json")"
+  check ".claude-plugin/marketplace.json plugin version" \
+    "$(sed -n 's/^ *"version": "\(.*\)",$/\1/p' "$TOP/.claude-plugin/marketplace.json" | head -1)"
   [ "$bad" = 0 ] || die "the versions differ from $want (docs/PUBLISHING.md \"The next version\" lists the files a release bumps together)"
 }
 
@@ -83,6 +93,12 @@ repo, tag, wait, ua = sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4]
 version = tag[1:] if tag.startswith("v") else tag
 need = [f"hydo-linux-{version}.tar.gz", f"hydo-linux-{version}-sources.tar.gz",
         f"hydo-mac-{version}.tar.gz", f"hydo-mac-{version}-sources.tar.gz", "SHA256SUMS"]
+# the onboarding skill ships in hydo's release from 0.5.0 on (Milestone 332)
+try:
+    if tuple(int(x) for x in version.split(".")) >= (0, 5, 0):
+        need.insert(-1, f"hydo-skill-{version}.tar.gz")
+except ValueError:
+    pass
 optional = [f"hydo-mac-{version}-signatures.tar.gz"]
 token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
 

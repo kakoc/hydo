@@ -18952,3 +18952,73 @@ The worst problems, in order:
 A bug planted in smallvec's `swap_remove` broke its contract on 25 of 1,000 calls and shrank to
 six elements and the index 1. The page lists nine fixes. Open items 139 and 163 have what is left.
 Nothing recorded moved.
+
+## Milestone 332 (tentative number): the onboarding skill has hydo's version
+
+The user decided on 2026-11-20 that the onboarding skill's version is hydo's version from hydo
+0.5.0 on. Until then the skill had a version line of its own, 1.0.0 to 2.4.0, released as GitHub
+releases tagged `skill-v<version>` (Milestone 170). There are no outside users, so nothing keeps
+the old line beyond the version order below.
+
+Where the version lives. The four version fields equal `hydo/VERSION`, now 0.4.1:
+`metadata.version` and `metadata.hydo-min` in `plugin/skills/onboard/SKILL.md`, the `version`
+of `plugin/.claude-plugin/plugin.json`, and the `version` of the plugin entry in
+`.claude-plugin/marketplace.json`. `metadata.hydo-min` stays and equals the version. The skill
+ships in hydo's release and needs the hydo of its own version, and the skill's step 0 reads
+`hydo-min` to tell the user to upgrade an older hydo. Keeping the key changes no text of the
+skill's steps. `skill_check::` fails when a field differs from `hydo/VERSION`, so a version bump
+changes them together. `hydo/dist/registries.sh versions` checks the four fields too.
+
+How the release carries the skill. Both `build-release.sh` scripts run
+`hydo/dist/skill/build-skill-release.sh` into their output folder. It refuses a skill whose
+version is not `hydo/VERSION` (or `HYDO_VERSION`), packs `hydo-skill-<version>.tar.gz` twice,
+compares the bytes, and prints the archive's line for the release's `SHA256SUMS`. The release
+`v<version>` gets the archive as a sixth file, with its line in `SHA256SUMS`
+(docs/RELEASING.md, steps 2, 6 and 7). From 0.5.0 on, `registries.sh release`, which the release
+workflow's `check` job runs, requires the archive. `hydo skill update` and `hydo update` take the
+skill from the newest `v<x>.<y>.<z>` release of the release list that they already read. Each
+command still makes one request (Milestone 322). `hydo update` takes the skill of the release it
+installs, also with `--version V`. The kept answer `~/.hydo/update-check.json` no longer has a
+`skill` key, and a kept `skill` key that an older hydo wrote is not read. A release before 0.5.0
+carries no skill, and `hydo skill update` then says so and changes nothing.
+
+How 2.x compares. `hydo_agents::release::skill_lt` orders every version from 1.0.0 to 2.4.0, the
+ended line, before every other version. Within one line the numbers decide. `hydo skill update`
+and `hydo update` compare installed copies and Claude Code's plugin installs with it, so a copy
+of 2.4.0 is behind 0.5.0. The skill's step 0 runs `hydo update --check`, so it gets the same
+answer. `hydo doctor` compares only hydo's own version. `skill_check::` refuses a `hydo/VERSION`
+from 1.0.0 to 2.4.0, because hydo would then take its own skill for an old one.
+
+Claude Code's plugin update. Claude Code's documentation ("Plugin loading reference", section
+"Versions and updates", and "Host and maintain a marketplace", section "Release a new version")
+says that Claude Code installs a new copy when the plugin's computed version differs from the
+recorded one. It compares the strings, not their order, so 2.4.0 to 0.5.0 is an update. This Mac's
+Claude Code setup was not changed to try it. If Claude Code does not offer the update, the user
+runs `claude plugin marketplace update hydo` and `claude plugin update hydo@hydo`, and if it still
+says that the plugin is current, `claude plugin uninstall hydo@hydo` and `claude plugin install
+hydo@hydo`. `hydo guide update` and docs/RELEASING.md say so.
+
+What changed in the documents:
+
+- docs/RELEASING.md: the section "Releasing the onboarding skill (separate from hydo releases)"
+  is now "The onboarding skill (ships with each hydo release)". A skill change ships with the
+  next hydo release, and a small fix with a patch release. Steps 1, 2, 6 and 7 name the skill's
+  archive. The new subsection "Once, after 0.5.0 is published" gives the lead three steps:
+  - write a "Before you upgrade" line into 0.5.0's notes, because hydo 0.4.1's `hydo update`
+    updates hydo only;
+  - delete the releases and tags `skill-v1.0.0` to `skill-v2.4.0`;
+  - check the update from a copy of 2.4.0.
+- docs/PUBLISHING.md, docs/INSTALL.md, `hydo guide update` and the skill's
+  `references/install.md` describe one version. The text of the skill's steps did not change.
+
+The tests: the fake release server of `tests/update.rs` publishes the skill in hydo's release
+`v<newest>` beside an old `skill-v2.9.0` tag that nothing may read. Copies of 2.0.0, 2.1.0 and
+2.3.3, and a plugin install of 2.0.0, are updated to the release's version. `hydo skill
+update`'s unit tests cover a copy of 2.4.0 updated to 0.5.0 and a release before 0.5.0 without a
+skill. `skill_check::` has a test of a hydo version bump without the skill's.
+
+What is left: between this commit and 0.5.0, hydo 0.4.1 compares the plugin's 0.4.1 on `main`
+with the release `skill-v2.4.0`, so it offers a Claude Code plugin update that changes nothing.
+Deleting the `skill-v` releases after 0.5.0 ends it. No real release carries the skill yet, and
+`claude plugin update` from 2.4.0 to a lower version ran only as the documentation describes it.
+Nothing recorded moved.

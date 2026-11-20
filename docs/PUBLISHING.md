@@ -93,7 +93,7 @@ commands below are the same steps by hand, the fallback. The packages' metadata 
 runs below are prepared in the tree (Milestone 160; the APIs were cleaned up before their first
 publication in Milestone 163).
 
-The `hydo` program itself is published through the GitHub release (docs/RELEASING.md step 7: the two tarballs, the two sources archives and, since 0.2.0, the Mac programs' signatures asset `hydo-mac-<version>-signatures.tar.gz`, docs/design/signing.md), the Homebrew tap (step 8, `brew install kakoc/tap/hydo`) and the release index (step 9); this file covers the SDKs, the crates of `cargo install hydo`, and (last section) the onboarding skill, which has its own releases.
+The `hydo` program itself is published through the GitHub release (docs/RELEASING.md step 7: the two tarballs, the two sources archives and, since 0.2.0, the Mac programs' signatures asset `hydo-mac-<version>-signatures.tar.gz`, docs/design/signing.md, and from 0.5.0 on the onboarding skill's archive `hydo-skill-<version>.tar.gz`), the Homebrew tap (step 8, `brew install kakoc/tap/hydo`) and the release index (step 9); this file covers the SDKs, the crates of `cargo install hydo`, and (last section) the onboarding skill, which has hydo's version since Milestone 332.
 
 | SDK | registry | name | code-level name | directory |
 |---|---|---|---|---|
@@ -526,18 +526,21 @@ agent's re-pin). A workspace version change moves the bytes of `guest/hydo-world
 `guest/hydo-grpc` (AGENTS.md open item 40), so plan the re-baseline with it. Then the same
 commands, in the same order.
 
-## The onboarding skill (Milestone 170)
+## The onboarding skill (Milestones 170 and 332)
 
-The skill has its own channels and its own version (docs/RELEASING.md, "Releasing the onboarding
-skill"); publishing it is the user's decision, like everything else here.
+Since Milestone 332 the skill has hydo's version and ships with each hydo release
+(docs/RELEASING.md, "The onboarding skill"). Publishing it is the user's decision, like
+everything else here.
 
 | Channel | What | Updated by |
 |---|---|---|
-| GitHub release `skill-v<version>` | `hydo-skill-<version>.tar.gz` and `SHA256SUMS`, read by `hydo skill update` | docs/RELEASING.md, "Releasing the onboarding skill", step 5 |
-| Claude Code marketplace `.claude-plugin/marketplace.json` on `main` (since 0.2.0) (`/plugin marketplace add kakoc/hydo`, `/plugin install hydo@hydo`) | the folder `plugin/` as the plugin `hydo`, whose skill `onboard` is the command `/hydo:onboard`, at the version its entry names | the same section, step 3 |
+| GitHub release `v<version>`, from 0.5.0 on | the asset `hydo-skill-<version>.tar.gz`, with its line in the release's `SHA256SUMS`, read by `hydo skill update` and `hydo update` | docs/RELEASING.md, steps 2, 6 and 7 |
+| Claude Code marketplace `.claude-plugin/marketplace.json` on `main` (since 0.2.0) (`/plugin marketplace add kakoc/hydo`, `/plugin install hydo@hydo`) | the folder `plugin/` as the plugin `hydo`, whose skill `onboard` is the command `/hydo:onboard`, at the version its entry names | docs/RELEASING.md, "The onboarding skill", step 4 |
 
-The skill is published separately from hydo (Milestone 170), so its process can improve between
-hydo releases while the facts always come from the user's own hydo (`hydo guide`):
+From Milestone 170 to hydo 0.4.1 the skill had releases of its own, `skill-v1.0.0` to
+`skill-v2.4.0`; the section "Once, after 0.5.0 is published" of docs/RELEASING.md deletes them.
+The process lives apart from hydo's facts, which always come from the user's own hydo (`hydo
+guide`):
 
 - One plugin folder, `plugin/`, in Claude Code's standard plugin layout
   (`.claude-plugin/plugin.json` and `skills/onboard/`, Milestone 229). The skill folder
@@ -547,9 +550,9 @@ hydo releases while the facts always come from the user's own hydo (`hydo guide`
   copies the plugin folder to `.claude/skills/hydo`, which Claude Code loads as the same plugin.
   Codex, Cursor, GitHub Copilot and Gemini CLI read the skill folder that `hydo skill install
   --agent <tool>` writes into `.agents/skills/onboard`.
-- A user of another tool gets a new skill version with `hydo skill update`, which runs only when
-  the user runs it, takes the newest `skill-v<version>` release from the GitHub API, and accepts
-  the archive only with the sha256 that the release's `SHA256SUMS` (fetched over TLS) names. The
-  skill itself never downloads anything.
-- A published skill release is never changed: a fix is a new version. A skill version states the
-  oldest hydo it supports (`metadata.hydo-min`); a skill that needs a newer guide topic raises it.
+- A user of another tool gets a new skill version with `hydo skill update` or `hydo update`,
+  which run only when the user runs them. They take the newest `v<version>` release from the
+  GitHub API, and accept the skill's archive only with the sha256 that the release's
+  `SHA256SUMS` (fetched over TLS) names. The skill itself never downloads anything.
+- A published release is never changed: a skill fix ships in a patch release. The skill's
+  `metadata.hydo-min` equals its version, because the skill needs the hydo of its own release.

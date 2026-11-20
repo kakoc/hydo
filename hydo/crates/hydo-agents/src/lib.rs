@@ -19,8 +19,9 @@
 //! Agent Skills folder (<https://agentskills.io/specification>) inside the Claude Code plugin
 //! `hydo`: plugin/ in hydo's repository and in a release holds `.claude-plugin/plugin.json` and
 //! `skills/onboard/` (Milestone 229). In Claude Code its command is `/hydo:onboard`. The skill is
-//! the process only, with its own version (`metadata.version`) and its own releases
-//! (`skill-v<version>`, [`release`]). The facts of this hydo (the project format's keys, commands,
+//! the process only. Since Milestone 332 its version (`metadata.version`) is hydo's, and it
+//! ships in hydo's release `v<version>` ([`release`]); before, it had versions 1.0.0 to 2.4.0
+//! and releases of its own (`skill-v<version>`). The facts of this hydo (the project format's keys, commands,
 //! options, fault kinds, limits, examples, `hydo init`'s template) are the guide, hydo/guide/ in
 //! the repository, built into the binary and printed by `hydo guide <topic>`; so they always match
 //! the hydo that prints them. `hydo guide` alone prints this hydo's version, how to get the skill
@@ -944,8 +945,10 @@ const SKILL_USAGE: &str = "usage: hydo skill install [--agent NAME ...] [--to DI
        hydo skill path          the skill folder of this installation
        hydo skill version       the version of the skill this hydo carries
   install: copy the skill this hydo carries (its process; hydo guide holds the facts)
-  update:  fetch the newest skill release (tag skill-v<version>) from hydo's GitHub releases,
-           check it by sha256 against the release's SHA256SUMS over TLS, and install it; without
+  update:  fetch the skill of the newest hydo release (the asset hydo-skill-<version>.tar.gz of
+           the GitHub release v<version>; the skill has hydo's version, and a copy of the old
+           skill line 1.0.0 to 2.4.0 counts as older), check it by sha256 against the release's
+           SHA256SUMS over TLS, and install it; without
            --agent or --to, every copy in this repository's and your home's .claude/skills and
            .agents/skills is updated. --check only reports (exit status 0: up to date, 3: newer
            available, 4: the release list could not be read, also at GitHub's limit for requests

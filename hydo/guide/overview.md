@@ -11,7 +11,7 @@ process; it asks this guide for facts. To get the skill by hand:
                   or: hydo skill install --agent claude    (.claude/skills/hydo, the same plugin)
   Codex, Cursor, GitHub Copilot, Gemini CLI
                   hydo skill install --agent codex|cursor|copilot|gemini [--user]
-                  hydo skill update                        (fetches the newest skill release)
+                  hydo skill update                        (fetches the newest release's skill)
   any other tool  tell it: "run `hydo guide skill` and follow it"
 
 Start with `hydo guide workflow`. The topics:

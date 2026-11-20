@@ -158,7 +158,14 @@ fn the_doctor_looks_once_a_day_and_keeps_a_failed_look_too() {
     // the doctor's answer serves the commands for 10 minutes
     let k = load(&f).unwrap();
     let l = kept_list(&k, "http://a", 1000 + FRESH - 1, FRESH).unwrap();
-    assert_eq!(l.skill.as_deref(), Some("2.9.0"));
+    // the skill is the newest hydo release's (Milestone 332); a `skill-v` tag is not read, and
+    // the kept answer has no `skill` key that an older hydo would take for a `skill-v` release
+    assert_eq!(l.skill().as_deref(), Some("0.9.0"));
+    assert!(k.get("skill").is_none(), "{k}");
+    let mut old = k.clone();
+    old["skill"] = serde_json::json!("2.9.0");
+    let o = kept_list(&old, "http://a", 1000, FRESH).unwrap();
+    assert_eq!(o.skill().as_deref(), Some("0.9.0"));
     assert_eq!(l.hydo.last().unwrap().version, "0.9.0");
     assert_eq!(l.age, Some(FRESH - 1));
     assert!(kept_list(&k, "http://a", 1000 + FRESH, FRESH).is_none());
