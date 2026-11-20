@@ -1661,6 +1661,11 @@ pub struct FakeRoute {
     /// (`'404'`), class (`'5XX'`) or `default`; without one, hydo's own error body.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub errors: Option<IndexMap<String, Text>>,
+    /// The route takes only a request that has this header, whatever its value (Milestone
+    /// 329): `If-None-Match` or `If-Match` makes a route of an S3 client's conditional writes.
+    /// A request without it goes on to the next route.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub if_header: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }
@@ -1770,6 +1775,16 @@ pub struct ProxyRoute {
     /// idempotency keys answers; needs the proxy's idempotency:.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idempotent: Option<bool>,
+    /// http proxies (Milestone 329): the answer bodies of an `H=` rule `status=<code>` on this
+    /// route (templates), by status (`'412'`), class (`'5XX'`) or `default`; without one,
+    /// hydo's own error body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub errors: Option<IndexMap<String, Text>>,
+    /// The route takes only a request that has this header, whatever its value (Milestone
+    /// 329): `If-None-Match` or `If-Match` makes a route of an S3 client's conditional writes.
+    /// A request without it goes on to the next route.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub if_header: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }

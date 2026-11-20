@@ -108,6 +108,31 @@ and what it did not flush, which the real provider would keep. Checks over the r
 proxy survive a cut, because hydo-world carries the record into the recovery boot. Checks over an
 emulator's own state, such as Mailpit's mailbox, are valid in runs without a cut.
 
+## Conditional writes
+
+Clients of S3 make optimistic concurrency with two headers. `If-None-Match: *` creates an object
+only if the key is free. `If-Match: <etag>` replaces an object only if it is still the version
+read. Rust's `object_store` sends them for `PutMode::Create` and `PutMode::Update`. In November
+2026 the pinned rclone 1.76.0 was tested with them under Docker, directly and through hydo's
+proxy (Milestone 329):
+
+| Request | rclone's answer |
+|---|---|
+| `If-None-Match: *`, a new key | 200 |
+| `If-None-Match: *`, an existing key | 412 `PreconditionFailed` |
+| `If-Match` with the object's ETag | 200 |
+| `If-Match` with another ETag | 412 `PreconditionFailed` |
+| `If-Match` on a missing key | 404 |
+
+`object_store` 0.14.2 turned the 412 answers into `AlreadyExists` and `Precondition`, through the
+proxy as directly. In 30 rounds of 8 parallel writers with each header on one key, one writer won
+each round. So the emulator needs no re-pin for conditional writes.
+
+A system's own path for a lost race runs only when another writer wins. The s3 proxy therefore
+has two routes before `put_object`: `put_if_absent` takes a `PUT` with `If-None-Match`, and
+`put_if_match` a `PUT` with `If-Match` (the route key `if_header:`). Each answers an `H=` rule
+`status=412` with S3's XML (`errors:` on an `http` proxy's route), without reaching rclone.
+
 ## Left for later
 
 - More providers. vercel-labs/emulate covers many with state and webhooks; it needs an image

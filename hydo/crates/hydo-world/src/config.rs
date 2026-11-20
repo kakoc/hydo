@@ -65,6 +65,10 @@ pub struct Route {
     /// `"5XX"`, or `"default"` (Milestone 249: a provider's documented error answers). Empty: the
     /// rule answers `{"error":"injected by hydo","status":N}` as before.
     pub errors: Vec<(String, String)>,
+    /// The route matches only a request that has this header (its canonical key; empty: any
+    /// request). Milestone 329: the s3 emulator's conditional writes, `If-None-Match` and
+    /// `If-Match`, are routes of their own, so that an `H=` rule can answer them 412.
+    pub if_header: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -219,6 +223,10 @@ fn route(v: &Value) -> Result<Route, String> {
             _ if is(k, "webhook") => r.webhook = webhook(x)?,
             _ if is(k, "save") => r.save = crate::objects::Save::from_value(x)?,
             _ if is(k, "load") => set_str(&mut r.load, x, "load")?,
+            _ if is(k, "if_header") => {
+                set_str(&mut r.if_header, x, "if_header")?;
+                r.if_header = crate::goish::canonical_key(&r.if_header);
+            }
             _ if is(k, "errors") => {
                 r.errors.clear();
                 if let Some(fs) = object(x, "map[string]string")? {
@@ -359,8 +367,22 @@ pub type Vars = Vec<(String, Vec<u8>)>;
 impl Endpoint {
     /// The first route whose method and path fit; path params go into the vars.
     pub fn matches(&self, method: &str, path: &[u8]) -> (Option<&Route>, Vars) {
+        self.matches_with(method, path, &[])
+    }
+
+    /// `matches` for a request with these headers (canonical keys): a route with `if_header`
+    /// fits only a request that has that header.
+    pub fn matches_with(
+        &self,
+        method: &str,
+        path: &[u8],
+        headers: &[(String, Vec<u8>)],
+    ) -> (Option<&Route>, Vars) {
         for r in &self.routes {
             if !r.method.is_empty() && !r.method.eq_ignore_ascii_case(method) {
+                continue;
+            }
+            if !r.if_header.is_empty() && !headers.iter().any(|(k, _)| *k == r.if_header) {
                 continue;
             }
             if r.path.is_empty() || r.path == "*" {
@@ -776,6 +798,40 @@ mod tests {
         assert_eq!(e.matches("GET", b"/files/x/y").0.unwrap().name, "c");
         assert_eq!(e.matches("GET", b"/").0.unwrap().name, "d");
         assert_eq!(e.routes[0].status, 200);
+    }
+
+    #[test]
+    fn a_route_with_if_header_fits_only_a_request_with_the_header() {
+        let mut c = Config {
+            proxies: vec![Endpoint {
+                kind: "proxy".into(),
+                routes: vec![
+                    route(
+                        &serde_json::json!({"name": "put_if_absent", "method": "PUT",
+                        "path": "/*", "if_header": "if-none-match"}),
+                    )
+                    .unwrap(),
+                    route(&serde_json::json!({"name": "put_object", "method": "PUT",
+                        "path": "/*"}))
+                    .unwrap(),
+                ],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        c.defaults();
+        let e = &c.proxies[0];
+        assert_eq!(e.routes[0].if_header, "If-None-Match");
+        let h = vec![("If-None-Match".to_string(), b"*".to_vec())];
+        assert_eq!(
+            e.matches_with("PUT", b"/b/k", &h).0.unwrap().name,
+            "put_if_absent"
+        );
+        assert_eq!(
+            e.matches_with("PUT", b"/b/k", &[]).0.unwrap().name,
+            "put_object"
+        );
+        assert_eq!(e.matches("PUT", b"/b/k").0.unwrap().name, "put_object");
     }
 
     #[test]

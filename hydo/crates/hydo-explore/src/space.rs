@@ -72,8 +72,9 @@ pub struct PfTarget {
     pub req: Vec<String>,
     pub hook: Vec<String>,
     pub proto: String,
-    /// The error statuses a fake's route declares in `errors:` (Milestone 249), which a drawn
-    /// `status=` takes besides hydo's own four; empty for every other target.
+    /// The error statuses a fake's route or an http proxy's route declares in `errors:`
+    /// (Milestones 249 and 329), which a drawn `status=` takes besides hydo's own four; empty
+    /// for every other target.
     pub statuses: Vec<i64>,
 }
 
@@ -1134,7 +1135,12 @@ fn pf_targets(m: &Value) -> Vec<PfTarget> {
                 req: svec(&PF_REQ_KINDS),
                 hook: Vec::new(),
                 proto: proto.clone(),
-                statuses: Vec::new(),
+                // an http proxy's route may declare error answers too (Milestone 329: the s3
+                // emulator's conditional writes answer 412)
+                statuses: match r.get("errors") {
+                    Some(Value::Object(o)) => o.keys().filter_map(|k| k.parse().ok()).collect(),
+                    _ => Vec::new(),
+                },
             });
         }
     }

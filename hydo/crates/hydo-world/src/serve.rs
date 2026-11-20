@@ -482,7 +482,7 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
     if grpc {
         v.msg = grpc_first(&rq.body);
     }
-    let (rt, vars) = e.matches(&rq.method, &rq.path);
+    let (rt, vars) = e.matches_with(&rq.method, &rq.path, &rq.headers);
     v.vars = vars;
     let mut rname = "-".to_string();
     let mut ref_spec = e.r#ref.clone();
@@ -660,8 +660,9 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
                 );
             }
             a.status = r.status.clamp(0, 999) as u16;
-            // a fake route's own error answer for this status (Milestone 249: `errors:`)
-            a.body = match rt.filter(|_| fake).and_then(|x| x.error_body(r.status)) {
+            // a route's own error answer for this status (Milestone 249: `errors:` of a fake;
+            // Milestone 329: of an HTTP proxy's route too, such as the s3 emulator's 412)
+            a.body = match rt.and_then(|x| x.error_body(r.status)) {
                 Some(t) => {
                     let b = render(t, &ctx, Some(&v));
                     match &obj {
@@ -673,6 +674,10 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
                     format!(r#"{{"error":"injected by hydo","status":{}}}"#, r.status).into_bytes()
                 }
             };
+            if a.body.starts_with(b"<?xml") {
+                // an XML error answer (S3's)
+                hset(&mut a.headers, "Content-Type", b"application/xml".to_vec());
+            }
             return Outcome::Answer(a);
         }
     }

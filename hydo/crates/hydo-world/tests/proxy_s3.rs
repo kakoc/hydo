@@ -1,7 +1,7 @@
 //! The s3 emulator's proxy with the request shapes of real S3 clients (Milestone 329), end to end
 //! through the `hydo-world` program, in front of a small S3 service this test runs. It keeps each
 //! object's bytes as it received them, answers a HEAD with the object's size in Content-Length,
-//! and a GET with the bytes.
+//! a GET with the bytes, and a PUT with `If-None-Match: *` over an object with 412.
 //!
 //! Before Milestone 329 the proxy dropped the service's Content-Length from every answer. So the
 //! answer to a HEAD had no size: rclone read 0 and deleted the object it had just written as
@@ -12,7 +12,9 @@
 //! - the AWS SDKs' signed streaming upload: `Content-Encoding: aws-chunked` in an HTTP chunked
 //!   body, after `Expect: 100-continue`;
 //! - `object_store` and multipart parts: a body of 3 MB, read back with a GET whose answer has
-//!   a Content-Length.
+//!   a Content-Length;
+//! - conditional writes (`If-None-Match`, `If-Match`) on the routes `put_if_absent` and
+//!   `put_if_match`, and an `H=` rule that answers them 412 without reaching the service.
 //!
 //! Fixed ports 28774 and 28775 (below Linux's ephemeral port range).
 
@@ -20,6 +22,7 @@ use crate::tmpdir::TmpDir;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::os::unix::net::UnixStream;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -153,6 +156,14 @@ fn hv<'a>(hs: &'a [(String, String)], k: &str) -> Option<&'a str> {
     hs.iter().find(|(x, _)| x == k).map(|(_, v)| v.as_str())
 }
 
+fn ctl(sock: &std::path::Path, line: &str) -> String {
+    let mut c = UnixStream::connect(sock).unwrap();
+    c.write_all(format!("{line}\n").as_bytes()).unwrap();
+    let mut s = String::new();
+    let _ = c.read_to_string(&mut s);
+    s
+}
+
 #[test]
 fn the_s3_proxy_carries_real_clients_uploads() {
     let (proxy, svc) = (28774u16, 28775u16);
@@ -164,6 +175,7 @@ fn the_s3_proxy_carries_real_clients_uploads() {
     std::thread::spawn(move || s3_service(ln, st2));
     let sock = dir.join("world.sock");
     // the s3 emulator's proxy as `emulators: [{use: s3}]` expands it
+    let xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><RequestId>hydo-{seq}</RequestId></Error>";
     let cfg = serde_json::json!({
         "log": dir.join("world.log"), "sock": sock,
         "fakes": [],
@@ -172,6 +184,10 @@ fn the_s3_proxy_carries_real_clients_uploads() {
             "to": format!("127.0.0.1:{svc}"),
             "routes": [
                 {"name": "create_bucket", "method": "PUT", "path": "/{bucket}"},
+                {"name": "put_if_absent", "method": "PUT", "path": "/*",
+                 "if_header": "If-None-Match", "errors": {"412": xml}},
+                {"name": "put_if_match", "method": "PUT", "path": "/*",
+                 "if_header": "If-Match", "errors": {"412": xml}},
                 {"name": "put_object", "method": "PUT", "path": "/*"},
                 {"name": "head", "method": "HEAD", "path": "/*"},
                 {"name": "read", "method": "GET", "path": "/*"}
@@ -254,6 +270,49 @@ fn the_s3_proxy_carries_real_clients_uploads() {
         assert_eq!(hv(&hs, "content-length"), Some("3000000"), "{hs:?}");
         assert_eq!(hv(&hs, "transfer-encoding"), None);
         assert!(b == big, "the object read back");
+
+        // conditional writes: the service's own 412 passes through
+        let cput = |k: &str, hdr: &str| {
+            format!("PUT /b/{k} HTTP/1.1\r\nHost: x\r\nConnection: close\r\n{hdr}\r\nContent-Length: 2\r\n\r\n")
+        };
+        let (st, _, _) = exchange(proxy, &cput("hello.txt", "If-None-Match: *"), b"v2", false);
+        assert!(st.contains("412"), "{st}");
+        // an H= rule on put_if_absent answers 412 itself, and the service never sees the PUT
+        let on = ctl(&sock, "on 1 s3.put_if_absent@0-9:status=412");
+        assert_eq!(on.trim(), "ok", "{on}");
+        let (st, hs, b) = exchange(proxy, &cput("new", "If-None-Match: *"), b"v1", false);
+        assert!(st.contains("412"), "{st}");
+        assert_eq!(hv(&hs, "content-type"), Some("application/xml"));
+        assert!(String::from_utf8_lossy(&b).contains("<Code>PreconditionFailed</Code>"));
+        assert!(!store.lock().unwrap().contains_key("/b/new"));
+        // a plain PUT and an If-Match PUT are other routes
+        let (st, _, _) = exchange(proxy, &cput("plain", ""), b"v1", false);
+        assert!(st.contains("200"), "{st}");
+        let (st, _, _) = exchange(proxy, &cput("plain", "If-Match: \"e\""), b"v2", false);
+        assert!(st.contains("200"), "{st}");
+        ctl(&sock, "off 1");
+        let log = std::fs::read_to_string(dir.join("world.log")).unwrap();
+        let routes: Vec<String> = log
+            .lines()
+            .filter(|l| l.contains("kind=req") && l.contains("method=PUT"))
+            .map(|l| {
+                let f = |k: &str| l.split(' ').find_map(|x| x.strip_prefix(k)).unwrap_or("");
+                format!("{} {}", f("route="), f("out="))
+            })
+            .collect();
+        assert_eq!(
+            routes,
+            [
+                "put_object fwd",
+                "put_object fwd",
+                "put_object fwd",
+                "put_if_absent fwd",
+                "put_if_absent -+status412",
+                "put_object fwd",
+                "put_if_match fwd",
+            ],
+            "{log}"
+        );
     });
     let _ = child.kill();
     let _ = child.wait();

@@ -2957,6 +2957,17 @@
             "$ref": "#/$defs/Text"
           }
         },
+        "if_header": {
+          "description": "The route takes only a request that has this header, whatever its value (Milestone\n329): `If-None-Match` or `If-Match` makes a route of an S3 client's conditional writes.\nA request without it goes on to the next route.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "description": {
           "anyOf": [
             {
@@ -3342,6 +3353,27 @@
           "type": [
             "boolean",
             "null"
+          ]
+        },
+        "errors": {
+          "description": "http proxies (Milestone 329): the answer bodies of an `H=` rule `status=<code>` on this\nroute (templates), by status (`'412'`), class (`'5XX'`) or `default`; without one,\nhydo's own error body.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "if_header": {
+          "description": "The route takes only a request that has this header, whatever its value (Milestone\n329): `If-None-Match` or `If-Match` makes a route of an S3 client's conditional writes.\nA request without it goes on to the next route.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "description": {
