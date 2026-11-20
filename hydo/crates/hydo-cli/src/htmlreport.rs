@@ -1718,6 +1718,138 @@ fn screens_html(dir: &Path, run: &Run) -> String {
 /// The largest video of a walk the page embeds.
 const MAX_VIDEO_BYTES: u64 = 8 * 1024 * 1024;
 
+/// The most frames of a filmstrip a page embeds, and their bytes in all (Milestone 334).
+const MAX_FRAMES: usize = 600;
+const MAX_FILM_BYTES: u64 = 8 * 1024 * 1024;
+
+/// The filmstrip of a walk (Milestone 334): `screens/film.jsonl` of a run folder (`sd`), one
+/// line per action of the run itself with a small screenshot of the page after it, as a
+/// timeline by step. The step that a failing check names, and every action after which the
+/// watcher saw an error, a failed request or an error element, are marked. The frames of the
+/// read-back check (`step: null`) come last. Empty without a filmstrip.
+pub fn film_html(sd: &Path, named: &str, folder: &str) -> String {
+    let Ok(text) = std::fs::read_to_string(sd.join("film.jsonl")) else {
+        return String::new();
+    };
+    let lines: Vec<Value> = text
+        .lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .collect();
+    if lines.is_empty() {
+        return String::new();
+    }
+    // the steps in the order the run took them; the read-back check last
+    let mut steps: Vec<Option<i64>> = Vec::new();
+    for l in &lines {
+        let s = l.get("step").and_then(Value::as_i64);
+        if !steps.contains(&s) {
+            steps.push(s);
+        }
+    }
+    steps.sort_by_key(|s| s.map_or(i64::MAX, |x| x));
+    let actions = lines
+        .iter()
+        .filter(|l| l.get("step").is_some_and(Value::is_i64))
+        .count();
+    let mut s = format!(
+        "<p>Every action of this run, in order, with a small screenshot of the page after it. hydo took them in the run itself, not in a second run, so they show the run that the verdict judged. The files are {} and {}.</p>\n",
+        code(&format!("{folder}film.jsonl")),
+        code(&format!("{folder}film-*.jpg"))
+    );
+    if actions == 0 {
+        s.clear();
+    }
+    let mut shown = 0usize;
+    let mut bytes = 0u64;
+    let mut cut = false;
+    for st in steps {
+        let of: Vec<&Value> = lines
+            .iter()
+            .filter(|l| l.get("step").and_then(Value::as_i64) == st)
+            .collect();
+        let head = match st {
+            Some(n) => {
+                let mark = if named.contains(&format!("walk step {n}")) {
+                    format!(" {}", badge("bad", "named by the finding"))
+                } else {
+                    String::new()
+                };
+                format!("<h3>Step {n}{mark}</h3>\n")
+            }
+            None => "<h3>The read-back check: the pages after the run</h3>\n".to_string(),
+        };
+        s.push_str(&head);
+        s.push_str("<div style=\"display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 14px\">\n");
+        for l in of {
+            let field = |k: &str| l.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+            let k = match l.get("k") {
+                Some(Value::Number(n)) => n.to_string(),
+                Some(Value::String(x)) => x.clone(),
+                _ => String::new(),
+            };
+            let at = match st {
+                Some(n) if k.chars().all(|c| c.is_ascii_digit()) => format!("{n}.{k}"),
+                Some(n) if k == "start" => format!("{n}, the page opens:"),
+                Some(n) => format!("{n}, {k}"),
+                None => k.clone(),
+            };
+            let notes: Vec<String> = l
+                .get("notes")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default();
+            let failed = l.get("failed").and_then(Value::as_bool).unwrap_or(false);
+            let bad = failed || !notes.is_empty();
+            let border = if bad { "var(--bad)" } else { "var(--line)" };
+            let mut fig = format!(
+                "<figure style=\"width:240px;margin:0;font-size:13px\"><figcaption><b>{}</b> {}</figcaption>\n",
+                esc(&at),
+                esc(&field("what"))
+            );
+            let file = field("file");
+            let p = sd.join(&file);
+            let len = std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0);
+            if !file.is_empty() && len > 0 && shown < MAX_FRAMES && bytes + len <= MAX_FILM_BYTES {
+                if let Ok(b) = std::fs::read(&p) {
+                    shown += 1;
+                    bytes += len;
+                    fig.push_str(&format!(
+                        "<img alt=\"{}\" src=\"data:image/jpeg;base64,{}\" style=\"display:block;width:240px;height:auto;border:2px solid {border};border-radius:6px;margin:4px 0\">\n",
+                        esc(&format!("the page after {at}")),
+                        base64(&b)
+                    ));
+                }
+            } else if !file.is_empty() {
+                cut = true;
+            }
+            if !field("url").is_empty() {
+                fig.push_str(&format!(
+                    "<span class=\"muted\">{}</span>\n",
+                    esc(&field("url"))
+                ));
+            }
+            for n in notes.iter().take(4) {
+                fig.push_str(&format!("<br><span class=\"m-bad\">{}</span>\n", esc(n)));
+            }
+            fig.push_str("</figure>\n");
+            s.push_str(&fig);
+        }
+        s.push_str("</div>\n");
+    }
+    if cut {
+        s.push_str(&format!(
+            "<p class=\"muted\">Some frames are not shown here, to keep the page small; they are in {}.</p>\n",
+            code(folder)
+        ));
+    }
+    s
+}
+
 /// The walk of `browser.explore` (Milestone 258), from `screens/` of the run directory: the walk
 /// as a Playwright test (`repro.spec.ts`), and with `I=...,rec` a video and a trace of each step.
 fn walk_html(dir: &Path) -> String {
@@ -1913,6 +2045,26 @@ fn run_page(
     if !shots.is_empty() {
         body.push_str(&h2("screens", "What the pages showed"));
         body.push_str(&shots);
+    }
+    // browser.explore (Milestone 334): the walk of this run, action by action
+    let named: String = run
+        .findings
+        .iter()
+        .filter(|x| x.status != "ok")
+        .map(|x| {
+            format!(
+                "{} {}",
+                x.message,
+                serde_json::to_string(&x.details).unwrap_or_default()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+        + &run.verdict.text;
+    let film = film_html(&dir.join("screens"), &named, "screens/");
+    if !film.is_empty() {
+        body.push_str(&h2("film", "The walk, action by action"));
+        body.push_str(&film);
     }
     // browser.explore (Milestone 258): the walk itself, as a video, a trace and a test
     let walk = walk_html(dir);
@@ -3422,6 +3574,20 @@ fn failure_card(
                     ),
                 ));
                 s.push_str("</details>\n");
+            }
+            // Milestone 334: a walk's filmstrip of that run, from the explorer's
+            // `consoles/<tag>.screens/`
+            let film = film_html(
+                &dir.join("consoles").join(format!("{tag}.screens")),
+                &run.verdict.text,
+                &format!("{shown}/consoles/{tag}.screens/"),
+            );
+            if !film.is_empty() {
+                s.push_str(&format!(
+                    "<details{}><summary>The walk of the run {}, action by action</summary>\n{film}</details>\n",
+                    if n == 1 { " open" } else { "" },
+                    code(&tag)
+                ));
             }
         }
     }

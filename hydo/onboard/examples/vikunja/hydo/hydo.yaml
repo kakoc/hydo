@@ -91,6 +91,23 @@ browser:
     # pattern matches `<METHOD> <path>`); the token's refresh in the background, and the reads
     # that refresh lists and notifications, retry by themselves
     failures_of: "^(POST|PUT|PATCH|DELETE) /api/v[12]/(projects|tasks|labels|teams|filters)"
+  # Milestone 334: the pages show what Vikunja acknowledged. Every task that Vikunja answered as
+  # created is a link to /tasks/<id> under "Current Tasks" of the home page, unless a later
+  # acknowledged write deleted it or its project. The check runs at the end of the run and in
+  # the recovery boot after a power cut, where it signs in with the account that the walk made.
+  read_back:
+    setup:
+      - {open: /login}
+      - {fill: Username Or Email Address, with: hydo}
+      - {fill: Password, with: hydo-pass-1}
+      - {click: Login}
+      - {see: Current Tasks}
+    objects:
+      - writes: '^(POST|PUT) /api/v[12]/projects/(?<project>\d+)/tasks(/bulk)?$'
+        name: task
+        page: /
+        shows: 'a[href$="/tasks/{id}"]'
+        unless: '^DELETE /api/v[12]/(tasks/{id}|projects/{project})$'
 
 invariants:
   - id: vikunja.saved_work_survives

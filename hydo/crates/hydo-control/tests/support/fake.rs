@@ -883,6 +883,37 @@ impl Fake {
                             );
                         }
                     }
+                    // Milestone 334: a walk's filmstrip (two frames a step) and a trace of each step,
+                    // which the controller copies only when the run fails
+                    if s.argv.join(" ").contains("HYDO_FAKE_FILM") {
+                        let dir = "/tmp/hydo/web/shots";
+                        for i in f..t2 {
+                            for k in 0..2 {
+                                let file = format!("film-{i}-{k:03}.jpg");
+                                self.world
+                                    .files
+                                    .insert(format!("{dir}/{file}"), format!("JPG {i}.{k}"));
+                                self.world
+                                    .files
+                                    .entry(format!("{dir}/film.jsonl"))
+                                    .or_default()
+                                    .push_str(&format!(
+                                        "{{\"step\":{i},\"k\":{k},\"file\":\"{file}\",\"what\":\"click button\",\"url\":\"/\",\"notes\":[],\"bytes\":7}}\n"
+                                    ));
+                            }
+                            let trace = format!("walk-step-{i}.trace.zip");
+                            self.world
+                                .files
+                                .insert(format!("{dir}/{trace}"), format!("PK trace {i}"));
+                            self.world
+                                .files
+                                .entry(format!("{dir}/index.jsonl"))
+                                .or_default()
+                                .push_str(&format!(
+                                    "{{\"file\":\"{trace}\",\"test\":\"walk step {i}\",\"url\":\"\",\"why\":\"the trace\",\"only\":\"failed\",\"step\":{i}}}\n"
+                                ));
+                        }
+                    }
                     let dur = 10 + 30 * t2.saturating_sub(f);
                     self.emit(
                         t + dur,

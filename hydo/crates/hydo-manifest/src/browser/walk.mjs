@@ -24,19 +24,35 @@
 // to $HYDO_WEB_DIR/walk-script.txt, instead of choosing them again (Milestone 270). Every run
 // prints each action it took as a `walk-act <step>.<k> <json>` line for that script.
 //
+// Since Milestone 334 every run keeps a filmstrip of the walk: after the page opens and after
+// every action a small JPEG of the page (480×270, film-<step>-<k>.jpg) and one line in
+// film.jsonl with the action's sentence, the page's path and what the watcher saw go wrong since
+// the action before. Every step also records a Playwright trace, which the controller copies out
+// only when the run fails (index line `only: failed`).
+//
+//   node walk.mjs --read-back <acked file>
+//
+// is the check `browser.read_back` (Milestone 334): it opens the pages that the configuration
+// names, in a fresh browser with the walk's session (or after its setup steps, as in a recovery
+// boot after a power cut), and looks there for every object whose id the server acknowledged in
+// a write ($HYDO_ACKED's `<METHOD>:<path>=<id>` words). An object that no page shows is a
+// finding. Exit 0: every object is shown, or none was to be looked for; 1: one is not.
+//
 // The configuration is $HYDO_WEB_WALK (JSON, written by the expansion of `browser.explore`):
-//   start, actions, setup, avoid, within, values, settle_ms, quiet_ms, text, routes
+//   start, actions, setup, avoid, within, values, settle_ms, quiet_ms, text, routes, read_back
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { chromium } from 'playwright-core';
+// playwright-core is loaded when a browser starts, so that `--read-back ... --list` runs without it
+const chromium = { launch: async (o) => (await import('playwright-core')).chromium.launch(o) };
 
 const dir = process.env.HYDO_WEB_DIR || '/tmp/hydo/web';
 const cfg = JSON.parse(process.env.HYDO_WEB_WALK || '{}');
-const step = Number(process.argv[2] || 0);
-const walk = parseWalk(process.argv[3] || '');
-const guest = process.argv[4] || '';
-const ackedFile = process.argv[5] || '';
+const readingBack = process.argv[2] === '--read-back';
+const step = readingBack ? 0 : Number(process.argv[2] || 0);
+const walk = parseWalk(readingBack ? '' : process.argv[3] || '');
+const guest = readingBack ? '' : process.argv[4] || '';
+const ackedFile = (readingBack ? process.argv[3] : process.argv[5]) || '';
 const watch = JSON.parse(process.env.HYDO_WEB_WATCH || '{}');
 const actions = walk.actions || cfg.actions || 10;
 const settle = cfg.settle_ms ?? 700;
@@ -44,7 +60,7 @@ const quiet = cfg.quiet_ms ?? 3000;
 const start = new URL(cfg.start || 'http://localhost:3000/');
 const within = cfg.within || '/';
 const avoid = (cfg.avoid || ['log ?out', 'sign ?out']).map((a) => new RegExp(a, 'i'));
-const title = `walk step ${step}`;
+const title = readingBack ? 'read back' : `walk step ${step}`;
 globalThis.__hydoWalkTest = title; // the stub @playwright/test hands it to hook.cjs
 const own = path.join(dir, 'walk');
 const shots = path.join(dir, 'shots');
@@ -108,7 +124,7 @@ const log = (line) => process.stdout.write(`hydo-web: ${line}\n`);
 function event(ev) {
   fs.appendFileSync(path.join(dir, 'events.jsonl'), JSON.stringify({ t: Date.now(), ...ev }) + '\n');
 }
-function indexLine(file, why) {
+function indexLine(file, why, extra = {}) {
   const index = path.join(shots, 'index.jsonl');
   let have = '';
   try {
@@ -117,8 +133,88 @@ function indexLine(file, why) {
     have = '';
   }
   if (!have.split('\n').some((l) => l.includes(`"file":${JSON.stringify(file)}`))) {
-    fs.appendFileSync(index, JSON.stringify({ file, test: title, url: '', why }) + '\n');
+    fs.appendFileSync(index, JSON.stringify({ file, test: title, url: '', why, ...extra }) + '\n');
   }
+}
+
+// ------------------------------------------------------------------ the filmstrip (Milestone 334)
+// After the page opens and after every action: a JPEG of the viewport at three eighths of its size
+// (480×270, a few kilobytes), taken through the page's DevTools session so that the page itself
+// does not change, and one line in film.jsonl. The controller copies both out of the guest after
+// the verdict, and at a power cut before the cut, so that `hydo report --html` shows the walk of
+// the failing run action by action. A frame that cannot be taken (the page went away) keeps its
+// line without a file.
+const FILM = path.join(shots, 'film.jsonl');
+const EVENTS = path.join(dir, 'events.jsonl');
+let eventsRead = 0;
+let cdp = null;
+const shortPath = (u) => {
+  try {
+    const x = new URL(u);
+    return x.protocol === 'about:' ? u : x.pathname + x.search;
+  } catch {
+    return String(u || '');
+  }
+};
+function eventsSoFar() {
+  try {
+    eventsRead = fs.statSync(EVENTS).size;
+  } catch {
+    eventsRead = 0;
+  }
+}
+// what the watcher (hook.cjs, in this process) recorded since the frame before: the errors, the
+// failed requests and the error elements that appeared
+function newNotes() {
+  let buf;
+  try {
+    buf = fs.readFileSync(EVENTS);
+  } catch {
+    return [];
+  }
+  const text = buf.subarray(eventsRead).toString('utf8');
+  const end = text.lastIndexOf('\n');
+  if (end < 0) return [];
+  eventsRead += Buffer.byteLength(text.slice(0, end + 1));
+  const out = [];
+  const what = { exception: 'uncaught exception', rejection: 'unhandled promise rejection', console: 'console.error' };
+  for (const l of text.slice(0, end).split('\n')) {
+    let e;
+    try {
+      e = JSON.parse(l);
+    } catch {
+      continue;
+    }
+    if (e.kind === 'error') out.push(`${what[e.what] || 'error'}: ${String(e.message).slice(0, 160)}`);
+    else if (e.kind === 'request' && (e.status === undefined || e.status >= 500)) {
+      out.push(`${e.method} ${e.path} ${e.status !== undefined ? `answered ${e.status}` : `got no answer (${e.error})`}`);
+    } else if (e.kind === 'alert' && e.on) out.push(`error shown: ${String(e.text || e.selector).slice(0, 160)}`);
+  }
+  return out.slice(0, 8);
+}
+async function frame(page, k, what, extra = {}) {
+  const name = `film-${readingBack ? 'check' : step}-${typeof k === 'number' ? String(k).padStart(3, '0') : k}.jpg`;
+  let file;
+  for (let i = 0; i < 2 && !file; i++) {
+    try {
+      cdp ??= await page.context().newCDPSession(page);
+      const m = await cdp.send('Page.getLayoutMetrics');
+      const v = m.cssVisualViewport || m.visualViewport;
+      const r = await cdp.send('Page.captureScreenshot', {
+        format: 'jpeg',
+        quality: 50,
+        clip: { x: v.pageX, y: v.pageY, width: v.clientWidth, height: v.clientHeight, scale: 0.375 },
+      });
+      const jpeg = Buffer.from(r.data, 'base64');
+      fs.writeFileSync(path.join(shots, name), jpeg);
+      file = name;
+      extra = { ...extra, bytes: jpeg.length };
+    } catch {
+      cdp = null; // a new document in another process: a new session, once
+    }
+  }
+  const line = { step: readingBack ? null : step, k, file, what, url: shortPath(page.url()), t: Date.now(), notes: newNotes(), ...extra };
+  fs.appendFileSync(FILM, JSON.stringify(line) + '\n');
 }
 
 // The walk as Playwright code, for repro.spec.ts: each step's lines in walk/repro-<step>.json.
@@ -373,10 +469,9 @@ const KINDS = [
   ['wait', 1],
 ];
 const T = { timeout: 3000 };
-// the largest video or trace that the controller copies out. The controller copies at most 1 MiB
-// of files per run (hydo-control's screens::MAX_BYTES, Milestone 264): the test, a trace and a
-// video of this size fit
-const RECORDING_MAX = 640 * 1024;
+// the largest video or trace that the controller copies out (hydo-control's screens::FILE_MAX,
+// Milestone 334: 640 KiB before, when a run copied at most 1 MiB of files in all)
+const RECORDING_MAX = 3 * 1024 * 1024;
 // the names of controls that only close an overlay
 const DISMISS = /^(close|cancel|dismiss|skip|not now|no thanks|×|✕)$/i;
 // the names of buttons that commit what a form holds
@@ -753,8 +848,8 @@ async function replay(page, a) {
 // ------------------------------------------------------------------ setup steps (sign in)
 // Each is one of {open: <path>}, {click: <name>[, role]}, {fill: <label>, with: <value>},
 // {press: <key>}, {see: <text>}, {wait: <ms>}.
-async function setup(page) {
-  for (const s of cfg.setup || []) {
+async function setup(page, steps = cfg.setup || []) {
+  for (const s of steps) {
     if (s.open !== undefined) {
       await page.goto(new URL(s.open, start).href, { timeout: 30000 });
       code.push(`await page.goto(${q(s.open)});`);
@@ -891,18 +986,21 @@ async function main() {
   const opts = { viewport: { width: 1280, height: 720 }, locale: 'en-US', timezoneId: 'UTC' };
   if (state && state.storage) opts.storageState = state.storage;
   // the controller copies these files out through the agent, about 1.5 KB per call, after the
-  // verdict and at most 1 MiB of them: a video and a trace (DOM snapshots, no screenshots) of the
-  // last step that takes an action, where a walk's failure shows most often (Milestone 264: a
-  // shrunk walk leaves the steps after its failure without actions)
+  // verdict: with rec, a video of the last step that takes an action, where a walk's failure
+  // shows most often (Milestone 264: a shrunk walk leaves the steps after its failure without
+  // actions). Since Milestone 334 every step records a trace (DOM snapshots, no screenshots),
+  // which the controller copies only when the run fails; with rec the recorded step's trace is
+  // copied always, as before.
   const nsteps = cfg.steps || 1;
   const acts = (s) => Array.from({ length: actions }, (_, k) => k).some((k) => !walk.skip.has(`${s}.${k}`));
   let lastActive = nsteps - 1;
   while (lastActive > 0 && !acts(lastActive)) lastActive--;
   // rec<s> names the step to record (Milestone 267: the step whose failure the replay shows)
-  const tracing = walk.rec && step === (walk.recStep ?? lastActive);
-  if (tracing) opts.recordVideo = { dir: path.join(own, 'video'), size: { width: 640, height: 360 } };
+  const recording = walk.rec && step === (walk.recStep ?? lastActive);
+  if (recording) opts.recordVideo = { dir: path.join(own, 'video'), size: { width: 640, height: 360 } };
   const context = await browser.newContext(opts);
-  if (tracing) await context.tracing.start({ screenshots: false, snapshots: true, title });
+  await context.tracing.start({ screenshots: false, snapshots: true, title });
+  eventsSoFar();
   // What the server acknowledged: every write, answered 2xx. A write is a request under
   // watch.requests whose path matches watch.failures_of, or without that key every request that
   // is not a GET. Each goes to walk/acks.jsonl with the printable text of the request and the
@@ -998,6 +1096,7 @@ async function main() {
     code.push(`// not done in hydo's run: ${error}`);
   }
   const signedIn = status === 'passed';
+  await frame(page, 'start', signedIn ? `open ${shortPath(page.url())}` : error, signedIn ? {} : { failed: true });
   if (walk.rec && !script) {
     log(`walk ${step}: this recording has no script of the run it replays (${SCRIPT}), so the walk chooses its actions again and may take others`);
   }
@@ -1021,6 +1120,7 @@ async function main() {
     log(`walk ${step}.${k}: ${done.what}`);
     log(`walk-act ${step}.${k} ${JSON.stringify(done.act)}`);
     code.push(...done.lines);
+    await frame(page, k, done.what, done.act.failed || done.act.missing ? { failed: true } : {});
   }
   if (script) {
     log(`walk ${step}: the recording replay ${missed ? `left out ${missed} action${missed === 1 ? '' : 's'}` : 'repeated every action'} of the run it replays`);
@@ -1036,7 +1136,7 @@ async function main() {
   }
   // A recording larger than this stays in the guest: the copy out of it must fit the run's copy
   // budget, and a trace's snapshots carry the app's scripts and styles (Memos's: megabytes).
-  const keep = (file, why) => {
+  const keep = (file, why, extra) => {
     let size = 0;
     try {
       size = fs.statSync(path.join(shots, file)).size;
@@ -1047,12 +1147,13 @@ async function main() {
       log(`walk ${step}: ${file} has ${size} bytes, more than ${RECORDING_MAX}; it stays in the guest (${path.join(shots, file)})`);
       return;
     }
-    indexLine(file, why);
+    indexLine(file, why, extra);
   };
-  if (tracing) {
+  {
     const trace = `walk-step-${step}.trace.zip`;
     await context.tracing.stop({ path: path.join(shots, trace) }).catch(() => {});
-    keep(trace, 'the Playwright trace of the walk (npx playwright show-trace)');
+    // only: failed (Milestone 334): the controller copies it when the run fails, or at a power cut
+    keep(trace, `the Playwright trace of step ${step} of the walk (npx playwright show-trace)`, recording ? {} : { only: 'failed', step });
   }
   const video = page.video();
   await context.close();
@@ -1086,7 +1187,190 @@ async function main() {
   log(`test "${title}" ${status} in ${(ms / 1000).toFixed(1)} s${error ? `: ${error}` : ''}`);
 }
 
-main().catch((e) => {
+// ------------------------------------------------------------------ the read-back check
+// `browser.read_back` (Milestone 334): the pages show what the server acknowledged. Each entry of
+// cfg.read_back.objects names the writes it judges (a regular expression over `<METHOD> <path>`
+// of an acknowledged write that returned an id), the page that lists such an object (a path,
+// with {id} and the regular expression's named groups), how the page shows it (a Playwright
+// selector, with the same places), and the writes after which it is gone on purpose (`unless`).
+const ACKED_WORD = /^(GET|POST|PUT|PATCH|DELETE):(\S+?)(?:=([A-Za-z0-9_-]+))?$/;
+const esc = (x) => String(x).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const fill = (tpl, vals, quote = (x) => x) => tpl.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (m, k) => (k in vals ? quote(vals[k]) : m));
+// the kind of object a write makes: the last word of its path that is not a number or a verb of
+// the API (POST /api/v2/projects/1/tasks/bulk makes tasks), in the singular for the sentences
+function kindOf(p) {
+  const parts = p.split('/').filter((x) => x && !/^\d+$/.test(x) && !/^(bulk|batch|new|create|api|v\d+)$/i.test(x));
+  return parts.pop() || '';
+}
+const singular = (k) => (k.endsWith('ies') ? `${k.slice(0, -3)}y` : k.endsWith('s') && !k.endsWith('ss') ? k.slice(0, -1) : k) || 'object';
+
+function ackedWrites() {
+  let text = '';
+  try {
+    text = fs.readFileSync(ackedFile, 'utf8');
+  } catch {
+    text = '';
+  }
+  const out = [];
+  for (const w of text.split(/\s+/)) {
+    const m = ACKED_WORD.exec(w);
+    if (m) out.push({ method: m[1], path: m[2], id: m[3], line: `${m[1]} ${m[2]}` });
+  }
+  return out;
+}
+
+// The objects to look for: one per entry and id, the last write that returned it.
+function wanted(rb, writes) {
+  const objs = new Map();
+  const goneBy = [];
+  for (const [n, e] of (rb.objects || [{}]).entries()) {
+    const re = new RegExp(e.writes || '^(POST|PUT) ');
+    for (const w of writes) {
+      if (!w.id) continue;
+      const m = re.exec(w.line);
+      if (!m) continue;
+      const kind = kindOf(w.path);
+      const vals = { ...(m.groups || {}), id: w.id };
+      const unless = new RegExp(fill(e.unless || (kind ? `^DELETE \\S*/${esc(kind)}/{id}$` : '^DELETE \\S*/{id}$'), vals, esc));
+      const gone = writes.find((x) => unless.test(x.line));
+      const key = `${n}\u0000${w.id}`;
+      if (gone) {
+        objs.delete(key);
+        goneBy.push(`${e.name || singular(kind)} ${w.id} (${gone.line})`);
+        continue;
+      }
+      const shows = e.shows || (kind ? `a[href$="/${kind}/{id}"], a[href*="/${kind}/{id}/"]` : 'a[href$="/{id}"]');
+      objs.set(key, {
+        id: w.id,
+        name: `${e.name || singular(kind)} ${w.id}`,
+        write: w.line,
+        page: fill(e.page || start.pathname + start.search, vals, encodeURIComponent),
+        shows: fill(shows, vals),
+      });
+    }
+  }
+  return { objs: [...objs.values()], goneBy };
+}
+
+async function readBackMain() {
+  const rb = cfg.read_back || {};
+  const writes = ackedWrites();
+  const { objs, goneBy } = wanted(rb, writes);
+  const left = goneBy.length ? `; ${goneBy.length} left out because a later acknowledged write removed them, such as the ${goneBy[0]}` : '';
+  // --list: what the check would look for, without a browser (hydo-manifest's tests)
+  if (process.argv[4] === '--list') {
+    console.log(JSON.stringify({ objects: objs, left_out: goneBy }));
+    process.exit(0);
+  }
+  if (objs.length === 0) {
+    console.log(`no acknowledged write that browser.read_back names returned an id (${writes.length} acknowledged writes in all), so no page had an object to show${left}`);
+    process.exit(0);
+  }
+  const wait = rb.wait_ms ?? 10000;
+  const server = await startServer();
+  const browser = await chromium.launch({ headless: true });
+  let state = null;
+  try {
+    state = JSON.parse(fs.readFileSync(path.join(own, 'state.json'), 'utf8'));
+  } catch {
+    state = null;
+  }
+  const opts = { viewport: { width: 1280, height: 720 }, locale: 'en-US', timezoneId: 'UTC' };
+  if (state && state.storage) opts.storageState = state.storage;
+  const context = await browser.newContext(opts);
+  const page = await context.newPage();
+  eventsSoFar();
+  const stop = async (code) => {
+    await browser.close().catch(() => {});
+    if (server) {
+      try {
+        process.kill(-server.pid, 'SIGTERM');
+      } catch {
+        /* gone already */
+      }
+    }
+    process.exit(code);
+  };
+  // the walk's session; in a recovery boot, or when the walk never signed in, the setup steps
+  if (!state || !state.signedIn) {
+    const steps = rb.setup || cfg.setup || [];
+    try {
+      if (!steps.some((x) => x.open !== undefined)) await page.goto(start.href, { timeout: 30000 });
+      await setup(page, steps);
+    } catch (e) {
+      const why = String((e && e.message) || e).split('\n')[0].slice(0, 200);
+      await frame(page, 'setup', `sign in again: ${why}`, { failed: true });
+      console.log(
+        `The pages could not be opened to look for the ${objs.length} objects that the server acknowledged, such as the ${objs[0].name} (${objs[0].write}): ` +
+          `the setup steps of browser.read_back failed: ${why}`,
+      );
+      await stop(1);
+    }
+  }
+  const byPage = new Map();
+  for (const o of objs) {
+    if (!byPage.has(o.page)) byPage.set(o.page, []);
+    byPage.get(o.page).push(o);
+  }
+  const missing = [];
+  let shot = 0;
+  let n = 0;
+  for (const [p, list] of byPage) {
+    let open = '';
+    try {
+      await page.goto(new URL(p, start).href, { timeout: 30000 });
+    } catch (e) {
+      open = String((e && e.message) || e).split('\n')[0].slice(0, 160);
+    }
+    const t0 = Date.now();
+    let notYet = list;
+    while (!open) {
+      const still = [];
+      for (const o of notYet) {
+        const c = await page.locator(o.shows).count().catch(() => 0);
+        if (c === 0) still.push(o);
+      }
+      notYet = still;
+      if (notYet.length === 0 || Date.now() - t0 >= wait) break;
+      await page.waitForTimeout(500);
+    }
+    n++;
+    await frame(page, n, `look on ${p} for ${list.length} acknowledged object${list.length === 1 ? '' : 's'}: ${notYet.length} not shown`, notYet.length ? { failed: true } : {});
+    if (notYet.length) {
+      let file = '';
+      try {
+        file = `read-back-${++shot}.png`;
+        await page.screenshot({ path: path.join(shots, file) });
+        indexLine(file, `the page ${p} without ${notYet.length === 1 ? notYet[0].name : `${notYet.length} acknowledged objects`}`);
+      } catch {
+        file = '';
+      }
+      for (const o of notYet) missing.push({ ...o, file, open, secs: ((Date.now() - t0) / 1000).toFixed(1) });
+    }
+  }
+  if (missing.length === 0) {
+    const pages = [...byPage.keys()];
+    console.log(
+      `every one of the ${objs.length} objects that the server acknowledged and browser.read_back names is shown, on ${pages.length === 1 ? `the page ${pages[0]}` : `${pages.length} pages`}${left}`,
+    );
+    await stop(0);
+  }
+  for (const m of missing.slice(1, 20)) console.log(`also not shown on ${m.page}: the ${m.name} (${m.write})`);
+  const f = missing[0];
+  const how = f.open ? `the page did not open (${f.open})` : `no element matches ${f.shows} after ${f.secs} s`;
+  const more = missing.length > 1 ? `; ${missing.length} of ${objs.length} acknowledged objects are not shown` : '';
+  console.log(
+    `The page ${f.page} does not show the ${f.name} that the server acknowledged (${f.write} answered with its id): ${how}${more}.` +
+      `${f.file ? ` Screenshot: screens/${f.file} in the run directory.` : ''}`,
+  );
+  await stop(1);
+}
+
+(readingBack ? readBackMain() : main()).catch((e) => {
+  if (readingBack) {
+    console.log(`browser.read_back could not look at the pages: ${String((e && e.message) || e).split('\n')[0].slice(0, 200)}`);
+    process.exit(2);
+  }
   log(`walk ${step}: the walker stopped: ${String((e && e.stack) || e).split('\n').slice(0, 3).join(' / ')}`);
   event({ kind: 'test', test: title, file: 'walk', status: 'failed', expected: 'passed', ms: 0, error: String(e && e.message) });
   process.exit(1);

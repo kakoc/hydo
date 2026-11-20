@@ -1421,6 +1421,29 @@ In 40 walks with every fault kind but the lying disk, 5 of 19 power cuts lost sa
 and the other kinds (kills, pauses, network faults, clock steps) lost none. The details are in
 `docs/HISTORY.md` Milestone 273; open item 137 has what the walk lacked.
 
+**The failing run's own frames, and the pages read back (M334, tentative number).** Two parts,
+each its own commit:
+- Every run of a walk keeps a filmstrip. After the page opens and after every action, the walker
+  saves a 480 by 270 JPEG of the page and one line in `screens/film.jsonl`. The line names the
+  action, the path, and the errors and failed requests since the action before. A failing run
+  also keeps the Playwright trace of every step.
+- A power cut does not lose them: the controller copies the filmstrip and the last step's trace
+  before the cut. `hydo report --html` shows the filmstrip as the run's timeline, step by step.
+  The page of an exploration shows each failure's filmstrip in its details.
+- An image whose walker has them (the file `/etc/hydo/walk-film`) copies up to 5 MiB per boot,
+  each file up to 3 MiB, in windows of 16 reads. An image built before copies as before, at
+  most 1 MiB. The Mac and KVM engines keep 32 MiB of console per boot (4 MiB before).
+- `browser.read_back` (a format-1 addition) adds the check `<browser>.acked_shown`. It runs at the
+  end of the run and in the recovery boot after a power cut. It opens the pages and looks for
+  every object whose id the server returned in an acknowledged write.
+- On hvx Vikunja's `disk=none | run C=5 I=1` failed it from the pages alone. The home page lacked
+  the tasks 3, 4, and 5 that the database rule found lost. The run directory kept the first
+  boot's 66 frames and its trace.
+
+Images built from `browser.explore` get new bytes (the walker and `/etc/hydo/walk-film`); none is
+in `hydo/onboard/recorded.json`, and nothing recorded moved. The reference is `hydo guide
+web-apps`; the design is the last section of `docs/design/ui-exploration.md` (open item 168).
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -1845,8 +1868,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       spin observer's own looks slowed the 4 GiB guest's memory setup past the 10 s limit.
       The web-shop example did not run again on KVM after the fix.
     - hvx did not run M254's code, so no hvx run has screenshots in its run directory yet.
-    - An exploration's report page does not show the screenshots, which the explorer writes to
-      `<tag>.screens/` beside the run's transcripts.
+    - An exploration's report page shows each problem's run's filmstrip since M334, but not the
+      other screenshots, which the explorer writes to `consoles/<tag>.screens/` beside the
+      run's transcripts.
     - One pinned Playwright version (1.65.1). A team on another version needs its pin added to
       `hydo_manifest::browser::CATALOG`. Firefox and WebKit were not tried.
     - Since M258 `browser.explore` walks through the pages without tests (open item 124). Cypress
@@ -2245,20 +2269,24 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `hydo-out/`.
 124. Walks through the pages (M258, M264). What is left:
     - The Mac engine runs the walks since M284; Vikunja's walks did not run there.
-    - Only one step is recorded: the step that a finding names (M267), else the last that
-      takes an action. A run copies at most 1 MiB of files out of the guest (M264), and the
-      videos of every step of a Memos walk would pass 2 MB.
+    - Only one step's video is recorded: the step that a finding names (M267), else the last
+      that takes an action. Since M334 every run keeps a small screenshot of every action, and a
+      failing run the trace of every step, up to 5 MiB per boot. The videos of every step of a
+      Memos walk would pass 2 MB.
     - A fault still changes the page itself (open item 129). A clock step changes a memo list's
       order and what a calendar shows, so a shrink candidate without it can take other actions.
     - `repro.spec.ts` maps `H=` faults to `page.route`, but applies a fault with `p=` to every
       request, and gives a backend fault only as a comment. Its native run was tried on the
       web-shop example only.
     - `hydo rules check` runs walks (`I=1`, `I=2` and on) for a walking image; it did not run on
-      one. The walk does not check what the page shows against the backend's state.
+      one. Since M334 `browser.read_back` checks that the pages show the acknowledged objects;
+      it does not check their content (open item 168).
     - Only the page invariants' signatures blank generated ids (M264); a project's own rule
       whose message names a random id still gives each shrink candidate its own signature.
     - After a power cut the page checks run in the recovery boot, where no page ran; the pages of
-      the first boot up to the cut are not judged.
+      the first boot up to the cut are not judged. Since M334 their filmstrip and the last
+      step's trace leave the guest before the cut, and the read-back check opens the pages in
+      the recovery boot.
     - The walk follows no links into other origins and no file uploads, and it sees no canvas,
       no iframe, and no shadow DOM that the accessibility tree does not show.
 125. What devices need from hydo (M259; the section "What hydo lacked" of
@@ -2348,8 +2376,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       draws a timed kill (`X=`) only for a manifest without `faults:`. Finding 2 needs a refused
       write in the middle of a step, so no schedule of seeds 21-60 with `--durable-only` can
       fail it.
-    - A walk that a power cut ends is not judged. Two walks of that version clicked a share
-      link's copy button and passed, because `C=5` cut the power (open item 124).
+    - A walk that a power cut ends is not judged by the five page checks. Two walks of that
+      version clicked a share link's copy button and passed, because `C=5` cut the power (open
+      item 124). Since M334 the filmstrip of the first boot shows what such a walk did.
     - M267's walker did not run on KVM.
 132. What Milestone 268 left. The saved regressions are out of the image since M269 (the
     fingerprint epoch 4): `hydo build` writes them beside it, and an edited or new regression
@@ -2362,8 +2391,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Memos's share-link finding has no recording yet. A walker that prints its actions changes
       the image, and with it the walks. On the first walker with M270's change, r31's and seed
       42's walks no longer open the share link's dialog, and they pass with and without `rec`.
-      A recording of the finding needs a walk that fails with the share link on an image with
-      M270's walker, for example from an exploration of that image.
+      Since M334 a failing run keeps its own frames and traces, so no second run is needed, but
+      no Memos image with M334's walker was built or explored.
     - `hydo run` and `hydo repro` of a schedule with `rec` run the schedule twice: once without
       `rec` for the actions, once recorded. A run directory's `walk-script.txt` is written but
       not read back by `hydo repro`.
@@ -2399,9 +2428,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - When the session ends, the walk does not sign in again: `setup` runs only in a step
       without a saved session. Under disk errors seed 9's walk was on the login page from step 4
       on; why the session ended was not traced.
-    - A recording replay of a walk that a power cut ends records nothing: the recording stays in
-      the first boot's guest, as the page checks do (open item 124). The replay of finding 1 left
-      no video, trace or `repro.spec.ts`.
+    - A recording replay of a walk that a power cut ends records no video: the video stays in the
+      first boot's guest. Since M334 the run's filmstrip and its last step's trace leave the guest
+      before the cut; `disk=none | run C=5 I=1` kept 66 frames and the trace of step 4.
     - Under `disk=ioerr` a rule that copies the database through the same disk cannot read it,
       and the run ends in ERROR (seeds 1 and 8). Which read failed was not traced.
     - The words name ids of a JSON answer only. A write whose answer has no id, such as
@@ -2576,6 +2605,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       passed on the Mac, whose pages answer at other moments of the guest's clock.
     - The Mac engine ran no `screens: compare` run, and its screenshots were not compared with
       those of hvx or KVM.
+    - The Mac engine did not run M334's filmstrip, its copy at a power cut, or the read-back
+      check.
 146. Value history (M285, M291, `docs/design/value-history.md`). What is left:
     - KVM: the engine makes the reads, but no KVM run was made. Blnk's plan needs 3 entry
       breakpoints and 1 for returns, and KVM has 3 debug registers.
@@ -2683,8 +2714,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 151. What the fixes of the 0.4.0 trial left (M301, `docs/design/0.4.0-user-trial.md`). What is
     left:
     - A recording replay has timing of its own. A failure that depends on the walk's timing can
-      pass in it, and then no video shows the failure. The page says so. A recording with the
-      run's own timing is not built.
+      pass in it, and then no video shows the failure. The page says so. Since M334 the failing
+      run's own filmstrip and traces show it; a video with the run's own timing is not built.
     - The images of `browser:` built after M301 have new bytes (`hook.cjs` and `check.mjs`). The
       fingerprints in the RESULTS.md pages of web-shop, Memos, and Vikunja hold only for the
       images built before. None of them is in `hydo/onboard/recorded.json`.
@@ -3033,6 +3064,25 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       of `SNAP` and `RESUME` did not run: the shared VM lock was taken and the disk was low.
       KVM explorations were not measured. The wall seconds are estimates from the guest clock,
       which predicts a run's seconds badly on ClickHouse and Dragonfly.
+168. The frames of a failing run and the read-back check (M334, tentative number). Left:
+    - Only hvx ran them, on Vikunja and web-shop. The Mac and KVM engines did not run the
+      filmstrip, the copy at a power cut, or the read-back check. Their larger console (32 MiB)
+      ran only in the scripted tests.
+    - The frames and the trace of every step cost the walk guest time, so a walk's timing
+      differs from M273's walker. Vikunja's `disk=cut | run C=6 I=1` lost two tasks then and
+      holds now; `disk=none | run C=5 I=1` loses three now, two then.
+    - Only the video of `,rec` is a video; a failing run keeps frames, not a video of itself.
+    - The copy at a power cut takes the last step's trace only. A `cf=` cut at the workload's
+      end, which the engine makes after the workload, copies nothing before the cut.
+    - The read-back check judges only objects whose write returned an id, on the pages it
+      names. It does not see a second page of a list, a hidden or archived object, or a cascade
+      of a delete without `unless`. It judges an object's presence, not its content.
+      `read_back: true` guesses the page and the link, and a guess that does not fit an app
+      gives a false finding, so the check is not on by default.
+    - In a recovery boot the check signs in with `read_back.setup`. A walk whose account the
+      power cut lost cannot sign in, and the check then fails without naming the lost account.
+    - Memos was not run with the new walker, and its share-link finding still has no recording
+      (open item 134).
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -4001,6 +4051,12 @@ build machine, before 2026-10-13.
   constructors, and the refusals name lines that build. The `with` types reach parameters'
   types. On the evaluator's first contracts hydo fuzzed 76 of 88 against 51, and all three known
   issues showed again. Nothing recorded moved
+- M334 (tentative number): the failing run's own frames, and the pages read back. Every run of a
+  walk keeps a small screenshot of every action with its sentence. A failing run keeps the
+  Playwright trace of every step, and a power cut takes them along. `hydo report --html` shows them
+  as the run's timeline. `browser.read_back` checks that the pages show every object the server
+  acknowledged, also after a power cut. On hvx it found Vikunja's lost tasks from the home page
+  alone. Nothing recorded moved
 - M337 (tentative number): research on shared beginnings of runs. On 13 hvx explorations the
   first runs shared 0.07 % of their time, because each schedule's seed, composition, walk, and
   early first fault reach the guest at once. Other draws would save 3 % to 11 % and lose the

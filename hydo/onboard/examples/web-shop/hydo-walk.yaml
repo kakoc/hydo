@@ -39,6 +39,14 @@ browser:
     busy: [.spinner]
     alerts: ["[role=alert]"]
     requests: /api/
+  # Milestone 334: every order that the API acknowledged opens on its own page, at the end of the
+  # walk; an order is the {"id":"o1"} answer of POST /api/orders
+  read_back:
+    objects:
+      - writes: '^POST /api/orders$'
+        name: order
+        page: /orders/{id}
+        shows: 'text=Order {id} confirmed'
 
 fakes:
   - name: api                   # the shop's API: its four routes and their usual answers

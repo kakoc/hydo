@@ -285,6 +285,14 @@ pub struct Plan {
     /// walker repeats those actions. Not a manifest key: the host sets it for a run whose walk
     /// records, and None leaves every run as it was.
     pub walk_script: Option<String>,
+    /// Milestone 334: the image's walker keeps a filmstrip (`film.jsonl`, a small screenshot of
+    /// every action) and a Playwright trace of every step. The controller then copies the
+    /// filmstrip out of the guest after the verdict and at a power cut, the traces when the run
+    /// fails, with the larger budget of [`crate::schedule::screens::BOOT_BYTES`]. Not a manifest
+    /// key: `agent::plan_of_image` sets it when the image has the file
+    /// [`hydo_manifest::browser::FILM_MARK`], which hydo-build stages with such a walker, so an
+    /// image built before keeps every command and value it had.
+    pub film: bool,
     /// Milestone 328: the sizes that decide whether an image's root fits into guest RAM, for an
     /// image whose root is its initramfs (the Mac engine's `*-arm64.cpio.gz`). The controller
     /// names them when the guest kernel says that it could not unpack the initramfs. Not a
@@ -750,6 +758,7 @@ impl Plan {
             screens: hydo_manifest::browser::screens_dir(d),
             walk: hydo_manifest::browser::walks(d),
             walk_script: None,
+            film: false,
             root_fit: None,
             invariants,
             knobs,

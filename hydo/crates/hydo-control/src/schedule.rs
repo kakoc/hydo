@@ -2482,7 +2482,7 @@ fn finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     dump::collect(fx, ctx)?;
     // browser: (Milestone 254): the pages' screenshots, last, so that their reads change
     // neither the verdict nor the counters
-    screens::collect(fx, ctx)?;
+    screens::collect(fx, ctx, screens::At::Verdict(&v))?;
     fx.settle()?;
     fx.end(Ending::Verdict(v))
 }
@@ -3543,6 +3543,8 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             );
         }
         cost::probe(fx, ctx, "end", true)?; // HYDO_COST=full: services frozen, before the cut
+                                            // Milestone 334: a walk's filmstrip leaves the guest before the cut, which loses its /tmp
+        screens::collect(fx, ctx, screens::At::Cut)?;
         fx.report("hydo-explore-workload-done cut");
         fx.settle()?;
         return fx.end(ending);
@@ -3681,6 +3683,8 @@ fn disk_cut(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         "POWER CUT at the disk flush of cf= (the workload and all services frozen)",
     );
     cost::probe(fx, ctx, "end", true)?; // HYDO_COST=full: services frozen, before the cut
+                                        // Milestone 334: a walk's filmstrip leaves the guest before the cut (/tmp is not on the disk)
+    screens::collect(fx, ctx, screens::At::Cut)?;
     fx.report("hydo-explore-workload-done");
     fx.engine(EngineAction::DiskFaultsOff);
     log(fx, "command: go");
@@ -3700,7 +3704,7 @@ fn stopped_without_faults(fx: &mut F<'_>, ctx: &Ctx, svc: &str) -> Step<()> {
     let v = format!("{STOPPED_WITHOUT_FAULTS} ({svc})");
     fx.report(v.clone());
     cost::probe(fx, ctx, "final", false)?;
-    screens::collect(fx, ctx)?;
+    screens::collect(fx, ctx, screens::At::Verdict(&v))?;
     fx.settle()?;
     fx.end(Ending::Verdict(v))
 }

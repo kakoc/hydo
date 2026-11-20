@@ -1885,8 +1885,73 @@ pub struct Browser {
     /// /opt/hydo/web/screens-ref.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub screens_ref: Option<Text>,
+    /// Milestone 334, with `explore` only: the check <name>.acked_shown, that the pages show
+    /// every object whose id the server acknowledged in a write. true takes the defaults: every
+    /// object that a POST or PUT returned an id of, on the walk's start page, as a link whose
+    /// path ends with /<kind>/<id> (the kind is the last word of the write's path). It runs at
+    /// the end of the run and in the recovery boot after a power cut.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_back: Option<BrowserReadBack>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
+}
+
+/// `browser.read_back` (Milestone 334): true, false, or which acknowledged objects the pages must
+/// show, where and how.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    untagged,
+    expecting = "true, false, or a mapping with objects:, setup: and wait_ms:"
+)]
+pub enum BrowserReadBack {
+    On(bool),
+    Spec(BrowserReadBackSpec),
+}
+
+/// The mapping of `browser.read_back`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct BrowserReadBackSpec {
+    /// The kinds of objects to look for (default one entry of the defaults).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub objects: Option<Vec<BrowserReadBackObject>>,
+    /// The steps that sign in when the check's browser has no session of the walk, as in the
+    /// recovery boot after a power cut (default the walk's own setup).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setup: Option<Vec<BrowserSetupStep>>,
+    /// How long a page may take to show its objects, in milliseconds (default 10000).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = 10000))]
+    pub wait_ms: Option<i64>,
+}
+
+/// One kind of object of `browser.read_back.objects`. {id} in page, shows and unless is the id
+/// that the write's answer returned, and {<group>} a named group of writes.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct BrowserReadBackObject {
+    /// A regular expression over `<METHOD> <path>` of an acknowledged write whose answer
+    /// returned an id (default `^(POST|PUT) `), such as
+    /// `^POST /api/projects/(?<project>\d+)/tasks$`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub writes: Option<Text>,
+    /// The object's name in the check's sentences, such as task (default the last word of the
+    /// write's path, in the singular).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<Text>,
+    /// The path of the page that lists such an object, such as /orders/{id} (default the walk's
+    /// start page).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<Text>,
+    /// A Playwright selector of what shows the object on that page, such as
+    /// `a[href$="/tasks/{id}"]` or `text=Order {id}` (default a link whose path ends with
+    /// /<kind>/<id>).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shows: Option<Text>,
+    /// A regular expression over `<METHOD> <path>` of a later acknowledged write that removes
+    /// the object on purpose (default `^DELETE <any path>/<kind>/{id}$`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unless: Option<Text>,
 }
 
 /// `browser.explore` (Milestone 258): hydo walks through the app's pages itself. Each workload

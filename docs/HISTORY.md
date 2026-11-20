@@ -19591,6 +19591,163 @@ which this milestone does not change.
 
 **What is left.** Open item 163. Nothing recorded moved.
 
+## Milestone 334 (tentative number): the failing run's own frames, and the pages read back
+
+Two gaps of the walks through a web app's pages (Milestones 258 to 273) are closed, each in its
+own commit.
+
+The first gap was the evidence of a failure. Only one step was recorded, the step that a finding
+names, because a run copied at most 1 MiB of files out of the guest (Milestone 264). The
+recording was a second run with `,rec` and timing of its own, so a failure that depends on the
+timing could pass in it, and then no video showed the failure (open item 151). A walk that a
+power cut ended left nothing at all, because its files stayed in the first boot's `/tmp` (open
+items 124 and 137).
+
+The second gap was what a user sees. The page checks judged what a page did, and a project's own
+rule judged the database. No check said whether the pages still showed what the server had said
+it saved.
+
+### Part 1: every run keeps its own frames
+
+What the walker does now, in images built from this commit on:
+
+- After the page opens and after every action, it takes a JPEG of the viewport at three eighths
+  of its size (480 by 270 pixels, quality 50). It uses the page's DevTools session
+  (`Page.captureScreenshot` with a scaled clip), not `page.screenshot`, which a trace records as
+  an action. It writes one line to `shots/film.jsonl`: the step, the action's number, the file
+  and its size, the action's sentence, the page's path, the guest's time, and `notes`. The notes
+  are the uncaught errors, the failed requests and the error elements that the watcher recorded
+  since the frame before.
+- Every step records a Playwright trace (DOM snapshots, no screenshots). Its index line says
+  `only: failed`. With `,rec` the recorded step's video and trace are copied as before.
+- The expansion of `browser.explore` writes `/etc/hydo/walk-film`. `agent::plan_of_image` reads
+  it and sets `Plan::film`. An image built before, of any fingerprint epoch, sends the commands
+  that it sent before. The epoch could not decide this, because an image built at epoch 5 before
+  this commit has the older walker.
+
+What the controller does for an image with the mark (`schedule/screens.rs`):
+
+- After the verdict it copies the index's files, then `film.jsonl` and every frame that it
+  names, then, when the verdict is not OK, the traces. The step that the verdict names ("walk
+  step 3") comes first, then the latest steps.
+- A boot copies at most 5 MiB (`BOOT_BYTES`), each file up to 3 MiB (`FILE_MAX`). An image
+  without the mark keeps Milestone 264's copy, at most 1 MiB per run.
+- The reads go 16 at a time (`text::WINDOW`) before the controller waits for their replies. A
+  frame's size is in its line, so every chunk of a group of frames is sent at once. A read that
+  waits alone costs about a tenth of a second on hvx (Milestone 264).
+- At a host power cut (`C=`, a reaction's `:cut`, and the flush of `cf=`), with every service
+  frozen and after the ids are read, it copies the filmstrip and the trace of the last step before
+  the engine cuts the power. `/tmp` is a tmpfs, so the reads touch no disk. The recovery boot
+  copies its own files after its verdict. `agent::take_screens` now also takes the recovery
+  transcript's files, adds the index lines that are new, and appends a second `film.jsonl` to
+  the first.
+
+The engines' channels: 5 MiB as hex with its notes is about 10.5 MiB of agent lines. The hvx
+engine keeps 16 MiB per boot (Milestone 264). The Mac and KVM engines read the agent's lines from
+the console, which kept 4 MiB per boot; `CONSOLE_MAX` is 32 MiB now. A fingerprint hashes the
+console up to its length, and a boot that wrote more than 4 MiB lost the agent's later lines and
+never reached its verdict. So no recorded run has a different console, and no recorded value
+moves.
+
+`hydo report --html` of a run has a section "The walk, action by action" with one row of frames
+per step: each frame with its action, its path and its notes. The step that a failing check
+names, and every frame with notes, are marked. The read-back check's frames come last. The page
+of an exploration shows each failure's filmstrip from `consoles/<tag>.screens/` in the
+failure's details, under its timeline.
+
+### Part 2: the pages read back
+
+`browser.read_back` (a format-1 addition, with `explore` only) adds the invariant
+`<browser>.acked_shown` after the other page checks. Its entries name the acknowledged writes
+that make an object (`writes`, a regular expression over `<METHOD> <path>` of the
+`<METHOD>:<path>=<id>` words of `$HYDO_ACKED`, Milestone 273). They also give the page that lists
+such an object (`page`), the Playwright selector by which it shows (`shows`), and the later
+writes that remove it on purpose (`unless`). `{id}` and the named groups of `writes` fill them.
+`read_back: true` takes one entry of defaults: every object that a POST or a PUT returned an id
+of, on the start page, as a link whose path ends with `/<kind>/<id>`.
+
+The check is `node walk.mjs --read-back "$HYDO_ACKED"` in the browser's service:
+
+- It runs at the end of the run and in the recovery boot after a power cut, whose `$HYDO_ACKED`
+  starts with the first boot's words.
+- It starts a fresh browser with the walk's saved session. A recovery boot has none, so it then
+  runs `read_back.setup`, or the walk's own setup.
+- It opens each page once and waits up to `wait_ms` (10 s) until every object of that page
+  shows.
+- A page that lacks an object gets a screenshot, `read-back-<n>.png`, which the finding names,
+  and a frame in the filmstrip. Exit 0: every object shows, or no write named one; 1: one does
+  not, or the pages could not be opened.
+- It runs after the other page checks, because in a recovery boot it makes the record folder
+  that they read as "no page ran in this boot".
+- The explorer blanks generated ids in its signatures (`report::page_violation`), so a loss of
+  two tasks and of three tasks is one signature.
+
+The check is not on by default. The default entry guesses where an object shows, and a guess that
+does not fit an app is a false finding. It judges an object's presence, not its content, and it
+cannot see an object that the app shows only on a page that it does not open, or hides on
+purpose.
+
+### The proofs
+
+The runs used hvx on the bare-metal machine, one VM at a time under `hvx-run`. hydo was this
+branch's over the 0.4.0 Linux release, at the fingerprint epoch 5, with images built from the
+examples as they are in this commit: `explore-ob-vikunja-disk.img` (sha256 `d43ef61b6d06f9a8…`,
+4,228,907,008 bytes) and `explore-ob-web-shop-walk-disk.img` with `--set variant=buggy`
+(`ab58056be7828887…`, 4,094,689,280 bytes).
+
+Vikunja (`hydo/onboard/examples/vikunja`, RESULTS.md "The pages read back after the power cut"):
+
+| schedule | verdict | `browser.acked_shown` | fingerprint |
+|---|---|---|---|
+| `disk=none \| run I=1` | OK, 7 invariants held | every one of 5 tasks shown on `/` | `626ca6e005521589` |
+| `disk=none \| run C=5 I=1` | VIOLATION `vikunja.saved_work_survives`, 3 of 5 missing | failed: `/` does not show the task 3; 3 of 5 not shown | `a4348eacc7ad3268` twice |
+| `disk=cut \| run C=6 I=1` | OK | every one of 5 tasks shown | `e6ee25b034d97130` |
+
+- With `C=5` the check named the same three tasks as the database rule, from the home page
+  alone, after it signed in again in the recovery boot. Its screenshot shows the two tasks that
+  survived. M273's finding 1 needed the database rule.
+- The run directory kept the first boot's 66 frames (445 KB, a median of 8 KB) and the trace of
+  step 4 (482 KB). The controller copied them in 0.8 s of guest time before the cut. The report
+  page was 801 KiB.
+- The walk takes more guest time per step now, so it meets the cuts at other moments: `C=5` lost
+  task 3 too, and `disk=cut | run C=6 I=1` lost nothing (two tasks in M273).
+
+web-shop (`hydo/onboard/examples/web-shop`, `hydo-walk.yaml`, the variant `buggy`; RESULTS.md
+"The filmstrip and the read-back of Milestone 334"):
+
+| schedule | verdict | `browser.acked_shown` | fingerprint |
+|---|---|---|---|
+| `disk=none \| run I=1` | OK, 6 invariants held | 3 orders, each on its own page | `5dac5c131187df81` twice |
+
+- The run kept 47 frames (121 KB) and no trace, because it passed.
+`hydo explore --seeds 1-10 --protocol-faults --workers 1` ran 10 schedules, the shrink and the
+recording replay in 965 s, a mean of 24.5 s per run in the engine (19.1 s in Milestone 284: the
+frames, the traces and the read-back check cost the rest).
+
+- Seed 7 failed, as in Milestone 258: "The page /orders/o32 left a promise rejection unhandled
+  during the test "walk step 3": HttpError: HTTP 502 for /api/orders/o32". Its run directory
+  kept the filmstrip and the traces of its 4 steps (14 to 17 KB each). The 9 passing runs kept
+  their filmstrips and no trace.
+- The shrinker took 29 runs to `disk=none dseed=63cbe1e459320dd7 | run H=api.get_order@3-4:reset
+  I=a0d28305209409f6,n7,x0.0-6,x1.0-6,x2.0-6`, the minimal schedule of Milestone 284, which gave
+  `2073817890afc835` on both confirmation runs. The page of the exploration shows the filmstrip of
+  the confirmation run `min-a` in the failure's details: 12 frames, the 7 actions of step 3
+  among them. The recording replay `replays/rec-1/` kept the video, as before, and its own
+  filmstrip and traces.
+- The read-back check held in every run, with 1 to 4 orders each, also in seed 7, where the
+  page of order o32 failed during step 3 and showed the order at the end.
+
+### What did not change
+
+- Nothing in `hydo/onboard/recorded.json` moved: no `browser:` image is in it (open item 105).
+- Images built from `browser.explore` get new bytes, because the walker changed and
+  `/etc/hydo/walk-film` is new: the examples `web-shop` (`hydo-walk.yaml`), `memos` and
+  `vikunja`. An image built from `browser.tests` keeps its bytes: the watcher and the checks did
+  not change.
+- The hvx engine and the module did not change.
+
+What is left is open item 168.
+
 ## Milestone 337 (tentative number): shared beginnings of an exploration's runs, research
 
 The question was whether the explorer can run a beginning that many schedules share once, take

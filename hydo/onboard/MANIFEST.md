@@ -2056,10 +2056,19 @@ browser:
   names). A walk with `rec` repeats the actions of the same schedule without `rec`, which each
   run prints as `hydo-web: walk-act <step>.<k> <json>` lines; the host writes them to
   `/tmp/hydo/web/walk-script.txt` before the first step, and an action whose control is not on
-  the page is left out with a line that says so (Milestone 270). A recording of more than
-  640 KB stays in the guest, and a run copies at most 1 MiB of files out of it; a file that
-  does not fit stays in the guest with a `HYDO-SCREEN-LEFT` line in the console (Milestone
-  264).
+  the page is left out with a line that says so (Milestone 270).
+- Since Milestone 334 every run also writes the filmstrip: `screens/film-<step>-<k>.jpg`, a
+  480 by 270 screenshot after the page opens and after each action, and one line per frame in
+  `screens/film.jsonl` (`step`, `k`, `file`, `bytes`, `what`, `url`, `t`, `notes`, and
+  `failed` for an action that was not done). Every step records a Playwright trace,
+  `walk-step-<i>.trace.zip`, which the run directory gets only when the verdict is not OK. At a
+  power cut the controller copies the filmstrip and the last step's trace before the cut.
+  `root.text` gains `/etc/hydo/walk-film`, by which the controller knows such a walker. A boot
+  of such an image copies at most 5 MiB of files out of the guest, each file up to 3 MiB; an
+  image built before keeps the copy of Milestone 264, at most 1 MiB per run. A file that does
+  not fit stays in the guest with a `HYDO-SCREEN-LEFT` line in the console.
+- `read_back:` (Milestone 334, below) adds the invariant `<name>.acked_shown` after the other
+  page checks.
 - `I=<seed>,x<step>.<k>` leaves out action k of a step, and `x<step>.<k>-<last>` actions k to
   last (Milestone 264); the shrinker writes such walks. A time or a date in a control's name
   ("1 minute ago", `2026-10-16 00:00:42`) counts as one word when the walk chooses, so that a
@@ -2071,6 +2080,35 @@ browser:
 - When `watch.failures_of` matches none of the requests the pages sent, `<name>.failures_shown`
   holds without judging a request, and the run prints a warning that names the pattern and one
   request (Milestone 264).
+
+`read_back:` (Milestone 334, with `explore:` only) checks that the pages show what the server
+acknowledged:
+
+```yaml
+browser:
+  read_back:                   # true: one entry of the defaults below
+    setup: [...]               # as explore.setup: signs in when the check has no session of the walk (a recovery boot)
+    wait_ms: 10000             # how long a page may take to show its objects (default 10000)
+    objects:
+      - writes: '^POST /api/orders$'   # over `<METHOD> <path>` of an acknowledged write that returned an id (default '^(POST|PUT) ')
+        name: order            # the object's word in a finding (default the path's last word, singular)
+        page: /orders/{id}     # the page that lists it (default explore.start's path)
+        shows: 'text=Order {id} confirmed'   # a Playwright selector (default a[href$="/<kind>/{id}"], a[href*="/<kind>/{id}/"])
+        unless: '^DELETE /api/orders/{id}$'  # a later acknowledged write that removes it (default '^DELETE <path>/<kind>/{id}$')
+```
+
+- The check reads the `<METHOD>:<path>=<id>` words of `$HYDO_ACKED`. `{id}` and the named groups
+  of `writes` (`(?<project>\d+)`) stand for values in `page`, `shows` and `unless`. `<kind>` is
+  the last word of the write's path that is not a number, `bulk`, `batch`, `new`, `create`, `api`
+  or a version such as `v2`.
+- The invariant runs `node walk.mjs --read-back "$HYDO_ACKED"` in the browser's service, at the
+  end of the run and in the recovery boot after a power cut. It starts the browser with the
+  walk's saved session, or runs `read_back.setup` (default `explore.setup`) when there is none.
+  It opens each page once, waits up to `wait_ms` for every object of that page, and saves a
+  screenshot of a page that lacks one as `screens/read-back-<n>.png`. Exit 0: every object is
+  shown, or no write named one; 1: one is not shown, or the pages could not be opened to look.
+- A regular expression is checked when the manifest is read, with a word in place of each
+  `{name}`.
 
 ### HTTPS for fakes and proxies (`tls:`)
 

@@ -76,6 +76,104 @@ pub(super) fn read_hex_sized(fx: &mut F<'_>, path: &str, max: usize) -> Step<(St
     }
 }
 
+/// Milestone 334: how many reads of [`read_hex_files`] are in flight at once. A read through the
+/// agent costs about a tenth of a second on hvx when it waits for its reply alone (Milestone 264);
+/// the window sends this many before it waits, and the agent answers them in one go.
+pub(super) const WINDOW: usize = 16;
+
+/// Milestone 334: whole files as lower-case hex, each with its size known before (the walker's
+/// filmstrip names the size of every frame, and an unknown size is read first): every chunk of
+/// [`HEX_CHUNK`] bytes of every file sent [`WINDOW`] at a time before the replies are awaited. A
+/// file whose replies do not add up to its size (it changed, or a read failed) comes back empty.
+pub(super) fn read_hex_files(fx: &mut F<'_>, files: &[(String, u64)]) -> Step<Vec<String>> {
+    let mut chunks: Vec<(usize, u64)> = Vec::new();
+    for (i, (_, size)) in files.iter().enumerate() {
+        let mut off = 0u64;
+        loop {
+            chunks.push((i, off));
+            off += HEX_CHUNK as u64;
+            if off >= *size {
+                break;
+            }
+        }
+    }
+    let mut out = vec![String::new(); files.len()];
+    let mut bad = vec![false; files.len()];
+    for win in chunks.chunks(WINDOW) {
+        let mut ids = Vec::with_capacity(win.len());
+        for (i, off) in win {
+            ids.push(fx.send(Command::Read(Read {
+                path: files[*i].0.clone(),
+                offset: (*off > 0).then_some(*off),
+                max: HEX_CHUNK,
+                hex: Some(true),
+            }))?);
+        }
+        for ((i, _), id) in win.iter().zip(ids) {
+            match fx.reply(id)? {
+                Ok(Reply::Read(r)) if r.size == files[*i].1 => out[*i].push_str(&r.data),
+                _ => bad[*i] = true,
+            }
+        }
+    }
+    for (i, (_, size)) in files.iter().enumerate() {
+        if bad[i] || out[i].len() as u64 != size * 2 {
+            out[i].clear();
+        }
+    }
+    Ok(out)
+}
+
+/// Milestone 334: [`read_hex_sized`] with the chunks after the first one sent [`WINDOW`] at a
+/// time: the first read gives the size, and a file larger than `max` comes back empty after it.
+pub(super) fn read_hex_window(fx: &mut F<'_>, path: &str, max: usize) -> Step<(String, u64)> {
+    let r = fx.send(Command::Read(Read {
+        path: path.into(),
+        offset: None,
+        max: HEX_CHUNK,
+        hex: Some(true),
+    }))?;
+    let first = match fx.reply(r)? {
+        Ok(Reply::Read(r)) => r,
+        _ => return Ok((String::new(), 0)),
+    };
+    if first.size as usize > max {
+        return Ok((String::new(), first.size));
+    }
+    if first.eof || first.data.is_empty() {
+        return Ok((first.data, first.size));
+    }
+    let size = first.size;
+    let mut chunks = Vec::new();
+    let mut off = HEX_CHUNK as u64;
+    while off < size {
+        chunks.push(off);
+        off += HEX_CHUNK as u64;
+    }
+    let mut out = first.data;
+    for win in chunks.chunks(WINDOW) {
+        let mut ids = Vec::with_capacity(win.len());
+        for off in win {
+            ids.push(fx.send(Command::Read(Read {
+                path: path.into(),
+                offset: Some(*off),
+                max: HEX_CHUNK,
+                hex: Some(true),
+            }))?);
+        }
+        for id in ids {
+            match fx.reply(id)? {
+                Ok(Reply::Read(r)) if r.size == size => out.push_str(&r.data),
+                _ => return Ok((String::new(), size)),
+            }
+        }
+    }
+    if out.len() as u64 != size * 2 {
+        return Ok((String::new(), size));
+    }
+    Ok((out, size))
+}
+
 fn unhex(s: &str) -> Vec<u8> {
     let b = s.as_bytes();
     let v = |c: u8| match c {

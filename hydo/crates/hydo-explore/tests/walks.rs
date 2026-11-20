@@ -204,6 +204,12 @@ fn a_violation_signature_has_no_generated_ids() {
             "VIOLATION [web.failures_shown] key k:12 lost on thread12",
             "VIOLATION [web.failures_shown] key k:# lost on thread#",
         ),
+        // Milestone 334: the read-back check names the object's id; one signature for any of
+        // them, and any count of lost objects
+        (
+            "VIOLATION [web.acked_shown] The page / does not show the task 4 that the server acknowledged; 2 of 5 acknowledged objects are not shown.",
+            "VIOLATION [web.acked_shown] The page / does not show the task # that the server acknowledged; # of # acknowledged objects are not shown.",
+        ),
     ] {
         assert_eq!(sig_key(v), want, "{v}");
     }

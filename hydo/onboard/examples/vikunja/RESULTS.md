@@ -258,10 +258,51 @@ The first two are built in this milestone; the rest is open item 137 of `AGENTS.
 - When the session ended, the walk did not sign in again: `setup` runs only in a step without a
   saved session. Under disk errors the walk of seed 9 was on the login page from step 4 on.
 - The recording replay of finding 1 recorded nothing: the power cut ends the first boot, and the
-  recording stays in its guest, as the page checks of that boot do (open item 124).
+  recording stays in its guest, as the page checks of that boot do (open item 124). Since
+  Milestone 334 the run keeps its own frames across the cut (the section below).
 - A first version of the saved rule named every lost object in its verdict, so a failure that
   lost four tasks and one that lost two had two signatures, and each was shrunk on its own. The
   third image puts the list on a line before the verdict.
+
+## The pages read back after the power cut (Milestone 334)
+
+Milestone 334 gave the walk two things that finding 1 lacked. Every run keeps a small screenshot
+of every action, and a failing run the trace of every step, also across a power cut. And the
+check `browser.acked_shown` reads the acknowledged tasks back from the pages instead of the
+database. `hydo.yaml` names the tasks for it (`browser.read_back`):
+
+- Each task that Vikunja answered as created, a `POST` or `PUT` under
+  `/api/v[12]/projects/<id>/tasks`, is a link `a[href$="/tasks/<id>"]` under "Current Tasks" on
+  the home page.
+- A later acknowledged delete of the task or of its project leaves it out.
+- In the recovery boot the check has no session of the walk, so it signs in on `/login` with the
+  account that the walk created.
+
+The runs used hvx on the bare-metal machine, with this branch's `hydo` over the 0.4.0 Linux
+release, at the fingerprint epoch 5. The image was built from `hydo/hydo.yaml`, with M334's
+walker.
+
+| schedule | verdict | the read-back check | fingerprint |
+|---|---|---|---|
+| `disk=none \| run I=1` | OK: 7 invariants held | "every one of the 5 objects ... is shown, on the page /" | `626ca6e005521589` |
+| `disk=none \| run C=5 I=1` | VIOLATION `vikunja.saved_work_survives`: 3 of 5 saved objects missing | failed: "The page / does not show the task 3 that the server acknowledged ...; 3 of 5 acknowledged objects are not shown" | `a4348eacc7ad3268`, twice |
+| `disk=cut \| run C=6 I=1` | OK | every one of the 5 objects shown | `e6ee25b034d97130` |
+
+- In the run with `C=5`, both checks named the same three tasks, 3, 4, and 5. The database rule
+  found the rows missing. The read-back check, from the home page alone, found that no link
+  led to them. Its screenshot `screens/read-back-1.png` shows "Current Tasks" with tasks 1 and 2.
+  The verdict names the database rule, because a project's own invariants come before the page
+  checks. The read-back check's sentence is in the run's `result.json` and in `hydo report
+  --details`.
+- The run directory kept the first boot's walk: 66 frames of 1.5 to 10 KB (445 KB in all), with
+  one line per action in `screens/film.jsonl`. It also kept the trace of step 4, the last step
+  before the cut (482 KB). The controller copied them before it cut the power, in 0.8 s of
+  guest time. `hydo report --html` of the run shows the filmstrip by step, and the page was
+  801 KiB.
+- M334's walker spends more guest time per step, because it takes the frames and records a
+  trace. So the walk of `I=1` meets the cuts at other moments than M273's. With `C=5` it lost
+  task 3 too (two tasks before), and with `disk=cut` and `C=6` the WAL had reached the disk
+  before the cut, and nothing was lost (two tasks before).
 
 ## What held
 

@@ -369,3 +369,35 @@ so the reset of `place_order` did not catch an order. The 104 runs had 89 differ
 and no schedule gave two fingerprints. At its end `hydo explore` replayed both minimal walks with
 `,rec`; each kept its verdict, and each `replays/rec-<k>/screens/` held `repro.spec.ts`, the last
 step's video (64,238 and 69,579 bytes) and its trace.
+
+## The filmstrip and the read-back of Milestone 334
+
+`hydo-walk.yaml` gained `browser.read_back`: every order that `POST /api/orders` answered with
+its id (`{"id":"o6"}`) must open on its own page, `/orders/<id>`, as "Order <id> confirmed". The
+runs used hvx on the bare-metal machine, with this branch's `hydo` over the 0.4.0 Linux release,
+at the fingerprint epoch 5. The image was built with `--set variant=buggy`.
+
+| schedule | verdict | the read-back check | fingerprint |
+|---|---|---|---|
+| `disk=none \| run I=1` | OK: 6 invariants held, the fake took 3 orders once each | "every one of the 3 objects ... is shown, on 3 pages" (`/orders/o6`, `o18` and `o27`) | `5dac5c131187df81`, twice |
+
+The run directory kept 47 frames (121 KB in all), one after the page opened in each step and one
+after each of the 40 actions, and 3 frames of the read-back check. It kept no trace, because the
+run passed. The copy after the verdict took about 15,000 of the run's 298,557 stops.
+
+`hydo explore --seeds 1-10 --protocol-faults --workers 1` ran 10 schedules, the shrink and the
+recording replay in 965 s, a mean of 24.5 s per run in the engine (19.1 s in Milestone 284: the
+frames, the traces and the read-back check cost the rest).
+
+- Seed 7 failed, as in Milestone 258: "The page /orders/o32 left a promise rejection unhandled
+  during the test "walk step 3": HttpError: HTTP 502 for /api/orders/o32". Its run directory
+  kept the filmstrip and the traces of its 4 steps (14 to 17 KB each). The 9 passing runs kept
+  their filmstrips and no trace.
+- The shrinker took 29 runs to `disk=none dseed=63cbe1e459320dd7 | run H=api.get_order@3-4:reset
+  I=a0d28305209409f6,n7,x0.0-6,x1.0-6,x2.0-6`, the minimal schedule of Milestone 284, which gave
+  `2073817890afc835` on both confirmation runs. The page of the exploration shows the filmstrip of
+  the confirmation run `min-a` in the failure's details: 12 frames, the 7 actions of step 3
+  among them. The recording replay `replays/rec-1/` kept the video, as before, and its own
+  filmstrip and traces.
+- The read-back check held in every run, with 1 to 4 orders each, also in seed 7, where the
+  page of order o32 failed during step 3 and showed the order at the end.
