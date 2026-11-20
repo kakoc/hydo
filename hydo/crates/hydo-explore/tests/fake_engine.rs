@@ -181,6 +181,14 @@ fn run(prog: &mut Command, dir: &Path, out: &Path) -> String {
                 ""
             },
         )
+        .env(
+            "HYDO_FAKE_RESTART",
+            if out.to_string_lossy().contains("restart_") {
+                "1"
+            } else {
+                ""
+            },
+        )
         .current_dir(top())
         .output()
         .expect("run");
@@ -304,6 +312,9 @@ fn scenario(name: &str, args: &[&str]) {
     }
     if name == REPEATS_SCENARIO {
         return repeats_scenario();
+    }
+    if name == RESTART_SCENARIO {
+        return restart_scenario();
     }
     let dir = scratch(name);
     let out = dir.join("out");
@@ -670,12 +681,174 @@ const SCENARIOS: &[(&str, &[&str])] = &[
     (MERGE_SCENARIO, &[]),
     // no golden: repeats_scenario() compares an exploration with the same one in VMs only
     (REPEATS_SCENARIO, &[]),
+    // no golden: restart_scenario() checks which errors are shrunk
+    (RESTART_SCENARIO, &[]),
 ];
 
 const CACHE_SCENARIO: &str = "cache_key_is_the_image_bytes";
 const TIME_LIMIT_SCENARIO: &str = "time_limit_cuts_at_a_seed_boundary";
 const MERGE_SCENARIO: &str = "merge_equals_one_exploration";
 const REPEATS_SCENARIO: &str = "repeats_take_the_earlier_result";
+const RESTART_SCENARIO: &str = "restart_errors_are_shrunk";
+
+/// Milestone 339: an error of the system is shrunk like a violation, by its signature. On the
+/// RAUC example's manifest the scripted engine ends a run whose service was killed for 3 steps
+/// or more with `ERROR device restart failed`, and a run with a `G=` with `ERROR device restart
+/// failed (its files were corrupted)`. The first is shrunk to its kill alone. The second is the
+/// system's detection of the damage: it is shrunk only with `--shrink-detected-damage`, to its
+/// `G=` alone.
+fn restart_scenario() {
+    let dir = scratch(RESTART_SCENARIO);
+    let explore = |name: &str, extra: &[&str]| -> serde_json::Value {
+        let out = dir.join(name);
+        let mut c = Command::new(env!("CARGO_BIN_EXE_hydo-explore"));
+        c.args([
+            "--seeds",
+            "1-40",
+            "--strategy",
+            "process",
+            "--storage-faults",
+            "--manifest",
+            "hydo/onboard/examples/rauc/hydo.yaml",
+            "--known-errors",
+            KNOWN,
+            "--errors-shrink",
+            "8",
+        ])
+        .args(extra)
+        .args(IMAGE)
+        .args(["--workers", "3", "--out"])
+        .arg(&out);
+        run(&mut c, &dir, &out);
+        let t = std::fs::read_to_string(out.join("exploration.json")).unwrap();
+        serde_json::from_str(&t).unwrap()
+    };
+    const DAMAGE: &str = "its files were corrupted";
+    // the guest tokens of a schedule, without the composition
+    let faults = |s: &str| -> Vec<String> {
+        let g = s.split_once("| run").map(|x| x.1).unwrap_or("");
+        g.split_whitespace()
+            .filter(|t| !t.starts_with("W="))
+            .map(str::to_string)
+            .collect()
+    };
+    let shrinks = |d: &serde_json::Value| -> Vec<(String, String)> {
+        d["shrinks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| {
+                (
+                    s["verdict"].as_str().unwrap_or("").to_string(),
+                    s["minimal"].as_str().unwrap_or("").to_string(),
+                )
+            })
+            .collect()
+    };
+    // the error kinds that were shrunk, each with the seed it was first new in
+    let kinds = |d: &serde_json::Value| -> Vec<(String, i64, Option<String>)> {
+        d["error_kinds"]["kinds"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter(|k| !k["shrink"].is_null())
+                    .map(|k| {
+                        (
+                            k["signature"].as_str().unwrap_or("").to_string(),
+                            k["first_new"]["seed"].as_i64().unwrap_or(0),
+                            k["shrink"]["minimal"].as_str().map(str::to_string),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let damaged = |d: &serde_json::Value| -> Vec<i64> {
+        d["failures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|f| {
+                f["run"]["verdict"]["text"]
+                    .as_str()
+                    .unwrap_or("")
+                    .contains(DAMAGE)
+            })
+            .filter_map(|f| f["run"]["seed"].as_i64())
+            .collect()
+    };
+    let d = explore("plain", &[]);
+    let failed: Vec<String> = d["failures"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| {
+            f["run"]["verdict"]["text"]
+                .as_str()
+                .unwrap_or("")
+                .to_string()
+        })
+        .collect();
+    assert!(
+        failed
+            .iter()
+            .any(|v| v.contains("restart failed") && !v.contains(DAMAGE)),
+        "{failed:?}"
+    );
+    assert!(failed.iter().any(|v| v.contains(DAMAGE)), "{failed:?}");
+    let s = shrinks(&d);
+    let restart = s
+        .iter()
+        .find(|(v, _)| v.contains("restart failed") && !v.contains(DAMAGE))
+        .unwrap_or_else(|| panic!("no shrink of the restart: {s:?}"));
+    let f = faults(&restart.1);
+    assert!(
+        f.len() == 1 && f[0].starts_with("K=device@") && f[0].ends_with("+3"),
+        "{restart:?}"
+    );
+    assert!(!s.iter().any(|(v, _)| v.contains(DAMAGE)), "{s:?}");
+    // an error kind first new in a run where the system detected the damage is not shrunk
+    let (k, dmg) = (kinds(&d), damaged(&d));
+    assert!(!k.is_empty(), "the scenario shrinks error kinds");
+    for (sig, sd, _) in &k {
+        assert!(!dmg.contains(sd), "{sig} of seed {sd} was shrunk");
+    }
+    // hydo explore --merge of four parts shrinks the same errors as one exploration
+    let parts: Vec<PathBuf> = (1..=4)
+        .map(|i| {
+            explore(&format!("part{i}"), &["--shard", &format!("{i}/4")]);
+            dir.join(format!("part{i}"))
+        })
+        .collect();
+    let o = Command::new(env!("CARGO_BIN_EXE_hydo-explore"))
+        .arg("--merge")
+        .args(&parts)
+        .arg("--out")
+        .arg(dir.join("merged"))
+        .output()
+        .expect("run");
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let t = std::fs::read_to_string(dir.join("merged/exploration.json")).unwrap();
+    let m: serde_json::Value = serde_json::from_str(&t).unwrap();
+    assert_eq!(shrinks(&m), s, "the merged shrinks");
+    assert_eq!(kinds(&m), k, "the merged error shrinks");
+    let d = explore("damage", &["--shrink-detected-damage"]);
+    let s = shrinks(&d);
+    let damage = s
+        .iter()
+        .find(|(v, _)| v.contains(DAMAGE))
+        .unwrap_or_else(|| panic!("no shrink of the detected damage: {s:?}"));
+    let f = faults(&damage.1);
+    assert!(f.len() == 1 && f[0].starts_with("G=device@"), "{damage:?}");
+    // and the error kind of the system's own line about the damage
+    let dmg = damaged(&d);
+    assert!(
+        kinds(&d).iter().any(|(_, sd, _)| dmg.contains(sd)),
+        "{:?}",
+        kinds(&d)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
 
 /// Milestone 339: a first run or a shrink candidate whose schedule the exploration already ran
 /// takes the earlier run's result without a VM. The exploration gives the same records, file for
@@ -1295,6 +1468,23 @@ mod engine {
                 "HYDO-ORACLE: OK acked=30".into()
             };
         }
+        // the restart scenario (Milestone 339; HYDO_FAKE_RESTART, set for the scenarios named
+        // restart_*): a service whose files a G= damaged does not start again, as a system that
+        // detects the damage refuses to; and a service killed for 3 steps or more does not start
+        // again
+        if std::env::var("HYDO_FAKE_RESTART").is_ok_and(|v| !v.is_empty()) {
+            if let Some(gv) = nonempty(tok(guest, "G")) {
+                verdict = format!(
+                    "HYDO-ORACLE: ERROR {} restart failed (its files were corrupted)",
+                    after(gv, '@', 0)
+                );
+            } else if let Some(kv) = kk {
+                let down: i64 = after(kv, '+', 1).parse().unwrap_or(1);
+                if down >= 3 {
+                    verdict = format!("HYDO-ORACLE: ERROR {} restart failed", after(kv, '@', 0));
+                }
+            }
+        }
         // properties: a failed always-property for clock jumps backwards, an eventually with a timing
         let ok_e = !oo.is_some_and(|ov| ov.contains("delay"));
         let el = 0.5 + (hx(&h(sched, "e")[..3]) % 300) as f64 / 100.0;
@@ -1359,6 +1549,15 @@ mod engine {
             el_recs.push("HYDO-ERRLOG {\"svc\":\"app\",\"src\":\"log\",\"n\":1,\"at\":\"end\",\"tpl\":\"slow request <n> ms\",\"ex\":\"slow request 900 ms\"}".into());
         }
         el_recs.push("HYDO-ERRLOG {\"svc\":\"app\",\"src\":\"log\",\"n\":1,\"at\":\"s\",\"tpl\":\"config reloaded\",\"ex\":\"config reloaded\"}".into());
+        // the restart scenario (Milestone 339): the line of a system that found its damaged files
+        if std::env::var("HYDO_FAKE_RESTART").is_ok_and(|v| !v.is_empty()) {
+            if let Some(gv) = nonempty(tok(guest, "G")) {
+                el_recs.push(format!(
+                    "HYDO-ERRLOG {{\"svc\":\"{}\",\"src\":\"log\",\"n\":1,\"at\":\"end\",\"tpl\":\"checksum mismatch in block <n>\",\"ex\":\"checksum mismatch in block 7\"}}",
+                    after(gv, '@', 0)
+                ));
+            }
+        }
         lines.extend(el_recs.iter().cloned());
         let hist = std::env::var("HYDO_FAKE_HIST").is_ok_and(|v| !v.is_empty());
         if hist {

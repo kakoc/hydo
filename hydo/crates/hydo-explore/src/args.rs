@@ -9,7 +9,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--no-faults]
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--shrink-causes N]
-       [--rerun-repeats]
+       [--shrink-detected-damage] [--rerun-repeats]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...] [--kill-now]]
        [--storage-faults [--corrupt-several]] [--block-faults] [--upgrades] [--pause-workload] [--pause-thread NAME[,NAME...]] [--pause-min MS] [--pause-max MS]
        [--pause-lengths MS[,MS...]]
@@ -133,6 +133,10 @@ pub struct Args {
     /// the exploration already ran in a VM again, instead of answering it with the earlier
     /// result ([`crate::repeats`]).
     pub rerun_repeats: bool,
+    /// `--shrink-detected-damage` (Milestone 339): shrink also a service that does not start
+    /// again after hydo damaged its files or its disk's blocks, the system's detection of the
+    /// damage ([`crate::report::shrinks`]).
+    pub shrink_detected_damage: bool,
     /// `--steer ID` (M209): steer the search by the value an SDK id (`HYDO-STEER` records) or a
     /// manifest `steer:` entry reports ([`crate::steer`]).
     pub steer: Option<String>,
@@ -251,6 +255,7 @@ impl Default for Args {
             heal_events: None,
             kill_now: false,
             rerun_repeats: false,
+            shrink_detected_damage: false,
             steer: None,
             steer_match: None,
             steer_goal: None,
@@ -270,7 +275,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 28] = [
+const FLAGS: [&str; 29] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -299,6 +304,7 @@ const FLAGS: [&str; 28] = [
     "state-stop",
     "kill-now",
     "rerun-repeats",
+    "shrink-detected-damage",
 ];
 
 const VALUED: [&str; 61] = [
@@ -447,6 +453,7 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "durable-only" => a.durable_only = true,
             "kill-now" => a.kill_now = true,
             "rerun-repeats" => a.rerun_repeats = true,
+            "shrink-detected-damage" => a.shrink_detected_damage = true,
             "new-faults" => a.new_faults = true,
             "concurrency" => a.concurrency = true,
             "more-faults" => a.more_faults = true,

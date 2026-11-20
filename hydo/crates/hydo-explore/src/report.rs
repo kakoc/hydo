@@ -120,6 +120,75 @@ pub fn same_failure(v_ref: &str, v: &str) -> bool {
     verdict_kind(v) == "violation" && sig_key(v) == sig_key(v_ref)
 }
 
+/// Whether the explorer shrinks a failure with this verdict, of a first run of this class
+/// (Milestone 339). A violation always is. An error is when it is the system's own failure,
+/// whose signature repeats:
+///
+/// - a service that does not start again: `ERROR <svc> restart failed`, with or without its
+///   reason, and `ERROR restart after the faults`;
+/// - a workload or a check that does not end: `TIMEOUT workload`, `TIMEOUT check`, `TIMEOUT
+///   recovery`, and the Mac engine's `ERROR workload: exit budget exhausted` and `ERROR check:
+///   exit budget exhausted`.
+///
+/// Every other error is hydo's or its engine's (a lost worker, a refused schedule, a guest that
+/// could not be set up) and is not shrunk. A service that does not start again after hydo damaged
+/// its files (`G=`, the class `corrupted-files`) or its disk's blocks (the class `damaged-disk`),
+/// or whose restart names `its files were corrupted`, is the system's documented detection of
+/// the damage. It is shrunk only with `damage` (`hydo explore --shrink-detected-damage`).
+pub fn shrinks(v: &str, class: &str, damage: bool) -> bool {
+    match verdict_kind(v) {
+        "violation" => true,
+        "error" => {
+            let b = v.trim();
+            let b = b.strip_prefix("HYDO-ORACLE: ").unwrap_or(b);
+            let restart = b.strip_prefix("ERROR ").is_some_and(|r| {
+                r.starts_with("restart after the faults")
+                    || r.split_once(" restart failed")
+                        .is_some_and(|(svc, _)| !svc.is_empty() && !svc.contains(' '))
+            });
+            let endless = [
+                "TIMEOUT workload",
+                "TIMEOUT check",
+                "TIMEOUT recovery",
+                "ERROR workload: exit budget exhausted",
+                "ERROR check: exit budget exhausted",
+            ]
+            .iter()
+            .any(|p| b.starts_with(p));
+            (restart || endless) && (damage || !detected_damage(v, class))
+        }
+        _ => false,
+    }
+}
+
+/// Whether a failure is a system's detection of damage that hydo made (Milestone 339): a service
+/// that does not start again in a run of the class `corrupted-files` or `damaged-disk`, or whose
+/// restart names `its files were corrupted`. Such a failure, and an error kind first new in such
+/// a run, is not shrunk without `hydo explore --shrink-detected-damage`.
+pub fn detected_damage(v: &str, class: &str) -> bool {
+    let b = v.trim();
+    let b = b.strip_prefix("HYDO-ORACLE: ").unwrap_or(b);
+    let restart = b.strip_prefix("ERROR ").is_some_and(|r| {
+        r.starts_with("restart after the faults")
+            || r.split_once(" restart failed")
+                .is_some_and(|(svc, _)| !svc.is_empty() && !svc.contains(' '))
+    });
+    restart
+        && (class == "corrupted-files"
+            || class == "damaged-disk"
+            || b.contains("its files were corrupted"))
+}
+
+/// Whether a shrink candidate's verdict keeps the failure being shrunk: a violation of the same
+/// signature ([`same_failure`]), or for an error an error of the same signature (Milestone 339).
+pub fn same_outcome(v_ref: &str, v: &str) -> bool {
+    if verdict_kind(v_ref) == "error" {
+        verdict_kind(v) == "error" && sig_key(v) == sig_key(v_ref)
+    } else {
+        same_failure(v_ref, v)
+    }
+}
+
 /// A value as `"%s" % v` prints it in a report table.
 pub fn cell(v: &Value) -> String {
     match v {

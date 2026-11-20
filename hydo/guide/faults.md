@@ -477,6 +477,10 @@ Useful options of `hydo explore`:
   several causes; with `--shrink-causes 3` a "fee missing" from a power cut and one from a clock
   step back each get their own minimal schedule. `report.md` names each shrink's fault kinds.
 - `--workers N`.
+- `--shrink-detected-damage`: shrink also a service that does not start again after hydo
+  damaged its files or its disk's blocks. Without it, hydo takes such an error for the system's
+  detection of the damage and does not shrink it (`hydo guide workflow`, "Which failures are
+  shrunk").
 - `--rerun-repeats`: run a first run or a shrink candidate whose schedule the exploration
   already ran in a VM again. Without it, such a run takes the earlier run's result
   (`hydo guide workflow`, "A schedule that ran once runs once").

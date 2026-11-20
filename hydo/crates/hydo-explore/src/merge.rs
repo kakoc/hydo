@@ -655,7 +655,11 @@ pub fn merge(dirs: &[PathBuf], out: &Path) -> Result<Exploration, String> {
                 more
             }
         };
-        if pick && !a.no_shrink && f.run.verdict.kind == "violation" {
+        // Milestone 339: the errors that one exploration shrinks (report::shrinks)
+        if pick
+            && !a.no_shrink
+            && crate::report::shrinks(&f.run.verdict.text, &class, a.shrink_detected_damage)
+        {
             if let Some(sd) = f.run.seed {
                 chosen.push((*i, sd));
             }
@@ -692,8 +696,28 @@ pub fn merge(dirs: &[PathBuf], out: &Path) -> Result<Exploration, String> {
     if let Some(k) = error_kinds.as_mut() {
         let agg: Vec<Aggregate> = k.kinds.iter().map(Aggregate::from_model).collect();
         if !a.no_shrink && a.errors_shrink > 0 {
+            // Milestone 339: as one exploration, no kind first new in a run where the system
+            // detected hydo's damage, without --shrink-detected-damage
+            let damaged: Vec<i64> = failures
+                .iter()
+                .filter(|(_, f)| {
+                    crate::report::detected_damage(
+                        &f.run.verdict.text,
+                        f.run.class.as_deref().unwrap_or(""),
+                    )
+                })
+                .filter_map(|(_, f)| f.run.seed)
+                .collect();
             for x in errlog::to_shrink(&agg)
                 .into_iter()
+                .filter(|x| {
+                    a.shrink_detected_damage
+                        || !x
+                            .first_new
+                            .as_ref()
+                            .and_then(|f| f.0.as_i64())
+                            .is_some_and(|sd| damaged.contains(&sd))
+                })
                 .take(a.errors_shrink as usize)
             {
                 let seed = x.first_new.as_ref().and_then(|f| f.0.as_i64()).unwrap_or(0);
