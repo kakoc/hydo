@@ -588,6 +588,9 @@ variables! {
     /// `1`: the scripted engine answers turn tokens in KVM's unit, VM exits, with the shape of
     /// nats-server's flaky test on 2 vCPUs (M227).
     HYDO_FAKE_KVM_TURNS: Tests, Test, "flag", "", "hydo-explore tests";
+    /// The scripted engine: a `restart_` scenario's service does not start again after a kill
+    /// (Milestone 339, the shrinks of ERROR runs).
+    HYDO_FAKE_RESTART: Tests, Test, "flag: not empty", "", "hydo-explore tests";
     /// Not empty: the scripted engine prints a steered distance and fails only at distance 0 (M209).
     HYDO_FAKE_STEER: Tests, Test, "flag: not empty", "", "hydo-explore tests";
     /// The history checker's dump directory.
