@@ -494,18 +494,7 @@ fn setup(a: Args, env: &Env) -> Cx {
         let saved = std::fs::write(&file, dumps_line(&sp.describe()) + "\n").is_ok();
         eprintln!(
             "{}{}",
-            sp.plain_with(&crate::space::Drawn {
-                new_faults: a.new_faults,
-                strategy: a.strategy.clone(),
-                protocol: a.protocol_faults || a.protocol_cover,
-                grpc: a.grpc_faults,
-                storage: a.storage_faults,
-                cluster: a.cluster_faults,
-                workload_pauses: a.workload_pauses && a.pause_threads.is_none(),
-                thread_pauses: a.pause_threads.is_some(),
-                upgrades: a.upgrades,
-                block: a.block_faults,
-            }),
+            sp.plain_with(&drawn(&a)),
             if saved {
                 format!(" The whole fault space: {}", file.display())
             } else {
@@ -879,6 +868,22 @@ fn steer_source(
 /// The refusal for an image whose manifest cannot be read (and no `--manifest`): the explorer
 /// would otherwise explore the built-in fault space of hydo's stack example, whose services the
 /// image does not have.
+/// The options of `hydo explore` that draw fault kinds of their own ([`crate::space::Drawn`]).
+fn drawn(a: &Args) -> crate::space::Drawn {
+    crate::space::Drawn {
+        new_faults: a.new_faults,
+        strategy: a.strategy.clone(),
+        protocol: a.protocol_faults || a.protocol_cover,
+        grpc: a.grpc_faults,
+        storage: a.storage_faults,
+        cluster: a.cluster_faults,
+        workload_pauses: a.workload_pauses && a.pause_threads.is_none(),
+        thread_pauses: a.pause_threads.is_some(),
+        upgrades: a.upgrades,
+        block: a.block_faults,
+    }
+}
+
 pub fn no_manifest(image: &str, why: &str) -> String {
     format!(
         "hydo: {image}: cannot read the image's manifest (/etc/hydo/hydo.yaml: {why}), so there \
@@ -2865,7 +2870,10 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
         .contracts
         .as_ref()
         .and_then(|plan| crate::paths::of_exploration(plan, &seeds, &res_all));
+    // Milestone 336: the workers' time, complete once the pool is closed
+    let ledger = pool.ledger.clone();
     pool.close();
+    let usage = crate::stats::usage();
     let total = t0.elapsed().as_secs_f64();
     let secs: Vec<f64> = seeds
         .iter()
@@ -2985,6 +2993,115 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
         .collect();
     doc.properties =
         results::property_table(&merged.iter().map(|x| x.1.clone()).collect::<Vec<_>>());
+    // Milestone 336: the statistics, from the first runs in seed order and the other runs
+    let outcomes: Vec<Vec<String>> = merged
+        .iter()
+        .map(|x| crate::stats::property_outcomes(&x.1))
+        .collect();
+    let stats = {
+        let ledger = ledger.lock().expect("lock");
+        let an: Vec<Option<&hydo_errors::Analysis>> = match &errors {
+            Some((_, an_runs, _)) => an_runs.iter().map(|x| x.2.as_ref()).collect(),
+            None => Vec::new(),
+        };
+        let mut watched = false;
+        let firsts: Vec<crate::stats::First> = seeds
+            .iter()
+            .enumerate()
+            .map(|(i, sd)| {
+                let tag = format!("seed-{sd}");
+                let (text, r) = res_all.get(&tag).cloned().unwrap_or_default();
+                let verdict = r.get("verdict").map(py_str).unwrap_or_default();
+                let cached = r.get("cached").and_then(Value::as_bool) == Some(true);
+                let error_paths = match crate::paths::of_res(&r).filter(|p| p.watched) {
+                    Some(p) => {
+                        watched = true;
+                        p.reached.iter().map(|x| x.place).collect()
+                    }
+                    None => Vec::new(),
+                };
+                let error_kinds = an
+                    .get(i)
+                    .copied()
+                    .flatten()
+                    .map(|a| {
+                        let mut v: Vec<String> = a
+                            .new
+                            .iter()
+                            .map(|k| k.sig.clone())
+                            .chain(a.known.iter().map(|k| k.kind.sig.clone()))
+                            .collect();
+                        v.sort();
+                        v.dedup();
+                        v
+                    })
+                    .unwrap_or_default();
+                crate::stats::First {
+                    seed: *sd,
+                    refused: hydo_engine::is_refused(&verdict),
+                    fp: r.get("fp").map(py_str).unwrap_or_default(),
+                    verdict,
+                    cached,
+                    vm_s: r.get("secs").and_then(Value::as_f64).unwrap_or(0.0),
+                    job_s: (!cached).then(|| ledger.jobs.get(&tag).copied()).flatten(),
+                    clock: crate::stats::clock_of(&cx.out.join("consoles"), &tag),
+                    properties: outcomes.get(i).cloned().unwrap_or_default(),
+                    error_kinds,
+                    error_paths,
+                    schedule: text,
+                }
+            })
+            .collect();
+        let mut other: std::collections::BTreeMap<String, (u64, f64)> = Default::default();
+        let mut add = |role: &str, secs: Option<f64>| {
+            let e = other.entry(role.to_string()).or_insert((0, 0.0));
+            e.0 += 1;
+            e.1 += secs.unwrap_or(0.0);
+        };
+        for r in rep.values() {
+            add(role::RERUN, r.get("secs").and_then(Value::as_f64));
+        }
+        for s in &shrunk {
+            for r in &s.log {
+                add("shrink", r.secs);
+            }
+        }
+        if let Some((_, _, done)) = &errors {
+            for (_, _, log) in done {
+                for r in log {
+                    add("error-shrink", r.secs);
+                }
+            }
+        }
+        let inp = crate::stats::Input {
+            hydo_version: doc.hydo_version.clone(),
+            epoch: doc.epoch,
+            image: doc.image.path.clone(),
+            engine: doc.engine.clone(),
+            strategy: doc.config.strategy.clone(),
+            seeds: doc.config.seeds.clone(),
+            errlog: errors.is_some(),
+            paths: watched,
+            other_runs: other,
+            wall_s: total,
+            sweep_wall_s: t_sweep,
+            clock_unit: Some(
+                if cx.arm() || cx.kvm {
+                    "exits"
+                } else {
+                    "hvx clock"
+                }
+                .into(),
+            ),
+            usage,
+            guest_ram_mib: u64::try_from(cx.ram_mib).ok(),
+            machine_workers: Some(
+                hydo_engine::machine_workers(cx.ram_mib.max(0) as u64 * 2 + 256) as u64,
+            ),
+        };
+        crate::stats::build(inp, &firsts, &ledger, cx.ex.space.as_ref(), &drawn(a))
+    };
+    let _ = hydo_results::write_document(&cx.out.join(hydo_results::STATS_DOC), &stats);
     let mut with: Vec<(String, String)> = merged
         .into_iter()
         .filter(|x| x.1.contains("HYDO-ASSERT"))

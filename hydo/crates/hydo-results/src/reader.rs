@@ -15,7 +15,7 @@
 
 use crate::v1::{
     CiFindingEvent, CiLedger, CiRun, CompareDoc, ConfigsDoc, DiagnosisDoc, Diff, End, Exploration,
-    Inspect, InspectError, Run, Shrink, Start, Timeline, ValueHistory, VersionsDoc,
+    Inspect, InspectError, Run, Shrink, Start, StatsDoc, Timeline, ValueHistory, VersionsDoc,
 };
 use crate::{EVENTS, EXPLORATION_DOC, RUN_DOC};
 use serde_json::Value;
@@ -55,6 +55,8 @@ pub enum Record {
     Compare(Box<CompareDoc>),
     /// `hydo explore --configs` (added in Milestone 299).
     Configs(Box<ConfigsDoc>),
+    /// `stats.json` of an exploration (added in Milestone 336).
+    Stats(Box<StatsDoc>),
 }
 
 /// A record the reader skipped (rule 3).
@@ -163,6 +165,7 @@ pub fn record(v: Value) -> Result<Option<Record>, String> {
         "values" => Record::Values(de(v, &ty)?),
         "compare" => Record::Compare(de(v, &ty)?),
         "configs" => Record::Configs(de(v, &ty)?),
+        "stats" => Record::Stats(de(v, &ty)?),
         _ => return Ok(None),
     }))
 }

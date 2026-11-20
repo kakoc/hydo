@@ -1043,9 +1043,11 @@ pub fn merge(dirs: &[PathBuf], out: &Path) -> Result<Exploration, String> {
                 let name = e.file_name().to_string_lossy().into_owned();
                 let r = match name.as_str() {
                     "consoles" | "parts" => Ok(()),
-                    hydo_results::EXPLORATION_DOC | "report.md" | "summary.txt" | "host.txt" => {
-                        copy_all(&e.path(), &mine.join(&name))
-                    }
+                    hydo_results::EXPLORATION_DOC
+                    | hydo_results::STATS_DOC
+                    | "report.md"
+                    | "summary.txt"
+                    | "host.txt" => copy_all(&e.path(), &mine.join(&name)),
                     hydo_results::EVENTS => Ok(()),
                     n if n.starts_with("worker-") => copy_all(&e.path(), &mine.join(&name)),
                     _ => copy_all(&e.path(), &out.join(&name)),
@@ -1053,6 +1055,23 @@ pub fn merge(dirs: &[PathBuf], out: &Path) -> Result<Exploration, String> {
                 r.map_err(|e| format!("{}: {e}", out.display()))?;
             }
         }
+    }
+    // Milestone 336: the statistics of the whole range, from the parts' own
+    let stats: Vec<hydo_results::StatsDoc> = parts
+        .iter()
+        .filter_map(|p| hydo_results::stats_of(&p.dir))
+        .collect();
+    if stats.len() < parts.len() {
+        eprintln!(
+            "hydo explore --merge: warning: {} of {} parts have no {} (an explorer before Milestone 336); the merged statistics count the others",
+            parts.len() - stats.len(),
+            parts.len(),
+            hydo_results::STATS_DOC
+        );
+    }
+    if let Some(s) = crate::stats::merge(&stats, doc.summary.total_wall_s.unwrap_or(0.0)) {
+        hydo_results::write_document(&out.join(hydo_results::STATS_DOC), &s)
+            .map_err(|e| format!("{}: {e}", out.display()))?;
     }
     Ok(doc)
 }

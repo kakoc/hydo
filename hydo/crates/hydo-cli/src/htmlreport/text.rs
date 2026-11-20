@@ -90,10 +90,15 @@ fn replayed(doc: &Exploration, shown: &str) -> Option<String> {
 /// `hydo report` of an exploration in the terminal.
 pub fn exploration(dir: &Path, doc: &Exploration, events: Option<&Stream>, shown: &str) -> String {
     let st = super::exploration_story(dir, doc, events, shown);
-    render(&st, doc, shown)
+    render(&st, doc, shown, hydo_results::stats_of(dir).as_ref())
 }
 
-fn render(st: &ExStory, doc: &Exploration, shown: &str) -> String {
+fn render(
+    st: &ExStory,
+    doc: &Exploration,
+    shown: &str,
+    stats: Option<&hydo_results::StatsDoc>,
+) -> String {
     let s = &doc.summary;
     let mut o = String::new();
     // the headline and what the runs had
@@ -189,6 +194,13 @@ fn render(st: &ExStory, doc: &Exploration, shown: &str) -> String {
         o.push('\n');
         o.push_str(&wrap(&format!("What held: {}", h.words()), ""));
     }
+    // Milestone 336: how much was explored, and whether more runs would show more
+    if let Some(s) = stats {
+        o.push_str("\nHow much was explored:\n");
+        for l in hydo_explore::stats::short_text(s) {
+            o.push_str(&hang(INDENT, &l, INDENT));
+        }
+    }
     // next
     o.push_str("\nNext:\n");
     if !st.items.is_empty() {
@@ -198,6 +210,12 @@ fn render(st: &ExStory, doc: &Exploration, shown: &str) -> String {
         ));
     }
     o.push_str(&format!("{INDENT}More runs: {}\n", st.explore_more));
+    if stats.is_some() {
+        o.push_str(&format!(
+            "{INDENT}The cost, the faults drawn and how many runs fit: {}\n",
+            on_dir("hydo stats", shown)
+        ));
+    }
     o
 }
 
