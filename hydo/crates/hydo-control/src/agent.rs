@@ -611,12 +611,15 @@ impl AgentEngine {
                 hydo_agent_proto::HOST_PROTOCOLS
             ));
         }
-        let plan = plan_of_image(image).map_err(|e| {
+        let mut plan = plan_of_image(image).map_err(|e| {
             format!(
                 "{}: this agent image cannot be run yet: {e}",
                 image.display()
             )
         })?;
+        // Milestone 328: what a root that does not fit into guest RAM is reported with
+        let ram = image_guest(image).map(|g| g.ram_mib).unwrap_or(1024);
+        plan.root_fit = crate::plan::RootFit::of_image(image, ram as u64);
         Ok(AgentEngine::new(inner, plan))
     }
 

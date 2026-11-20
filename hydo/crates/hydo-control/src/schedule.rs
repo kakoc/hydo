@@ -362,6 +362,39 @@ pub const DARK_AGENT_VERDICT: &str = "HYDO-ORACLE: ERROR the disk lost power at 
     while the agent itself waited on it (an L= or G= under way), so the ids for the recovery boot \
     cannot be read";
 
+/// What the guest kernel prints when it cannot unpack its initramfs (init/initramfs.c).
+pub const INITRAMFS_FAILED: &str = "Initramfs unpacking failed:";
+
+/// Milestone 328: the verdict of a boot whose kernel could not unpack the image's initramfs, from
+/// the console line that says so, or None for any other line. On the Mac engine an image's root
+/// is its initramfs, unpacked into guest RAM. A user's image with 10 services unpacked to
+/// 1,885 MiB in a 4,096 MiB guest; the kernel left files out (`write error`), and the run ended
+/// later as `ERROR service network setup failed`, which named the wrong cause.
+pub fn initramfs_verdict(line: &str, fit: Option<&crate::plan::RootFit>) -> Option<String> {
+    let at = line.find(INITRAMFS_FAILED)?;
+    let said = line[at..].trim();
+    if !said.contains("write error") {
+        return Some(format!(
+            "HYDO-ORACLE: ERROR the guest kernel could not unpack the image's root ({said}); \
+             build the image again"
+        ));
+    }
+    // the engines keep a verdict line of at most 300 bytes (hvm's last_verdict)
+    let sizes = match fit {
+        Some(f) => format!(
+            ": it unpacks to about {} MiB beside its {} MiB compressed copy, and guest.ram_mib is \
+             {}",
+            f.unpacked_mib, f.compressed_mib, f.ram_mib
+        ),
+        None => String::new(),
+    };
+    Some(format!(
+        "HYDO-ORACLE: ERROR the image's root does not fit into guest RAM ({said}){sizes}. Raise \
+         guest.ram_mib, or make the roots smaller (root.share_images: true for services of one \
+         image)"
+    ))
+}
+
 /// The fault assertions explore_run declares, in its order (type, id, message).
 pub const FAULT_DECLS: [(&str, &str, &str); 6] = [
     (
@@ -886,6 +919,17 @@ impl Controller for ScheduleController {
         let mut new = false;
         for s in seen {
             match s {
+                // Milestone 328: a root that the kernel could not unpack ends the boot at once,
+                // with the cause (files are missing, so what fails later names another one)
+                Seen::Console(line) if line.contains(INITRAMFS_FAILED) => {
+                    let fit = self.flow.shared.ctx.plan.root_fit;
+                    if let Some(v) = initramfs_verdict(line, fit.as_ref()) {
+                        out.report("main", v.clone());
+                        out.end(Ending::Verdict(v));
+                        self.flow.end_now();
+                        return;
+                    }
+                }
                 Seen::Hello(_) => {
                     if self.waiting_hello {
                         self.waiting_hello = false;
@@ -3556,6 +3600,82 @@ pub const STOPPED_WITHOUT_FAULTS: &str =
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Milestone 328: the kernel's line that it could not unpack the initramfs ends the boot at
+    /// once with its own ERROR, which names the sizes and what to change.
+    #[test]
+    fn a_root_that_did_not_unpack_ends_the_boot_with_its_sizes() {
+        let text = "name: p\nservices:\n  - name: s\n    cmd: /bin/s\n    ready: /bin/true\n\
+                    workload:\n  steps: 2\n  run: echo x\ninvariants:\n  - id: i\n    cmd: /bin/true\n";
+        let mut plan = crate::agent::plan_of_embedded(text, None).unwrap();
+        plan.root_fit = Some(crate::plan::RootFit {
+            unpacked_mib: 1885,
+            compressed_mib: 700,
+            ram_mib: 4096,
+        });
+        let mut c = ScheduleController::boot(plan).unwrap();
+        let stop = StopInfo {
+            n: 45,
+            at: 1000,
+            why: crate::control::Why::Cadence,
+            seen: 0,
+        };
+        let mut out = Out::new(1);
+        c.step(
+            &stop,
+            &[Seen::Console(
+                "[    1.204816] Initramfs unpacking failed: write error".into(),
+            )],
+            &mut out,
+        );
+        let v = match out.into_actions().pop() {
+            Some(crate::control::Action::End(Ending::Verdict(v))) => v,
+            a => panic!("{a:?}"),
+        };
+        assert_eq!(
+            v,
+            "HYDO-ORACLE: ERROR the image's root does not fit into guest RAM (Initramfs unpacking \
+             failed: write error): it unpacks to about 1885 MiB beside its 700 MiB compressed \
+             copy, and guest.ram_mib is 4096. Raise guest.ram_mib, or make the roots smaller \
+             (root.share_images: true for services of one image)"
+        );
+        // the engines keep 300 bytes of a verdict line
+        assert!(v.len() < 300, "{}", v.len());
+        assert!(c.ended());
+        // another reason names it, and other lines change nothing
+        let v = initramfs_verdict(
+            "Initramfs unpacking failed: junk within compressed archive",
+            None,
+        )
+        .unwrap();
+        assert!(v.contains("could not unpack the image's root (Initramfs unpacking failed: junk"));
+        assert_eq!(
+            initramfs_verdict("Freeing initrd memory: 1024K", None),
+            None
+        );
+    }
+
+    /// Milestone 328: the unpacked size from a gzip trailer, and none for an image that is no
+    /// gzip file.
+    #[test]
+    fn the_root_size_comes_from_the_gzip_trailer() {
+        let d = std::env::temp_dir().join(format!("hydo-rootfit-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let gz = d.join("x-arm64.cpio.gz");
+        let mut b = vec![0u8; 2 << 20];
+        b.extend_from_slice(&(1885u32 << 20).to_le_bytes());
+        std::fs::write(&gz, &b).unwrap();
+        let f = crate::plan::RootFit::of_image(&gz, 4096).unwrap();
+        assert_eq!(
+            (f.unpacked_mib, f.compressed_mib, f.ram_mib),
+            (1885, 2, 4096)
+        );
+        let disk = d.join("x-disk.img");
+        std::fs::write(&disk, &b).unwrap();
+        assert_eq!(crate::plan::RootFit::of_image(&disk, 4096), None);
+        let _ = std::fs::remove_dir_all(&d);
+    }
 
     #[test]
     fn shell_text_helpers() {
