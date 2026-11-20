@@ -245,6 +245,12 @@ the `Ok` or `Some` value, and throws away an input for which the constructor giv
 hydo:   212 of 1000 inputs were thrown away: a `build` line's constructor gave `Err` or `None`
 ```
 
+A line's type and constructor may be of another module than the function's. When the
+function's module does not import them, the test module names them by their path from the
+crate's root: base64's `engine` module does not import `Alphabet`. A constructor of a generic
+`impl` block takes the type's arguments: `build NotNan from NotNan::new(val: T)` of `impl<T>
+NotNan<T>` passes an `f64` for `NotNan<f64>`, also in `impl NotNan<f64>`, which has no `T`.
+
 hydo reads the constructor's result type from the crate's sources. For a function that it does
 not find, such as one of another crate, end the line with `?`: `build Date from
 time_helpers::date(jd: i32)?`.

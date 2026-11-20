@@ -200,3 +200,15 @@ fn a_helper_left_unused_by_fn_and_a_feature_build() {
     let (_, rep) = run_fns(&t, &["extra_on"], &[]);
     assert_eq!(one(&rep, "::extra_on").verdict, "broken");
 }
+
+#[test]
+fn a_build_line_names_types_of_other_modules_and_binds_its_blocks_parameters() {
+    let t = TmpDir::new("hydo-contracts-fuzz-m333-across");
+    let (_, rep) = run_fns(&t, &["user::get", "value"], &[]);
+    assert!(rep.skipped.is_empty(), "{:?}", rep.skipped);
+    for f in ["user::get", "::value"] {
+        let r = one(&rep, f);
+        assert_eq!(r.verdict, "held", "{r:?}");
+        assert!(r.held.iter().all(|h| h.undecided == 0), "{r:?}");
+    }
+}

@@ -432,3 +432,55 @@ pub fn extra_on(x: u8) -> bool {
     let _ = x;
     cfg!(feature = "extra")
 }
+
+// ---------------------------------------------------------------- build lines across modules
+
+/// A type that the module of its `build` line's function does not import, as base64's
+/// `Alphabet` in its `engine` module.
+pub mod deep {
+    pub struct Inner(u8);
+
+    impl Inner {
+        pub fn new(x: u8) -> Inner {
+            Inner(x)
+        }
+
+        pub fn get(&self) -> u8 {
+            self.0
+        }
+    }
+}
+
+pub mod user {
+    // hydo: build Inner from Inner::new(x: u8)
+    // hydo: read Inner as u8 by get()
+    // hydo: ensures result == i.x
+    pub fn get(i: &crate::deep::Inner) -> u8 {
+        i.get()
+    }
+}
+
+/// A generic constructor of a generic `impl` block, named for one type, as ordered-float's
+/// `NotNan::new(val: T)` for `NotNan<f64>`.
+#[derive(Clone, Copy)]
+pub struct Nn<T>(T);
+
+impl<T: PartialEq + Copy> Nn<T> {
+    #[allow(clippy::eq_op)]
+    pub fn new(val: T) -> Option<Nn<T>> {
+        (val == val).then_some(Nn(val))
+    }
+
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+impl Nn<f64> {
+    // hydo: build Nn from Nn::new(val: T)
+    // hydo: read Nn as f64 by into_inner()
+    // hydo: ensures result == self
+    pub fn value(self) -> f64 {
+        self.0
+    }
+}

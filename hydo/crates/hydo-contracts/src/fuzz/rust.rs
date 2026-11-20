@@ -2686,14 +2686,52 @@ impl Resolver<'_> {
             return FTy::Opaque(t.text());
         }
         stack.push(name.into());
-        let build = self.items.builds.get(name).map(|b| Ctor {
-            fallible: b.fallible,
-            path: b.ctor.clone(),
-            args: b
-                .args
-                .iter()
-                .map(|(n, a)| (n.clone(), self.res(a, stack), pass_of(a)))
-                .collect(),
+        let concrete = subst_ty(
+            match t {
+                TyAst::Ref(_, x) => x,
+                o => o,
+            },
+            self.subst,
+        );
+        // the path that the harness's module names the type by: base64's `engine` module
+        // does not import `Alphabet`, which `crate::alphabet::Alphabet` names (Milestone 333)
+        let abs = self.items.structs.get(name).and_then(|d| {
+            self.written(&[name.to_string()], &d.module, name, d.is_pub)
+                .filter(|a| a != name)
+                .map(|a| (name.to_string(), a))
+        });
+        let build = self.items.builds.get(name).map(|b| {
+            // the constructor's `impl` block's type parameters bound to the type's arguments:
+            // `NotNan::new(val: T)` of `impl<T> NotNan<T>` takes an `f64` for `NotNan<f64>`
+            let mut map = BTreeMap::new();
+            let fname = path_segments(&b.ctor).last().cloned().unwrap_or_default();
+            for i in &self.items.impls {
+                if type_key(&i.ty.text()) == name
+                    && i.fns.iter().any(|(_, f)| f.name == fname)
+                    && unify(&i.ty, &concrete, &i.generics, &mut map)
+                {
+                    break;
+                }
+                map.clear();
+            }
+            let path = match &abs {
+                Some((w, a)) if b.ctor.starts_with(&format!("{w}::")) => {
+                    format!("{a}{}", &b.ctor[w.len()..])
+                }
+                _ => b.ctor.clone(),
+            };
+            Ctor {
+                fallible: b.fallible,
+                path,
+                args: b
+                    .args
+                    .iter()
+                    .map(|(n, a)| {
+                        let a = subst_ty(a, &map);
+                        (n.clone(), self.res(&a, stack), pass_of(&a))
+                    })
+                    .collect(),
+            }
         });
         let read = self
             .items
@@ -2727,9 +2765,12 @@ impl Resolver<'_> {
         });
         // the `with` lines' types in the type's text (`OrderedFloat<T>` with `with T = f64`;
         // Milestone 333)
-        let ty = match t {
-            TyAst::Ref(_, x) => subst_ty(x, self.subst).text(),
-            o => subst_ty(o, self.subst).text(),
+        let ty = concrete.text();
+        let ty = match &abs {
+            Some((w, a)) if ty == *w || ty.starts_with(&format!("{w}<")) => {
+                format!("{a}{}", &ty[w.len()..])
+            }
+            _ => ty,
         };
         FTy::Built { ty, build, read }
     }
