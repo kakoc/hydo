@@ -218,15 +218,17 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.5.0 is prepared for publication from the release commit `4d43a6bd` and
-not published; publishing is the user's decision (docs/RELEASING.md step 7 onward). Its six
-files, `SHA256SUMS` and the prepared material (release notes, Homebrew formula, release-index
-lines) are in `hydo/dist/out/0.5.0/` of the main checkout: `hydo-linux-0.5.0.tar.gz`
-`2b5d45fd…`, `hydo-mac-0.5.0.tar.gz` (signed and notarized) `44860817…`, the two sources
-archives, the signatures asset and `hydo-skill-0.5.0.tar.gz` `5eb0f84d…`. 0.5.0 holds
+**Releases.** hydo 0.5.0 was published on 2026-11-22 from the release commit `4d43a6bd`. The
+GitHub release `v0.5.0` holds both tarballs, their sources archives, the Mac signatures, the
+skill archive and `SHA256SUMS`: `hydo-linux-0.5.0.tar.gz` `2b5d45fd…`, `hydo-mac-0.5.0.tar.gz`
+(signed and notarized) `44860817…`, and `hydo-skill-0.5.0.tar.gz` `5eb0f84d…`. The tag
+starts the registries' workflow; npm waits for its trusted-publisher entry (open item 63). The
+files and the prepared material are in `hydo/dist/out/0.5.0/` of the main checkout. 0.5.0 holds
 Milestones 304 to 314 and 317 to 339 at the fingerprint epoch 5, and the skill with hydo's
 version. Every recorded value was re-recorded at epoch 5 for it (docs/REBASELINE.md section 29).
-The record is the section "The 0.5.0 release, prepared for publication" of `docs/HISTORY.md`.
+The final KVM check of the published Linux tarball (release step 4) did not run; the epoch-5 KVM
+values came from this release's programs on six runners. The record is the section "The 0.5.0
+release" of `docs/HISTORY.md`.
 
 hydo 0.4.1 was published on 2026-11-19 from the release commit `14e09873`, in
 these places:

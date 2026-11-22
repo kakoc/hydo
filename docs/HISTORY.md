@@ -20447,3 +20447,14 @@ hosting company's letters occur only as bytes of the compressed upstream archive
 - The branch with the release commit `4d43a6bd` comes to `main` with step 7, because Claude
   Code's marketplace reads the skill's version from `main` (docs/RELEASING.md, "The onboarding
   skill", step 4).
+
+**Published (2026-11-22).** On the user's word "Publish release" the lead pushed the branch
+`release-0.5.0`, ran the release workflow's dry run on it (run 45047903637: every package packed
+and checked, `cargo install hydo` rehearsed on Linux and macOS), and created the GitHub release
+`v0.5.0` on `4d43a6bd` with the six files and `SHA256SUMS`, which created the tag and started
+the registries' workflow. The release branch was merged into `main` with it, so the
+marketplace's plugin version is 0.5.0 from the same moment. The release index gained the 0.5.0
+lines. The final KVM check of release step 4, which needed a draft release, did not run: the
+user published first. The KVM values at epoch 5 came from this release's programs on six of
+GitHub's runners (runs 44751184557 and 44755347384). npm's trusted-publisher entry was left to
+the user for later.
