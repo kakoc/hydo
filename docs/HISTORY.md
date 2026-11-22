@@ -20456,5 +20456,7 @@ the registries' workflow. The release branch was merged into `main` with it, so 
 marketplace's plugin version is 0.5.0 from the same moment. The release index gained the 0.5.0
 lines. The final KVM check of release step 4, which needed a draft release, did not run: the
 user published first. The KVM values at epoch 5 came from this release's programs on six of
-GitHub's runners (runs 44751184557 and 44755347384). npm's trusted-publisher entry was left to
-the user for later.
+GitHub's runners (runs 44751184557 and 44755347384). The registries' workflow (run 45049415529)
+published every package: the crates on crates.io, `hydo-assert` on PyPI and on npm (npm's
+trusted-publisher entry was still valid), and the Go tag `sdk/go/v0.5.0`. The Homebrew tap
+names 0.5.0, and the skill releases `skill-v1.0.0` to `skill-v2.4.0` are deleted with their tags.

@@ -221,8 +221,9 @@ Each paragraph gives the current values and where the details are.
 **Releases.** hydo 0.5.0 was published on 2026-11-22 from the release commit `4d43a6bd`. The
 GitHub release `v0.5.0` holds both tarballs, their sources archives, the Mac signatures, the
 skill archive and `SHA256SUMS`: `hydo-linux-0.5.0.tar.gz` `2b5d45fd…`, `hydo-mac-0.5.0.tar.gz`
-(signed and notarized) `44860817…`, and `hydo-skill-0.5.0.tar.gz` `5eb0f84d…`. The tag
-starts the registries' workflow; npm waits for its trusted-publisher entry (open item 63). The
+(signed and notarized) `44860817…`, and `hydo-skill-0.5.0.tar.gz` `5eb0f84d…`. The tag's
+workflow (run 45049415529) published the crates of `cargo install hydo`, `hydo-assert` on
+crates.io, PyPI and npm, and the Go tag `sdk/go/v0.5.0`. The
 files and the prepared material are in `hydo/dist/out/0.5.0/` of the main checkout. 0.5.0 holds
 Milestones 304 to 314 and 317 to 339 at the fingerprint epoch 5, and the skill with hydo's
 version. Every recorded value was re-recorded at epoch 5 for it (docs/REBASELINE.md section 29).
