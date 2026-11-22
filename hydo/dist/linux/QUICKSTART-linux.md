@@ -22,7 +22,7 @@ Words this page uses:
 - Verdict: the run's outcome: `OK`, `VIOLATION` (an invariant, a property that must always hold,
   failed), or `ERROR` (the run could not finish its workload).
 - Fingerprint epoch: the generation of hydo's fingerprints. A change that moves recorded
-  fingerprints raises it; this release's is 4. Runs of different epochs compare only verdicts.
+  fingerprints raises it; this release's is 5. Runs of different epochs compare only verdicts.
 - Recovery: after a power cut, hydo boots the guest again on what the disk kept and runs the
   invariants there.
 - Engine: the program that runs the virtual machine: hvx (hydo's kernel module) or KVM.
@@ -69,8 +69,8 @@ Download the tarball and check it as [docs/INSTALL.md](https://github.com/kakoc/
 shows (`curl` and `sha256sum -c`), then:
 
 ```sh
-tar xzf hydo-linux-0.4.1.tar.gz
-./hydo-linux-0.4.1/install.sh                 # or: --prefix DIR (default ~/.hydo), --add-to-path
+tar xzf hydo-linux-0.5.0.tar.gz
+./hydo-linux-0.5.0/install.sh                 # or: --prefix DIR (default ~/.hydo), --add-to-path
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -96,7 +96,7 @@ The run engine needs no compiling: it runs inside `hydo` itself when you can ope
 `/dev/hvx` (as root, or after `hydo module udev install`), or as the program `bin/hydo-hvx` under
 `sudo` when you cannot. The installer writes nothing outside `~/.hydo` except your shell startup
 file (only with `--add-to-path`) and the udev rule (only with `--udev`). If the module is already
-loaded (a machine where someone else manages it), `./hydo-linux-0.4.1/install.sh --no-module`
+loaded (a machine where someone else manages it), `./hydo-linux-0.5.0/install.sh --no-module`
 skips `hydo module install`; `hydo doctor` then warns that `hvx.ko` was not built by this
 release. In that case run `hydo module build`, not `hydo module install`: it builds this
 release's module without loading it, and `hydo module status` then says whether the loaded module
@@ -165,7 +165,7 @@ This writes `hydo-out/explore-ob-redis-disk.img`, and next to it the steps of th
 and `hydo-agent`, plus a data partition. `hydo-agent` is a small program that is the guest's first
 process and only carries out what the host tells it. Every decision (when to start Redis, when to
 inject a fault, when to check the invariant) is made by `hydo` on the host, which also records it.
-Building the same `hydo.yaml` again gives the same bytes (sha256 `80643bb10db1787b…`).
+Building the same `hydo.yaml` again gives the same bytes (sha256 `23c3b28038b26115…`).
 
 Run one schedule with no faults. Then run one with a power cut before step 12, while Redis is set
 to sync its log only once a second. The workload's 20 steps count from 0, and step 5, for
@@ -181,8 +181,8 @@ hydo run "disk=cut | run C=12 R=everysec"
 Each prints the engine's `RESULT` line (shortened here; `…` stands for fields left out):
 
 ```
-RESULT one fp=2f9186af5e3be2b1 wfp=fb8f826f99c291ed secs=0.4 stops=23617 typed=22 … inh=… ctl=f918a572bec1502b verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)
-RESULT one fp=d299dc487ceb5e3c wfp=ffe9697f49bd79e3 secs=1.0 stops=24050 typed=31 … inh=… ctl=157553d2c383a4bb verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
+RESULT one fp=cce52f9e8565f6e2 wfp=87738d589202f285 secs=0.4 stops=183367 typed=22 … inh=… ctl=09116271ef7d92f0 verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)
+RESULT one fp=8bee301c59ad1b12 wfp=ec8dfde036b545ee secs=0.9 stops=183488 typed=31 … inh=… ctl=ed29619ccdd76831 verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
 ```
 
 - `verdict=` is the outcome. `HYDO-ORACLE: OK` means every invariant held; `VIOLATION` names the
@@ -209,8 +209,8 @@ With this example's default setting, `appendfsync always`, the same cut loses no
 hydo run "disk=cut | run C=12"
 ```
 
-It ends `OK` with `acked=12 all present` (`28275db955114140`; with `--backend kvm`
-`87f1ea33b112285a`).
+It ends `OK` with `acked=12 all present` (`8966aa3944388f9d`; with `--backend kvm`
+`2c486eb24aedfd7f`).
 
 `hydo run` exits with status 0 whenever the run finishes, whatever its verdict. A script tells a
 pass from a failure by `verdict.kind` in the run's `result.json`: `ok`, `violation`, or `error`.
@@ -232,7 +232,7 @@ Run either command again: the fingerprint is the same. Each run leaves a directo
 
 ```
 $ hydo repro hydo-out/runs/run-…
-REPRODUCED   run  fp=d299dc487ceb5e3c (recorded d299dc487ceb5e3c)  disk=cut | run C=12 R=everysec
+REPRODUCED   run  fp=8bee301c59ad1b12 (recorded 8bee301c59ad1b12)  disk=cut | run C=12 R=everysec
              HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
 hydo: 1 of 1 reproduced with the recorded fingerprint (consoles under hydo-out/runs/run-…/repro-…)
 ```
@@ -269,9 +269,11 @@ with one JSON summary line instead. `hydo report` prints each problem it found:
   chose, such as a relaxed sync. `Expected` means that it comes from a fault no system survives,
   such as a disk that throws away writes;
 - what happens, and whether it is a bug;
-- the `hydo run` command that shows it again. For a failed check it is shrunk to the fewest
-  faults that still cause it. A run that stopped with an error is not shrunk, so its command
-  repeats the whole failing run, and the report says so;
+- the `hydo run` command that shows it again. For a failed check, a service that did not start
+  again, and a run that did not end, it is shrunk to the fewest faults that still cause it. A run in
+  which the system itself detected damaged files or a damaged disk is not shrunk unless you ask
+  (`--shrink-detected-damage`). Its command repeats the whole failing run, and the report says
+  so;
 - `If it is expected: hydo ci accept <key>`: this line is for `hydo ci run`, which runs hydo in
   your continuous integration (`hydo guide ci`). It changes nothing in `hydo report`. A key names
   the failing check, so two problems that fail the same check share one key. A problem whose runs
@@ -300,11 +302,19 @@ For this example expect only these classes in `hydo report --details`:
   system that a guest token changes, here `R=`).
 
 With the default settings and an honest disk, Redis loses nothing (the `disk=cut | run C=12`
-run of section 2). On the machine of section 2 it found 9 failures (io-errors 4, lying-disk 3, unsafe-knob 2), and all
-of them reproduced. The two minimal schedules were
-`disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no` (`ec087a21903279d8`) and
-`disk=lying:2 dseed=17144527b62d669c | run C=17` (`b9ba9497e29887aa`). The number after
-`lying:` or `ioerr:` is the fault's rate (`hydo guide faults`).
+run of section 2). On the machine of section 2 it found 9 failures (io-errors 4, lying-disk 3,
+unsafe-knob 2), and all of them reproduced. `hydo report` names 3 problems. The four minimal
+schedules were these:
+
+- `disk=cut dseed=0 | run C=9 R=no` (`unsafe-knob`);
+- `disk=lying:2 dseed=17144527b62d669c | run C=17` (`lying-disk`, `b7d0027938426fb9`);
+- `disk=ioerr:1 dseed=fd403ef8d08fa636 | run K=redis@16+1` (`io-errors`: Redis did not start
+  again after a kill);
+- `disk=ioerr:1 dseed=ce2af709f01aac0 | run` (`io-errors`: Redis did not start again after the
+  faults).
+
+The number after `lying:` or `ioerr:` is the fault's rate (`hydo guide faults`). `dseed=0` means
+that the disk's seed decides nothing in that schedule.
 
 To re-run every failure of an exploration from a fresh boot and compare the fingerprints:
 
@@ -312,7 +322,7 @@ To re-run every failure of an exploration from a fresh boot and compare the fing
 hydo repro hydo-out/explore
 ```
 
-It ends `hydo: 11 of 11 reproduced with the recorded fingerprint` (the 9 failures and the 2
+It ends `hydo: 13 of 13 reproduced with the recorded fingerprint` (the 9 failures and the 4
 minimal schedules).
 
 ## 4. Network faults
@@ -326,8 +336,8 @@ hydo build hydo-netem.yaml
 hydo run --image hydo-out/explore-ob-redis-netem-disk.img "disk=none | run N=redis@3-6:delay,300ms"
 ```
 
-It ends `OK` with `retrans=0` (`020c9cc8c6182c9f`; on the KVM engine `46e0b32fc537a987`; image
-sha256 `b9d31daf7c494255…`): no packet was sent twice. With two images in `hydo-out`, `hydo
+It ends `OK` with `retrans=0` (`2124171a52edf77e`; on the KVM engine `5f02bc6f56c1ca5c`; image
+sha256 `a9374bd83addf933…`): no packet was sent twice. With two images in `hydo-out`, `hydo
 run` and `hydo explore` need `--image` to know which one you mean.
 
 ## 5. Onboard your own project
@@ -381,7 +391,7 @@ and AMD CPUs. Its fingerprints differ between Intel and AMD CPUs; its
 verdicts do not.
 
 ```sh
-./hydo-linux-0.4.1/install.sh --no-module     # nothing to build or load
+./hydo-linux-0.5.0/install.sh --no-module     # nothing to build or load
 export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor --backend kvm
 cp -R ~/.hydo/examples/redis ~/hydo-redis && cd ~/hydo-redis
@@ -417,18 +427,20 @@ the same verdicts as with hvx, but they are counted differently:
 
 A host power cut at the k-th disk flush (`cf=`) and inserted ticks (`pp=`, `xt…`) are hvx's
 alone; the explorer draws the faults both engines apply. With the image of section 2, the two
-schedules end `OK` (`7adecc09c07aaaa4`) and `VIOLATION … key k:1 lost` (`fd41aeb199057728`).
-The values come from AMD EPYC CPUs (the 7763 and 9V74 give the same values). Intel CPUs give the
+schedules end `OK` (`d2e4da56c54ce2a1`) and `VIOLATION … key k:1 lost` (`af9a168ee9d9071c`).
+The values come from AMD EPYC CPUs (the 7763, 9V45 and 9V74 give the same values). Intel CPUs give the
 same verdicts with fingerprints of their own.
 
-The exploration finds 10 failures, and its report gives three minimal schedules:
+The exploration finds 10 failures, and its report gives five minimal schedules:
 
 - `disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20` (`lying-disk`, a lost key);
-- `disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no` (`unsafe-knob`);
+- `disk=cut dseed=0 | run C=9 R=no` (`unsafe-knob`);
+- `disk=ioerr:1 dseed=fd403ef8d08fa636 | run K=redis@16+1` and
+  `disk=ioerr:1 dseed=ce2af709f01aac0 | run` (`io-errors`, Redis did not start again);
 - `disk=lying:6 dseed=b3c3d806a5d34604 | run C=5` (`lying-disk`, a data disk that does not mount
   again).
 
-`hydo repro hydo-out/explore` ends `hydo: 13 of 13 reproduced with the recorded fingerprint`.
+`hydo repro hydo-out/explore` ends `hydo: 15 of 15 reproduced with the recorded fingerprint`.
 `hydo repro` of a run or an exploration uses the engine that recorded it, so it needs no
 `--backend`.
 
@@ -459,7 +471,7 @@ this third-party software:
 `THIRD-PARTY.md` lists each one with its version, its license, the files it is in, and where its
 source is. `licenses/` holds the full text of every license.
 
-The archive `hydo-linux-0.4.1-sources.tar.gz` accompanies this release; it is published next to
+The archive `hydo-linux-0.5.0-sources.tar.gz` accompanies this release; it is published next to
 the tarball, with the same `SHA256SUMS`. It contains the corresponding source:
 
 - the exact upstream source archives of every third-party component, including every GPL- and

@@ -17,11 +17,11 @@ hydo doctor
 Without Homebrew:
 
 ```sh
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.1/hydo-mac-0.4.1.tar.gz
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.1/SHA256SUMS
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.5.0/hydo-mac-0.5.0.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.5.0/SHA256SUMS
 shasum -a 256 -c --ignore-missing SHA256SUMS
-tar xzf hydo-mac-0.4.1.tar.gz
-./hydo-mac-0.4.1/install.sh
+tar xzf hydo-mac-0.5.0.tar.gz
+./hydo-mac-0.5.0/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -48,10 +48,10 @@ run several virtual CPUs.
 Download and check the release for both engines:
 
 ```sh
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.1/hydo-linux-0.4.1.tar.gz
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.1/SHA256SUMS
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.5.0/hydo-linux-0.5.0.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.5.0/SHA256SUMS
 sha256sum -c --ignore-missing SHA256SUMS
-tar xzf hydo-linux-0.4.1.tar.gz
+tar xzf hydo-linux-0.5.0.tar.gz
 ```
 
 For the KVM engine, your user must be able to open `/dev/kvm`. Install, then let
@@ -59,7 +59,7 @@ For the KVM engine, your user must be able to open `/dev/kvm`. Install, then let
 module's engine):
 
 ```sh
-./hydo-linux-0.4.1/install.sh --no-module
+./hydo-linux-0.5.0/install.sh --no-module
 export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor --backend kvm
 ```
@@ -77,7 +77,7 @@ kernel's headers. Do not install it while other virtual machines run under KVM: 
 unloads the kernel modules `kvm_intel` and `kvm`.
 
 ```sh
-./hydo-linux-0.4.1/install.sh
+./hydo-linux-0.5.0/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor
 ```
@@ -93,8 +93,8 @@ hydo doctor                  # on Linux: hydo doctor --backend kvm
 ```
 
 `cargo install` builds only the `hydo` command. `hydo setup` downloads the release for your
-platform into `~/.hydo/versions/0.4.1` (`HYDO_HOME` names another folder than `~/.hydo`) and
-checks every file by sha256. The examples are in `~/.hydo/versions/0.4.1/examples`.
+platform into `~/.hydo/versions/0.5.0` (`HYDO_HOME` names another folder than `~/.hydo`) and
+checks every file by sha256. The examples are in `~/.hydo/versions/0.5.0/examples`.
 
 On Linux this gives the KVM engine, and your user must be able to open `/dev/kvm`, as for the
 tarball. For hydo's kernel module `hvx.ko`, use the tarball.
@@ -131,7 +131,7 @@ installed it:
 - Homebrew: `brew update && brew upgrade kakoc/tap/hydo`.
 - cargo: `cargo install hydo --locked`, then `hydo setup`.
 - The release archive: download your platform's archive and `SHA256SUMS`, check the archive,
-  unpack it, and run `install.sh`. The preceding sections show these commands for 0.4.1.
+  unpack it, and run `install.sh`. The preceding sections show these commands for 0.5.0.
   You do not need the large `-sources.tar.gz` archives, which hold the third-party sources.
 
 Then update the skill: run `hydo skill update` for its copies. For Claude Code's plugin, run
@@ -140,4 +140,7 @@ Then update the skill: run `hydo skill update` for its copies. For Claude Code's
 Read the "Before you upgrade" section of the release notes of each release after yours first.
 From 0.3.4 or older, images built by 0.4.0 or newer get new fingerprints, so build your images
 again after the upgrade. From 0.4.0 to 0.4.1, an image you built keeps its fingerprints. Only an
-image with fakes, proxies or generated gRPC drivers gets new bytes when you build it again.
+image with fakes, proxies or generated gRPC drivers gets new bytes when you build it again. From
+0.4.1 or older to 0.5.0, an image you built keeps its fingerprints until you build it again. An
+image that 0.5.0 builds gets new bytes and new fingerprints, and on hvx its guest's clock follows
+the virtual TSC.

@@ -50,11 +50,11 @@ its installer. The installer copies hydo into `~/.hydo` and runs `hydo setup` th
 `hydo doctor`.
 
 ```sh
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.1/hydo-mac-0.4.1.tar.gz
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.4.1/SHA256SUMS
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.5.0/hydo-mac-0.5.0.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.5.0/SHA256SUMS
 shasum -a 256 -c --ignore-missing SHA256SUMS
-tar xzf hydo-mac-0.4.1.tar.gz
-./hydo-mac-0.4.1/install.sh
+tar xzf hydo-mac-0.5.0.tar.gz
+./hydo-mac-0.5.0/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -98,11 +98,11 @@ This writes into `hydo-out/`:
 
 The other files there (`explore-ob-redis-arm64-data.img` and the folder
 `explore-ob-redis-arm64-root/`) are steps of the build. The data disk (`data.size_mib`, 64 MiB here) is on the Mac's disk
-twice, so the example's `hydo-out/` holds about 150 MB after the build. The 512 MiB data disk of
+twice, so the example's `hydo-out/` holds about 160 MB after the build. The 512 MiB data disk of
 the `hydo init` skeleton (section 5) takes about 1 GB.
 
 Building the same `hydo.yaml` again gives the same bytes:
-`shasum -a 256 hydo-out/explore-ob-redis-arm64.cpio.gz` prints `31e906681736ecad…` before and after
+`shasum -a 256 hydo-out/explore-ob-redis-arm64.cpio.gz` prints `4f1e9207868ff352…` before and after
 a second `hydo build hydo.yaml`. `appendfsync` is the Redis setting that
 decides when Redis writes its log to the disk: `always` (the example's default) after every
 write, `everysec` once a second.
@@ -121,12 +121,12 @@ is such a setting of the system that a guest token changes; the example's `hydo.
 knobs under `knobs:`. Each command prints a `RESULT` line. Its `verdict=` field is the outcome,
 and `HYDO-ORACLE:` marks the verdict of the invariants. `fp=` is the fingerprint; the other
 fields are hydo's own counters and hashes. The first ends `verdict=HYDO-ORACLE: OK invariants=1
-held (redis.acked_writes_survive: acked=20 all present)` (fingerprint `05f433ee427f8e3c`). The second prints a violation: an acknowledged key is gone after the power
-cut (`key k:0 lost`, fingerprint `2174995ebfb4d2d6`; the check stops at the first lost key).
+held (redis.acked_writes_survive: acked=20 all present)` (fingerprint `cc6abeb1ec4e4f29`). The second prints a violation: an acknowledged key is gone after the power
+cut (`key k:0 lost`, fingerprint `b9a2d62ab3eaf0cb`; the check stops at the first lost key).
 That is Redis's documented `everysec` window, and the run reproduces it every time. Run either command again and the fingerprint
 (`fp=`) is the same. With the default `appendfsync always`, the same cut loses nothing:
 `hydo run "disk=cut | run C=12"` ends `OK` with `acked=12 all present` (fingerprint
-`c95bf61bfaf5779a`).
+`b46eb1de79e18bda`).
 
 `hydo run` exits with status 0 whenever the run finishes, whatever its verdict. A script tells a
 pass from a failure by `verdict.kind` in the run's `result.json` (in the folder under
@@ -212,9 +212,11 @@ terminal (a log file, CI) it ends with one JSON summary line instead.
   chose, such as a relaxed sync. `Expected` means that it comes from a fault no system survives,
   such as a disk that throws away writes;
 - what happens, and whether it is a bug;
-- the `hydo run` command that shows it again. For a failed check it is shrunk to the fewest
-  faults that still cause it. A run that stopped with an error is not shrunk, so its command
-  repeats the whole failing run, and the report says so;
+- the `hydo run` command that shows it again. For a failed check, a service that did not start
+  again, and a run that did not end, it is shrunk to the fewest faults that still cause it. A run in
+  which the system itself detected damaged files or a damaged disk is not shrunk unless you ask
+  (`--shrink-detected-damage`). Its command repeats the whole failing run, and the report says
+  so;
 - `If it is expected: hydo ci accept <key>`: this line is for `hydo ci run`, which runs hydo in
   your continuous integration (`hydo guide ci`). It changes nothing in `hydo report`. A key names
   the failing check, so two problems that fail the same check share one key. A problem whose runs
@@ -268,7 +270,7 @@ the exploration again and compare each fingerprint with the recorded one:
 hydo repro hydo-out/explore
 ```
 
-It ends `hydo: 13 of 13 reproduced with the recorded fingerprint` (the 11 failures and the 2
+It ends `hydo: 15 of 15 reproduced with the recorded fingerprint` (the 11 failures and the 4
 minimal schedules).
 
 ## 5. Onboard your own project
@@ -359,7 +361,7 @@ third-party software:
 `THIRD-PARTY.md` lists each one with its version, its license, the files it is in, and where its
 source is. `licenses/` holds the full text of every license.
 
-The archive `hydo-mac-0.4.1-sources.tar.gz` accompanies this release; it is published next to
+The archive `hydo-mac-0.5.0-sources.tar.gz` accompanies this release; it is published next to
 the tarball, with the same `SHA256SUMS`. It contains the corresponding source:
 
 - the exact upstream source archives of every third-party component, including every GPL- and

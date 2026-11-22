@@ -60,6 +60,10 @@
     {
       "description": "`hydo explore --configs` (added in Milestone 299).",
       "$ref": "#/$defs/ConfigsDoc"
+    },
+    {
+      "description": "`stats.json` of an exploration (added in Milestone 336).",
+      "$ref": "#/$defs/StatsDoc"
     }
   ],
   "$defs": {
@@ -323,6 +327,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/Perf"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "paths": {
+          "description": "Which error-handling places of the image's programs ran (added in Milestone 306,\ndocs/design/error-paths.md): for an image whose manifest has `error_paths: true` in a\n`contracts:` entry, on an engine that watches them.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunPaths"
             },
             {
               "type": "null"
@@ -1890,6 +1905,71 @@
         "value"
       ]
     },
+    "RunPaths": {
+      "description": "The error paths of one run (added in Milestone 306).",
+      "type": "object",
+      "properties": {
+        "places": {
+          "description": "The places the image's plan watches.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reached": {
+          "description": "The places that ran, in the order of their first run.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PathReached"
+          },
+          "default": []
+        },
+        "unwatched": {
+          "description": "The places the engine could not watch in this run: it found none of their code in the\nguest's memory.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "watched": {
+          "description": "False when the engine wrote no record of the error paths (an engine that does not\nwatch them: hvx and KVM); then nothing is known about them.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "places",
+        "watched"
+      ]
+    },
+    "PathReached": {
+      "description": "The first run of one place in a run (added in Milestone 306).",
+      "type": "object",
+      "properties": {
+        "place": {
+          "description": "The place's id in the image's plan (`<image>.contracts.json`).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "at": {
+          "description": "The engine's clock at the first run (VM exits on the Mac engine).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "boot": {
+          "description": "The boot: 0 is the run's first, and each power cut or reboot starts the next.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "place",
+        "at"
+      ]
+    },
     "Exploration": {
       "description": "`exploration.json`: an exploration's result.",
       "type": "object",
@@ -2009,6 +2089,31 @@
         },
         "artifacts": {
           "$ref": "#/$defs/ExplorationArtifacts"
+        },
+        "shards": {
+          "description": "`hydo explore --merge` (added in Milestone 304): the parts it merged, in seed order.\nAbsent for an exploration that ran in one piece.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MergedShard"
+          }
+        },
+        "missing_seeds": {
+          "description": "`hydo explore --merge`: the seeds of the range that no part explored (a shard that did\nnot finish), written `lo-hi,lo-hi`; absent when the parts cover the range.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "paths": {
+          "description": "Which error-handling places of the image's programs ran in the first runs (added in\nMilestone 306, docs/design/error-paths.md); absent for an image without them.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PathCoverage"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -2080,10 +2185,47 @@
             "type": "string"
           },
           "default": []
+        },
+        "shard": {
+          "description": "`--shard I/N` (added in Milestone 304): this exploration is the I-th of N contiguous\nparts of a seed range, and `seeds` is its part. `hydo explore --merge` makes one\nexploration of the whole range from the parts.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConfigShard"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "strategy"
+      ]
+    },
+    "ConfigShard": {
+      "description": "Which part of a seed range a shard explored (added in Milestone 304).",
+      "type": "object",
+      "properties": {
+        "index": {
+          "description": "The shard's number, from 1, and the number of shards.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "count": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "range": {
+          "description": "The whole range the shards split (`--seeds`), written `lo-hi`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "count",
+        "range"
       ]
     },
     "Summary": {
@@ -2220,6 +2362,23 @@
           ],
           "format": "uint64",
           "minimum": 0
+        },
+        "repeats": {
+          "description": "First runs and shrink candidates whose schedule the exploration had already run, answered\nwith the earlier run's result without a VM (added in M339).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "repeats_saved_s": {
+          "description": "The seconds that the earlier runs of those schedules took (added in M339).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
         },
         "error_kinds_new": {
           "description": "Error kinds new in some run, and runs with a new kind.",
@@ -3121,6 +3280,206 @@
         "events"
       ]
     },
+    "MergedShard": {
+      "description": "One part of an exploration that `hydo explore --merge` made from parts (added in Milestone\n304): what it explored and on which machine. Fingerprints of two parts are comparable only\nwhen their engine and their host's CPU vendor are the same; their verdicts always are.",
+      "type": "object",
+      "properties": {
+        "index": {
+          "description": "`--shard I/N`'s I, when the part was explored with it.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "seeds": {
+          "description": "The part's seeds, written `lo-hi`.",
+          "type": "string"
+        },
+        "schedules": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "failures": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "host_cpu": {
+          "description": "The machine's CPU and the part's worker count.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HostCpu"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "workers": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "sweep_wall_s": {
+          "description": "The part's own wall times (its summary's `sweep_wall_s` and `total_wall_s`).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "total_wall_s": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "dir": {
+          "description": "The part's directory, as the merge was given it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "seeds",
+        "schedules",
+        "failures"
+      ]
+    },
+    "PathCoverage": {
+      "description": "Which error-handling places ran in an exploration's first runs (added in Milestone 306,\ndocs/design/error-paths.md).",
+      "type": "object",
+      "properties": {
+        "runs": {
+          "description": "The first runs whose error paths the engine recorded.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "runs_without_faults": {
+          "description": "The first runs without a fault (a schedule without a fault token): what ran there is\nwhat the workload reaches by itself.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "places": {
+          "description": "Every place of the plan, in the order of the plan (by file and line).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PathPlaceCoverage"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "runs",
+        "runs_without_faults"
+      ]
+    },
+    "PathPlaceCoverage": {
+      "description": "One place across an exploration (added in Milestone 306).",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "The place's id in the image's plan.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "`err-check`, `err-return`, `err-arm`, `try`, `unwrap`, `panic`, `recovery` or\n`declared`.",
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "function": {
+          "description": "The function the line is written in.",
+          "type": "string"
+        },
+        "runs": {
+          "description": "The first runs where it ran.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "runs_without_faults": {
+          "description": "Of those, the runs without a fault.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "first": {
+          "description": "The first run where it ran, in seed order: replay its schedule to see it run.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PathFirst"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unwatched_runs": {
+          "description": "The first runs where the engine could not watch it.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "file",
+        "line",
+        "function",
+        "runs",
+        "runs_without_faults"
+      ]
+    },
+    "PathFirst": {
+      "description": "The first run of a place in an exploration (added in Milestone 306).",
+      "type": "object",
+      "properties": {
+        "seed": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "tag": {
+          "description": "The run's tag in `events.jsonl` and `consoles/`.",
+          "type": "string"
+        },
+        "schedule": {
+          "type": "string"
+        },
+        "at": {
+          "description": "The engine's clock when the place first ran in that run.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "seed",
+        "tag",
+        "schedule",
+        "at"
+      ]
+    },
     "Start": {
       "description": "The first record of an exploration's stream.",
       "type": "object",
@@ -3803,6 +4162,13 @@
           "description": "`start`, `status`, `list`, `stop`, `exec`, `read`, `ls`, `logs`, `ps`, `sockets`,\n`advance`.",
           "type": "string"
         },
+        "id": {
+          "description": "`start`: the session's id, the same as `session.id`, where scripts look for an id first\n(added in Milestone 328).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "session": {
           "anyOf": [
             {
@@ -3814,7 +4180,7 @@
           ]
         },
         "sessions": {
-          "description": "`list`: every session of this user.",
+          "description": "`list`: every session of this user; `stop --all`: the sessions it stopped (Milestone\n328).",
           "type": "array",
           "items": {
             "$ref": "#/$defs/InspectSession"
@@ -6981,6 +7347,703 @@
         "found_with",
         "schedule",
         "replay"
+      ]
+    },
+    "StatsDoc": {
+      "description": "`stats.json` in an exploration's directory (`hydo explore`, `hydo explore --merge`; added in\nMilestone 336): how much the exploration explored and what it cost, so that a person, or a\nprogram that reads hydo's files, can decide how much more to run. Every number is the host's\nrecord of the runs; nothing in it changes a run, a fingerprint or a verdict. `hydo stats\n<explore dir>` prints it in words.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/StatsType"
+        },
+        "hydo_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epoch": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "image": {
+          "description": "The image explored, as `exploration.json` names it.",
+          "type": "string"
+        },
+        "engine": {
+          "$ref": "#/$defs/Engine"
+        },
+        "strategy": {
+          "description": "The explorer's strategy (`random`, `swarm`, ...) and its seeds (`lo-hi`; absent when\nthe exploration was given no seed range).",
+          "type": "string"
+        },
+        "seeds": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schedules": {
+          "description": "The first runs counted, refused ones included.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "shards": {
+          "description": "The parts a merge was made from (`hydo explore --merge`); absent for one exploration.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "curve": {
+          "description": "The curve of new behaviour.",
+          "$ref": "#/$defs/StatsCurve"
+        },
+        "cost": {
+          "description": "What the runs cost.",
+          "$ref": "#/$defs/StatsCost"
+        },
+        "coverage": {
+          "description": "Which faults the schedules drew, against what the manifest allows.",
+          "$ref": "#/$defs/StatsCoverage"
+        },
+        "estimate": {
+          "description": "How many first runs fit in a time budget.",
+          "$ref": "#/$defs/StatsEstimate"
+        },
+        "runs": {
+          "description": "Each first run in seed order: its cost and what it showed first. A merge of parts reads\nthem to make the curve of the whole range again.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StatsRun"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "image",
+        "engine",
+        "strategy",
+        "schedules",
+        "curve",
+        "cost",
+        "coverage",
+        "estimate"
+      ]
+    },
+    "StatsType": {
+      "description": "The `type` of this record: always `\"stats\"`.",
+      "type": "string",
+      "enum": [
+        "stats"
+      ]
+    },
+    "StatsCurve": {
+      "description": "The curve of new behaviour (added in Milestone 336): after each first run in seed order, how\nmany distinct things the runs showed so far. The measures, in this order:\n\n- `fingerprints`: distinct run fingerprints. Two schedules that differ almost always give\n  two fingerprints, so this measure grows with nearly every run and is not judged.\n- `verdicts`: distinct verdicts, by kind and signature (`ok: OK`, `violation: ...`).\n- `properties`: distinct outcomes of a property or check (`<id>: held`, `<id>: failed`,\n  `<id>: reached`).\n- `error_kinds`: distinct error kinds of the services' logs (images built with `errors:`).\n- `error_paths`: distinct error-handling places that ran (engines that watch them).",
+      "type": "object",
+      "properties": {
+        "measures": {
+          "description": "The measures the runs recorded, in the order above.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "points": {
+          "description": "The counts after 1, 2, 4, 8, ... first runs, after every `total/64`-th one (at least\nevery one), and after the last, in increasing order.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StatsPoint"
+          }
+        },
+        "grew_at": {
+          "description": "Each judged measure's first-run numbers (1 is the first in seed order) at which it grew.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            }
+          },
+          "default": {}
+        },
+        "window": {
+          "description": "The last first runs the judgement looks at: a quarter of them, at least 10.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "trend": {
+          "description": "`growing`, `flat` or `too-few` ([`trend`]).",
+          "type": "string"
+        },
+        "judgement": {
+          "description": "The judgement in one sentence.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "measures",
+        "points",
+        "window",
+        "trend",
+        "judgement"
+      ]
+    },
+    "StatsPoint": {
+      "description": "The counts of the curve after `runs` first runs (added in Milestone 336).",
+      "type": "object",
+      "properties": {
+        "runs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "counts": {
+          "description": "One count per measure of [`StatsCurve::measures`], by its name.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        }
+      },
+      "required": [
+        "runs",
+        "counts"
+      ]
+    },
+    "StatsCost": {
+      "description": "What an exploration's runs cost (added in Milestone 336). Seconds are the host's wall\nseconds.",
+      "type": "object",
+      "properties": {
+        "wall_s": {
+          "description": "The exploration's wall time.",
+          "type": "number",
+          "format": "double"
+        },
+        "runs": {
+          "description": "The runs made, by role: `first`, `rerun`, `shrink` (shrink candidates and minimal\nschedules), `error-shrink` and `other` (probes, traces).",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "default": {}
+        },
+        "vm_s": {
+          "description": "The engine's seconds of the runs, in total and by the same roles.",
+          "type": "number",
+          "format": "double"
+        },
+        "vm_s_by_role": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "format": "double"
+          },
+          "default": {}
+        },
+        "shrink_share": {
+          "description": "The share of the workers' busy time that went to re-running and shrinking failures, from\n0 to 1.",
+          "type": "number",
+          "format": "double"
+        },
+        "first_run_s": {
+          "description": "A first run's engine seconds: the mean, the median, the 90th percentile and the largest.",
+          "$ref": "#/$defs/StatsSpread"
+        },
+        "clock": {
+          "description": "The engine's clock over the first runs: in total and per run on average, and its unit\n(`exits` on the Mac and KVM engines, `instructions` of hvx's instruction clock); absent\nwhen the runs left no control transcripts.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "clock_per_run": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "clock_unit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "host_cpu_s": {
+          "description": "The host CPU seconds of the explorer and the engines it started (user and system time;\nan engine that runs in the explorer's process counts with it).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "guest_ram_mib": {
+          "description": "The guest RAM of one worker, the largest resident memory of one engine process (an\nengine in a process of its own, as on the Mac), and the explorer process's largest\nresident memory, in MiB, as the host's process accounting reports them.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "engine_peak_mib": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "explorer_peak_mib": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "cached": {
+          "description": "The first runs answered from the result cache (`HYDO_EXPLORE_CACHE`), which cost no VM.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "workers": {
+          "description": "Each worker's time ([`StatsWorker`]), and their sums.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StatsWorker"
+          },
+          "default": []
+        },
+        "busy_s": {
+          "type": "number",
+          "format": "double"
+        },
+        "starting_s": {
+          "type": "number",
+          "format": "double"
+        },
+        "waiting_s": {
+          "type": "number",
+          "format": "double"
+        },
+        "idle_s": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "wall_s",
+        "vm_s",
+        "shrink_share",
+        "first_run_s",
+        "busy_s",
+        "starting_s",
+        "waiting_s",
+        "idle_s"
+      ]
+    },
+    "StatsSpread": {
+      "description": "A spread of values (added in Milestone 336).",
+      "type": "object",
+      "properties": {
+        "mean": {
+          "type": "number",
+          "format": "double"
+        },
+        "median": {
+          "type": "number",
+          "format": "double"
+        },
+        "p90": {
+          "type": "number",
+          "format": "double"
+        },
+        "max": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "mean",
+        "median",
+        "p90",
+        "max"
+      ]
+    },
+    "StatsWorker": {
+      "description": "One worker's time (added in Milestone 336): `busy_s` running jobs, `starting_s` starting its\nengine (the boot to S1, and every start after an engine exited; an engine's wait for a lock\nor for memory is inside it), `waiting_s` in a quiet window (`HYDO_QUIET_FILE`), and `idle_s`\nwith no job to take.",
+      "type": "object",
+      "properties": {
+        "worker": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "part": {
+          "description": "The part of a merge it belongs to, from 1; absent for one exploration.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "jobs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "restarts": {
+          "description": "The engine starts after the first one (an engine that exited during a run).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "busy_s": {
+          "type": "number",
+          "format": "double"
+        },
+        "starting_s": {
+          "type": "number",
+          "format": "double"
+        },
+        "waiting_s": {
+          "type": "number",
+          "format": "double"
+        },
+        "idle_s": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "worker",
+        "jobs",
+        "busy_s",
+        "starting_s",
+        "waiting_s",
+        "idle_s"
+      ]
+    },
+    "StatsCoverage": {
+      "description": "Which faults the first runs drew (added in Milestone 336), against what the manifest\nallows: its `faults:` and its services.",
+      "type": "object",
+      "properties": {
+        "allowed": {
+          "description": "The manifest's fault kinds (`faults:`, or the kinds hydo allows without the list), and\nits services that faults may name (one-shot jobs left out); empty for an image without\na manifest.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "steps": {
+          "description": "The workload's steps.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "without_faults": {
+          "description": "The first runs without any fault.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kinds": {
+          "description": "Each kind the schedules drew, the kind of the most runs first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StatsKind"
+          },
+          "default": []
+        },
+        "never": {
+          "description": "The allowed kinds no schedule drew, each with the explorer option that draws it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StatsNever"
+          },
+          "default": []
+        },
+        "services_never": {
+          "description": "The allowed services that no fault named.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "without_faults"
+      ]
+    },
+    "StatsKind": {
+      "description": "One fault kind across the first runs (added in Milestone 336).",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "description": "The kind, by the manifest's word (`kill`, `pause`, `network`, `oneway`, `cut`, `clock`,\n`disk`, `freeze`, `protocol`, `corrupt`, `powerloss`) or hydo's own (`upgrade`, `block`\nfor faults of the disk's blocks, `timing` for tick and turn tokens, `setting` for a\nsetting of the manifest (`R=`), `reaction` for a reaction whose action has no kind).",
+          "type": "string"
+        },
+        "words": {
+          "description": "The kind in a few words.",
+          "type": "string"
+        },
+        "runs": {
+          "description": "The first runs that drew it.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "targets": {
+          "description": "The targets its tokens named (services, links, routes), each with its count of runs.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "default": {}
+        },
+        "steps": {
+          "description": "The workload steps its tokens start at, each once, in increasing order.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "default": []
+        },
+        "allowed": {
+          "description": "Whether the manifest's `faults:` names it (false for hydo's own kinds).",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "words",
+        "runs",
+        "allowed"
+      ]
+    },
+    "StatsNever": {
+      "description": "An allowed fault kind that no schedule drew (added in Milestone 336).",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "words": {
+          "type": "string"
+        },
+        "option": {
+          "description": "The `hydo explore` option that draws it; absent when the seeds drew none although the\noptions draw it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "words"
+      ]
+    },
+    "StatsEstimate": {
+      "description": "How many first runs fit in a time budget (added in Milestone 336), from what this\nexploration measured on its machine. The count for `workers` workers and `shards` parts is\n`shards × ⌊(budget − starting_s) × workers ÷ job_s × (1 − shrink_share)⌋`: each part\nruns on a machine like this one, its workers start once, and re-runs and shrinks take the\nsame share of their time as here.",
+      "type": "object",
+      "properties": {
+        "job_s": {
+          "description": "A first run's job seconds on one worker (the mean), a worker's start, and the share of\nthe busy time that re-runs and shrinks took.",
+          "type": "number",
+          "format": "double"
+        },
+        "starting_s": {
+          "type": "number",
+          "format": "double"
+        },
+        "shrink_share": {
+          "type": "number",
+          "format": "double"
+        },
+        "workers": {
+          "description": "The workers this exploration used, and about how many this machine fits for this guest\nnow (its hardware threads, and its free memory at twice the guest RAM and 256 MiB a\nworker).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "machine_workers": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "measured_per_hour": {
+          "description": "First runs an hour on this exploration's workers, as measured: the first runs over the\ntime their batch took.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "fits": {
+          "description": "Some budgets worked out.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StatsFit"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "job_s",
+        "starting_s",
+        "shrink_share",
+        "workers"
+      ]
+    },
+    "StatsFit": {
+      "description": "The first runs that fit in one budget (added in Milestone 336).",
+      "type": "object",
+      "properties": {
+        "budget_s": {
+          "type": "number",
+          "format": "double"
+        },
+        "workers": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "shards": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "runs": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "budget_s",
+        "workers",
+        "shards",
+        "runs"
+      ]
+    },
+    "StatsRun": {
+      "description": "One first run of the statistics (added in Milestone 336).",
+      "type": "object",
+      "properties": {
+        "seed": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "vm_s": {
+          "description": "The engine's own seconds for the run (`secs`).",
+          "type": "number",
+          "format": "double"
+        },
+        "job_s": {
+          "description": "The worker's seconds for the job: the run and the host's checks of it. Absent for a run\nanswered from the result cache.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "clock": {
+          "description": "How far the engine's clock moved in the run's conversations ([`StatsCost::clock_unit`]),\nwhen the run left control transcripts.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "refused": {
+          "description": "The engine refused the schedule: it tested nothing, and it shows nothing new.",
+          "type": "boolean"
+        },
+        "fingerprint": {
+          "description": "What the run showed that no earlier first run in seed order showed, by measure.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdicts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "error_kinds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "error_paths": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        }
+      },
+      "required": [
+        "seed",
+        "vm_s"
       ]
     }
   }

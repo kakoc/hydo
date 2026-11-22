@@ -70,13 +70,13 @@ instruction.
   nats-server test failed on every one of 209 schedules, whatever the timing tokens.
 - On hvx with several vCPUs (`--vcpus N`, up to 8), the vCPUs take turns of exactly `q=` guest
   branches (default 2^20). The other vCPU's threads run between the turns, so the turn length
-  decides where the threads interleave. The nats-server test fails at `q=19783` and passes at
-  `q=19726` on two vCPUs, each twice with one fingerprint. These are the values of the
-  fingerprint epoch 4; another epoch, image or engine can move the boundary.
+  decides where the threads interleave. The nats-server test fails at `q=18870` and passes at
+  `q=18813` on two vCPUs, each twice with one fingerprint. These are the values of the
+  fingerprint epoch 5; another epoch, image or engine can move the boundary.
 
 ```sh
-hydo run --vcpus 2 "disk=none q=19783 | run"
-hydo run --vcpus 2 "disk=none q=19726 | run"
+hydo run --vcpus 2 "disk=none q=18870 | run"
+hydo run --vcpus 2 "disk=none q=18813 | run"
 ```
 
 - On the KVM engine with several vCPUs (`--backend kvm --vcpus N`, up to 8), the vCPUs take turns
@@ -123,11 +123,14 @@ hydo explore --backend kvm --vcpus 2 --sweep turns --out turns
 ```
 
 The verdict need not change only once. The sweep bisects only between the lengths it ran, so a
-narrow band of other verdicts between two grid points stays hidden. On the nats-server image the
-default sweep made 21 runs at the fingerprint epoch 4 and found one boundary, between
+narrow band of other verdicts between two grid points stays hidden. On the nats-server image
+the default sweep made 21 runs at the fingerprint epoch 4 and found one boundary, between
 `q=19726` (passes) and `q=19783` (fails). A dense sweep of 17,000 to 19,000 found five
 boundaries in 56 runs: failing bands start at 18,103, 18,421 and 18,895. The default sweep
-stepped over all three: its grid points `q=7222`, `q=18585` and `q=19498` pass.
+stepped over all three: its grid points `q=7222`, `q=18585` and `q=19498` pass. At the
+fingerprint epoch 5 the test fails at most lengths: of the default sweep's 27 runs, 6 passed,
+between `q=5911` and `q=7222` and between `q=18585` and `q=18813`. It found two boundaries:
+`q=5842` fails and `q=5911` passes, and `q=18813` passes and `q=18870` fails.
 
 ```sh
 hydo explore --vcpus 2 --sweep turns --turn-range 17000-19000 --turn-points 41 \

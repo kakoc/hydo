@@ -367,6 +367,24 @@ boundaries: the failing bands are 18,103 to 18,135, 18,421 to 18,453, and 18,895
 end at 19,000 (the default sweep's 19,498 passes). The comment
 in `hydo.yaml` keeps the epoch-2 lengths, because the manifest's text is inside the image.
 
+## The fingerprint epoch 5 (hydo 0.5.0): the current values
+
+At the fingerprint epoch 5 hvx keeps the guest's time with the virtual TSC (`guest.exact_tick`),
+and the test fails at most turn lengths: `q=19726` fails now. On the images built at epoch 5
+(buggy `d386ed4fa8382fc5…`, fixed `5c47d73e1c9610be…`) the default turn sweep (27 runs) passed
+only between `q=5911` and `q=7222` and between `q=18585` and `q=18813`. It found two boundaries,
+`q=5842` and `q=5911`, and `q=18813` and `q=18870`, each reproduced. Each schedule below ran
+twice from a fresh boot on the bare-metal machine:
+
+| image | schedule | vCPUs | verdict | fingerprint (both runs) |
+|---|---|---|---|---|
+| buggy | `disk=none q=18870 \| run` | 2 | VIOLATION, line 72, `3 vs 2` | `a94f7147f418291f` |
+| buggy | `disk=none q=18813 \| run` | 2 | OK, `pass=2 of 2` | `8906517ac7452a59` |
+| fixed | `disk=none q=18870 \| run` | 2 | OK | `f2baba63173fab8b` |
+| buggy | `disk=none \| run` | 1 | VIOLATION | `3d658ef45e859aca` |
+
+These four runs replace the epoch-4 ones in `hydo/onboard/recorded.json`.
+
 ## Files
 
 | file | what it is |

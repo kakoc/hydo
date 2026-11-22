@@ -29,7 +29,7 @@ jobs:
           fi
       - uses: kakoc/hydo/action@v1
         with:
-          hydo-version: 0.4.1
+          hydo-version: 0.5.0
           history: ${{ runner.temp }}/hydo-history
           # hydo-record.yml posts the comment, also for pull requests from forks
           comment: "false"
