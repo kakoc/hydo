@@ -51,22 +51,27 @@ fn spawn_stop(items: &[Item], from: u64) -> Option<u64> {
     })
 }
 
-/// The stop at which the reaction's event is first seen after its arming, if it is.
-fn event_stop(items: &[Item], got: &[Delivered], event: &str, at: u64) -> Option<u64> {
+/// The stop at which the reaction's event is seen the `nth` time after its arming (Milestone 345:
+/// `#<k>`; 1 for the first), if it is.
+fn event_stop(items: &[Item], got: &[Delivered], event: &str, at: u64, nth: u64) -> Option<u64> {
     let armed = spawn_stop(items, at)?;
-    got.iter().find_map(|d| match &d.msg {
-        Msg::Kernel(l) if d.n >= armed && record(l).is_some_and(|(id, ev)| ev && id == event) => {
-            Some(d.n)
-        }
-        _ => None,
-    })
+    got.iter()
+        .filter_map(|d| match &d.msg {
+            Msg::Kernel(l)
+                if d.n >= armed && record(l).is_some_and(|(id, ev)| ev && id == event) =>
+            {
+                Some(d.n)
+            }
+            _ => None,
+        })
+        .nth(nth as usize - 1)
 }
 
 fn by<'a>(items: &'a [Item], who: &str) -> Vec<&'a Item> {
     items.iter().filter(|i| i.by() == Some(who)).collect()
 }
 
-const SCHEDULES: [&str; 16] = [
+const SCHEDULES: [&str; 18] = [
     "disk=none | run A=client.place_failed:kill-redis",
     "disk=none | run A=client.place_failed+200:stop-redis-500",
     "disk=none | run A=server.place_acked@4:stop-redis-300",
@@ -82,6 +87,9 @@ const SCHEDULES: [&str; 16] = [
     // Milestone 296: actions inside the workload's own work
     "disk=none | run A=client.place_failed+20:clock-300",
     "disk=none | run A=client.place_failed:stop-workload-500",
+    // Milestone 345: a later record of the event
+    "disk=none | run A=client.place_failed#2:kill-redis",
+    "disk=none | run A=server.place_acked#3@4+5:stop-redis-300",
     "disk=none | run A=client.place_failed+5:stop-workload/hydo-call#2-50",
     "disk=none | run A=client.place_failed:kill-workload/harness",
 ];
@@ -145,7 +153,7 @@ fn a_reaction_acts_where_its_event_is_seen_and_replays() {
                     continue;
                 }
                 let has_c = s.guest.iter().any(|t| t.letter() == 'C');
-                let ev = event_stop(items, &ran.run.fake.delivered, &r.event, r.at);
+                let ev = event_stop(items, &ran.run.fake.delivered, &r.event, r.at, r.nth);
                 let first = mine.first().map(|i| i.stop());
                 match ev {
                     None => assert!(mine.is_empty(), "{salt} {text}: acted without its event"),
@@ -417,6 +425,8 @@ fn a_kill_now_reaction_kills_at_its_event_and_replays() {
             "disk=none | run A=server.place_acked@4+5:kill-now-redis",
             "disk=none | run A=order.broken:kill-now-redis K=redis@2+1",
             "disk=none | run A=no.such.event:kill-now-redis",
+            // Milestone 345: the relay counts the event's records
+            "disk=none | run A=server.place_acked#3@4+5:kill-now-redis",
         ] {
             let s: Schedule = text.parse().unwrap();
             let ran = run_schedule(&b, &s).unwrap();

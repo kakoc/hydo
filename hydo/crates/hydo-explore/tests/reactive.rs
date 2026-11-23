@@ -343,3 +343,73 @@ fn kill_now_reaches_the_only_service() {
         assert!(with > before, "{st}: {with} against {before}");
     }
 }
+
+/// Milestone 345: `--reactive-at` makes each seed one cell of its grid, in the order of the
+/// event, the delay and the action, with nothing else drawn. Seeds past the grid try it again
+/// with the seed's composition. Every schedule is canonical, round-trips, and its reaction stays
+/// after the manifest's restrictions; a later record (`#<k>`) and a power cut keep their parts.
+#[test]
+fn an_aimed_exploration_tries_every_cell_in_turn() {
+    use hydo_explore::aim;
+    let sp = hydo_explore::space::Space::from_path(
+        &support::top().join("hydo/onboard/examples/meilisearch/hydo/hydo.yaml"),
+    )
+    .expect("the example loads");
+    let mut e = Ex::default();
+    sp.apply(&mut e);
+    let keep = |_: &str| true;
+    e.aim = Some(aim::Aim {
+        events: aim::parse_events("meili.swap_acked@20,meili.edit_acked#2").unwrap(),
+        delays: aim::parse_delays("0..50").unwrap(),
+        actions: aim::actions(None, &e.pause_svcs, &keep).unwrap(),
+    });
+    let a = e.aim.clone().unwrap();
+    assert_eq!(
+        a.actions,
+        ["kill-now-meilisearch", "kill-meilisearch", "cut"]
+    );
+    assert_eq!(a.cells(), 2 * 51 * 3);
+    let mut seen = std::collections::BTreeSet::new();
+    for seed in 1..=a.cells() + 5 {
+        let s = e.compose_seed("process", seed, false);
+        let text = e.render(&s);
+        let sc = Schedule::parse(&text).unwrap_or_else(|x| panic!("{text}: {x}"));
+        assert_eq!(sc.to_string(), text, "canonical");
+        assert_eq!(e.render(&e.parse(&text).unwrap()), text, "round trip");
+        let guest: Vec<&str> = text
+            .split("| run")
+            .nth(1)
+            .unwrap()
+            .split_whitespace()
+            .collect();
+        let react: Vec<&&str> = guest.iter().filter(|t| t.starts_with("A=")).collect();
+        assert_eq!(react.len(), 1, "{text}");
+        let want = hydo_explore::sched::render_a(&a.cell(seed - 1));
+        assert_eq!(*react[0], want, "seed {seed}");
+        if seed <= a.cells() {
+            assert_eq!(
+                guest.len(),
+                1,
+                "only the reaction in the first round: {text}"
+            );
+            assert!(seen.insert(want.clone()), "seed {seed} repeats {want}");
+        } else {
+            assert!(guest.iter().any(|t| t.starts_with("W=")), "{text}");
+        }
+        assert_eq!(
+            text.starts_with("disk=cut"),
+            want.ends_with(":cut"),
+            "{text}"
+        );
+    }
+    assert_eq!(seen.len() as u64, a.cells());
+    // seed 13 is the first schedule 4 ms after the event, with the kill at its moment
+    assert_eq!(
+        hydo_explore::sched::render_a(&a.cell(12)),
+        "A=meili.swap_acked@20+4:kill-now-meilisearch"
+    );
+    assert_eq!(
+        hydo_explore::sched::render_a(&a.cell(153)),
+        "A=meili.edit_acked#2:kill-now-meilisearch"
+    );
+}

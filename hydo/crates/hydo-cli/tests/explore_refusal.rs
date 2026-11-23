@@ -119,3 +119,42 @@ fn a_bad_option_keeps_status_2() {
     assert_eq!(rc, 2, "{out}{err}");
     assert!(!out.contains("\"refused\""), "{out}");
 }
+
+/// Milestone 345: without `--seeds`, an aimed exploration runs its whole grid once: here one
+/// event, two delays and the kill at the event's moment of each of the built-in space's four
+/// services, so 8 schedules, one reaction each in the grid's order.
+#[test]
+fn an_aimed_exploration_runs_its_grid() {
+    let t = T::new("aimed");
+    let (rc, out, err) = t.explore(&[
+        "--image",
+        "db-arm64.cpio.gz",
+        "--reactive-at",
+        "client.place_failed",
+        "--react-delays",
+        "0,5",
+        "--react-actions",
+        "kill-now",
+        "--out",
+        "out",
+        "--json",
+    ]);
+    assert_eq!(rc, 0, "{out}{err}");
+    assert!(
+        err.contains("aimed reactions (--reactive-at): 8 schedules, one per seed"),
+        "{err}"
+    );
+    let doc: Value =
+        serde_json::from_str(&std::fs::read_to_string(t.dir.join("out/exploration.json")).unwrap())
+            .unwrap();
+    assert_eq!(doc["config"]["seeds"], "1-8", "{doc}");
+    assert_eq!(doc["summary"]["schedules"], 8, "{doc}");
+    let events = std::fs::read_to_string(t.dir.join("out/events.jsonl")).unwrap();
+    for want in [
+        "A=client.place_failed:kill-now-mysql",
+        "A=client.place_failed:kill-now-front",
+        "A=client.place_failed+5:kill-now-mysql",
+    ] {
+        assert!(events.contains(want), "{want}: {events}");
+    }
+}

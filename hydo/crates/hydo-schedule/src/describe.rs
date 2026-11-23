@@ -1361,12 +1361,21 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
                     format!("after the processes {} were killed", code(&t.to_string())),
                 ),
             };
+            // Milestone 345: the k-th record of the event
+            let (time, times) = if r.nth > 1 {
+                (
+                    format!(" for the {} time", ordinal(r.nth)),
+                    format!(" the {} time", ordinal(r.nth)),
+                )
+            } else {
+                (String::new(), String::new())
+            };
             fault(
                 format!(
-                    "When your system reports {}{from}, hydo{later} {act}.",
+                    "When your system reports {}{time}{from}, hydo{later} {act}.",
                     code(&r.event)
                 ),
-                format!("when {} is reported, {act}", code(&r.event)),
+                format!("when {} is reported{times}, {act}", code(&r.event)),
             )
             .at(r.at)
             .fault(kind, ctx)

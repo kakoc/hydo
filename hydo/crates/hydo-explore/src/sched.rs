@@ -94,12 +94,15 @@ pub struct Fc {
 
 pub type Kinds = Vec<(String, i64)>;
 
-/// `A=<event>[@<at>][+<delay>]:<action>` (M139): a reaction to the guest's first assertion
-/// record of `event` after step `at`; `action` is `cut`, `kill-<svc>`, `kill-now-<svc>`
-/// (Milestone 305), `stop-<svc>-<ms>` or `cont-<svc>` (hydo_schedule::React).
+/// `A=<event>[#<nth>][@<at>][+<delay>]:<action>` (M139): a reaction to the guest's first
+/// assertion record of `event` after step `at` (the nth with `#<nth>`, Milestone 345); `action`
+/// is `cut`, `kill-<svc>`, `kill-now-<svc>` (Milestone 305), `stop-<svc>-<ms>` or `cont-<svc>`
+/// (hydo_schedule::React).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ra {
     pub event: String,
+    /// Which record of the event acts, from 1 (Milestone 345).
+    pub nth: i64,
     pub at: i64,
     pub delay: i64,
     pub action: String,
@@ -126,6 +129,9 @@ impl Ra {
 /// The text of one `A=` token.
 pub fn render_a(a: &Ra) -> String {
     let mut t = format!("A={}", a.event);
+    if a.nth > 1 {
+        t.push_str(&format!("#{}", a.nth));
+    }
     if a.at > 0 {
         t.push_str(&format!("@{}", a.at));
     }
@@ -154,8 +160,13 @@ pub fn parse_a(v: &str) -> Result<Ra, String> {
         Some((e, a)) => (e, num(a)?),
         None => (head, 0),
     };
+    let (event, nth) = match event.split_once('#') {
+        Some((e, k)) => (e, num(k)?),
+        None => (event, 1),
+    };
     Ok(Ra {
         event: event.to_string(),
+        nth,
         at,
         delay,
         action: action.to_string(),

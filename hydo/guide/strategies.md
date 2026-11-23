@@ -622,8 +622,10 @@ These findings hold for every type of system:
 
 - **What it is.** One reaction runs with a list of delays after its event, one run per delay, to
   map the window where a fault breaks a promise.
-- **What to write.** A shell loop over `A=mender.commit_started@3+<ms>:cut` for each delay.
-  The explorer draws a delay from six fixed values only.
+- **What to write.** `hydo explore --reactive-at mender.commit_started@3`. It tries every
+  delay from 0 to 50 ms, each with `kill-now-<svc>`, `kill-<svc>` and a power cut, one schedule
+  per seed, and shrinks each failure (`--react-delays` and `--react-actions` change the grid).
+  The random draws of `--reactive` take a delay from six fixed values only.
 - **When it fits.** A window of a few milliseconds after an event, whose place differs between
   engines.
 - **What it found.**
@@ -635,9 +637,13 @@ These findings hold for every type of system:
     25 ms). The same scan in Docker, `pkill -9` 0 to 45 ms after the swap in steps of 3 ms, ran
     the swap twice at 0, 9, 12, and 15 ms. `kill-now-meilisearch` at 0 to 50 ms ran it twice at
     13 and 14 ms on the Mac engine.
+  - Meilisearch again, on an image built at the fingerprint epoch 5, where the saved `+14`
+    passed. `hydo explore --reactive-at meili.swap_acked@20` ran the swap twice first at seed
+    29 of 153, a `kill-meilisearch` 9 ms after the `202`. `kill-now-meilisearch` did it at 11
+    and 12 ms.
 - **What it misses.** The window moves with the program's bytes. A second build of
   `mender-update` moved it to 65, 70, and 75 ms.
-- **Cost.** One run per delay.
+- **Cost.** One run per delay and action: 153 runs for one service and the 51 default delays.
 
 ### Protocol faults on fakes and emulators (`H=`)
 

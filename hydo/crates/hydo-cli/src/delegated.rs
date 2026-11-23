@@ -84,10 +84,10 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
         args.push("--out".into());
         args.push(pjoin(OUT, "explore"));
     }
-    if !args
-        .iter()
-        .any(|a| a == "--seeds" || a == "--schedule" || a == "--sweep")
-    {
+    // Milestone 345: an aimed exploration's default seeds are its whole grid (the explorer's)
+    if !args.iter().any(|a| {
+        a == "--seeds" || a == "--schedule" || a == "--sweep" || a.starts_with("--reactive-at")
+    }) {
         args.push("--seeds".into());
         args.push("1-20".into());
     }

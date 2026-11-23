@@ -53,6 +53,8 @@ pub struct Drawn {
     pub upgrades: bool,
     /// `--block-faults` (Milestone 313).
     pub block: bool,
+    /// `--reactive-at` (Milestone 345): each schedule is one aimed reaction, and nothing is drawn.
+    pub aimed: bool,
 }
 
 /// A group of the manifest's `groups:` (Milestone 195): its members in order, whether it has a
@@ -436,6 +438,19 @@ impl Space {
     /// and a kind of the project's `faults:` that only such an option draws names the option
     /// (0.4.0's trial: "none of the project's kinds", and then `H=` faults).
     pub fn plain_with(&self, o: &Drawn) -> String {
+        // Milestone 345: an aimed exploration draws no fault; its grid has a line of its own
+        if o.aimed {
+            return format!(
+                "hydo explore: it draws no fault: each schedule is one reaction of \
+                 --reactive-at ({}: {}).",
+                if self.svcs.len() == 1 {
+                    "service"
+                } else {
+                    "services"
+                },
+                self.svcs.join(", ")
+            );
+        }
         let (new_faults, strategy) = (o.new_faults, o.strategy.as_str());
         let words = |k: &str| -> &'static str {
             match k {

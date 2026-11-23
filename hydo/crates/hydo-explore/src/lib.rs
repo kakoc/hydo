@@ -23,6 +23,7 @@
 //! machine has the room, and the pool sized from the machine.
 
 pub mod advice;
+pub mod aim;
 pub mod args;
 pub mod compose;
 pub mod contracts;

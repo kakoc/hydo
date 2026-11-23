@@ -1,11 +1,12 @@
 //! Reactive exploration (M139, docs/design/guest-control.md step D2): the schedule token
-//! `A=<event>[@<step>][+<ms>]:<action>`, which only host control makes possible.
+//! `A=<event>[#<k>][@<step>][+<ms>]:<action>`, which only host control makes possible.
 //!
 //! A reaction is a thread of the controller, armed before workload step `step` (0 when not
 //! written). It watches the guest's console for the first assertion record of `event` whose
 //! outcome is the event's (`ok:true` of a `sometimes`/`reachable` assertion, `ok:false` of the
-//! others: an `always` that failed, an `unreachable` that was reached) seen after it was armed,
-//! waits `ms` of guest time (a guest `sleep`, as the timers do) and acts:
+//! others: an `always` that failed, an `unreachable` that was reached) seen after it was armed
+//! (with `#<k>`, Milestone 345, the k-th such record), waits `ms` of guest time (a guest `sleep`,
+//! as the timers do) and acts:
 //!
 //! - `kill-<svc>`: SIGKILL the service's tree; it stays down until the heal's restart pass
 //!   (restart_dead), as after the stack's timed kill `X=`;
@@ -256,6 +257,22 @@ while IFS= read -r l <&4; do
 done
 "#;
 
+/// The relay's script for the `nth` record of the event (Milestone 345: `#<k>`). The first
+/// record's script is [`RELAY`] byte for byte, so the runs of earlier schedules send the same
+/// command; for a later record the relay counts the event's records and lets the earlier ones
+/// pass on as any other line.
+pub(super) fn relay_script(nth: u64) -> String {
+    if nth <= 1 {
+        return RELAY.to_string();
+    }
+    let s = RELAY.replacen("go=1\n", &format!("go=1 k={nth}\n"), 1);
+    s.replacen(
+        "    if [ $h = 1 ]; then\n",
+        "    [ $h = 0 ] || { k=$((k-1)); [ $k = 0 ] || h=0; }\n    if [ $h = 1 ]; then\n",
+        1,
+    )
+}
+
 /// The relay's directory in the guest (Milestone 305).
 fn relay_dir(i: usize) -> String {
     format!("/tmp/hydo-killnow/a{i}")
@@ -309,7 +326,7 @@ pub(super) fn arm_now(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<()> {
         bb(ctx),
         "sh".into(),
         "-c".into(),
-        RELAY.into(),
+        relay_script(r.nth),
         "hydo-killnow".into(),
         bb(ctx),
         format!("a{i}"),
@@ -416,10 +433,11 @@ pub(super) fn watch(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<()> {
         Memo::Id(n) => n as usize,
         m => unreachable!("memo out of step: {m:?}"),
     };
+    // Milestone 345: the k-th record of the event (`#<k>`; the first without it)
     fx.until(|_, f| {
-        f.asserts
-            .get(from..)
-            .is_some_and(|l| l.iter().any(|(id, ev)| *ev && *id == r.event))
+        f.asserts.get(from..).is_some_and(|l| {
+            l.iter().filter(|(id, ev)| *ev && *id == r.event).count() as u64 >= r.nth
+        })
     })?;
     if fx.is_cancelled() {
         // cancelled at the stop where its event was seen: the main sequence decided first
@@ -479,4 +497,28 @@ pub(super) fn watch(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<()> {
     }
     xassert(fx, REACT_DECL.0, REACT_DECL.1, REACT_DECL.2);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{relay_script, RELAY};
+
+    /// Milestone 345: the first record's relay is the script of Milestone 305 byte for byte, and
+    /// a later record's relay lets the earlier records pass before it decides as before.
+    #[test]
+    fn a_relay_for_a_later_record_counts_them() {
+        assert_eq!(relay_script(1), RELAY);
+        let s = relay_script(3);
+        assert_eq!(s.matches("go=1 k=3\n").count(), 1);
+        let count = "    [ $h = 0 ] || { k=$((k-1)); [ $k = 0 ] || h=0; }\n";
+        assert_eq!(s.matches(count).count(), 1);
+        assert!(s.find(count) < s.find("    if [ $h = 1 ]; then\n"));
+        // the counting line in a shell: the third matching line is the one that acts
+        let sh = format!("k=3\nfor h in 1 0 1 1 1; do\n{count}    printf %s $h\ndone");
+        let out = std::process::Command::new("sh")
+            .args(["-c", &sh])
+            .output()
+            .expect("sh runs");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "00010");
+    }
 }

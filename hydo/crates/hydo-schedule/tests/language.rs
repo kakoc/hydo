@@ -362,6 +362,8 @@ fn reactions() {
         "disk=none dseed=0 | run P=kafka@5+25 A=client.outcome_unknown@5+500:cont-kafka",
         "disk=none dseed=0 | run A=server.store_error@3:stop-mysql-3000 A=client.place_failed:cut",
         "disk=none | run A=Fault-X.y_1:kill-redis",
+        "disk=none | run A=meili.swap_acked#3@20+14:kill-now-meilisearch",
+        "disk=none | run A=meili.swap_acked#2:cut",
     ] {
         round_trip(s);
     }
@@ -370,6 +372,7 @@ fn reactions() {
         s.guest,
         vec![GuestToken::React(React {
             event: "client.place_failed".into(),
+            nth: 1,
             at: 4,
             delay_ms: 250,
             action: ReactAction::Stop("kafka".into(), 1000),
@@ -383,6 +386,11 @@ fn reactions() {
     refused("disk=none | run A=x:stop-kafka", "the action is");
     refused("disk=none | run A=x:stop-kafka-0", "at least 1 ms");
     refused("disk=none | run A=x@0:cut", "no @0");
+    // Milestone 345: the k-th record of the event
+    refused("disk=none | run A=x#1:cut", "#1 is not written");
+    refused("disk=none | run A=x#0:cut", "#1 is not written");
+    refused("disk=none | run A=x#:cut", "A=x#:cut");
+    refused("disk=none | run A=x@3#2:cut", "A=x@3#2:cut");
     refused("disk=none | run A=x+0:cut", "no +0");
     refused("disk=none | run A=x+05:cut", "leading zero");
     refused("disk=none | run A=:cut", "not an assertion id");

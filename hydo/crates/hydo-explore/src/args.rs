@@ -12,6 +12,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--shrink-detected-damage] [--rerun-repeats]
        [--shrink-from-snapshots | --shrink-from-s1] [--check-continued]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...] [--kill-now]]
+       [--reactive-at EVENT[#K][@STEP][,...] [--react-delays A..B[/STEP]] [--react-actions kill-now,kill,cut,...]]
        [--storage-faults [--corrupt-several]] [--block-faults] [--upgrades] [--pause-workload] [--pause-thread NAME[,NAME...]] [--pause-min MS] [--pause-max MS]
        [--pause-lengths MS[,MS...]]
        [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
@@ -130,6 +131,17 @@ pub struct Args {
     /// `--kill-now` (Milestone 305): the fault reactions kill with `kill-now-<svc>` (at the
     /// event's moment) where they would kill with `kill-<svc>`.
     pub kill_now: bool,
+    /// `--reactive-at EVENT[#K][@STEP][,...]` (Milestone 345, [`crate::aim`]): every schedule is
+    /// one reaction of a grid over these events, the delays of `--react-delays` and the actions
+    /// of `--react-actions`, tried in turn.
+    pub reactive_at: Option<String>,
+    /// `--react-delays A..B[/STEP]` or `A,B,C` (Milestone 345; default [`crate::aim::DELAYS_DEFAULT`]).
+    pub react_delays: Option<String>,
+    /// `--react-actions LIST` (Milestone 345; default `kill-now,kill,cut`).
+    pub react_actions: Option<String>,
+    /// Whether `--seeds` was given (Milestone 345: an aimed exploration's default seeds are its
+    /// grid).
+    pub seeds_given: bool,
     /// `--rerun-repeats` (Milestone 339): run a first run or a shrink candidate whose schedule
     /// the exploration already ran in a VM again, instead of answering it with the earlier
     /// result ([`crate::repeats`]).
@@ -263,6 +275,10 @@ impl Default for Args {
             react_events: None,
             heal_events: None,
             kill_now: false,
+            reactive_at: None,
+            react_delays: None,
+            react_actions: None,
+            seeds_given: false,
             rerun_repeats: false,
             shrink_detected_damage: false,
             shrink_snapshots: None,
@@ -321,7 +337,7 @@ const FLAGS: [&str; 32] = [
     "check-continued",
 ];
 
-const VALUED: [&str; 61] = [
+const VALUED: [&str; 64] = [
     "seeds",
     "shard",
     "workers",
@@ -371,6 +387,9 @@ const VALUED: [&str; 61] = [
     "reactive",
     "react-events",
     "heal-events",
+    "reactive-at",
+    "react-delays",
+    "react-actions",
     "steer",
     "steer-match",
     "steer-goal",
@@ -494,7 +513,10 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "turns" => a.turns = true,
             "no-compose" => a.no_compose = true,
             "bursts" => a.bursts = true,
-            "seeds" => a.seeds = val,
+            "seeds" => {
+                a.seeds = val;
+                a.seeds_given = true;
+            }
             "shard" => {
                 let (index, count) = hydo_manifest::ci::parse_shard(v).ok_or_else(|| {
                     format!("argument --shard: invalid value: '{v}' (I/N with 1 <= I <= N)")
@@ -558,6 +580,9 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "reactive" => a.reactive = Some(choice("reactive", v, &["both", "fault", "heal"])?),
             "react-events" => a.react_events = Some(val),
             "heal-events" => a.heal_events = Some(val),
+            "reactive-at" => a.reactive_at = Some(val),
+            "react-delays" => a.react_delays = Some(val),
+            "react-actions" => a.react_actions = Some(val),
             "steer-stop" => a.steer_stop = true,
             "steer" => a.steer = Some(val),
             "steer-match" => a.steer_match = Some(val),
@@ -622,6 +647,9 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             || a.search.as_deref() == Some("state"))
     {
         return Err("argument --time-limit: only for a plain seed range (not with --sweep, --schedule, --steer, --steer-match or --search state)".into());
+    }
+    if a.shard.is_some() && a.reactive_at.is_some() && !a.seeds_given {
+        return Err("argument --shard: give --seeds with --reactive-at (the parts of its grid, for example --seeds 1-153)".into());
     }
     if let Some(sh) = a.shard.as_mut() {
         if a.sweep.is_some()
