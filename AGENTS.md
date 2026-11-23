@@ -1668,8 +1668,8 @@ and each held:
 A run that passed its engine's limit has the fingerprint `0000000000000000`, and `report.md` and
 the web page now say that its confirmations repeat the verdict only. `hydo guide faults` no longer says that `hydo
 explore --schedule` shrinks. The Mac engine did not run the walks: the build of a `browser:`
-image needs about 7 GB of free disk, which this Mac did not have. KVM's Vikunja jobs ran
-nothing, because of a path in the workflow; their run is to come. The details are in
+image needs about 7 GB of free disk, which this Mac did not have. KVM ran Vikunja's
+read-back too, and its power cut `C=5` lost no task, where hvx's lost three. The details are in
 `docs/HISTORY.md` Milestone 341.
 **Shrinks from snapshots (M340, tentative number; on by default with KVM).** With `hydo explore
 --shrink-from-snapshots`, the reruns of a failure and the shrink candidates take a snapshot where
@@ -3219,10 +3219,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       KVM explorations were not measured. The wall seconds are estimates from the guest clock,
       which predicts a run's seconds badly on ClickHouse and Dragonfly.
 168. The frames of a failing run and the read-back check (M334, tentative number). Left:
-    - hvx ran them on Vikunja and web-shop. KVM ran them on web-shop in M341, on one Intel host
-      and one AMD host. That covered the filmstrip, the copy before a power cut, the read-back
-      after it, and an exploration whose page shows the frames. KVM's Vikunja jobs ran nothing, because of a path
-      in the workflow; their run on the branch `tmp-m341-kvm` is to come. The Mac engine did not
+    - hvx ran them on Vikunja and web-shop. KVM ran them on both in M341: web-shop on one Intel
+      host and one AMD host, Vikunja on two Intel hosts. That covered the filmstrip, the copy
+      before a power cut, the read-back after it, and an exploration whose page shows the frames.
+      On KVM Vikunja's `disk=none | run C=5 I=1` lost no task, where hvx's lost three, so no KVM
+      run showed the read-back finding a loss. The Mac engine did not
       run them: the build of a `browser:` image needs about 7 GB of free disk, which this Mac did
       not have. The Mac engine's larger console (32 MiB) ran only in the scripted tests.
     - The frames and the trace of every step cost the walk guest time, so a walk's timing
@@ -4345,8 +4346,8 @@ build machine, before 2026-10-13.
 - M341 (tentative number): 0.5.0's features on the engines that had not run them. On hvx the
   statistics and their merge of shards, the repeats, the error shrinks, TIMEOUT shrinks, the
   recursive `/sys` of an image service, and the s3 proxy held. The s3 proxy held on the Mac
-  engine. On KVM all of these and web-shop's filmstrip and read-back held; its Vikunja jobs ran
-  nothing. A run past its engine's limit has no fingerprint, and the report says so now; `hydo
+  engine. On KVM all of these and the filmstrip and read-back of web-shop and Vikunja held. A
+  run past its engine's limit has no fingerprint, and the report says so now; `hydo
   explore --schedule` does not shrink, and the guide says so now. Nothing recorded moved
 - M342 (tentative number): the onboarding of Prometheus v3.16.0 on hvx: an agent, and a central
   server with remote write, out-of-order samples, blocks of one minute, and snapshots. One new

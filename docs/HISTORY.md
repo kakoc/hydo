@@ -20799,10 +20799,24 @@ with an `s3probe` built by the runner's Go 1.24.13 (`a0663665…`) held its thre
 `cb31e248b99b1066` (40 answers as S3 gives them), `8ca1a9a3566758f9` (round 1's 412 from the
 proxy), and `d9720815fa43937d` (round 2's 412 from the proxy).
 
-**`vikunja`.** Its two jobs ran nothing. The script looked for the image in `hydo-out/`, but an
-imported project's `hydo build` writes it into `.hydo/`, and an empty result counted as no
-difference, so the jobs passed. Commit `ef6b8fea` on the branch takes the image from `.hydo/`,
-fails a run without a result, and runs only this part. Its run is still to come.
+**`vikunja`.** In run 45170910149 its two jobs ran nothing. The script looked for the image in
+`hydo-out/`, but an imported project's `hydo build` writes it into `.hydo/`, and an empty result
+counted as no difference, so the jobs passed. Commit `ef6b8fea` on the branch takes the image
+from `.hydo/`, fails a run without a result, and runs only this part. Its run 45184947074 ran on
+two Xeon 6975P-C hosts, which gave the same values. The image was `6767b2ac…` on both.
+
+| Schedule | Verdict | Fingerprint | What the run kept |
+|---|---|---|---|
+| `disk=none \| run I=1` | OK, 7 invariants; every one of 5 tasks shown on `/` | `07f684612a013fc5` | 79 frames, 760 KiB |
+| `disk=none \| run C=5 I=1` | OK; all 5 tasks in the database and shown on `/` after the cut | `3449db841f284b55` | 65 frames of steps 0 to 4 and the trace of step 4, copied before the cut; the recovery boot's read-back frame |
+| `disk=cut \| run C=6 I=1` | OK; all 5 tasks shown | `cc8460e1c97895c2` | 78 frames of steps 0 to 5, the trace of step 5, and the read-back frame |
+
+On hvx (Milestone 334) `disk=none | run C=5 I=1` lost tasks 3, 4 and 5, and both the database
+rule and `browser.acked_shown` named them. On KVM the same schedule lost none, so neither check
+had a loss to find. The walk meets the cut at another moment of each engine's clock, as
+Milestone 334 saw between M273's walker and its own. The filmstrip, the copy before the cut, and
+the read-back in the recovery boot ran on KVM; a loss that the read-back finds on KVM was not
+shown.
 
 ### What did not change
 
