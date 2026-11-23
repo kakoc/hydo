@@ -1,0 +1,57 @@
+# Prometheus v3.16.0 in the shape of a central server behind an agent: an exporter (the test
+# client's `promc serve`), a Prometheus agent that scrapes it every second and forwards the samples
+# with remote write, and a central Prometheus server that receives remote write, scrapes itself,
+# and keeps out-of-order samples up to 10 minutes old (config/prometheus.yml). The test client
+# also writes to the server with remote write directly.
+#
+# Three settings differ from production, for a test of minutes: the server cuts a block of its
+# head every minute (--storage.tsdb.min-block-duration=1m, a hidden flag "for use in testing"; the
+# default is 2h), so that head compaction, the WAL checkpoint and block compaction run during a
+# run; a block's chunk files take 16 MB instead of the 512 MB that the server preallocates for
+# each, so that they fit the test's small file system; and the admin API is on, for the
+# snapshots. Both containers run as root, because their data directories are volumes of their own.
+services:
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    user: root
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus/tsdb
+      - --storage.tsdb.min-block-duration=1m
+      - --storage.tsdb.max-block-duration=10m
+      - --storage.tsdb.max-block-chunk-segment-size=16MB
+      - --web.enable-remote-write-receiver
+      - --web.enable-admin-api
+      - --web.listen-address=:9090
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom-data:/prometheus
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+  agent:
+    image: prom/prometheus:v3.16.0
+    user: root
+    command:
+      - --agent
+      - --config.file=/etc/prometheus/agent.yml
+      - --storage.agent.path=/agent/wal
+      - --web.listen-address=:9091
+    volumes:
+      - ./config/agent.yml:/etc/prometheus/agent.yml:ro
+      - agent-data:/agent
+    ports:
+      - "9091:9091"
+    depends_on: [prometheus, exporter]
+    restart: unless-stopped
+  exporter:
+    image: busybox:1.37
+    command: ["/bin/promc", "serve"]
+    volumes:
+      - ./bin/promc-amd64:/bin/promc:ro
+    ports:
+      - "9100:9100"
+    restart: unless-stopped
+volumes:
+  prom-data: {}
+  agent-data: {}

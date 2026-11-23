@@ -1,0 +1,123 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "busybox:1.37": {
+   "index_digest": "sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec",
+   "name": "busybox",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "sh"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": null
+     },
+     "digest": "sha256:66a6306db78bf2dbf3487f293aa8d6990d8e506fdffab9cc43fe422becf886e4",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "sh"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": null
+     },
+     "digest": "sha256:d82c2ab94640ded77cf76514ce6a84870761105058a4a9e51b05a8a79be97a6c",
+     "variant": "v8",
+     "variants": [
+      "v8"
+     ]
+    }
+   },
+   "ref": "busybox:1.37",
+   "registry": "docker.io",
+   "repo": "library/busybox",
+   "tag": "1.37"
+  },
+  "prom/prometheus:v3.16.0": {
+   "index_digest": "sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06",
+   "name": "prom/prometheus",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "--config.file=/etc/prometheus/prometheus.yml",
+       "--storage.tsdb.path=/prometheus"
+      ],
+      "Entrypoint": [
+       "/bin/prometheus"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "9090/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "nobody",
+      "Volumes": {
+       "/prometheus": {}
+      },
+      "WorkingDir": "/prometheus"
+     },
+     "digest": "sha256:89c1a644817e9ad70fa2af76c84898e327c1de7063735f962e8313b1e28672c3",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "--config.file=/etc/prometheus/prometheus.yml",
+       "--storage.tsdb.path=/prometheus"
+      ],
+      "Entrypoint": [
+       "/bin/prometheus"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "9090/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "nobody",
+      "Volumes": {
+       "/prometheus": {}
+      },
+      "WorkingDir": "/prometheus"
+     },
+     "digest": "sha256:c523006440e714e0e53405b77e9f6ee668871d9855fc1c853fd43f5b990c34d2",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "prom/prometheus:v3.16.0",
+   "registry": "docker.io",
+   "repo": "prom/prometheus",
+   "tag": "v3.16.0"
+  }
+ }
+}

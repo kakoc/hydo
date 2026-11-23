@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=30
+# one remote write to the server: 2 new series with 3 samples each, one in order and one 60 s
+# behind (out of order); each fourth write is sent twice (../../client/main.go, write)
+exec /bin/promc write

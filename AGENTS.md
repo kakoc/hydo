@@ -908,6 +908,28 @@ No new bug:
 - A clock effect: after a backward step, the oldest segment's timestamps lie ahead of the clock.
   The cleaner stops there, so a partition keeps all its data for the step's length.
 - Detected damage of a segment, WAL, or frontier file fences the partition, as documented.
+**Prometheus behind an agent (M342, tentative number).** Prometheus v3.16.0 runs from the
+official image in one hvx guest, in `hydo/onboard/examples/prometheus` (RESULTS.md), imported with
+`hydo compose`. An agent scrapes an exporter every second, and a central server receives remote
+write. The server scrapes itself, keeps out-of-order samples up to 10 minutes back, and
+cuts blocks of one minute (a hidden flag for tests). A Go client writes in-order and out-of-order
+samples with remote write and takes snapshots. Its rules:
+- every acknowledged sample stays queryable, after a power cut when a listed block holds it;
+- a snapshot holds what was acknowledged before it;
+- the agent's scrapes reach the server after the heal.
+
+They held under kills, pauses, network faults, clock steps, and power cuts at steps and at disk
+flushes. They held under the server's own power loss and damaged files, and under kills at the
+moment of writes, blocks, and snapshots. That was 104 blind schedules and 35 directed runs,
+with the two findings' checks left out. One new candidate and two known bugs with a new detail, none posted:
+- A snapshot with the head holds no out-of-order sample of the head: `DB.Snapshot` writes the
+  head from the in-order chunks only, in every run without faults.
+- After a backward clock step every scrape takes the time of the last scrape before it, because
+  the alignment's test `<= tolerance` has no lower bound (known prometheus#8312). The server then
+  drops its scraped samples as duplicates, also with an out-of-order window.
+- After a step back, remote write holds back new samples until the clock reaches its queue's
+  start (known prometheus#11496).
+
 **The VictoriaMetrics cluster (M312, tentative number).** VictoriaMetrics v1.156.0 runs as two
 `vmstorage` nodes, one `vminsert` with `-replicationFactor=2` and one `vmselect` with
 `-dedup.minScrapeInterval=1ms`, from the official images in one hvx guest, in
@@ -3169,6 +3191,30 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       reading `events.jsonl`.
     - The waits for the Mac's shared VM lock are outside hydo, so the workers' time does not show
       them.
+170. The Prometheus example (M342, tentative number). What is left:
+    - Its three candidates are not posted. Finding 1 is new; findings 2 and 3 are details for the
+      known prometheus#8312 and #11496.
+    - The agent and the server share the guest's clock, so a server whose clock alone runs ahead
+      of its senders cannot be tested (the idea "Clocks per service" of `docs/USE-CASES.md`).
+    - A check cannot tell which faults its run had. A power loss of the server alone (`L=`) may
+      lose what the WAL had not synced, a kill may not. So the rules take the build parameter
+      `powerloss`, and the explorations with `--storage-faults` use an image of their own.
+    - On hvx one explorer worker with a guest of 2,048 MiB held about 5 GB of the host, and the
+      explorer's warning estimated 10 GB. Beside another onboarding the host's out-of-memory
+      killer ended an engine of the first exploration, so the rest ran with one worker.
+    - A workload command's output stays in the guest (as open item 157); the client copies the
+      lines that explain a failure to the console. A program that a command starts finds
+      `hydo-oci` only by its path `/bin/hydo-oci`: Go's `exec.Command("hydo-oci", ...)` failed
+      with `executable file not found in $PATH`.
+    - Production's blocks of 2 hours were scaled to 1 minute, and the stale-series compaction ran
+      in one exploration only. The agent's out-of-order window, which would let the agent forward
+      finding 2's duplicates, was not tried.
+    - Two explorations ran on at the hand-off: seeds 80 to 100 of the reactive one (e4b), and
+      seeds 101 to 120 of the stale-series compaction (e5). Their results are not recorded.
+      No swarm exploration ran. `hydo repro --regressions` did not run on the final image.
+    - The goldens of the explorer's and the controller's corpora (`corpus-quick.txt`,
+      `corpus-full.txt`, `identity-quick.txt`, `identity-full.txt`) are not re-recorded with the
+      new example; `HYDO_BLESS=1` runs of those tests are needed.
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -4181,6 +4227,12 @@ build machine, before 2026-10-13.
   decided. etcd issue 14685's second symptom is in the list again. Both releases were built
   twice to the same bytes, with the skill's archive for the first time. The Mac one is signed
   and notarized. Both were verified on hvx and the Mac, and open item 105 is empty
+- M342 (tentative number): the onboarding of Prometheus v3.16.0 on hvx: an agent, and a central
+  server with remote write, out-of-order samples, blocks of one minute, and snapshots. One new
+  candidate, not posted: a snapshot with the head lacks every out-of-order sample of the head,
+  in every run without faults. Two known bugs with new details: after a step back the scrapes
+  keep one timestamp (#8312), and remote write holds back new samples (#11496). Acknowledged
+  samples held under every fault kind. Nothing recorded moved
 
 ## Where to look
 

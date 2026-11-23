@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: two scrapes a second apart carry two timestamps in the server
+exec /bin/promc check times
