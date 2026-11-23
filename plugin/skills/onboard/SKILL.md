@@ -108,7 +108,10 @@ its data directory, its dependencies, and the file where you found each fact. Sh
    cache or the replication of results. The folder must match them, scaled down only in memory
    (`hydo guide strategies`, "Production's topology" and "The features behind a flag"). Tell
    the user every place where the folder differs from production, and why.
-4. One workload command per client operation (`hydo guide composer`). Each command records what
+4. One workload command per client operation (`hydo guide composer`). First list the operations
+   with `hydo rules scan --kind writes` (`hydo guide rules`, "List the routes that write"). Give
+   each route of class `data` or `admin` a command, or tell the user why it has none: a route
+   that no command calls is a write that no run tests. Each command records what
    the client saw: acknowledged, failed for certain, or unknown (a timeout is unknown). Derive
    every choice from the seed hydo gives, never from the clock. An outcome recorded as unknown is
    a property that no check judges: for each kind of unknown outcome (a query still running, a

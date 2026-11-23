@@ -1411,6 +1411,28 @@ The guide is the section "Find the durations measured on the
 wall clock" of `hydo guide faults`. The design and the precision numbers are in the section
 "The clock audit" of `docs/design/rule-suggestion.md`.
 
+**The write routes (M344, tentative number).** `hydo rules scan --kind writes [DIR] [--json]`
+lists every route of a project's API that writes. These are the HTTP routes with POST, PUT, PATCH
+and DELETE, the RPC methods whose names do not say that they read, and the OpenAPI operations. It
+reads text, with the clock audit's rules for test code, and each route has its handler's file and
+line. It reads these sources:
+
+- the router code of Rust (axum, actix-web, the route tables of a macro);
+- the router code of Go (net/http, gorilla/mux, chi, gin, labstack's router, httprouter);
+- the router code of JavaScript and TypeScript (express, fastify, koa, hapi, NestJS);
+- the router code of Python (FastAPI, Flask, Django), and of Java and Kotlin (Spring, JAX-RS);
+- `.proto` files and gRPC servers in Go and Rust;
+- OpenAPI files.
+
+It joins the prefixes of nests, groups and mounts by name, and lists a route that two places
+declare once. A POST route whose name says that it reads is left out. Each route has a class
+(`data`, `admin`, `session`, `runtime`), and the list is grouped by resource and ranked by class.
+On the sources of Meilisearch, Iggy, Prometheus, GreptimeDB, Hatchet, and Memos it listed 14 to
+99 routes. 109 of 114 sampled routes wrote. Every write of the examples' RESULTS.md pages was
+there, the index swap, the dump, and the snapshot among them. The skill's step that writes the
+workload runs it (`hydo guide rules`, "List the routes that write"; the design and the numbers
+are the section "The write routes" of `docs/design/rule-suggestion.md`; open item 175).
+
 **Web apps through their Playwright tests (M253).** `browser:` (a format-1 addition) runs a team's
 Playwright tests unchanged as the workload, in Microsoft's Playwright image 1.65.1, which `hydo
 build` fetches by digest into `browser/`. Each workload step runs one shard. A watcher loaded with
@@ -2314,7 +2336,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The candidates file has no JSON schema, and `rules-check.json` is not in the results
       format. `messages` and `history` candidates are not run by `hydo rules check`.
     - A planted change is a change of the stored state; a change of the workload is not built.
-    - `hydo rules scan` matches words, not syntax; Lago's scan gives 4,217 lines.
+    - `hydo rules scan` matches words, not syntax; Lago's scan gives 4,217 lines. Since M344
+      `--kind writes` lists the routes that write; open item 175 has what it leaves.
     - The listmonk inconsistency (a blocklisting by bounces keeps the subscriptions) is not
       reported upstream, and no exploration ran with the Blnk or Lago rules.
 111. What the River onboarding lacked (M233). `hydo onboard` built and saved one image per
@@ -3406,6 +3429,22 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       reads none: it has no task uid for such a request.
     - `hydo explore` draws nothing aimed at the window between an effect's commit and its
       status's commit; the kill reactions of `--kill-now` reach it by chance.
+175. The write routes (M344, tentative number; `docs/design/rule-suggestion.md`, "The write
+    routes"). What is left:
+    - It reads text. A route that a program builds at run time, or registers through a function of
+      its own, is not found. Warp's filters and GraphQL mutations are not read. Neither is a
+      protocol of a project's own, such as Iggy's binary protocol over TCP.
+    - A prefix added in another way is missing. Prometheus's `/api/v1` comes from
+      `http.StripPrefix`, and GreptimeDB's `/v1` from a router built in another function. An
+      express router that another file mounts with `app.use("/p", router)`, and a FastAPI router
+      that another file includes with a prefix, keep their own paths.
+    - A POST route is a read by the words of its path and its handler. Prometheus's `POST
+      /labels` and `POST /series` are listed as writes, and Iggy's `poll_messages_committing` is
+      left out as a read.
+    - A gRPC method is found by its name, so it can point at another type's method of that name
+      (Hatchet's `SendStepActionEvent`). A handler that answers `unimplemented` is listed.
+    - `hydo rules check` does not read the list yet; the skill reads it when it writes the
+      workload. No onboarding used it yet.
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -4441,6 +4480,12 @@ build machine, before 2026-10-13.
   once and with its value, under every fault kind but a power cut of the guest, and through
   failovers, migrations, and DDL. One new candidate, not posted: a short copy in a datanode's
   manifest cache stops the datanode at every start. Nothing recorded moved
+- M344 (tentative number): `hydo rules scan --kind writes` lists the routes of a project's API
+  that write, with each handler's file and line and why it counts. It reads the router code of
+  Rust, Go, JavaScript, Python and Java, `.proto` files and gRPC servers, and OpenAPI files. It
+  groups the routes by resource and ranks durable writes before logins and metrics. On six
+  examples' sources 109 of 114 sampled routes wrote, and every known write was listed. The skill's
+  workload step runs it. Nothing recorded moved
 - M345 (tentative number): three explorer changes from automated onboardings. `hydo explore
   --reactive-at <event>` tries every delay of a range with each action, one schedule per seed,
   and `A=<event>#<k>` acts at a later record. Options the engine or the image cannot use are

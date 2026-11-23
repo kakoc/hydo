@@ -21005,6 +21005,81 @@ Retro: GreptimeDB v1.3.1, hvx, 2026-11-23
 
 **What is left.** Open item 171.
 
+## Milestone 344 (tentative number): the write routes of a project's API
+
+`hydo rules scan --kind writes [DIR] [--json] [--max N] [--all]` lists every route of a
+project's API that writes, each with its handler, from the project's own sources. Nothing
+recorded moved, and no VM ran.
+
+**Why.** An onboarding writes one workload command per client operation. An operation that no
+command calls is not tested under faults. On Meilisearch the index swap, the dump, and the payload
+of a document addition held the three bugs that hydo found (M295), and those operations came from
+reading the sources by hand. `hydo rules scan` found no routes before.
+
+**What it reads.** The module is `hydo/crates/hydo-cli/src/writescan.rs`. It reads text, as the
+clock audit does, and leaves out what the audit leaves out: test files, test code inside a
+source file (M324), examples, vendored code, and generated code.
+
+- HTTP routes with the methods POST, PUT, PATCH and DELETE:
+  - Rust: axum's `.route(<path>, post(h))` and `get(a).post(b)`, actix-web's
+    `web::resource(<path>).route(web::post().to(h))` and attributes, and the route tables of an
+    attribute macro (`"<path>" => [post(h)]`, `sub(Type)`), also inside `macro_rules!`;
+  - Go: net/http's `"POST /p"`, gorilla/mux's `.Methods(...)`, chi, gin, labstack's router, httprouter,
+    fiber, and Prometheus's route package;
+  - JavaScript and TypeScript: express, fastify, koa, hapi's route objects, and NestJS's
+    decorators;
+  - Python: FastAPI and Flask decorators, and Django's URL patterns with each view's methods;
+  - Java and Kotlin: Spring's mappings and JAX-RS.
+- RPC methods whose names do not say that they read: `.proto` services with their
+  `google.api.http` mappings, a Go type that embeds `Unimplemented<Service>Server`, and a Rust
+  `#[async_trait] impl Service for T` whose methods take a `Request<...>`.
+- OpenAPI 3 and Swagger 2 operations, also through `$ref` files.
+
+The prefixes come from the calls that enclose a route, the groups that a file assigns, and mounts
+by name. A route that two places declare is listed once. A POST route or an RPC method whose name
+says that it reads is left out and counted (`--all` lists them). Each route has a class: `data`,
+`admin` (a snapshot, a dump, a compaction), `session` (a sign-in or a token) or `runtime`
+(health, metrics, profiling, a reload). The list is grouped by resource and ranked by class.
+`--json` has every route with its rank, its handler's file and line, and why it counts, for
+`hydo rules check` and the skill. The scan without `--kind` prints one line per route in its
+section `writes`. The design and the proof are the section "The write routes" of
+`docs/design/rule-suggestion.md`; the reference is `hydo guide rules`, "List the routes that
+write". The onboarding skill's step that writes the workload, and its inventory, run it.
+
+**The proof.** The scan ran on the sources of six examples at their tags, on this Mac, in 2 to
+11 seconds each. 20 routes per project, spread evenly over the ranked list, were judged by their
+handlers (all 14 for Prometheus).
+
+| project | tag | files read | routes that write | resources | reads left out | handlers found | right in the sample |
+|---|---|---|---|---|---|---|---|
+| Meilisearch | v1.57.0 | 576 | 83 | 23 | 10 | 83 | 19 of 20 |
+| Iggy | server-0.10.0 | 2,038 | 38 | 17 | 2 | 38 | 20 of 20 |
+| Prometheus | v3.16.0 | 616 | 14 | 7 | 12 | 14 | 12 of 14 |
+| GreptimeDB | v1.3.1 | 1,834 | 53 | 29 | 26 | 53 | 19 of 20 |
+| Hatchet | v0.120.5 | 2,411 | 99 | 36 | 12 | 99 | 20 of 20 |
+| Memos | 26.11.0 | 742 | 49 | 24 | 4 | 49 | 19 of 20 |
+
+109 of 114 judged routes write. The five others: Meilisearch's `POST /indexes/{index_uid}/fields`
+(a list with a filter), Prometheus's `POST /labels` and `POST /series` (queries), GreptimeDB's
+Flight `DoAction` (not implemented), and Memos's `Transcribe` (it stores nothing). Every write
+that the examples' RESULTS.md pages name was listed: Meilisearch 8 of 8 (with the swap, the edit
+by function, the dump and the snapshot), Iggy 5 of 5, Prometheus 2 of 2, GreptimeDB 1 of 1 (its
+SQL endpoint), Hatchet 5 of 5, and Memos 5 of 5. Meilisearch's 83 routes hold 44 per-setting
+routes of a route table inside `macro_rules!`; without them the list has 39.
+
+The first runs found the scan's own errors, which are fixed:
+
+- an array `[post(h)]` was taken for an attribute;
+- two route tables named `CompactApi` in two modules shared one mount;
+- `$` counts as a character of a name, so `$route` was missed;
+- `PUT` and `DELETE` of one path merged;
+- a tonic `impl<T: X> Service for Y` lost its trait's name;
+- a Go type that embeds several services listed its helpers;
+- a function whose parameters take more than six lines had no definition;
+- OpenAPI's `operationId` `workflow:delete` did not match the Go handler `WorkflowDelete`.
+
+**What is left.** Open item 175.
+
 ## Milestone 345 (tentative number): reactions aimed at one event, options the engine cannot use, and one list of several explorations' problems
 
 The user said "do" on 2026-11-23 to three explorer changes learned from automated onboardings.
