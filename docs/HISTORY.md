@@ -20461,6 +20461,248 @@ published every package: the crates on crates.io, `hydo-assert` on PyPI and on n
 trusted-publisher entry was still valid), and the Go tag `sdk/go/v0.5.0`. The Homebrew tap
 names 0.5.0, and the skill releases `skill-v1.0.0` to `skill-v2.4.0` are deleted with their tags.
 
+## Milestone 341 (tentative number): 0.5.0's features on the engines that had not run them
+
+Several features of 0.5.0 ran on one engine only. The user agreed on 2026-11-23 to run them on
+the others. This milestone ran them on hvx, on the Mac engine, and on KVM in a one-off workflow,
+fixed what was wrong, and records what held. No engine, image, or recorded value changed.
+
+### How the runs were made
+
+- hvx: the bare-metal machine, the published 0.5.0 Linux release installed with `install.sh
+  --no-module` into a tree of its own, and the examples of this tree. Every VM ran through
+  `hvx-run` under umask 022. The release's Redis example built the image `23c3b280…`, the
+  recorded one, and `disk=none | run` gave `cce52f9e8565f6e2`, its recorded value.
+- The Mac engine: the installed 0.5.0 release, under the shared VM lock.
+- KVM: the workflow `.github/workflows/tmp-m341-kvm.yml` on the branch `tmp-m341-kvm`, with the
+  published 0.5.0 Linux release, run 45170910149 on GitHub's runners.
+
+### The statistics of Milestone 336 on hvx
+
+`hydo explore --seeds 1-40 --strategy swarm --workers 2` of the Redis example wrote
+`stats.json` with every part:
+
+- The curve: 4 distinct verdicts, which grew at runs 1, 5, 12 and 20, and 2 property outcomes,
+  at runs 1 and 5. "Flat over the last 10 runs: no new verdict or property outcome since run 20
+  of 40."
+- The cost: 40 first runs took 25.8 s of the engine, 19 re-runs 10.2 s, and 23 shrink runs
+  13.2 s. Re-runs and shrinks took 44 % of the workers' busy time. A first run took 0.65 s on
+  average (median 0.6 s, the longest 1.4 s). The clock is hvx's own unit, 29,954 per first run.
+  The host CPU was 84 s for 31.8 s of wall time. The explorer's process held 5,038 MiB at most
+  and an engine 13 MiB, because hvx's engine runs inside the explorer's process (open item 169).
+- The faults drawn: disk faults in 31 runs, power cuts in 21 (at 15 workload steps), crashes of
+  `redis` in 19 (at 8 steps), and the setting `R=` in 18. No schedule drew a pause or a clock
+  jump, and the statistics name `--new-faults` for them.
+- The estimate: an hour on 2 workers fits 5,410 first runs. The exploration measured 4,703 an
+  hour.
+
+The same seeds as `--shard 1/2` and `--shard 2/2`, and `hydo explore --merge` of the two, gave
+the same curve, the same runs with the same new keys, and the same faults drawn. The merge has 43
+shrink runs against 23, because each part shrank its own failures (open item 153). Its workers
+keep their part numbers.
+
+### The repeats and the error shrinks of Milestone 339 on hvx
+
+The exploration of the last section answered 9 runs from earlier results, 5.0 s of the engine. With
+`--rerun-repeats` the same 82 run records (tag, schedule, verdict, fingerprints) and the same 4
+minimal schedules came back. Two errors of the system were shrunk, and each minimal schedule
+gave one fingerprint on both confirmations:
+
+| Error | From | Tries | Minimal schedule | Fingerprint |
+|---|---|---|---|---|
+| `ERROR redis restart failed` | seed 12 | 5 | `disk=ioerr:1 dseed=fd403ef8d08fa636 \| run K=redis@16+1` | `264951ea4e91998a` |
+| `ERROR restart after the faults (redis)` | seed 20 | 3 | `disk=ioerr:1 dseed=ce2af709f01aac0 \| run` | `441d4e62c64662f2` |
+
+**TIMEOUT on hvx.** hvx's `TIMEOUT workload` is the engine's wall limit, `HVX_EXPLORE_WALL_SECS`
+(900 s by default), not the manifest's `workload.timeout`. A guest call that passes
+`workload.timeout` is killed, and the run goes on. So a short `workload.timeout` does not bound
+the cost of a TIMEOUT shrink: each candidate that keeps the error runs to the wall limit. The
+proof used a copy of the release's Redis example with two changes. Its `workload.timeout` is
+20 s, and after a failed `SET` the client spins in the shell (`[ "$r" = OK ] || while :; do :;
+done`). The guest's clock then moves at about two thirds of the wall clock: 20 s of guest time
+took 30 s of wall time. With `HVX_EXPLORE_WALL_SECS=20`:
+
+- `hydo run "disk=none | run K=redis@5+3"` ended `TIMEOUT workload` after 20.0 s, with the
+  fingerprint `0000000000000000`.
+- `hydo explore --seeds 1-20 --strategy random --workers 2` ran 20 schedules in 368 s. 11 first
+  runs ended `TIMEOUT workload`, and 12 runs were answered from earlier results (64.5 s of the
+  engine). It shrank three TIMEOUT failures:
+  - seed 1, `disk=ioerr:1 dseed=910a2dec89025cc1 | run K=redis@0+2`, in 4 tries to the disk
+    errors alone;
+  - seed 2 in 3 tries to `disk=none dseed=0 | run K=redis@9+1`;
+  - seed 12 (`disk=lying:2 ... | run K=redis@6+3 C=7`) in 10 tries to `disk=none dseed=0 | run
+    K=redis@6+1`.
+- The engine's seconds by role: first runs 224.6 s, re-runs 220.5 s, shrink runs 104.6 s, and
+  the confirmations of the minimal schedules 121.0 s. Each run that kept the error took the 20 s
+  limit, so with the default limit one such candidate takes 15 minutes.
+
+### Two fixes
+
+**A TIMEOUT has no fingerprint** (commits `99b4da45` and `165477d6`). hvx's engine ends a run
+that passes its wall limit before it hashes the end state, and writes the fingerprint
+`0000000000000000`. The two
+confirmations of a minimal TIMEOUT schedule then compare two zeros, and `report.md` said
+"fingerprint, two runs: `0000000000000000` / `0000000000000000` (identical)". The web page said
+"same fingerprint". Now `report.md` says that the runs have no fingerprint, because each ended at
+the engine's limit before its end state was hashed, so only the verdicts repeat. The limit is
+hvx's wall time or the exit budget of the Mac and KVM engines, whose runs also end with zeros
+(the section "The KVM runs"). The page
+says "same verdict" with the same reason. `hydo_results::has_fingerprint` and
+`Shrink::confirmed_without_fingerprint` decide it; a run without a result does not count as a
+timeout. `exploration.json` did not change. The new test of hydo-results is
+`a_shrink_whose_confirmations_timed_out_has_no_fingerprint`.
+
+**`hydo explore --schedule` does not shrink** (commit `77d913ff`). `hydo guide faults` said that it
+runs a schedule and shrinks a failure. It runs the schedule once, and open item 38's text of
+Milestone 187 says so too. The guide now says that it runs the schedule once, and that a person
+finds the tokens a failure needs by leaving tokens out by hand.
+
+### The recursive `/sys` of Milestone 338 on hvx
+
+`hydo/onboard/examples/redis-oci/hydo-sys.yaml` is the redis-oci example with one more check,
+`oci.sys_cgroup_files`. It runs `hydo-oci redis sh -c "cat /proc/self/cgroup; ls /sys/fs/cgroup;
+test -e /sys/fs/cgroup/cgroup.procs"` in the image service. The image built at epoch 5 is
+`396d54dc…`:
+
+- `disk=none | run` gave `OK invariants=2 held`, `5c12fb8373b148f3` twice. The check listed
+  `cgroup.controllers cgroup.max.depth cgroup.max.descendants cgroup.pressure cgroup.procs
+  cgroup.stat ...` in the service's root.
+- `disk=none | run K=redis@5+2` gave `OK invariants=2 held`, `aecd1c7dd916f1eb`. After the
+  service's restart the folder still had its files, because the launcher's block binds once per
+  boot.
+
+### The s3 proxy of Milestone 329 in a VM
+
+0.5.0 re-pinned `hydo-world` with Milestone 329's fix: x86_64 `40973bdb…`, arm64 `9fbdbee4…`.
+The new example `hydo/onboard/examples/checkout/hydo-s3.yaml` runs one s3 emulator and a client,
+`s3probe` (Go, standard library only, built by the example's `build.sh` for amd64 and arm64).
+Each workload step is one round through the proxy:
+
+- a PUT of 7 bytes and its HEAD, which must name `Content-Length: 7`;
+- a PUT of 3,000,000 bytes, its HEAD, and a GET whose answer must have `Content-Length:
+  3000000` and the same bytes;
+- a PUT with `If-None-Match: *` on a new key (200) and on the same key again (412);
+- a PUT with `If-Match` and the object's ETag (200), and one with another ETag (412).
+
+A 412 that an `H=` rule gives is checked against the server's own port. After the proxy's 412 to
+`If-None-Match`, the server has no such key. After its 412 to `If-Match`, the server keeps the
+first bytes. The check `s3.rounds_read_back` reads each acknowledged round's objects from the
+server. Every schedule held, and each gave one fingerprint over two runs:
+
+| Schedule | hvx (`ba2a859f…`) | the Mac engine (`0eb05b06…`) |
+|---|---|---|
+| `disk=none \| run` | OK, 40 answers as S3 gives them, `1a5efe89b6ea0e9d` | OK, 40, `c27377375a768e64` |
+| `disk=none \| run H=s3.put_if_absent@1-2:status=412` | OK; round 1's conditional PUT got 412 from the proxy, and the server had no key; `60cf779c3e6158cc` | the same, `951cd681ce4e0cfb` |
+| `disk=none \| run H=s3.put_if_match@2-3:status=412` | OK; round 2's `If-Match` got 412 from the proxy, and the server kept `first-2`; `1d3625b1ae992896` | the same, `0b3c48624df9ce24` |
+
+The checkout example itself, buggy, kept its verdicts with 0.5.0's `hydo-world`. `disk=none |
+run` was OK, with 8 receipts stored through the s3 proxy (hvx `4b6b7992e35890ff`, the Mac
+`8eb002a4f0d34699`). `H=stripe.payment_intent@3-4:status=500,effect=yes` gave `VIOLATION
+[stripe.charged_at_most_once] ... ref o3 took effect 3 times` (hvx `fa8275c08b747d39`, the Mac
+`055ef90b2ac11ead`).
+
+### The filmstrip and the read-back of Milestone 334 on the Mac engine
+
+It did not run. On this Mac, `hydo build hydo-walk.yaml --set variant=buggy` fetched the
+Playwright image (966 MB) and started the helper VM that makes the 3,200 MiB root from 2,420 MiB
+of files. The Mac had 18 GB free, shared with other sessions. The build was stopped with 5.9 GB
+written, when the free space fell under the 12 GB that the sessions keep free. Vikunja's image
+needs as much. KVM ran web-shop's walk (the section "The KVM runs").
+
+### The KVM runs
+
+The workflow `tmp-m341-kvm` runs four parts, each on two hosts, with the published 0.5.0 Linux
+release (`.github/workflows/tmp-m341-kvm.sh`):
+
+- `explore`: the Redis example's exploration of seeds 1-40, again with `--rerun-repeats`, and as
+  two shards and their merge, compared by a script. Then a copy that writes and syncs without end
+  after a failed `SET`, under a small exit budget (`HYDO_KVM_RUN_EXITS=3000000`), so that a run
+  ends `exit budget exhausted` and is shrunk.
+- `walk`: web-shop's walk (`hydo-walk.yaml`, the variant `buggy`) with `I=1`, the power cut
+  `C=3` with and without `disk=cut`, Milestone 284's minimal schedule, and an exploration of
+  seeds 1-10 with `--protocol-faults`.
+- `vikunja`: Milestone 334's three Vikunja schedules.
+- `oci-s3`: `hydo-sys.yaml` and `hydo-s3.yaml`.
+
+Run 45170910149 ran the eight jobs. The hosts were an Intel Xeon Platinum 8573C and an AMD EPYC
+7763 (`explore`), a Xeon 6975P-C and an EPYC 7763 (`walk`), and Xeon 6975P-C hosts (`vikunja`,
+`oci-s3`). Every schedule gave one fingerprint over its two runs. A KVM fingerprint holds for one
+CPU vendor or model (open items 102 and 153), so each host's values are its own.
+
+**`explore`.** The Redis example's image was `23c3b280…` on both hosts. `disk=none | run` gave
+`d2e4da56c54ce2a1` on the AMD host, the recorded KVM value, and `b5b0234c48d0d4f6` on the Xeon
+Platinum 8573C. The exploration of seeds 1-40 gave the same verdicts on both hosts:
+
+- The statistics: the curve was flat over the last 10 runs, with verdicts that grew at runs 1,
+  2, 12, 19 and 20, and property outcomes at runs 1 and 2. The engine's clock is VM exits, 13,155
+  per first run. 40 first runs, 17 re-runs and 27 shrink runs took 10.7, 4.0 and 6.4 s of the
+  engine on Intel (13.8, 5.0 and 8.0 s on AMD), and shrinks took 46 % of the busy time. An hour
+  on 2 workers fits 14,081 first runs on Intel and 11,201 on AMD.
+- `--shard 1/2`, `--shard 2/2` and `--merge` gave the same curve, the same runs with the same new
+  keys, and the same faults drawn as one exploration.
+- The repeats answered 9 runs, and `--rerun-repeats` gave the same 84 run records.
+- Five failures were shrunk, each to the same minimal schedule on both hosts. Among them are the
+  two errors of hvx's exploration, with hvx's minimal schedules: `ERROR redis restart failed` to
+  `disk=ioerr:1 dseed=fd403ef8d08fa636 | run K=redis@16+1`, and `ERROR restart after the faults`
+  to `disk=ioerr:1 dseed=ce2af709f01aac0 | run`.
+
+The copy that writes and syncs without end after a failed `SET` ran with
+`HYDO_KVM_RUN_EXITS=3000000`. `disk=none | run K=redis@5+3` ended `ERROR workload: exit budget
+exhausted while the workload's steps 5 to 7 ran` after 38 s (Intel) and 57 s (AMD), with the
+fingerprint `0000000000000000`. The random exploration of seeds 1-20 shrank four such errors, the
+same on both hosts: seed 1 to `disk=ioerr:1 dseed=910a2dec89025cc1 | run`, seed 2 to `disk=none
+dseed=0 | run K=redis@9+2`, seed 10 to `K=redis@14+1`, and seed 12 to `K=redis@6+1`. Seeds 1 and
+12 shrank to hvx's TIMEOUT schedules. The repeats saved 82.6 s and 115.5 s of the engine. The
+confirmations of an exit-budget error have zero fingerprints too, so the report's words of
+commit `99b4da45` name both limits since commit `165477d6`.
+
+**`walk`.** The web-shop walk image was `f95bf05a…` on both hosts.
+
+| Schedule | Verdict | Intel | AMD | What the run kept |
+|---|---|---|---|---|
+| `disk=none \| run I=1` | OK, 6 invariants; 3 orders shown | `95f5ddc067c92b7a` | `81f7ffcdb7e3a3ec` | 47 frames, 212 KiB |
+| `disk=none \| run C=3 I=1` | OK; 2 orders shown after the cut | `06f4bad652abe093` | `540e09a4a76ea941` | 33 frames of steps 0 to 2 and the trace of step 2, copied before the cut; 2 frames of the recovery boot's read-back |
+| `disk=cut \| run C=3 I=1` | OK; 2 orders shown after the cut | `b8c2020db9c05f63` | `f527ac38060e33a5` | the same |
+| Milestone 284's minimal schedule | VIOLATION `[browser.no_page_errors]`, `/orders/o10` HTTP 502 in step 3 | `de8e7aafb81bf0f8` | `88e69c1e20972b2c` | 12 frames and the traces of steps 0 to 3 |
+
+`hydo explore --seeds 1-10 --protocol-faults --workers 1` found seed 7 as hvx did. It shrank it
+in 29 runs to Milestone 284's minimal schedule, now with `dseed=0`, whose confirmations gave
+`e96e4ae198133874` (Intel) and `1114494cfe7efad0` (AMD). Every run kept its frames in
+`consoles/<tag>.screens/`, and the exploration's web page shows them. A first run took 47 s
+(Intel) and 61 s (AMD) of the engine, and shrinks took 67 % and 69 % of the busy time.
+
+**`oci-s3`.** Both jobs ran on Xeon 6975P-C hosts and gave the same values. `hydo-sys.yaml` built
+`396d54dc…`, the bytes that hvx's build had. `disk=none | run` gave `OK invariants=2 held`,
+`6d027b5d3276d837`, and `K=redis@5+2` gave `1ad3921ed6c623e7`. The check listed
+`cgroup.controllers cgroup.max.depth ... cpu.stat.local` in the image service. `hydo-s3.yaml`
+with an `s3probe` built by the runner's Go 1.24.13 (`a0663665…`) held its three schedules:
+`cb31e248b99b1066` (40 answers as S3 gives them), `8ca1a9a3566758f9` (round 1's 412 from the
+proxy), and `d9720815fa43937d` (round 2's 412 from the proxy).
+
+**`vikunja`.** Its two jobs ran nothing. The script looked for the image in `hydo-out/`, but an
+imported project's `hydo build` writes it into `.hydo/`, and an empty result counted as no
+difference, so the jobs passed. Commit `ef6b8fea` on the branch takes the image from `.hydo/`,
+fails a run without a result, and runs only this part. Its run is still to come.
+
+### What did not change
+
+- No engine, image, or recorded value changed. The examples' new files are not in
+  `hydo/onboard/recorded.json`.
+- The fix of the report changes `report.md` and the web page of an exploration only where every
+  confirmation has a fingerprint of zeros, which no recorded run has.
+- The two new manifests, `checkout/hydo-s3.yaml` and `redis-oci/hydo-sys.yaml`, are inputs of
+  the goldens that read every example manifest. The explorer's `identity-quick.txt`,
+  `identity-full.txt`, `corpus-full.txt` and `corpus-quick.txt`, and hydo-control's
+  `corpus-quick.txt`, were recorded again with `HYDO_BLESS=1`. hydo-build's and hydo-manifest's
+  equivalence corpora already fail (open items 115 and 165); they get the new manifests as more
+  answers and were not recorded again.
+
+The commits are `99b4da45` (the TIMEOUT's report), `77d913ff` (the guide), `e788257e` (the two
+example manifests and the goldens), `165477d6` (the report's words for the exit budget), and the
+ones with these pages. The branch `tmp-m341-kvm` adds the workflow on top of them.
+
+What is left is in open items 116, 142, 144, 167, 168 and 169.
+
 ## Milestone 342 (tentative number): Prometheus behind an agent, its snapshots and its scrape times
 
 The onboarding of Prometheus v3.16.0 (2026-11-05, the latest release) on hvx, 2026-11-23. The

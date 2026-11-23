@@ -3469,7 +3469,13 @@ fn failure_card(
         }
         f.push((
             "Two runs of it".into(),
-            if sh.identical {
+            if sh.confirmed_without_fingerprint() {
+                // hvx's TIMEOUT, the Mac's and KVM's exit budget (Milestone 341): no end state
+                format!(
+                    "{} <span class=\"muted\">no fingerprint: each run ended at the engine's limit (hvx's wall time, the exit budget of the Mac and KVM engines) before its end state was hashed</span>",
+                    badge("ok", "same verdict")
+                )
+            } else if sh.identical {
                 format!(
                     "{} {}",
                     badge("ok", "same fingerprint"),

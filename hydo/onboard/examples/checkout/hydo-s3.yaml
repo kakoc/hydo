@@ -1,0 +1,51 @@
+# The s3 emulator's proxy in a VM (Milestone 341): the request shapes of Milestone 329's fix,
+# sent by s3probe (s3probe/, Go, standard library only) through the proxy at $AWS_ENDPOINT_URL_S3.
+#
+# Each step is one round: a small PUT and its HEAD, a 3,000,000-byte PUT read back with HEAD and
+# GET, a PUT with If-None-Match: * on a new key and again on the same key, and PUTs with If-Match
+# (the object's ETag, then another). A round is acknowledged when every answer is what S3 gives.
+# The check reads each acknowledged round's objects from the server's own port.
+#
+# Inputs: build.sh builds s3probe-amd64 and s3probe-arm64 next to the checkout programs.
+#   disk=none | run                                   -> OK, 4 rounds acknowledged
+#   disk=none | run H=s3.put_if_absent@1-2:status=412  -> OK; round 1's first conditional PUT
+#                                       gets 412 from the proxy, and the server has no such key
+#   disk=none | run H=s3.put_if_match@2-3:status=412   -> OK; round 2's If-Match PUT gets 412 from
+#                                       the proxy, and the server keeps the first bytes
+name: checkout-s3
+description: the s3 emulator's proxy carries uploads, sizes, large bodies and conditional writes.
+
+params:
+  bin: "../../../../build"       # where build.sh put s3probe-amd64 and s3probe-arm64
+  arch: amd64                    # amd64 for hvx and KVM, arm64 for the Mac engine
+
+guest:
+  ram_mib: 1024
+
+root:
+  files:
+    - {src: "{{bin}}/s3probe-{{arch}}", dst: /bin/s3probe, mode: "0755"}
+
+emulators:
+  - use: s3                      # $AWS_ENDPOINT_URL_S3 is http://127.0.0.1:9000
+    buckets: [receipts]
+    ref: path:2                  # PUT /receipts/<key>
+
+workload:
+  steps: 4                       # step i: round i
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      if s3probe step $i > /dev/console 2>&1; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+  timeout: 300
+  process: s3probe
+
+invariants:
+  - id: s3.rounds_read_back
+    msg: every acknowledged round's objects are on the server with their bytes
+    cmd: s3probe check
+
+faults: [kill, pause, protocol]

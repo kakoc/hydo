@@ -362,3 +362,30 @@ fn the_validator_rejects_invalid_records() {
     );
     assert!(e.is_empty(), "{e:?}");
 }
+
+#[test]
+fn a_shrink_whose_confirmations_timed_out_has_no_fingerprint() {
+    // hvx's TIMEOUT workload and KVM's exit budget end before the end state is hashed (M341)
+    let rep = |fp: Option<&str>| hydo_results::Reproduction {
+        fp: fp.map(str::to_string),
+        ..Default::default()
+    };
+    let zero = Some("0000000000000000");
+    let mut s = hydo_results::Shrink {
+        confirmations: vec![rep(zero), rep(zero)],
+        identical: true,
+        ..Default::default()
+    };
+    assert!(s.confirmed_without_fingerprint());
+    s.confirmations = vec![rep(Some("b7d0027938426fb9")), rep(Some("b7d0027938426fb9"))];
+    assert!(!s.confirmed_without_fingerprint());
+    s.confirmations = vec![rep(zero), rep(None)];
+    assert!(
+        !s.confirmed_without_fingerprint(),
+        "a run without a result is no timeout"
+    );
+    s.confirmations.clear();
+    assert!(!s.confirmed_without_fingerprint());
+    assert!(!hydo_results::has_fingerprint("0000000000000000"));
+    assert!(hydo_results::has_fingerprint("0000000000000001"));
+}

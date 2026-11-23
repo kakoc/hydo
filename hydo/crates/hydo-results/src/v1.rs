@@ -1572,6 +1572,25 @@ pub struct Failure {
     pub run: Run,
 }
 
+/// Whether an engine's fingerprint names an end state. A run that passed its engine's limit (hvx's
+/// `TIMEOUT workload`, the Mac's and KVM's `exit budget exhausted`) ends before the state is hashed,
+/// and its fingerprint is all zeros.
+pub fn has_fingerprint(fp: &str) -> bool {
+    fp.bytes().any(|b| b != b'0')
+}
+
+impl Shrink {
+    /// The two confirmations ended without a fingerprint, so `identical` compares nothing but
+    /// their absence; only the verdicts say that the minimal schedule repeats.
+    pub fn confirmed_without_fingerprint(&self) -> bool {
+        !self.confirmations.is_empty()
+            && self
+                .confirmations
+                .iter()
+                .all(|c| c.fp.as_deref().is_some_and(|fp| !has_fingerprint(fp)))
+    }
+}
+
 /// A failure shrunk to a minimal schedule (one per class and signature).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Shrink {

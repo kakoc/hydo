@@ -313,16 +313,27 @@ pub fn report(doc: &Exploration) -> String {
                 .and_then(|c| c.fp.clone())
                 .unwrap_or_else(|| "None".into())
         };
-        l.push(format!(
-            "- fingerprint, two runs: `{}` / `{}` ({})",
-            fp(0),
-            fp(1),
-            if v.identical {
-                "identical"
-            } else {
-                "DIFFERENT"
-            }
-        ));
+        if v.confirmed_without_fingerprint() {
+            // hvx's TIMEOUT and the Mac's and KVM's exit budget: the runs end at the engine's
+            // limit, before the end state is
+            // hashed, so the two zeros compare nothing (Milestone 341)
+            l.push(format!(
+                "- fingerprint, two runs: none (`{}` / `{}`): each run ended at the engine's limit (hvx's wall time, the exit budget of the Mac and KVM engines) before its end state was hashed, so only the verdicts repeat",
+                fp(0),
+                fp(1)
+            ));
+        } else {
+            l.push(format!(
+                "- fingerprint, two runs: `{}` / `{}` ({})",
+                fp(0),
+                fp(1),
+                if v.identical {
+                    "identical"
+                } else {
+                    "DIFFERENT"
+                }
+            ));
+        }
         l.push(format!(
             "- by hand: {}",
             v.repro_command.clone().unwrap_or_default()
