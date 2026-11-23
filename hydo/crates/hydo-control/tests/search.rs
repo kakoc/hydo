@@ -156,3 +156,87 @@ fn a_branch_equals_its_schedule_run_from_s1() {
     }
     assert!(checked > 0, "no snapshot before the last steps");
 }
+
+/// Milestone 340 (docs/design/shrink-snapshots.md): a shrink's run takes its snapshots where its
+/// step ranges start; a candidate that leaves out a later fault continues from the deepest of
+/// them and gives the transcript of its run from S1; one that leaves out the first fault reaches
+/// none of them.
+#[test]
+fn a_shrink_candidate_continues_from_its_parents_range_start() {
+    let plan = plan_of("hydo/onboard/examples/redis/hydo.yaml").unwrap();
+    let sb = support::boot(&plan, "search").unwrap();
+    let db = drive::Booted {
+        plan: plan.clone(),
+        s0: (sb.s0.1.clone(), sb.s0.2.clone()),
+        s1: (sb.s1.1.clone(), sb.s1.2.clone()),
+        boot: sb.boot.fin.clone(),
+    };
+    let a: Schedule = "disk=none | run K=redis@5+2 P=redis@9+2".parse().unwrap();
+    let cad = support::cadence(Some(&a));
+    let mut m = vm(&sb.s1.0, cad, 0);
+    let policy = SnapPolicy {
+        names: (0..6).map(|i| format!("r{i}")).collect(),
+        ranges: true,
+        ..SnapPolicy::default()
+    };
+    let (ran_a, stops, taken) = {
+        let mut rec = RecLink::new(&mut m, policy);
+        let r = drive::run(&mut rec, &db, &a, RunFrom::Restored, &Policy::Schedule).unwrap();
+        (r, rec.stops.clone(), rec.taken.clone())
+    };
+    let snaps = m.f.snaps.clone();
+    let mut plain = vm(&sb.s1.0, cad, 0);
+    let ran_p = drive::run(&mut plain, &db, &a, RunFrom::Restored, &Policy::Schedule).unwrap();
+    assert_eq!(ran_a.run.transcript, ran_p.run.transcript);
+    // the ranges 5..6, 7..8, 9..10 and 11.. start after the first one
+    let ranges = hydo_control::search::ranges(&ran_a.run.transcript);
+    assert_eq!(ranges.len(), 5, "{ranges:?}");
+    assert_eq!(taken.len(), 4, "{taken:?}");
+    for (t, r) in taken.iter().zip(&ranges) {
+        // each snapshot is after the range before it ended
+        assert!(t.stop.n >= r.2, "{t:?} before the end of {r:?}");
+    }
+    // leave out P=: the ranges up to 7 are the parent's
+    let s: Schedule = "disk=none | run K=redis@5+2".parse().unwrap();
+    let ok: Vec<usize> = taken
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| hydo_control::agent::check_branch(&db, &s, &stops[..=t.index]).is_ok())
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(
+        ok,
+        vec![0, 1],
+        "the candidate reaches the starts of 5.. and 7.."
+    );
+    let t = &taken[1];
+    let prefix = &stops[..=t.index];
+    let mut live = vm(&snaps[&t.name], cad, t.stop.n - 1);
+    let got = {
+        let mut br = BranchLink::new(prefix, Some(&mut live));
+        drive::run(&mut br, &db, &s, RunFrom::Restored, &Policy::Schedule).unwrap()
+    };
+    let mut fresh = vm(&sb.s1.0, cad, 0);
+    let want = drive::run(&mut fresh, &db, &s, RunFrom::Restored, &Policy::Schedule).unwrap();
+    let norm = |t: &hydo_control::Transcript| -> Vec<hydo_control::Record> {
+        t.records
+            .iter()
+            .map(|r| match r {
+                hydo_control::Record::Ack { n, id, .. } => hydo_control::Record::Ack {
+                    n: *n,
+                    id: *id,
+                    send: 0,
+                },
+                r => r.clone(),
+            })
+            .collect()
+    };
+    // (the scripted engine counts its stops per conversation; a real engine's snapshot keeps
+    // the count, which `--check-continued` compares)
+    assert_eq!(norm(&got.run.transcript), norm(&want.run.transcript));
+    // leave out K=: no snapshot is reached
+    let s: Schedule = "disk=none | run P=redis@9+2".parse().unwrap();
+    for t in &taken {
+        assert!(hydo_control::agent::check_branch(&db, &s, &stops[..=t.index]).is_err());
+    }
+}

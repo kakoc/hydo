@@ -31,6 +31,7 @@ mod flow;
 pub mod lockstep_link;
 pub mod names;
 pub mod plan;
+pub mod prefix;
 pub mod replay;
 pub mod runner;
 pub mod schedule;

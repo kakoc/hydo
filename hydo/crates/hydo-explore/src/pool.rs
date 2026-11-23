@@ -141,6 +141,56 @@ pub struct Pool {
     pub cache_engine: String,
     /// The schedules this exploration already ran (Milestone 339, [`crate::repeats`]).
     repeats: Arc<Mutex<Repeats>>,
+    /// Shrinks from snapshots (Milestone 340, docs/design/shrink-snapshots.md).
+    prefix: Arc<Mutex<Prefix>>,
+}
+
+/// Shrinks from snapshots (Milestone 340): whether they are on, and what they did.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Prefix {
+    /// Shrink candidates continue from snapshots of earlier runs of their worker, and the
+    /// reruns of a failure and the candidates take snapshots at their step ranges.
+    pub on: bool,
+    /// `--check-continued`: every run that took or used a snapshot runs again from S1, and the
+    /// two are compared; the result is the run from S1's.
+    pub check: bool,
+    /// The snapshots a worker keeps and a run takes ([`hydo_engine::PrefixReq`]).
+    pub keep: usize,
+    pub per_run: usize,
+    pub stats: PrefixStats,
+}
+
+/// What the shrinks from snapshots did in one exploration (Milestone 340).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PrefixStats {
+    /// Runs that could take or use snapshots (reruns of failures and shrink candidates).
+    pub runs: u64,
+    /// Of them, the ones that continued from a snapshot.
+    pub continued: u64,
+    /// The snapshots taken, and the engine's wall seconds for them.
+    pub taken: u64,
+    pub snap_secs: f64,
+    /// The guest clock of those runs from S1, and the part of it that the continued runs did
+    /// not run again.
+    pub clock: u64,
+    pub skipped: u64,
+    /// The wall seconds of those runs (with `--check-continued`: with their runs from S1).
+    pub secs: f64,
+    /// `--check-continued`: the runs compared with their run from S1, and what differed.
+    pub checked: u64,
+    pub differs: Vec<(String, String)>,
+}
+
+/// Which runs take and use snapshots (Milestone 340): a shrink candidate does both, a rerun of a
+/// failure only takes them (it confirms the failure from S1), every other run neither.
+fn prefix_role(tag: &str) -> Option<hydo_engine::PrefixReq> {
+    let cand = crate::repeats::TAGS[1..].iter().any(|p| tag.starts_with(p));
+    let rerun = tag.starts_with("repro");
+    (cand || rerun).then_some(hydo_engine::PrefixReq {
+        continue_: cand,
+        take: true,
+        ..hydo_engine::PrefixReq::default()
+    })
 }
 
 #[derive(Default)]
@@ -366,13 +416,14 @@ impl Pool {
         ));
         let boot_secs = Arc::new(Mutex::new(vec![None; n]));
         let repeats = Arc::new(Mutex::new(Repeats::default()));
+        let prefix = Arc::new(Mutex::new(Prefix::default()));
         let ledger = Arc::new(Mutex::new(Ledger {
             workers: vec![WorkerTime::default(); n],
             jobs: HashMap::new(),
         }));
         let mut threads = Vec::new();
         for i in 0..n {
-            let (q2, eng, sp, h, bs, rp, lg) = (
+            let (q2, eng, sp, h, bs, rp, lg, px) = (
                 q.clone(),
                 engine.clone(),
                 spec.clone(),
@@ -380,9 +431,10 @@ impl Pool {
                 boot_secs.clone(),
                 repeats.clone(),
                 ledger.clone(),
+                prefix.clone(),
             );
             threads.push(std::thread::spawn(move || {
-                worker_main(i, q2, eng, sp, h, bs, rp, lg)
+                worker_main(i, n, q2, eng, sp, h, bs, rp, lg, px)
             }));
         }
         let p = Pool {
@@ -396,6 +448,7 @@ impl Pool {
             cache_image,
             cache_engine,
             repeats,
+            prefix,
         };
         p.cache_load();
         p
@@ -405,6 +458,21 @@ impl Pool {
     /// earlier result, without a VM (Milestone 339; off until the explorer turns it on).
     pub fn answer_repeats(&self, on: bool) {
         self.repeats.lock().expect("lock").set_on(on);
+    }
+
+    /// Shrinks from snapshots (Milestone 340): `on` turns them on, `check` compares every run
+    /// that took or used a snapshot with its run from S1. Set before the first job.
+    pub fn shrink_from_snapshots(&self, on: bool, check: bool, keep: usize, per_run: usize) {
+        let mut p = self.prefix.lock().expect("lock");
+        p.on = on || check;
+        p.check = check;
+        p.keep = keep;
+        p.per_run = per_run;
+    }
+
+    /// What the shrinks from snapshots did so far.
+    pub fn prefix_stats(&self) -> PrefixStats {
+        self.prefix.lock().expect("lock").stats.clone()
     }
 
     /// (runs answered with an earlier result, the seconds of those earlier runs)
@@ -746,6 +814,58 @@ impl Batch<'_> {
     }
 }
 
+/// [`take`] for a worker that keeps snapshots for shrinks (Milestone 340): among the jobs at the
+/// front of the queue that would start now anyway (one per worker), the one this worker would
+/// continue from the deepest snapshot; the first job when it continues none of them. It never
+/// waits for a job that another worker could take, so no worker stays idle for it.
+fn take_for(q: &(Mutex<Queue>, Condvar), w: &mut dyn Worker, workers: usize) -> Option<Job> {
+    let (m, cv) = q;
+    let front: Vec<(usize, String, String)> = {
+        let mut g = m.lock().expect("lock");
+        loop {
+            if !g.high.is_empty() || !g.low.is_empty() {
+                break;
+            }
+            if g.closed {
+                return None;
+            }
+            g = cv.wait(g).expect("lock");
+        }
+        g.high
+            .iter()
+            .take(workers.max(1))
+            .enumerate()
+            .filter(|(_, j)| j.search.is_none() && prefix_role(&j.tag).is_some_and(|r| r.continue_))
+            .map(|(i, j)| (i, j.tag.clone(), j.text.clone()))
+            .collect()
+    };
+    let mut best: Option<(u64, String)> = None;
+    for (_, tag, text) in &front {
+        let Ok(s) = Schedule::parse(text) else {
+            continue;
+        };
+        let g = w.prefix_gain(&s);
+        if g > 0 && best.as_ref().is_none_or(|b| g > b.0) {
+            best = Some((g, tag.clone()));
+        }
+    }
+    let mut g = m.lock().expect("lock");
+    if let Some((_, tag)) = best {
+        if let Some(i) = g.high.iter().position(|j| j.tag == tag) {
+            return g.high.remove(i);
+        }
+    }
+    loop {
+        if let Some(j) = g.high.pop_front().or_else(|| g.low.pop_front()) {
+            return Some(j);
+        }
+        if g.closed {
+            return None;
+        }
+        g = cv.wait(g).expect("lock");
+    }
+}
+
 fn take(q: &(Mutex<Queue>, Condvar)) -> Option<Job> {
     let (m, cv) = q;
     let mut g = m.lock().expect("lock");
@@ -783,6 +903,7 @@ fn start(i: usize, engine: &dyn Engine, spec: &BootSpec, h: &Host) -> Option<Box
 #[allow(clippy::too_many_arguments)]
 fn worker_main(
     i: usize,
+    workers: usize,
     q: Arc<(Mutex<Queue>, Condvar)>,
     engine: Arc<dyn Engine + Send + Sync>,
     spec: BootSpec,
@@ -790,7 +911,11 @@ fn worker_main(
     boot: Arc<Mutex<Vec<Option<f64>>>>,
     reps: Arc<Mutex<Repeats>>,
     ledger: Arc<Mutex<Ledger>>,
+    prefix: Arc<Mutex<Prefix>>,
 ) {
+    // Milestone 340: whether this worker's engine keeps snapshots for shrinks (it says so at
+    // its first such run)
+    let mut keeps = true;
     // Milestone 336: the worker's time, on the host's clock
     let born = Instant::now();
     let mut tm = WorkerTime::default();
@@ -811,7 +936,16 @@ fn worker_main(
         give_up(&q, &reps, &h.outdir);
         return;
     }
-    while let Some(job) = take(&q) {
+    loop {
+        let (on, check, keep, per_run) = {
+            let p = prefix.lock().expect("lock");
+            (p.on && keeps, p.check, p.keep, p.per_run)
+        };
+        let job = match (on, w.as_mut()) {
+            (true, Some(wk)) => take_for(&q, wk.as_mut(), workers),
+            _ => take(&q),
+        };
+        let Some(job) = job else { break };
         // a cancelled run still runs when another run of its schedule waits for it (M339)
         if job.cancel.load(Ordering::SeqCst)
             && !reps.lock().expect("lock").needed(&job.tag, &job.text)
@@ -825,6 +959,7 @@ fn worker_main(
         let mut restart_s = 0.0;
         let mut res = None;
         let mut state: Option<(hydo_engine::SearchRun, f64)> = None;
+        let mut pre: Option<(hydo_engine::PrefixRun, f64)> = None;
         for attempt in 0..2 {
             let Some(wk) = w.as_mut() else { break };
             let r = match Schedule::parse(&job.text) {
@@ -842,7 +977,27 @@ fn worker_main(
                         break;
                     }
                     None => match &job.search {
-                        None => wk.run(&job.tag, &s),
+                        None => match prefix_role(&job.tag).filter(|_| on) {
+                            Some(mut req) => {
+                                req.check = check;
+                                req.keep = keep;
+                                req.per_run = per_run;
+                                let t0 = Instant::now();
+                                match wk.run_prefix(&job.tag, &s, &req) {
+                                    Ok((rr, pr)) => {
+                                        pre = Some((pr, t0.elapsed().as_secs_f64()));
+                                        Ok(rr)
+                                    }
+                                    // an engine without such snapshots: every run from S1
+                                    Err(EngineError::Unsupported(_)) => {
+                                        keeps = false;
+                                        wk.run(&job.tag, &s)
+                                    }
+                                    Err(e) => Err(e),
+                                }
+                            }
+                            None => wk.run(&job.tag, &s),
+                        },
                         Some(req) => {
                             let t0 = Instant::now();
                             wk.run_search(&job.tag, &s, req).map(|(rr, sr)| {
@@ -893,6 +1048,27 @@ fn worker_main(
             }
         }
         let mut res = res.unwrap_or_else(|| error_result("", i));
+        if let Some((pr, secs)) = pre {
+            let mut p = prefix.lock().expect("lock");
+            let st = &mut p.stats;
+            st.runs += 1;
+            st.continued += u64::from(pr.from.is_some());
+            st.taken += pr.taken;
+            st.snap_secs += pr.snap_secs;
+            st.clock += pr.clock;
+            st.skipped += pr.skipped;
+            st.secs += secs;
+            if pr.checked {
+                st.checked += 1;
+                if let Some(d) = pr.differs {
+                    eprintln!(
+                        "hydo explore: {} from a snapshot differs from its run from S1: {d}",
+                        job.tag
+                    );
+                    st.differs.push((job.tag.clone(), d));
+                }
+            }
+        }
         if let Some((sr, secs)) = state {
             res.insert("state".into(), search_json(&sr));
             res.insert("job_s".into(), json!(secs));

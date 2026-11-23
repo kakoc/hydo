@@ -366,4 +366,11 @@ pub trait Controller {
     fn engine_ended(&self, _verdict: &str) -> Option<String> {
         None
     }
+
+    /// How many of the workload's step ranges the controller has started so far (Milestone 340,
+    /// the shrinks from snapshots of docs/design/shrink-snapshots.md). The runner compares it
+    /// before and after a step. A controller without step ranges says 0.
+    fn ranges_started(&self) -> u64 {
+        0
+    }
 }

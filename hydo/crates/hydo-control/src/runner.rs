@@ -86,6 +86,19 @@ pub trait Link {
     fn before_step(&mut self, _stop: &StopInfo, _seen: &[Seen]) -> Result<(), LinkError> {
         Ok(())
     }
+    /// Whether the link wants [`Link::at_range_start`] (Milestone 340): the runner then asks
+    /// the controller at every stop whether its step starts a workload step range.
+    fn wants_range_starts(&self) -> bool {
+        false
+    }
+    /// Called at a stop where the controller's step started a workload step range, after the
+    /// step and before any of its commands goes to the link, so that nothing reached the guest
+    /// since [`Link::before_step`] (Milestone 340: where a shrink's run takes its snapshots,
+    /// docs/design/shrink-snapshots.md). A link that wraps another and does not take them itself
+    /// passes both calls on.
+    fn at_range_start(&mut self, _stop: &StopInfo) -> Result<(), LinkError> {
+        Ok(())
+    }
     /// The run's timing from this stop on (the engine's `TIME`; a schedule's `br=` point).
     fn timing(&mut self, _tokens: &str) -> Result<(), LinkError> {
         Err(LinkError(
@@ -387,8 +400,14 @@ pub fn run_with(
         }
         link.before_step(&stop, &seen)?;
         let next_id = session.as_ref().map(|s| s.position().0).unwrap_or(1);
+        let ranges = link.wants_range_starts().then(|| ctl.ranges_started());
         let mut out = Out::new(next_id);
         ctl.step(&stop, &seen, &mut out);
+        // Milestone 340: the step started a step range. Its commands are not sent yet, so a
+        // snapshot here holds the guest as it was before the controller decided at this stop.
+        if ranges.is_some_and(|r| ctl.ranges_started() > r) {
+            link.at_range_start(&stop)?;
+        }
         let mut ended = None;
         for a in out.into_actions() {
             match a {

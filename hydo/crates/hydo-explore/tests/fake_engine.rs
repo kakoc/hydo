@@ -890,6 +890,7 @@ fn repeats_scenario() {
     ];
     // the option itself is in the recorded command line
     let opt = regex::Regex::new(r#"\s*"--rerun-repeats","#).unwrap();
+    let opts = regex::Regex::new(r#"\s*"--(shrink-from-snapshots|check-continued)","#).unwrap();
     let clock: &[&str] = &[
         "--seeds",
         "1-40",
@@ -937,6 +938,28 @@ fn repeats_scenario() {
             let a = std::fs::read(once.join("consoles/seed-1.log")).unwrap();
             let b = std::fs::read(once.join("consoles/seed-40.log")).unwrap();
             assert_eq!(a, b);
+        }
+        // Milestone 340: a worker that keeps no snapshots for shrinks (the scripted engine's)
+        // runs every candidate from S1 with --shrink-from-snapshots and --check-continued, and
+        // the exploration is the same file for file
+        if name == "stack" {
+            let snaps = explore(
+                "stack-snaps",
+                args,
+                &["--shrink-from-snapshots", "--check-continued"],
+            );
+            for f in ["exploration.json", "events.jsonl", "report.md"] {
+                let clean = |out: &Path, re: &regex::Regex| {
+                    let t = std::fs::read_to_string(out.join(f)).unwrap();
+                    let t = re.replace_all(&t, "").into_owned();
+                    norm(&t.replace(&out.display().to_string(), "<out>"))
+                };
+                assert!(
+                    clean(&once, &opts) == clean(&snaps, &opts),
+                    "--shrink-from-snapshots changed {f}"
+                );
+            }
+            assert!(!snaps.join("shrink-snapshots.json").exists());
         }
     }
     let _ = std::fs::remove_dir_all(&dir);

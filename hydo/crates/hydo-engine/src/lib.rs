@@ -592,6 +592,65 @@ pub trait Worker {
             "this worker has no state search (docs/design/state-search.md)".into(),
         ))
     }
+
+    /// A shrink candidate's run that may continue from a snapshot of an earlier run of this
+    /// worker and take snapshots at its step ranges (Milestone 340,
+    /// docs/design/shrink-snapshots.md). Workers that cannot say so.
+    fn run_prefix(
+        &mut self,
+        tag: &str,
+        schedule: &Schedule,
+        req: &PrefixReq,
+    ) -> Result<(RunResult, PrefixRun), EngineError> {
+        let _ = (tag, schedule, req);
+        Err(EngineError::Unsupported(
+            "this worker keeps no snapshots for shrinks (docs/design/shrink-snapshots.md)".into(),
+        ))
+    }
+
+    /// The guest clock that [`Worker::run_prefix`] of `schedule` would not run again on this
+    /// worker (0: it would run from S1). It runs no VM.
+    fn prefix_gain(&mut self, schedule: &Schedule) -> u64 {
+        let _ = schedule;
+        0
+    }
+}
+
+/// What a shrink's run asks of its worker (Milestone 340, docs/design/shrink-snapshots.md).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PrefixReq {
+    /// Continue from the deepest snapshot of this worker that the run's controller reaches with
+    /// the commands of the snapshot's own run (and the same host part); false: from S1.
+    pub continue_: bool,
+    /// Take snapshots at the run's step ranges, for later runs to continue from.
+    pub take: bool,
+    /// Also run the schedule from S1 without snapshots and compare (`--check-continued`); the
+    /// result is the run from S1's.
+    pub check: bool,
+    /// The snapshots the worker keeps, and the snapshots one run takes at most (0: the
+    /// worker's defaults). Each Mac snapshot is a file of the guest RAM's pages that are not
+    /// zero, so a large guest keeps fewer.
+    pub keep: usize,
+    pub per_run: usize,
+}
+
+/// What a shrink's run did with snapshots besides its RESULT (Milestone 340).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PrefixRun {
+    /// The snapshot it continued from (None: from S1).
+    pub from: Option<String>,
+    /// The guest clock from S1 to that snapshot, which the run did not run again.
+    pub skipped: u64,
+    /// The guest clock of the whole run from S1 (the skipped part included).
+    pub clock: u64,
+    /// The snapshots it took, and the wall seconds the engine took for them.
+    pub taken: u64,
+    pub snap_secs: f64,
+    /// With [`PrefixReq::check`], when the run took or used a snapshot: None when the run
+    /// from S1 gave the same result, consoles and transcripts, else what differed.
+    pub differs: Option<String>,
+    /// Whether the check ran.
+    pub checked: bool,
 }
 
 /// What the state search asks of one run (docs/design/state-search.md).

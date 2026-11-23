@@ -807,6 +807,7 @@ impl Engine for AgentEngine {
                     outdir: spec.outdir.clone(),
                     spin_rewind: self.spin_rewind,
                     recs: std::collections::HashMap::new(),
+                    prefix: crate::prefix::Store::new(crate::prefix::keep(self.inner.kind())),
                 }))
             }
             Err(e) => {
@@ -851,6 +852,8 @@ pub struct AgentWorker {
     /// The state search's recordings: each snapshot's parent stops up to the snapshot
     /// (docs/design/state-search.md).
     recs: std::collections::HashMap<String, Arc<Vec<crate::search::RecStop>>>,
+    /// The snapshots of shrinks' runs (Milestone 340, [`crate::prefix`]).
+    prefix: crate::prefix::Store,
 }
 
 /// The driver of a state search's run: a recording run from S1, or a branch from a snapshot.
@@ -863,6 +866,7 @@ struct SearchDriver<'b> {
     stops: Vec<crate::search::RecStop>,
     features: Vec<String>,
     taken: Vec<crate::search::Taken>,
+    snap_secs: f64,
 }
 
 impl Driver for SearchDriver<'_> {
@@ -890,6 +894,7 @@ impl Driver for SearchDriver<'_> {
                 self.stops = std::mem::take(&mut rec.stops);
                 self.features = std::mem::take(&mut rec.features);
                 self.taken = std::mem::take(&mut rec.taken);
+                self.snap_secs = rec.snap_secs;
                 r
             };
             r.map(|ran| (ran, link.result.take()))
@@ -1042,12 +1047,15 @@ impl AgentWorker {
                 any_new: req.any_new,
                 skip,
                 spread: req.spread.clone(),
+                ranges: false,
+                spacing: 0,
             },
             parent: parent.as_deref().map(|v| v.as_slice()),
             ran: None,
             stops: Vec::new(),
             features: Vec::new(),
             taken: Vec::new(),
+            snap_secs: 0.0,
         };
         let r = match &req.branch_from {
             Some(name) => self.inner.resume(tag, name, &mut d, None)?,
@@ -1083,6 +1091,201 @@ impl AgentWorker {
     }
 }
 
+/// The files a run left under `<tag>.` in `dir` (the engine's own console, `.agent.log`, left
+/// out: a run continued from a snapshot has only the part after it), by name.
+fn tag_files(dir: &Path, tag: &str) -> std::collections::BTreeMap<String, Vec<u8>> {
+    let mut out = std::collections::BTreeMap::new();
+    let pre = format!("{tag}.");
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for e in rd.flatten() {
+            let n = e.file_name().to_string_lossy().into_owned();
+            if n.starts_with(&pre) && !n.ends_with(".agent.log") && !n.ends_with(".err") {
+                if let Ok(b) = std::fs::read(e.path()) {
+                    out.insert(n, b);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// What differs between a run that took or used snapshots and the same schedule's run from S1
+/// (`--check-continued`): the RESULT line but for its wall seconds, and the run's files; None
+/// when nothing does.
+pub fn prefix_differs(
+    a: &RunResult,
+    b: &RunResult,
+    fa: &std::collections::BTreeMap<String, Vec<u8>>,
+    fb: &std::collections::BTreeMap<String, Vec<u8>>,
+) -> Option<String> {
+    let strip = |r: &RunResult| -> String {
+        r.line
+            .split(' ')
+            .filter(|w| !w.starts_with("secs="))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let (la, lb) = (strip(a), strip(b));
+    if la != lb {
+        return Some(format!("RESULT {la:?} against {lb:?} from S1"));
+    }
+    let names: std::collections::BTreeSet<&String> = fa.keys().chain(fb.keys()).collect();
+    let bad: Vec<String> = names
+        .into_iter()
+        .filter(|n| fa.get(*n) != fb.get(*n))
+        .cloned()
+        .collect();
+    (!bad.is_empty()).then(|| format!("files {}", bad.join(", ")))
+}
+
+impl AgentWorker {
+    /// [`Worker::run_prefix`] (Milestone 340, docs/design/shrink-snapshots.md).
+    fn prefix_once(
+        &mut self,
+        tag: &str,
+        schedule: &Schedule,
+        req: &hydo_engine::PrefixReq,
+    ) -> Result<(RunResult, hydo_engine::PrefixRun), EngineError> {
+        use crate::prefix::{Store, PER_RUN};
+        use hydo_engine::PrefixRun;
+        let keep = match req.keep {
+            0 => crate::prefix::keep(self.kind),
+            n => n.min(crate::prefix::keep(self.kind)),
+        };
+        if self.prefix.len() != keep {
+            self.prefix = Store::new(keep);
+        }
+        let per_run = if req.per_run == 0 {
+            PER_RUN
+        } else {
+            req.per_run
+        };
+        let (full, eng) = match engine_schedule(schedule, self.cadence) {
+            Ok(x) => x,
+            Err(e) => return Ok((refused(tag, &unsupported_verdict(&e)), PrefixRun::default())),
+        };
+        if let Err(u) = drive::check(&self.booted.plan, &full) {
+            return Ok((
+                refused(tag, &unsupported_verdict(&u.to_string())),
+                PrefixRun::default(),
+            ));
+        }
+        let (full_text, eng_text) = (full.to_string(), eng.to_string());
+        let parent = if req.continue_ {
+            let booted = &self.booted;
+            self.prefix.best(&full_text, &eng_text, |rec| {
+                check_branch(booted, &full, rec).is_ok()
+            })
+        } else {
+            None
+        };
+        let slots = if req.take {
+            self.prefix.slots_for_run(parent, per_run)
+        } else {
+            Vec::new()
+        };
+        let rec = parent.and_then(|i| self.prefix.entry(i).map(|e| (e.rec.clone(), e.clock)));
+        let skip = rec.as_ref().map(|(p, _)| p.len() - 1).unwrap_or(0);
+        let mut d = SearchDriver {
+            booted: &self.booted,
+            schedule: &full,
+            policy: crate::search::SnapPolicy {
+                names: slots.iter().map(|i| Store::name(*i)).collect(),
+                skip,
+                ranges: true,
+                // a composed workload has a point per round: spread the run's snapshots over them
+                spacing: if self.booted.plan.composed() {
+                    (self.booted.plan.steps.max(1) as u64).div_ceil(per_run.max(1) as u64 + 1)
+                } else {
+                    1
+                },
+                ..crate::search::SnapPolicy::default()
+            },
+            parent: rec.as_ref().map(|(p, _)| p.as_slice()),
+            ran: None,
+            stops: Vec::new(),
+            features: Vec::new(),
+            taken: Vec::new(),
+            snap_secs: 0.0,
+        };
+        let r = match parent {
+            Some(i) => self.inner.resume(tag, &Store::name(i), &mut d, None),
+            None => self.inner.run_controlled(tag, &eng, &mut d, None),
+        };
+        let r = match (r, parent) {
+            (Ok(r), _) => r,
+            // a continuation that failed: that snapshot is no use, and the run goes from S1
+            (Err(EngineError::Protocol(why)), Some(i)) if why != "the engine exited" => {
+                eprintln!(
+                    "hydo: {tag}: continuing from {} failed: {why}",
+                    Store::name(i)
+                );
+                self.prefix.drop_slot(i);
+                let r = self.run_with(tag, schedule, &Policy::Schedule)?;
+                return Ok((r, PrefixRun::default()));
+            }
+            (Err(e), _) => return Err(e),
+        };
+        let (stops, taken, ran, snap_secs) = (d.stops, d.taken, d.ran, d.snap_secs);
+        if let Some(i) = parent {
+            self.prefix.touch(i);
+        }
+        for t in &taken {
+            let Some(i) = slots.iter().copied().find(|i| Store::name(*i) == t.name) else {
+                continue;
+            };
+            let upto = &stops[..=t.index];
+            let clock = crate::search::clock(upto, 0).0;
+            self.prefix
+                .put(i, &eng_text, Arc::new(upto.to_vec()), clock);
+        }
+        let mut out = PrefixRun {
+            from: parent.map(Store::name),
+            skipped: rec.as_ref().map(|(_, c)| *c).unwrap_or(0),
+            clock: crate::search::clock(&stops, 0).0,
+            taken: taken.len() as u64,
+            snap_secs,
+            ..PrefixRun::default()
+        };
+        let result = match ran {
+            Some(ran) => {
+                let prefix = format!("{tag}.");
+                write_run_files(&self.outdir, tag, &prefix, &ran, None);
+                run_result(&r, &ran)
+            }
+            None => r,
+        };
+        // M130: a SPIN on the Mac engine runs again in the rewind mode, from S1
+        if rewind_again(self.kind, &result, schedule, self.spin_rewind).is_some() {
+            let r = self.run_with(tag, schedule, &Policy::Schedule)?;
+            return Ok((r, PrefixRun::default()));
+        }
+        if req.check && (parent.is_some() || !taken.is_empty()) {
+            let fa = tag_files(&self.outdir, tag);
+            let plain = self.run_with(tag, schedule, &Policy::Schedule)?;
+            let fb = tag_files(&self.outdir, tag);
+            out.checked = true;
+            out.differs = prefix_differs(&result, &plain, &fa, &fb);
+            return Ok((plain, out));
+        }
+        Ok((result, out))
+    }
+
+    /// [`Worker::prefix_gain`].
+    fn gain_of(&mut self, schedule: &Schedule) -> u64 {
+        let Ok((full, eng)) = engine_schedule(schedule, self.cadence) else {
+            return 0;
+        };
+        let booted = &self.booted;
+        let (ft, et) = (full.to_string(), eng.to_string());
+        let best = self
+            .prefix
+            .best(&ft, &et, |rec| check_branch(booted, &full, rec).is_ok());
+        best.and_then(|i| self.prefix.entry(i).map(|e| e.clock))
+            .unwrap_or(0)
+    }
+}
+
 impl Worker for AgentWorker {
     fn boot_secs(&self) -> f64 {
         self.inner.boot_secs()
@@ -1099,6 +1302,19 @@ impl Worker for AgentWorker {
         req: &hydo_engine::SearchReq,
     ) -> Result<(RunResult, hydo_engine::SearchRun), EngineError> {
         self.search_once(tag, schedule, req)
+    }
+
+    fn run_prefix(
+        &mut self,
+        tag: &str,
+        schedule: &Schedule,
+        req: &hydo_engine::PrefixReq,
+    ) -> Result<(RunResult, hydo_engine::PrefixRun), EngineError> {
+        self.prefix_once(tag, schedule, req)
+    }
+
+    fn prefix_gain(&mut self, schedule: &Schedule) -> u64 {
+        self.gain_of(schedule)
     }
 
     fn close(self: Box<Self>) -> Result<(), EngineError> {

@@ -305,6 +305,29 @@ corrupted`. Such an error is not shrunk, because its shrink only shows the damag
 a new error line of the service's log (`hydo guide error-logs`) that first appeared in such a
 run. `--shrink-detected-damage` shrinks both, for a system that must start on damaged files.
 
+### Shrinks that continue from snapshots
+
+A shrink candidate keeps the faults before the one it changes. So it runs again what an earlier
+run of the shrink ran, up to a step range where the two differ. With `--shrink-from-snapshots`,
+the re-runs of a failure and the shrink candidates take a snapshot where each of their step ranges
+starts. A later candidate on the same worker continues from the deepest of them that it reaches,
+instead of running that part again. It reaches a snapshot when it has the snapshot's host part,
+`dseed=` and timing tokens included, and sends the same commands up to it. Every other candidate
+runs from S1, as before. The verdicts, fingerprints, consoles and minimal schedules are the same
+with the option and without it.
+
+- `shrink-snapshots.json` in the exploration's folder counts the runs that continued, the
+  snapshots taken and their seconds, and the share of those runs' guest time that was not run
+  again.
+- `--check-continued` runs every run that took or used a snapshot again from S1 and compares the
+  two. A difference is printed and listed in the file, and the run from S1 counts.
+- `--shrink-from-s1` runs every candidate from S1. `HYDO_SHRINK_SNAPSHOTS=1` or `0` sets the
+  default; the options decide over it.
+- It is on by default with the KVM engine, where a snapshot takes a few milliseconds and the
+  Redis example's shrinks took 1 % to 7 % less time. It is off on the Mac engine, where a
+  snapshot of a 1 GiB guest takes about 0.1 s and the shrinks of the Redis examples ran slower.
+  It is off on hvx.
+
 ## How much was explored, and whether to run more
 
 `hydo explore` writes `stats.json` beside `exploration.json`. `hydo stats` prints it in words,

@@ -10,6 +10,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--shrink-causes N]
        [--shrink-detected-damage] [--rerun-repeats]
+       [--shrink-from-snapshots | --shrink-from-s1] [--check-continued]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...] [--kill-now]]
        [--storage-faults [--corrupt-several]] [--block-faults] [--upgrades] [--pause-workload] [--pause-thread NAME[,NAME...]] [--pause-min MS] [--pause-max MS]
        [--pause-lengths MS[,MS...]]
@@ -137,6 +138,14 @@ pub struct Args {
     /// again after hydo damaged its files or its disk's blocks, the system's detection of the
     /// damage ([`crate::report::shrinks`]).
     pub shrink_detected_damage: bool,
+    /// `--shrink-from-snapshots` (Some(true)) or `--shrink-from-s1` (Some(false)), Milestone 340
+    /// (docs/design/shrink-snapshots.md): shrink candidates continue from snapshots that earlier
+    /// runs of their worker took at their step ranges, or every one runs from S1. None: the
+    /// engine's default ([`crate::run`]'s `shrink_snapshots_default`).
+    pub shrink_snapshots: Option<bool>,
+    /// `--check-continued` (Milestone 340): every run that took or used such a snapshot runs again
+    /// from S1, and the two must give the same RESULT, consoles and control transcripts.
+    pub check_continued: bool,
     /// `--steer ID` (M209): steer the search by the value an SDK id (`HYDO-STEER` records) or a
     /// manifest `steer:` entry reports ([`crate::steer`]).
     pub steer: Option<String>,
@@ -256,6 +265,8 @@ impl Default for Args {
             kill_now: false,
             rerun_repeats: false,
             shrink_detected_damage: false,
+            shrink_snapshots: None,
+            check_continued: false,
             steer: None,
             steer_match: None,
             steer_goal: None,
@@ -275,7 +286,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 29] = [
+const FLAGS: [&str; 32] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -305,6 +316,9 @@ const FLAGS: [&str; 29] = [
     "kill-now",
     "rerun-repeats",
     "shrink-detected-damage",
+    "shrink-from-snapshots",
+    "shrink-from-s1",
+    "check-continued",
 ];
 
 const VALUED: [&str; 61] = [
@@ -454,6 +468,9 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "kill-now" => a.kill_now = true,
             "rerun-repeats" => a.rerun_repeats = true,
             "shrink-detected-damage" => a.shrink_detected_damage = true,
+            "shrink-from-snapshots" => a.shrink_snapshots = Some(true),
+            "shrink-from-s1" => a.shrink_snapshots = Some(false),
+            "check-continued" => a.check_continued = true,
             "new-faults" => a.new_faults = true,
             "concurrency" => a.concurrency = true,
             "more-faults" => a.more_faults = true,

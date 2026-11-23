@@ -20461,6 +20461,126 @@ published every package: the crates on crates.io, `hydo-assert` on PyPI and on n
 trusted-publisher entry was still valid), and the Go tag `sdk/go/v0.5.0`. The Homebrew tap
 names 0.5.0, and the skill releases `skill-v1.0.0` to `skill-v2.4.0` are deleted with their tags.
 
+## Milestone 340 (tentative number): shrinks from snapshots
+
+The user said "go" on 2026-11-23 to the second recommendation of Milestone 337
+(`hydo/explore/RESEARCH-shared-prefix.md`): shrink candidates continue from snapshots that
+earlier runs of the shrink took, instead of running from S1 what they share with those runs. The
+design is `docs/design/shrink-snapshots.md`. `hydo explore --shrink-from-snapshots` turns it
+on. After the proofs it is on by default with the KVM engine only (the end of this section).
+
+**What was built.**
+
+- The points where runs part. The host controller counts the workload's step ranges and the
+  composition's rounds that it started (`Controller::ranges_started`, an effect on the host
+  state only, so no command and no transcript changed). The runner compares the count before
+  and after each step. When it grew, the link takes `SNAP` before any of the step's commands
+  reaches the engine (`Link::at_range_start`). A first version asked a copy of the controller
+  before the step; the copy of the controller's whole state at every stop cost more than it
+  found.
+- The book of snapshots (`hydo_control::prefix`). A worker keeps 8 and a run takes 4 for a guest
+  under 2 GiB, 4 and 2 from 2 GiB on, and hvx keeps 2. A composed workload's run spreads its
+  snapshots over its rounds. A candidate continues from the deepest snapshot of the same
+  engine schedule that its controller reaches (`agent::check_branch`, the state search's offline
+  check), with `RESUME`; every other candidate runs from S1. A continuation that fails drops its
+  snapshot and runs from S1.
+- The pool. The reruns of a failure take snapshots, and the shrink candidates take and use them
+  (`Worker::run_prefix`, `Worker::prefix_gain`). A free worker takes, among the jobs that would
+  start now, the one it continues from the deepest snapshot, and never waits for one.
+- `--check-continued` runs every run that took or used a snapshot again from S1 without
+  snapshots. It compares the RESULT line without its wall seconds and every file of the run but
+  the engine's own console. The run from S1's result counts. `shrink-snapshots.json` and one
+  line on stderr give the counts. `--shrink-from-s1` and `HYDO_SHRINK_SNAPSHOTS` (`hydo-config`)
+  choose; `HYDO_SHRINK_SNAPSHOTS_KEEP` sets the two numbers for measurements.
+- The Mac engine. A snapshot that is not the host's S0 or S1 gets a RAM base of its own,
+  without the RAM tree hash that names a shared base, and guest RAM stays mapped as it was until
+  the run's end. On a 1 GiB guest a mid-run snapshot took 0.27 s before, of which the hash was
+  0.20 s and the new mapping with its instruction-cache upkeep 0.03 s. After both changes it
+  took 0.11 s to 0.14 s. Runs without mid-run snapshots do as before.
+
+**Exactness on the Mac engine.** The images were the Redis quickstart of the release 0.4.1
+(`explore-ob-redis-arm64.cpio.gz`, `31e90668…`, fingerprint epoch 4) and the repository's
+`redis-composed` example with the quickstart's Redis files, built by the released 0.5.0
+(`c63f273f…`, epoch 5). Each exploration ran three times with 2 workers: with
+`--shrink-from-s1`, with `--shrink-from-snapshots`, and with `--check-continued`.
+`events.jsonl` and `exploration.json` were compared without the wall times, the worker numbers,
+the repeat counts, and the command line. The engine and the snapshots changed between the
+builds: the first took snapshots before the step with the RAM tree hash, the second without the
+hash, the third (the commit's, without the rounds) after the step without a new mapping.
+
+| exploration | runs that took or used snapshots | continued | compared with S1 | differed | records |
+|---|---|---|---|---|---|
+| Redis, `--strategy random --shrink-causes 3`, seeds 1-40 (three builds) | 39 to 43 | 5 to 8 | 22 to 24 each | 0 | the same 102 run records, 8 failures, 6 minimal schedules |
+| redis-composed, the same options (three builds) | 353 to 368 | 33 to 41 | 98 to 105 each | 0 | the same 324 run records, 11 failures, 9 minimal schedules |
+
+Every compared run gave the same RESULT line (fingerprints, `ctl`, the engine's counts, the
+verdict), the same `<tag>.log` and the same control transcripts as its run from S1.
+
+**Time on the Mac engine.** The seconds are the engine's seconds of the shrink candidates, from
+`events.jsonl`, on a Mac that other sessions shared. The Redis row's snapshots are from the
+`--check-continued` run of the last build, whose recorded seconds are those of the runs from S1.
+
+| exploration | from S1 | from snapshots | snapshots taken, their seconds | guest clock not run again |
+|---|---|---|---|---|
+| Redis, seeds 1-40 | 5.0 s (36 candidates) | not measured with the last build | 39, 4.3 s | 5.7 % |
+| redis-composed, seeds 1-40 | 73.5 s (246 candidates) | 86.8 s | 90, 10.5 s | 2.8 % |
+
+The shrinks took longer with snapshots. A Redis run takes 0.1 s to 0.3 s, and a snapshot of its
+1 GiB guest about 0.12 s, so a snapshot costs more than a continued run saves. The composed
+example's candidates mostly change the composition (`W=...,x<rounds>`, `n<rounds>`,
+`o<commands>`), and such a candidate parts from its parent at a round, not at a step range.
+With snapshots only at the step ranges 2.8 % of the guest clock was skipped. So the commit also
+counts each round of a composition as a point and spreads a composed run's snapshots over its
+rounds. That version ran in the scripted tests only: the shared Mac VM lock stayed with another
+session from 12:07 to past 14:12, and its runs were stopped unrun. A tree over every
+point where two runs' commands part, on any worker, would skip 21 % on the same exploration
+(7 % on the quickstart's), by the control transcripts. One worker with 16 snapshots kept and
+12 per run skipped 2.5 %, so the workers and the counts were not what limited it.
+
+**hvx.** hvx refuses a snapshot of a schedule with `cf=`, `pp=`, `xt`, `q=` or `tj=`, and the
+refusal leaves the point out. TiKV's exploration `explore-ex4` of Milestone 287 (the research
+note's largest shrink, 1,124 s) had 18 shrink candidates: 13 with `cf=` and 5 without. So 5 of
+18 could continue there. An hvx snapshot holds every page of guest RAM that is not zero in host
+memory, and the engine keeps 8 names with S0 and S1. Without a module change it is not worth it.
+
+**KVM.** The one-off workflow `.github/workflows/tmp-shrink-snap-kvm.yml` ran on the branch
+`tmp-shrink-snap-kvm` (commit `b84fad0e`, on the milestone's commit `ed511da2`, which has the
+points at the composed rounds too), run 45181990563. The branch is deleted. Each of four
+GitHub runners (three Xeon 6975P-C, one AMD EPYC 7763) built the published 0.5.0 release's
+Redis example. It explored seeds 1-40 with 2 workers and `--shrink-causes 3`, three times per
+strategy: from S1, from snapshots, and with `--check-continued`.
+
+| strategy | compared with S1, per runner | differed | records, per runner | continued | snapshots, their seconds | guest clock not run again |
+|---|---|---|---|---|---|---|
+| random | 18 | 0 | 94 events the same in all three | 5 to 7 of 32 or 33 runs | 16 to 19, 0.0 s to 0.1 s | 4.7 % to 6.9 % |
+| swarm | 23 | 0 | 132 events the same in all three | 4 or 5 of 54 or 55 runs | 28 to 30, 0.1 s | 2.9 % to 3.7 % |
+
+So 164 runs that took or used a snapshot matched their runs from S1, on both vendors. A KVM
+snapshot keeps the pages written since S1 in the engine's memory, so it cost a few milliseconds.
+The engine's seconds of the reruns and shrink candidates from S1 and from snapshots:
+
+| runner | random | swarm |
+|---|---|---|
+| Xeon 6975P-C (1) | 10.6 s, 10.0 s | 17.7 s, 17.2 s |
+| Xeon 6975P-C (2) | 10.7 s, 10.0 s | 17.8 s, 17.5 s |
+| Xeon 6975P-C (3) | 10.7 s, 10.0 s | 17.5 s, 17.3 s |
+| EPYC 7763 | 10.6 s, 10.3 s | 18.3 s, 17.6 s |
+
+The shrinks took 1 % to 7 % less time in all eight pairs.
+
+**The defaults.** On by default with the KVM engine, where every compared run matched and the
+shrinks took less time (`run::shrink_snapshots_default`). Off on the Mac engine, where every
+compared run matched too but the shrinks took longer, and on hvx. `--shrink-from-s1` and
+`HYDO_SHRINK_SNAPSHOTS=0` turn it off; hydo-bench's pools never turn it on. No test of CI
+continues a candidate on a real KVM host.
+
+Nothing recorded moved: no recorded value, explorer golden, or control corpus changed. The
+explorer's fake-engine scenario `repeats_take_the_earlier_result` also explores the stack with
+`--shrink-from-snapshots --check-continued`: the scripted worker keeps no snapshots, and the
+files are the same. The scripted agent's test `a_shrink_candidate_continues_from_its_parents_range_start`
+shows the snapshots at the range starts and a continued candidate with the transcript of its run
+from S1.
+
 ## Milestone 341 (tentative number): 0.5.0's features on the engines that had not run them
 
 Several features of 0.5.0 ran on one engine only. The user agreed on 2026-11-23 to run them on

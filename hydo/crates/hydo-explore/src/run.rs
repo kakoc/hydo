@@ -1071,10 +1071,89 @@ fn make_pool(cx: &Cx) -> Pool {
     } else {
         (cx.image.clone(), cx.engine_args().join(" "))
     };
+    let kind = engine.kind();
     let pool = Pool::new(engine, spec, n, host, cache_image, cache_engine);
     // Milestone 339: a schedule this exploration already ran takes the earlier result
     pool.answer_repeats(!cx.a.rerun_repeats);
+    // Milestone 340: shrink candidates continue from snapshots of earlier runs
+    let on =
+        cx.a.shrink_snapshots
+            .or(cx.env.config.pool.shrink_snapshots)
+            .unwrap_or_else(|| shrink_snapshots_default(kind));
+    let (keep, per_run) = cx
+        .env
+        .config
+        .pool
+        .shrink_snapshots_keep
+        .unwrap_or_else(|| shrink_snapshots_keep(cx.ram_mib as u64));
+    pool.shrink_from_snapshots(on, cx.a.check_continued, keep, per_run);
     pool
+}
+
+/// Whether shrink candidates continue from snapshots on engine `kind` when neither the options
+/// nor `HYDO_SHRINK_SNAPSHOTS` say (Milestone 340, docs/design/shrink-snapshots.md): on for an
+/// engine where every continued candidate of the proofs gave its run from S1's RESULT, consoles
+/// and control transcripts, and the shrinks took less time. That is KVM: 164 compared runs on
+/// three Intel and one AMD runner matched, a snapshot cost under 10 ms, and the shrinks took 1 %
+/// to 7 % less. On the Mac engine every compared run matched too, but a snapshot of a 1 GiB
+/// guest costs about 0.12 s, and the shrinks took longer; hvx refuses the snapshots of `cf=`
+/// and timing schedules.
+pub fn shrink_snapshots_default(kind: hydo_engine::EngineKind) -> bool {
+    kind == hydo_engine::EngineKind::Kvm
+}
+
+/// How many shrink snapshots a worker keeps and one run takes for a guest of `ram_mib`
+/// (Milestone 340): a Mac snapshot is a file of the guest RAM's pages that are not zero, and its
+/// making reads the whole guest RAM, so a guest of 2 GiB or more keeps 4 and takes 2 per run;
+/// a smaller one keeps 8 and takes 4.
+pub fn shrink_snapshots_keep(ram_mib: u64) -> (usize, usize) {
+    if ram_mib >= 2048 {
+        (4, 2)
+    } else {
+        (8, 4)
+    }
+}
+
+/// The line and the file `shrink-snapshots.json` of an exploration whose shrinks used snapshots
+/// (Milestone 340): what continued, how much of the guest clock it skipped, and with
+/// `--check-continued` what was compared and what differed.
+fn report_prefix(out: &Path, st: &crate::pool::PrefixStats) {
+    if st.runs == 0 {
+        return;
+    }
+    let share = if st.clock > 0 {
+        100.0 * st.skipped as f64 / st.clock as f64
+    } else {
+        0.0
+    };
+    let mut line = format!(
+        "hydo explore: shrinks from snapshots: {} of {} runs continued, {} snapshots taken in \
+         {:.1} s, {share:.1} % of their guest clock skipped",
+        st.continued, st.runs, st.taken, st.snap_secs
+    );
+    if st.checked > 0 {
+        line.push_str(&format!(
+            "; {} compared with their runs from S1, {} differed",
+            st.checked,
+            st.differs.len()
+        ));
+    }
+    eprintln!("{line}");
+    let doc = json!({
+        "runs": st.runs,
+        "continued": st.continued,
+        "taken": st.taken,
+        "snap_secs": (st.snap_secs * 1000.0).round() / 1000.0,
+        "clock": st.clock,
+        "skipped": st.skipped,
+        "secs": (st.secs * 1000.0).round() / 1000.0,
+        "checked": st.checked,
+        "differs": st.differs.iter().map(|(t, d)| json!({"tag": t, "what": d})).collect::<Vec<_>>(),
+    });
+    let _ = std::fs::write(
+        out.join("shrink-snapshots.json"),
+        serde_json::to_string_pretty(&doc).unwrap_or_default() + "\n",
+    );
 }
 
 /// What a result in `$HYDO_EXPLORE_CACHE` is a function of, besides its schedule and the
@@ -2904,6 +2983,7 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
     let nworkers = pool.workers();
     let cache_hits = *pool.cache_hits.lock().expect("lock");
     let (repeats, repeats_s) = pool.repeat_stats();
+    report_prefix(&cx.out, &pool.prefix_stats());
     // the error paths of the first runs (Milestone 306)
     let paths = pool
         .host

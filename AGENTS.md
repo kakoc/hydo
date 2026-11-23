@@ -1671,6 +1671,20 @@ explore --schedule` shrinks. The Mac engine did not run the walks: the build of 
 image needs about 7 GB of free disk, which this Mac did not have. KVM's Vikunja jobs ran
 nothing, because of a path in the workflow; their run is to come. The details are in
 `docs/HISTORY.md` Milestone 341.
+**Shrinks from snapshots (M340, tentative number; on by default with KVM).** With `hydo explore
+--shrink-from-snapshots`, the reruns of a failure and the shrink candidates take a snapshot where
+a workload step range or a round of the composition starts. A later candidate on the same worker
+continues from the deepest one that it reaches: the same host part, and its controller sends the
+snapshot run's commands up to it (`agent::check_branch`). `--check-continued` runs each such run
+again from S1 and compares the RESULT line, the consoles, and the control transcripts. On the
+Mac engine every compared run of the Redis quickstart and of `redis-composed` matched. The
+explorations' records were the same with and without the option. The shrinks took longer there.
+A snapshot of a 1 GiB guest costs about 0.12 s and a Redis run 0.1 s to 0.3 s. Only 2.8 % to
+5.7 % of the candidates' guest clock was skipped. On KVM (four GitHub runners, Intel and AMD)
+164 compared runs matched, a snapshot cost a few milliseconds, and the shrinks took 1 % to 7 %
+less time. So it is on by default with the KVM engine only (`--shrink-from-s1`,
+`HYDO_SHRINK_SNAPSHOTS`). The design is `docs/design/shrink-snapshots.md`, the reference `hydo
+guide workflow`, "Shrinks that continue from snapshots" (open item 172).
 
 **A failure as one web page (M220).** `hydo report --html [DIR] [-o FILE]` writes one HTML file
 for a run directory, an exploration directory or a `hydo ci run` output directory. It holds its
@@ -2161,7 +2175,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       point. Explorations with timing branches need `--no-shrink`.
     - hvx has no timing branches: its snapshots of `tj=`, `xt=`, `pp=`, `q=` and `cf=` schedules
       stay refused, so the search cannot branch towards d11.
-    - A search runs on one worker, because the snapshots live in one engine process.
+    - A search runs on one worker, because the snapshots live in one engine process. M340's
+      shrinks from snapshots continue on the worker that holds the snapshot for the same reason.
 86. TigerBeetle's issue 3960 (M217). The directed schedule `tie/` runs one replica only. In a
     three-replica cluster TigerBeetle clamps request timestamps to the cluster's agreed time, so
     the guest-clock construction does not carry over. Whether every replica stops is not
@@ -3194,10 +3209,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Explorations made before M339 have drawn schedules with another `dseed=`, and so other
       texts and fingerprints than a new exploration of the same seeds. Their verdicts are the
       same.
-    - Shrink candidates that continue from snapshots of earlier candidates at their step ranges,
-      on the Mac engine and KVM. KVM has no proof on a real host that a continued run gives its
-      fingerprint from S1 (open item 85). A snapshot lives in one engine process, and a round's
-      candidates run on all workers.
+    - Shrink candidates continue from snapshots of earlier runs since M340, opt-in; open item
+      172 has what is left of it.
     - No engine command changes the disk's policy or seed at a stop, so a run with `disk=cut`
       and one with `disk=none` share nothing, although the guest sees no difference before the
       cut.
@@ -3289,6 +3302,28 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - An exploration worker took about 8.5 GB of the host for its RAM and disks. With the
       other onboardings the explorations ran one worker. The Mac engine and KVM did not run the
       example.
+172. Shrinks from snapshots (M340, tentative number; `docs/design/shrink-snapshots.md`). What is
+    left:
+    - KVM ran the Redis example only (run 45181990563, four runners), and no test of CI continues
+      a candidate on a real KVM host. A KVM snapshot holds the pages written since S1 in the
+      engine's memory, and the explorer's count of memory per worker leaves its 8 snapshots
+      out. The shrinks of a large guest were not measured.
+    - It saves no time on the Mac with the examples that ran. A snapshot of a 1 GiB guest costs
+      about 0.12 s, which is more than a Redis candidate's shared part. Making a snapshot reads
+      the whole guest RAM, because Hypervisor.framework has no log of the pages written. An
+      example whose runs take many seconds was not measured: the Meilisearch image of M335 was
+      removed before its run.
+    - Composed workloads: most candidates change the composition. The snapshots at the rounds
+      ran in the scripted tests only, not on the Mac: the shared VM lock stayed taken. A tree over every point where two runs part would skip 21 % of
+      the composed example's candidate clock, by the control transcripts. The snapshots skipped
+      2.8 %.
+    - A snapshot lives in its engine process, so a candidate continues only on the worker that
+      took its parent. Snapshots that every worker loads need the vCPU, the devices, and the
+      engine's book of sends in a file besides the RAM base.
+    - hvx refuses snapshots of `cf=` and timing schedules, and keeps 8 names with S0 and S1; on
+      TiKV's `explore-ex4` 13 of 18 candidates had `cf=`. Not worth it without a module change.
+    - No engine changes the disk's policy at a stop, so a candidate that leaves out `disk=` faults
+      shares nothing with its parent.
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -4301,6 +4336,12 @@ build machine, before 2026-10-13.
   decided. etcd issue 14685's second symptom is in the list again. Both releases were built
   twice to the same bytes, with the skill's archive for the first time. The Mac one is signed
   and notarized. Both were verified on hvx and the Mac, and open item 105 is empty
+- M340 (tentative number): shrinks from snapshots. The reruns and the shrink candidates
+  snapshot where a step range or a composed round starts. A later candidate on the same worker
+  continues from the deepest one its controller reaches. `--check-continued` compares each with
+  its run from S1. Every compared run matched on the Mac engine and on KVM. It is on by default
+  with KVM, where the shrinks took 1 % to 7 % less, and off on the Mac, where they took longer.
+  Mac snapshots mid-run skip the RAM tree hash and the new mapping. Nothing recorded moved
 - M341 (tentative number): 0.5.0's features on the engines that had not run them. On hvx the
   statistics and their merge of shards, the repeats, the error shrinks, TIMEOUT shrinks, the
   recursive `/sys` of an image service, and the s3 proxy held. The s3 proxy held on the Mac
@@ -4313,12 +4354,12 @@ build machine, before 2026-10-13.
   in every run without faults. Two known bugs with new details: after a step back the scrapes
   keep one timestamp (#8312), and remote write holds back new samples (#11496). Acknowledged
   samples held under every fault kind. Nothing recorded moved
-
 - M343 (tentative number): the GreptimeDB v1.3.1 onboarding on hvx, in cluster mode with region
   failover, the WAL in Kafka and the data on hydo's S3 emulator. Every acknowledged row held,
   once and with its value, under every fault kind but a power cut of the guest, and through
   failovers, migrations, and DDL. One new candidate, not posted: a short copy in a datanode's
   manifest cache stops the datanode at every start. Nothing recorded moved
+
 ## Where to look
 
 - `docs/HISTORY.md`: every milestone with its evidence, and the superseded values.

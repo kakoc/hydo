@@ -1,6 +1,8 @@
 # Shared beginnings of an exploration's runs
 
-Status: research (Milestone 337, tentative number). Nothing is built. The note measures how much
+Status: research (Milestone 337, tentative number). Both recommendations are built since: the
+answers to repeated schedules (Milestone 339) and the shrinks from snapshots (Milestone 340,
+`docs/design/shrink-snapshots.md`), the second on by default with KVM. The note measures how much
 of an exploration's runs repeats the same beginning. It says what keeps runs apart, and it
 recommends what to build.
 

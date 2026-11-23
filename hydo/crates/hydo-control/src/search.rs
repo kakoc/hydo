@@ -121,6 +121,13 @@ pub struct SnapPolicy {
     /// For a target whose console shows no features: snapshots at the first stops whose clock
     /// is this far past the run's first stop (or the branch point), whatever they show.
     pub spread: Vec<u64>,
+    /// Milestone 340 (docs/design/shrink-snapshots.md): take the snapshots at the stops where a
+    /// workload step range or a round of the composition starts, after the first such stop, and
+    /// at no other stop.
+    pub ranges: bool,
+    /// With `ranges`: at most one snapshot in this many such stops, counted from the last one
+    /// taken (0 or 1: at each), so that a run's few snapshots reach its later rounds too.
+    pub spacing: u64,
 }
 
 /// A snapshot the run took: its name, the stop's index in the recording, the stop, and the
@@ -146,6 +153,12 @@ pub struct RecLink<'a> {
     /// the clock of the first stop where snapshots may be taken, and the spread points passed
     origin: Option<VTime>,
     spread_next: usize,
+    /// the step ranges started so far (the policy's `ranges`)
+    range_starts: u64,
+    /// The wall seconds the engine took for the snapshots of [`Link::at_range_start`].
+    pub snap_secs: f64,
+    /// The `range_starts` count of the last snapshot taken there.
+    last_point: Option<u64>,
 }
 
 impl<'a> RecLink<'a> {
@@ -161,6 +174,9 @@ impl<'a> RecLink<'a> {
             last_at: None,
             origin: None,
             spread_next: 0,
+            range_starts: 0,
+            snap_secs: 0.0,
+            last_point: None,
         }
     }
 
@@ -243,6 +259,45 @@ impl Link for RecLink<'_> {
         self.ended = true;
         self.inner.cut(e)
     }
+    fn wants_range_starts(&self) -> bool {
+        self.policy.ranges
+    }
+    fn at_range_start(&mut self, stop: &StopInfo) -> Result<(), LinkError> {
+        self.range_starts += 1;
+        let index = self.stops.len().saturating_sub(1);
+        // the first range starts right after S1: a snapshot there skips next to nothing
+        let in_prefix = index <= self.policy.skip;
+        let spaced = self
+            .last_point
+            .is_none_or(|p| self.range_starts >= p + self.policy.spacing.max(1));
+        if self.ended
+            || in_prefix
+            || self.range_starts < 2
+            || !spaced
+            || self.taken.len() >= self.policy.names.len()
+        {
+            return Ok(());
+        }
+        let name = self.policy.names[self.taken.len()].clone();
+        let t0 = std::time::Instant::now();
+        let r = self.inner.snap(&name);
+        self.snap_secs += t0.elapsed().as_secs_f64();
+        match r {
+            Ok(()) => {
+                self.last_point = Some(self.range_starts);
+                self.taken.push(Taken {
+                    name,
+                    index,
+                    stop: *stop,
+                    new: Vec::new(),
+                });
+                Ok(())
+            }
+            // a typed command not yet acknowledged: no snapshot at this range's start
+            Err(e) if e.0.starts_with("snapshot ") => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
     fn before_step(&mut self, stop: &StopInfo, seen: &[Seen]) -> Result<(), LinkError> {
         self.inner.before_step(stop, seen)?;
         let index = self.stops.len().saturating_sub(1);
@@ -259,6 +314,9 @@ impl Link for RecLink<'_> {
         // a stop at the clock value of the stop before it cannot be told apart by br=
         let distinct = self.last_at.is_none_or(|a| a < stop.at);
         self.last_at = Some(stop.at);
+        if self.policy.ranges {
+            return Ok(());
+        }
         let in_prefix = index < self.policy.skip || (index == self.policy.skip && index > 0);
         if index >= self.policy.skip && self.origin.is_none() {
             self.origin = Some(stop.at);
@@ -579,6 +637,12 @@ impl Link for SwitchLink<'_> {
     fn cut(&mut self, e: &Ending) -> Result<String, LinkError> {
         self.done = true;
         self.inner.cut(e)
+    }
+    fn wants_range_starts(&self) -> bool {
+        self.inner.wants_range_starts()
+    }
+    fn at_range_start(&mut self, stop: &StopInfo) -> Result<(), LinkError> {
+        self.inner.at_range_start(stop)
     }
     fn before_step(&mut self, stop: &StopInfo, seen: &[Seen]) -> Result<(), LinkError> {
         self.inner.before_step(stop, seen)?;
