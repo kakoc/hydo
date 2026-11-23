@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-64 user-facing and 96 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 38 test switches are read by test code; 32 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+65 user-facing and 97 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 38 test switches are read by test code; 32 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -83,6 +83,8 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 |---|---|---|---|---|---|
 | `HYDO_QUIET_FILE` | user | path | - | hydo-explore, hydo-bench | While this file exists, the explorer starts no new VM (waits, checking every 30 s, at most 2 hours): a quiet window on a shared machine. |
 | `HYDO_EXPLORE_CACHE` | user | path | - | hydo-explore, hydo-bench | A result cache: a deterministic exploration resumes from the results recorded there. |
+| `HYDO_SHRINK_SNAPSHOTS` | user | flag: `0` or `1` | the engine's | hydo-explore | Shrinks from snapshots (Milestone 340): `1` makes shrink candidates continue from snapshots that earlier runs of their worker took at their step ranges, `0` runs every one from S1; unset, the engine's default. `hydo explore --shrink-from-snapshots` and `--shrink-from-s1` decide over it. |
+| `HYDO_SHRINK_SNAPSHOTS_KEEP` | developer | text | - | hydo-explore | Measurements of shrinks from snapshots (Milestone 340): `<keep>,<per run>`, the snapshots a worker keeps and the snapshots one run takes at most, instead of the explorer's choice by the guest's RAM (8 and 4 below 2 GiB, 4 and 2 from 2 GiB on; hvx keeps 2 at most). |
 | `HYDO_SCRIPTED_ENGINE` | developer | path | - | hydo-explore, hydo-cli | The explorer's tests only (M145): a scripted engine program that answers every schedule as a pure function of its text, instead of the host controller over a real engine (`hydo_explore::scripted`). `hydo versions`' tests use it too (M221): it also builds a stand-in image per version (`<program> build <manifest> <out dir> KEY=VALUE...`). |
 
 ## The Mac engine (`hydo_config::hvm::Engine`, `hydo_config::hvm::Options`)

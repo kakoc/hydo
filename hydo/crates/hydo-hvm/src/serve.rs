@@ -523,6 +523,7 @@ impl Host {
             "ctl",
             &snap_dir,
             self.o.share_ram,
+            name == "S0" || name == "S1",
         );
         let mut k = self.c.k.clone();
         for s in &mut k.s {
@@ -918,16 +919,32 @@ fn copy_changed(dst: &mut [u8], src: &[u8]) {
 }
 
 /// `xsnap_take`
-fn xsnap_take(vm: &mut Vmm, s: &mut XSnap, name: &str, snap_dir: &str, share: bool) {
+///
+/// `named`: the base is named by its RAM tree hash, so that another engine whose snapshot has the
+/// same bytes finds it (the host's S0 and S1, which every worker of an exploration takes with the
+/// same bytes). Another snapshot (a run's own, mid-run) gets a base of its own without the hash
+/// (Milestone 340).
+fn xsnap_take(vm: &mut Vmm, s: &mut XSnap, name: &str, snap_dir: &str, share: bool, named: bool) {
     if share {
         // a new base of the RAM as it is (made before the one it replaces goes, so a base of the
-        // same bytes is found and kept), and guest RAM mapped from it at once, so the pages the
-        // run wrote before the snapshot stop being this engine's own
+        // same bytes is found and kept)
         let ram = vm.ram.bytes();
-        let key = crate::ramtree::hash_bytes(OFFSET, ram, crate::ramtree::threads());
-        match Base::make(snap_dir, ram, key, true) {
+        let key = if named {
+            crate::ramtree::hash_bytes(OFFSET, ram, crate::ramtree::threads())
+        } else {
+            0
+        };
+        match Base::make(snap_dir, ram, key, named) {
             Ok((b, _)) => {
-                vm.rebase(&b);
+                // S0 and S1: guest RAM mapped from the new base at once, so that the boot's
+                // pages stop being this engine's own. A run's own snapshot leaves guest RAM as it
+                // is mapped until the run's end: mapping it again made every page fault in again
+                // and the instruction cache made coherent over the whole base, two thirds of such
+                // a snapshot's time on a 1 GiB guest (Milestone 340). A base dropped while guest
+                // RAM is still mapped from it stays readable through the mapping.
+                if named {
+                    vm.rebase(&b);
+                }
                 s.base = Some(b);
             }
             Err(e) => fatal(1, &format!("hvmx: snapshot {name}: {e}")),

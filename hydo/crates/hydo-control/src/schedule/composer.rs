@@ -1146,6 +1146,12 @@ fn round_start(fx: &mut F<'_>, ctx: &Ctx, r: i64, rc: i64, t: &mut i64, k: &mut 
     if wait {
         fx.until(|h, _| r < h.compose.gate)?;
     }
+    // Milestone 340: a round of the composition starts here, where a shrink candidate that
+    // leaves out later rounds (`W=...,x<rounds>`) parts from its parent
+    fx.effect(|h, _| {
+        h.ranges += 1;
+        Memo::Unit
+    });
     let now = centis(fx)?;
     if now > *t {
         *t = now;

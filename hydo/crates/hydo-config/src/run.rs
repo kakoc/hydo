@@ -46,6 +46,12 @@ pub struct Pool {
     /// `HYDO_SCRIPTED_ENGINE`: the explorer's tests' scripted engine program instead of the host
     /// controller over a real engine (M145). Default: none.
     pub scripted_engine: Option<PathBuf>,
+    /// `HYDO_SHRINK_SNAPSHOTS`: `1` Some(true), `0` Some(false), else None (the engine's
+    /// default) (Milestone 340).
+    pub shrink_snapshots: Option<bool>,
+    /// `HYDO_SHRINK_SNAPSHOTS_KEEP`: `<keep>,<per run>` (Milestone 340); None when unset or not
+    /// two numbers.
+    pub shrink_snapshots_keep: Option<(usize, usize)>,
 }
 
 impl Pool {
@@ -54,6 +60,15 @@ impl Pool {
             quiet_file: e.path(HYDO_QUIET_FILE),
             cache: e.path(HYDO_EXPLORE_CACHE),
             scripted_engine: e.path_nonempty(HYDO_SCRIPTED_ENGINE),
+            shrink_snapshots: match e.text(HYDO_SHRINK_SNAPSHOTS).as_deref() {
+                Some("1") => Some(true),
+                Some("0") => Some(false),
+                _ => None,
+            },
+            shrink_snapshots_keep: e.text(HYDO_SHRINK_SNAPSHOTS_KEEP).and_then(|t| {
+                let (a, b) = t.split_once(',')?;
+                Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
+            }),
         }
     }
 }

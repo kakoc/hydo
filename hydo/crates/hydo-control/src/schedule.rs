@@ -266,6 +266,9 @@ struct Host {
     /// Milestone 328: what runs now (a final check, an eventually check's monitor, the
     /// workload's steps), by key, for the verdict of a run that the engine ends by itself.
     doing: BTreeMap<String, Doing>,
+    /// Milestone 340: the workload's step ranges and the composition's rounds started so far
+    /// ([`Controller::ranges_started`]). Only counted: nothing the controller sends reads it.
+    pub(crate) ranges: u64,
 }
 
 /// The failed tries after which an eventually check that the exit budget cut short counts as
@@ -560,6 +563,7 @@ impl ScheduleController {
             versions: BTreeMap::new(),
             prev: BTreeMap::new(),
             doing: BTreeMap::new(),
+            ranges: 0,
         };
         Ok(ScheduleController {
             flow: Flow::new(host, Part::Main),
@@ -970,6 +974,10 @@ impl Controller for ScheduleController {
 
     fn engine_ended(&self, verdict: &str) -> Option<String> {
         budget_verdict(verdict, &self.flow.shared.doing)
+    }
+
+    fn ranges_started(&self) -> u64 {
+        self.flow.shared.ranges
     }
 
     fn step(&mut self, stop: &StopInfo, seen: &[Seen], out: &mut Out) {
@@ -2489,6 +2497,11 @@ fn finish(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
 
 /// step_range: workload steps [a, b), one call bounded by workload.timeout.
 fn step_range(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
+    // Milestone 340: a range starts here (an effect of the host state only, recorded once)
+    fx.effect(|h, _| {
+        h.ranges += 1;
+        Memo::Unit
+    });
     // SEAM(ErrorLogs): el_mark <first step>, once around the fakes' split
     errlog::mark(fx, ctx, &a.to_string())?;
     // SEAM(Fakes): split at the H= windows' boundaries, switching the rules there; each piece

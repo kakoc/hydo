@@ -260,6 +260,15 @@ variables! {
     HYDO_QUIET_FILE: Pool, User, "path", "", "hydo-explore, hydo-bench";
     /// A result cache: a deterministic exploration resumes from the results recorded there.
     HYDO_EXPLORE_CACHE: Pool, User, "path", "", "hydo-explore, hydo-bench";
+    /// Shrinks from snapshots (Milestone 340): `1` makes shrink candidates continue from
+    /// snapshots that earlier runs of their worker took at their step ranges, `0` runs every
+    /// one from S1; unset, the engine's default. `hydo explore --shrink-from-snapshots` and
+    /// `--shrink-from-s1` decide over it.
+    HYDO_SHRINK_SNAPSHOTS: Pool, User, "flag: `0` or `1`", "the engine's", "hydo-explore";
+    /// Measurements of shrinks from snapshots (Milestone 340): `<keep>,<per run>`, the snapshots a
+    /// worker keeps and the snapshots one run takes at most, instead of the explorer's choice by
+    /// the guest's RAM (8 and 4 below 2 GiB, 4 and 2 from 2 GiB on; hvx keeps 2 at most).
+    HYDO_SHRINK_SNAPSHOTS_KEEP: Pool, Developer, "text", "", "hydo-explore";
     /// The explorer's tests only (M145): a scripted engine program that answers every schedule as a
     /// pure function of its text, instead of the host controller over a real engine
     /// (`hydo_explore::scripted`). `hydo versions`' tests use it too (M221): it also builds a
