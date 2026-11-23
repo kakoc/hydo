@@ -1174,6 +1174,11 @@ fn env_with(
     m.insert("HYDO_ACKED".into(), l.acked());
     m.insert("HYDO_OUTCOMES".into(), l.outcomes());
     m.insert("HYDO_FAILED".into(), l.failed());
+    // Milestone 348: `guest.path` gives a program that a command starts the guest's programs by
+    // name (open item 170); the manifest's `env:` and the init's exports may set it otherwise
+    if ctx.plan.path == Some(true) {
+        m.insert("PATH".into(), hydo_image::COMMAND_PATH.into());
+    }
     for (k, v) in exports {
         m.insert(k.clone(), v.clone());
     }

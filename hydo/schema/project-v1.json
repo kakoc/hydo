@@ -496,6 +496,14 @@
           ],
           "default": true
         },
+        "path": {
+          "description": "Every command that hydo starts in the guest (the workload's, the checks', a service's\nown) gets PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin in its\nenvironment, so a program that such a command starts finds the guest's programs, hydo-oci\namong them, by name. Without it the commands have no PATH: busybox's shell finds the\nprograms, but Go's exec.Command(\"hydo-oci\") does not. Off by default for images built at\nfingerprint epoch 5 and earlier, because the variable is in guest RAM and so in every\nfingerprint (Milestone 348).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
+        },
         "description": {
           "anyOf": [
             {

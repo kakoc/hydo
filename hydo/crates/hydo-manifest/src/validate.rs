@@ -145,6 +145,7 @@ pub(crate) const KNOWN_GUEST: &[&str] = &[
     "branch_tick",
     "cgroup2",
     "exact_tick",
+    "path",
     "description",
 ];
 pub const KNOWN_KNOB: &[&str] = &[
@@ -966,6 +967,16 @@ pub fn validate(m: &mut Value) -> R<()> {
         if !c.is_boolean() {
             return Err(err(format!(
                 "guest.cgroup2: true (hydo mounts cgroup2 on /sys/fs/cgroup at every boot; the default) or false (got {})",
+                repr(c)
+            )));
+        }
+    }
+    // Milestone 348: the project's commands get a PATH (on from the fingerprint epoch 6)
+    if has(&guest, "path")? {
+        let c = index(&guest, "path")?;
+        if !c.is_boolean() {
+            return Err(err(format!(
+                "guest.path: true (every command hydo starts gets PATH, so its programs find hydo-oci and the guest's programs by name) or false (the default; got {})",
                 repr(c)
             )));
         }

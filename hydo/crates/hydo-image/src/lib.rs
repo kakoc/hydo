@@ -163,7 +163,19 @@ pub struct EpochDefaults {
     /// ended (open item 80). From epoch 5 (Milestone 338). It changes the controller's commands,
     /// so an image built before keeps its transcripts.
     pub pause_largest_session: bool,
+    /// What an absent `guest.path` means: the host controller gives every command it starts (the
+    /// workload's, the checks', the services' of the guest's own root) `PATH` =
+    /// [`COMMAND_PATH`], so a program that such a command starts finds the guest's programs,
+    /// `hydo-oci` among them, by name. Before, the kernel gave init no `PATH`, busybox's shell
+    /// exported none, and Go's `exec.Command("hydo-oci", ...)` failed with `executable file
+    /// not found in $PATH` (open item 170). The variable is in each command's environment, so
+    /// in guest RAM: it moves every fingerprint and control transcript. So it waits for the
+    /// next fingerprint epoch, 6 (Milestone 348); until then `guest.path: true` turns it on.
+    pub command_path: bool,
 }
+
+/// The `PATH` that `guest.path` gives the project's commands: busybox's own default.
+pub const COMMAND_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 
 /// The defaults of an image built at `epoch` for `arch` (`x86_64` or `arm64`).
 pub fn defaults(epoch: u64, arch: &str) -> EpochDefaults {
@@ -183,6 +195,7 @@ pub fn defaults(epoch: u64, arch: &str) -> EpochDefaults {
         cpio_hard_links: epoch >= 5,
         oci_sys_rbind: epoch >= 5,
         pause_largest_session: epoch >= 5,
+        command_path: epoch >= 6,
     }
 }
 
@@ -633,6 +646,11 @@ mod tests {
         // hvx runs x86_64 images only
         assert!(!defaults(5, "arm64").exact_tick);
         assert_eq!(defaults(EPOCH, "x86_64"), five);
+        // Milestone 348: `guest.path` waits for the next epoch, so no image built now has it on
+        for e in 1..=5 {
+            assert!(!defaults(e, "x86_64").command_path && !defaults(e, "arm64").command_path);
+        }
+        assert!(defaults(6, "x86_64").command_path && defaults(6, "arm64").command_path);
     }
 
     #[test]

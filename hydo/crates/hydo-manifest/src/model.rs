@@ -827,6 +827,16 @@ pub struct Guest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = true))]
     pub exact_tick: Option<bool>,
+    /// Every command that hydo starts in the guest (the workload's, the checks', a service's
+    /// own) gets PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin in its
+    /// environment, so a program that such a command starts finds the guest's programs, hydo-oci
+    /// among them, by name. Without it the commands have no PATH: busybox's shell finds the
+    /// programs, but Go's exec.Command("hydo-oci") does not. Off by default for images built at
+    /// fingerprint epoch 5 and earlier, because the variable is in guest RAM and so in every
+    /// fingerprint (Milestone 348).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
+    pub path: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }

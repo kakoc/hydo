@@ -164,6 +164,9 @@ guest:
                                # true since fingerprint epoch 4); see "The cgroup2 mount"
   exact_tick: true             # optional (hvx): the guest keeps time with its TSC (default
                                # from epoch 5); see "The guest's timer tick on hvx"
+  path: true                   # optional: every command hydo starts gets PATH, so a program it
+                               # starts finds hydo-oci by name (default false); see "Services
+                               # from a Docker/OCI image"
 
 network: bridge                # loopback (default): one network for everything in the guest;
                                # bridge: each service in its own network namespace at its addr:
@@ -413,7 +416,12 @@ What the build does:
   in the service's root with its env and working directory, as root. Use it in `ready:`, the
   workload, knobs and invariants (`hydo-oci cache redis-cli GET k`). A static busybox is put at
   `/.hydo/busybox` in each image root for `env -i`, `cd` and the user switch, so images without
-  a shell (distroless) work.
+  a shell (distroless) work. The program is `/bin/hydo-oci`. A shell command finds it by name,
+  but the commands that hydo starts have no `PATH`, so a program that such a command starts
+  (Go's `exec.Command("hydo-oci", ...)`) does not. `guest.path: true` gives every command
+  `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`. The variable is in guest
+  RAM, so the key moves the image's fingerprints; it is off by default until the next
+  fingerprint epoch (Milestone 348).
 - A killed, paused or frozen image service is the same process tree as any other service (the
   launcher `exec`s down to the program), so every fault applies unchanged.
 - **Reproducible:** owners, groups and modes (including setuid) come from the layer tars and
