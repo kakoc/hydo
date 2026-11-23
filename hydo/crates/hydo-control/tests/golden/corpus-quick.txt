@@ -71,6 +71,7 @@ input	hydo/onboard/examples/memos/hydo/hydo.yaml	472ecabb0f5b062536e3aa139cc11e7
 input	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml	4d23b2bfe574b53cb772f9e876efc61b8b3fd0541d58686872ae67ce5148b92f
 input	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml	a7e19bf3c01be56d464b7a6e443792caee1ad45e29fa7ea8be9801cf05965719
 input	hydo/onboard/examples/postgres-sql/hydo/hydo.yaml	f6ceeb30a54343c50cd46e85a57e34d3bc1b576857d163ef11561c7a5025733c
+input	hydo/onboard/examples/prometheus/hydo/hydo.yaml	15a1ec47a0adc76f29b12e052e6c9f6354ab65cad3c1128c98372691382f460b
 input	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	88fe4f02ad242c2a7c1905488abf07586e407f736f67eca9be5a0ca79ea3048d
 input	hydo/onboard/examples/redis-composed-read/hydo/hydo.yaml	b97a539c43ee5a1703876b471476e355c3d9e5fced762ab414d37630c4023fbf
 input	hydo/onboard/examples/redis-composed/hydo/hydo.yaml	15783ea6b8ce52f11642a06b2c38b082baa91e3ac54ca60a1bb8751eac61a9b9
@@ -5324,6 +5325,7 @@ chunk	hydo/onboard/examples/postgres-sql/hydo/hydo.yaml	1493	500	c66213773d0b709
 chunk	hydo/onboard/examples/postgres-sql/hydo/hydo.yaml	1494	500	55d8aa84b681909c4a10c2fa5987eac8868e5cf70df00f1a4da76186df3e1ba9
 chunk	hydo/onboard/examples/postgres-sql/hydo/hydo.yaml	1495	500	52a83abd380fdf4eaa988caf5f5323aa924a902389c8926daecab2354217d52a
 chunk	hydo/onboard/examples/postgres-sql/hydo/hydo.yaml	1496	250	45572ccc2ef3057c1cd86118cae2dc870d2af3bf5cd23a5899d8b93709acd76e
+manifest	hydo/onboard/examples/prometheus/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	core
 boot	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml#0	snapshot	0b0ff40b1a75762b
 counts	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	identity=326 recovery:ok=94 recovery:violation=2 refused=1 run:cut=96 run:error=16 run:ok=18 run:violation=209 token:C=100 token:K=168 token:P=160 token:Q=1 token:R=53 token:T=143 token:W=182 token:X=4 token:Z=1 written=13
