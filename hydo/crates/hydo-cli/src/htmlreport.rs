@@ -3469,7 +3469,13 @@ fn failure_card(
         }
         f.push((
             "Two runs of it".into(),
-            if sh.identical {
+            if sh.confirmed_without_fingerprint() {
+                // hvx's TIMEOUT (Milestone 341): no end state was hashed
+                format!(
+                    "{} <span class=\"muted\">no fingerprint: each run ended at the engine's time limit before its end state was hashed</span>",
+                    badge("ok", "same verdict")
+                )
+            } else if sh.identical {
                 format!(
                     "{} {}",
                     badge("ok", "same fingerprint"),
