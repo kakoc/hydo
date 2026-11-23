@@ -201,3 +201,139 @@ fn options_the_engine_or_the_image_cannot_use_are_refused() {
         }
     }
 }
+
+/// The examples' own command lines with the options they give (their hydo.yaml headers and
+/// RESULTS.md pages), as (manifest, strategy, options): none draws nothing.
+const EXAMPLE_LINES: &[(&str, &str, &[&str])] = &[
+    (
+        "hydo/onboard/examples/hatchet/hydo/hydo.yaml",
+        "process",
+        &["new", "more", "cluster"],
+    ),
+    (
+        "hydo/onboard/examples/clickhouse/hydo/hydo.yaml",
+        "process",
+        &["new", "cluster"],
+    ),
+    (
+        "hydo/onboard/examples/tikv/hydo/hydo.yaml",
+        "process",
+        &["new", "cluster", "storage"],
+    ),
+    (
+        "hydo/onboard/examples/victoriametrics/hydo/hydo.yaml",
+        "process",
+        &["new", "storage", "cluster"],
+    ),
+    (
+        "hydo/onboard/examples/dragonfly/hydo/hydo.yaml",
+        "process",
+        &["new", "cluster"],
+    ),
+    (
+        "hydo/onboard/examples/river/hydo/hydo.yaml",
+        "process",
+        &["new", "more", "cluster"],
+    ),
+    (
+        "hydo/onboard/examples/valkey/hydo/hydo.yaml",
+        "process",
+        &["new", "cluster"],
+    ),
+    (
+        "hydo/onboard/examples/redpanda/hydo/hydo.yaml",
+        "process",
+        &["more", "new", "storage", "cluster"],
+    ),
+    (
+        "hydo/onboard/examples/greptimedb/hydo/hydo.yaml",
+        "process",
+        &["new", "cluster", "storage", "protocol"],
+    ),
+    (
+        "hydo/onboard/examples/redis-bridge/hydo.yaml",
+        "process",
+        &["new", "protocol"],
+    ),
+    (
+        "hydo/onboard/examples/prometheus/hydo/hydo.yaml",
+        "process",
+        &["new", "more"],
+    ),
+    (
+        "hydo/onboard/examples/etcd-upgrade/hydo.yaml",
+        "random",
+        &["upgrades"],
+    ),
+    (
+        "hydo/onboard/examples/web-shop/hydo.yaml",
+        "random",
+        &["protocol"],
+    ),
+    ("hydo/onboard/examples/redis/hydo.yaml", "swarm", &["new"]),
+];
+
+/// Milestone 348: an option whose draws the explorer's own rendering drops entirely is refused,
+/// one line each; `--new-faults` with `--strategy process` only warns, because that strategy
+/// draws its faults itself and the examples' command lines give the pair.
+#[test]
+fn an_option_that_draws_nothing_is_refused() {
+    use hydo_explore::refuse::nothing_drawn;
+    let plain = |m: &str| {
+        let mut ex = Ex::default();
+        let sp = Space::from_path(&top().join(m)).expect("an example manifest loads");
+        sp.apply(&mut ex);
+        ex.backend = Backend::Hvx;
+        ex
+    };
+    let redis = "hydo/onboard/examples/redis/hydo.yaml";
+    // the pair of the examples' command lines: one warning, no refusal
+    let mut ex = plain(redis);
+    ex.new_faults = true;
+    let (refused, warned) = nothing_drawn(&ex, "process");
+    assert!(refused.is_empty(), "{refused:?}");
+    assert_eq!(
+        warned,
+        [
+            "hydo explore: warning: --new-faults adds nothing to --strategy process, which draws \
+          pauses, clock steps and one-way losses itself"
+        ]
+    );
+    // with the random strategy it draws
+    assert_eq!(nothing_drawn(&ex, "random"), (vec![], vec![]));
+    // the Redis example has no groups: and no service with versions:
+    let mut ex = plain(redis);
+    ex.cluster_faults = true;
+    ex.upgrades = true;
+    let (refused, warned) = nothing_drawn(&ex, "random");
+    assert!(warned.is_empty());
+    assert_eq!(refused.len(), 2, "{refused:?}");
+    assert!(
+        refused[0].starts_with("hydo explore: --cluster-faults draws nothing in this exploration")
+            && refused[0].ends_with("; explore without it"),
+        "{}",
+        refused[0]
+    );
+    assert!(refused[1].starts_with("hydo explore: --upgrades draws nothing"));
+    // an exploration without faults draws no option's faults by design
+    let mut none = ex.clone();
+    none.no_faults = true;
+    assert_eq!(nothing_drawn(&none, "random"), (vec![], vec![]));
+    // the examples' own lines: nothing refused
+    for (m, strategy, opts) in EXAMPLE_LINES {
+        let mut ex = plain(m);
+        for o in *opts {
+            match *o {
+                "new" => ex.new_faults = true,
+                "more" => ex.more_faults = true,
+                "cluster" => ex.cluster_faults = true,
+                "storage" => ex.storage_faults = true,
+                "protocol" => ex.protocol_faults = true,
+                "upgrades" => ex.upgrades = true,
+                other => panic!("{other}"),
+            }
+        }
+        let (refused, _) = nothing_drawn(&ex, strategy);
+        assert!(refused.is_empty(), "{m} {strategy} {opts:?}: {refused:?}");
+    }
+}

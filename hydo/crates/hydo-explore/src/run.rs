@@ -813,7 +813,21 @@ fn setup(a: Args, env: &Env) -> Cx {
     cx.steer = steer_source(&a, m.as_ref()).unwrap_or_else(|e| die(&e));
     // Milestone 345: the options the engine or the image cannot use, all at once
     let kind = crate::refuse::kind_of(&cx.ex, cx.kvm);
-    let lines = crate::refuse::refusals(&cx.ex, &a.strategy, kind, cx.vcpus as u32, cx.epoch);
+    let mut lines = crate::refuse::refusals(&cx.ex, &a.strategy, kind, cx.vcpus as u32, cx.epoch);
+    // Milestone 348: an option whose draws the explorer's own rendering drops entirely; a sweep
+    // and a given schedule draw no seed's faults
+    if a.sweep.is_none() && a.schedule.is_none() {
+        let (refused, warned) = crate::refuse::nothing_drawn(&cx.ex, &a.strategy);
+        for w in warned {
+            eprintln!("{w}");
+        }
+        for r in refused {
+            let name = r.split(' ').nth(2).unwrap_or_default();
+            if !lines.iter().any(|l| l.split(' ').nth(2) == Some(name)) {
+                lines.push(r);
+            }
+        }
+    }
     if !lines.is_empty() {
         die(&lines.join("\n"));
     }

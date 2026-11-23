@@ -436,7 +436,8 @@ Useful options of `hydo explore`:
 
 - `--more-faults`: timed kills and k-th-flush cuts. Only the hvx engine has them; the explorer
   refuses the option with `--backend kvm` and on a Mac (`hydo guide capabilities`).
-- `--new-faults`: pauses, clock jumps, and one-way loss.
+- `--new-faults`: pauses, clock jumps, and one-way loss. The strategies `process` and
+  `swarm-pos` draw them without it.
 - `--timing`: thread-timing jitter.
 - `--concurrency`: concurrent clients, through a manifest knob `Q`.
 - `--durable-only`: only durable settings and an honest disk.
@@ -496,7 +497,7 @@ folder.
 
 hydo's own benchmark showed that where faults land, and in what combination, matters more than
 how the next schedule is chosen. So prefer `--strategy process` with `--more-faults`. With
-`--backend kvm` and on a Mac, use `--new-faults` instead.
+`--backend kvm` and on a Mac, use `--strategy process` alone.
 
 One schedule holds one `K=`, one `P=`, one `X=`, and one `C=`; a second one is refused. Several
 `N=` tokens are one fault when they share the window and the netem arguments. Every token names

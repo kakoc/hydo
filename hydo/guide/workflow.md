@@ -259,7 +259,12 @@ engine's own rule about each schedule, and one the engine would refuse refuses t
 examples are `--timing` with `--vcpus 2` on KVM, whose tick jitter is one vCPU's, and
 `--block-faults` on hvx. An option with nothing to act
 on is refused as well: `--storage-faults` without a service with `storage:` or a `faults:` with
-`corrupt` or `powerloss`, and `--block-faults` on an image without a data disk. Each refusal is
+`corrupt` or `powerloss`, and `--block-faults` on an image without a data disk. So is an option
+whose first 64 schedules are the same without it, because the manifest's `faults:` or the image
+leaves nothing of what it draws. Examples are `--cluster-faults` without `groups:` and `--upgrades`
+without `versions:`. One such option only gets a warning, and the exploration goes on:
+`--new-faults` with `--strategy process` or `swarm-pos`, which draw pauses, clock steps and
+one-way losses themselves. Each refusal is
 one line that names the option, the reason, and what to use instead. When several options are
 refused this way, each gets its line. With `--json`, or when stdout is not a terminal, a refusal also
 prints one JSON line, `{"refused": "<reason>", "status": 5}`. A refusal for memory names each
