@@ -32,6 +32,71 @@ wall clock. Such code fails when the clock is stepped, so it needs clock-step sc
 rule. `hydo rules scan --kind clock` proposes those schedules (`hydo guide faults`, "Find the
 durations measured on the wall clock").
 
+A seventh section, `writes`, lists the routes of the project's API that write. The next section
+describes it.
+
+## List the routes that write: `hydo rules scan --kind writes`
+
+```sh
+hydo rules scan [DIR] --kind writes [--json] [--max N] [--all]
+```
+
+A workload has one command per client operation (`hydo guide composer`). An operation that no
+command calls is never tested under faults. On Meilisearch, the index swap, the dump, and the
+payload of a document addition held the three bugs that hydo found. This command lists every
+operation that the project's API offers to write, so that the workload can cover each one.
+
+It reads the project's own sources and description files, as text:
+
+| what | where it looks |
+|---|---|
+| HTTP routes with `POST`, `PUT`, `PATCH`, and `DELETE` | Rust (axum, actix-web, and the route tables of a macro) |
+| | Go (net/http, gorilla/mux, chi, gin, labstack's router, and httprouter) |
+| | JavaScript and TypeScript (express, fastify, koa, hapi, and NestJS) |
+| | Python (FastAPI, Flask, and Django), Java and Kotlin (Spring and JAX-RS) |
+| RPC methods whose names do not say that they read | `.proto` files with their `google.api.http` mappings |
+| | a Go type that embeds `Unimplemented<Service>Server`, a Rust `impl` of a tonic service |
+| operations | OpenAPI 3 and Swagger 2 files, also through `$ref` files |
+
+It leaves out test files, the test code inside source files, examples, vendored code, and
+generated code. It also leaves out a `POST` route or an RPC method whose name says that it
+reads, such as `/query` or `GetMemo`; `--all` lists them. It joins the prefixes that a router
+adds, such as axum's `.nest("/v1", ...)`, gin's `r.Group("/v1")`, and Spring's class-level
+`@RequestMapping`.
+
+Each route has its handler with the file and the line, the place that declares it, and why it
+counts as a write. A route that a `.proto` file and the code both declare is listed once. The
+routes are grouped by resource, the first two segments of the path that are not parameters or
+versions. Each route has one of four classes, and the list puts durable writes first:
+
+| class | what the route changes | examples |
+|---|---|---|
+| `data` | the system's data | an addition of documents, a new order, a deletion |
+| `admin` | the stored data as a whole | a snapshot, a dump, a compaction, a migration |
+| `session` | a sign-in or a token, not the system's data | a login, a token refresh |
+| `runtime` | the process's own state, not durable data | a health check, metrics, profiling, a reload |
+
+On Meilisearch v1.57.0 the report's first lines and its entry of the index swap read:
+
+```text
+hydo rules scan --kind writes: 83 routes that write, in 23 resources, in 576 files of meilisearch
+  by class: 78 data, 4 admin, 1 runtime
+  left out: 10 POST routes and RPC methods whose names say that they read
+
+swap-indexes (1)
+  POST   /swap-indexes  [data]
+         handler swap_indexes (crates/meilisearch/src/routes/swap_indexes.rs:92)
+         declared at crates/meilisearch/src/routes/swap_indexes.rs:21: POST in a route table of a macro; it changes the system's data (swap)
+```
+
+Give the workload one command for each route of class `data` or `admin`, or say why a route
+has none. `--json` prints every route with its rank, and the onboarding skill reads it. The
+scan without `--kind` prints one line for each route in its `writes` section.
+
+The scan reads text without a compiler, so it misses a route that a program builds at run time.
+A prefix that a function adds from another file is not always joined. An RPC protocol of a
+project's own, such as a binary protocol over TCP, is not read.
+
 ## Turn evidence into rules
 
 These kinds of evidence give rules that hold for any business system:

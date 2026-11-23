@@ -256,6 +256,73 @@ fn the_scan_lists_evidence_by_kind() {
     assert_eq!(doc["evidence"][0]["kind"], "docs");
 }
 
+/// The write routes (Milestone 344): an axum router and a `.proto` service, grouped by resource
+/// and ranked by class, with the reads by name left out and listed by `--all`.
+#[test]
+fn the_write_scan_lists_the_routes_that_write() {
+    let t = T::new("writes");
+    std::fs::create_dir_all(t.dir.join("proj/src")).unwrap();
+    std::fs::create_dir_all(t.dir.join("proj/proto")).unwrap();
+    std::fs::write(
+        t.dir.join("proj/src/http.rs"),
+        "fn router() -> Router {\n    Router::new()\n        .route(\"/orders\", get(list_orders).post(create_order))\n        .route(\"/orders/{id}\", delete(delete_order))\n        .route(\"/orders/search\", post(search_orders))\n        .route(\"/users/login\", post(login))\n        .route(\"/-/reload\", post(reload))\n}\nasync fn create_order() {}\nasync fn delete_order() {}\n",
+    )
+    .unwrap();
+    std::fs::write(
+        t.dir.join("proj/proto/ledger.proto"),
+        "syntax = \"proto3\";\npackage ledger.v1;\nservice Ledger {\n  rpc PostTransfer(TransferRequest) returns (Transfer);\n  rpc GetBalance(BalanceRequest) returns (Balance);\n}\n",
+    )
+    .unwrap();
+    let (rc, text) = t.hydo(&["rules", "scan", "proj", "--kind", "writes"]);
+    assert_eq!(rc, 0, "{text}");
+    assert!(
+        text.starts_with(
+            "hydo rules scan --kind writes: 5 routes that write, in 4 resources, in 2 files of proj"
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains("  by class: 3 data, 1 session, 1 runtime"),
+        "{text}"
+    );
+    assert!(text.contains("  left out: 2 POST routes and RPC methods whose names say that they read (--all lists them)"), "{text}");
+    assert!(text.contains("\norders (2)\n  POST   /orders  [data]\n         handler create_order (src/http.rs:9)\n"), "{text}");
+    assert!(
+        text.contains("  RPC    /ledger.v1.Ledger/PostTransfer  [data]"),
+        "{text}"
+    );
+    // the data first, the sign-in and the health check last
+    let at = |s: &str| text.find(s).unwrap_or_else(|| panic!("{s} not in {text}"));
+    assert!(at("/orders/{id}") < at("/users/login"));
+    assert!(at("/users/login") < at("/-/reload"));
+    let (rc, text) = t.hydo(&["rules", "scan", "proj", "--kind", "writes", "--all"]);
+    assert_eq!(rc, 0, "{text}");
+    assert!(text.contains("left out, read by their names (2)"), "{text}");
+    assert!(
+        text.contains("/orders/search  handler search_orders"),
+        "{text}"
+    );
+    let (rc, text) = t.hydo(&["rules", "scan", "proj", "--kind", "writes", "--json"]);
+    assert_eq!(rc, 0, "{text}");
+    let doc: Value = serde_json::from_str(&text).unwrap();
+    let w = doc["writes"].as_array().unwrap();
+    assert_eq!(w.len(), 5);
+    assert_eq!(w[0]["rank"], 1);
+    assert_eq!(w[0]["class"], "data");
+    assert_eq!(doc["reads_left_out"].as_array().unwrap().len(), 2);
+    // the scan without --kind prints one line per route in its own section
+    let (rc, text) = t.hydo(&["rules", "scan", "proj"]);
+    assert_eq!(rc, 0, "{text}");
+    assert!(
+        text.contains("\nwrites (5): routes of the API that write"),
+        "{text}"
+    );
+    assert!(
+        text.contains("  src/http.rs:3: [data] POST /orders\n"),
+        "{text}"
+    );
+}
+
 /// The clock audit (Milestone 248): a throttle measured on the wall clock (Temporal's shape),
 /// a lease stamped by the database's clock (River's), and a test file that is not read. The
 /// schedules name the database and the lease holder of hydo/hydo.yaml.

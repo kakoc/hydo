@@ -47,6 +47,7 @@ mod sqlgen;
 mod stats;
 mod update;
 mod versions;
+mod writescan;
 
 use ctx::{Ctx, Platform};
 

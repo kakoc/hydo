@@ -134,7 +134,7 @@ pub fn skipped(rel: &str) -> bool {
 }
 
 /// Whether the first lines of a file say that a tool generated it.
-fn generated(text: &str) -> bool {
+pub(crate) fn generated(text: &str) -> bool {
     text.lines().take(8).any(|l| {
         let l = l.to_ascii_lowercase();
         (l.contains("code generated") && l.contains("do not edit")) || l.contains("@generated")
@@ -150,6 +150,12 @@ fn is_ident(c: char) -> bool {
 /// Each line of `text` without its comments and with the contents of its strings removed (the
 /// quotes stay). SQL keeps its strings: `datetime('now')` is a reading.
 pub fn clean(lang: Lang, text: &str) -> Vec<String> {
+    clean_with(lang, text, false)
+}
+
+/// Each line of `text` without its comments; `keep` keeps the contents of strings (the route
+/// scan reads paths in them, Milestone 344), but not those of Python's triple-quoted strings.
+pub(crate) fn clean_with(lang: Lang, text: &str, keep: bool) -> Vec<String> {
     #[derive(PartialEq)]
     enum St {
         Code,
@@ -241,12 +247,18 @@ pub fn clean(lang: Lang, text: &str) -> Vec<String> {
             }
             St::Str(q) => {
                 if c == '\\' && n != Some('\n') {
+                    if keep {
+                        cur.push(c);
+                        cur.extend(n);
+                    }
                     i += 2;
                     continue;
                 }
                 if c == q {
                     st = St::Code;
                     cur.push(q);
+                } else if keep {
+                    cur.push(c);
                 }
                 i += 1;
             }
@@ -254,6 +266,8 @@ pub fn clean(lang: Lang, text: &str) -> Vec<String> {
                 if c == '`' {
                     st = St::Code;
                     cur.push('`');
+                } else if keep {
+                    cur.push(c);
                 }
                 i += 1;
             }
@@ -1137,6 +1151,48 @@ fn scopes(lang: Lang, code: &[String]) -> (Vec<Option<usize>>, Vec<Func>) {
 }
 
 // ---------------------------------------------------------------- test code inside a source file
+
+/// A source file as the route scan reads it (Milestone 344): its lines without comments and
+/// without test code, with the contents of strings, and its functions as (name, first line,
+/// last line).
+pub(crate) struct Outline {
+    pub code: Vec<String>,
+    pub funcs: Vec<(String, usize, usize)>,
+    /// every line that starts a function, also one whose parameters take many lines
+    pub heads: Vec<(String, usize)>,
+    pub tests: TestItems,
+}
+
+pub(crate) fn outline(lang: Lang, text: &str) -> Outline {
+    let bare = clean(lang, text);
+    let mut code = clean_with(lang, text, true);
+    let (_, funcs) = scopes(lang, &bare);
+    let (mask, tests) = test_lines(lang, &bare, &funcs);
+    for (i, t) in mask.iter().enumerate() {
+        if *t {
+            if let Some(l) = code.get_mut(i) {
+                l.clear();
+            }
+        }
+    }
+    let funcs = funcs
+        .into_iter()
+        .filter(|f| !mask.get(f.start).copied().unwrap_or(false))
+        .map(|f| (f.name, f.start, f.end))
+        .collect();
+    let heads = bare
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !mask.get(*i).copied().unwrap_or(false))
+        .filter_map(|(i, l)| func_header(lang, l).map(|n| (n, i)))
+        .collect();
+    Outline {
+        code,
+        funcs,
+        heads,
+        tests,
+    }
+}
 
 /// What the audit left out of one file as test code (Milestone 324): the functions and the
 /// modules or classes.

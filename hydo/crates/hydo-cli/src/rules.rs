@@ -32,7 +32,8 @@ pub const HELP: &str = "usage: hydo rules scan [DIR] [--kind K] [--json] [--max 
   scan: lists what the project in DIR (default .) promises, with the file and the line: schema
   constraints and state columns, API contracts, promise words in its documentation, and test
   assertions about refusals and limits, and the code that measures a duration with the wall
-  clock. It writes no rule. --kind K shows one kind (schema, state, api, docs, tests, clock).
+  clock, and the routes of its API that write. It writes no rule. --kind K shows one kind
+  (schema, state, api, docs, tests, clock, writes).
   --kind clock is the clock audit: each place where a lease, a timeout, a throttle, a lag or a
   delay is measured on the wall clock instead of a monotonic clock, with the limit when the code
   states it, and three clock-step schedules aimed at it (a step back before and after the fault
@@ -40,6 +41,14 @@ pub const HELP: &str = "usage: hydo rules scan [DIR] [--kind K] [--json] [--max 
   (--manifest FILE, default DIR/hydo/hydo.yaml or DIR/hydo.yaml) when they can. It shows one
   place per function, the most likely 5 first (--all shows every place; --json has them all,
   each with its rank).
+  --kind writes lists every route of the API that writes: the HTTP routes with the methods POST,
+  PUT, PATCH and DELETE of the router code (Rust, Go, JavaScript and TypeScript, Python, Java and
+  Kotlin), the RPC methods of .proto files and gRPC servers whose names do not say that they
+  read, and the operations of OpenAPI files. Each has its handler with the file and the line, and
+  why it counts as a write. They are grouped by resource, and ranked by class: data (it changes
+  the system's data), admin (a snapshot, a dump, a compaction), session (a sign-in or a token),
+  runtime (health, metrics, a reload). A POST route whose name says that it reads is left out
+  (--all lists them; --json has them all).
   check: validates candidate rules (format: hydo guide rules). It runs the image's workload
   without faults, `disk=none | run W=<seed>` for the seeds 00000001..N (--runs, default 3; one run of
   `disk=none | run` for an image without composed commands, `disk=none | run I=<seed>` for a walk
@@ -1380,9 +1389,12 @@ fn cmd_scan(argv: &[String]) -> i32 {
     let only = take(&mut args, "--kind");
     let manifest = take(&mut args, "--manifest");
     if let Some(k) = &only {
-        if k != "clock" && !EVIDENCE_KINDS.iter().any(|(n, _)| n == k) {
+        if k != "clock" && k != "writes" && !EVIDENCE_KINDS.iter().any(|(n, _)| n == k) {
             let names: Vec<&str> = EVIDENCE_KINDS.iter().map(|x| x.0).collect();
-            die(&format!("--kind {k}: one of {}, clock", names.join(", ")));
+            die(&format!(
+                "--kind {k}: one of {}, clock, writes",
+                names.join(", ")
+            ));
         }
     }
     let max: usize = take(&mut args, "--max")
@@ -1412,6 +1424,15 @@ fn cmd_scan(argv: &[String]) -> i32 {
         }
         return 0;
     }
+    if only.as_deref() == Some("writes") {
+        let w = crate::writescan::scan_writes(root);
+        if as_json {
+            println!("{}", crate::writescan::json_report(&dir, &w));
+        } else {
+            print!("{}", crate::writescan::text_report(&dir, &w, max, all));
+        }
+        return 0;
+    }
     let (read, mut ev) = scan(root, 40);
     if let Some(k) = &only {
         ev.retain(|e| e.kind == k.as_str());
@@ -1425,6 +1446,14 @@ fn cmd_scan(argv: &[String]) -> i32 {
         if only.is_none() {
             let matches = crate::clockscan::audit(root).matches;
             doc["clock"] = Value::Array(matches.iter().map(crate::clockscan::match_json).collect());
+            let w = crate::writescan::scan_writes(root);
+            doc["writes"] = Value::Array(
+                w.routes
+                    .iter()
+                    .enumerate()
+                    .map(|(i, r)| crate::writescan::route_json(r, i + 1))
+                    .collect(),
+            );
         }
         println!("{}", serde_json::to_string_pretty(&doc).unwrap_or_default());
         return 0;
@@ -1460,6 +1489,24 @@ fn cmd_scan(argv: &[String]) -> i32 {
             println!(
                 "  ... {} more (--max N, or --json for all)",
                 matches.len() - max
+            );
+        }
+        // the routes that write, one line each; --kind writes gives the handlers
+        let w = crate::writescan::scan_writes(root);
+        println!(
+            "\nwrites ({}): routes of the API that write (--kind writes names each handler and why)",
+            w.routes.len()
+        );
+        for r in w.routes.iter().take(max) {
+            println!(
+                "  {}:{}: [{}] {} {}",
+                r.file, r.line, r.class, r.method, r.path
+            );
+        }
+        if w.routes.len() > max {
+            println!(
+                "  ... {} more (--max N, or --json for all)",
+                w.routes.len() - max
             );
         }
     }

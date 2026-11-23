@@ -15,7 +15,9 @@ configuration:
 5. The README's "run" or "self-host" section and the configuration parser: which settings exist,
    and which of them are durability settings (fsync, commit and replication modes) or timeouts.
 6. Database migrations and schemas: keys, unique constraints and foreign keys that checks can use.
-7. `.proto` files and API specifications: the operations clients perform.
+7. `.proto` files, API specifications and the router code: the operations clients perform. Run
+   `hydo rules scan --kind writes` for the list of routes that write, each with its handler, and
+   add it to the inventory.
 8. Existing integration or end-to-end tests: candidates for workload commands and checks.
 
 Write a short inventory for the user: for each process, its program, its port, its data

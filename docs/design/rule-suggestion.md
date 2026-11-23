@@ -246,6 +246,122 @@ step forward only shortens the 5-second wait.
   moved by hand.
 - The private queue's code was not available, so its pattern is checked only by a unit test.
 
+## The write routes (Milestone 344, tentative number)
+
+`hydo rules scan --kind writes` lists the routes of a project's API that write. An onboarding
+writes one workload command per client operation, and an operation that nobody lists is not
+tested. Meilisearch's index swap, its dump, and the payload of a document addition held the three
+bugs that hydo found there, and the onboarding found those operations by reading the sources.
+
+### How it reads the code
+
+The scan is in `hydo/crates/hydo-cli/src/writescan.rs`. It reads text, as the clock audit does,
+and it uses the audit's rules for what to leave out: test files, test code inside a source file
+(Milestone 324), examples, vendored code, and generated code. Each file becomes one text without
+comments, with its strings, and with each call's name, receiver, and arguments.
+
+- A router call is a method named `post`, `put`, `patch`, or `delete` whose first argument is a
+  path, such as Go's `r.Post("/write", h)` or express's `app.post("/orders", h)`. A Go file needs
+  a router package among its imports, and a JavaScript file needs a server framework, so that a
+  client's `axios.post(...)` is not a route. Receivers such as `http`, `client`, and `axios` are
+  clients.
+- Rust's axum and actix-web routes are `.route(<path>, <methods>)` and
+  `web::resource(<path>)` with the methods of their router expression, such as
+  `get(a).post(b)` and `web::post().to(h)`. A route table of an attribute macro,
+  `"<path>" => [get(a), post(b)]`, belongs to the `struct` after it, and `sub(Type)` mounts
+  another table.
+- Decorators and annotations name the function after them: FastAPI and Flask, NestJS, Spring and
+  JAX-RS, and the attributes of actix-web and rocket. A Django URL pattern names a view, and the
+  view's methods (`def post`, a REST framework base class, `@require_POST`) give the routes.
+- A `.proto` service gives one route per method, with its HTTP mapping when it has one. A Go type
+  that embeds `Unimplemented<Service>Server` and a Rust `#[async_trait] impl Service for T` whose
+  methods take a `Request<...>` give the methods of a gRPC server without a `.proto` file in the
+  project.
+- An OpenAPI or Swagger file gives one route per operation, and its `operationId` names the
+  handler.
+
+The prefixes are joined from three places: the calls that enclose a route (axum's `.nest`,
+actix-web's `web::scope`, chi's `r.Route`), the groups that a file assigns (gin's and labstack's
+`r.Group`, gorilla's `PathPrefix(...).Subrouter()`, FastAPI's `APIRouter(prefix=...)`,
+Flask's `url_prefix`), and the mounts by name (`.nest("/p", routes())`, `sub(Type)`, and a
+group passed to a function, as in Prometheus's `api.Register(router.WithPrefix("/api/v1"))`).
+
+A handler named in an expression is its innermost identifier, so `wrapAgent(api.deleteSeries)`
+names `deleteSeries`, and the scan finds its definition among the functions of the code. A
+route that two places declare, such as a `.proto` method and its gateway's OpenAPI file, is
+listed once with both places.
+
+### Reads and classes
+
+A `POST` route or an RPC method is a read when the last segment of its path, or the first word
+of its handler's name, is a word of reading (`query`, `search`, `get`, `list`, `fetch`, and 50
+others), and neither has a verb of change. Such routes are counted and left out.
+
+Each route that writes gets a class by the words of its path and its handler: `runtime` for the
+process's own state (health, metrics, profiling, a reload), `session` for a sign-in or a token,
+`admin` for an operation on the stored data as a whole (a snapshot, a dump, a compaction), and
+`data` for the rest. The list ranks resources by their best route, and the routes of a resource
+by class, so durable writes come before logins and metrics.
+
+### What the proof runs measured
+
+The scan ran on the sources of six examples at their tags, with a debug build on this Mac. A
+sample of 20 routes per project, spread evenly over the ranked list, was judged by reading each
+handler: a route is right when its handler changes state of the system. Prometheus has 14
+routes, so all of them were judged.
+
+| project | tag | files read | routes that write | resources | reads left out | handlers found | right in the sample | seconds |
+|---|---|---|---|---|---|---|---|---|
+| Meilisearch | v1.57.0 | 576 | 83 | 23 | 10 | 83 | 19 of 20 | 5 |
+| Iggy | server-0.10.0 | 2,038 | 38 | 17 | 2 | 38 | 20 of 20 | 10 |
+| Prometheus | v3.16.0 | 616 | 14 | 7 | 12 | 14 | 12 of 14 | 2 |
+| GreptimeDB | v1.3.1 | 1,834 | 53 | 29 | 26 | 53 | 19 of 20 | 11 |
+| Hatchet | v0.120.5 | 2,411 | 99 | 36 | 12 | 99 | 20 of 20 | 7 |
+| Memos | 26.11.0 | 742 | 49 | 24 | 4 | 49 | 19 of 20 | 2 |
+
+109 of the 114 judged routes write. The five that do not are these:
+
+- Meilisearch's `POST /indexes/{index_uid}/fields` lists fields with a filter in its body.
+- Prometheus's `POST /labels` and `POST /series` are queries sent with POST.
+- GreptimeDB's Flight `DoAction` answers `unimplemented`.
+- Memos's `Transcribe` transcribes audio and stores nothing.
+
+Every write that the examples' RESULTS.md pages name was in the list:
+
+| project | the writes of its workload | found |
+|---|---|---|
+| Meilisearch | the addition, the update and the deletion of documents, the filterable attributes, the index swap, the edit by function, the dump, the snapshot | 8 of 8 |
+| Iggy | a stream, a topic, a consumer group, sent messages, a stored consumer offset | 5 of 5 |
+| Prometheus | remote write, a snapshot | 2 of 2 |
+| GreptimeDB | the SQL endpoint, which takes the inserts, the DDL and the ADMIN functions | 1 of 1 |
+| Hatchet | a run triggered by the SDK, a scheduled run, a cron, a cancellation, a worker's completion | 5 of 5 |
+| Memos | a memo, its update, a comment, a reaction, a share link | 5 of 5 |
+
+Meilisearch's list has 83 routes. 44 of them are the per-setting routes, two for each of 22
+settings, which a route table inside `macro_rules!` declares; the scan expands it from the
+macro's invocation. Without them the list has 39.
+
+The scan's own mistakes outside the sample:
+
+- A prefix that a router adds in another way is missing: Prometheus's `/api/v1`, which
+  `http.StripPrefix` adds, and the `/v1` of GreptimeDB's SQL and dashboard routes, which a
+  router built in another function receives.
+- Iggy's `poll_messages_committing` commits offsets, but its first word `poll` reads.
+- A gRPC method found by name can point at another type's method of that name, as Hatchet's
+  `SendStepActionEvent` does.
+
+### What the write scan does not do
+
+- It reads text, so a route that a program builds at run time, or registers through a function
+  of its own, is not found.
+- A prefix that another file adds through a variable of a module (an express router mounted by
+  `app.use("/p", router)` from another file, a FastAPI router included with a prefix) is not
+  joined.
+- A protocol of a project's own, such as Iggy's binary protocol over TCP, is not read. Neither
+  are GraphQL mutations and warp's filters.
+- A route whose verb of change is inflected (`poll_messages_committing`) can be taken for a
+  read.
+
 ## What is not built
 
 - The candidates file has no JSON schema yet. A change of its format raises its `format:` number.
