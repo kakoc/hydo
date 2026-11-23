@@ -21342,3 +21342,97 @@ fetch-images.sh has the stop line. The CLI's recorded answers of `compose`, `com
 
 **What is left.** The user's own project did not run with the fix. An image with only an amd64
 build on a Mac is unchanged: its hydo.yaml names the x86_64 file only.
+
+## Milestone 348 (tentative number): five gaps of recent onboardings
+
+Status: done on 2026-11-23. Nothing recorded moved, and the fingerprint epoch stays 5.
+
+The onboardings of ClickHouse (M311), Prometheus (M342), GreptimeDB (M343) and the aimed
+explorations of Meilisearch (M345) named five gaps. Each fix is its own commit.
+
+1. **`hydo-oci` by name (`guest.path`).** The commands that hydo starts in the guest had no
+   `PATH`. The kernel gives init none, and busybox's shell exports none. A shell command found
+   `hydo-oci` through the shell's own default, but Go's `exec.Command("hydo-oci", ...)` in the
+   Prometheus client failed with `executable file not found in $PATH` (open item 170). The
+   format-1 addition `guest.path: true` makes the host controller give every command it starts
+   `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`
+   (`hydo_image::COMMAND_PATH`, busybox's own default). The manifest's `env:` can still set
+   another. The variable is in each command's environment, so in guest RAM, and in every
+   fingerprint and control transcript. So what an absent key means is keyed on the image's
+   fingerprint epoch (`hydo_image::EpochDefaults::command_path`): off at every epoch up to 5,
+   and on from the next one, 6. The host controller's environment was chosen over an `export`
+   in the image's `prelude.sh`. The prelude is part of the image's bytes, so that way would
+   change every image built from now on; the controller's way changes nothing until a manifest
+   asks for it.
+2. **A failing workload command's output.** A composed command's output stays in the guest's
+   `/tmp/hydo/compose/log.<entry>`, so the examples' clients copied their errors to the console
+   (open items 157 and 170). The controller already reads that file after each command. Now a
+   command that ends with an exit status other than 0 and 100 gives one `HYDO-CMD-OUT
+   {"id":..,"entry":..,"rc":..,"lines":[..],"omitted":n}` note, the first time in a boot. A
+   command that reports a violation (exit 100) gives the `HYDO-CHECK-OUT` note of its finding
+   `compose.<id>.no_violation` instead, so `result.json` keeps the lines in `details.output`, as
+   M225 does for a failing check. Both keep the last 20 lines, each cut to 300 bytes, at most
+   2,000 bytes. A note is in the run's console log (`one.log`), and no transcript's hash and no
+   fingerprint covers it. The diagnosis replay of M239 also reads the output: of a plain
+   `workload.run` (`workload.log`), or of up to 4 composed commands that failed in the verdict's
+   conversation, named by the controller's `HYDO-CMD end` reports. It writes their last 64 KiB
+   to `logs/workload.log` and `logs/command.<id>.log`.
+3. **The error-log scan past hvx's 16 MiB.** On hvx a boot whose agent lines passed the 16 MiB
+   that the engine keeps lost the agent's later replies, and the run waited for its wall limit
+   with no word but a line of `engine.log` (open item 171). The engine now ends the boot at the
+   first stop after the buffer filled, with `ERROR agent lines full <phase>: ...`. The verdict
+   names the error-log scan of large service logs as the usual cause, and says to lower the
+   services' log level or to set `errors: false`. The diagnosis takes the verdict's words. Failing
+   early was chosen over a bound on the scan: the host controller does not know its engine, and
+   the Mac and KVM engines keep 32 MiB of console per boot, so a bound for hvx would change their
+   scans too. A run that filled the buffer never reached a verdict before, so no recorded run
+   changes.
+4. **An option that draws nothing.** M345's probe asked the engine about each option's draws
+   after the explorer's rendering, which drops what the manifest's `faults:` or the engine does
+   not keep, so an option whose draws were all dropped was not refused (open item 173). Now the
+   explorer compares its first 64 rendered schedules with and without each drawing option:
+   `--new-faults`, `--more-faults`, `--cluster-faults`, `--protocol-faults`, `--upgrades`,
+   `--pause-workload` or `--pause-thread`, and `--corrupt-several`. An option that changes none
+   of them is refused, one line each, with the exit status 5. The range of `--cf-range auto`
+   comes from a probe run after the check, so the check gives `--more-faults` a placeholder
+   range. The point runs of `--sweep`, a given schedule,
+   `--no-faults` and `--reactive-at` draw no seed's faults and are not checked. `--new-faults`
+   with `--strategy process` or `swarm-pos` gets a warning only, because those strategies draw
+   pauses, clock steps and one-way losses themselves. About 100 lines of the examples' hydo.yaml
+   headers, RESULTS.md pages and design notes give that pair, and a refusal would have made
+   them wrong. The lines that recommend a command to a user drop `--new-faults` from the process
+   strategy: `hydo guide strategies`, `hydo guide error-paths`, `hydo guide faults` and the
+   playbook.
+5. **The saved Meilisearch regression.** Open items 148 and 173 said that
+   `swap-runs-twice-after-a-kill.schedule` (`+14`) passes on the image built at epoch 5. That was
+   M345's image. M346 changed the client, and on its image the regression fails again (its
+   RESULTS.md table, "Since Milestone 346"). On the Mac engine, with this tree's hydo and the
+   example built again (`ce20b437…`), `disk=none | run A=meili.swap_acked@20+14:kill-now-meilisearch`
+   gave `VIOLATION [swap]` in two runs, `fp=5401620771ff668b` and `wfp=ff2e49cab7d84f41`, the
+   value of M346's table. `+12`, which M345's grid named, passes on this image
+   (`wfp=19611eda9fb10bd2`). So the regression and its `# expect: violation` line stay as they
+   are. The run without faults gave `wfp=34d6b1999155c0a5`, also M346's value.
+
+**Proof on the Mac engine.** The runs of item 5 also showed item 2. In the `+12` run, 96 of
+159 composed commands failed while Meilisearch was down, and `one.log` had 10 `HYDO-CMD-OUT`
+lines, one per command, such as `mlc: POST /indexes/docs/documents: no answer: ... connection
+refused`. `hydo inspect diagnose <the +14 run> --evidence` wrote four `logs/command.<id>.log`
+files beside `logs/meilisearch.log`. The fingerprints above are M346's, so the notes moved none.
+
+**Tests.** `command_path::` runs a conversation with and without the key: with it, every command
+the controller starts has the `PATH`; without it, or with `false`, none has one.
+`hydo_image`'s defaults test says that no epoch up to 5 has the default on. `command_out::` checks
+the note's bounds, and the diagnosis's unit test checks which `HYDO-CMD end` reports name a
+file to read. `phase_end` has a unit test in the hvx engine, which builds on Linux only; clippy
+checked it for the `x86_64-unknown-linux-musl` target. `refusals::an_option_that_draws_nothing_is_refused`
+refuses `--cluster-faults` and `--upgrades` on the Redis example, warns of `--new-faults` with
+the process strategy, and refuses nothing of 14 examples' own command lines. The project
+schema and the CLI's recorded answer of `hydo guide manifest` are re-recorded (`HYDO_BLESS=1`).
+Every control transcript of the controller's corpora held unchanged. In `m123-quick.txt` only
+the count of records that contain ` seed=` moved, from 308 to 314: six new `HYDO-CMD-OUT` notes
+quote the output of the scripted agent's failing commands. The line is re-recorded in the
+record's commit.
+
+**What moved.** No value of `hydo/onboard/recorded.json`, and no example's value.
+
+**What is left.** Open item 176, and open items 148, 157, 170, 171 and 173 are updated.
