@@ -5,6 +5,7 @@
 //	mlc init              the indexes, their settings, the first documents (first_init)
 //	mlc op <kind>         enqueue one task; the composer's HYDO_* variables drive it
 //	mlc check <rule>      one check over the client's records and the server's state
+//	mlc readback          the final: of the messages check: each acknowledged task's final state
 //	mlc get <path>        print one GET answer (for a look by hand)
 //
 // The server is MS_URL (default http://127.0.0.1:7700). MS_DATA (default /data/vol/meili) is the
@@ -30,9 +31,18 @@
 //	t<uid>:swap                     sa and sb swapped
 //	t<uid>:edit                     cnt's k gets n + 1 (an edit by function)
 //	t<uid>:dump, t<uid>:snap        a dump, a snapshot
+//	t<uid>:mkidx:<cmd>              the index x<cmd> created
+//	t<uid>:delidx:<cmd>             the index x<cmd> deleted
 //
-// $HYDO_OUTCOMES gets <kind>.<cmd>[.<target>] ack|failed|unknown: a check does not judge a
-// document that an unknown request may have changed.
+// and the line m<uid>:<oid>, the task's request id below.
+//
+// $HYDO_OUTCOMES gets <oid> ack|failed|unknown, where the request id <oid> is
+// <kind>.<cmd>[.<target>]: a check does not judge a document that an unknown request may have
+// changed.
+//
+// The history tasks (the messages check of hydo.yaml, hydo guide messages): each request is a
+// send of its request id to the channel tasks, with the task's uid as its system id, and
+// `mlc readback`, the check's final:, reads back each acknowledged task's final state.
 package main
 
 import (
@@ -168,6 +178,34 @@ func sometimes(id, msg string) {
 	fmt.Fprintf(f, "HYDO-ASSERT %s\n", b)
 }
 
+// uptimeNs is the guest's uptime in ns, as the history records write it.
+func uptimeNs() string {
+	b, err := os.ReadFile("/proc/uptime")
+	if err != nil {
+		return "-"
+	}
+	f := strings.Fields(string(b))
+	if len(f) == 0 {
+		return "-"
+	}
+	return strings.Replace(f[0], ".", "", 1) + "0000000"
+}
+
+// hrec writes one record of the history tasks in one write: HYDO-HIST tasks <process> <type>
+// <time> <args>. The records go to the console, or to HYDO_HIST_OUT ("off": nowhere).
+func hrec(proc int, typ string, args ...string) {
+	out := envDef("HYDO_HIST_OUT", "/dev/console")
+	if out == "off" {
+		return
+	}
+	f, err := os.OpenFile(out, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.WriteString(fmt.Sprintf("HYDO-HIST tasks %d %s %s %s\n", proc, typ, uptimeNs(), strings.Join(args, " ")))
+}
+
 func cmdID() int { return atoiDef(os.Getenv("HYDO_CMD_ID"), 0) }
 
 func rng() *rand.Rand {
@@ -178,10 +216,12 @@ func rng() *rand.Rand {
 // enqueue sends one task request. It records the outcome under oid and, when acknowledged, the
 // line t<uid>:<rec> in $HYDO_ACKED. It returns the task's uid, or -1.
 func enqueue(oid, rec, method, path string, body any) int {
+	hrec(cmdID(), "invoke", "send", "tasks", oid)
 	st, b, err := call(method, path, body)
 	outcomes := os.Getenv("HYDO_OUTCOMES")
 	if err != nil {
 		appendLine(outcomes, oid+" unknown")
+		hrec(cmdID(), "info", "send", "tasks", oid)
 		fmt.Fprintf(os.Stderr, "mlc: %s %s: no answer: %v\n", method, path, err)
 		return -1
 	}
@@ -190,11 +230,14 @@ func enqueue(oid, rec, method, path string, body any) int {
 	}
 	if st != 202 || json.Unmarshal(b, &t) != nil || t.TaskUID == nil {
 		appendLine(outcomes, oid+" failed")
+		hrec(cmdID(), "fail", "send", "tasks", oid)
 		fmt.Fprintf(os.Stderr, "mlc: %s %s: %d %s\n", method, path, st, trunc(string(b), 300))
 		return -1
 	}
 	appendLine(os.Getenv("HYDO_ACKED"), fmt.Sprintf("t%d:%s", *t.TaskUID, rec))
+	appendLine(os.Getenv("HYDO_ACKED"), fmt.Sprintf("m%d:%s", *t.TaskUID, oid))
 	appendLine(outcomes, oid+" ack")
+	hrec(cmdID(), "ok", "send", "tasks", fmt.Sprintf("%s;o=%d", oid, *t.TaskUID))
 	fmt.Printf("mlc: task %d enqueued: %s\n", *t.TaskUID, rec)
 	return *t.TaskUID
 }
@@ -503,6 +546,23 @@ func opSnap() int {
 	return 0
 }
 
+// opDelIdx enqueues the creation of a new index x<cmd> and then its deletion, without waiting
+// between the two: Meilisearch runs the tasks of one index in the order of their uids.
+func opDelIdx() int {
+	id := cmdID()
+	ix := fmt.Sprintf("x%d", id)
+	if enqueue(fmt.Sprintf("mkidx.%d", id), fmt.Sprintf("mkidx:%d", id), "POST", "/indexes",
+		map[string]any{"uid": ix, "primaryKey": "id"}) < 0 {
+		return 1
+	}
+	uid := enqueue(fmt.Sprintf("delidx.%d", id), fmt.Sprintf("delidx:%d", id), "DELETE", "/indexes/"+ix, nil)
+	if uid < 0 {
+		return 1
+	}
+	sometimes("meili.delete_index_acked", fmt.Sprintf("task %d", uid))
+	return 0
+}
+
 // ---- the client's records ----
 
 type rec struct {
@@ -539,6 +599,7 @@ var taskType = map[string]string{
 	"add": "documentAdditionOrUpdate", "upd": "documentAdditionOrUpdate", "del": "documentDeletion",
 	"set": "settingsUpdate", "swap": "indexSwap", "edit": "documentEdition",
 	"dump": "dumpCreation", "snap": "snapshotCreation",
+	"mkidx": "indexCreation", "delidx": "indexDeletion",
 }
 
 // ---- checks ----
@@ -1043,9 +1104,125 @@ func checkDumps() int {
 	return 0
 }
 
+// ---- the read-back of the messages check tasks ----
+
+// enc encodes a value of a history item: %, a space, and the characters the records use.
+func enc(s string) string {
+	var b strings.Builder
+	for _, c := range []byte(s) {
+		if c <= ' ' || strings.IndexByte("%@,[]:;=", c) >= 0 {
+			fmt.Fprintf(&b, "%%%02X", c)
+		} else {
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}
+
+// effect is the f= of a task whose effect the read-back reads, or "" for one it does not read.
+// An addition's effect is there when every document it sent is stored with the addition's own
+// body. A document that a deletion request may have removed leaves the effect unread. An index
+// deletion's effect is there when the creation of its index succeeded and the index is gone;
+// mk holds the creation tasks by command.
+func effect(r rec, docs map[string]stored, derr error, mayDel map[string]bool, mk map[string]task) string {
+	if r.kind == "delidx" && len(r.args) == 1 {
+		// without a succeeded creation the read-back cannot tell whether the index ever existed
+		if c, ok := mk[r.args[0]]; !ok || c.Status != "succeeded" {
+			return ""
+		}
+		switch st, _, err := call("GET", "/indexes/x"+r.args[0], nil); {
+		case err == nil && st == 404:
+			return "1"
+		case err == nil && st == 200:
+			return "0"
+		}
+		return ""
+	}
+	if r.kind != "add" || derr != nil || len(r.args) < 2 {
+		return ""
+	}
+	for i := 0; i < atoiDef(r.args[1], 0); i++ {
+		id := fmt.Sprintf("c%s_%d", r.args[0], i)
+		if d, ok := docs[id]; !ok || d.Body != "alpha w"+r.args[0] {
+			if mayDel[id] {
+				return ""
+			}
+			return "0"
+		}
+	}
+	return "1"
+}
+
+// readBack is the final: of the messages check tasks. It waits up to 90 s for the queue to
+// drain, then writes a status record of every acknowledged task: s=ok (succeeded), s=fail with
+// the error's code (failed, or canceled), or s=info (still enqueued or processing, or not in
+// the queue), with f= where effect reads it. It exits 1 only when it cannot list the tasks.
+func readBack() int {
+	const proc = 100000
+	if !drain(90 * time.Second) {
+		fmt.Println("the queue did not drain: its pending tasks are read back as they are")
+	}
+	ts, err := allTasks()
+	if err != nil {
+		fmt.Println("cannot list the tasks:", err)
+		return 1
+	}
+	docs, derr := fetchDocs("docs")
+	mayDel := map[string]bool{}
+	for oid, o := range outcomes() {
+		if f := strings.Split(oid, "."); f[0] == "del" && len(f) == 4 && o != "failed" {
+			mayDel[fmt.Sprintf("c%s_%s", f[2], f[3])] = true
+		}
+	}
+	recs := map[int]rec{}
+	mk := map[string]task{}
+	for _, r := range records() {
+		recs[r.uid] = r
+		if t, ok := ts[r.uid]; ok && r.kind == "mkidx" && len(r.args) == 1 {
+			mk[r.args[0]] = t
+		}
+	}
+	var ids, items []string
+	for _, l := range readLines(os.Getenv("HYDO_ACKED")) {
+		f := strings.SplitN(l, ":", 2)
+		if len(f) != 2 || !strings.HasPrefix(f[0], "m") {
+			continue
+		}
+		uid := atoiDef(f[0][1:], -1)
+		it := fmt.Sprintf("%s;o=%d", f[1], uid)
+		t, ok := ts[uid]
+		switch {
+		case !ok:
+			it += ";s=info;e=" + enc("not in the queue")
+		case t.Status == "succeeded":
+			it += ";s=ok"
+		case t.Status == "failed" || t.Status == "canceled":
+			code := t.Status
+			if t.Error != nil && t.Error.Code != "" {
+				code = t.Error.Code
+			}
+			it += ";s=fail;e=" + enc(code)
+		default:
+			it += ";s=info;e=" + enc(t.Status)
+		}
+		if e := effect(recs[uid], docs, derr, mayDel, mk); ok && e != "" {
+			it += ";f=" + e
+		}
+		ids, items = append(ids, f[1]), append(items, it)
+	}
+	// 20 tasks per record, so that no console line grows long
+	for i := 0; i < len(items); i += 20 {
+		j := min(i+20, len(items))
+		hrec(proc, "invoke", append([]string{"status", "tasks"}, ids[i:j]...)...)
+		hrec(proc, "ok", append([]string{"status", "tasks"}, items[i:j]...)...)
+	}
+	fmt.Printf("read back the final states of %d acknowledged tasks\n", len(items))
+	return 0
+}
+
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: mlc ready | init | op <kind> | check <rule> | get <path>")
+		fmt.Fprintln(os.Stderr, "usage: mlc ready | init | op <kind> | check <rule> | readback | get <path>")
 		os.Exit(2)
 	}
 	arg := ""
@@ -1062,7 +1239,7 @@ func main() {
 		os.Exit(cmdInit())
 	case "op":
 		ops := map[string]func() int{"add": opAdd, "upd": opUpd, "del": opDel, "set": opSet, "swap": opSwap,
-			"edit": opEdit, "dump": opDump, "snap": opSnap}
+			"edit": opEdit, "dump": opDump, "snap": opSnap, "delidx": opDelIdx}
 		if f, ok := ops[arg]; ok {
 			os.Exit(f())
 		}
@@ -1072,6 +1249,8 @@ func main() {
 		if f, ok := checks[arg]; ok {
 			os.Exit(f())
 		}
+	case "readback":
+		os.Exit(readBack())
 	case "get":
 		st, b, err := call("GET", arg, nil)
 		fmt.Println(st, err)

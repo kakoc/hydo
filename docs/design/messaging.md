@@ -78,6 +78,8 @@ checks:
       fan_out: none                 # none | every-group
       members: any                  # any | exclusive
       linearizable: none            # none | fifo | unordered
+      acked_outcome: none           # none | success | {client_errors: [<code>, ...],
+                                    #                   effect: none | recorded}
 
     measures:                       # optional; the defaults are shown
       windows: true                 # also per fault window
@@ -112,6 +114,8 @@ checks:
 | `claims.fan_out` | `every-group` | every group that must receive a message receives it (`no-loss` per group) |
 | `claims.members` | `exclusive` | inside a group, two members do not hold one message at once |
 | `claims.linearizable` | `fifo`, `unordered` | the sends and receives are linearizable as one FIFO queue or one multiset |
+| `claims.acked_outcome` | `success` | every acknowledged send ends succeeded in the read-back's `status` records (`acked-outcome`) |
+| | `{client_errors, effect}` | as `success`, and a failure with an error that the list names (a code, or a pattern with `*`) keeps the claim; with `effect: recorded` a final state that contradicts the recorded effect breaks it |
 
 ### Examples
 
@@ -205,7 +209,7 @@ both keys:
 | `linearizable` without `acknowledgement: on-receive` | a queue with acknowledgements redelivers, so it is not one linearizable queue; the claim would always fail |
 | `processing: once`, `after_ack`, `lease`, `dead_letter` or `order: fifo-blocking` with `acknowledgement: on-receive` or `none` | they are about acknowledgements |
 | `delivery: at-most-once` or `exactly-once` with `lease` | a lease exists to allow redelivery; at-most-once forbids it |
-| any claim that reads the end (`delivery` with loss, `fan_out`, `processing`, `dead_letter` with `to:`) without `final:` | "every message comes out" needs someone to read everything at the end |
+| any claim that reads the end (`delivery` with loss, `fan_out`, `processing`, `dead_letter` with `to:`, `acked_outcome`) without `final:` | "every message comes out" needs someone to read everything at the end, and `acked_outcome` needs the read-back of the final states |
 
 Claims whose records may be missing are not refused at build time: `duplicates` needs system ids
 (`o=`) and `order: log` needs offsets. A run without them reports the claim as undecided with the
@@ -280,8 +284,10 @@ adds operations and one item syntax.
 An **item** is one token: the message id followed by optional attributes,
 `m17;k=g2;x=d17;d=5000;o=81;n=2;h=a91f;v=30000;s=ok`. Attributes: `k` key, `x` deduplication id
 (default `m`), `d` requested delay in ms, `o` system id or offset, `n` attempt count, `h` handle,
-`v` lease in ms, `s` the item's own outcome inside a batch (`ok`, `fail`, `info`). Values are
-encoded with the recorders' `enc` (HISTORIES.md), extended to `;` and `=`.
+`v` lease in ms, `s` the item's own outcome inside a batch (`ok`, `fail`, `info`). A `status`
+item adds `e`, the system's error of a failed operation, and `f` (`1` or `0`), whether the
+operation's effect is in the system's state. Values are encoded with the recorders' `enc`
+(HISTORIES.md), extended to `;` and `=`.
 
 | operation | invoke | completion | meaning |
 |---|---|---|---|
@@ -292,6 +298,7 @@ encoded with the recorders' `enc` (HISTORIES.md), extended to `;` and `=`.
 | extend | `extend <q> <g> <item;v=<ms>>...` | the same | extend a lease |
 | commit | `commit <q> <g> <key>@<offset>...` | the same | acknowledge every delivery of the key up to the offset |
 | sub | `sub <q> <g> [from=start\|now]` | the same | join a group or create a subscription |
+| status | `status <q> <item>...` | the items, each with its final state in `s` and maybe `e` and `f` | the read-back of sent operations' final states (`acked-outcome`) |
 | drained | (none) | `drained <q> <g>` | written by the drain when it has seen the end of the group's messages |
 
 Push delivery (a callback) has no request: the callback writes `invoke recv` and `ok recv` back
@@ -521,6 +528,35 @@ duration. hydo would implement the patterns as those papers define them (not fro
 each in O(n log n) over sorted intervals, report the first found as the witness, and confirm the
 witness with the WGL search hydo-history already has, which is small on a witness's few
 operations. Messages are unique by construction, which is the condition the reduction needs.
+
+### acked-outcome (`acked_outcome`, Milestone 346)
+
+**Claim.** Every acknowledged send ends in a final state that agrees with the acknowledgement. It
+is for systems that answer a write at once and do the work later: a task queue, a job runner, a
+search engine's indexing queue. The check's `final:` is the read-back: it writes one `status`
+item per sent id with the system's final state, `s=ok` (succeeded), `s=fail` with the error `e=`,
+or `s=info` (no final state). The last answered read of an id counts.
+
+**Rules.**
+
+- An acknowledged send breaks the claim when it ends `s=info`, or `s=fail` with an `e=` that
+  `client_errors:` does not name.
+- A send with an unknown outcome may end in any state, because the system may never have taken
+  it.
+- With `effect: recorded`, the read-back also records `f=1` or `f=0`, whether the operation's
+  effect is in the system's state. `s=ok` with `f=0`, and `s=fail` with `f=1`, break the claim
+  for any send, also with a client error. An item without `f=` is judged by its final state
+  alone.
+- An acknowledged id without an answered read is undecided. With no answered read at all the
+  claim is undecided.
+
+**Why a claim of its own.** The Meilisearch example (Milestone 295) found its lost document
+additions with a hand-written check: an addition acknowledged with `202` ended `failed` with an
+internal error after a power cut. Such a check must also leave an operation with an unknown
+outcome alone, because the system may never have taken it. Each project wrote these rules
+again; the claim writes them once.
+
+**Witness.** Up to five broken ids, each with its send and its `status` record.
 
 ## Time-dependent claims
 

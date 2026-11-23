@@ -97,6 +97,45 @@ pub enum Linearizable {
     Unordered,
 }
 
+/// `claims.acked_outcome`: every acknowledged send ends in a final state that the read-back
+/// (`status` records) shows, and that state agrees with the acknowledgement.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AckedOutcome {
+    /// The errors (`e=` of a status item) that the client causes: a failed final state with one
+    /// of them keeps the claim. Each is a code, or a pattern with `*` for any characters.
+    pub client_errors: Vec<String>,
+    /// `effect: recorded`: the read-back records whether each operation's effect is there
+    /// (`f=1` or `f=0`), and a final state that contradicts it breaks the claim.
+    pub effect: bool,
+}
+
+impl AckedOutcome {
+    /// Whether `e` is one of the client's errors.
+    pub fn client_error(&self, e: &str) -> bool {
+        self.client_errors.iter().any(|p| glob(p, e))
+    }
+}
+
+/// Whether `s` matches the pattern `p`, where `*` stands for any characters (none too).
+pub fn glob(p: &str, s: &str) -> bool {
+    let parts: Vec<&str> = p.split('*').collect();
+    if parts.len() == 1 {
+        return p == s;
+    }
+    let (first, last) = (parts[0], parts[parts.len() - 1]);
+    if !s.starts_with(first) || s.len() < first.len() + last.len() || !s.ends_with(last) {
+        return false;
+    }
+    let mut rest = &s[first.len()..s.len() - last.len()];
+    for mid in &parts[1..parts.len() - 1] {
+        match rest.find(mid) {
+            Some(i) => rest = &rest[i + mid.len()..],
+            None => return false,
+        }
+    }
+    true
+}
+
 /// What the measures cover.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MeasureOpts {
@@ -137,6 +176,8 @@ pub struct Decl {
     /// `members: exclusive`.
     pub members_exclusive: bool,
     pub linearizable: Linearizable,
+    /// `acked_outcome`: None when not declared.
+    pub acked_outcome: Option<AckedOutcome>,
     pub measures: MeasureOpts,
 }
 
@@ -161,6 +202,7 @@ impl Default for Decl {
             fan_out: false,
             members_exclusive: false,
             linearizable: Linearizable::None,
+            acked_outcome: None,
             measures: MeasureOpts::default(),
         }
     }
@@ -179,7 +221,7 @@ pub const DECL_KEYS: [&str; 5] = [
     "measures",
 ];
 /// The claim keys this hydo knows.
-pub const CLAIM_KEYS: [&str; 11] = [
+pub const CLAIM_KEYS: [&str; 12] = [
     "delivery",
     "duplicates",
     "after_ack",
@@ -191,6 +233,7 @@ pub const CLAIM_KEYS: [&str; 11] = [
     "fan_out",
     "members",
     "linearizable",
+    "acked_outcome",
 ];
 /// The measure option keys this hydo knows.
 pub const MEASURE_KEYS: [&str; 3] = ["windows", "quantiles", "channels"];
@@ -434,10 +477,47 @@ fn claims(d: &mut Decl, v: &PyVal) -> Result<(), String> {
                     _ => Linearizable::None,
                 }
             }
+            "acked_outcome" => d.acked_outcome = acked_outcome(v, &wh)?,
             _ => {}
         }
     }
     Ok(())
+}
+
+/// `none`, `success`, or a mapping with `client_errors:` and `effect:`.
+fn acked_outcome(v: &PyVal, wh: &str) -> Result<Option<AckedOutcome>, String> {
+    if let PyVal::Str(_) = v {
+        return Ok(match word(v, wh, &["none", "success"])? {
+            "success" => Some(AckedOutcome::default()),
+            _ => None,
+        });
+    }
+    let mut a = AckedOutcome::default();
+    for (k, x) in keys_of(v, wh, &["client_errors", "effect"])? {
+        let w = format!("{wh}.{k}");
+        if k == "effect" {
+            a.effect = word(x, &w, &["none", "recorded"])? == "recorded";
+            continue;
+        }
+        let PyVal::List(l) = x else {
+            return Err(format!(
+                "{w}: a list of error codes or patterns with *, not {}",
+                x.repr()
+            ));
+        };
+        for e in l {
+            match e.as_str() {
+                Some(s) if !s.is_empty() => a.client_errors.push(s.to_string()),
+                _ => {
+                    return Err(format!(
+                        "{w}: a list of error codes or patterns with *, not {}",
+                        e.repr()
+                    ))
+                }
+            }
+        }
+    }
+    Ok(Some(a))
 }
 
 fn measures(o: &mut MeasureOpts, v: &PyVal) -> Result<(), String> {
@@ -525,6 +605,9 @@ pub fn claim_names(d: &Decl) -> Vec<&'static str> {
     if d.linearizable != Linearizable::None {
         v.push("linearizable");
     }
+    if d.acked_outcome.is_some() {
+        v.push("acked-outcome");
+    }
     v
 }
 
@@ -542,6 +625,9 @@ pub fn needs_drain(d: &Decl) -> Vec<&'static str> {
     }
     if d.dead_letter.as_ref().is_some_and(|x| x.to.is_some()) {
         v.push("claims.dead_letter (with to:)");
+    }
+    if d.acked_outcome.is_some() {
+        v.push("claims.acked_outcome");
     }
     v
 }
@@ -728,6 +814,19 @@ pub fn to_pyval(d: &Decl) -> PyVal {
             Linearizable::Unordered => "unordered",
         }),
     ));
+    // only when declared, so that the declarations of the checks before it show as they did
+    if let Some(a) = &d.acked_outcome {
+        claims.push((
+            "acked_outcome",
+            dict(vec![
+                (
+                    "client_errors",
+                    PyVal::List(a.client_errors.iter().map(|x| s(x)).collect()),
+                ),
+                ("effect", s(if a.effect { "recorded" } else { "none" })),
+            ]),
+        ));
+    }
     let mut top = vec![
         (
             "acknowledgement",

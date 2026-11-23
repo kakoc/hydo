@@ -1,0 +1,41 @@
+{
+  "format": 1,
+  "name": "messages-acked-outcome",
+  "services": [
+    {
+      "name": "search",
+      "cmd": "/bin/search-server --data /data/search",
+      "ready": "/bin/tasks-client ready"
+    }
+  ],
+  "workload": {
+    "steps": 30,
+    "run": "/bin/tasks-client enqueue --from $HYDO_FROM --to $HYDO_TO"
+  },
+  "checks": [
+    {
+      "id": "tasks",
+      "type": "messages",
+      "history": "tasks",
+      "final": "/bin/tasks-client read-back",
+      "claims": {
+        "acked_outcome": {
+          "client_errors": [
+            "index_already_exists",
+            "invalid_*"
+          ],
+          "effect": "recorded"
+        }
+      }
+    },
+    {
+      "id": "jobs",
+      "type": "messages",
+      "history": "jobs",
+      "final": "/bin/tasks-client read-back-jobs",
+      "claims": {
+        "acked_outcome": "success"
+      }
+    }
+  ]
+}

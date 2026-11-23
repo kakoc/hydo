@@ -21129,6 +21129,114 @@ two rounds. No explorer or controller golden moved.
 
 **What is left.** Open item 173.
 
+## Milestone 346 (tentative number): a ready-made claim that an acknowledged write ends as acknowledged
+
+A `type: messages` check takes a new claim, `acked_outcome`: every send that the system
+acknowledged ends in a final state that the check's `final:` reads back, and that state agrees
+with the acknowledgement. The user said "do" on 2026-11-23. Nothing recorded moved.
+
+**Why.** A check of this kind found the Meilisearch example's lost document additions without a
+hint: an addition acknowledged with `202` ended `failed` with an internal error after a power
+cut. The same kind of check caught an index deletion reported `failed` with `index_not_found`
+after it had taken effect. Each project wrote the check by hand, and the rules are easy to get
+wrong: an agent's check of the Iggy example counted an error of an unknown outcome as a failure.
+
+**The declaration** (a format-1 addition, `hydo/schema/project-v1.json`, the schema example
+`messages-acked-outcome`):
+
+```yaml
+    final: /bin/mlc readback
+    claims:
+      acked_outcome:                      # none | success | a mapping
+        client_errors: [index_not_found]  # codes, or patterns with *
+        effect: recorded                  # none | recorded
+```
+
+`hydo build --check` refuses the claim without a `final:`. The results show `acked_outcome` in
+the declaration only when it is declared, so every earlier declaration shows as it did.
+
+**The records.** A new operation of the messages history, `status <channel> <item>...`, written
+by the read-back. Each item of its completion carries the final state in `s=` (`ok` succeeded,
+`fail` failed, `info` no final state), the system's error in `e=`, and with `effect: recorded`
+whether the operation's effect is in the system's state, `f=1` or `f=0`. A read without an
+answer is the operation's `info`. The Rust SDK writes it with `Messages::status`,
+`Item::final_state`, `Item::error` and `Item::effect`. The shared case
+`sdk/cases/history/messages` has four new lines, and the Go, Python and JavaScript SDKs replay
+it unchanged (their tests pass).
+
+**The claim**, reported as `<check id>.acked-outcome`, judges the last answered read of each id:
+
+- An acknowledged send breaks it when it ends `s=info`, or `s=fail` with an `e=` that
+  `client_errors:` does not name.
+- A send with an unknown outcome may end in any state.
+- With `effect: recorded`, `s=ok` with `f=0` and `s=fail` with `f=1` break it for any send,
+  also with a client error. An item without `f=` is judged by its final state alone.
+- An acknowledged id without an answered read is undecided; with no answered read at all the
+  claim is undecided, and the run's verdict is an ERROR.
+
+A violation names up to five ids with their system ids and final states, and its witness holds
+each one's send and status record. The checker is `claims::acked_outcome` in hydo-history's
+module `messages`. A status operation creates no group, so it changes no other claim.
+
+**The tests.** `hydo-history`'s `messages::` has six new scripted tests of the claim: a hold with
+succeeded and client-caused failures, the failures that break it, the effect with and without
+`effect: recorded`, the undecided cases, the declaration's refusals and its JSON, and the
+witness in `run_checks`. `hydo-manifest`'s `format::` takes the new schema and the example case,
+and `hydo-schema-compat` finds the schema an addition to the released one. The Rust SDK's
+`messages_records_the_shared_case` writes the shared case's new lines; the Go, Python and
+JavaScript SDKs' case tests pass unchanged.
+
+**The Meilisearch example** (`hydo/onboard/examples/meilisearch`, Mac engine, this tree's hydo
+over the 0.5.0 release's guest files, images at the fingerprint epoch 5). The client records each
+task request as a send of its request id with the task's uid as its system id, and writes
+`m<uid>:<request id>` to `$HYDO_ACKED`. `mlc readback`, the final: of the new check `queue`,
+drains the queue and writes each acknowledged task's final state, its error's code, and the
+effect of an addition (every document stored with its body) and of an index deletion whose
+creation succeeded (the index is gone). The check declares
+`acked_outcome: {client_errors: [index_not_found], effect: recorded}`. In its own commit the
+client gained `parallel_driver_delidx`: the creation of an index `x<cmd>` and its deletion,
+enqueued one after the other, with the event `meili.delete_index_acked`.
+
+| schedule | `queue.acked-outcome` | fingerprint |
+|---|---|---|
+| `disk=none \| run` | held over 173 acknowledged tasks | `34d6b1999155c0a5` (twice) |
+| `disk=cut \| run A=meili.add_acked@20+2:cut` (finding 2) | broken: `add.155 (system id 178) was acknowledged and ended failed with internal, but its effect is there; add.157 (system id 180) ... failed with internal, not an error the client causes` | `3e5b31f5dd34a1fb` |
+| `disk=none \| run A=meili.delete_index_acked+13:kill-now-meilisearch` | broken: `delidx.4 (system id 14) was acknowledged and ended failed with index_not_found, but its effect is there` | `b72d43f0a3a2d63c` (three runs) |
+| `disk=none \| run A=meili.delete_index_acked+7:kill-now-meilisearch` | broken: `mkidx.4 (system id 13) was acknowledged and ended failed with index_already_exists, not an error the client causes` | `f3bf73fdaf6b40f3` (three runs) |
+| `disk=none \| run A=meili.swap_acked@20+10:cut` | broken: `add.157 (system id 179) was acknowledged and ended succeeded, but its effect is not there` | `e21f719584c4b44e` |
+
+On the image before the deletion driver (the second commit's), finding 2's schedule broke the
+claim twice with `fp=fecb31f6821fff20`, and the clean run held over 159 tasks with
+`fp=b9c674012d4c2dc7`.
+
+What the effect showed. Finding 2's failed additions have their documents stored: the first boot
+indexed them, and the restart ran their batch again after the payload files were gone. So on
+this image the failure comes from finding 1's split of two commits, not from a lost payload. With
+the cut 10 or 16 ms after a swap the payload was lost before the first run, and the claim names
+a succeeded addition whose documents are missing. The index deletion and the creation run twice
+after a kill between their two commits, a fourth form of finding 1 (RESULTS.md, finding 4). The
+deletion's `index_not_found` is in `client_errors`, so only the effect breaks the claim there.
+Delays of 4 to 6, 12 and 14 ms held. The old check `final_tasks`, which counts every failure as
+broken, broke on the same runs; the claim states the rule without a hand-written check, and it
+held where `final_tasks` called a succeeded addition with `indexedDocuments` 0 broken although
+its documents are stored (`+14`, `A=meili.add_acked@20+40:cut`).
+
+**What moved.** No value of `hydo/onboard/recorded.json`: the example is not in it. The example's
+own values (RESULTS.md) are new, because the client and the composition changed. The saved
+regressions on the new image:
+
+- `payload-lost-at-a-power-cut` and `swap-runs-twice-after-a-kill` keep their violations.
+- `swap-runs-twice-after-a-crash` (`A=meili.add_acked@20+40:cut`) still fails, by findings 2
+  and 3; the swap no longer runs twice there. Its comment says so.
+- `dump-empty-after-a-power-cut` passed with `C=30`, because no dump came before step 30 in the
+  new composition. It is `C=55` now (`fp=547d6d5f16276222`, twice).
+- `index-deletion-runs-twice-after-a-kill` is new.
+
+The explorer's `identity-quick.txt` and `corpus-full.txt` are re-recorded for the example's new
+inputs. The controller's corpus held unchanged.
+
+**What is left.** Open item 174, and open item 66 is updated.
+
 ## Milestone 347 (tentative number): two gaps of a user's test project
 
 Status: done on 2026-11-23. Nothing recorded moved, and the fingerprint epoch stays 5.
@@ -21159,4 +21267,3 @@ fetch-images.sh has the stop line. The CLI's recorded answers of `compose`, `com
 
 **What is left.** The user's own project did not run with the fix. An image with only an amd64
 build on a Mac is unchanged: its hydo.yaml names the x86_64 file only.
-

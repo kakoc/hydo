@@ -1533,6 +1533,20 @@ the history, and it knows no messaging system or API. The checker is the module 
 Rust SDK records with `hydo_assert::history::messages`. Reference: `hydo guide messages`; design:
 `docs/design/messaging.md`; evidence and decisions: `docs/HISTORY.md` Milestone 196.
 
+**The final state of each acknowledged write (M346, tentative number).** The claim
+`acked_outcome` of a messages check (a format-1 addition: `none`, `success`, or
+`{client_errors: [...], effect: recorded}`) says that every acknowledged send ends as
+acknowledged. The check's `final:` writes `status` records with each id's final state (`s=`),
+the system's error (`e=`) and, where it can read it, whether the effect is there (`f=1` or
+`f=0`). A failure with an error that `client_errors:` names keeps the claim, and a send with an
+unknown outcome may end in any state. With `effect: recorded` a final state that contradicts the
+effect breaks it for any send. It is reported as `<id>.acked-outcome`. The Rust SDK writes the
+records with `Messages::status`. The Meilisearch example's check `queue` declares it, and its
+finding 2 breaks it. A kill between an index deletion's two commits there leaves the deletion
+`failed` with `index_not_found` although the index is gone
+(`A=meili.delete_index_acked+13:kill-now-meilisearch`): the effect breaks the claim. The
+reference is the section "Read back the final states" of `hydo guide messages`.
+
 **Format-1 additions of M202.** `services[].start_after: started` starts a cluster's members
 before their readiness checks run. `services[].logs` names a service's own log files for the
 diagnosis and `hydo inspect logs`. `root.fix_pyc` makes Python's bytecode caches match the image's
@@ -2097,9 +2111,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     one target and a second `T=`. Refusing them, or applying several clock steps, re-records one
     case each. Also left: `G=` and `L=` lists, `O=` partitions, several `N=` windows at once, a
     primary followed during the fault, and runs on hvx and KVM (M195).
-66. Messaging checks: no VM ran one yet, and per-window measures, `Exploration.messages` and the
-    other SDKs' helpers are not built. The planted-bug example and the real-system onboardings
-    come next (M196).
+66. Messaging checks (M196, M346). The onboardings of Redpanda (M279), ClickHouse (M311), Iggy
+    (M314) and GreptimeDB (M343) ran them in VMs, and M346's claim `acked_outcome` ran on the
+    Mac engine.
+    Per-window measures and `Exploration.messages` are not built. The Go, Python and
+    JavaScript SDKs have no messaging helper: their clients write the generic records, as the
+    shared case `sdk/cases/history/messages` does.
 67. The GitHub action ran on 2026-11-13 in a private trial repository with the 0.3.1 Redis
     example. Its 2-CPU runners have KVM. A push passed with 0 findings. A pull request that set
     `appendfsync everysec` failed with 2 new findings in one comment, each with its minimal
@@ -3198,7 +3215,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       error, but no run used such a Docker.
     - `hydo build` compares no image file with the lock file, for any image. A changed file is
       caught by `hydo compose` and fetch-images.sh only.
-    - hydo-build's equivalence corpus has 39 mismatches. Six are from M306: two mutants with a
+    - hydo-build's equivalence corpus has 39 mismatches. On 2026-11-23 one run of the merge of
+      M346 counted 57, and the next run of the same tree 39, the list of `main`; the cause was not
+      found. Six are from M306: two mutants with a
       `contracts:` key the recorded answers do not list. Twelve are from M329: the known keys of
       a fake's and a proxy's route. The others name the guest keys of later milestones.
 166. The three gaps of a user's onboarding with 0.4.0 (M324, tentative number). What is left:
@@ -3373,6 +3392,20 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The merged list shows each problem as its first round shows it. It merges no property
       table, no list of what held, and no statistics. The error lines of new kinds are the first
       round's, with the rounds that wrote any. The accept keys are each round's.
+174. The claim `acked_outcome` (M346, tentative number). What is left:
+    - It ran on the Mac engine only, with the Meilisearch example. hvx and KVM did not run it, and
+      no other example declares it.
+    - The read-back must wait for the system's pending work itself. A task still pending at the
+      read is `s=info` and breaks the claim, so a read-back that stops too early reports a
+      false loss.
+    - The effect is what the client can read. Meilisearch's read-back reads it for an addition
+      (every document stored with its body) and for an index deletion whose creation succeeded.
+      Updates, deletions of documents, settings, swaps, edits, dumps and snapshots are judged by
+      their final state alone.
+    - A send with an unknown outcome is judged only by its effect, and Meilisearch's read-back
+      reads none: it has no task uid for such a request.
+    - `hydo explore` draws nothing aimed at the window between an effect's commit and its
+      status's commit; the kill reactions of `--kill-now` reach it by chance.
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -4414,6 +4447,11 @@ build machine, before 2026-10-13.
   refused before any VM, one line each. `hydo report A B C` lists several explorations'
   problems once each. Meilisearch's swap ran twice at schedule 29 of the aimed grid, against
   seed 101 blind. Nothing recorded moved
+- M346 (tentative number): a ready-made claim of the messages check, `acked_outcome`. Every
+  acknowledged send ends succeeded in the read-back's `status` records, or failed with an error
+  the client causes. No final state contradicts its recorded effect. The Meilisearch example
+  declares it, and its finding 2 and an index deletion that runs twice after a kill break it on
+  the Mac engine. Nothing recorded moved; the example's own fingerprints are new
 - M347 (tentative number): two gaps of a user's test project. On a Mac, `hydo compose` refused
   an image with only a linux/arm64 build unless `--from-docker` was given, because it asked for
   amd64 too. Such an image is imported now, with its settings from the arm64 build. A warning

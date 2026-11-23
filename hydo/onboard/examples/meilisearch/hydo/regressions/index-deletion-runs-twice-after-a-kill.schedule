@@ -1,0 +1,8 @@
+# New (RESULTS.md, finding 4, Milestone 346): 13 ms after the first index deletion was
+# acknowledged, a real-time relay in the guest kills the server. The deletion of x4 is then
+# between its two commits: the index is gone, the task's succeeded status is not committed. The
+# restart runs the deletion again, and it fails with index_not_found. The claim acked_outcome of
+# the check queue breaks: the deletion's effect is there and its status says failed. 7 ms after
+# the event the creation of x4 runs twice instead and fails with index_already_exists.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run A=meili.delete_index_acked+13:kill-now-meilisearch

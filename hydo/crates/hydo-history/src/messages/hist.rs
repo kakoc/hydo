@@ -1,5 +1,6 @@
 //! The records of a messages history (docs/design/messaging.md "The history") read into
-//! operations: send, recv, ack, nack, extend, commit, sub, and the drain's `drained` records.
+//! operations: send, recv, ack, nack, extend, commit, sub, status (the read-back of final
+//! states), and the drain's `drained` records.
 //!
 //! Order is the records' position over the consoles (the workload console, then the recovery
 //! console); time is the record's guest time, used only for durations between two records of
@@ -66,6 +67,11 @@ pub struct Item {
     pub s: Option<Out>,
     /// `r=0` on a nack: do not requeue (a reject).
     pub r: Option<String>,
+    /// A status read-back's error: the code or message the system gave a failed operation.
+    pub e: Option<String>,
+    /// A status read-back's effect, as the client read it from the system's state: `f=1` the
+    /// operation's effect is there, `f=0` it is not.
+    pub f: Option<bool>,
 }
 
 impl Item {
@@ -96,6 +102,8 @@ impl Item {
         kv("v", &self.v.map(|x| x.to_string()));
         kv("s", &self.s.map(|x| x.word().to_string()));
         kv("r", &self.r);
+        kv("e", &self.e);
+        kv("f", &self.f.map(|x| if x { "1" } else { "0" }.to_string()));
         s
     }
 
@@ -104,7 +112,7 @@ impl Item {
         macro_rules! take {
             ($($f:ident),*) => {$( if o.$f.is_some() { self.$f = o.$f.clone(); } )*};
         }
-        take!(k, x, d, o, n, h, v, s, r);
+        take!(k, x, d, o, n, h, v, s, r, e, f);
     }
 }
 
@@ -140,6 +148,14 @@ pub fn parse_item(tok: &str) -> Result<Item, String> {
             "o" => it.o = Some(v),
             "h" => it.h = Some(v),
             "r" => it.r = Some(v),
+            "e" => it.e = Some(v),
+            "f" => {
+                it.f = Some(match v.as_str() {
+                    "1" => true,
+                    "0" => false,
+                    _ => return Err(format!("item {tok:?}: f={v}: 1 or 0")),
+                })
+            }
             "d" => it.d = Some(num(&v).ok_or_else(bad)?),
             "n" => it.n = Some(num(&v).ok_or_else(bad)?),
             "v" => it.v = Some(num(&v).ok_or_else(bad)?),
@@ -168,6 +184,8 @@ pub enum OpKind {
     Extend,
     Commit,
     Sub,
+    /// The read-back of operations' final states (`claims.acked_outcome`).
+    Status,
 }
 
 impl OpKind {
@@ -180,6 +198,7 @@ impl OpKind {
             OpKind::Extend => "extend",
             OpKind::Commit => "commit",
             OpKind::Sub => "sub",
+            OpKind::Status => "status",
         }
     }
     fn parse(f: &str) -> Option<OpKind> {
@@ -191,6 +210,7 @@ impl OpKind {
             "extend" => OpKind::Extend,
             "commit" => OpKind::Commit,
             "sub" => OpKind::Sub,
+            "status" => OpKind::Status,
             _ => return None,
         })
     }
@@ -319,7 +339,7 @@ pub fn read(ev: &Events, name: &str, clock: &[usize]) -> MHist {
         }
         let Some(kind) = OpKind::parse(&e.f) else {
             h.warnings.push(format!(
-                "{wh}: operation {} is not one of send, recv, ack, nack, extend, commit, sub, drained (ignored)",
+                "{wh}: operation {} is not one of send, recv, ack, nack, extend, commit, sub, status, drained (ignored)",
                 e.f
             ));
             continue;
@@ -429,7 +449,7 @@ fn parse_op(kind: OpKind, args: &[String], wh: &str) -> Result<Parsed, String> {
             .collect()
     };
     match kind {
-        OpKind::Send => {
+        OpKind::Send | OpKind::Status => {
             let q = args
                 .first()
                 .ok_or_else(|| format!("{w}: needs a channel"))?;

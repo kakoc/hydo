@@ -156,12 +156,22 @@ These findings hold for every type of system:
   done
   ```
 
+  For the operations that the system acknowledged, the claim `acked_outcome` of a `type:
+  messages` check states the first rule without a hand-written check (`hydo guide messages`,
+  "Read back the final states"). It also keeps the rule for unknown outcomes: such an operation
+  may end in any state, so the claim never counts it as a failure.
+
 - **When it fits.** A system that accepts an operation and finishes it later: a query engine, a
   job runner, a workflow engine, a batch scheduler.
 - **What it found.** The user's query engine (the entry "Production's topology"). The first
   round's workload recorded a stuck query and an unreadable result as unknown, so no run could
   fail on them. With the two checks, the second round found both bugs: a query that stays
   running after a worker's pause, and a completed query whose results are gone after a kill.
+  The claim `acked_outcome` on Meilisearch's task queue broke on two acknowledged additions
+  after a power cut: both failed with an internal error, and one of them had its documents
+  stored. A kill after an index deletion's `202` left the deletion `failed` with
+  `index_not_found` although the index was gone, an error the declaration named as the
+  client's; the recorded effect broke the claim.
 - **What it misses.** `$HYDO_OUTCOMES` is empty in the recovery boot after a power cut unless
   `guest.outcomes_after_cut: true` is set (`hydo guide composer`). A check that asks about every
   operation on every poll starts many processes. In the user's first version, the run ended as

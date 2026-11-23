@@ -703,6 +703,19 @@ fn messages_prog() -> Prog {
     a.push("from=now".into());
     let o = p.invoke(q, 8, "sub", a);
     p.fail(o);
+    let o = p.invoke(q, 10, "status", with(&["orders"], &[Item::new("m17"), Item::new("m19")]));
+    p.ok(
+        o,
+        with(
+            &["orders"],
+            &[
+                Item::new("m17").id(81).final_state(Outcome::Ok).effect(true),
+                Item::new("m19").id(83).final_state(Outcome::Fail).error("invalid doc; id").effect(false),
+            ],
+        ),
+    );
+    let o = p.invoke(q, 10, "status", with(&["orders"], &[Item::new("m18")]));
+    p.info(o);
     p.record(q, 9, "ok", "drained", with(&["orders", "-"], &[]));
     p
 }
@@ -866,7 +879,7 @@ fn history_cases() -> Vec<Case> {
 
     v.push(hcase(
         "messages",
-        "messaging records (docs/design/messaging.md): send, recv, ack, nack, extend, commit, sub and drained, with items m;k=;x=;d=;o=;n=;h=;v=;s=;r= in one fixed order and their values encoded with enc plus ; and = (the tokens are the Rust Item's; tests/history.rs checks that the Messages recorder writes exactly these lines)",
+        "messaging records (docs/design/messaging.md): send, recv, ack, nack, extend, commit, sub, status and drained, with items m;k=;x=;d=;o=;n=;h=;v=;s=;r=;e=;f= in one fixed order and their values encoded with enc plus ; and = (the tokens are the Rust Item's; tests/history.rs checks that the Messages recorder writes exactly these lines)",
         messages_prog(),
     ));
 

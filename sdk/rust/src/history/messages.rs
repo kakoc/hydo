@@ -27,7 +27,8 @@
 //! The lines are `HYDO-HIST <history> <process> <type> <time> <op> <channel> [<group>] <item>...`
 //! with an item `m17;k=g2;x=d17;d=5000;o=81;n=2;h=a91f;v=30000;s=ok` (message id, then key,
 //! deduplication id, delay, system id or offset, attempt count, handle, lease, the item's own
-//! outcome in a batch, and `r=0` for a reject), values encoded with [`enc`](super::enc) extended
+//! outcome in a batch, and `r=0` for a reject; a read-back's `status` item adds the error `e=`
+//! and the effect `f=1` or `f=0`), values encoded with [`enc`](super::enc) extended
 //! to `;` and `=`. They are the generic records, so any client can write them with
 //! [`History`](super::History) too.
 
@@ -65,6 +66,8 @@ pub struct Item {
     v: Option<u64>,
     s: Option<Outcome>,
     r: bool,
+    e: Option<String>,
+    f: Option<bool>,
 }
 
 impl Item {
@@ -118,6 +121,22 @@ impl Item {
         self.r = true;
         self
     }
+    /// A read-back's final state (`s=`): [`Outcome::Ok`] succeeded, [`Outcome::Fail`] failed,
+    /// [`Outcome::Info`] no final state (still pending, or unknown to the system).
+    pub fn final_state(self, s: Outcome) -> Item {
+        self.outcome(s)
+    }
+    /// The error code or message the system gave a failed operation (`e=`, in a read-back).
+    pub fn error(mut self, e: &str) -> Item {
+        self.e = Some(e.to_string());
+        self
+    }
+    /// Whether the operation's effect is in the system's state, as the client read it (`f=1` or
+    /// `f=0`, in a read-back).
+    pub fn effect(mut self, there: bool) -> Item {
+        self.f = Some(there);
+        self
+    }
     /// The item as one token.
     pub fn token(&self) -> String {
         let mut t = item_enc(&self.m);
@@ -148,6 +167,8 @@ impl Item {
             }),
         );
         kv("r", if self.r { Some("0".to_string()) } else { None });
+        kv("e", self.e.clone());
+        kv("f", self.f.map(|x| if x { "1" } else { "0" }.to_string()));
         t
     }
 }
@@ -271,6 +292,13 @@ impl Messages {
     pub fn sub(&self, proc_: impl std::fmt::Display, channel: &str, group: &str, from_start: bool) -> MsgOp {
         let from = if from_start { "from=start" } else { "from=now" };
         self.invoke(&proc_, "sub", vec![item_enc(channel), item_enc(group)], vec![from.to_string()])
+    }
+
+    /// Records a read-back of the final states of sent operations (`claims.acked_outcome`): the
+    /// completion's items carry each one's [`Item::final_state`], [`Item::error`] and
+    /// [`Item::effect`]. A read without an answer is [`MsgOp::info`].
+    pub fn status(&self, proc_: impl std::fmt::Display, channel: &str, items: &[Item]) -> MsgOp {
+        self.invoke(&proc_, "status", vec![item_enc(channel)], tokens(items))
     }
 
     /// Records that the drain has seen the end of the group's messages (one completion record,

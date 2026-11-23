@@ -76,4 +76,20 @@ test:
   round_ms: 300
   command_timeout: 120
 
+checks:
+  # hydo's ready-made claim (Milestone 346, hydo guide messages, "Read back the final states"):
+  # every task that Meilisearch acknowledged with 202 ends succeeded. The client records each
+  # request as a send of its request id (the history tasks), and `mlc readback` reads back each
+  # acknowledged task's final state and its effect: for an addition whether its documents are
+  # stored, for an index deletion whether the index existed and is gone.
+  - id: queue
+    type: messages
+    history: tasks
+    msg: every acknowledged task ends as Meilisearch acknowledged it
+    final: /bin/mlc readback
+    claims:
+      acked_outcome:
+        client_errors: [index_not_found]   # a deletion of an index whose creation failed
+        effect: recorded
+
 faults: [kill, pause, cut, clock, disk, corrupt, powerloss]

@@ -32,6 +32,7 @@ checks:
       fan_out: every-group           # none | every-group
       members: exclusive             # any | exclusive
       linearizable: none             # none | fifo | unordered (needs acknowledgement: on-receive)
+      acked_outcome: none            # none | success | {client_errors: [<code>, ...], effect: recorded}
     measures:
       quantiles: [0.5, 0.95, 0.99, 1]
       channels: all                  # all | [<channel>, ...]
@@ -43,7 +44,8 @@ checks:
 - `processing`, `after_ack`, `lease`, `dead_letter` or `order: fifo-blocking` without
   acknowledgements;
 - `delivery: at-most-once` or `exactly-once` together with a `lease`;
-- `delivery` with loss, `fan_out`, `processing`, or `dead_letter` with `to:`, without a `final:`.
+- `delivery` with loss, `fan_out`, `processing`, `dead_letter` with `to:`, or `acked_outcome`,
+  without a `final:`.
 
 Unknown keys are errors, so a misspelled claim stops the build.
 
@@ -118,6 +120,7 @@ retry of the same intent reuses the id.
 | extend a lease | `extend <channel> <group> <item;v=<ms>>...` | the same |
 | commit offsets | `commit <channel> <group> <key>@<offset>...` | the same |
 | subscribe | `sub <channel> <group> from=start\|from=now` | the same |
+| read back final states | `status <channel> <item>...` | the items, each with `s=` and maybe `e=` and `f=` |
 | end of the drain | (none) | `drained <channel> <group>` |
 
 An item is the message id with attributes, in this order: `m17;k=g2;x=d17;d=5000;o=81;n=2;h=a91f;v=30000;s=ok`.
@@ -125,6 +128,8 @@ An item is the message id with attributes, in this order: `m17;k=g2;x=d17;d=5000
 - `k`: the ordering key. `x`: the deduplication id. `d`: the requested delay in ms.
 - `o`: the system id or offset. `n`: the attempt count. `h`: the handle an acknowledgement presents.
 - `v`: the lease in ms. `s`: the item's outcome in a batch. `r=0`: a reject on a nack.
+- In a `status` item only: `e`, the error that the system gave a failed operation, and `f=1` or
+  `f=0`, whether the operation's effect is in the system's state.
 
 The rules for the values:
 
@@ -135,7 +140,7 @@ The rules for the values:
   numbers: `order: log` and the gap in a lost message's explanation read `o` as an offset. A
   system id that is not a number works for every other claim.
 - `d`, `n` and `v` are whole numbers.
-- A message id, `h`, `k`, `x` and `o` may hold any characters, encoded as in the other history
+- A message id, `h`, `k`, `x`, `o` and `e` may hold any characters, encoded as in the other history
   records. Encode these characters: `%`, `@`, a space, a control character, `,`, `[`, `]`, `:`,
   `;` and `=`. Each becomes `%` and two hexadecimal digits per byte of UTF-8 (`a;b` is `a%3Bb`). Write an empty value as
   `%`. The Rust SDK's recorder encodes the values itself.
@@ -238,6 +243,65 @@ exit 1
 The sketch writes values as they are. Encode a message id or a handle with other characters as
 the section "Record the history" says. A Rust drain writes the same records with `q.recv`, `q.ack` and
 `q.drained`, as in the Rust example of that section.
+
+## Read back the final states: `acked_outcome`
+
+Some systems answer a write at once and do the work later. A task queue answers `202` with a
+task id, and a job runner accepts a job before it runs. Such a write can still fail, or vanish,
+after the answer. The claim `acked_outcome` says that every acknowledged send ends in a final
+state that the system reports, and that this state agrees with the acknowledgement. It is
+reported as `<check id>.acked-outcome`.
+
+```yaml
+    final: /bin/tasks-client read-back
+    claims:
+      acked_outcome:
+        client_errors: [index_already_exists, "invalid_*"]   # codes, or patterns with *
+        effect: recorded                                      # none | recorded
+```
+
+`acked_outcome: success` is the claim without client errors and without the effect. The
+Meilisearch example's check `queue` declares the claim, and its client `mlc readback` is a
+read-back to copy (`hydo/onboard/examples/meilisearch`).
+
+Record each write as a `send` of the client's own id, with the system's id in `o=`. A write
+without an answer is `info`. The check's `final:` is the read-back. It waits until the system
+has no pending work, then writes a `status` record for each id. Each item of a status
+completion carries the final state in `s=`:
+
+- `s=ok`: the operation succeeded.
+- `s=fail`: it failed. `e=` holds the system's error code or message.
+- `s=info`: it has no final state. It is still pending, or the system does not know its id.
+
+A read that got no answer is a `status` operation with the type `info`. With `effect:
+recorded`, the read-back also looks at the system's state. It writes `f=1` when the operation's
+effect is there and `f=0` when it is not. An item without `f=` is judged by its final state
+alone, so the read-back can leave out the effects that it cannot read.
+
+The claim judges the last answered read of each id:
+
+- An acknowledged send must end `s=ok`, or `s=fail` with an `e=` that `client_errors:` names.
+  `s=info` breaks the claim: the acknowledged write has no final state.
+- A send with an unknown outcome may end in any state. Do not count it as a failure in the
+  client: the write can have taken effect (`hydo guide strategies`).
+- With `effect: recorded`, a final state that contradicts the effect breaks the claim for any
+  send. Two cases break it: `s=ok` with `f=0`, and `s=fail` with `f=1`. A client error does not
+  excuse a failure whose effect is there.
+- An acknowledged id that the read-back did not read is undecided. When no id was read back,
+  the claim is undecided, and the run's verdict is an ERROR.
+
+A violation names up to five ids with their system ids and final states:
+
+```text
+HYDO-ORACLE: VIOLATION [tasks.acked-outcome] 1 of 1 judged operations did not end as the system answered them: m1 (system id 81) was acknowledged and ended failed with internal, not an error the client causes
+```
+
+The Rust SDK writes the read-back with `Messages::status`:
+
+```rust
+let r = q.status(100, "tasks", &[Item::new("add.12")]);
+r.ok(&[Item::new("add.12").id(165).final_state(Outcome::Fail).error("internal").effect(false)]);
+```
 
 ## Clock steps and durations on the wall clock
 

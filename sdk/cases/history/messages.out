@@ -22,4 +22,8 @@ HYDO-HIST q 8 invoke * sub events g1 from=start
 HYDO-HIST q 8 ok * sub events g1 from=start
 HYDO-HIST q 8 invoke * sub events g2 from=now
 HYDO-HIST q 8 fail * sub events g2 from=now
+HYDO-HIST q 10 invoke * status orders m17 m19
+HYDO-HIST q 10 ok * status orders m17;o=81;s=ok;f=1 m19;o=83;s=fail;e=invalid%20doc%3B%20id;f=0
+HYDO-HIST q 10 invoke * status orders m18
+HYDO-HIST q 10 info * status orders m18
 HYDO-HIST q 9 ok * drained orders -

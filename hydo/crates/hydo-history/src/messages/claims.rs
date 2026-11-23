@@ -1810,3 +1810,173 @@ pub fn delay(ix: &Ix<'_>) -> Claim {
 pub fn when(a: Option<At>) -> String {
     secs(a.and_then(|x| x.shown))
 }
+
+// ------------------------------------------------------------------ acked-outcome
+
+/// The read-back's last answered `status` item of each message id: (op, item), by completion.
+fn last_status<'a>(ix: &Ix<'a>) -> BTreeMap<&'a str, (usize, usize)> {
+    let mut last: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
+    for op in ix.h.ops.iter() {
+        if op.kind != OpKind::Status || op.out != Out::Ok {
+            continue;
+        }
+        for (j, it) in op.items.iter().enumerate() {
+            let later = last
+                .get(it.m.as_str())
+                .is_none_or(|&(o, _)| ix.op(o).ret_pos() <= op.ret_pos());
+            if later {
+                last.insert(it.m.as_str(), (op.i, j));
+            }
+        }
+    }
+    last
+}
+
+/// One broken message of `acked-outcome`: its id, what it shows, and its records.
+struct Broken {
+    text: String,
+    ops: Vec<usize>,
+}
+
+pub fn acked_outcome(ix: &Ix<'_>) -> Claim {
+    const NAME: &str = "acked-outcome";
+    let a = ix.d.acked_outcome.clone().unwrap_or_default();
+    let last = last_status(ix);
+    let (mut judged, mut und) = (0u64, 0u64);
+    let (mut acked, mut client_failed, mut unknown_judged) = (0u64, 0u64, 0u64);
+    let mut broken: Vec<Broken> = Vec::new();
+    let mut first_undecided: Option<String> = None;
+    for m in ix.msgs.values() {
+        let is_acked = ix.acknowledged(m);
+        let is_unknown = !is_acked && m.sends.iter().any(|s| ix.send_out(*s) == Out::Info);
+        if !is_acked && !is_unknown {
+            continue; // refused: it took no effect, and nobody promised one
+        }
+        if is_acked {
+            acked += 1;
+        }
+        let send = if is_acked {
+            ix.first_ok(m)
+        } else {
+            ix.first_live(m)
+        };
+        let send_op = send.map(|s| s.op);
+        let Some(&(sop, sj)) = last.get(m.m.as_str()) else {
+            if is_acked {
+                und += 1;
+                first_undecided.get_or_insert_with(|| m.m.clone());
+            }
+            continue;
+        };
+        let it = &ix.op(sop).items[sj];
+        // the system id the read-back names, else the send's
+        let sysid =
+            it.o.clone()
+                .or_else(|| send.and_then(|s| ix.op(s.op).items[s.item].o.clone()))
+                .map(|o| format!(" (system id {o})"))
+                .unwrap_or_default();
+        let err = it.e.as_deref().unwrap_or("no error code");
+        let mut ops = send_op.into_iter().collect::<Vec<_>>();
+        ops.push(sop);
+        // the effect as the read-back recorded it, when the declaration reads it (an item
+        // without f= is judged by its final state alone: the client cannot read every effect)
+        let effect = if a.effect { it.f } else { None };
+        let Some(s) = it.s else {
+            und += 1;
+            first_undecided.get_or_insert_with(|| m.m.clone());
+            continue;
+        };
+        judged += 1;
+        let what = if is_acked {
+            "was acknowledged and"
+        } else {
+            "had an unknown outcome and"
+        };
+        let text = match (s, effect) {
+            (Out::Ok, Some(false)) => Some(format!(
+                "{}{sysid} {what} ended succeeded, but its effect is not there",
+                m.m
+            )),
+            (Out::Fail, Some(true)) => Some(format!(
+                "{}{sysid} {what} ended failed with {err}, but its effect is there",
+                m.m
+            )),
+            (Out::Fail, _) if is_acked && it.e.as_deref().is_some_and(|e| a.client_error(e)) => {
+                client_failed += 1;
+                None
+            }
+            (Out::Fail, _) if is_acked => Some(format!(
+                "{}{sysid} was acknowledged and ended failed with {err}, not an error the client causes",
+                m.m
+            )),
+            (Out::Info, _) if is_acked => Some(format!(
+                "{}{sysid} was acknowledged and has no final state ({err})",
+                m.m
+            )),
+            _ => None,
+        };
+        if !is_acked {
+            unknown_judged += 1;
+        }
+        if let Some(text) = text {
+            broken.push(Broken { text, ops });
+        }
+    }
+    if !broken.is_empty() {
+        let mut w = Witness::default();
+        for b in broken.iter().take(5) {
+            for &o in &b.ops {
+                w.op(ix, o);
+            }
+        }
+        let shown: Vec<&str> = broken.iter().take(5).map(|b| b.text.as_str()).collect();
+        let more = if broken.len() > 5 {
+            format!("; and {} more", broken.len() - 5)
+        } else {
+            String::new()
+        };
+        return violated(
+            NAME,
+            judged,
+            und,
+            format!(
+                "{} of {} judged operations did not end as the system answered them: {}{more}",
+                broken.len(),
+                judged,
+                shown.join("; ")
+            ),
+            w,
+        );
+    }
+    if judged == 0 && acked > 0 {
+        return undecided(
+            NAME,
+            judged,
+            und,
+            format!(
+                "no final state of the {acked} acknowledged operations was read back (the first: {}); \
+                 the check's final: reads each one back as a status record",
+                first_undecided.unwrap_or_default()
+            ),
+        );
+    }
+    held(
+        NAME,
+        judged,
+        und,
+        &format!(
+            "every acknowledged operation that was read back ended succeeded{}{} ({acked} \
+             acknowledged, {unknown_judged} with an unknown outcome read back)",
+            if client_failed > 0 {
+                format!(" or failed with an error the client causes ({client_failed})")
+            } else {
+                String::new()
+            },
+            if a.effect {
+                ", and no final state contradicted its effect"
+            } else {
+                ""
+            }
+        ),
+    )
+}

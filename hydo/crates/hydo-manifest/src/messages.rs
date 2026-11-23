@@ -50,7 +50,7 @@ const DECL: [&str; 5] = [
     "measures",
 ];
 
-const CLAIMS: [&str; 11] = [
+const CLAIMS: [&str; 12] = [
     "delivery",
     "duplicates",
     "after_ack",
@@ -62,6 +62,7 @@ const CLAIMS: [&str; 11] = [
     "fan_out",
     "members",
     "linearizable",
+    "acked_outcome",
 ];
 
 const MEASURES: [&str; 3] = ["windows", "quantiles", "channels"];
@@ -201,6 +202,7 @@ struct Facts {
     fifo_blocking: bool,
     fan_out: bool,
     linearizable: bool,
+    acked_outcome: bool,
 }
 
 /// Validates a messages check (after `include:` is resolved, or with it unresolved: then only
@@ -400,6 +402,28 @@ fn claims(v: &Value, wh: &str, f: &mut Facts) -> R<()> {
             "members" => {
                 word(v, &w, &["any", "exclusive"])?;
             }
+            "acked_outcome" => {
+                if v.is_string() {
+                    f.acked_outcome = word(v, &w, &["none", "success"])? == "success";
+                } else {
+                    let d = mapping(v, &w, &["client_errors", "effect"])?;
+                    if let Some(e) = d.get("effect") {
+                        word(e, &format!("{w}.effect"), &["none", "recorded"])?;
+                    }
+                    if let Some(l) = d.get("client_errors") {
+                        let ok = l.as_array().is_some_and(|a| {
+                            a.iter().all(|x| x.as_str().is_some_and(|s| !s.is_empty()))
+                        });
+                        if !ok {
+                            return Err(err(format!(
+                                "{w}.client_errors: a list of error codes or patterns with *, not {}",
+                                repr(l)
+                            )));
+                        }
+                    }
+                    f.acked_outcome = true;
+                }
+            }
             _ => {
                 f.linearizable = word(v, &w, &["none", "fifo", "unordered"])? != "none";
             }
@@ -448,6 +472,7 @@ fn conflicts(f: &Facts, has_final: bool) -> Vec<String> {
             (f.fan_out, "claims.fan_out"),
             (f.processing, "claims.processing"),
             (f.dead_letter_to, "claims.dead_letter (with to:)"),
+            (f.acked_outcome, "claims.acked_outcome"),
         ] {
             if on {
                 out.push(format!(

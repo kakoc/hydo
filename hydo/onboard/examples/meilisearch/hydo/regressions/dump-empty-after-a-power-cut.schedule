@@ -1,4 +1,6 @@
-# New (RESULTS.md, finding 3): a power cut before step 30, within 30 s of the run's five dumps.
-# Every dump task says succeeded with its dumpUid, and every dump file has 0 bytes.
+# New (RESULTS.md, finding 3): a power cut within 30 s of a dump. Every dump task says
+# succeeded with its dumpUid, and every dump file has 0 bytes. The cut was C=30 until
+# Milestone 346. The new command parallel_driver_delidx changed the composition, so no dump
+# came before step 30, and C=30 passed; C=55 comes after the first dump.
 # expect: violation      (change to ok when the bug is fixed)
-disk=cut | run C=30
+disk=cut | run C=55

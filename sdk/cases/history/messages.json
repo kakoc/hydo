@@ -1,5 +1,5 @@
 {
-  "about": "messaging records (docs/design/messaging.md): send, recv, ack, nack, extend, commit, sub and drained, with items m;k=;x=;d=;o=;n=;h=;v=;s=;r= in one fixed order and their values encoded with enc plus ; and = (the tokens are the Rust Item's; tests/history.rs checks that the Messages recorder writes exactly these lines)",
+  "about": "messaging records (docs/design/messaging.md): send, recv, ack, nack, extend, commit, sub, status and drained, with items m;k=;x=;d=;o=;n=;h=;v=;s=;r=;e=;f= in one fixed order and their values encoded with enc plus ; and = (the tokens are the Rust Item's; tests/history.rs checks that the Messages recorder writes exactly these lines)",
   "needs": [],
   "steps": [
     {"do":"history","name":"q"},
@@ -27,6 +27,10 @@
     {"do":"ok_same","o":10},
     {"do":"invoke","h":0,"proc":{"int":"8"},"f":"sub","args":["events","g2","from=now"]},
     {"do":"fail","o":11},
+    {"do":"invoke","h":0,"proc":{"int":"10"},"f":"status","args":["orders","m17","m19"]},
+    {"do":"ok","o":12,"args":["orders","m17;o=81;s=ok;f=1","m19;o=83;s=fail;e=invalid%20doc%3B%20id;f=0"]},
+    {"do":"invoke","h":0,"proc":{"int":"10"},"f":"status","args":["orders","m18"]},
+    {"do":"info","o":13},
     {"do":"record","h":0,"proc":{"int":"9"},"type":"ok","f":"drained","args":["orders","-"]}
   ],
   "runs": [

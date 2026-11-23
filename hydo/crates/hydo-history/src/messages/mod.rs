@@ -1,8 +1,8 @@
 //! `type: messages`: the checker for message-passing systems (docs/design/messaging.md). hydo
 //! knows nothing about any particular system: the project's declaration ([`decl`]) says what its
 //! system promises, and the checker judges exactly those claims on the history the project's
-//! client records (send, recv, ack, nack, extend, commit, sub and the drain's `drained`), and
-//! measures the history whatever the system claims.
+//! client records (send, recv, ack, nack, extend, commit, sub, the read-back's `status` and the
+//! drain's `drained`), and measures the history whatever the system claims.
 //!
 //! Each claim is a property of its own, reported as `<check id>.<claim>`: held, violated with a
 //! small sound witness (the records that together prove it), or undecided when the records it
@@ -103,7 +103,7 @@ fn op_line(h: &MHist, i: usize) -> String {
     let op = &h.ops[i];
     let items: Vec<String> = op.items.iter().map(|x| x.token()).collect();
     let mut args = vec![hist::enc(&op.q)];
-    if op.kind != hist::OpKind::Send {
+    if !matches!(op.kind, hist::OpKind::Send | hist::OpKind::Status) {
         args.push(hist::enc(&op.g));
     }
     args.extend(items);
@@ -186,6 +186,7 @@ pub fn check(ev: &Events, name: &str, d: &Decl, clock: &[usize]) -> Report {
             "delay" => claims::delay(&ix),
             "fan-out" => claims::no_loss(&ix, true),
             "members" => claims::members(&ix),
+            "acked-outcome" => claims::acked_outcome(&ix),
             _ => queue::claim(&ix),
         });
     }

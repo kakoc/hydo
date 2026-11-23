@@ -2224,6 +2224,17 @@
             }
           ],
           "default": "none"
+        },
+        "acked_outcome": {
+          "description": "Every acknowledged send ends in the final state that the check's `final:` reads back\n(`status` records): succeeded, or failed with an error the client causes.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgAckedOutcomeClaim"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -2580,6 +2591,75 @@
         "none",
         "fifo",
         "unordered"
+      ]
+    },
+    "MsgAckedOutcomeClaim": {
+      "description": "none, success, or a mapping with client_errors: and effect:.",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgAckedOutcome"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/MsgAckedOutcomeSpec"
+        }
+      ]
+    },
+    "MsgAckedOutcome": {
+      "description": "type: messages: whether every acknowledged send ends as acknowledged.",
+      "type": "string",
+      "enum": [
+        "none",
+        "success"
+      ]
+    },
+    "MsgAckedOutcomeSpec": {
+      "type": "object",
+      "properties": {
+        "client_errors": {
+          "description": "The errors (`e=` of a status item) that the client causes, each a code or a pattern with\n`*`: a failed final state with one of them keeps the claim.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "effect": {
+          "description": "recorded: the read-back records whether each operation's effect is there (`f=1` or\n`f=0`), and a final state that contradicts it breaks the claim.",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgEffect"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "none"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MsgEffect": {
+      "description": "type: messages: whether the read-back records each operation's effect.",
+      "type": "string",
+      "enum": [
+        "none",
+        "recorded"
       ]
     },
     "MessageMeasures": {

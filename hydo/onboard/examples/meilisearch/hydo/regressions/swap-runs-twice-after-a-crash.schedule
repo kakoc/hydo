@@ -5,6 +5,9 @@
 # also empties two acknowledged additions' payloads (finding 2), which the verdict line names;
 # the swap's lines are in hydo report --details <run dir>. A SIGKILL does the same in Docker
 # (native/swap-twice.sh). The moment moves with the image's bytes: on the image before the
-# build parameter dumps, the cut 2 ms after the event gave this finding.
+# build parameter dumps, the cut 2 ms after the event gave this finding. On the image of
+# Milestone 346 (the client's history records and parallel_driver_delidx) the cut comes outside
+# the swap's window: the run breaks for findings 2 and 3 only, and the swap shows with
+# swap-runs-twice-after-a-kill.schedule.
 # expect: violation      (change to ok when the bugs are fixed)
 disk=none | run A=meili.add_acked@20+40:cut
