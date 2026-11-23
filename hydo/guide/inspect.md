@@ -19,13 +19,23 @@ the verdict was given, it read the evidence (`evidence`):
 
 - every service's log (its output, and the files its `logs:` names), and the setup and
   provisioning logs;
+- the output of the workload: of a plain `workload.run`, or of up to 4 composed commands that
+  ended with an exit status other than 0;
 - the readiness check, run once;
 - the kernel's memory and crash messages, `free`, and `ps`.
 
 The replay also writes the end of each service's log (its last 64 KiB, without terminal color
-codes) into the run directory as `logs/<service>.log`. When a service exited, the
-`hydo: diagnosis:` line quotes the last lines of its log whole and names that file. Read the
+codes) into the run directory as `logs/<service>.log`. The workload's output goes to
+`logs/workload.log`, and a composed command's to `logs/command.<id>.log`. When a service exited,
+the `hydo: diagnosis:` line quotes the last lines of its log whole and names that file. Read the
 file with any tool; it needs no inspection session. `hydo run --no-diagnose` skips that replay.
+
+A composed command's output stays in the guest. A run without a replay still shows why a
+command failed. The first time in a boot that a command ends with an exit status other than 0
+and 100, the run's console log (`one.log`) gets one `HYDO-CMD-OUT` line. The line has the
+command's last 20 lines of output, at most 2,000 bytes.
+A command that reports a violation (exit 100) gets a `HYDO-CHECK-OUT` line, and `result.json`
+keeps those lines with the finding, as it does for a failing check.
 
 A session of `hydo inspect start` keeps the guest's memory (`guest.ram_mib`) until
 `hydo inspect stop <id>`, or until it is idle for 15 minutes. `hydo inspect list` shows the

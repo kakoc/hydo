@@ -1326,6 +1326,16 @@ fn run1(fx: &mut F<'_>, ctx: &Ctx, entry: i64, round: i64, idx: usize, seed: i64
         (t2 - t1) * 10
     ));
     let cid = c.id.clone();
+    // Milestone 348: the output of a command that failed, which stays in the guest
+    match st {
+        "ok" => {}
+        "violation" => super::check_output(
+            fx,
+            &format!("compose.{}.no_violation", c.id),
+            &String::from_utf8_lossy(&out),
+        ),
+        _ => super::cmd_output(fx, &c.id, entry, rc, &String::from_utf8_lossy(&out)),
+    }
     match st {
         "ok" => {
             if fx.effect_bool(|h, _| h.compose.ok_ids.insert(cid)) {
