@@ -387,10 +387,11 @@ When several do, or none, or the audit cannot tell, a line under the schedules s
 placeholder stays. A step back
 is at least 5 minutes and ten times the limit. A step forward is longer than the limit.
 
-Try a schedule with `hydo explore --schedule "<schedule>"`, which runs it and shrinks a
-failure. Move the steps to where the code runs in your workload. In the Valkey example the
-audit ranks `shouldStartChildReplication` (`repl-diskless-sync-delay`, 5 seconds) fourth. Its
-`back-after` schedule `disk=none | run K=valkey3@2+3 T=10:-300` is the example's saved
+Try a schedule with `hydo explore --schedule "<schedule>"`, which runs it once. It does not
+shrink a failure: leave tokens out by hand to find the ones the failure needs. Move the steps
+to where the code runs in your workload. In the Valkey example the audit ranks
+`shouldStartChildReplication` (`repl-diskless-sync-delay`, 5 seconds) fourth. Its `back-after`
+schedule `disk=none | run K=valkey3@2+3 T=10:-300` is the example's saved
 regression for valkey-io/valkey#5406, and it fails on the Mac engine.
 
 ## Clock after a power cut
