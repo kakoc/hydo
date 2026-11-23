@@ -1,0 +1,10 @@
+# Known (prometheus#8312, closed), with a new cause (RESULTS.md, finding 2): the wall clock goes
+# back 5 minutes before step 20. The scrape loops of the agent and of the server then stamp
+# every scrape with the last aligned time before the step, until the clock is there again: 199 of
+# 240 pairs of scrapes a second apart carry one timestamp (the check `times`). The server drops
+# 81,585 of its own scraped samples as duplicates of a timestamp, although its out-of-order
+# window of 10 minutes covers the step. With --no-scrape.adjust-timestamps (--set
+# adjust=--no-scrape.adjust-timestamps) every scrape has its own timestamp. The verdict line
+# names finding 1 first; the run's result.json has the `times` finding too.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run T=20:-300

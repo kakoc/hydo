@@ -14,7 +14,7 @@ results page: new as far as the search found, known, by design, or a deployment 
 
 | system | its promise | the techniques that found most | where they found bugs |
 |---|---|---|---|
-| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse |
+| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus |
 | log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults | Redpanda, NATS |
 | job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate |
 | distributed query or compute engine with schedulers and workers | an accepted query ends; a completed query's result stays readable | production's topology and features; checks of how each unknown outcome ends; pauses of a worker past its failure detector; kills of the worker that holds the results | a user's query engine |
@@ -87,7 +87,11 @@ These findings hold for every type of system:
 - **What it found.** In the user's query engine, the caches of fragments, entries, and
   predicates write their manifests to the object store with conditional writes. In the first
   round the caches were off, so that code never ran. The two bugs of the second round came with
-  the caches on, and no bug was tied to the caches alone.
+  the caches on, and no bug was tied to the caches alone. In Prometheus, the out-of-order window
+  (`out_of_order_time_window`, off by default) gave finding 1. A snapshot lacks the samples of
+  the out-of-order head. Turning on a feature also puts a test-only setting beside it. Prometheus
+  needed blocks of one minute (`--storage.tsdb.min-block-duration=1m`) so that a run of
+  4 minutes sees its compactions.
 - **What it misses.** hydo's S3 emulator (`emulators:` with `use: s3`, `rclone serve s3`) was not
   checked for conditional writes. If it ignores the two headers, every race of two writes
   succeeds, and the system's handling of a conflict never runs. The user ran the object store
@@ -322,6 +326,27 @@ These findings hold for every type of system:
 - **What it misses.** A race between two objects that the drivers never choose together.
 - **Cost.** The drivers only. It runs on every engine.
 
+### A snapshot or a backup read back at once
+
+- **What it is.** A workload command asks the system for a snapshot, a dump or a backup, and
+  reads it back at once with the system's own tool. The snapshot must hold every operation that
+  was acknowledged before the request. A final check reads every snapshot again, also after a
+  power cut.
+- **What to write.** An `anytime_` command that records the snapshot's name in `$HYDO_ACKED`
+  and reads it with the tool inside the service's image (`hydo-oci <service> <tool> ...`), and a
+  `final_` check over the recorded names. Mix every type of write that the system keeps apart:
+  the Prometheus client writes one in-order and one out-of-order series in each request.
+- **When it fits.** A database or a store that offers snapshots or dumps for backups.
+- **What it found.**
+  - Prometheus (finding 1): in a run without faults, every snapshot with the head lacked up to
+    207 samples. They were the out-of-order samples that the server had not yet compacted into a
+    block. The in-order samples were all there.
+  - Meilisearch (finding 3): a dump that succeeded was an empty file after a power cut.
+- **What it misses.** A workload of one type of write: the Prometheus snapshots held every
+  in-order sample. A tool that cannot read the snapshot as it is: `promtool tsdb dump` refuses a
+  directory without a `wal` folder, so the client makes an empty one first.
+- **Cost.** One read of the snapshot per command. It runs on every engine.
+
 ## Faults
 
 ### Power cuts of the whole guest (`C=`)
@@ -371,7 +396,9 @@ These findings hold for every type of system:
 - **What it misses.** The point moves with the image's bytes. Saleor's `cf=270` stopped
   reproducing when its image was rebuilt, and `cf=271` gives the finding now. Restate held at
   all 49 flush points from `cf=37` to `cf=4000`: it syncs its log before it answers, as its
-  documentation says.
+  documentation says. Prometheus held at 19 points from `cf=60` to `cf=1140` and at 11 drawn
+  ones, with blocks of one minute, so the cuts fell around head compactions and WAL
+  checkpoints. Its rule asked only for the samples of a block that the server had listed.
 - **Cost.** hvx only.
 
 ### One node's storage faults (`G=` and `L=`)
@@ -401,7 +428,11 @@ These findings hold for every type of system:
   seed, so one token damages other files on another image. The explorer never draws
   `L=...:strict`. On one Iggy server, 7 of 20 schedules damaged a segment, WAL or frontier file
   that Iggy detects. Each fenced its partition, as Iggy documents, and each ended in an ERROR
-  because the drain could not read that partition. None lost data silently.
+  because the drain could not read that partition. None lost data silently. In Prometheus `G=`
+  also picks files of the snapshots, which hard-link the blocks' files: a flipped bit of one
+  block's `index` broke the read of every later snapshot. A power loss of the server alone loses
+  what its WAL had not synced, as a power cut does. So the rules must know the run of the server
+  that acknowledged a write (its start time), or they call that loss a bug.
 - **Cost.** A file system per service. The explorer shrinks detected damage too. In SurrealDB the
   shrink of seed 3 took an hour. hvx and the Mac engine ran it.
 
@@ -491,6 +522,12 @@ These findings hold for every type of system:
     instead of 60. The same step leaves a batch with one copy, and one node's power loss then
     loses it. Blind in 16 of e2's 40 schedules; the shrink was by hand. The watchers run every
     minute, so the regressions use rounds of 1 s to outlast the first tick.
+  - Prometheus (finding 2, known prometheus#8312 with a new cause): the audit's second place,
+    the scrape loop's alignment (`scrape/scrape.go`), is the cause. After `T=20:-300` every scrape
+    of the agent and of the server carried the time of the last scrape before the step. The
+    server dropped 81,585 of its own samples as duplicates, although its out-of-order window
+    covered the step. A check that two scrapes a second apart carry two timestamps showed it;
+    the checks of acknowledged writes did not, because the client stamps its own samples.
 - **What it misses.** Many clock effects are by design. Examples are Temporal's delayed timers,
   and River's runs of every periodic job that a forward step skipped. The audit reads text. It
   found no place in Redpanda's 2,694 C++ files, whose transaction expiry uses Seastar's wall
@@ -553,7 +590,8 @@ These findings hold for every type of system:
   - SWUpdate: two of the five minimal schedules of its hvx exploration carry a
     reaction.
 - **What it misses.** Restate held under cuts and kills at six events of the client and the
-  service. One of them is a cut at the start of a step's closure, just after the step before it
+  service. Prometheus held under `kill-now-prometheus` 5 to 40 ms after the client saw a new
+  block, when the WAL checkpoint follows, and under cuts at the same delays. One of them is a cut at the start of a step's closure, just after the step before it
   was journaled. On the bug benchmark the drawn reactions found no defect
   sooner. The sum of the runs to each defect's first detection grew from 154 to between 181
   and 187. A new event in the client changes the image, and with it the timing of every

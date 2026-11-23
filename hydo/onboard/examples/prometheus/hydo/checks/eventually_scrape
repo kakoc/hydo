@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: after the heal, the samples that the agent scrapes reach the server
+exec /bin/promc check scrape

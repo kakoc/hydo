@@ -1,0 +1,153 @@
+# Prometheus v3.16.0 (the newest release, 2026-11-05) in the shape of a central server behind an
+# agent, as ../docker-compose.yaml runs it: an exporter that the agent scrapes every second, a
+# Prometheus agent that forwards every sample with remote write, and a central Prometheus server
+# that receives remote write, scrapes itself, and keeps out-of-order samples up to 10 minutes
+# behind its newest sample. The test client writes to the server with remote write too, and takes
+# snapshots. RESULTS.md has the promises under test and what was found.
+#
+#   sh ../build.sh            # bin/promc-<arch>, the test client and exporter (../client)
+#   sh fetch-images.sh        # the image by digest
+#   hydo build hydo.yaml      # the default image: its runs show findings 1 and 2
+#   hydo run "disk=none | run"
+#   # the explorations leave findings 1 and 2 out; with --storage-faults also powerloss=yes
+#   hydo build hydo.yaml --set ooo_snapshots=skip --set scrape_times=skip --out .hydo-x
+#   hydo explore --image .hydo-x/explore-ob-prometheus-disk.img --seeds 1-40 \
+#     --strategy process --new-faults --more-faults --workers 1
+#
+# Memory: the guest has 2,048 MiB; on hvx one explorer worker holds about 5 GB of the host. The
+# onboarding shared the bare-metal machine with another one, so it ran at most two VMs at once,
+# below 10 GiB.
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The services below are the importer's,
+# with these changes:
+# - the server's and the agent's data directories are file systems of their own (storage:), the
+#   targets of G= and L=; the agent's unused anonymous volume /prometheus is left out;
+# - the exporter is the test client's own program in the guest's root, not a busybox image;
+# - the readiness checks ask each server's /-/ready.
+format: 1
+name: prometheus
+description: "Prometheus v3.16.0, an agent and a central server: every sample that remote write acknowledged is queryable with its value after kills, pauses, network faults, clock steps, power cuts and one service's storage faults; snapshots hold what was acknowledged before them; the agent's scrapes reach the server"
+hydo_version: "0.3"
+
+params:
+  arch: amd64     # amd64 | arm64: the client's architecture, the same as the image's
+  ooo_snapshots: judge   # judge | skip: whether a snapshot must hold the out-of-order samples of
+                         # the head (RESULTS.md, finding 1); the explorations build with skip
+  powerloss: "no"        # yes | no: yes for the explorations that draw one service's power loss
+                         # (L=, --storage-faults): the rules then excuse the unsynced samples of
+                         # a server that started again
+  scrape_times: judge    # judge | skip: whether two scrapes a second apart must carry two
+                         # timestamps (RESULTS.md, finding 2); the explorations build with skip
+  adjust: "--scrape.adjust-timestamps"   # the default of both programs; --no-scrape.adjust-timestamps
+                         # turns the alignment of scrape times off (finding 2's comparison)
+  server_config: prometheus   # prometheus | prometheus-stale: the server's configuration file in ../config;
+                         # prometheus-stale also compacts the stale series of the head
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 2048   # the server and the agent take about 200 MiB each; promtool dumps a snapshot beside them
+  clock_start: 1795392000   # 2026-11-23 00:00 UTC, the day of the import
+  clock_after_cut: 60       # samples carry wall-clock timestamps: no real clock runs back across a power cut
+
+data:
+  size_mib: 256   # the exporter's log of served scrapes and the error-log scan's files
+  dirs: [vol/prom, vol/agent, exp]
+
+root:
+  files:
+    - {src: "../config/{{server_config}}.yml", dst: /etc/hydo/compose/bind/0-prometheus.yml}
+    - {src: ../config/agent.yml, dst: /etc/hydo/compose/bind/1-agent.yml}
+    - {src: "../bin/promc-{{arch}}", dst: /bin/promc, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 prometheus
+      10.89.0.12 agent
+      10.89.0.13 exporter
+    /etc/promc/ooo_snapshots: "{{ooo_snapshots}}"
+    /etc/promc/powerloss: "{{powerloss}}"
+    /etc/promc/scrape_times: "{{scrape_times}}"
+  # prometheus and agent run one image, prom/prometheus:v3.16.0.
+  # They share one unpacked copy of their image in the root, each service with its own
+  # /tmp and mounts.
+  share_images: true
+
+# Error logs as findings: Prometheus logs with slog's text format, level=ERROR for an error
+# (hydo guide error-logs). hydo/known-errors.yaml lists the expected kinds.
+errors: true
+
+services:
+  # Compose service prometheus
+  # image prom/prometheus:v3.16.0 = docker.io/prom/prometheus@sha256:e04987641b57704f408e31f6373ba4138ecf27cb4a165d24aabb6c38fddd0f06
+  #   linux/amd64: sha256:89c1a644817e9ad70fa2af76c84898e327c1de7063735f962e8313b1e28672c3
+  #   linux/arm64: sha256:c523006440e714e0e53405b77e9f6ee668871d9855fc1c853fd43f5b990c34d2
+  # restart: unless-stopped: an agent image starts the service again when its process ends by itself while the test runs (MANIFEST.md "Restart policies"); hydo's kill faults keep their own restart points
+  - name: prometheus
+    image: {x86_64: images/prom-prometheus-v3.16.0-amd64.docker.tar, arm64: images/prom-prometheus-v3.16.0-arm64-oci}
+    image_ref: "prom/prometheus:v3.16.0"
+    cmd: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus/tsdb", "--storage.tsdb.min-block-duration=1m", "--storage.tsdb.max-block-duration=10m", "--storage.tsdb.max-block-chunk-segment-size=16MB", "--web.enable-remote-write-receiver", "--web.enable-admin-api", "--web.listen-address=:9090", "{{adjust}}"]
+    user: "root"
+    port: 9090
+    addr: 10.89.0.11
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://10.89.0.11:9090/-/ready"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    errors: {format: none, match: 'level=ERROR'}
+    storage: {dir: vol/prom, size_mib: 512}   # the TSDB: blocks, the WAL, the head chunks, the snapshots
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-prometheus.yml, dst: /etc/prometheus/prometheus.yml}
+      - {src: /data/vol/prom, dst: /prometheus}
+  # Compose service exporter: the test client's exporter, one new series per scrape
+  - name: exporter
+    cmd: /bin/promc serve
+    port: 9100
+    addr: 10.89.0.13
+    ready: "tcp:9100"
+    restart: "unless-stopped"
+  # Compose service agent
+  # depends_on prometheus, exporter (short form: Compose's service_started): hydo starts it once the services before it have started, without waiting for their readiness (start_after: started)
+  - name: agent
+    image: {x86_64: images/prom-prometheus-v3.16.0-amd64.docker.tar, arm64: images/prom-prometheus-v3.16.0-arm64-oci}
+    image_ref: "prom/prometheus:v3.16.0"
+    cmd: ["--agent", "--config.file=/etc/prometheus/agent.yml", "--storage.agent.path=/agent/wal", "--web.listen-address=:9091", "{{adjust}}"]
+    user: "root"
+    port: 9091
+    addr: 10.89.0.12
+    depends_on: [prometheus, exporter]
+    start_after: started   # Compose's service_started: no wait for readiness
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://10.89.0.12:9091/-/ready"
+    ready_timeout: 120
+    restart: "unless-stopped"
+    errors: {format: none, match: 'level=ERROR'}
+    storage: {dir: vol/agent, size_mib: 256}   # the agent's write-ahead log
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/1-agent.yml, dst: /etc/prometheus/agent.yml}
+      - {src: /data/vol/agent, dst: /agent}
+
+# 120 rounds of 2 s: 4 minutes of guest time with about 240 writes. The server cuts a block every
+# minute (--storage.tsdb.min-block-duration=1m), so a run sees about three head compactions with
+# their WAL checkpoints, and a compaction of three blocks into one.
+workload:
+  steps: 120
+  timeout: 420
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 2000
+  command_timeout: 60
+  drain_timeout: 30
+
+# The faults of the task: kills, pauses, network faults and one-way loss, power cuts of the whole
+# guest (C= and, on hvx, cf= at a disk flush), clock steps, and one service's power loss (L=) and
+# damaged files (G=). Disk I/O errors and the lying disk are left out: their failures are the
+# disk's.
+faults: [kill, pause, network, oneway, cut, clock, corrupt, powerloss]
