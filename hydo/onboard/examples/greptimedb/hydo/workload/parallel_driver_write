@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=45
+# one write through a frontend: 3 rows into hydo_rows, the same 3 into the append-mode table
+# hydo_log (../../client/main.go, write)
+exec /bin/gtc write

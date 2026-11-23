@@ -1,0 +1,32 @@
+# The frontends of the GreptimeDB example. Each gets its --grpc-server-addr on its command line.
+# The defaults of config/frontend.example.toml of v1.3.1 hold, among them the frontend's own
+# retries of a failed write to a datanode ([write_retry], 3 retries).
+default_timezone = "UTC"
+
+[http]
+addr = "0.0.0.0:4000"
+timeout = "0s"
+
+[grpc]
+bind_addr = "0.0.0.0:4001"
+runtime_size = 4
+
+[mysql]
+enable = false
+
+[postgres]
+enable = false
+
+[meta_client]
+metasrv_addrs = ["metasrv:3002"]
+timeout = "3s"
+ddl_timeout = "10s"
+connect_timeout = "1s"
+
+# The log level is warn, with info for the code that moves and opens regions: at info a run
+# with faults wrote more than the 16 MiB of lines that hvx keeps per boot (RESULTS.md, "What hydo
+# lacked").
+[logging]
+dir = "/tmp/greptimedb_logs"
+level = "warn"
+append_stdout = true

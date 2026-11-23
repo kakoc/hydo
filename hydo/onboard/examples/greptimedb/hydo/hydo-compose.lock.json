@@ -1,0 +1,259 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "apache/kafka:3.9.1": {
+   "index_digest": "sha256:4ceccc577f03f51f6af8dbfda55194d0d892f4fa7913ffbded567ce3895622ed",
+   "name": "apache/kafka",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "/etc/kafka/docker/run"
+      ],
+      "Entrypoint": [
+       "/__cacert_entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "JAVA_HOME=/opt/java/openjdk",
+       "LANG=en_US.UTF-8",
+       "LANGUAGE=en_US:en",
+       "LC_ALL=en_US.UTF-8",
+       "JAVA_VERSION=jdk-21.0.7+6"
+      ],
+      "ExposedPorts": {
+       "9092/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "appuser",
+      "Volumes": {
+       "/etc/kafka/secrets": {},
+       "/mnt/shared/config": {},
+       "/var/lib/kafka/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:5862db4a63a6dd7d46fd14771b10a1b39e069c2c47f17d8e4640f960720a0ead",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "/etc/kafka/docker/run"
+      ],
+      "Entrypoint": [
+       "/__cacert_entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "JAVA_HOME=/opt/java/openjdk",
+       "LANG=en_US.UTF-8",
+       "LANGUAGE=en_US:en",
+       "LC_ALL=en_US.UTF-8",
+       "JAVA_VERSION=jdk-21.0.7+6"
+      ],
+      "ExposedPorts": {
+       "9092/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "appuser",
+      "Volumes": {
+       "/etc/kafka/secrets": {},
+       "/mnt/shared/config": {},
+       "/var/lib/kafka/data": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:39bc3b30084ad6ab33ad2c9a525f15c942bf097b18cb2a1825afa6df3411f8b5",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "apache/kafka:3.9.1",
+   "registry": "docker.io",
+   "repo": "apache/kafka",
+   "tag": "3.9.1"
+  },
+  "greptime/greptimedb:v1.3.1": {
+   "index_digest": "sha256:a10181273b9400a30fbad6f5043b3d08e388c7d4ee30a7570e5f0241496e9ee1",
+   "name": "greptime/greptimedb",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "sh",
+       "-c",
+       "exec $TARGET_BIN \"$@\"",
+       "--"
+      ],
+      "Env": [
+       "PATH=/greptime/bin/:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "TARGET_BIN=greptime",
+       "MALLOC_CONF=prof:true,prof_active:false"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": null
+     },
+     "digest": "sha256:f539f3780cf7331e5203c4687f2f88f2d570718300cb8990d9d7490e9db114a5",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "sh",
+       "-c",
+       "exec $TARGET_BIN \"$@\"",
+       "--"
+      ],
+      "Env": [
+       "PATH=/greptime/bin/:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "TARGET_BIN=greptime",
+       "MALLOC_CONF=prof:true,prof_active:false"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": null
+     },
+     "digest": "sha256:c026fa2b8db730ff392c67b46ca723ee50604e01592b16b3847c39941c824366",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "greptime/greptimedb:v1.3.1",
+   "registry": "docker.io",
+   "repo": "greptime/greptimedb",
+   "tag": "v1.3.1"
+  },
+  "quay.io/coreos/etcd:v3.6.17": {
+   "index_digest": "sha256:316f5d367455f75a327f9dc72f669cbf645651859fa2e272f692a1f2dee6f5c9",
+   "name": "quay.io/coreos/etcd",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "/usr/local/bin/etcd"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"
+      ],
+      "ExposedPorts": {
+       "2379/tcp": {},
+       "2380/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "0",
+      "Volumes": null,
+      "WorkingDir": "/var/lib/etcd/"
+     },
+     "digest": "sha256:c521f860433f4f1696e95ff2124c90e8a979766c8443f5f487bdf1b02d238de2",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "/usr/local/bin/etcd"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt"
+      ],
+      "ExposedPorts": {
+       "2379/tcp": {},
+       "2380/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "0",
+      "Volumes": null,
+      "WorkingDir": "/var/lib/etcd/"
+     },
+     "digest": "sha256:960ea8d19062c3e2e85cb827884fa002fffa754616071f86f01196a1fdd42bc8",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "quay.io/coreos/etcd:v3.6.17",
+   "registry": "quay.io",
+   "repo": "coreos/etcd",
+   "tag": "v3.6.17"
+  },
+  "rclone/rclone:1.76.0": {
+   "index_digest": "sha256:7cbeec24a44f206067597c0368be4de90ae19a64d5113c7d1938bd737a81e466",
+   "name": "rclone/rclone",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "rclone"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "XDG_CONFIG_HOME=/config"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:075cf0e4e0f623996646cfb8a434c71cb4fcfe75bbbe27ccbb296ca04a7cd260",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "rclone"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "XDG_CONFIG_HOME=/config"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:fbcca19e4dc192f6a12169a7e033e713877e07abca796928bbed27d2a334c8e0",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "rclone/rclone:1.76.0",
+   "registry": "docker.io",
+   "repo": "rclone/rclone",
+   "tag": "1.76.0"
+  }
+ }
+}

@@ -1,0 +1,49 @@
+# The metasrv of the GreptimeDB example: etcd as its store (the documented default), the remote
+# WAL in Kafka, and region failover on (it needs the remote WAL and shared storage, both here).
+# Values that differ from config/metasrv.example.toml of v1.3.1 say why.
+data_home = "/greptimedb_data"
+store_addrs = ["etcd:2379"]
+backend = "etcd_store"
+selector = "round_robin"
+enable_region_failover = true
+# The default of 10 minutes is for a cluster that the operator starts; the test's cluster is
+# ready before the workload, and the workload lasts about a minute.
+region_failure_detector_initialization_delay = "10s"
+allow_region_failover_on_local_wal = false
+
+[grpc]
+bind_addr = "0.0.0.0:3002"
+server_addr = "metasrv:3002"
+runtime_size = 4
+
+[http]
+addr = "0.0.0.0:3000"
+
+[failure_detector]
+threshold = 8.0
+min_std_deviation = "100ms"
+acceptable_heartbeat_pause = "10000ms"
+
+[wal]
+provider = "kafka"
+broker_endpoints = ["kafka:9092"]
+auto_create_topics = true
+# The default is 64 topics; 4 keep Kafka small in the guest.
+num_topics = 4
+replication_factor = 1
+topic_name_prefix = "greptimedb_wal_topic"
+# The default is 30 minutes; the workload lasts about a minute, so prune every 20 s to run the
+# pruning of WAL entries that a flush made unneeded.
+auto_prune_interval = "20s"
+# The defaults: the metasrv asks a region to flush when its WAL holds 512 MB, and to checkpoint at
+# 128 MB. The workload's ADMIN commands flush and compact the tables.
+flush_trigger_size = "512MB"
+checkpoint_trigger_size = "128MB"
+
+# The log level is warn, with info for the code that moves and opens regions: at info a run
+# with faults wrote more than the 16 MiB of lines that hvx keeps per boot (RESULTS.md, "What hydo
+# lacked").
+[logging]
+dir = "/tmp/greptimedb_logs"
+level = "warn,meta_srv::region::supervisor=info,meta_srv::procedure::region_migration=info"
+append_stdout = true

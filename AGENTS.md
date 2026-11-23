@@ -979,6 +979,26 @@ One new candidate, not posted (M325, tentative number):
 Four schedules ended `TIMEOUT workload` because hvx's guest clock nearly stopped under that busy
 work (M319, `guest.exact_tick`).
 
+**GreptimeDB in cluster mode (M343, tentative number).** GreptimeDB v1.3.1 runs in one hvx
+guest of 3,072 MiB in `hydo/onboard/examples/greptimedb` (RESULTS.md), imported with `hydo
+compose`. The cluster is etcd, a metasrv with region failover, two frontends, and two datanodes.
+The region WAL is in one Kafka 3.9 broker, and the data is on S3 through hydo's S3 emulator. A Go
+client writes rows through both frontends into a deduplicating table and an append-mode table,
+each of 3 regions. It also runs flushes, compactions, region migrations, and DDL statements. A
+messages check, a count check, a DDL check, and a leader check judge them. Every acknowledged
+row stayed readable once, with its value. That held under kills, pauses past the failure
+detector, partitions, one node's power loss, clock steps, and S3 faults, and through failovers
+and migrations. One new candidate, not posted:
+- A datanode's manifest cache trusts a short copy of a manifest delta. With the default
+  `compress_manifest = false` it parses the cached bytes instead of the intact object on S3.
+  One region that does not open stops the datanode at every start
+  (`G=datanode0@11+1:trunc,seed=71f5a076 W=6311ab23,p4,q2,r1000`). A power loss did not leave a
+  short copy in the runs.
+
+The example leaves out a power cut of the whole guest, because the S3 emulator loses objects it
+acknowledged. The error-log scan is off, because it passed hvx's 16 MiB of agent lines (open item
+171). The other agents' load kept the explorations at one worker.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -3215,6 +3235,30 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The goldens of the explorer's and the controller's corpora (`corpus-quick.txt`,
       `corpus-full.txt`, `identity-quick.txt`, `identity-full.txt`) are not re-recorded with the
       new example; `HYDO_BLESS=1` runs of those tests are needed.
+171. What the example `greptimedb` left (M343, tentative number):
+    - The candidate is not reported upstream. In the runs only hydo's damage of a cached
+      manifest made it, and no power loss left a short copy.
+    - The S3 emulator writes objects without an fsync (rclone's local backend). So a power cut
+      of the whole guest loses objects that it acknowledged. The example leaves `cut` out, and
+      no run of `C=` or `cf=` judged the database. A durable object store in the guest is not
+      built.
+    - The error-log scan reads every service's whole log through the agent. On hvx a run of
+      Kafka and five GreptimeDB services passed the 16 MiB of lines that hvx keeps per boot. The
+      run then waited for its wall limit, so the example turns `errors:` off. Nothing warns
+      before the limit.
+    - The clock audit found no place of the metasrv. GreptimeDB reads the wall clock through
+      its own `current_time_millis()` (as open item 152). The audit also maps no image service
+      to the Cargo binaries of its sources.
+    - The frontend's write retries after a transport error (`[write_retry]`, new in v1.3.0) can
+      apply a write twice in an append-mode table. So can rskafka's retry of a produce after its
+      timeout. 19 directed runs and the explorations showed no duplicate. Whether a duplicated
+      WAL record is replayed before a flush was not shown.
+    - One Kafka broker that syncs each record stands for production's three. etcd runs one
+      member. GreptimeDB's experimental object-store WAL, which makes conditional writes, did
+      not run.
+    - An exploration worker took about 8.5 GB of the host for its RAM and disks. With the
+      other onboardings the explorations ran one worker. The Mac engine and KVM did not run the
+      example.
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -4234,6 +4278,11 @@ build machine, before 2026-10-13.
   keep one timestamp (#8312), and remote write holds back new samples (#11496). Acknowledged
   samples held under every fault kind. Nothing recorded moved
 
+- M343 (tentative number): the GreptimeDB v1.3.1 onboarding on hvx, in cluster mode with region
+  failover, the WAL in Kafka and the data on hydo's S3 emulator. Every acknowledged row held,
+  once and with its value, under every fault kind but a power cut of the guest, and through
+  failovers, migrations, and DDL. One new candidate, not posted: a short copy in a datanode's
+  manifest cache stops the datanode at every start. Nothing recorded moved
 ## Where to look
 
 - `docs/HISTORY.md`: every milestone with its evidence, and the superseded values.

@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=45
+# one DDL statement: CREATE TABLE d<entry> (two partitions), ALTER TABLE ... ADD COLUMN, or
+# DROP TABLE of a table that an acknowledged CREATE made
+exec /bin/gtc ddl

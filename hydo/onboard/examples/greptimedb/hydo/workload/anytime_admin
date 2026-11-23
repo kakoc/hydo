@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=45
+# one ADMIN function: flush_table or compact_table of one table, or migrate_region of one region
+# to the other datanode
+exec /bin/gtc admin

@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=170
+# wait for both datanodes and both frontends, create the tables hydo_rows and hydo_log (3
+# regions each), and wait until every region answers through both frontends
+exec /bin/gtc settle 160

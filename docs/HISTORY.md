@@ -20550,4 +20550,81 @@ Retro: Prometheus v3.16.0, hvx, 2026-11-23
   (the out-of-order window); "One node's storage faults" (snapshots share damaged files; the
   power loss of one server needs the server's start in the rules); "Power cuts at the k-th disk flush" and "Reactions at console events" (Prometheus held).
 
-**What is left.** Open item 170.
+## Milestone 343 (tentative number): GreptimeDB in cluster mode, region failover and the object store
+
+The onboarding of GreptimeDB v1.3.1 (2026-11-13, the latest release) on hvx, by
+`docs/ONBOARDING-PLAYBOOK.md`, with the published hydo 0.5.0 Linux release. One new candidate,
+not posted. Nothing recorded moved.
+
+**The example.** `hydo/onboard/examples/greptimedb` (RESULTS.md) runs the production shape of a
+cluster, small in memory: one etcd as the metasrv's store, a metasrv with region failover on, two
+frontends, two datanodes with the write cache on, the region WAL in one Kafka 3.9 broker that
+syncs each record, and the data on S3 through hydo's S3 emulator. It was imported with `hydo
+compose` from the example's Compose file, whose configuration files are in `config/`. Kafka
+needed a line for the guest's hostname `(none)` in `/etc/hosts` and runs as root. The Go client
+`gtc` writes 3 rows per write through both frontends into a deduplicating table and an
+append-mode table, each of 3 regions. It also runs `ADMIN flush_table`, `compact_table` and
+`migrate_region`, and DDL statements on tables `d<n>`. A messages check (`no-loss`,
+`duplicates: forbidden`, `no-phantom`), a count check, an `eventually_` DDL check, an
+`eventually_` leader check and an anytime read judge them. Two clean runs give one fingerprint on
+the final image (`3fb799a5…`): `2330e7fdc5c43f46`. The guest has 3,072 MiB, and the services'
+peaks add up to about 1,360 MiB.
+
+**Finding 1, new.** A short or zeroed copy in a datanode's manifest cache stops the datanode at
+every start. At its start the cache records each local file's own size
+(`mito2/src/cache/manifest_cache.rs` lines 190 and 193). `fetch_manifests` reads a delta from the
+cache first (`manifest/storage/delta.rs` line 211) without comparing the listing's size. With the
+default `compress_manifest = false` the decoding in `get_from_cache_decoded`
+(`manifest/storage/utils.rs` line 38) cannot fail, so the short JSON reaches the parser. One
+region that does not open stops the datanode (`datanode/src/region_server.rs` line 1517).
+`disk=none | run G=datanode0@11+1:trunc,seed=71f5a076 W=6311ab23,p4,q2,r1000` cuts a cached
+delta to 686 bytes, while S3 keeps its 1,076 bytes. It ends in `ERROR datanode0 restart failed`
+with `fp=f9ec66d7caa0cd80` twice, and the same kill without the damage passes. Pull request
+#10179 (in v1.3.1) refills a cached entry that does not decode, and its test leaves out the
+uncompressed default ("Truncation only applies to compression envelopes"). Blind in e3's seed 13
+and e4's seed 23. A power loss of a datanode, six times, lost cached copies whole and left none
+short. The regression is `regressions/manifest-cache-truncated.schedule`. No report found; nothing
+posted.
+
+**Not bugs.** An unanswered `DROP TABLE` took effect later, which the first DDL check did not
+allow: a mistake of the rules, fixed (`u~<what>~<table>`). A power cut of the guest made the S3
+emulator lose an SST object that it had acknowledged: rclone's local backend writes without an
+fsync. A datanode or a frontend that did not start while Kafka or the metasrv was down: hydo's
+restart ignores the restart policy (open item 111). Damaged Kafka segments stopped Kafka.
+
+**What held.** Every acknowledged row stayed readable, once and with its value, in both tables.
+So it held through kills, pauses past the failure detector, partitions, and one-way loss of every
+service, and through failovers and migrations. It held through one node's power loss and damaged
+SST files, clock steps from 30 days back to a year forward, S3 errors and drops, and pauses inside
+a write's WAL append. Every acknowledged DDL statement took effect. The datanode counts its
+region lease on the monotonic clock, so a paused datanode refused the writes that reached it
+after the metasrv had moved its regions.
+
+**Explorations.** e3 (process, seeds 1-20, with protocol, cluster and storage faults): 3 errors in
+11 minutes, finding 1 and two of hydo's restarts. e4 (swarm, seeds 21-80, with reactions and
+`--kill-now` at the client's events): 5 errors in 26 minutes, finding 1 again, three damaged
+Kafka segments and one of hydo's restarts. About 60 directed runs.
+
+**Tests.** The explorer's `identity-quick.txt` and `corpus-full.txt` and the controller's
+`corpus-quick.txt` are re-recorded for the new example's inputs.
+
+Retro: GreptimeDB v1.3.1, hvx, 2026-11-23
+- Time to the first clean run: 45 minutes of wall time, about 15 of them in image builds.
+- Schedules run before the first finding: about 60 (45 directed runs, 2 of the halted
+  explorations, and seeds 1 to 13 of e3). The DDL check's mistake failed 2 directed runs before it.
+- The findings: 1 new (a gap in the fallback of the manifest cache), 0 known; the rest were the rules'
+  mistake, the environment, or hydo's restart.
+- What took the most time: two explorations that hung on hvx's 16 MiB of agent lines (about 45
+  minutes); the hypothesis of a write applied twice by the retries, 19 directed runs without a
+  duplicate (about 50 minutes); Kafka's first start without a line for the hostname (about 20
+  minutes).
+- What hydo lacked: a durable S3 emulator, an error-log scan that fits hvx's line budget, a clock
+  audit that follows a project's own clock, and a restarted service's earlier log (all in open
+  item 171, with open items 111, 141 and 152).
+- Strategies: one node's storage faults found finding 1; pauses past the failure detector, clock
+  steps and protocol faults found nothing. The entries "One node's storage faults", "Pauses of a
+  service past its failure detector", "Clock steps and the clock audit", "Protocol faults on
+  fakes and emulators", "Power cuts of the whole guest", "Error logs as findings" and "The
+  features behind a flag" of `hydo guide strategies` are updated.
+
+**What is left.** Open item 171.

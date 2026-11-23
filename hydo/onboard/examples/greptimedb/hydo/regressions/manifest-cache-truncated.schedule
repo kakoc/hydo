@@ -1,0 +1,11 @@
+# New (RESULTS.md, finding 1): hydo stops datanode0 before step 11, cuts its cached copy of a
+# region's first manifest delta (cache/object/manifest/.../00000000000000000000.json, written
+# without compression, the default) to 686 bytes, and starts it again. The datanode reads the
+# short copy instead of the intact object on S3, fails to parse it ("EOF while parsing an
+# object"), and stops at its start with "Failed to start datanode". The same kill without the
+# damage passes. With compress_manifest = true the code removes a copy that does not decode and
+# reads the object again (pull request #10179); this run has the default, false.
+# The run ends in an ERROR, not a violation, so the expectation is its fingerprint on the final
+# image (sha256 3fb799a5…); change it to ok when the bug is fixed.
+# expect: fp=f9ec66d7caa0cd80
+disk=none | run G=datanode0@11+1:trunc,seed=71f5a076 W=6311ab23,p4,q2,r1000

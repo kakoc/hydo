@@ -1,0 +1,255 @@
+# GreptimeDB v1.3.1 (the newest release, 2026-11-13) in cluster mode, as ../docker-compose.yaml
+# runs it: one etcd as the metasrv's store, one metasrv with region failover on, two frontends,
+# two datanodes, the region WAL in one Kafka broker (the remote WAL that region failover needs),
+# and the data on S3 through hydo's S3 emulator. The configuration files are ../config/*.
+# RESULTS.md has the promises under test and what was found.
+#
+#   sh ../build.sh            # bin/gtc-<arch>, the test client (../client)
+#   sh fetch-images.sh        # the images by digest (hydo build fetches the emulator's)
+#   hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --new-faults --cluster-faults --storage-faults
+#
+# The guest takes 3,072 MiB. On the bare-metal machine, which other onboardings share, the
+# explorations ran 3 workers at most: 9 GiB of guests, within the 14 GiB agreed for this example.
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The services below are the importer's,
+# with these changes:
+# - the S3 server is hydo's S3 emulator (emulators:), so `H=s3.<route>` faults reach every
+#   request of the datanodes to the object store; the name s3 resolves to the emulator's proxy;
+# - the datanodes', Kafka's and etcd's data directories are file systems of their own (storage:),
+#   the targets of L= and G=; the importer's anonymous volumes of the Kafka image are left out;
+# - the readiness checks ask each component's /health with the guest's busybox, and Kafka's is a
+#   connect to its port;
+# - the test client gtc is in the image (../build.sh);
+# - /etc/hosts names the guest's hostname, `(none)`, which Kafka resolves at its start (Docker
+#   gives every container a line for its own hostname); without it Kafka stops with
+#   `UnknownHostException: (none)`;
+# - Kafka runs as root, because the image's user cannot write the file system of storage:.
+format: 1
+name: greptimedb
+description: "GreptimeDB v1.3.1 in cluster mode (etcd, a metasrv with region failover, two frontends, two datanodes, the WAL in Kafka, the data on S3): acknowledged rows stay readable, once and with their values, and DDL statements take effect whole, under kills, pauses, partitions, power cuts, one node's power loss or damaged files, clock steps and faults of the object store"
+hydo_version: "0.5"
+
+params:
+  arch: amd64     # amd64 | arm64: the client's architecture, the same as the image's
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 3072   # the services' peaks add up to about 1,360 MiB (hydo run --memory); the rest is for the page cache
+  clock_start: 1795392000   # 2026-11-23 00:00 UTC, the day of the import
+  clock_after_cut: 60       # rows carry wall-clock timestamps: no real clock runs back across a power cut
+  outcomes_after_cut: true  # the checks in a recovery boot read the unknown outcomes too
+
+data:
+  size_mib: 512   # the shared data disk: the S3 emulator's objects and the error-log scan's files; hvx keeps every disk of a VM in host memory, beside its RAM
+  dirs: [vol/etcd, vol/kafka, vol/dn0, vol/dn1]
+
+root:
+  share_images: true   # the metasrv, the frontends and the datanodes share one tree of the greptimedb image
+  files:                 # bind-mount sources, copied into the read-only root
+    - {src: ../config/kafka.properties, dst: /etc/hydo/compose/bind/0-kafka.properties}
+    - {src: ../config/metasrv.toml, dst: /etc/hydo/compose/bind/1-metasrv.toml}
+    - {src: ../config/datanode.toml, dst: /etc/hydo/compose/bind/2-datanode.toml}
+    - {src: ../config/frontend.toml, dst: /etc/hydo/compose/bind/3-frontend.toml}
+    - {src: "../bin/gtc-{{arch}}", dst: /bin/gtc, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr: (the emulator adds s3)
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      127.0.0.1 (none)
+      10.89.0.11 etcd
+      10.89.0.12 kafka
+      10.89.0.14 metasrv
+      10.89.0.15 datanode0
+      10.89.0.16 datanode1
+      10.89.0.17 frontend0
+      10.89.0.18 frontend1
+
+emulators:
+  - use: s3
+    buckets: [greptimedb]
+    addr: 10.89.0.13
+
+groups:
+  - name: datanodes
+    services: [datanode0, datanode1]
+  - name: frontends
+    services: [frontend0, frontend1]
+  - name: meta
+    services: [etcd, metasrv]
+
+# Error logs as findings are off. The scan reads every service's whole log through the agent,
+# and in a run with faults the logs of Kafka and the GreptimeDB services passed the 16 MiB of
+# lines that hvx keeps per boot, so the run waited for its wall limit (RESULTS.md, "What hydo
+# lacked"). With `errors: true` and per service `errors: {format: none, match: ' (ERROR|PANIC) '}`, `hydo run`
+# of one schedule works.
+errors: false
+
+services:
+  # Compose service etcd
+  # image quay.io/coreos/etcd:v3.6.17 = quay.io/coreos/etcd@sha256:316f5d367455f75a327f9dc72f669cbf645651859fa2e272f692a1f2dee6f5c9
+  #   linux/amd64: sha256:c521f860433f4f1696e95ff2124c90e8a979766c8443f5f487bdf1b02d238de2
+  #   linux/arm64: sha256:960ea8d19062c3e2e85cb827884fa002fffa754616071f86f01196a1fdd42bc8
+  - name: etcd
+    image: {x86_64: images/quay.io-coreos-etcd-v3.6.17-amd64.docker.tar, arm64: images/quay.io-coreos-etcd-v3.6.17-arm64-oci}
+    image_ref: "quay.io/coreos/etcd:v3.6.17"
+    entrypoint: [/usr/local/bin/etcd]
+    cmd: ["--name=etcd", "--data-dir=/var/lib/etcd/data", "--listen-client-urls=http://0.0.0.0:2379", "--advertise-client-urls=http://etcd:2379", "--listen-peer-urls=http://0.0.0.0:2380", "--initial-advertise-peer-urls=http://etcd:2380", "--initial-cluster=etcd=http://etcd:2380", "--initial-cluster-state=new", "--heartbeat-interval=250", "--election-timeout=1250"]
+    port: 2379
+    addr: 10.89.0.11
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://10.89.0.11:2379/health"
+    ready_timeout: 150
+    restart: "unless-stopped"
+    storage: {dir: vol/etcd, size_mib: 192}   # etcd's data directory, a file system of its own (its WAL preallocates 64 MB files)
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/etcd, dst: /var/lib/etcd}
+  # Compose service kafka
+  # image apache/kafka:3.9.1 = docker.io/apache/kafka@sha256:4ceccc577f03f51f6af8dbfda55194d0d892f4fa7913ffbded567ce3895622ed
+  #   linux/amd64: sha256:5862db4a63a6dd7d46fd14771b10a1b39e069c2c47f17d8e4640f960720a0ead
+  #   linux/arm64: sha256:39bc3b30084ad6ab33ad2c9a525f15c942bf097b18cb2a1825afa6df3411f8b5
+  - name: kafka
+    image: {x86_64: images/apache-kafka-3.9.1-amd64.docker.tar, arm64: images/apache-kafka-3.9.1-arm64-oci}
+    image_ref: "apache/kafka:3.9.1"
+    user: ""   # root: the image's user appuser cannot write the file system of storage:
+    entrypoint: [/bin/sh, "-c"]
+    cmd: ["/opt/kafka/bin/kafka-storage.sh format --ignore-formatted -t 4L6g3nShT-eMCtK--X86sw -c /etc/kafka-hydo/server.properties && exec /opt/kafka/bin/kafka-server-start.sh /etc/kafka-hydo/server.properties"]
+    env:
+      KAFKA_HEAP_OPTS: "-Xmx320m -Xms320m"
+      LOG_DIR: "/tmp/kafka-logs"
+    port: 9092
+    addr: 10.89.0.12
+    ready: "tcp:9092"
+    ready_timeout: 150
+    restart: "unless-stopped"
+    storage: {dir: vol/kafka, size_mib: 256}   # the WAL's topics, a file system of its own
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-kafka.properties, dst: /etc/kafka-hydo/server.properties}
+      - {src: /data/vol/kafka, dst: /var/lib/kafka}
+  # Compose service metasrv
+  # image greptime/greptimedb:v1.3.1 = docker.io/greptime/greptimedb@sha256:a10181273b9400a30fbad6f5043b3d08e388c7d4ee30a7570e5f0241496e9ee1
+  #   linux/amd64: sha256:f539f3780cf7331e5203c4687f2f88f2d570718300cb8990d9d7490e9db114a5
+  #   linux/arm64: sha256:c026fa2b8db730ff392c67b46ca723ee50604e01592b16b3847c39941c824366
+  - name: metasrv
+    image: {x86_64: images/greptime-greptimedb-v1.3.1-amd64.docker.tar, arm64: images/greptime-greptimedb-v1.3.1-arm64-oci}
+    image_ref: "greptime/greptimedb:v1.3.1"
+    cmd: [metasrv, start, "-c", /etc/greptimedb/metasrv.toml]
+    port: 3002
+    addr: 10.89.0.14
+    depends_on: [etcd, kafka]
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://10.89.0.14:3000/health"
+    ready_timeout: 150
+    restart: "unless-stopped"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/1-metasrv.toml, dst: /etc/greptimedb/metasrv.toml}
+  # Compose service datanode0
+  - name: datanode0
+    image: {x86_64: images/greptime-greptimedb-v1.3.1-amd64.docker.tar, arm64: images/greptime-greptimedb-v1.3.1-arm64-oci}
+    image_ref: "greptime/greptimedb:v1.3.1"
+    cmd: [datanode, start, "-c", /etc/greptimedb/datanode.toml, "--node-id=0", "--grpc-server-addr=datanode0:3001"]
+    port: 3001
+    addr: 10.89.0.15
+    depends_on: [metasrv, kafka, s3_emulator]
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://10.89.0.15:5000/health"
+    ready_timeout: 150
+    restart: "unless-stopped"
+    storage: {dir: vol/dn0, size_mib: 192}   # the write cache and the local state, a file system of its own
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/2-datanode.toml, dst: /etc/greptimedb/datanode.toml}
+      - {src: /data/vol/dn0, dst: /greptimedb_data}
+  # Compose service datanode1
+  - name: datanode1
+    image: {x86_64: images/greptime-greptimedb-v1.3.1-amd64.docker.tar, arm64: images/greptime-greptimedb-v1.3.1-arm64-oci}
+    image_ref: "greptime/greptimedb:v1.3.1"
+    cmd: [datanode, start, "-c", /etc/greptimedb/datanode.toml, "--node-id=1", "--grpc-server-addr=datanode1:3001"]
+    port: 3001
+    addr: 10.89.0.16
+    depends_on: [metasrv, kafka, s3_emulator]
+    start_after: started   # Compose starts both datanodes together
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://10.89.0.16:5000/health"
+    ready_timeout: 150
+    restart: "unless-stopped"
+    storage: {dir: vol/dn1, size_mib: 192}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/2-datanode.toml, dst: /etc/greptimedb/datanode.toml}
+      - {src: /data/vol/dn1, dst: /greptimedb_data}
+  # Compose service frontend0
+  - name: frontend0
+    image: {x86_64: images/greptime-greptimedb-v1.3.1-amd64.docker.tar, arm64: images/greptime-greptimedb-v1.3.1-arm64-oci}
+    image_ref: "greptime/greptimedb:v1.3.1"
+    cmd: [frontend, start, "-c", /etc/greptimedb/frontend.toml, "--grpc-server-addr=frontend0:4001"]
+    port: 4000
+    addr: 10.89.0.17
+    depends_on: [metasrv, datanode0, datanode1]
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://10.89.0.17:4000/health"
+    ready_timeout: 150
+    restart: "unless-stopped"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/3-frontend.toml, dst: /etc/greptimedb/frontend.toml}
+  # Compose service frontend1
+  - name: frontend1
+    image: {x86_64: images/greptime-greptimedb-v1.3.1-amd64.docker.tar, arm64: images/greptime-greptimedb-v1.3.1-arm64-oci}
+    image_ref: "greptime/greptimedb:v1.3.1"
+    cmd: [frontend, start, "-c", /etc/greptimedb/frontend.toml, "--grpc-server-addr=frontend1:4001"]
+    port: 4000
+    addr: 10.89.0.18
+    depends_on: [metasrv, datanode0, datanode1]
+    start_after: started   # Compose starts both frontends together
+    ready: "timeout 4 wget -q -T 3 -O /dev/null http://10.89.0.18:4000/health"
+    ready_timeout: 150
+    restart: "unless-stopped"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/3-frontend.toml, dst: /etc/greptimedb/frontend.toml}
+
+# 60 rounds of 1 s: a minute of guest time with about 100 writes, long enough for a region
+# failover (the failure detector waits about 10 s past the last heartbeat) and for the datanodes'
+# flushes every 20 s
+workload:
+  steps: 60
+  timeout: 420    # also the drain's limit: it gives up after 200 s
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 1000
+  command_timeout: 60
+  drain_timeout: 45
+
+checks:
+  - id: gt
+    type: messages
+    history: gt
+    msg: every acknowledged row of hydo_rows and hydo_log is returned by a query, once and with its value
+    final: /bin/gtc drain
+    acknowledgement: none           # a read does not consume a row
+    claims:
+      delivery: at-least-once       # every acknowledged row is read back (no-loss)
+      duplicates: forbidden         # each row is returned once: a second copy has another system id
+
+# A power cut of the whole guest (cut) is left out: the S3 emulator writes its objects without an
+# fsync, so a cut loses objects that the S3 server acknowledged, which real object storage never
+# does (RESULTS.md, "What hydo lacked"). One service's power loss (powerloss, L=) cuts a datanode,
+# Kafka or etcd while the object store keeps its objects.
+faults: [kill, pause, network, oneway, clock, corrupt, powerloss, protocol]
