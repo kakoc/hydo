@@ -1,0 +1,64 @@
+# The redis-oci example with one more check (Milestone 341): the image service sees cgroup2's
+# files under /sys/fs/cgroup. From the fingerprint epoch 5 the launcher binds /sys into the
+# service's root with `mount --rbind` (Milestone 338); before, the folder was empty.
+# The image file and the build are those of hydo.yaml next to this file:
+#   hydo build hydo-sys.yaml
+#   disk=none | run   -> OK invariants=2 held; `hydo report --details <run dir>` lists the files
+name: redis-oci-sys
+description: Redis from the official Docker image; its service sees cgroup2's files under /sys/fs/cgroup.
+
+data:
+  size_mib: 64
+
+services:
+  - name: redis
+    # x86_64: a `docker save`-format archive; arm64: an OCI layout directory (both made by
+    # fetch-image.sh with skopeo, pinned by the per-platform manifest digest)
+    image:
+      x86_64: redis-7.2.4-amd64.docker.tar
+      arm64: redis-7.2.4-arm64-oci
+    image_ref: redis:7.2.4
+    # the image's ENTRYPOINT (docker-entrypoint.sh: chown /data, then gosu redis) stays; this
+    # replaces its CMD. WorkingDir /data from the image is the data disk.
+    cmd: >-
+      redis-server --port 6379 --bind 127.0.0.1 --dir /data --save ""
+      --appendonly yes --appendfsync always --hz 1 --dynamic-hz no
+    ready: hydo-oci redis redis-cli ping | grep -q PONG
+    port: 6379
+
+workload:
+  steps: 20                         # step i = SET k:i v<i>
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      r=$(timeout 2 hydo-oci redis redis-cli SET k:$i v$i 2>/dev/null)   # a 2 s client deadline
+      if [ "$r" = OK ]; then echo $i >> $HYDO_ACKED; echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+  process: redis-cli
+
+knobs:
+  - token: R
+    name: Redis appendfsync
+    default: always
+    values: [always, everysec, "no"]
+    set: hydo-oci redis redis-cli CONFIG SET appendfsync $HYDO_VALUE
+
+invariants:
+  - id: redis.acked_writes_survive
+    msg: every SET the client saw acknowledged reads back with its value
+    cmd: |
+      lost=0
+      for i in $(cat $HYDO_ACKED); do
+        [ "$(hydo-oci redis redis-cli GET k:$i)" = "v$i" ] || { echo "key k:$i lost"; lost=1; break; }
+      done
+      [ $lost = 0 ] && echo "acked=$(wc -l < $HYDO_ACKED) all present"
+      [ $lost = 0 ]
+
+  - id: oci.sys_cgroup_files
+    msg: the image service sees cgroup2's files under /sys/fs/cgroup (the recursive bind of /sys)
+    cmd: |
+      hydo-oci redis sh -c "cat /proc/self/cgroup; ls /sys/fs/cgroup | tr \"\\n\" \" \"; echo; test -e /sys/fs/cgroup/cgroup.procs"
+
+faults: [kill, pause, cut, clock, disk]
