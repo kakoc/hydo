@@ -1002,6 +1002,29 @@ The example leaves out a power cut of the whole guest, because the S3 emulator l
 acknowledged. The error-log scan is off, because it passed hvx's 16 MiB of agent lines (open item
 171). The other agents' load kept the explorations at one worker.
 
+**Garage (M349, tentative number).** Garage v2.5.0, the S3-compatible object store, runs in one
+guest of the Mac engine in `hydo/onboard/examples/garage` (RESULTS.md), imported with `hydo
+compose`. Three nodes run with replication factor 3 and the consistent mode. Each node's LMDB
+metadata and data blocks are on a file system of its own. The build parameter `fsync` sets
+`metadata_fsync` and `data_fsync` (`true` by default). A Go client on the AWS SDK v2 writes,
+overwrites, deletes, uploads in parts, aborts, and copies objects. It reads each acknowledged
+write through another node. M346's `acked_outcome` claim, a listing check, and an uploads check
+judge them. With both fsync settings on, every acknowledged write but a copy stayed as
+acknowledged. That held under kills, pauses, partitions, one node's power loss or damaged
+blocks, and power cuts 0 to 30 ms after an acknowledgement. Nothing was posted:
+- Fixed on `main-v2` (`4dde841d`), not released: after a backward clock step, CopyObject onto an
+  existing or deleted key is acknowledged and has no effect. It takes the clock as its version's
+  timestamp (`disk=none | run T=17:-3600`).
+- New: after a node comes back, ListObjectsV2 lists keys deleted while it was down, for up to 10
+  minutes, while GET answers 404. Each node filters its own copy before the merge. The same
+  holds for ListMultipartUploads and aborted uploads.
+- New, minor: each node saves its peers once a minute without a sync. So a cluster formed with
+  `garage node connect` does not form again after a power loss of every node in its first
+  minute (`hydo build --set peerwait=no`, then `disk=cut | run C=3`).
+
+With Garage's default `fsync=false` a power cut lost acknowledged writes, which `hydo explore
+--configs` labeled the documented trade-off (open item 177).
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -3444,7 +3467,31 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A gRPC method is found by its name, so it can point at another type's method of that name
       (Hatchet's `SendStepActionEvent`). A handler that answers `unimplemented` is listed.
     - `hydo rules check` does not read the list yet; the skill reads it when it writes the
-      workload. No onboarding used it yet.
+      workload. The Garage onboarding (M349) ran it and got no route. Garage's S3 router is an
+      enumeration of its own (`Endpoint`), not a web framework's route table.
+177. What the example `garage` left (M349, tentative number):
+    - The three candidates are not reported upstream. Garage's tracker is a Forgejo instance
+      that needs an account, not GitHub. Finding 1 is fixed on `main-v2` and waits for a
+      release.
+    - `hydo rules scan --kind writes` found no route in Garage (open item 175). The clock audit
+      named only the request signatures' date checks. It looks for durations, and Garage orders
+      an object's versions by wall-clock timestamps. It also explained each place with a
+      constant of another file ("10 minutes by default (src/block/manager.rs:49)").
+    - An `acked_outcome` check that records no delivery keeps its implicit claim `no-phantom`
+      without anything to judge. `hydo explore` then counts every passing run as a vacuous pass
+      ("may have checked nothing"), although `acked-outcome` judged about 80 operations a run.
+    - One node's `storage:` takes one directory, so a node's metadata and data share one file
+      system; production puts the metadata on an SSD and the data on disks.
+    - The uploads check judges only the uploads that Garage acknowledged as aborted. An upload
+      that a stale node lists after its completion, the other case of finding 2's cause, was
+      not checked.
+    - Pauses on one node fit within the 40-step workload only as timed pauses (`P=<svc>@<at>~0:
+      80000`), and a paused node applied the writes queued in its sockets when it went on. A
+      partition longer than Garage's failure detector, with deletions on the other side, was
+      not run.
+    - No native run: the causes are plain in the code. hvx and KVM did not run the example; the
+      image has an amd64 build. A cluster of several zones, a gateway node, a layout change
+      under faults, and the experimental Fjall engine were not tried.
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -4501,6 +4548,12 @@ build machine, before 2026-10-13.
   an image with only a linux/arm64 build unless `--from-docker` was given, because it asked for
   amd64 too. Such an image is imported now, with its settings from the arm64 build. A warning
   says that it runs on the Mac engine only, and fetch-images.sh stops on an x86_64 machine. `hydo compose --help` names `--from-docker`. Nothing recorded moved
+- M349 (tentative number): the onboarding of Garage v2.5.0 on the Mac engine, three nodes with
+  replication factor 3. Two new candidates, not posted. After a node comes back, ListObjectsV2
+  and ListMultipartUploads list deleted keys and aborted uploads for up to 10 minutes, because
+  each node filters its copy before the merge. A cluster formed with `garage node connect`
+  loses its peers at a power loss in its first minute. A CopyObject after a backward clock step
+  has no effect, fixed on `main-v2` but not released. Nothing recorded moved
 
 ## Where to look
 

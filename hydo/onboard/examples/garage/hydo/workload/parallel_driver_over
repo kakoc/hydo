@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# PutObject over a known key, then a read through another node
+exec /bin/gac op over

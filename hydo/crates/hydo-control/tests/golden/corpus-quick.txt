@@ -62,6 +62,7 @@ input	hydo/onboard/examples/blnk/hydo/hydo.yaml	7e97e5e2f1ff496ca70bf59e69bf32a2
 input	hydo/onboard/examples/clickhouse/hydo/hydo.yaml	8345a545d5208fa175d21ddc0c1c728cede18b5923a6f9705c46f6f0e6a52658
 input	hydo/onboard/examples/dragonfly/hydo/hydo.yaml	5037c40624c84145423634f5a9c0949d5dc86af40ebc1d8a772a10c36b347a9a
 input	hydo/onboard/examples/formance-ledger/hydo/hydo.yaml	c2d48d2d9012cbeb2f305ad2e12cb70d6fd2896f07f6c098102cd7901b757308
+input	hydo/onboard/examples/garage/hydo/hydo.yaml	35689f0e2a827bf0e816bf464d502d9cd900bb778148e583b08a66f09a75acaf
 input	hydo/onboard/examples/ghost/hydo/hydo.yaml	e5a0a96f7d60faa87ba107f15fc1757aaf7111ade412aeeadb0424613c6392c6
 input	hydo/onboard/examples/greptimedb/hydo/hydo.yaml	888bba3ab5119fbaf5526a3470cf0f3f7658e293a77e76d82f95ad04fc73e606
 input	hydo/onboard/examples/hatchet/hydo/hydo.yaml	e3672df0fb0e8111b40656afe8cbb75554c01acce9e44903591c30ebefc6c557
@@ -69,7 +70,7 @@ input	hydo/onboard/examples/iggy/hydo/hydo.yaml	3788017a576d3e9f3bd5c6980fca478c
 input	hydo/onboard/examples/lago/hydo/hydo.yaml	b6cbc77b1992ae4c4a1e578d59e0884ceb724a0d44e018203f960a226f31d60f
 input	hydo/onboard/examples/libsql-replica/hydo/hydo.yaml	e9675d508c22631f89dfe6fe2c719a96e98ffade48092f1738748187814357fd
 input	hydo/onboard/examples/medusa/hydo/hydo.yaml	6e1a65dbb528ebc030ab84acad7e095324263ae3b2d4d30a4e0956d3168675c8
-input	hydo/onboard/examples/meilisearch/hydo/hydo.yaml	3694e3812f8ec090d5b81136fd2696f8aee89953d0ec343547164046a5dc9586
+input	hydo/onboard/examples/meilisearch/hydo/hydo.yaml	02fd9b43c3cc6ce553b8da55248d4b795f5a99e68f1b42f2103a20d5385a929f
 input	hydo/onboard/examples/memos/hydo/hydo.yaml	472ecabb0f5b062536e3aa139cc11e75c7215c4f874e9e9ce9f3eedce1087755
 input	hydo/onboard/examples/messages-tutorial/hydo/hydo.yaml	4d23b2bfe574b53cb772f9e876efc61b8b3fd0541d58686872ae67ce5148b92f
 input	hydo/onboard/examples/nats-jetstream/hydo/hydo.yaml	a7e19bf3c01be56d464b7a6e443792caee1ad45e29fa7ea8be9801cf05965719
@@ -3549,6 +3550,7 @@ manifest	hydo/onboard/examples/blnk/hydo/hydo.yaml	not core: restart policies: n
 manifest	hydo/onboard/examples/clickhouse/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/dragonfly/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/formance-ledger/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
+manifest	hydo/onboard/examples/garage/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/ghost/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/greptimedb/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/hatchet/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)

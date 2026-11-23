@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=60
+# a multipart upload of 2 to 4 parts to a new or a known key and its completion, then a read through another node
+exec /bin/gac op mpu

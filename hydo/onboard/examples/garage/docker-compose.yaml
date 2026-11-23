@@ -1,0 +1,34 @@
+# Three Garage nodes with replication factor 3, as Garage's documentation deploys a cluster
+# (doc/book/cookbook/real-world.md). Each node has its metadata and its data in volumes of its
+# own. The layout, the key and the bucket are made once with the garage command line; the hydo
+# folder does it in its first_init command.
+services:
+  garage1:
+    image: dxflrs/garage:v2.5.0
+    restart: unless-stopped
+    volumes:
+      - ./config/garage-fsync-true.toml:/etc/garage.toml
+      - meta1:/var/lib/garage/meta
+      - data1:/var/lib/garage/data
+    ports: ["3900:3900"]
+  garage2:
+    image: dxflrs/garage:v2.5.0
+    restart: unless-stopped
+    volumes:
+      - ./config/garage-fsync-true.toml:/etc/garage.toml
+      - meta2:/var/lib/garage/meta
+      - data2:/var/lib/garage/data
+  garage3:
+    image: dxflrs/garage:v2.5.0
+    restart: unless-stopped
+    volumes:
+      - ./config/garage-fsync-true.toml:/etc/garage.toml
+      - meta3:/var/lib/garage/meta
+      - data3:/var/lib/garage/data
+volumes:
+  meta1: {}
+  data1: {}
+  meta2: {}
+  data2: {}
+  meta3: {}
+  data3: {}

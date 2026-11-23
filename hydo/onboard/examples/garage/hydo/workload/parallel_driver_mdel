@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# DeleteObjects of two known keys in one request, then a read of each through another node
+exec /bin/gac op mdel

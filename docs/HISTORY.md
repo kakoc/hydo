@@ -21342,3 +21342,90 @@ fetch-images.sh has the stop line. The CLI's recorded answers of `compose`, `com
 
 **What is left.** The user's own project did not run with the fix. An image with only an amd64
 build on a Mac is unchanged: its hydo.yaml names the x86_64 file only.
+
+## Milestone 349 (tentative number): Garage, three nodes, and what a listing says
+
+The onboarding of Garage v2.5.0 (2026-10-24, the newest release) on the Mac engine, by
+`docs/ONBOARDING-PLAYBOOK.md`, with the hydo of `main` at `45aa2be3` (0.5.0 and Milestones 344
+to 347). Two new candidates and one bug fixed on Garage's `main-v2` but in no release. Nothing
+was posted. Nothing recorded moved.
+
+**The example.** `hydo/onboard/examples/garage` (RESULTS.md) runs production's shape: three
+nodes with `replication_factor = 3`, the default `consistency_mode = "consistent"` and LMDB, each
+node's metadata and data on a file system of its own. It was imported with `hydo compose` from
+the example's Compose file; the configuration is `config/garage-fsync-<true|false>.toml`, chosen
+by the build parameter `fsync` (`true` by default, Garage's default is `false`). The Go client
+`gac` (the AWS SDK for Go v2) connects the nodes, applies the layout and makes the key and the
+bucket through the admin API v2. It runs PutObject, overwrites, DeleteObject, DeleteObjects,
+multipart uploads with their completion or their abort, and CopyObject, each through a node that
+the seed picks, and reads each acknowledged write through another node. The checks are a
+`type: messages` check with M346's `acked_outcome` and `effect: recorded`, a listing check, an
+uploads check, and an `eventually_` check that every node answers. Two clean runs give one
+fingerprint on the final image (`d25c3a50…`): `e80b6137f1d1a827`.
+
+**Finding 1, fixed on `main-v2`, not released.** After a backward clock step, CopyObject onto an
+existing or a deleted key is acknowledged and has no effect. `handle_copy_metaonly`
+(`src/api/s3/copy.rs` line 293) takes `now_msec()` as the copy's version timestamp, while every
+other write takes `next_timestamp` (`put.rs` line 720). `disk=none | run T=17:-3600` fails on
+every run. Commit `4dde841d` (2026-11-22, the quota fix of #1621) uses `next_timestamp` there too.
+Blind in 23 of the 200 blind schedules.
+
+**Finding 2, new.** After a node comes back from a kill, a pause or a power loss, ListObjectsV2
+lists the keys deleted while it was down, through any node, for up to 10 minutes, while GET
+answers 404. Each node applies the listing's filter `IsData` to its own copy
+(`src/table/data.rs`, `read_range_aux`, lines 152 to 161) before the coordinator merges the copies
+(`src/table/table.rs`, `get_range_internal`), so the nodes that hold the deletion return nothing
+for the key. `get_range` does no read repair, and the anti-entropy sync of the object table runs
+every 10 minutes. ListMultipartUploads lists an aborted upload the same way (`IsUploading`).
+`disk=none dseed=0 | run K=garage1@1+1 W=757a66d9,p4,q1,r500,oanytime_read` and `disk=none
+dseed=0 | run N=nodes.isolate.3@21-29:delay,500ms W=6d4d3721,p3,q2,r500 L=garage1@23+1` are the
+regressions. Blind in 52 of the 200 blind schedules, from seed 2.
+
+**Finding 3, new, minor.** Each node saves its peers' addresses once a minute
+(`DISCOVERY_INTERVAL`), by truncating and writing `peer_list` without a sync
+(`src/util/persister.rs` line 79). A cluster formed with `garage node connect`, as the page
+"Deployment on a cluster" does, then does not form again after a power loss of every node in its
+first minute. With `hydo build --set peerwait=no`, `disk=cut | run C=3` ends `VIOLATION
+[available] not satisfied 120.56s after heal`. The default build waits for the lists in
+`first_init`, so that the explorations' power cuts test the data.
+
+**Not bugs.** With `fsync=false` a power cut lost an acknowledged PutObject (`hydo explore
+--configs` labeled it the documented trade-off). A damaged LMDB file stops its node, as "Known
+issues" says. A damaged `node_key` leaves its node out of the cluster: Garage does not compare the
+key's two halves.
+
+**What held.** With both fsync settings on, every acknowledged write but the copies of finding 1
+stayed as acknowledged and was readable through another node at once. That held through kills,
+pauses up to 80 s, partitions and one-way loss, one node's power loss, damaged data blocks of one
+or two nodes, and 48 power cuts of the whole guest 0 to 30 ms after an acknowledgement. LMDB keeps
+`MDB_NOMETASYNC` with `metadata_fsync = true`, which may undo the last transaction (issue #1571
+names it), but Garage's next commits come within milliseconds.
+
+**Explorations.** e1 and e3 (process, seeds 1-80, cluster and storage faults), e6 (swarm, seeds
+81-120, `--kill-now` reactions at the client's events), e7 (process, seeds 121-200, with
+`--corrupt-several` and reactions), e2 and e4 (M345's `--reactive-at` grids, 132 schedules), and
+e5 (`--configs`, both values of `fsync`, 20 seeds each). All on one worker of 1,024 MiB, at 160 to
+860 runs an hour.
+
+**Tests.** The explorer's corpus and identity goldens (quick and full) and the controller's
+corpus golden are re-recorded for the new example's inputs (`HYDO_BLESS=1`).
+
+Retro: Garage v2.5.0, the Mac engine, 2026-11-23
+- Time to the first clean run: 50 minutes of wall time, 20 of them waiting for free disk.
+- Schedules run before the first finding: 1, a directed clock step; blind, seed 2 of e1. None
+  failed by the rules' mistakes but the first clean run, whose listing check named the first
+  command's keys.
+- The findings: 2 new (the listing, and the lost peers), 1 fixed but not released (the copy), 1
+  documented (`fsync=false`), and the environment (damaged LMDB files and keys).
+- What took the most time: the power cuts that left the cluster without peers, which first looked
+  like hydo's or the checks' error (about 30 minutes); two waits for free disk (about 20
+  minutes); separating the faults of the uploads listing (about 10 minutes).
+- What hydo lacked: `hydo rules scan --kind writes` found no route in Garage, the clock audit
+  does not see versions ordered by wall-clock timestamps, and an `acked_outcome` check without
+  deliveries makes every passing run count as vacuous (open item 177).
+- Strategies: a new entry, "A listing compared with a read of each key", found finding 2. The
+  entries "Clock steps and the clock audit", "Power cuts of the whole guest", "A scan of a
+  reaction's delay" and "Settings that trade durability" of `hydo guide strategies` are updated,
+  and the first table has a row for object stores.
+
+**What is left.** Open item 177.

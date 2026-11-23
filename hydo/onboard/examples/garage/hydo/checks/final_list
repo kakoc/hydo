@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: ListObjectsV2 lists every key that exists and no key that does not
+exec /bin/gac check list

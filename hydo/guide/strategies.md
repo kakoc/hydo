@@ -15,6 +15,7 @@ results page: new as far as the search found, known, by design, or a deployment 
 | system | its promise | the techniques that found most | where they found bugs |
 |---|---|---|---|
 | database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus |
+| object store | an acknowledged object stays as written; a listing shows what exists | a listing compared with a read of each key; kills and pauses of one node; clock steps | Garage |
 | log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults | Redpanda, NATS |
 | job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate |
 | distributed query or compute engine with schedulers and workers | an accepted query ends; a completed query's result stays readable | production's topology and features; checks of how each unknown outcome ends; pauses of a worker past its failure detector; kills of the worker that holds the results | a user's query engine |
@@ -362,6 +363,27 @@ These findings hold for every type of system:
   directory without a `wal` folder, so the client makes an empty one first.
 - **Cost.** One read of the snapshot per command. It runs on every engine.
 
+### A listing compared with a read of each key
+
+- **What it is.** A final check lists the store's keys, a bucket or a range, and reads each key
+  that the workload wrote on its own. Every key that a read finds must be listed, and no key that
+  a read does not find. A read of one key and a listing take different code paths in a
+  replicated store.
+- **What to write.** A `final_` check that lists first, then reads each key, and prints each key
+  that differs on an earlier line than its count. Do not read a key before the listing: a read
+  can repair the stale replica. The Garage example's `gac check list` is one to copy.
+- **When it fits.** A replicated store with quorum reads, an object store, or any store whose
+  scans merge the replicas' answers.
+- **What it found.**
+  - Garage (finding 2): after one node of three was killed, paused or lost its power, a
+    listing named keys deleted while it was down, and GET answered 404 for each. Each node
+    filters its own copy before the coordinator merges them. The blind explorations ended with it
+    in 52 of 200 schedules, from seed 2 on; the checks of each acknowledged write held in all of
+    them. The same check of the multipart uploads found an aborted upload listed.
+- **What it misses.** A stale replica that anti-entropy repairs before the check runs. In Garage
+  the repair came within 10 minutes, after the run's end, so the check saw it.
+- **Cost.** One listing and one read per key at the end. It runs on every engine.
+
 ## Faults
 
 ### Power cuts of the whole guest (`C=`)
@@ -388,6 +410,11 @@ These findings hold for every type of system:
     merge and a fetch off, `disk=cut | run C=40` lost merged parts on both replicas. Replication
     then stopped for good with rows on one replica. In the first exploration seeds 1 and 5 did it
     blind, and the power cut of seed 8 passed. With every fsync setting on, no cut did.
+  - Garage (finding 3): a cluster formed with `garage node connect` saves each node's peers once
+    a minute. A cut in the cluster's first minute left every node with no peer, and the cluster
+    never answered again. A check that the cluster answers within 120 s of the recovery boot's
+    start (`eventually_available`) caught it; without one the run ended in an ERROR of a timed
+    out check.
 - **What it misses.** hydo's S3 emulator writes its objects without an fsync, so a cut of the
   guest loses objects that it acknowledged. In GreptimeDB a query of the recovery boot read an
   SST object shorter than its manifest says. A system whose data lives in object storage needs
@@ -555,6 +582,11 @@ These findings hold for every type of system:
     server dropped 81,585 of its own samples as duplicates, although its out-of-order window
     covered the step. A check that two scrapes a second apart carry two timestamps showed it;
     the checks of acknowledged writes did not, because the client stamps its own samples.
+  - Garage (finding 1, fixed on `main-v2` after v2.5.0): after a step back, CopyObject onto a
+    key that exists or was deleted answers 200 and changes nothing. The copy's version takes the
+    clock alone, while every other write takes the newest version's time plus 1. Blind
+    in 23 of 200 schedules, shrunk to one step, `T=17:-162000`. A read through another
+    node right after each acknowledged write showed it at once.
 - **What it misses.** Many clock effects are by design. Examples are Temporal's delayed timers,
   and River's runs of every periodic job that a forward step skipped. The audit reads text. It
   found no place in Redpanda's 2,694 C++ files, whose transaction expiry uses Seastar's wall
@@ -572,6 +604,9 @@ These findings hold for every type of system:
   named 4 functions, none of the metasrv's: its failure detectors, leases, and region
   migration read the wall clock through the project's own `current_time_millis()`. Steps from
   30 days back to a year forward, alone and in the blind schedules that drew them, broke nothing.
+  The audit looks for durations only. Garage orders an object's versions by wall-clock
+  timestamps, a last-writer-wins order, and the audit named only the request signatures' date
+  checks there, not the copy of Garage's finding 1.
 - **Cost.** The shrinker spends hours on clock steps; stop an exploration once its failures are
   understood. It runs on every engine.
 
@@ -651,6 +686,11 @@ These findings hold for every type of system:
     passed. `hydo explore --reactive-at meili.swap_acked@20` ran the swap twice first at seed
     29 of 153, a `kill-meilisearch` 9 ms after the `202`. `kill-now-meilisearch` did it at 11
     and 12 ms.
+  - Garage, nothing: 48 power cuts of the whole guest 0 to 30 ms after an acknowledged
+    PutObject, overwrite and DeleteObject on three nodes with `metadata_fsync` on lost no write.
+    LMDB may undo its last transaction at a crash there, but Garage commits other transactions
+    within milliseconds. The kills of one node in the same grid showed finding 2, a listing of
+    deleted keys.
 - **What it misses.** The window moves with the program's bytes. A second build of
   `mender-update` moved it to 65, 70, and 75 ms.
 - **Cost.** One run per delay and action: 153 runs for one service and the 51 default delays.
@@ -894,6 +934,11 @@ These findings hold for every type of system:
     alone, `C=30`. The table labeled both the documented trade-off. Iggy's README says that
     `replicated` acknowledges before the copy reaches the disk, and its issue 4631 measured the
     loss after a `kill -9`.
+  - Garage v2.5.0's `metadata_fsync` and `data_fsync` (the Mac engine, seeds 1-20,
+    `--durable-only`): with both on, no power cut lost a write. With Garage's default, both off,
+    `disk=cut | run C=1` lost an acknowledged PutObject on a cluster of three nodes, labeled the
+    documented trade-off. Both values also showed Garage's finding 2, a listing fault that needs
+    no power cut.
   - ClickHouse's fsync settings (hvx, seeds 1-8): with every fsync setting on, all 8 schedules
     passed. With the defaults, 3 of the 4 power-cut schedules failed. Two lost a block
     acknowledged with `insert_quorum = 2`, and the shrink of one kept the cut and the quorum

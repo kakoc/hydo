@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=240
+# connect the three nodes, apply the layout, import the S3 key and make the bucket hydo, through the admin API (../../client/main.go, cmdInit)
+exec /bin/gac init

@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: no multipart upload whose abort Garage acknowledged is still listed
+exec /bin/gac check uploads

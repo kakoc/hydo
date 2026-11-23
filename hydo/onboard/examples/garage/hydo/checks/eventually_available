@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: the cluster answers S3 requests through every node within 120 s of the heal and of the recovery boot's start
+exec /bin/gac check available
