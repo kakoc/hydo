@@ -31,6 +31,8 @@
 //	t<uid>:swap                     sa and sb swapped
 //	t<uid>:edit                     cnt's k gets n + 1 (an edit by function)
 //	t<uid>:dump, t<uid>:snap        a dump, a snapshot
+//	t<uid>:mkidx:<cmd>              the index x<cmd> created
+//	t<uid>:delidx:<cmd>             the index x<cmd> deleted
 //
 // and the line m<uid>:<oid>, the task's request id below.
 //
@@ -544,6 +546,23 @@ func opSnap() int {
 	return 0
 }
 
+// opDelIdx enqueues the creation of a new index x<cmd> and then its deletion, without waiting
+// between the two: Meilisearch runs the tasks of one index in the order of their uids.
+func opDelIdx() int {
+	id := cmdID()
+	ix := fmt.Sprintf("x%d", id)
+	if enqueue(fmt.Sprintf("mkidx.%d", id), fmt.Sprintf("mkidx:%d", id), "POST", "/indexes",
+		map[string]any{"uid": ix, "primaryKey": "id"}) < 0 {
+		return 1
+	}
+	uid := enqueue(fmt.Sprintf("delidx.%d", id), fmt.Sprintf("delidx:%d", id), "DELETE", "/indexes/"+ix, nil)
+	if uid < 0 {
+		return 1
+	}
+	sometimes("meili.delete_index_acked", fmt.Sprintf("task %d", uid))
+	return 0
+}
+
 // ---- the client's records ----
 
 type rec struct {
@@ -580,6 +599,7 @@ var taskType = map[string]string{
 	"add": "documentAdditionOrUpdate", "upd": "documentAdditionOrUpdate", "del": "documentDeletion",
 	"set": "settingsUpdate", "swap": "indexSwap", "edit": "documentEdition",
 	"dump": "dumpCreation", "snap": "snapshotCreation",
+	"mkidx": "indexCreation", "delidx": "indexDeletion",
 }
 
 // ---- checks ----
@@ -1101,8 +1121,23 @@ func enc(s string) string {
 
 // effect is the f= of a task whose effect the read-back reads, or "" for one it does not read.
 // An addition's effect is there when every document it sent is stored with the addition's own
-// body. A document that a deletion request may have removed leaves the effect unread.
-func effect(r rec, docs map[string]stored, derr error, mayDel map[string]bool) string {
+// body. A document that a deletion request may have removed leaves the effect unread. An index
+// deletion's effect is there when the creation of its index succeeded and the index is gone;
+// mk holds the creation tasks by command.
+func effect(r rec, docs map[string]stored, derr error, mayDel map[string]bool, mk map[string]task) string {
+	if r.kind == "delidx" && len(r.args) == 1 {
+		// without a succeeded creation the read-back cannot tell whether the index ever existed
+		if c, ok := mk[r.args[0]]; !ok || c.Status != "succeeded" {
+			return ""
+		}
+		switch st, _, err := call("GET", "/indexes/x"+r.args[0], nil); {
+		case err == nil && st == 404:
+			return "1"
+		case err == nil && st == 200:
+			return "0"
+		}
+		return ""
+	}
 	if r.kind != "add" || derr != nil || len(r.args) < 2 {
 		return ""
 	}
@@ -1140,8 +1175,12 @@ func readBack() int {
 		}
 	}
 	recs := map[int]rec{}
+	mk := map[string]task{}
 	for _, r := range records() {
 		recs[r.uid] = r
+		if t, ok := ts[r.uid]; ok && r.kind == "mkidx" && len(r.args) == 1 {
+			mk[r.args[0]] = t
+		}
 	}
 	var ids, items []string
 	for _, l := range readLines(os.Getenv("HYDO_ACKED")) {
@@ -1166,7 +1205,7 @@ func readBack() int {
 		default:
 			it += ";s=info;e=" + enc(t.Status)
 		}
-		if e := effect(recs[uid], docs, derr, mayDel); ok && e != "" {
+		if e := effect(recs[uid], docs, derr, mayDel, mk); ok && e != "" {
 			it += ";f=" + e
 		}
 		ids, items = append(ids, f[1]), append(items, it)
@@ -1200,7 +1239,7 @@ func main() {
 		os.Exit(cmdInit())
 	case "op":
 		ops := map[string]func() int{"add": opAdd, "upd": opUpd, "del": opDel, "set": opSet, "swap": opSwap,
-			"edit": opEdit, "dump": opDump, "snap": opSnap}
+			"edit": opEdit, "dump": opDump, "snap": opSnap, "delidx": opDelIdx}
 		if f, ok := ops[arg]; ok {
 			os.Exit(f())
 		}

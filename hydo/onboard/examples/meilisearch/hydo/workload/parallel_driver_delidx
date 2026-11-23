@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# enqueue the creation of a new index x<cmd> and its deletion (not waited for)
+exec /bin/mlc op delidx

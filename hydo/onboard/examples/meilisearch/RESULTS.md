@@ -8,7 +8,7 @@ the task queue promises across kills, power cuts, disk faults, and clock steps.
 
 ## The short answers
 
-- **What was found?** Three new bugs, none posted upstream:
+- **What was found?** Three new bugs and a fourth form of the first, none posted upstream:
   1. **An index swap runs twice after a crash.** The swap commits the swapped index mapping in
      one LMDB transaction and the task's `succeeded` status in a second one. A crash between the
      two leaves the task `enqueued`, and the restart swaps the indexes back. A power cut reaches
@@ -22,6 +22,10 @@ the task queue promises across kills, power cuts, disk faults, and clock steps.
   3. **A succeeded dump is an empty file after a power cut.** The dump is written without an
      `fsync`, and its task is committed as `succeeded`. Every power cut of the runs came within
      30 s of a dump, before the guest kernel wrote it back, and left the dump at 0 bytes.
+  4. **The same split runs an index's creation or deletion twice** (Milestone 346). After a
+     kill between the two commits, a deletion that took effect ends `failed` with
+     `index_not_found`, and a creation `failed` with `index_already_exists`. hydo's claim
+     `acked_outcome` found both from the tasks' final states and effects.
 - **What held?** No acknowledged task was lost from the queue, and the tasks of each index ran in
   the order of their uids. Kills and pauses of the service and clock steps of 30 s to a year
   broke no check in 75 blind schedules and the directed ones. The settings were those of the
@@ -85,12 +89,15 @@ and does not wait for it. Four commands run at once, four per round, in 60 steps
 | `parallel_driver_swap` | a swap of the indexes `sa` and `sb`, which hold one document each |
 | `parallel_driver_edit` | an edit by function, an experimental feature, that adds 1 to the counter in index `cnt` |
 | `parallel_driver_dump`, `parallel_driver_snap` | a dump or a snapshot in one call of four, else an addition |
+| `parallel_driver_delidx` (Milestone 346) | the creation of a new index `x<cmd>` and its deletion, enqueued one after the other |
 
 An answer `202` with a `taskUid` is acknowledged, and the client writes the task's uid and what
 it asked for to `$HYDO_ACKED`. A request without an answer is unknown, and the checks do not
 judge a document that such a request may have changed. The client writes the console events
-`meili.add_acked`, `meili.swap_acked`, `meili.edit_acked`, `meili.dump_acked`, and
-`meili.snap_acked`, the anchors of reactions (`A=`).
+`meili.add_acked`, `meili.swap_acked`, `meili.edit_acked`, `meili.dump_acked`,
+`meili.snap_acked` and `meili.delete_index_acked`, the anchors of reactions (`A=`). Since
+Milestone 346 it also records each request as a send of the history `tasks`, with the task's uid
+as its system id.
 
 ## The rules
 
@@ -105,6 +112,7 @@ queue that does not drain breaks the first promise.
 | `final_swap` | `sa` and `sb` each hold their one document, at home after an even number of succeeded swaps |
 | `final_edits` | the counter equals the number of succeeded edits: each edit ran once |
 | `final_dumps` | the file of every succeeded dump task, and the snapshot, are whole archives with their metadata and index `docs` |
+| `queue` (`hydo.yaml`, Milestone 346) | hydo's claim `acked_outcome`: every acknowledged task ends `succeeded`, or `failed` with `index_not_found`, and no final state contradicts the task's effect. `mlc readback` reads the effect of an addition (every document stored with its body) and of an index deletion whose creation succeeded (the index is gone) |
 
 `errors: true` makes Meilisearch's `ERROR` lines findings too.
 
@@ -126,6 +134,20 @@ same in two runs. The moment of a cut after an event moves with the image's byte
 images of the onboarding, before the build parameter `dumps`, gave finding 1 with the cut at
 `+2` and finding 2 at `+40` (hydo from `c1d78449`, `fp=5919be91fe02d8c2`, also from a fresh
 clone).
+
+**Since Milestone 346.** The client's history records, `mlc readback` and
+`parallel_driver_delidx` give the image new bytes, and the image is built at the fingerprint
+epoch 5. These are the values on the Mac engine, with the tree's hydo of Milestone 346. A value
+without a note was the same in two runs.
+
+| file | schedule | verdict | fingerprint |
+|---|---|---|---|
+| (no fault) | `disk=none \| run` | OK, 173 acknowledged tasks | `34d6b1999155c0a5` |
+| `swap-runs-twice-after-a-crash.schedule` | `disk=none \| run A=meili.add_acked@20+40:cut` | `VIOLATION [dumps]`, findings 2 and 3, not the swap | `c4c67122170806f1` (one run) |
+| `payload-lost-at-a-power-cut.schedule` | `disk=cut \| run A=meili.add_acked@20+2:cut` | `VIOLATION [dumps]`, and `queue.acked-outcome` | `3e5b31f5dd34a1fb` (one run) |
+| `dump-empty-after-a-power-cut.schedule` | `disk=cut \| run C=55` (`C=30` passes now: no dump before step 30) | `VIOLATION [dumps]` | `547d6d5f16276222` |
+| `swap-runs-twice-after-a-kill.schedule` | `disk=none \| run A=meili.swap_acked@20+14:kill-now-meilisearch` | `VIOLATION [swap]` | `ff2e49cab7d84f41` (one run) |
+| `index-deletion-runs-twice-after-a-kill.schedule` | `disk=none \| run A=meili.delete_index_acked+13:kill-now-meilisearch` | `VIOLATION [tasks]`, and `queue.acked-outcome` | `b72d43f0a3a2d63c` |
 
 ## What was found
 
@@ -256,6 +278,40 @@ before the rename, so only a first snapshot could be lost the same way, and no r
 Issue #6597 reports a dump missing after a succeeded task in Docker, with no power cut; its cause
 is not known. Native reproduction: none, for the reason of finding 2. The regression is
 `hydo/regressions/dump-empty-after-a-power-cut.schedule`.
+
+### 4. The split of two commits in an index's creation and deletion (Milestone 346)
+
+**Label: a bug of the project, the cause of finding 1 in two more tasks.**
+
+Milestone 346 declared hydo's claim `acked_outcome` in the check `queue` and added
+`parallel_driver_delidx`, which creates an index `x<cmd>` and enqueues its deletion. A kill of
+the server at the moment of the first deletion's `202` (`kill-now-meilisearch`, one run per
+delay of 4 to 14 ms on the Mac engine) found two new forms of finding 1:
+
+| delay | what `queue.acked-outcome` said |
+|---|---|
+| 7 to 11 ms | `mkidx.4 (system id 13) was acknowledged and ended failed with index_already_exists, not an error the client causes`: the creation ran twice |
+| 13 ms | `delidx.4 (system id 14) was acknowledged and ended failed with index_not_found, but its effect is there`: the deletion ran twice |
+| 4 to 6, 12, 14 ms | held |
+
+`+7` gave `fp=f3bf73fdaf6b40f3` and `+13` gave `fp=b72d43f0a3a2d63c`, each in three runs. In
+`+13`'s run the creation, task 13, succeeded, and the index `x4` is gone. The deletion, task 14,
+says `Index x4 not found`. So the deletion took effect in the first run, and the restart ran it
+again. `index_not_found` is in the claim's `client_errors`, because a deletion of an index whose
+creation failed fails so. A check that only excuses that error passes this run; the claim breaks
+on the effect. Both tasks commit their effect before their status, as in finding 1. The regression is
+`hydo/regressions/index-deletion-runs-twice-after-a-kill.schedule`.
+
+The same reading of the effect changes what finding 2 means on this image. With
+`disk=cut | run A=meili.add_acked@20+2:cut`, the two additions that ended `failed` with `No such
+file or directory` have every document stored with their body. The first boot indexed them, and
+the restart ran their batch again after the payload files were gone. The claim says
+`add.155 (system id 178) was acknowledged and ended failed with internal, but its effect is
+there`. With `disk=none | run A=meili.swap_acked@20+10:cut` and `+16` the payload was lost
+before the first run: the additions ended `succeeded` with `indexedDocuments` 0, their documents
+are missing, and the claim says `ended succeeded, but its effect is not there`. With `+14` and
+`A=meili.add_acked@20+40:cut` the additions succeeded with `indexedDocuments` 0 and their
+documents are stored, so the claim held there; only `final_tasks` counts that as broken.
 
 ## The duplicate searches
 
