@@ -1752,3 +1752,267 @@ fn run_checks_reports_one_property_per_claim() {
         "{v}"
     );
 }
+
+// ------------------------------------------------------------------ acked-outcome
+
+/// A status read-back of one item by process 90: its completion `ok` with the item's final
+/// state, or `info` when the read got no answer.
+fn status(h: &mut H, t: i64, m: &str, done: &str, out: &'static str) {
+    h.rec(90, "invoke", t, "status", &["c", m]);
+    if out == "ok" {
+        h.rec(90, "ok", t + 1, "status", &["c", done]);
+    } else {
+        h.rec(90, out, t + 1, "status", &["c", m]);
+    }
+}
+
+const OUTCOME: &str = r#"{"id":"c","type":"messages","history":"q","claims":{"acked_outcome":{"client_errors":["index_already_exists","invalid_*"]}}}"#;
+const OUTCOME_EFFECT: &str = r#"{"id":"c","type":"messages","history":"q","claims":{"acked_outcome":{"client_errors":["index_not_found"],"effect":"recorded"}}}"#;
+
+#[test]
+fn acked_outcome_holds_for_succeeded_and_client_failures() {
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m1", "ok");
+    sent(&mut h, 2, 2, "m2", "ok");
+    sent(&mut h, 3, 4, "m3", "info");
+    sent(&mut h, 4, 6, "m4", "fail");
+    status(&mut h, 100, "m1", "m1;o=81;s=ok", "ok");
+    status(
+        &mut h,
+        102,
+        "m2",
+        "m2;o=82;s=fail;e=invalid_document_id",
+        "ok",
+    );
+    // an unknown outcome may stay unknown, and a refused send is not judged
+    status(&mut h, 104, "m3", "m3;s=info;e=not%20found", "ok");
+    status(&mut h, 106, "m4", "m4;s=info", "ok");
+    let r = run(&h.text(), OUTCOME);
+    assert_eq!(st(&r, "acked-outcome"), Status::Held, "{r:?}");
+    let s = &r["acked-outcome"].1;
+    assert!(
+        s.contains("an error the client causes (1)") && s.contains("2 acknowledged"),
+        "{s}"
+    );
+    // the read-back's records leave every other claim as it was
+    assert_eq!(st(&r, "no-phantom"), Status::Held);
+    let r = run(&h.text(), ALO);
+    assert!(!r.contains_key("acked-outcome"), "{r:?}");
+}
+
+#[test]
+fn acked_outcome_breaks_on_a_failure_the_client_did_not_cause() {
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "add.12", "ok");
+    sent(&mut h, 2, 2, "add.13", "ok");
+    sent(&mut h, 3, 4, "add.14", "ok");
+    status(
+        &mut h,
+        100,
+        "add.12",
+        "add.12;o=165;s=fail;e=internal",
+        "ok",
+    );
+    status(&mut h, 102, "add.13", "add.13;o=166;s=ok", "ok");
+    // a task the queue no longer has: no final state
+    status(
+        &mut h,
+        104,
+        "add.14",
+        "add.14;o=167;s=info;e=not%20in%20the%20queue",
+        "ok",
+    );
+    let r = run(&h.text(), OUTCOME);
+    assert_eq!(st(&r, "acked-outcome"), Status::Violated, "{r:?}");
+    let s = &r["acked-outcome"].1;
+    assert!(
+        s.starts_with("2 of 3 judged operations did not end as the system answered them")
+            && s.contains("add.12 (system id 165) was acknowledged and ended failed with internal")
+            && s.contains(
+                "add.14 (system id 167) was acknowledged and has no final state (not in the queue)"
+            ),
+        "{s}"
+    );
+    // without the client's errors, every failure breaks it
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m1", "ok");
+    status(&mut h, 100, "m1", "m1;s=fail;e=invalid_x", "ok");
+    let r = run(
+        &h.text(),
+        r#"{"id":"c","type":"messages","history":"q","claims":{"acked_outcome":"success"}}"#,
+    );
+    assert_eq!(st(&r, "acked-outcome"), Status::Violated, "{r:?}");
+    // the last read-back of an id counts: a retry that saw the task succeed
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m1", "ok");
+    status(&mut h, 100, "m1", "m1;s=info;e=enqueued", "ok");
+    status(&mut h, 200, "m1", "m1;s=ok", "ok");
+    assert_eq!(st(&run(&h.text(), OUTCOME), "acked-outcome"), Status::Held);
+}
+
+#[test]
+fn acked_outcome_judges_the_effect_when_it_is_recorded() {
+    // an index deletion that took effect and reports failed with index_not_found
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "delidx.7", "ok");
+    status(
+        &mut h,
+        100,
+        "delidx.7",
+        "delidx.7;o=42;s=fail;e=index_not_found;f=1",
+        "ok",
+    );
+    let r = run(&h.text(), OUTCOME_EFFECT);
+    assert_eq!(st(&r, "acked-outcome"), Status::Violated, "{r:?}");
+    assert!(
+        r["acked-outcome"].1.contains(
+            "delidx.7 (system id 42) was acknowledged and ended failed with index_not_found, but its effect is there"
+        ),
+        "{r:?}"
+    );
+    // the same error without the effect is the client's own
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "delidx.7", "ok");
+    status(
+        &mut h,
+        100,
+        "delidx.7",
+        "delidx.7;s=fail;e=index_not_found;f=0",
+        "ok",
+    );
+    assert_eq!(
+        st(&run(&h.text(), OUTCOME_EFFECT), "acked-outcome"),
+        Status::Held
+    );
+    // a succeeded addition whose documents are not there
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "add.3", "ok");
+    status(&mut h, 100, "add.3", "add.3;s=ok;f=0", "ok");
+    assert!(run(&h.text(), OUTCOME_EFFECT)["acked-outcome"]
+        .1
+        .contains("ended succeeded, but its effect is not there"));
+    // an unknown outcome is judged by its effect only
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m1", "info");
+    sent(&mut h, 2, 2, "m2", "info");
+    status(&mut h, 100, "m1", "m1;s=fail;e=internal;f=0", "ok");
+    status(&mut h, 102, "m2", "m2;s=ok;f=0", "ok");
+    let r = run(&h.text(), OUTCOME_EFFECT);
+    assert_eq!(st(&r, "acked-outcome"), Status::Violated, "{r:?}");
+    assert!(
+        r["acked-outcome"].1.starts_with("1 of 2 judged")
+            && r["acked-outcome"]
+                .1
+                .contains("m2 had an unknown outcome and ended succeeded"),
+        "{r:?}"
+    );
+    // without effect: recorded, f= is not read
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m1", "ok");
+    status(&mut h, 100, "m1", "m1;s=ok;f=0", "ok");
+    assert_eq!(st(&run(&h.text(), OUTCOME), "acked-outcome"), Status::Held);
+    // with it, an item without f= is judged by its final state alone
+    let r = run(&h.text().replace(";f=0", ""), OUTCOME_EFFECT);
+    assert_eq!(st(&r, "acked-outcome"), Status::Held, "{r:?}");
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m1", "ok");
+    status(&mut h, 100, "m1", "m1;s=fail;e=internal", "ok");
+    let r = run(&h.text(), OUTCOME_EFFECT);
+    assert_eq!(st(&r, "acked-outcome"), Status::Violated, "{r:?}");
+}
+
+#[test]
+fn acked_outcome_is_undecided_without_a_read_back() {
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m1", "ok");
+    sent(&mut h, 2, 2, "m2", "ok");
+    let r = run(&h.text(), OUTCOME);
+    assert_eq!(st(&r, "acked-outcome"), Status::Undecided, "{r:?}");
+    assert!(r["acked-outcome"]
+        .1
+        .contains("no final state of the 2 acknowledged operations"));
+    // a read that got no answer decides nothing; the other one is judged
+    status(&mut h, 100, "m1", "m1", "info");
+    status(&mut h, 102, "m2", "m2;s=ok", "ok");
+    let r = run(&h.text(), OUTCOME);
+    assert_eq!(st(&r, "acked-outcome"), Status::Held, "{r:?}");
+    assert!(
+        r["acked-outcome"].1.contains("(1 judged, 1 undecided)"),
+        "{r:?}"
+    );
+    // no acknowledged send: nothing to judge
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m1", "fail");
+    assert_eq!(st(&run(&h.text(), OUTCOME), "acked-outcome"), Status::Held);
+}
+
+#[test]
+fn acked_outcome_declaration() {
+    let d = |j: &str| from_spec(&json_loads(j).unwrap());
+    let a = d(OUTCOME).unwrap().acked_outcome.unwrap();
+    assert!(a.client_error("index_already_exists") && a.client_error("invalid_document_id"));
+    assert!(!a.client_error("internal") && !a.client_error("an_invalid_x"));
+    assert!(decl::glob("a*b*c", "aXbYc") && decl::glob("*", "") && !decl::glob("a*b", "ab_c"));
+    assert!(decl::glob("*_not_found", "index_not_found") && !decl::glob("ab*ba", "aba"));
+    assert_eq!(
+        d(r#"{"claims":{"acked_outcome":"none"}}"#)
+            .unwrap()
+            .acked_outcome,
+        None
+    );
+    for (j, frag) in [
+        (r#"{"claims":{"acked_outcome":"always"}}"#, "none, success"),
+        (r#"{"claims":{"acked_outcome":{"errors":[]}}}"#, "errors"),
+        (
+            r#"{"claims":{"acked_outcome":{"client_errors":"internal"}}}"#,
+            "a list of error codes",
+        ),
+        (
+            r#"{"claims":{"acked_outcome":{"effect":"yes"}}}"#,
+            "none, recorded",
+        ),
+    ] {
+        let e = d(j).unwrap_err();
+        assert!(e.contains(frag), "{j}: {e}");
+    }
+    // it reads the end of the history: the read-back is the check's final:
+    let c = conflicts(&d(OUTCOME).unwrap(), Some(false));
+    assert!(
+        c[0].contains("claims.acked_outcome") && c[0].contains("final:"),
+        "{c:?}"
+    );
+    // the results show it only when it is declared
+    let j = hydo_history::py::dumps_sorted(&decl::to_pyval(&d(OUTCOME_EFFECT).unwrap()));
+    assert!(
+        j.contains(r#""acked_outcome":{"client_errors":["index_not_found"],"effect":"recorded"}"#),
+        "{j}"
+    );
+}
+
+#[test]
+fn acked_outcome_names_its_witness() {
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m1", "ok");
+    status(&mut h, 100, "m1", "m1;o=81;s=fail;e=internal", "ok");
+    let mut text = String::from(
+        "HYDO-CHECK {\"claims\":{\"acked_outcome\":\"success\"},\"history\":\"q\",\"id\":\"tasks\",\"msg\":\"tasks\",\"type\":\"messages\"}\n",
+    );
+    text.push_str(&h.text());
+    let r =
+        hydo_history::run_checks(&[("w", text)], None, hydo_history::DEFAULT_BUDGET, None).unwrap();
+    let ids: Vec<&str> = r.checks.iter().map(|c| c.id.as_str()).collect();
+    assert_eq!(ids, vec!["tasks.no-phantom", "tasks.acked-outcome"]);
+    let v = r.verdict.unwrap();
+    assert!(
+        v.starts_with("HYDO-ORACLE: VIOLATION [tasks.acked-outcome] 1 of 1 judged operations"),
+        "{v}"
+    );
+    let c = &r.checks[1];
+    assert!(
+        c.explanation.contains("process 1 send c m1 -> ok")
+            && c.explanation
+                .contains("process 90 status c m1;o=81;s=fail;e=internal -> ok"),
+        "{}",
+        c.explanation
+    );
+}

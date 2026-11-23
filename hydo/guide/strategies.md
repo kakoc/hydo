@@ -156,6 +156,11 @@ These findings hold for every type of system:
   done
   ```
 
+  For the operations that the system acknowledged, the claim `acked_outcome` of a `type:
+  messages` check states the first rule without a hand-written check (`hydo guide messages`,
+  "Read back the final states"). It also keeps the rule for unknown outcomes: such an operation
+  may end in any state, so the claim never counts it as a failure.
+
 - **When it fits.** A system that accepts an operation and finishes it later: a query engine, a
   job runner, a workflow engine, a batch scheduler.
 - **What it found.** The user's query engine (the entry "Production's topology"). The first

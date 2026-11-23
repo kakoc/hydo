@@ -520,6 +520,14 @@ choice!(
     MsgMembers { Any = "any", Exclusive = "exclusive" }
 );
 choice!(
+    /// type: messages: whether every acknowledged send ends as acknowledged.
+    MsgAckedOutcome { None = "none", Success = "success" }
+);
+choice!(
+    /// type: messages: whether the read-back records each operation's effect.
+    MsgEffect { None = "none", Recorded = "recorded" }
+);
+choice!(
     /// type: messages: the queue the sends and receives are linearizable as.
     MsgLinearizable {
         None = "none",
@@ -1314,6 +1322,35 @@ pub struct MessageClaims {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = "none"))]
     pub linearizable: Option<Param<MsgLinearizable>>,
+    /// Every acknowledged send ends in the final state that the check's `final:` reads back
+    /// (`status` records): succeeded, or failed with an error the client causes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acked_outcome: Option<MsgAckedOutcomeClaim>,
+}
+
+/// none, success, or a mapping with client_errors: and effect:.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    untagged,
+    expecting = "none, success, or a mapping with client_errors: and effect:"
+)]
+pub enum MsgAckedOutcomeClaim {
+    Word(Param<MsgAckedOutcome>),
+    Spec(MsgAckedOutcomeSpec),
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct MsgAckedOutcomeSpec {
+    /// The errors (`e=` of a status item) that the client causes, each a code or a pattern with
+    /// `*`: a failed final state with one of them keeps the claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_errors: Option<Vec<Text>>,
+    /// recorded: the read-back records whether each operation's effect is there (`f=1` or
+    /// `f=0`), and a final state that contradicts it breaks the claim.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "none"))]
+    pub effect: Option<Param<MsgEffect>>,
 }
 
 /// allowed, forbidden, or a deduplication window.

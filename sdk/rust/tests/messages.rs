@@ -26,6 +26,11 @@ fn messages_records_the_shared_case() {
     q.commit(8, "events", "g1", &[("k1", 41), ("k 2", 7)]).ok_same();
     q.sub(8, "events", "g1", true).ok_same();
     q.sub(8, "events", "g2", false).fail();
+    q.status(10, "orders", &[Item::new("m17"), Item::new("m19")]).ok(&[
+        Item::new("m17").id(81).final_state(Outcome::Ok).effect(true),
+        Item::new("m19").id(83).final_state(Outcome::Fail).error("invalid doc; id").effect(false),
+    ]);
+    q.status(10, "orders", &[Item::new("m18")]).info();
     q.drained(9, "orders", "-");
     let file = std::env::var_os("HYDO_HIST_OUT").unwrap();
     let got = std::fs::read_to_string(&file).unwrap_or_default();

@@ -195,7 +195,8 @@ pub fn build<'a>(h: &'a MHist, d: &'a Decl) -> Ix<'a> {
                     .push(SendRef { op: op.i, item: j });
             }
         }
-        if op.kind != OpKind::Send {
+        // a status read-back is about sends, not about a group
+        if !matches!(op.kind, OpKind::Send | OpKind::Status) {
             let g = ix.groups.entry((op.q.clone(), op.g.clone())).or_default();
             if op.g == "-" {
                 g.from_start = true;
