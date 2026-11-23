@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# reads of up to 5 known keys through any node: each body must be whole
+exec /bin/gac read

@@ -1,0 +1,9 @@
+# Fixed on Garage's main-v2 after v2.5.0, in no release yet (RESULTS.md, finding 1). After a
+# backward step of the wall clock by an hour before step 17, CopyObject onto an existing or a
+# deleted key is acknowledged and has no effect: the copy's version gets the node's clock as its
+# timestamp (src/api/s3/copy.rs, handle_copy_metaonly, `now_msec()`), which is older than the
+# key's current version or deletion, so every node keeps the older one. A GET through another
+# node right after the 200 answers the old value, or 404 after a deletion. PutObject,
+# DeleteObject and the multipart uploads take max(now, newest + 1) (put.rs, next_timestamp).
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run T=17:-3600

@@ -1,0 +1,11 @@
+# New (RESULTS.md, finding 2), found by `hydo explore` (seed 49 of e3) and shrunk to one kill.
+# garage1 is killed before step 1 and started again before step 2. The deletions acknowledged
+# while it was down reach garage2 and garage3 only. After that, ListObjectsV2 through any node
+# lists deleted keys, while GET of each answers 404 on every node, until the anti-entropy sync of
+# the object table repairs garage1 up to 10 minutes later. Each node applies the listing's filter
+# (the object has data) to its own copy before the coordinator merges the copies
+# (src/table/data.rs, read_range_aux, and src/table/table.rs, get_range_internal): the nodes that
+# hold the deletion return nothing for the key, so the merge sees only the stale version.
+# commands: anytime_read first_init parallel_driver_abort parallel_driver_copy parallel_driver_del parallel_driver_mdel parallel_driver_mpu parallel_driver_over parallel_driver_put
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=0 | run K=garage1@1+1 W=757a66d9,p4,q1,r500,oanytime_read

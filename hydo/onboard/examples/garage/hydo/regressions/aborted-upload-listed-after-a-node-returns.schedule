@@ -1,0 +1,10 @@
+# New (RESULTS.md, finding 2, the uploads), from seed 72 of e3 with its faults separated by hand.
+# The links of garage3 are slowed by 500 ms from step 21 to 29, and garage1 loses its power
+# before step 23 and starts again before step 24. ListMultipartUploads then lists an upload whose
+# AbortMultipartUpload Garage acknowledged. ListMultipartUploads reads the object table with the
+# filter IsUploading, which each node applies to its own copy before the merge, as the listing of
+# objects does with IsData: a node that missed the abort still answers the upload as uploading.
+# The slow links alone, and the pause of seed 72 alone, list no aborted upload.
+# commands: anytime_read first_init parallel_driver_abort parallel_driver_copy parallel_driver_del parallel_driver_mdel parallel_driver_mpu parallel_driver_over parallel_driver_put
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=0 | run N=nodes.isolate.3@21-29:delay,500ms W=6d4d3721,p3,q2,r500 L=garage1@23+1

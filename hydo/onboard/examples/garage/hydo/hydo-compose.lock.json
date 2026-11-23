@@ -1,0 +1,63 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "dxflrs/garage:v2.5.0": {
+   "index_digest": "sha256:677e5b758e4425a325b811c425c026bf35a4bf42f7ddbaa773de3f4fd779a5a5",
+   "name": "dxflrs/garage",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "/garage",
+       "server"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "RUST_BACKTRACE=1",
+       "RUST_LOG=garage=info"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": null
+     },
+     "digest": "sha256:23b16d34e0348d9aca9b960a7429a7e6d494974b5288bfb8f6c3ab856895f71e",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "/garage",
+       "server"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "RUST_BACKTRACE=1",
+       "RUST_LOG=garage=info"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": null
+     },
+     "digest": "sha256:32b5de84cf9e3ae9c0b4d0f02566c442029e62203a4ed1bca9cdf2327fc19388",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "dxflrs/garage:v2.5.0",
+   "registry": "docker.io",
+   "repo": "dxflrs/garage",
+   "tag": "v2.5.0"
+  }
+ }
+}
