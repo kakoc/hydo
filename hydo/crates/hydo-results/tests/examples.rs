@@ -365,7 +365,7 @@ fn the_validator_rejects_invalid_records() {
 
 #[test]
 fn a_shrink_whose_confirmations_timed_out_has_no_fingerprint() {
-    // hvx's TIMEOUT workload ends before the end state is hashed (Milestone 341)
+    // hvx's TIMEOUT workload and KVM's exit budget end before the end state is hashed (M341)
     let rep = |fp: Option<&str>| hydo_results::Reproduction {
         fp: fp.map(str::to_string),
         ..Default::default()

@@ -314,10 +314,11 @@ pub fn report(doc: &Exploration) -> String {
                 .unwrap_or_else(|| "None".into())
         };
         if v.confirmed_without_fingerprint() {
-            // hvx's TIMEOUT: the runs end at the engine's time limit, before the end state is
+            // hvx's TIMEOUT and the Mac's and KVM's exit budget: the runs end at the engine's
+            // limit, before the end state is
             // hashed, so the two zeros compare nothing (Milestone 341)
             l.push(format!(
-                "- fingerprint, two runs: none (`{}` / `{}`): each run ended at the engine's time limit before its end state was hashed, so only the verdicts repeat",
+                "- fingerprint, two runs: none (`{}` / `{}`): each run ended at the engine's limit (hvx's wall time, the exit budget of the Mac and KVM engines) before its end state was hashed, so only the verdicts repeat",
                 fp(0),
                 fp(1)
             ));

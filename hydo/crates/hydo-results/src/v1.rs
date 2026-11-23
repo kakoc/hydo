@@ -1572,8 +1572,9 @@ pub struct Failure {
     pub run: Run,
 }
 
-/// Whether an engine's fingerprint names an end state. A run that passed its engine's time limit
-/// (hvx's `TIMEOUT workload`) ends before the state is hashed, and its fingerprint is all zeros.
+/// Whether an engine's fingerprint names an end state. A run that passed its engine's limit (hvx's
+/// `TIMEOUT workload`, the Mac's and KVM's `exit budget exhausted`) ends before the state is hashed,
+/// and its fingerprint is all zeros.
 pub fn has_fingerprint(fp: &str) -> bool {
     fp.bytes().any(|b| b != b'0')
 }
