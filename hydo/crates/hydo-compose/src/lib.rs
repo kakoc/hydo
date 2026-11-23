@@ -555,6 +555,16 @@ pub fn local_entry(r: &str) -> Result<Y, ComposeError> {
     file_entry(r, "local_build")
 }
 
+/// The platform entry whose image settings (`config`) a service takes: linux/amd64's, or
+/// linux/arm64's for an image with only an arm64 build (an image pushed from a Mac).
+fn settings_platform(plat: &Y) -> Y {
+    plat.get("amd64")
+        .filter(|x| x.truthy())
+        .or_else(|| plat.get("arm64").filter(|x| x.truthy()))
+        .cloned()
+        .unwrap_or(Y::Map(vec![]))
+}
+
 /// The lock entry of an image saved from the local Docker (`from_docker: true`, `--from-docker`,
 /// Milestone 320), without platforms.
 pub fn docker_entry(r: &str) -> Result<Y, ComposeError> {
@@ -1951,11 +1961,18 @@ impl<'a> Importer<'a> {
             info.set(Y::s("platforms"), p);
         }
         let plat = info.getn("platforms").clone();
-        let am = plat
-            .get("amd64")
-            .filter(|x| x.truthy())
-            .cloned()
-            .unwrap_or(Y::Map(vec![]));
+        let am = settings_platform(&plat);
+        if local_build.is_none()
+            && !from_docker
+            && !unresolved
+            && !plat.has("amd64")
+            && plat.has("arm64")
+        {
+            self.w.warn(
+                "image",
+                format!("{wh}: image {rf} has only a linux/arm64 build: it runs on the Mac engine only, and fetch-images.sh stops on an x86_64 machine"),
+            );
+        }
         let cfg = am
             .get("config")
             .filter(|x| x.truthy())
@@ -3102,14 +3119,12 @@ impl<'a> Importer<'a> {
                     let u = match &j.user {
                         Some(u) if !u.is_empty() => u.clone(),
                         _ => {
-                            let u = j
-                                .info
-                                .getn("platforms")
-                                .getn("amd64")
+                            let u = settings_platform(j.info.getn("platforms"))
                                 .getn("config")
-                                .getn("User");
+                                .getn("User")
+                                .clone();
                             if u.truthy() {
-                                pstr(u)
+                                pstr(&u)
                             } else {
                                 String::new()
                             }
@@ -3559,10 +3574,24 @@ impl<'a> Importer<'a> {
                 if done.iter().any(|(_, p)| p == path) {
                     continue;
                 }
-                done.push((arch, path.clone()));
                 let a = if arch == "x86_64" { "amd64" } else { "arm64" };
                 let other = if arch == "x86_64" { "arm64" } else { "x86_64" };
                 let pd = plat.get(a).map(|p| p.getn("digest"));
+                let other_a = if a == "amd64" { "arm64" } else { "amd64" };
+                if pd.is_none() && plat.get(other_a).is_some_and(|p| p.truthy()) {
+                    // a pinned image without this architecture (only an arm64 build): the
+                    // machine of that architecture cannot run it, so say so instead of
+                    // fetching the tag
+                    l.push(format!(
+                        "[ \"$A\" = {other} ] || {{ echo {} >&2; exit 1; }}",
+                        shlex::quote(&format!(
+                            "fetch-images.sh: {} has no linux/{a} build, so it does not run on this machine",
+                            pstr(info.getn("ref"))
+                        ))
+                    ));
+                    continue;
+                }
+                done.push((arch, path.clone()));
                 let repo = format!(
                     "{}/{}",
                     pstr(info.getn("registry")),

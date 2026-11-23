@@ -126,9 +126,12 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
         ),
         "compose" => "usage: hydo compose <docker-compose.yaml> [--out hydo.yaml] [--images-dir DIR] [--env-file F]
                     [--profile P] [--use-env] [--no-resolve] [--lock FILE] [--no-build] [--docker CLI]
+                    [--from-docker]
   writes a hydo.yaml from a Docker Compose file: its services, their images and how they start.
   It builds the image of a service with build: with Docker and pins it in the lock file
-  (--no-build leaves that to fetch-images.sh). `hydo guide services` describes the result."
+  (--no-build leaves that to fetch-images.sh). --from-docker saves an image whose registry
+  refuses or does not answer from the local Docker and pins it. `hydo guide services` describes
+  the result."
             .to_string(),
         "k8s" => hydo_compose::k8s::USAGE.to_string(),
         "fuzz" => hydo_contracts::fuzz::USAGE.to_string(),
