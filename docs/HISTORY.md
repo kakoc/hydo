@@ -21128,3 +21128,35 @@ exploration on the scripted engine (8 schedules without `--seeds`) and the refus
 two rounds. No explorer or controller golden moved.
 
 **What is left.** Open item 173.
+
+## Milestone 347 (tentative number): two gaps of a user's test project
+
+Status: done on 2026-11-23. Nothing recorded moved, and the fingerprint epoch stays 5.
+
+A user's test project on a Mac found two gaps of `hydo compose`:
+
+1. An image tag whose index has only a linux/arm64 build failed without `--from-docker`. The
+   registry reader (`hydo_compose::registry::resolve_image`) refused every image without a
+   linux/amd64 build, with `no linux/amd64 image`, on every machine. Now it refuses only an
+   image with neither build. The service's settings (its command, user, ports, healthcheck and
+   volumes) come from the amd64 build, or from the arm64 build when the image has only that
+   (`settings_platform`), as they already did for a local build made on a Mac. A one-shot job's
+   user comes from the same place. `hydo compose` warns that such an image runs on the Mac engine
+   only. On an x86_64 machine fetch-images.sh stops at its amd64 file with `fetch-images.sh:
+   <image> has no linux/amd64 build, so it does not run on this machine`, instead of fetching the
+   tag for an architecture the image does not have. An image without platform entries (an image
+   given by digest with `--no-resolve`) writes the same lines as before.
+2. `hydo compose --help` and the usage line of `hydo compose` without a file did not name
+   `--from-docker`; both do now, and the help says what it does.
+
+MANIFEST.md's row for `image:` says what an image with only an arm64 build gives.
+
+**Tests.** `registry::an_arm64_only_image_is_imported` answers from a registry in the test with
+an index of one arm64 build: the reader keeps it, the manifest takes its `Cmd` and `EXPOSE`, and
+fetch-images.sh has the stop line. The CLI's recorded answers of `compose`, `compose --help` and
+`guide manifest` are re-recorded (`HYDO_BLESS=1`), with the digest of the guide's files in
+`agents.jsonl`. `compose_equals_python` keeps every one of its 185 cases.
+
+**What is left.** The user's own project did not run with the fix. An image with only an amd64
+build on a Mac is unchanged: its hydo.yaml names the x86_64 file only.
+

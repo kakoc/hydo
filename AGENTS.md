@@ -578,7 +578,10 @@ whose registry refuses or does not answer is saved from the local Docker (`docke
 file again with `hydo-fetch-image docker` and stops at another digest until
 `HYDO_ACCEPT_REBUILD=1`. A registry on the loopback is reached over plain HTTP, as Docker does.
 The proof is a registry in the test process and Docker's `registry:2` with htpasswd, never a
-real registry. Reference: `hydo guide workflow`.
+real registry. Since M347 an image with only a linux/arm64 build is imported without
+`--from-docker`, and its settings come from that build. `hydo compose` warns that it runs on
+the Mac engine only, and fetch-images.sh stops on an x86_64 machine with that reason. `hydo compose
+--help` names `--from-docker`. Reference: `hydo guide workflow`.
 
 **Three gaps of a user's onboarding with 0.4.0 (M324, tentative number).** Each fix is its own
 commit; none moves a recorded value:
@@ -4411,6 +4414,10 @@ build machine, before 2026-10-13.
   refused before any VM, one line each. `hydo report A B C` lists several explorations'
   problems once each. Meilisearch's swap ran twice at schedule 29 of the aimed grid, against
   seed 101 blind. Nothing recorded moved
+- M347 (tentative number): two gaps of a user's test project. On a Mac, `hydo compose` refused
+  an image with only a linux/arm64 build unless `--from-docker` was given, because it asked for
+  amd64 too. Such an image is imported now, with its settings from the arm64 build. A warning
+  says that it runs on the Mac engine only, and fetch-images.sh stops on an x86_64 machine. `hydo compose --help` names `--from-docker`. Nothing recorded moved
 
 ## Where to look
 
