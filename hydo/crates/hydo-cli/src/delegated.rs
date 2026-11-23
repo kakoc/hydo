@@ -511,6 +511,22 @@ pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
     }
     // `--details`: the technical report (report.md's text) instead of the problems in words
     let details = argv.iter().any(|a| a == "--details");
+    // Milestone 345: several explorations of one image, their problems as one list
+    let dirs: Vec<String> = argv
+        .iter()
+        .filter(|a| !a.starts_with('-'))
+        .cloned()
+        .collect();
+    if dirs.len() > 1 {
+        if details {
+            die("hydo report --details takes one directory; give the explorations one by one");
+        }
+        let rounds = crate::htmlreport::merged::read(&dirs)
+            .unwrap_or_else(|e| die(&format!("no report: {e}")));
+        let mut o = std::io::stdout().lock();
+        let _ = o.write_all(crate::htmlreport::merged::text(&rounds).as_bytes());
+        return 0;
+    }
     let d = argv
         .iter()
         .find(|a| *a != "--details")

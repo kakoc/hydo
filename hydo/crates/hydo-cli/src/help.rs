@@ -79,6 +79,7 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
   alone), and `hydo repro --regressions` replays them."
             .to_string(),
         "report" => "usage: hydo report [DIR] [--details]
+       hydo report DIR DIR... [--html [-o FILE]]
        hydo report --paths [DIR] [--against DIR]
        hydo report --html [DIR] [-o FILE] [--against RUN_DIR] [--diff DIFF]
   prints the problems an exploration found (DIR's exploration.json): for each, what happens,
@@ -87,6 +88,8 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
   signatures, minimal schedules, fingerprints and the property table). For a run (DIR's
   result.json) it prints the run's summary; while an exploration still runs, how far it has
   got. DIR defaults to hydo-out/explore.
+  Several DIRs, explorations of one image with different options, give one list of their
+  problems: each once, with every exploration and seed that showed it.
   --paths prints which error paths of the programs ran (an image built with `error_paths:
   true`): the places only runs with faults reached, the places the workload reaches by itself,
   and the places never reached, by function. --against DIR leaves out of the first list what

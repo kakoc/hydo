@@ -126,9 +126,6 @@ fn render(
     o.push_str(&wrap(&lead, ""));
     // the problems
     for (n, it) in st.items.iter().enumerate() {
-        o.push('\n');
-        let num = format!("{}. ", n + 1);
-        o.push_str(&hang(&num, &it.problem.title, INDENT));
         let mut label = it.problem.attention.words().to_string();
         if let Some((k, of)) = it.runs {
             label.push_str(&format!(
@@ -136,7 +133,26 @@ fn render(
                 if of == 1 { "" } else { "s" }
             ));
         }
-        o.push_str(&format!("{INDENT}{label}.\n"));
+        o.push_str(&item(n + 1, it, &label, shown, n + 1));
+    }
+    tail(&mut o, st, shown, stats);
+    o
+}
+
+/// One problem's block: its number `n`, title and `label`, what happens, the steps, what hydo
+/// saw, the command, and the lines that name the exploration `shown` (its problem `own`: the
+/// number `hydo inspect diagnose` takes there). Milestone 345: also the merged report's.
+pub(super) fn item(n: usize, it: &super::Item, label: &str, shown: &str, own: usize) -> String {
+    let mut o = String::new();
+    {
+        o.push('\n');
+        let num = format!("{n}. ");
+        o.push_str(&hang(&num, &it.problem.title, INDENT));
+        if INDENT.len() + label.chars().count() < WIDTH {
+            o.push_str(&format!("{INDENT}{label}.\n"));
+        } else {
+            o.push_str(&wrap(&format!("{label}."), INDENT));
+        }
         if !it.happens.is_empty() {
             o.push_str(&wrap(&it.happens, INDENT));
         }
@@ -171,9 +187,8 @@ fn render(
         // Milestone 324: an exploration keeps no run directory of a problem; say how to get one
         if let Some(c) = &it.run_command {
             o.push_str(&format!(
-                "{INDENT}Why it failed: hydo inspect diagnose {} --problem {}\n",
+                "{INDENT}Why it failed: hydo inspect diagnose {} --problem {own}\n",
                 crate::inspect::work::quote(shown),
-                n + 1
             ));
             o.push_str(&format!("{INDENT}A run directory of it: {c}\n"));
         }
@@ -189,6 +204,11 @@ fn render(
             o.push_str(&wrap(&it.accept_note, INDENT));
         }
     }
+    o
+}
+
+/// What held, how much was explored, and what to run next.
+fn tail(o: &mut String, st: &ExStory, shown: &str, stats: Option<&hydo_results::StatsDoc>) {
     // what held
     if let Some(h) = &st.held {
         o.push('\n');
@@ -216,7 +236,6 @@ fn render(
             on_dir("hydo stats", shown)
         ));
     }
-    o
 }
 
 /// Numbered steps, each wrapped under its number.

@@ -337,6 +337,26 @@ with the option and without it.
   snapshot of a 1 GiB guest takes about 0.1 s and the shrinks of the Redis examples ran slower.
   It is off on hvx.
 
+### Several explorations of one image
+
+An onboarding explores in rounds, each with other options: a blind round, a round with
+`--kill-now`, a round aimed at one event. Each round has its own report, and a problem that two
+rounds found shows in both. Name every round's folder to see one list:
+
+```sh
+hydo report hydo-out/blind hydo-out/kill-now hydo-out/aimed
+hydo report --html hydo-out/blind hydo-out/kill-now hydo-out/aimed   # the first folder's report-merged.html
+```
+
+The list names each round with its seeds and the options that tell it from the others. It shows
+each problem once, with every round and seed that showed it: two failures are one problem when
+their class and signature agree, the key each exploration shrinks by. A problem is shown as the
+first round that found it shows it, with that round's minimal schedule and command, and `hydo
+inspect diagnose` of that round's folder with its own problem number. The rounds must have
+explored one image: two images are refused, because a problem of one is not a problem of the
+other. `hydo explore --merge` is for the shards of one exploration, which share one command
+line; this list is for rounds with different options.
+
 ## How much was explored, and whether to run more
 
 `hydo explore` writes `stats.json` beside `exploration.json`. `hydo stats` prints it in words,

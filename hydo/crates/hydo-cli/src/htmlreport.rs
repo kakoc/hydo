@@ -17,6 +17,7 @@
 
 mod comparepage;
 pub mod history;
+pub mod merged;
 mod page;
 mod statspage;
 mod story;
@@ -56,6 +57,7 @@ const CANDIDATES: usize = 8;
 
 pub const USAGE: &str =
     "usage: hydo report --html [DIR] [-o FILE] [--against RUN_DIR] [--diff DIFF]
+       hydo report --html DIR DIR... [-o FILE]
   writes one web page for a run directory, an exploration directory, a `hydo ci run` output
   directory or a `hydo compare-versions` directory: the verdict, each failure with its minimal schedule and the command that replays
   it, the failing run's timeline, where it first differs from a passing neighbour, and the
@@ -65,7 +67,10 @@ pub const USAGE: &str =
   --against RUN_DIR  the passing run to compare a run with (its first difference, as hydo diff)
   --diff DIFF        a diff.json, a hydo diff directory or a hydo explain directory to show
   An exploration compares each minimal schedule with its passing shrink candidates; a hydo
-  explain directory given as DIR shows its closest passing neighbour.";
+  explain directory given as DIR shows its closest passing neighbour.
+  Several exploration directories of one image give one page of their problems, each once with
+  every exploration and seed that showed it (FILE defaults to the first DIR's
+  report-merged.html).";
 
 /// What a directory holds.
 enum Input {
@@ -174,9 +179,28 @@ pub fn cmd(argv: &[String]) -> i32 {
     let out = take(&mut args, "-o").or_else(|| take(&mut args, "--out"));
     let against = take(&mut args, "--against").map(PathBuf::from);
     let diff_arg = take(&mut args, "--diff").map(PathBuf::from);
-    if args.len() > 1 || args.iter().any(|a| a.starts_with('-')) {
+    if args.iter().any(|a| a.starts_with('-')) {
         eprintln!("{USAGE}");
         return 2;
+    }
+    // Milestone 345: several explorations of one image, their problems as one list
+    if args.len() > 1 {
+        if against.is_some() || diff_arg.is_some() {
+            eprintln!("hydo report --html: --against and --diff take one directory");
+            return 2;
+        }
+        let rounds = merged::read(&args).unwrap_or_else(|e| die(&format!("no report: {e}")));
+        let html = merged::page(&rounds);
+        let file = out.unwrap_or_else(|| pjoin(&args[0], "report-merged.html"));
+        if let Err(e) = std::fs::write(&file, &html) {
+            die(&format!("{file}: {e}"));
+        }
+        println!(
+            "hydo: wrote {file} ({} KiB): the problems of {} explorations, each once",
+            html.len().div_ceil(1024),
+            rounds.len()
+        );
+        return 0;
     }
     let d = args
         .first()
@@ -2339,6 +2363,7 @@ struct Prob<'a> {
 
 /// One problem as the page and the terminal show it (Milestone 230: `hydo report` prints the same
 /// problems as the page).
+#[derive(Clone)]
 pub struct Item {
     pub problem: advice::Problem,
     /// Runs that show it, of all runs.
@@ -3019,7 +3044,26 @@ fn exploration_page(
         body.push_str(&h2("start", "Start here"));
     }
     for (n, it) in st.items.iter().enumerate() {
-        let mut more = String::new();
+        body.push_str(&item_card(n + 1, it, it.runs, "", Some(it.link.clone())));
+    }
+    // what held
+    body.push_str(&h2("held", "What held"));
+    body.push_str(&exploration_rest(dir, doc, events, &st, &shown));
+    page::document(&format!("{} (hydo report)", st.title), &body)
+}
+
+/// One problem's card (number `n`): what happens, the steps, what hydo saw, the error lines, the
+/// command and the accept lines. `first` is HTML before the steps (Milestone 345: the merged
+/// report's line of where it was seen), and `link` the id of its runs in the details.
+fn item_card(
+    n: usize,
+    it: &Item,
+    runs: Option<(usize, u64)>,
+    first: &str,
+    link: Option<String>,
+) -> String {
+    {
+        let mut more = first.to_string();
         if !it.steps.is_empty() {
             more.push_str(&format!(
                 "<p class=\"when\"><b>When it happens</b>{}</p>\n{}",
@@ -3054,11 +3098,11 @@ fn exploration_page(
             }
             more.push_str("</ul>\n");
         }
-        body.push_str(&card(&Card {
-            n: n + 1,
+        card(&Card {
+            n,
             problem: &it.problem,
             state: None,
-            runs: it.runs,
+            runs,
             happens: it.happens.clone(),
             more,
             command: it.command.clone(),
@@ -3075,18 +3119,28 @@ fn exploration_page(
                     md(&it.accept_note)
                 )
             },
-            link: Some(it.link.clone()),
-        }));
+            link,
+        })
     }
-    // what held
-    body.push_str(&h2("held", "What held"));
+}
+
+/// An exploration's page after its problems: what held, the error paths, how much was explored,
+/// what to run next, and the details for specialists.
+fn exploration_rest(
+    dir: &Path,
+    doc: &Exploration,
+    events: Option<&Stream>,
+    st: &ExStory,
+    shown: &str,
+) -> String {
+    let mut body = String::new();
     body.push_str(&held_html(st.held.as_ref()));
     // which error paths the runs reached (Milestone 306)
     if let Some(c) = &doc.paths {
         body.push_str(&h2("paths", "Which error paths ran"));
         body.push_str(&format!(
             "<div class=\"card\">\n{}</div>\n",
-            paths_html(c, &shown)
+            paths_html(c, shown)
         ));
     }
     // how much was explored (Milestone 336)
@@ -3094,7 +3148,7 @@ fn exploration_page(
         body.push_str(&h2("stats", "How much was explored"));
         body.push_str(&format!(
             "<div class=\"card\">\n{}</div>\n",
-            statspage::html(&s, &shown)
+            statspage::html(&s, shown)
         ));
     }
     // next
@@ -3111,9 +3165,9 @@ fn exploration_page(
         &st.groups,
         &st.problem_of,
         &st.new_kinds,
-        &shown,
+        shown,
     )));
-    page::document(&format!("{} (hydo report)", st.title), &body)
+    body
 }
 
 /// A problem's recording on the exploration's page: links to its files, beside the page in the
