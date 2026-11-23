@@ -1,0 +1,26 @@
+# The error-log kinds that are expected in this example (hydo guide error-logs). Each entry has
+# its reason; `with:` keeps it to runs whose schedule has that fault.
+format: 1
+unknown: report
+known:
+  - match: "source=write_handler.go:# msg='Out of order sample from remote write' component=web err='too old sample'"
+    service: prometheus
+    example: "time=2026-11-23T00:02:10.001Z level=ERROR source=write_handler.go:276 msg='Out of order sample from remote write' component=web err='too old sample' series='{__name__=\"hydo_scrape\", instance=\"exporter:9100\", job=\"exporter\", n=\"1201\"}' timestamp=1795390000000"
+    reason: "after a backward clock step larger than the out-of-order window (10 minutes) the agent's new samples are older than the head's newest sample minus the window; the server refuses them by design (configuration.md, out_of_order_time_window)"
+    with: [T]
+    by: "onboarding"
+    date: "2026-11-23"
+  - match: "source=write_handler.go:# msg='Out of order sample from remote write' component=web err='out of bounds: timestamp is too far in the future'"
+    service: prometheus
+    example: "time=2026-11-23T00:02:10.001Z level=ERROR source=write_handler.go:276 msg='Out of order sample from remote write' component=web err='out of bounds: timestamp is too far in the future' series='{__name__=\"hydo_scrape\", instance=\"exporter:9100\", job=\"exporter\", n=\"1201\"}' timestamp=1795393000000"
+    reason: "after a backward clock step of more than 10 minutes the agent stamps its scrapes with the time before the step (RESULTS.md, finding 2), which is more than 10 minutes ahead of the server's clock; the receiver refuses samples that far ahead (write_handler.go, maxAheadTime)"
+    with: [T]
+    by: "onboarding"
+    date: "2026-11-23"
+  - match: "source=queue_manager.go:# msg='non-recoverable error' component=remote"
+    service: agent
+    example: "time=2026-11-23T00:02:10.001Z level=ERROR source=queue_manager.go:1751 msg='non-recoverable error' component=remote remote_name=1c url=http://prometheus:9090/api/v1/write failedSampleCount=6 failedHistogramCount=0 failedExemplarCount=0 err='server returned HTTP status 400 Bad Request: too old sample'"
+    reason: "the agent's side of the two kinds above: a 400 answer is final, and the agent drops the batch, as remote write's specification says (the whole batch: prometheus#9214)"
+    with: [T]
+    by: "onboarding"
+    date: "2026-11-23"

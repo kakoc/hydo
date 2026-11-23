@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=110
+# wait until the server and the agent are ready and the agent's scrapes reach the server
+exec /bin/promc settle 100

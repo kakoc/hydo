@@ -20702,3 +20702,94 @@ example manifests and the goldens), `165477d6` (the report's words for the exit 
 ones with these pages. The branch `tmp-m341-kvm` adds the workflow on top of them.
 
 What is left is in open items 116, 142, 144, 167, 168 and 169.
+
+## Milestone 342 (tentative number): Prometheus behind an agent, its snapshots and its scrape times
+
+The onboarding of Prometheus v3.16.0 (2026-11-05, the latest release) on hvx, 2026-11-23. The
+example is `hydo/onboard/examples/prometheus`; its RESULTS.md has the evidence.
+
+**The example.** An exporter (the client's own `promc serve`, a new series at every scrape), a
+Prometheus agent that scrapes it every second and forwards with remote write, and a central
+Prometheus server, all from the official image `prom/prometheus:v3.16.0` (index
+`sha256:e0498764…`) in one hvx guest of 2,048 MiB. `hydo compose` imported the Compose file. The
+server receives remote write, scrapes itself, keeps out-of-order samples up to 10 minutes back
+and one day of data, and cuts blocks of one minute (`--storage.tsdb.min-block-duration=1m`, a
+hidden flag for tests) with chunk files of 16 MB. Its data directory and the agent's are file
+systems of their own. The client writes 2 new series per remote write, one in order and one 60 s
+back, sends each fourth write twice, takes snapshots and reads them back with `promtool tsdb dump`
+inside the server's image, and records the blocks that the server lists. Five build parameters
+choose the rules of the explorations (`ooo_snapshots`, `scrape_times`, `powerloss`), the scrape
+alignment (`adjust`) and the server's configuration (`server_config`).
+
+**The checks.** `samples`: every acknowledged sample is queryable with its value; after a power
+cut, or the server's own power loss in the image built with `powerloss=yes`, only a sample of a
+block that the server listed after its acknowledgement, in the same run of the server, must be
+there. A sample a day older than the head's newest one may be gone (retention). The same rule
+covers every scrape that a read found. `snapshots`: a snapshot holds every sample acknowledged
+before it, also after a power cut. `scrape` (`eventually`, 120 s after the heal): the agent's new
+scrapes reach the server. `times`: two scrapes a second apart carry two timestamps.
+
+**What was found.**
+
+1. **New: a snapshot with the head lacks every out-of-order sample of the head.** In every run
+   without faults on the default image, each snapshot lacked the out-of-order samples that the
+   server had not compacted into a block yet, up to 207 of them, and held every in-order one.
+   `DB.Snapshot` (`tsdb/db.go` line 2586) writes the head through `NewRangeHead` (lines 2611 to
+   2616), whose index lists only the in-order chunks (`appendSeriesChunks`, `tsdb/head_read.go`
+   line 363). The querier adds the out-of-order head with `NewHeadAndOOOQuerier` (lines 2681 to
+   2684); the snapshot does not. With the default blocks of 2 hours a snapshot can lack up to about
+   3 hours of out-of-order samples, which then are only in `wbl/`. The same on `main` at
+   `f1486b67`. No issue or pull request names it (30 phrases). Regression
+   `snapshot-without-ooo-head`, `disk=none | run`, fingerprint `a5a53e35802ad822` twice.
+2. **Known (prometheus#8312, closed by a bug scrub), with a new cause.** After `T=20:-300` the
+   scrape loops stamped every scrape with the last aligned time before the step, until the clock
+   passed it: 199 of 240 pairs of scrapes a second apart shared one timestamp, and the server
+   dropped 81,585 of its own samples as duplicates, although its out-of-order window of 10 minutes
+   covers the step. `scrape/scrape.go` line 1460 aligns when `scrapeTime.Sub(alignedScrapeTime)
+   <= tolerance`, which a negative difference always is; a maintainer in #8312 described the
+   alignment as two-sided, and the bug scrub named the out-of-order window as the remedy. With
+   `--no-scrape.adjust-timestamps` no pair shared a timestamp. The clock audit named this
+   function second. Regression `scrape-times-frozen-after-clock-step`, fingerprint
+   `bd59337c12da9aa9` twice.
+3. **Known (prometheus#11496, open), with a new trigger.** The remote-write watcher sends only
+   samples later than its start (`tsdb/wlog/watcher.go` lines 286 and 560). Without the alignment
+   of finding 2, a step back of 5 minutes held the agent's new series back: the check `scrape`
+   held 70 s after the heal instead of at once.
+
+Documented or by design: the server's own power loss loses its unsynced head (the WAL syncs a
+segment at each head compaction only), a step back of more than the out-of-order window makes
+the server refuse every new sample (and the agent drops each refused batch whole, #9214), a
+forward step of a year lets retention delete every older block, and `G=` on a block file also
+damages the snapshots that hard-link it. `promtool tsdb dump` reads a snapshot only with a `wal`
+folder (open pull request #20416).
+
+**What held.** With the two findings' checks left out (`ooo_snapshots=skip`, `scrape_times=skip`), no rule broke in 104 blind schedules (e1 24, e2 40, e3 6, e3b 25, e4 9) and 35 directed runs: power cuts at 19 flushes `cf=60` to `cf=1140` and 11 drawn ones, `kill-now-prometheus` and cuts 5 to 40 ms after a new block, three power cuts at steps, and three strict power losses of one service. Two failures were damaged files that snapshots share through hard links (the environment). Two engines were ended by the host's out-of-memory killer beside another onboarding.
+
+**hydo.** Two small additions: `hydo guide services` names `/bin/hydo-oci` for programs that a
+command starts, and `hydo guide strategies` has the new entry "A snapshot or a backup read back
+at once" and the Prometheus evidence in three entries. No code of hydo changed. The new example
+enters the explorer's and the controller's corpora; their goldens were not re-recorded in this
+commit (open item 170).
+
+Retro: Prometheus v3.16.0, hvx, 2026-11-23
+- Time to the first clean run: 55 minutes of wall time (scouting 25, setup 30), none of it
+  waiting for machines.
+- Schedules run before the first finding: none. Finding 1 failed the first clean run that read a
+  snapshot back; finding 2 came from the clock audit's place and a directed step of 5 minutes.
+  Four failures of the explorations were the rules' own mistakes, all after a power loss of the
+  server alone or a damaged file.
+- The findings: 1 new (the snapshot), 2 known with a new detail (#8312, #11496), 4 documented or
+  by design, 2 environment (damaged files shared by snapshots).
+- What took the most time: the rule after a power loss of the server alone (three versions, 40
+  minutes); memory beside another onboarding (two engines ended by the host's out-of-memory
+  killer, and one worker from then on); the client's records of in-order and out-of-order samples
+  after a clock step (20 minutes).
+- What hydo lacked: a check cannot read its run's faults; one clock for all services; a
+  command's output stays in the guest; `hydo-oci` by its path (guide text); memory per hvx worker.
+  Open item 170.
+- Strategies: a new entry "A snapshot or a backup read back at once" (finding 1); "Clock steps
+  and the clock audit" (the audit named finding 2's function); "The features behind a flag"
+  (the out-of-order window); "One node's storage faults" (snapshots share damaged files; the
+  power loss of one server needs the server's start in the rules); "Power cuts at the k-th disk flush" and "Reactions at console events" (Prometheus held).
+
+**What is left.** Open item 170.

@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: every acknowledged sample is queryable with its value; after a power cut, every sample in a block that the server had listed
+exec /bin/promc check samples

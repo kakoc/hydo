@@ -1,0 +1,7 @@
+# New (RESULTS.md, finding 1): a snapshot with the head (POST /api/v1/admin/tsdb/snapshot)
+# holds no out-of-order sample that is still in the server's out-of-order head. Every write puts
+# one series 60 s behind the head's newest sample, which the server keeps as out-of-order
+# samples, and every snapshot lacks those acknowledged since the last out-of-order compaction.
+# No fault is needed. The image built with --set ooo_snapshots=skip passes.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run

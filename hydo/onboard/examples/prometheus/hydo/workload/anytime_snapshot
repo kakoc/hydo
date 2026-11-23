@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=50
+# a snapshot with the head (POST /api/v1/admin/tsdb/snapshot); exit 100 when it lacks a sample
+# acknowledged before the request (promtool tsdb dump in the server's image)
+exec /bin/promc snapshot

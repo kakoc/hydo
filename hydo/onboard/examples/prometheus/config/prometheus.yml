@@ -1,0 +1,19 @@
+# The central Prometheus server of the example: it receives remote write (the agent's, and the
+# test client's), scrapes itself every second as a central server does, and keeps out-of-order
+# samples up to 10 minutes behind its newest sample. Retention is one day, so that only a forward
+# clock step of more than a day makes it delete the samples under test.
+global:
+  scrape_interval: 1s
+  scrape_timeout: 1s
+  evaluation_interval: 1s
+
+storage:
+  tsdb:
+    out_of_order_time_window: 10m
+    retention:
+      time: 1d
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

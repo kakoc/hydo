@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=25
+# read every sample through the query API during the faults; exit 100 when a sample acknowledged
+# 30 s ago or earlier is missing or has another value, while the server answered
+exec /bin/promc read
