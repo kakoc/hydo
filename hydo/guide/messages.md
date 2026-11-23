@@ -260,7 +260,9 @@ reported as `<check id>.acked-outcome`.
         effect: recorded                                      # none | recorded
 ```
 
-`acked_outcome: success` is the claim without client errors and without the effect.
+`acked_outcome: success` is the claim without client errors and without the effect. The
+Meilisearch example's check `queue` declares the claim, and its client `mlc readback` is a
+read-back to copy (`hydo/onboard/examples/meilisearch`).
 
 Record each write as a `send` of the client's own id, with the system's id in `o=`. A write
 without an answer is `info`. The check's `final:` is the read-back. It waits until the system
