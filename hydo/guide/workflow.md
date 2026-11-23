@@ -323,8 +323,10 @@ with the option and without it.
   two. A difference is printed and listed in the file, and the run from S1 counts.
 - `--shrink-from-s1` runs every candidate from S1. `HYDO_SHRINK_SNAPSHOTS=1` or `0` sets the
   default; the options decide over it.
-- No engine has it on by default. On the Mac engine a snapshot of a 1 GiB guest takes about
-  0.1 s, and the shrinks of the Redis examples ran slower with it.
+- It is on by default with the KVM engine, where a snapshot takes a few milliseconds and the
+  Redis example's shrinks took 1 % to 7 % less time. It is off on the Mac engine, where a
+  snapshot of a 1 GiB guest takes about 0.1 s and the shrinks of the Redis examples ran slower.
+  It is off on hvx.
 
 ## How much was explored, and whether to run more
 

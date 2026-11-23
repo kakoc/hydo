@@ -1608,7 +1608,7 @@ their own snapshots on the Mac engine and KVM. The note is `hydo/explore/RESEARC
 The reference is `hydo guide workflow`, sections "A schedule that ran once runs once" and "Which
 failures are shrunk"; the details are in `docs/HISTORY.md` Milestone 339.
 
-**Shrinks from snapshots (M340, tentative number; opt-in).** With `hydo explore
+**Shrinks from snapshots (M340, tentative number; on by default with KVM).** With `hydo explore
 --shrink-from-snapshots`, the reruns of a failure and the shrink candidates take a snapshot where
 a workload step range or a round of the composition starts. A later candidate on the same worker
 continues from the deepest one that it reaches: the same host part, and its controller sends the
@@ -1617,8 +1617,10 @@ again from S1 and compares the RESULT line, the consoles, and the control transc
 Mac engine every compared run of the Redis quickstart and of `redis-composed` matched. The
 explorations' records were the same with and without the option. The shrinks took longer there.
 A snapshot of a 1 GiB guest costs about 0.12 s and a Redis run 0.1 s to 0.3 s. Only 2.8 % to
-5.7 % of the candidates' guest clock was skipped. So no engine has it on by default
-(`HYDO_SHRINK_SNAPSHOTS`). The design is `docs/design/shrink-snapshots.md`, the reference `hydo
+5.7 % of the candidates' guest clock was skipped. On KVM (four GitHub runners, Intel and AMD)
+164 compared runs matched, a snapshot cost a few milliseconds, and the shrinks took 1 % to 7 %
+less time. So it is on by default with the KVM engine only (`--shrink-from-s1`,
+`HYDO_SHRINK_SNAPSHOTS`). The design is `docs/design/shrink-snapshots.md`, the reference `hydo
 guide workflow`, "Shrinks that continue from snapshots" (open item 170).
 
 **A failure as one web page (M220).** `hydo report --html [DIR] [-o FILE]` writes one HTML file
@@ -3183,8 +3185,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       them.
 170. Shrinks from snapshots (M340, tentative number; `docs/design/shrink-snapshots.md`). What is
     left:
-    - KVM: the one-off workflow `tmp-shrink-snap-kvm` is written and has not run. No KVM host has
-      continued a candidate yet (as open item 85).
+    - KVM ran the Redis example only (run 45181990563, four runners), and no test of CI continues
+      a candidate on a real KVM host. A KVM snapshot holds the pages written since S1 in the
+      engine's memory, and the explorer's count of memory per worker leaves its 8 snapshots
+      out. The shrinks of a large guest were not measured.
     - It saves no time on the Mac with the examples that ran. A snapshot of a 1 GiB guest costs
       about 0.12 s, which is more than a Redis candidate's shared part. Making a snapshot reads
       the whole guest RAM, because Hypervisor.framework has no log of the pages written. An
@@ -4213,12 +4217,12 @@ build machine, before 2026-10-13.
   decided. etcd issue 14685's second symptom is in the list again. Both releases were built
   twice to the same bytes, with the skill's archive for the first time. The Mac one is signed
   and notarized. Both were verified on hvx and the Mac, and open item 105 is empty
-- M340 (tentative number): shrinks from snapshots, opt-in. The reruns and the shrink candidates
+- M340 (tentative number): shrinks from snapshots. The reruns and the shrink candidates
   snapshot where a step range or a composed round starts. A later candidate on the same worker
   continues from the deepest one its controller reaches. `--check-continued` compares each with
-  its run from S1. On the Mac engine every compared run matched, but the shrinks of the Redis
-  examples took longer, so no engine has it on by default. Mac snapshots mid-run skip
-  the RAM tree hash and the new mapping. Nothing recorded moved
+  its run from S1. Every compared run matched on the Mac engine and on KVM. It is on by default
+  with KVM, where the shrinks took 1 % to 7 % less, and off on the Mac, where they took longer.
+  Mac snapshots mid-run skip the RAM tree hash and the new mapping. Nothing recorded moved
 
 ## Where to look
 

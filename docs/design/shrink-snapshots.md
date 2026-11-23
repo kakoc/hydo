@@ -1,8 +1,9 @@
 # Shrinks from snapshots
 
-Status: built and opt-in (Milestone 340, tentative number). `hydo explore --shrink-from-snapshots`
-turns it on, and `--check-continued` proves each continued run against its run from S1. No engine
-has it on by default yet (section [The proofs](#the-proofs)).
+Status: built (Milestone 340, tentative number). It is on by default with the KVM engine and off
+on the Mac engine and hvx (section [The proofs](#the-proofs)). `hydo explore
+--shrink-from-snapshots` and `--shrink-from-s1` choose, and `--check-continued` proves each
+continued run against its run from S1.
 
 ## The problem
 
@@ -107,7 +108,17 @@ run's own snapshots get a file of their own, which is unlinked at once.
 
 ## The proofs
 
-The numbers of this section are in `docs/HISTORY.md` Milestone 340.
+Every run that took or used a snapshot and was compared with its run from S1 matched:
+
+- on the Mac engine, 22 to 24 runs of each Redis quickstart exploration and 98 to 105 of each
+  `redis-composed` exploration;
+- on KVM, 41 runs of each of four GitHub runners (three Xeon 6975P-C, one EPYC 7763), with the
+  Redis example's random and swarm strategies.
+
+On KVM a snapshot holds the pages written since S1, in the engine's memory. The 16 to 30
+snapshots of an exploration took 0.0 to 0.1 s together. The shrinks and the reruns took 1 % to
+7 % less time. On the Mac they took longer, because each snapshot reads the whole guest RAM. The
+numbers are in `docs/HISTORY.md` Milestone 340.
 
 ## What is left
 

@@ -20466,8 +20466,8 @@ names 0.5.0, and the skill releases `skill-v1.0.0` to `skill-v2.4.0` are deleted
 The user said "go" on 2026-11-23 to the second recommendation of Milestone 337
 (`hydo/explore/RESEARCH-shared-prefix.md`): shrink candidates continue from snapshots that
 earlier runs of the shrink took, instead of running from S1 what they share with those runs. The
-design is `docs/design/shrink-snapshots.md`. The option is opt-in, `hydo explore
---shrink-from-snapshots`, and no engine has it on by default.
+design is `docs/design/shrink-snapshots.md`. `hydo explore --shrink-from-snapshots` turns it
+on. After the proofs it is on by default with the KVM engine only (the end of this section).
 
 **What was built.**
 
@@ -20543,9 +20543,36 @@ note's largest shrink, 1,124 s) had 18 shrink candidates: 13 with `cf=` and 5 wi
 18 could continue there. An hvx snapshot holds every page of guest RAM that is not zero in host
 memory, and the engine keeps 8 names with S0 and S1. Without a module change it is not worth it.
 
-**KVM.** The one-off workflow `.github/workflows/tmp-shrink-snap-kvm.yml` on the branch
-`tmp-shrink-snap-kvm` (commit `b84fad0e`, on the milestone's commit `ed511da2`) runs the three explorations of the quickstart's Redis, random and swarm,
-on four of GitHub's runners and compares them. It did not run yet.
+**KVM.** The one-off workflow `.github/workflows/tmp-shrink-snap-kvm.yml` ran on the branch
+`tmp-shrink-snap-kvm` (commit `b84fad0e`, on the milestone's commit `ed511da2`, which has the
+points at the composed rounds too), run 45181990563. The branch is deleted. Each of four
+GitHub runners (three Xeon 6975P-C, one AMD EPYC 7763) built the published 0.5.0 release's
+Redis example. It explored seeds 1-40 with 2 workers and `--shrink-causes 3`, three times per
+strategy: from S1, from snapshots, and with `--check-continued`.
+
+| strategy | compared with S1, per runner | differed | records, per runner | continued | snapshots, their seconds | guest clock not run again |
+|---|---|---|---|---|---|---|
+| random | 18 | 0 | 94 events the same in all three | 5 to 7 of 32 or 33 runs | 16 to 19, 0.0 s to 0.1 s | 4.7 % to 6.9 % |
+| swarm | 23 | 0 | 132 events the same in all three | 4 or 5 of 54 or 55 runs | 28 to 30, 0.1 s | 2.9 % to 3.7 % |
+
+So 164 runs that took or used a snapshot matched their runs from S1, on both vendors. A KVM
+snapshot keeps the pages written since S1 in the engine's memory, so it cost a few milliseconds.
+The engine's seconds of the reruns and shrink candidates from S1 and from snapshots:
+
+| runner | random | swarm |
+|---|---|---|
+| Xeon 6975P-C (1) | 10.6 s, 10.0 s | 17.7 s, 17.2 s |
+| Xeon 6975P-C (2) | 10.7 s, 10.0 s | 17.8 s, 17.5 s |
+| Xeon 6975P-C (3) | 10.7 s, 10.0 s | 17.5 s, 17.3 s |
+| EPYC 7763 | 10.6 s, 10.3 s | 18.3 s, 17.6 s |
+
+The shrinks took 1 % to 7 % less time in all eight pairs.
+
+**The defaults.** On by default with the KVM engine, where every compared run matched and the
+shrinks took less time (`run::shrink_snapshots_default`). Off on the Mac engine, where every
+compared run matched too but the shrinks took longer, and on hvx. `--shrink-from-s1` and
+`HYDO_SHRINK_SNAPSHOTS=0` turn it off; hydo-bench's pools never turn it on. No test of CI
+continues a candidate on a real KVM host.
 
 Nothing recorded moved: no recorded value, explorer golden, or control corpus changed. The
 explorer's fake-engine scenario `repeats_take_the_earlier_result` also explores the stack with

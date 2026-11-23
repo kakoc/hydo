@@ -1093,10 +1093,13 @@ fn make_pool(cx: &Cx) -> Pool {
 /// Whether shrink candidates continue from snapshots on engine `kind` when neither the options
 /// nor `HYDO_SHRINK_SNAPSHOTS` say (Milestone 340, docs/design/shrink-snapshots.md): on for an
 /// engine where every continued candidate of the proofs gave its run from S1's RESULT, consoles
-/// and control transcripts.
+/// and control transcripts, and the shrinks took less time. That is KVM: 164 compared runs on
+/// three Intel and one AMD runner matched, a snapshot cost under 10 ms, and the shrinks took 1 %
+/// to 7 % less. On the Mac engine every compared run matched too, but a snapshot of a 1 GiB
+/// guest costs about 0.12 s, and the shrinks took longer; hvx refuses the snapshots of `cf=`
+/// and timing schedules.
 pub fn shrink_snapshots_default(kind: hydo_engine::EngineKind) -> bool {
-    let _ = kind;
-    false
+    kind == hydo_engine::EngineKind::Kvm
 }
 
 /// How many shrink snapshots a worker keeps and one run takes for a guest of `ram_mib`
