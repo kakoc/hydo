@@ -105,6 +105,8 @@ struct Relay {
     svc: String,
     on: bool,
     fired: bool,
+    /// Milestone 345: the event's records still to see before the kill (1: the next one).
+    left: u64,
 }
 
 /// When a scripted exit happens (M134, the restart policies' tests).
@@ -823,12 +825,18 @@ impl Fake {
                 // $0, busybox, a<i>, the event, the delay, the log file, the service)
                 if let Some(name) = h.strip_prefix("killnow:") {
                     let arg = |k: usize| s.argv.get(k).cloned().unwrap_or_default();
+                    // Milestone 345: the k-th record of the event (`go=1 k=<k>` in the script)
+                    let left = arg(7)
+                        .split_once("go=1 k=")
+                        .and_then(|(_, r)| r.split_whitespace().next()?.parse().ok())
+                        .unwrap_or(1);
                     self.world.relays.push(Relay {
                         name: name.to_string(),
                         event: arg(11),
                         svc: arg(14),
                         on: true,
                         fired: false,
+                        left,
                     });
                     self.emit(t + 4, Msg::Kernel(format!("HYDO-KILLNOW {name} armed")));
                     return;
@@ -1062,6 +1070,10 @@ impl Fake {
         for i in 0..self.world.relays.len() {
             let r = self.world.relays[i].clone();
             if r.fired || !r.on || r.event != event {
+                continue;
+            }
+            if r.left > 1 {
+                self.world.relays[i].left -= 1;
                 continue;
             }
             self.world.relays[i].fired = true;

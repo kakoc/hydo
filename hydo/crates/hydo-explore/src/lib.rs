@@ -23,6 +23,7 @@
 //! machine has the room, and the pool sized from the machine.
 
 pub mod advice;
+pub mod aim;
 pub mod args;
 pub mod compose;
 pub mod contracts;
@@ -35,6 +36,7 @@ pub mod merge;
 pub mod paths;
 pub mod pool;
 pub mod py;
+pub mod refuse;
 pub mod repeats;
 pub mod report;
 pub mod results;

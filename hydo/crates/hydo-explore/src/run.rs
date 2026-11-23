@@ -749,6 +749,7 @@ fn setup(a: Args, env: &Env) -> Cx {
     } else if m.is_some() && cx.ex.react_heal {
         die("hydo explore: --reactive heal|both on a manifest needs --heal-events (the assertion ids that mean a client request made no progress; the defaults are the stack's)");
     }
+    aim_setup(&mut cx);
     cx.ex.freeze_call = a.freeze_call;
     cx.ex.fc_nmax = a.fc_nmax;
     cx.ex.protocol_faults = a.protocol_faults;
@@ -810,7 +811,71 @@ fn setup(a: Args, env: &Env) -> Cx {
         .filter_map(|v| v.trim().parse().ok())
         .collect();
     cx.steer = steer_source(&a, m.as_ref()).unwrap_or_else(|e| die(&e));
+    // Milestone 345: the options the engine or the image cannot use, all at once
+    let kind = crate::refuse::kind_of(&cx.ex, cx.kvm);
+    let lines = crate::refuse::refusals(&cx.ex, &a.strategy, kind, cx.vcpus as u32, cx.epoch);
+    if !lines.is_empty() {
+        die(&lines.join("\n"));
+    }
     cx
+}
+
+/// `--reactive-at` (Milestone 345, [`crate::aim`]): the grid of aimed reactions, and the seeds
+/// it takes when `--seeds` is not given (the whole grid once).
+fn aim_setup(cx: &mut Cx) {
+    let a = cx.a.clone();
+    let Some(ev) = &a.reactive_at else {
+        if a.react_delays.is_some() || a.react_actions.is_some() {
+            die("hydo explore: --react-delays and --react-actions set the grid of --reactive-at; give --reactive-at EVENT too");
+        }
+        return;
+    };
+    if a.reactive.is_some() || a.kill_now {
+        die("hydo explore: --reactive-at tries every reaction of its grid in turn, and --reactive and --kill-now draw reactions at random; give one of them (the actions of --reactive-at come from --react-actions, kill-now among them)");
+    }
+    if a.sweep.is_some() || a.steer.is_some() || a.steer_match.is_some() || a.search.is_some() {
+        die("hydo explore: --reactive-at goes with a seeded exploration (--seeds), not with --sweep, --steer, --steer-match or --search");
+    }
+    let fail = |e: String| -> ! { die(&format!("hydo explore: {e}")) };
+    let events = crate::aim::parse_events(ev).unwrap_or_else(|e| fail(e));
+    let delays = crate::aim::parse_delays(
+        a.react_delays
+            .as_deref()
+            .unwrap_or(crate::aim::DELAYS_DEFAULT),
+    )
+    .unwrap_or_else(|e| fail(e));
+    // an action the manifest's faults or the engine leave out of a schedule is no action
+    let ex = cx.ex.clone();
+    let keep = |act: &str| {
+        let mut s = S::new(if act == "cut" { "cut" } else { "none" }, 0);
+        s.a.push(crate::sched::Ra {
+            event: "x".into(),
+            nth: 1,
+            at: 0,
+            delay: 0,
+            action: act.to_string(),
+        });
+        ex.render(&s).contains(&format!("A=x:{act}"))
+    };
+    let actions = crate::aim::actions(a.react_actions.as_deref(), &cx.ex.pause_svcs, &keep)
+        .unwrap_or_else(|e| fail(e));
+    let aim = crate::aim::Aim {
+        events,
+        delays,
+        actions,
+    };
+    if aim.cells() > crate::aim::CELLS_MAX {
+        fail(format!(
+            "--reactive-at: {} schedules in the grid, more than {}; give fewer events, delays or actions",
+            aim.cells(),
+            crate::aim::CELLS_MAX
+        ));
+    }
+    if !a.seeds_given && a.schedule.is_none() {
+        cx.a.seeds = format!("1-{}", aim.cells());
+    }
+    eprintln!("{}", aim.words());
+    cx.ex.aim = Some(aim);
 }
 
 /// `--steer ID` (a manifest `steer:` entry of that id, else the SDK's records of that id) or
@@ -881,6 +946,7 @@ fn drawn(a: &Args) -> crate::space::Drawn {
         thread_pauses: a.pause_threads.is_some(),
         upgrades: a.upgrades,
         block: a.block_faults,
+        aimed: a.reactive_at.is_some(),
     }
 }
 

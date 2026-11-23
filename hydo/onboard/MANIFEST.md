@@ -1023,6 +1023,47 @@ are a `kill-now-` of any service, and the schedule's `K=` or `P=` on that servic
 (with the heal of that pause). So a manifest with one service, whose `K=` and `P=` the process
 strategy puts on that service in most schedules, still gets these kills.
 
+A reaction acts at the first record of its event after it is armed. `A=<event>#<k>...` (Milestone
+345) acts at the k-th record instead, for example `A=meili.swap_acked#3+12:kill-now-meilisearch`
+at the third swap's record. The full form is `A=<event>[#<k>][@<step>][+<ms>]:<action>`, and `#1`
+is not written. The shrinker tries the first record in place of the k-th.
+
+**Aimed reactions (`hydo explore --reactive-at`, Milestone 345).** `--reactive` draws one
+reaction per schedule over every event and a few fixed delays. A window of one or two
+milliseconds after one event then gets a few hits in a thousand schedules. An aimed exploration
+tries every cell of a grid instead:
+
+```sh
+hydo explore --reactive-at meili.swap_acked@20 [--react-delays 0..50] [--react-actions kill-now,kill,cut]
+```
+
+- `--reactive-at` names the events, several with commas, each as an `A=` head:
+  `<event>[#<k>][@<step>]`.
+- `--react-delays` gives the delays in ms of guest time: `A..B` (every ms), `A..B/STEP`, or a
+  list `A,B,C`. The default is `0..50`.
+- `--react-actions` gives the actions. `kill-now` and `kill` name one action per service, `cut` a
+  power cut, and any other item is one action as `A=` writes it (`stop-db-500`). The default is
+  `kill-now,kill,cut`, each where the manifest's `faults:` and the engine keep it. An action
+  given by name that they would leave out is refused.
+
+Seed `n` is cell `n - 1`, in the order event, delay, action: each moment after the event meets
+every action before the next moment. The seed's schedule is the plain workload with that one
+reaction (`disk=cut` for a power cut). Without `--seeds`, the exploration runs the grid once.
+Seeds past the grid try it again with each seed's composition (`W=`), its walk and the timing
+options, so a longer exploration varies what runs beside the reaction. Every schedule is an
+ordinary one: it is run again, shrunk, replayed and saved like any other. `--reactive` and
+`--kill-now` draw reactions at random and do not go with it. The names of the options join
+`--react-events` in one family: every `--react-` option shapes a reaction.
+
+**The moment a write is applied.** A client's record such as `meili.swap_acked` comes when the
+server acknowledges a request. The window that breaks a promise is often later, when the server
+applies the write. Give that moment an event of its own: let the client poll the operation's
+status and write a record when the server reports it started (`processing`) or finished, and aim
+at that record. A reaction cannot watch a service's log file: busybox's
+`tail -f` reads a file once a second, which is late for a window of a few milliseconds, and a
+service's output goes to a file, not to the console that the relay watches. So the client's
+record is the event.
+
 ### Freeze at a call (stop a service at an exact point of its traffic)
 
 Some bugs need a service stopped at one precise moment of a conversation -- between two

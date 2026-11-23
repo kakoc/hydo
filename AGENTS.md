@@ -1897,6 +1897,28 @@ network faults and clock jumps were never drawn (`--new-faults`). The reference 
 workflow`, "How much was explored, and whether to run more"; the details are in
 `docs/HISTORY.md` Milestone 336 (open item 169).
 
+**Aimed reactions, refused options, and one list of several explorations (M345, tentative
+number).** Three host-side changes; nothing recorded moved:
+- `hydo explore --reactive-at <event>[#<k>][@<step>][,...]` tries a grid instead of drawing.
+  The grid is each event, each delay of `--react-delays` (default `0..50` ms), and each action
+  of `--react-actions`, one schedule per seed in that order. The default actions are
+  `kill-now`, `kill` and `cut`, where the manifest and the engine keep them. A seed of the
+  first round is the plain workload with that one reaction, and later rounds add the seed's
+  composition. Without `--seeds` it runs the grid once. `A=<event>#<k>` acts at the k-th record
+  of the event. On the Meilisearch example on the Mac engine, at epoch 5, `--reactive-at
+  meili.swap_acked@20` ran the swap twice first at schedule 29 of 153. The blind `--kill-now`
+  exploration did so first at seed 101 of 360.
+- `hydo explore` refuses an option whose first 64 draws the engine's own rule
+  (`hydo_engine::refusal_on`) refuses. It also refuses one that has nothing to act on:
+  `--storage-faults` without `storage:`, and `--block-faults` without a data disk. Each gets one
+  line, and the exit status is 5.
+- `hydo report A B C` and `hydo report --html A B C` list the problems of several explorations
+  of one image once each, by class and signature, with every exploration and seed that showed
+  it.
+
+The references are the section "Reactions" of MANIFEST.md, `hydo guide faults` and `hydo guide workflow`; the
+details are in `docs/HISTORY.md` Milestone 345 (open item 173).
+
 **Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 64 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
 facts and commands of `README.md` and the quickstarts. Release step 6a is a docs review by a
@@ -2542,9 +2564,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The recordings ran on hvx only, not on KVM.
 136. The Mender example (M272). What is left:
     - Its two Mender candidates and the mender-artifact one are not reported upstream.
-    - The explorer draws a reaction's delay from six fixed values, so a window of a millisecond
-      after an event is reached only by a sweep by hand. A sweep of one reaction's delay is not
-      built.
+    - The explorer's `--reactive` draws a reaction's delay from six fixed values. Since M345
+      `hydo explore --reactive-at mender.commit_started@3` tries every delay of a range; it did
+      not run on this example.
     - Reactions act only during workload steps, and `kill-<svc>` keeps the service down until
       the heal. So no reaction cuts the rollback that a device runs while it boots, and the
       operator's retry after a kill comes only at the workload's end.
@@ -2819,9 +2841,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A run's verdict line names its first broken check only. Every power cut within 30 s of a
       dump breaks `final_dumps`, and finding 1's schedule shows the swap only in `hydo report
       --details`. The example's build parameter `dumps=no` keeps finding 3 out of explorations.
-    - The explorer draws a reaction's delay from fixed values. No blind schedule came between
-      the swap's commits. The moment of a cut after an event moves with the image's bytes. A
-      change of the client moved finding 1 from 2 ms to 40 ms after its event.
+    - The moment of a cut after an event moves with the image's bytes. A change of the client
+      moved finding 1 from 2 ms to 40 ms after its event, and on the image built at epoch 5 the
+      saved `+14` passes. Since M345 `hydo explore --reactive-at meili.swap_acked@20` finds the
+      window without its delay (`kill-meilisearch` at 9 and 10 ms, `kill-now-meilisearch` at 11
+      and 12 ms there); the saved regression was not changed.
     - Released 0.3.4 (epoch 3) cuts at other moments and misses finding 1 with `+2` and `+40`.
     - The shared Mac VM lock: the onboarding waited about 1 hour 40 minutes for it.
     - The example ran on the Mac engine and, since M305, on hvx with reactions; no `cf=` run, and
@@ -3325,6 +3349,27 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       TiKV's `explore-ex4` 13 of 18 candidates had `cf=`. Not worth it without a module change.
     - No engine changes the disk's policy at a stop, so a candidate that leaves out `disk=` faults
       shares nothing with its parent.
+173. Aimed reactions, refused options and the merged list (M345, tentative number). What is
+    left:
+    - Only the Mac engine ran an aimed exploration. hvx and KVM run the same controller code.
+    - A grid has one reaction per schedule, and its first round no other fault. An event's
+      arming step and its record are fixed per item of `--reactive-at`; a range of steps or
+      records is written as several items.
+    - A reaction to a service's own log line is not built. busybox's `tail -f` reads a file once
+      a second, and a service's output goes to its log file, not to the console that the relay
+      watches. The client's record of the moment a write is applied is the way (the section
+      "Reactions" of MANIFEST.md).
+    - The saved regression `swap-runs-twice-after-a-kill.schedule` (`+14`) passes on the Mac
+      with the image built at epoch 5. Its schedule needs a new delay; the aimed grid gives one
+      (`kill-now-meilisearch` at 11 or 12 ms). It was not changed here.
+    - The refusal probe asks the engine about what an option draws after the explorer's own
+      rendering. The rendering drops the hvx-only tokens on the Mac and KVM engines, and the
+      tokens that the manifest's `faults:` does not allow. An option whose draws are all dropped there, such as
+      `--new-faults` with `--strategy process` (which draws nothing of it), is not refused; the
+      examples' command lines use it.
+    - The merged list shows each problem as its first round shows it. It merges no property
+      table, no list of what held, and no statistics. The error lines of new kinds are the first
+      round's, with the rounds that wrote any. The accept keys are each round's.
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -4360,6 +4405,12 @@ build machine, before 2026-10-13.
   once and with its value, under every fault kind but a power cut of the guest, and through
   failovers, migrations, and DDL. One new candidate, not posted: a short copy in a datanode's
   manifest cache stops the datanode at every start. Nothing recorded moved
+- M345 (tentative number): three explorer changes from automated onboardings. `hydo explore
+  --reactive-at <event>` tries every delay of a range with each action, one schedule per seed,
+  and `A=<event>#<k>` acts at a later record. Options the engine or the image cannot use are
+  refused before any VM, one line each. `hydo report A B C` lists several explorations'
+  problems once each. Meilisearch's swap ran twice at schedule 29 of the aimed grid, against
+  seed 101 blind. Nothing recorded moved
 
 ## Where to look
 

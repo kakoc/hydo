@@ -242,6 +242,9 @@ pub struct Ex {
     /// The manifest's `clock_points:` (Milestone 225): clock steps to a time (`T=<at>:@...`)
     /// drawn beside the fixed amounts of [`CLOCK_DELTAS`]. Empty: exactly the old draws.
     pub clock_points: Vec<String>,
+    /// `--reactive-at` (Milestone 345): every schedule is one cell of this grid of aimed
+    /// reactions ([`crate::aim`]) instead of a drawn one. None: exactly the old draws.
+    pub aim: Option<crate::aim::Aim>,
 }
 
 impl Default for Ex {
@@ -308,6 +311,7 @@ impl Default for Ex {
             react_events: STACK_REACT_EVENTS.map(String::from).to_vec(),
             heal_events: STACK_HEAL_EVENTS.map(String::from).to_vec(),
             react_kill_now: false,
+            aim: None,
         }
     }
 }
@@ -1110,6 +1114,7 @@ impl Ex {
                 if let Some(ev) = pick(&evs, h_ev) {
                     s.p = Some(Pause::Plus(svc.clone(), a, (self.norders - a).max(1)));
                     s.a.push(Ra {
+                        nth: 1,
                         event: ev,
                         at: a,
                         delay: h_delay,
@@ -1200,6 +1205,7 @@ impl Ex {
                         _ => f_delay,
                     };
                     s.a.push(Ra {
+                        nth: 1,
                         event: ev,
                         at,
                         delay,
@@ -1655,6 +1661,10 @@ impl Ex {
 
     /// The composition explore.py main() applies to a generated schedule.
     pub fn compose_seed(&self, strategy: &str, seed: u64, durable_only: bool) -> S {
+        // Milestone 345: an aimed exploration's seed is a cell of its grid
+        if let Some(aim) = &self.aim {
+            return aim.schedule(self, seed);
+        }
         let mut s = self.generator(strategy, seed);
         if durable_only {
             s = self.durable_only(s);
@@ -2470,6 +2480,10 @@ impl Ex {
             }
             if a.at > 0 {
                 var(&|t| t.a[i].at = 0);
+            }
+            // Milestone 345: the first record of the event instead of a later one
+            if a.nth > 1 {
+                var(&|t| t.a[i].nth = 1);
             }
             if a.kind() == "stop" {
                 if let Some(ms) = a

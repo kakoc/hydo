@@ -252,7 +252,16 @@ The exit status of `hydo explore` tells a script what happened:
 | 5 | The exploration refused before it ran any schedule, and it wrote no report. |
 
 Refusals include a guest that does not fit into this machine's memory, a missing image, and
-options that do not go together. With `--json`, or when stdout is not a terminal, a refusal also
+options that do not go together. An option that the engine or the image cannot use is refused
+too. Some options draw faults that no other option draws. Before its first run the explorer
+draws the first 64 schedules of each such option, with only that option on. It asks the
+engine's own rule about each schedule, and one the engine would refuse refuses the option. Two
+examples are `--timing` with `--vcpus 2` on KVM, whose tick jitter is one vCPU's, and
+`--block-faults` on hvx. An option with nothing to act
+on is refused as well: `--storage-faults` without a service with `storage:` or a `faults:` with
+`corrupt` or `powerloss`, and `--block-faults` on an image without a data disk. Each refusal is
+one line that names the option, the reason, and what to use instead. When several options are
+refused this way, each gets its line. With `--json`, or when stdout is not a terminal, a refusal also
 prints one JSON line, `{"refused": "<reason>", "status": 5}`. A refusal for memory names each
 running `hydo inspect` session with its memory and its age, because each session holds a whole
 guest. `hydo inspect stop --all` stops them. Inside `hydo ci run` every stop of the explorer is
@@ -327,6 +336,26 @@ with the option and without it.
   Redis example's shrinks took 1 % to 7 % less time. It is off on the Mac engine, where a
   snapshot of a 1 GiB guest takes about 0.1 s and the shrinks of the Redis examples ran slower.
   It is off on hvx.
+
+### Several explorations of one image
+
+An onboarding explores in rounds, each with other options: a blind round, a round with
+`--kill-now`, a round aimed at one event. Each round has its own report, and a problem that two
+rounds found shows in both. Name every round's folder to see one list:
+
+```sh
+hydo report hydo-out/blind hydo-out/kill-now hydo-out/aimed
+hydo report --html hydo-out/blind hydo-out/kill-now hydo-out/aimed   # the first folder's report-merged.html
+```
+
+The list names each round with its seeds and the options that tell it from the others. It shows
+each problem once, with every round and seed that showed it: two failures are one problem when
+their class and signature agree, the key each exploration shrinks by. A problem is shown as the
+first round that found it shows it, with that round's minimal schedule and command, and `hydo
+inspect diagnose` of that round's folder with its own problem number. The rounds must have
+explored one image: two images are refused, because a problem of one is not a problem of the
+other. `hydo explore --merge` is for the shards of one exploration, which share one command
+line; this list is for rounds with different options.
 
 ## How much was explored, and whether to run more
 

@@ -513,16 +513,30 @@ system writes to the console (`hydo guide manifest`, section `Reactions`).
 `kill-<svc>` acts when the host has seen the record, so the service finishes what it was doing.
 To kill it between two commits, write `A=<event>+<ms>:kill-now-<svc>`. A relay in the guest
 kills the service `ms` milliseconds after the record, before any thread of the service runs on.
-Give the client an event just before the operation, and run one schedule per delay:
+`A=<event>#<k>+<ms>:<action>` acts at the k-th record of the event instead of the first, and
+`@<step>` arms the reaction at that step.
+
+The window moves with the program's bytes, so do not guess the delay. Give the client an event
+just before the operation, and aim an exploration at it:
 
 ```sh
-for ms in 10 11 12 13 14 15; do
-  hydo run "disk=none | run A=meili.swap_acked@20+$ms:kill-now-meilisearch"
-done
+hydo explore --reactive-at meili.swap_acked@20
 ```
 
-On the Meilisearch example on the Mac engine the swap runs twice at 13 and 14 ms, and every other
-delay passes. On hvx the window is 34 to 40 ms after the first swap from step 30.
+It tries every delay from 0 to 50 ms after the event, each with `kill-now-<svc>`, `kill-<svc>` and
+a power cut, one schedule per seed: 153 schedules for one service. `--react-delays 0..200/5`
+changes the delays and `--react-actions kill-now` the actions. Name several events with commas,
+for example `meili.swap_acked@20,meili.swap_acked#3`. Without `--seeds` it runs the grid once;
+more seeds run it again with each seed's composition. Each failure is shrunk and replayed as in
+any exploration. Take the Meilisearch example on the Mac engine, with an image built at the
+fingerprint epoch 5. The swap ran twice first at seed 29, a `kill-meilisearch` 9 ms after the
+swap's `202`. The grid of 153 schedules took 4 minutes and 24 seconds with 2 workers.
+
+The window often opens when the server applies the write, after it has answered. Give that
+moment an event too: let the client poll the operation's status and write a record when the
+server reports it started or finished. A reaction cannot watch a service's log file. The client's
+record is the event (`hydo guide manifest`, section `Reactions`).
+
 `--kill-now` makes `hydo explore --reactive fault` draw `kill-now-<svc>` instead of `kill-<svc>`.
 Half of its fault reactions are such a kill of any service, and the schedule then has no `K=`
 or `P=` on that service. So a project with one service gets these kills too. A schedule has at

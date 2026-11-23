@@ -727,16 +727,19 @@ impl fmt::Display for ReactAction {
     }
 }
 
-/// `A=<event>[@<step>][+<ms>]:<action>` (M139, reactive exploration): from before workload step
-/// `step` (0 when not written) the host controller watches the guest's console for the first
-/// assertion record of `event` whose outcome is the event's (`ok:true` for a `sometimes` or
+/// `A=<event>[#<k>][@<step>][+<ms>]:<action>` (M139, reactive exploration): from before workload
+/// step `step` (0 when not written) the host controller watches the guest's console for the
+/// first assertion record of `event` whose outcome is the event's (`ok:true` for a `sometimes` or
 /// `reachable` assertion, `ok:false` for the others), waits `ms` of guest time and does the
-/// action. The schedule string is the whole run: the controller's decision is a pure function of
-/// it and of the guest's console, so the run reproduces from the string and from its control
-/// transcript. `@0` and `+0` are not written (the canonical form).
+/// action. With `#<k>` (Milestone 345) it acts at the k-th such record from the arming point
+/// instead of the first. The schedule string is the whole run: the controller's decision is a
+/// pure function of it and of the guest's console, so the run reproduces from the string and
+/// from its control transcript. `#1`, `@0` and `+0` are not written (the canonical form).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct React {
     pub event: String,
+    /// Which record of the event acts, from 1 (Milestone 345: `#<k>`; 1 when not written).
+    pub nth: u64,
     pub at: u64,
     pub delay_ms: u64,
     pub action: ReactAction,
@@ -747,7 +750,7 @@ impl React {
         let what = format!("A={v}");
         let (head, act) = v
             .split_once(':')
-            .ok_or_else(|| err(format!("{what}: A=<event>[@<step>][+<ms>]:<action>")))?;
+            .ok_or_else(|| err(format!("{what}: A=<event>[#<k>][@<step>][+<ms>]:<action>")))?;
         let (head, delay_ms) = match head.rsplit_once('+') {
             Some((h, ms)) => {
                 let ms = dec(ms, &what)?;
@@ -772,6 +775,20 @@ impl React {
             }
             None => (head, 0),
         };
+        // Milestone 345: the k-th record of the event
+        let (event, nth) = match event.split_once('#') {
+            Some((e, k)) => {
+                let k = dec(k, &what)?;
+                if k < 2 {
+                    return Err(err(format!(
+                        "{what}: #<k> counts the event's records from 1, and #1 is not written \
+                         (the first record acts without it)"
+                    )));
+                }
+                (e, k)
+            }
+            None => (event, 1),
+        };
         if event.is_empty()
             || !event
                 .bytes()
@@ -783,6 +800,7 @@ impl React {
         }
         Ok(React {
             event: event.to_string(),
+            nth,
             at,
             delay_ms,
             action: ReactAction::parse(act, &what)?,
@@ -793,6 +811,9 @@ impl React {
 impl fmt::Display for React {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.event)?;
+        if self.nth > 1 {
+            write!(f, "#{}", self.nth)?;
+        }
         if self.at > 0 {
             write!(f, "@{}", self.at)?;
         }
