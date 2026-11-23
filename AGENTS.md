@@ -1608,23 +1608,27 @@ their own snapshots on the Mac engine and KVM. The note is `hydo/explore/RESEARC
 The reference is `hydo guide workflow`, sections "A schedule that ran once runs once" and "Which
 failures are shrunk"; the details are in `docs/HISTORY.md` Milestone 339.
 
-**0.5.0's features on more engines (M341, tentative number).** hvx ran, with the published
-0.5.0, the features that had run on one engine only, and each held:
+**0.5.0's features on more engines (M341, tentative number).** hvx and KVM (a one-off workflow
+on GitHub's runners) ran, with the published 0.5.0, the features that had run on one engine only,
+and each held:
 - `stats.json` and `hydo stats` of the Redis example's exploration, and the merge of two shards,
   which gave the curve, the runs and the faults drawn of one exploration;
 - the repeats (9 of 82 runs answered, the same records with `--rerun-repeats`) and the shrinks of
   `ERROR redis restart failed` and `ERROR restart after the faults`;
-- the shrinks of `TIMEOUT workload`, which on hvx is the engine's wall limit
-  (`HVX_EXPLORE_WALL_SECS`, 900 s), so each candidate that keeps the error runs that long;
+- the shrinks of `TIMEOUT workload` on hvx, which is the engine's wall limit
+  (`HVX_EXPLORE_WALL_SECS`, 900 s), so each candidate that keeps the error runs that long, and of
+  KVM's `exit budget exhausted`;
 - the recursive `/sys` bind of an image service (`redis-oci/hydo-sys.yaml`);
 - the s3 proxy's request shapes and conditional routes (`checkout/hydo-s3.yaml`), also on the
-  Mac engine.
+  Mac engine;
+- on KVM, web-shop's filmstrip, its copy before a power cut, and `browser.read_back`.
 
-A TIMEOUT run has the fingerprint `0000000000000000`, and `report.md` and the web page now say
-that its confirmations repeat the verdict only. `hydo guide faults` no longer says that `hydo
+A run that passed its engine's limit has the fingerprint `0000000000000000`, and `report.md` and
+the web page now say that its confirmations repeat the verdict only. `hydo guide faults` no longer says that `hydo
 explore --schedule` shrinks. The Mac engine did not run the walks: the build of a `browser:`
-image needs about 7 GB of free disk, which this Mac did not have. The KVM runs are the one-off
-workflow `tmp-m341-kvm`. The details are in `docs/HISTORY.md` Milestone 341.
+image needs about 7 GB of free disk, which this Mac did not have. KVM's Vikunja jobs ran
+nothing, because of a path in the workflow; their run is to come. The details are in
+`docs/HISTORY.md` Milestone 341.
 
 **A failure as one web page (M220).** `hydo report --html [DIR] [-o FILE]` writes one HTML file
 for a run directory, an exploration directory or a `hydo ci run` output directory. It holds its
@@ -2273,7 +2277,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     its next re-pin. M329's (the proxy's `Content-Length` and whole bodies, `if_header:`, and
     `errors:` on an `http` proxy's route) reached 0.5.0. Since M341 the s3 proxy's request shapes
     and conditional routes ran in a VM on hvx and on the Mac engine (`checkout/hydo-s3.yaml`).
-    So the s3 emulator ran on the Mac too. KVM's run of the one-off workflow is to come.
+    So the s3 emulator ran on the Mac too. KVM ran them too, on Xeon 6975P-C hosts.
 117. The clock audit (M248). It reads text, so a reading that passes through an interface with
     several implementations, a channel or a queue is not followed. Its schedules place the steps
     at fixed workload steps. Only the Valkey schedules ran; the Temporal and River schedules, and
@@ -2632,8 +2636,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       hvx's `TIMEOUT workload` is the engine's wall limit (`HVX_EXPLORE_WALL_SECS`, 900 s), not
       `workload.timeout`, so each candidate that keeps the error runs the whole limit (M341).
       `--no-shrink` turns it off. Other errors, such as a drain's own error line, are not shrunk.
-      The error shrinks ran on the scripted engine, the Mac engine and hvx (M341); KVM's run is
-      to come.
+      The error shrinks ran on the scripted engine, the Mac engine, hvx and KVM (M341). KVM's
+      `exit budget exhausted` has zero fingerprints too, and its shrinks gave hvx's schedules.
     - A run of `hydo run` from a fresh boot and the explorer's run of the same schedule differ, so
       an explorer failure is replayed with `hydo explore --schedule` or `hydo repro --transcript`.
     - `G=` chooses the damaged file and its place from the seed and the run's files; a byte or a
@@ -2668,7 +2672,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - An image service's root of an image built before epoch 5 gets `/sys` by a bind that is not
       recursive, so its programs read the `0::/` line but find no files under `/sys/fs/cgroup`.
       From epoch 5 the bind is recursive (M338). It ran on the Mac engine and, since M341, on hvx
-      (`redis-oci/hydo-sys.yaml`); KVM's run is to come.
+      and KVM (`redis-oci/hydo-sys.yaml`; KVM on Xeon 6975P-C hosts only).
     - hydo sets no limits. Every process is in the root cgroup, so a program that sizes itself
       from `memory.max` or `cpu.max` uses the whole guest. Limits per service, as Compose's
       `mem_limit` and `cpus` give a container, are not built.
@@ -3139,9 +3143,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `hydo/explore/RESEARCH-shared-prefix.md`). Since M339 a repeated schedule takes the earlier
     result, and the explorer writes `dseed=0` where the seed decides nothing. What is left:
     - The answers ran on the scripted engine and on the Mac engine's Redis quickstart, where a
-      run takes 0.1 s to 0.3 s. Since M341 they ran on hvx too. On hvx they answered 9 of 82 runs of the Redis
-      example and 12 runs of a TIMEOUT exploration, 64.5 s of the engine. No KVM exploration
-      measured them yet, and `hydo-bench` and the state search do not use the answers.
+      run takes 0.1 s to 0.3 s. Since M341 they ran on hvx and KVM too. On hvx they answered 9 of
+      82 runs of the Redis example and 12 runs of a TIMEOUT exploration, 64.5 s of the engine. On
+      KVM they answered 11 runs of an exploration of exit-budget errors, 82.6 s to 115.5 s.
+      `hydo-bench` and the state search do not use the answers.
     - The counts `repeats` and `repeats_saved_s` depend on which runs were in flight together,
       and a merge adds up its parts', which answer only their own repeats.
     - Explorations made before M339 have drawn schedules with another `dseed=`, and so other
@@ -3159,10 +3164,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       KVM explorations were not measured. The wall seconds are estimates from the guest clock,
       which predicts a run's seconds badly on ClickHouse and Dragonfly.
 168. The frames of a failing run and the read-back check (M334, tentative number). Left:
-    - Only hvx ran them, on Vikunja and web-shop. The Mac engine did not run them in M341: the
-      build of a `browser:` image needs about 7 GB of free disk, which this Mac did not have.
-      KVM's run of the one-off workflow `tmp-m341-kvm` is to come. The larger console of the Mac
-      and KVM engines (32 MiB) ran only in the scripted tests.
+    - hvx ran them on Vikunja and web-shop. KVM ran them on web-shop in M341, on one Intel host
+      and one AMD host. That covered the filmstrip, the copy before a power cut, the read-back
+      after it, and an exploration whose page shows the frames. KVM's Vikunja jobs ran nothing, because of a path
+      in the workflow; their run on the branch `tmp-m341-kvm` is to come. The Mac engine did not
+      run them: the build of a `browser:` image needs about 7 GB of free disk, which this Mac did
+      not have. The Mac engine's larger console (32 MiB) ran only in the scripted tests.
     - The frames and the trace of every step cost the walk guest time, so a walk's timing
       differs from M273's walker. Vikunja's `disk=cut | run C=6 I=1` lost two tasks then and
       holds now; `disk=none | run C=5 I=1` loses three now, two then.
@@ -3185,10 +3192,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       run's. An engine in the explorer's process, as hvx's, counts with the explorer.
     - The estimate assumes that each shard runs on a machine like this one and that shrinking
       takes the same share of a longer exploration. It leaves out a shard's build and download.
-    - The Mac engine and, since M341, hvx ran it on a VM, with images without `errors:` and
-      without watched error paths; the scripted engine covers the error kinds. On hvx the merge of
-      two shards gave the curve, the runs and the faults drawn of one exploration. KVM's run is to
-      come.
+    - The Mac engine and, since M341, hvx and KVM ran it on a VM, with images without `errors:`
+      and without watched error paths; the scripted engine covers the error kinds. On hvx and KVM
+      the merge of two shards gave the curve, the runs and the faults drawn of one exploration.
     - An exploration made before M336 has no `stats.json`, and `hydo stats` says so instead of
       reading `events.jsonl`.
     - The waits for the Mac's shared VM lock are outside hydo, so the workers' time does not show
@@ -4208,8 +4214,9 @@ build machine, before 2026-10-13.
 - M341 (tentative number): 0.5.0's features on the engines that had not run them. On hvx the
   statistics and their merge of shards, the repeats, the error shrinks, TIMEOUT shrinks, the
   recursive `/sys` of an image service, and the s3 proxy held. The s3 proxy held on the Mac
-  engine. A TIMEOUT has no fingerprint, and the report says so now; `hydo explore --schedule` does not
-  shrink, and the guide says so now. KVM's runs are a one-off workflow. Nothing recorded moved
+  engine. On KVM all of these and web-shop's filmstrip and read-back held; its Vikunja jobs ran
+  nothing. A run past its engine's limit has no fingerprint, and the report says so now; `hydo
+  explore --schedule` does not shrink, and the guide says so now. Nothing recorded moved
 
 ## Where to look
 
