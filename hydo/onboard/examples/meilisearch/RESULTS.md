@@ -239,7 +239,7 @@ milliseconds and then deletes its payload.
 
 The cause, at v1.57.0:
 
-1. The route writes the request body into a temporary file in `data.ms/updates/updates_files/`
+1. The route writes the request body into a temporary file in `data.ms/update_files/`
    and renames it to the task's uuid with `file_store::File::persist`
    (`crates/file-store/src/lib.rs:147`, called at
    `crates/meilisearch/src/routes/indexes/documents.rs:1598` and `:1624`). That is
@@ -247,8 +247,12 @@ The cause, at v1.57.0:
 2. The route then registers the task. `register_with_custom_metadata` commits the queue's LMDB
    transaction (`crates/index-scheduler/src/lib.rs:1004`), which LMDB syncs, and the `202`
    follows.
-3. On ext4 that sync commits the journal with the new name in it. The file's data is allocated
-   only at writeback, up to 30 s later.
+3. Nothing makes the rename or the file's data durable. The file's data is allocated only at
+   writeback, up to 30 s later. A cut 40 ms after the `202` left the file's name with 0 bytes.
+   A cut 2 ms after it left neither name on the disk: the folder on the disk was older than both
+   renames, and the index's commit of the running batch was lost too. So the tasks failed with a
+   lost file, not because their batch ran a second time (checked on the v0.5.0 image,
+   2026-11-23).
 4. After a power cut in that window the queue holds the task, and its payload file is empty or
    missing. The scheduler maps it
    (`crates/index-scheduler/src/scheduler/process_index_operation.rs:96`): an empty file is an
