@@ -567,11 +567,13 @@ pub fn resolve_image(reg: &mut dyn Registry, r: &str) -> Result<Y, ComposeError>
         ]);
         out.set(Y::Str(a), entry);
     }
-    if !out.has("amd64") {
+    // an image with only one of the two architectures is kept: hydo compose writes a hydo.yaml
+    // for both, and fetch-images.sh stops on the machine whose architecture it lacks
+    if !out.has("amd64") && !out.has("arm64") {
         let mut found: Vec<String> = out.iter_keys().iter().map(crate::pyval::pstr).collect();
         found.sort();
         return Err(ComposeError(format!(
-            "{r}: no linux/amd64 image (found: {})",
+            "{r}: no linux/amd64 or linux/arm64 image (found: {})",
             if found.is_empty() {
                 "none".into()
             } else {
