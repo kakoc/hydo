@@ -252,7 +252,16 @@ The exit status of `hydo explore` tells a script what happened:
 | 5 | The exploration refused before it ran any schedule, and it wrote no report. |
 
 Refusals include a guest that does not fit into this machine's memory, a missing image, and
-options that do not go together. With `--json`, or when stdout is not a terminal, a refusal also
+options that do not go together. An option that the engine or the image cannot use is refused
+too. Some options draw faults that no other option draws. Before its first run the explorer
+draws the first 64 schedules of each such option, with only that option on. It asks the
+engine's own rule about each schedule, and one the engine would refuse refuses the option. Two
+examples are `--timing` with `--vcpus 2` on KVM, whose tick jitter is one vCPU's, and
+`--block-faults` on hvx. An option with nothing to act
+on is refused as well: `--storage-faults` without a service with `storage:` or a `faults:` with
+`corrupt` or `powerloss`, and `--block-faults` on an image without a data disk. Each refusal is
+one line that names the option, the reason, and what to use instead. When several options are
+refused this way, each gets its line. With `--json`, or when stdout is not a terminal, a refusal also
 prints one JSON line, `{"refused": "<reason>", "status": 5}`. A refusal for memory names each
 running `hydo inspect` session with its memory and its age, because each session holds a whole
 guest. `hydo inspect stop --all` stops them. Inside `hydo ci run` every stop of the explorer is

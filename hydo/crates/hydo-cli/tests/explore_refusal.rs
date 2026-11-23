@@ -120,6 +120,45 @@ fn a_bad_option_keeps_status_2() {
     assert!(!out.contains("\"refused\""), "{out}");
 }
 
+/// Milestone 345: an option with nothing to act on in the image is refused before any run, with
+/// status 5 and its reason: `--storage-faults` without a service with `storage:` (the stand-in
+/// image explores the built-in space, which has none), and `--react-delays` without the
+/// `--reactive-at` it shapes.
+#[test]
+fn an_option_the_image_cannot_use_is_refused() {
+    let t = T::new("unusable");
+    let (rc, out, err) = t.explore(&[
+        "--image",
+        "db-arm64.cpio.gz",
+        "--storage-faults",
+        "--out",
+        "out",
+        "--json",
+    ]);
+    assert_eq!(rc, 5, "{out}{err}");
+    let v = json_line(&out);
+    let why = v["refused"].as_str().unwrap();
+    assert!(
+        why.starts_with("hydo explore: --storage-faults: it damages the files")
+            && why.contains("no service of this image's manifest has storage:"),
+        "{v}"
+    );
+    let (rc, out, err) = t.explore(&[
+        "--image",
+        "db-arm64.cpio.gz",
+        "--react-delays",
+        "0..5",
+        "--out",
+        "out",
+        "--json",
+    ]);
+    assert_eq!(rc, 5, "{out}{err}");
+    assert!(json_line(&out)["refused"]
+        .as_str()
+        .unwrap()
+        .contains("give --reactive-at EVENT too"));
+}
+
 /// Milestone 345: without `--seeds`, an aimed exploration runs its whole grid once: here one
 /// event, two delays and the kill at the event's moment of each of the built-in space's four
 /// services, so 8 schedules, one reaction each in the grid's order.

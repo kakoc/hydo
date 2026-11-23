@@ -811,6 +811,12 @@ fn setup(a: Args, env: &Env) -> Cx {
         .filter_map(|v| v.trim().parse().ok())
         .collect();
     cx.steer = steer_source(&a, m.as_ref()).unwrap_or_else(|e| die(&e));
+    // Milestone 345: the options the engine or the image cannot use, all at once
+    let kind = crate::refuse::kind_of(&cx.ex, cx.kvm);
+    let lines = crate::refuse::refusals(&cx.ex, &a.strategy, kind, cx.vcpus as u32, cx.epoch);
+    if !lines.is_empty() {
+        die(&lines.join("\n"));
+    }
     cx
 }
 

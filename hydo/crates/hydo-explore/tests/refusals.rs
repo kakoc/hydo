@@ -130,3 +130,74 @@ fn the_engines_refuse_what_they_cannot_arm() {
         "ERROR harness tick jitter (needs the PMU clock)"
     ));
 }
+
+/// Milestone 345: an option whose draws the engine refuses, or that has nothing to act on in the
+/// image, is refused before any VM, one line each with the option, the reason and what to do;
+/// the options each engine takes pass.
+#[test]
+fn options_the_engine_or_the_image_cannot_use_are_refused() {
+    use hydo_explore::refuse::refusals;
+    let epoch = hydo_image::EPOCH;
+    // tick jitter on the KVM engine with several vCPUs (its turns are exits)
+    let mut kvm = ex_for(Some("hydo/onboard/examples/redis/hydo.yaml"), Backend::Hvm);
+    kvm.hvm_disk = true;
+    kvm.preempt = false;
+    kvm.new_faults = false;
+    let lines = refusals(&kvm, "random", EngineKind::Kvm, 2, epoch);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(
+        lines[0].starts_with(
+            "hydo explore: --timing draws schedules that the kvm engine refuses (host token tj="
+        ) && lines[0].ends_with("explore without it, or with one vCPU"),
+        "{}",
+        lines[0]
+    );
+    assert!(refusals(&kvm, "random", EngineKind::Kvm, 1, epoch).is_empty());
+    // storage faults on a manifest without storage:, and on one with it
+    let mut redis = ex_for(Some("hydo/onboard/examples/redis/hydo.yaml"), Backend::Hvx);
+    redis.timing = false;
+    redis.preempt = false;
+    redis.more_faults = false;
+    redis.storage_faults = true;
+    let lines = refusals(&redis, "process", EngineKind::Hvx, 1, epoch);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(
+        lines[0].starts_with("hydo explore: --storage-faults: it damages the files"),
+        "{}",
+        lines[0]
+    );
+    let mut meili = ex_for(
+        Some("hydo/onboard/examples/meilisearch/hydo/hydo.yaml"),
+        Backend::Hvx,
+    );
+    meili.timing = false;
+    meili.preempt = false;
+    meili.more_faults = false;
+    meili.storage_faults = true;
+    assert!(refusals(&meili, "process", EngineKind::Hvx, 1, epoch).is_empty());
+    // the block faults on the Mac engine need a data disk
+    let mut mac = meili.clone();
+    mac.backend = Backend::Hvm;
+    mac.storage_faults = false;
+    mac.block_faults = true;
+    mac.hvm_disk = false;
+    let lines = refusals(&mac, "process", EngineKind::Hvm, 1, epoch);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(lines[0].contains("--block-faults: it damages the data disk's blocks"));
+    mac.hvm_disk = true;
+    assert!(refusals(&mac, "process", EngineKind::Hvm, 1, epoch).is_empty());
+    // every option the engines take, as the test above draws them, passes
+    for space in SPACES {
+        for (backend, kind) in [
+            (Backend::Hvx, EngineKind::Hvx),
+            (Backend::Hvm, EngineKind::Hvm),
+            (Backend::Hvm, EngineKind::Kvm),
+        ] {
+            let ex = ex_for(space, backend);
+            assert!(
+                refusals(&ex, "random", kind, 1, epoch).is_empty(),
+                "{space:?} {kind:?}"
+            );
+        }
+    }
+}
