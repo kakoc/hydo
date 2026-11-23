@@ -186,6 +186,7 @@ Ideas that would answer more:
 | Can the pull request show only what it changed? | `hydo ci run` writes `comment.md`, which the GitHub action posts and edits. | built; M286 |
 | Which commit introduced a finding? | `hydo versions --git A..B` replays it per commit, by hand. | partly built; M221 |
 | Does an exploration spend VMs on runs it already ran? | A first run or a shrink candidate whose schedule the exploration already ran takes the earlier result without a VM. `exploration.json` counts `repeats` and `repeats_saved_s`. | built; M339; the Redis quickstart on the Mac engine |
+| Can a shrink candidate skip the part it shares with an earlier candidate? | `hydo explore --shrink-from-snapshots`: the reruns and the candidates snapshot where a step range or a composed round starts, and a later candidate on the same worker continues from the deepest one it reaches. `--check-continued` compares each with its run from S1. | partly built; M340; exact on the Mac engine (Redis and `redis-composed`), but slower there, so off by default; KVM not run (open item 170) |
 | Can a long exploration run on many machines at once? | `hydo explore --shard I/N` explores one part of the seeds, and `hydo explore --merge` makes one exploration of the parts. hydo's workflow `explore.yml` runs up to 20 parts on GitHub's KVM runners. | built; M304 (Redis, Redpanda, and Dragonfly on GitHub's runners), M310 |
 | Can more workers of one exploration fit on one Mac? | The Mac engine's workers map guest RAM from the snapshots' shared RAM bases, and each holds only the pages its runs write. The explorer counts the bases once and lets as many workers boot at once as fit. | built on the Mac engine; Redis and Meilisearch (M335); hvx and KVM do not share between workers (open item 36) |
 
@@ -593,13 +594,16 @@ that a milestone builds moves into the tables of this page with its new status.
 
 - **What it is.** A shrink candidate continues from a snapshot of an earlier candidate where
   their commands part. Since Milestone 339 the explorer takes the earlier result for a schedule
-  it already ran, without a snapshot.
+  it already ran, without a snapshot. Since Milestone 340 a candidate continues from a snapshot
+  at a step range or a composed round of an earlier run on its worker, opt-in. What is left is
+  a snapshot that costs less than the part it skips on the Mac, snapshots that every worker
+  loads, and points inside a round.
 - **Why it matters.** Shrinks took 27 % to 83 % of the seconds of the three measured
   explorations that shrank. 10 % to 21 % of the shrinks' seconds repeated an earlier schedule
   exactly, and 10 % to 43 % of their guest clock was already run by an earlier candidate. The
   first runs of an exploration share almost nothing: 0.07 % of 12,590 s.
-- **What it needs.** A proof on the Mac engine and on KVM that a continued candidate gives its
-  fingerprint from S1.
+- **What it needs.** A proof on KVM that a continued candidate gives its fingerprint from S1
+  (on the Mac engine every compared run matched, M340), and a cheaper Mac snapshot.
 - **Where it came from.** Milestone 337 (tentative number), `hydo/explore/RESEARCH-shared-prefix.md`;
   open item 167.
 

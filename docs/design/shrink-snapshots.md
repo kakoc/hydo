@@ -27,14 +27,19 @@ send the same commands up to the start of the range at step 7. There the candida
 another `HYDO_TO`.
 
 So the points where runs part are the starts of the step ranges. A snapshot there holds the run up
-to the range's first command.
+to the range's first command. A composed workload (`W=`) has points of its own. Its
+candidates often leave out rounds of the composition (`W=...,x12-14`), and such a candidate parts
+from its parent where the first left-out round starts. So the start of each round is a point too.
 
 ## The mechanism
 
-**Snapshots at the range starts.** The host controller is a pure function of what it has seen.
-At each stop, before the controller decides, the runner asks a copy of the controller whether its
-step starts a step range (`Controller::starts_range`). When it does, the link takes `SNAP` there
-(`Link::at_range_start`). The first range starts right after S1 and gets no snapshot. A `SNAP`
+**Snapshots at the points.** The host controller counts the step ranges and the rounds that it
+started (`Controller::ranges_started`), in its host state only, so no command changes. The runner
+compares the count before and after each step. When it grew, the link takes `SNAP`
+(`Link::at_range_start`) before any of the step's commands goes to the engine. So the snapshot
+holds the guest as it was before the controller decided at that stop. The first point comes
+right after S1 and gets no snapshot. A composed run spreads its few snapshots over its rounds: at
+most one in `steps / (per run + 1)` points. A `SNAP`
 changes nothing in the guest, so the run's fingerprint and transcript stay the same. An engine
 that refuses the snapshot, for example while a typed command is not acknowledged, leaves that
 point out.
@@ -64,6 +69,9 @@ waits for a job that another worker could take, so no worker stays idle. Snapsho
 worker maps, as Milestone 335 maps S1 on the Mac, would remove that limit. They need a snapshot
 format that another engine process can load: the vCPU, the devices, and the engine's book of
 sends besides the RAM base.
+
+A first version asked a copy of the controller before each step whether the step would start a
+range. The copy of the controller's whole state at every stop cost more than the snapshots found.
 
 **How many are kept.** A worker keeps 8 snapshots and a run takes 4 at most, for a guest under
 2 GiB. A larger guest keeps 4 and takes 2. hvx keeps 2. Its 8 names include S0 and S1, and each of
