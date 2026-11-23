@@ -8,6 +8,8 @@ mod tmpdir;
 
 mod cgroup2_mount;
 mod clock_cut;
+mod command_out;
+mod command_path;
 mod conversations;
 mod corpus;
 mod corpus_net;

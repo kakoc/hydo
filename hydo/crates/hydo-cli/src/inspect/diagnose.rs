@@ -312,6 +312,10 @@ fn host_from(rec: &Recorded, evs: Vec<AgentEv>) -> Option<Diagnosis> {
             "{core}: the phase ran out of its time limit (a command that never ends, a stuck \
              service, or a workload slower than workload.timeout)"
         );
+    } else if core.starts_with("ERROR agent lines full") {
+        // Milestone 348: the hvx engine's verdict names the cause and what to change
+        d.failure = "vm".into();
+        d.summary = core.clone();
     } else if core.starts_with("ERROR vm") || core.starts_with("ERROR harness") {
         d.failure = "vm".into();
         d.summary = format!("{core}: the guest or the engine stopped (see engine.log)");
@@ -645,7 +649,7 @@ pub fn evidence(ctx: &Ctx, rec: &Recorded, d: &mut Diagnosis) -> Replayed {
     let tmp = super::session::scratch(ctx, "diagnose");
     let r = (|| -> Result<(Batch, Replayed), Problem> {
         let m = super::session::machine(ctx, rec, &tmp)?;
-        let mut works = plan_works(&m.plan, d);
+        let mut works = plan_works(&m.plan, d, &failed_commands(rec, target));
         let mut b = Batch {
             works: std::mem::take(&mut works),
             i: 0,
@@ -672,6 +676,13 @@ pub fn evidence(ctx: &Ctx, rec: &Recorded, d: &mut Diagnosis) -> Replayed {
                     if let Some(svc) = what.strip_prefix("the log of ") {
                         keep_log(&rec.dir, svc, &mut e);
                     }
+                    // Milestone 348: a workload command's output, beside the services' logs
+                    if let Some(id) = what.strip_prefix(COMMAND_OUTPUT) {
+                        keep_log(&rec.dir, &format!("command.{id}"), &mut e);
+                    }
+                    if what == WORKLOAD_OUTPUT {
+                        keep_log(&rec.dir, "workload", &mut e);
+                    }
                     if what == "the kernel's messages" {
                         for l in e.text.lines().filter(|l| kernel_worth(l)) {
                             if !d.kernel.iter().any(|k| k == l) {
@@ -688,10 +699,62 @@ pub fn evidence(ctx: &Ctx, rec: &Recorded, d: &mut Diagnosis) -> Replayed {
     }
 }
 
+/// How many failed composed commands the evidence reads the output of (Milestone 348).
+const COMMANDS_MAX: usize = 4;
+/// The evidence of a failed composed command's output, before the command's id.
+const COMMAND_OUTPUT: &str = "the output of the command ";
+/// The evidence of a plain workload's output (`workload.run`, Milestone 348).
+const WORKLOAD_OUTPUT: &str = "the workload's output";
+
+/// The composed workload's commands that ended with an exit status other than 0 in the
+/// conversation of `target`, from the controller's `HYDO-CMD end i=<entry> cmd=<id> rc=<rc>`
+/// reports: (the command's id, its output's file name in the composer's folder), the first
+/// failure of each id, at most [`COMMANDS_MAX`] (Milestone 348). The output stays in the guest,
+/// so only the replay can read it.
+fn failed_commands(rec: &Recorded, target: Target) -> Vec<(String, String)> {
+    let Some(t) = rec.transcript(target.conv) else {
+        return Vec::new();
+    };
+    let mut out: Vec<(String, String)> = Vec::new();
+    for r in &t.records {
+        let hydo_control::Record::Report { line, .. } = r else {
+            continue;
+        };
+        if let Some(c) = failed_command(line) {
+            if out.len() < COMMANDS_MAX && !out.iter().any(|(id, _)| *id == c.0) {
+                out.push(c);
+            }
+        }
+    }
+    out
+}
+
+/// (id, `log.<entry>`) of a `HYDO-CMD end` report whose exit status is not 0.
+fn failed_command(line: &str) -> Option<(String, String)> {
+    let rest = line.strip_prefix("HYDO-CMD end ")?;
+    let word = |k: &str| {
+        rest.split(' ')
+            .find_map(|w| w.strip_prefix(k))
+            .map(str::to_string)
+    };
+    let (entry, id, rc) = (word("i=")?, word("cmd=")?, word("rc=")?);
+    let plain = |s: &str| {
+        !s.is_empty()
+            && s.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '-')
+    };
+    (rc != "0" && plain(&entry) && plain(&id)).then(|| (id, format!("log.{entry}")))
+}
+
 /// The reads of the evidence: the failing service's log first, then every other service's, the
-/// provisioning's and setup logs, the readiness check run once, the kernel's messages, memory
-/// and processes.
-fn plan_works(plan: &Plan, d: &Diagnosis) -> Vec<(String, String, Work)> {
+/// provisioning's and setup logs, the output of the workload's failed commands (`cmds`, from
+/// [`failed_commands`]) or of a plain workload, the readiness check run once, the kernel's
+/// messages, memory and processes.
+fn plan_works(
+    plan: &Plan,
+    d: &Diagnosis,
+    cmds: &[(String, String)],
+) -> Vec<(String, String, Work)> {
     let l = &plan.layout;
     let mut v: Vec<(String, String, Work)> = Vec::new();
     let tail_of = |p: String, n: u64| {
@@ -735,6 +798,20 @@ fn plan_works(plan: &Plan, d: &Diagnosis) -> Vec<(String, String, Work)> {
     if let Some(s) = &d.service {
         let p = format!("{}/{s}.setup.log", l.dir);
         v.push((format!("the setup log of {s}"), p.clone(), tail(p)));
+    }
+    // Milestone 348: the workload's own output stays in the guest (open items 157 and 170)
+    if plan.compose.is_some() {
+        for (id, file) in cmds {
+            let p = format!("{}/compose/{file}", l.dir);
+            v.push((
+                format!("{COMMAND_OUTPUT}{id}"),
+                p.clone(),
+                tail_of(p, LOG_KEEP),
+            ));
+        }
+    } else {
+        let p = format!("{}/workload.log", l.dir);
+        v.push((WORKLOAD_OUTPUT.into(), p.clone(), tail_of(p, LOG_KEEP)));
     }
     if d.failure == "provision" {
         let p = format!("{}/provision.log", l.dir);
@@ -1497,6 +1574,26 @@ mod tests {
         );
         assert_eq!(verdict_service("HYDO-ORACLE: ERROR provision failed"), None);
         assert_eq!(verdict_service("HYDO-ORACLE: VIOLATION [x] y"), None);
+    }
+
+    /// Milestone 348: the composed commands whose output the evidence reads.
+    #[test]
+    fn a_failed_command_is_named_by_its_end_report() {
+        assert_eq!(
+            failed_command("HYDO-CMD end i=12 cmd=parallel_driver_write rc=1 ms=40 status=failed"),
+            Some(("parallel_driver_write".into(), "log.12".into()))
+        );
+        assert_eq!(
+            failed_command("HYDO-CMD end i=e2 cmd=eventually_drain rc=143 ms=9000"),
+            Some(("eventually_drain".into(), "log.e2".into()))
+        );
+        assert_eq!(
+            failed_command("HYDO-CMD end i=3 cmd=anytime_read rc=0 ms=10 status=ok"),
+            None
+        );
+        assert_eq!(failed_command("HYDO-CMD start i=3 kind=x cmd=y"), None);
+        // a word that could leave the composer's folder is not read
+        assert_eq!(failed_command("HYDO-CMD end i=../x cmd=y rc=1 ms=1"), None);
     }
 
     #[test]

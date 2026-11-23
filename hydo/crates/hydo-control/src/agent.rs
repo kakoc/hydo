@@ -186,6 +186,10 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
     if plan.cgroup2.is_none() {
         plan.cgroup2 = Some(hydo_engine::image::image_defaults(image).1.cgroup2);
     }
+    // Milestone 348: without `guest.path` the image's epoch decides (a PATH from epoch 6)
+    if plan.path.is_none() {
+        plan.path = Some(hydo_engine::image::image_defaults(image).1.command_path);
+    }
     // Milestone 338: from epoch 5 a timed pause of threads finds the workload as a reaction does
     plan.pause_largest_session = hydo_engine::image::image_defaults(image)
         .1

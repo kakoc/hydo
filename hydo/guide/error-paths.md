@@ -72,7 +72,7 @@ Explore with faults, and explore the same seeds without them. `--no-faults` runs
 workload, its composition and walk, without a fault:
 
 ```sh
-hydo explore --seeds 1-12 --strategy process --new-faults --out hydo-out/faults
+hydo explore --seeds 1-12 --strategy process --out hydo-out/faults
 hydo explore --seeds 1-12 --no-faults --out hydo-out/clean
 hydo report --paths hydo-out/faults --against hydo-out/clean
 ```

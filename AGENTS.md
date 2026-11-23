@@ -1958,6 +1958,25 @@ number).** Three host-side changes; nothing recorded moved:
 The references are the section "Reactions" of MANIFEST.md, `hydo guide faults` and `hydo guide workflow`; the
 details are in `docs/HISTORY.md` Milestone 345 (open item 173).
 
+**Five gaps of recent onboardings (M348, tentative number).** Each fix is its own commit; none
+moves a recorded value:
+- `guest.path: true` (a format-1 addition) gives every command that hydo starts `PATH`, so a
+  program that a workload command starts finds `hydo-oci` by name. The variable is in guest RAM,
+  so an absent key means off up to the fingerprint epoch 5 and on from epoch 6
+  (`hydo_image::EpochDefaults::command_path`).
+- A composed command that fails leaves its last lines in `one.log`: a `HYDO-CMD-OUT` note, or for
+  a violation the `HYDO-CHECK-OUT` note of `compose.<id>.no_violation`, which `result.json`
+  keeps. The diagnosis replay writes the workload's output to `logs/workload.log` and
+  `logs/command.<id>.log`.
+- On hvx a boot whose agent lines pass 16 MiB ends at once with `ERROR agent lines full
+  <phase>`, which names the error-log scan, instead of waiting for its wall limit.
+- `hydo explore` refuses an option whose first 64 schedules are the same without it, with the
+  exit status 5. `--new-faults` with `--strategy process` or `swarm-pos` gets a warning only.
+
+The references are `hydo guide inspect`, `hydo guide error-logs`, `hydo guide workflow` and the
+section "Services from a Docker/OCI image" of MANIFEST.md; the details are in `docs/HISTORY.md`
+Milestone 348.
+
 **Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 64 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
 facts and commands of `README.md` and the quickstarts. Release step 6a is a docs review by a
@@ -2885,10 +2904,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       dump breaks `final_dumps`, and finding 1's schedule shows the swap only in `hydo report
       --details`. The example's build parameter `dumps=no` keeps finding 3 out of explorations.
     - The moment of a cut after an event moves with the image's bytes. A change of the client
-      moved finding 1 from 2 ms to 40 ms after its event, and on the image built at epoch 5 the
-      saved `+14` passes. Since M345 `hydo explore --reactive-at meili.swap_acked@20` finds the
-      window without its delay (`kill-meilisearch` at 9 and 10 ms, `kill-now-meilisearch` at 11
-      and 12 ms there); the saved regression was not changed.
+      moved finding 1 from 2 ms to 40 ms after its event, and on M345's image built at epoch 5
+      the saved `+14` passed. Since M345 `hydo explore --reactive-at meili.swap_acked@20` finds
+      the window without its delay (`kill-meilisearch` at 9 and 10 ms, `kill-now-meilisearch` at
+      11 and 12 ms there). On M346's image `+14` fails again, twice with one fingerprint, and
+      `+12` passes (M348), so the saved regression stays.
     - Released 0.3.4 (epoch 3) cuts at other moments and misses finding 1 with `+2` and `+40`.
     - The shared Mac VM lock: the onboarding waited about 1 hour 40 minutes for it.
     - The example ran on the Mac engine and, since M305, on hvx with reactions; no `cf=` run, and
@@ -3039,8 +3059,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - `hydo explore --configs` with `--no-shrink` or `--schedule` lists no class of failure and
       says that no combination failed, although 6 of 24 and 2 of 3 runs failed. An exploration's
       failures are recorded only when they are shrunk.
-    - A workload command's output stays in the guest (`/tmp/hydo/compose/log.<n>`); the client
-      copies its errors to the console to show them in a run's `one.log`.
+    - A workload command's output stays in the guest (`/tmp/hydo/compose/log.<n>`). Since M348 a
+      command that fails leaves its last 20 lines in `one.log`, and the diagnosis replay writes
+      its output to `logs/command.<id>.log`. The example's client still copies its errors to the
+      console.
     - Two of the onboarding's VMs of 4 GiB beside other sessions made the host's out-of-memory
       killer end one of its runs; its scripts then held one lock for every VM.
     - Only hvx ran it: not the Mac engine (the images have arm64 builds) and not KVM. No `cf=`
@@ -3336,9 +3358,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       explorer's warning estimated 10 GB. Beside another onboarding the host's out-of-memory
       killer ended an engine of the first exploration, so the rest ran with one worker.
     - A workload command's output stays in the guest (as open item 157); the client copies the
-      lines that explain a failure to the console. A program that a command starts finds
+      lines that explain a failure to the console. A program that a command starts found
       `hydo-oci` only by its path `/bin/hydo-oci`: Go's `exec.Command("hydo-oci", ...)` failed
-      with `executable file not found in $PATH`.
+      with `executable file not found in $PATH`. Since M348 a failing command's last lines reach
+      `one.log`, and `guest.path: true` gives the commands a `PATH`. The example keeps
+      `/bin/hydo-oci` and its own copies; it was not built with the key.
     - Production's blocks of 2 hours were scaled to 1 minute, and the stale-series compaction ran
       in one exploration only. The agent's out-of-order window, which would let the agent forward
       finding 2's duplicates, was not tried.
@@ -3357,8 +3381,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       built.
     - The error-log scan reads every service's whole log through the agent. On hvx a run of
       Kafka and five GreptimeDB services passed the 16 MiB of lines that hvx keeps per boot. The
-      run then waited for its wall limit, so the example turns `errors:` off. Nothing warns
-      before the limit.
+      run then waited for its wall limit, so the example turns `errors:` off. Since M348 such a
+      boot ends at once with `ERROR agent lines full <phase>`, which names the scan. The scan
+      itself is not bounded, so the example keeps `errors:` off.
     - The clock audit found no place of the metasrv. GreptimeDB reads the wall clock through
       its own `current_time_millis()` (as open item 152). The audit also maps no image service
       to the Cargo binaries of its sources.
@@ -3404,14 +3429,13 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       a second, and a service's output goes to its log file, not to the console that the relay
       watches. The client's record of the moment a write is applied is the way (the section
       "Reactions" of MANIFEST.md).
-    - The saved regression `swap-runs-twice-after-a-kill.schedule` (`+14`) passes on the Mac
-      with the image built at epoch 5. Its schedule needs a new delay; the aimed grid gives one
-      (`kill-now-meilisearch` at 11 or 12 ms). It was not changed here.
-    - The refusal probe asks the engine about what an option draws after the explorer's own
-      rendering. The rendering drops the hvx-only tokens on the Mac and KVM engines, and the
-      tokens that the manifest's `faults:` does not allow. An option whose draws are all dropped there, such as
-      `--new-faults` with `--strategy process` (which draws nothing of it), is not refused; the
-      examples' command lines use it.
+    - The saved regression `swap-runs-twice-after-a-kill.schedule` (`+14`) passed on the Mac
+      with M345's image. On M346's image it fails again: `VIOLATION [swap]`, twice with
+      `wfp=ff2e49cab7d84f41`, and `+12` passes (M348). The window moves with the image's bytes.
+    - Since M348 an option whose first 64 rendered schedules are the same without it is refused.
+      `--new-faults` with `--strategy process` or `swarm-pos` only warns, because about 100
+      command lines of the examples' pages and RESULTS.md files give that pair. Those lines were
+      not changed; the guide's and the playbook's were.
     - The merged list shows each problem as its first round shows it. It merges no property
       table, no list of what held, and no statistics. The error lines of new kinds are the first
       round's, with the rounds that wrote any. The accept keys are each round's.
@@ -3445,6 +3469,20 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       (Hatchet's `SendStepActionEvent`). A handler that answers `unimplemented` is listed.
     - `hydo rules check` does not read the list yet; the skill reads it when it writes the
       workload. No onboarding used it yet.
+176. Five gaps of recent onboardings (M348, tentative number). What is left:
+    - `guest.path` is off for every image built now; it is the default from the next fingerprint
+      epoch. No example was built with the key, and no VM ran a Go program that finds `hydo-oci`
+      by name; the controller's test checks the commands' environment.
+    - A failed composed command's `HYDO-CMD-OUT` note is in `one.log` only: `result.json` keeps
+      the lines of a violation (exit 100), not of another exit status. A plain `workload.run`'s
+      output reaches the run directory only through the diagnosis replay, which `hydo run`
+      makes for an ERROR and for a violation that names a service.
+    - No hvx run filled the agent lines' buffer to show `ERROR agent lines full`; the engine's
+      unit test and the Linux build checked it. The error-log scan is not bounded, so a verbose
+      system on hvx still needs `errors: false`.
+    - The refusal of an option that draws nothing checks the first 64 seeds of the given
+      strategy. `--freeze-call`, `--protocol-cover`, `--concurrency` and `--reactive` are not
+      checked.
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -4501,6 +4539,13 @@ build machine, before 2026-10-13.
   an image with only a linux/arm64 build unless `--from-docker` was given, because it asked for
   amd64 too. Such an image is imported now, with its settings from the arm64 build. A warning
   says that it runs on the Mac engine only, and fetch-images.sh stops on an x86_64 machine. `hydo compose --help` names `--from-docker`. Nothing recorded moved
+- M348 (tentative number): five gaps of recent onboardings, each its own commit. `guest.path:
+  true` gives the commands hydo starts a `PATH`, so a program finds `hydo-oci` by name; it is the
+  default from the next epoch. A failing composed command leaves its last lines in `one.log`,
+  and the diagnosis writes the workload's output to `logs/`. On hvx a boot past 16 MiB of agent
+  lines ends at once with an ERROR that names the error-log scan. `hydo explore` refuses an
+  option that draws nothing. The saved Meilisearch regression `+14` fails on M346's image, so it
+  stays. Nothing recorded moved
 
 ## Where to look
 

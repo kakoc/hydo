@@ -163,3 +163,105 @@ fn image_gap(name: &str, ex: &Ex) -> Option<String> {
         _ => None,
     }
 }
+
+/// An option whose draws [`nothing_drawn`] checks: its flag, what it changes on an [`Ex`], and
+/// why the rendering can drop all it draws.
+type Draws = (
+    &'static str,
+    fn(&Ex) -> bool,
+    fn(&mut Ex, bool),
+    &'static str,
+);
+
+const DRAWING: [Draws; 7] = [
+    (
+        "--new-faults",
+        |e| e.new_faults,
+        |e, v| e.new_faults = v,
+        "the manifest's faults: allows none of pause, clock and oneway",
+    ),
+    (
+        "--more-faults",
+        |e| e.more_faults,
+        |e, v| e.more_faults = v,
+        "the engine and the manifest's faults: keep none of its timed kills (X=) and flush \
+         cuts (cf=)",
+    ),
+    (
+        "--cluster-faults",
+        |e| e.cluster_faults,
+        |e, v| e.cluster_faults = v,
+        "it acts on the manifest's groups:, and this manifest has none, or its faults: allows \
+         none of kill, pause and network",
+    ),
+    (
+        "--protocol-faults",
+        |e| e.protocol_faults,
+        |e, v| e.protocol_faults = v,
+        "it acts on fakes, proxies and emulators, and this manifest has none, or its faults: \
+         does not allow protocol",
+    ),
+    (
+        "--upgrades",
+        |e| e.upgrades,
+        |e, v| e.upgrades = v,
+        "it acts on services with versions:, and this manifest has none",
+    ),
+    (
+        "--pause-workload or --pause-thread",
+        |e| e.workload_pauses,
+        |e, v| e.workload_pauses = v,
+        "the manifest's faults: does not allow pause",
+    ),
+    (
+        "--corrupt-several",
+        |e| e.corrupt_several,
+        |e, v| e.corrupt_several = v,
+        "it spreads the damage of --storage-faults over several services, and the exploration \
+         draws no such damage",
+    ),
+];
+
+/// What the explorer's own rendering leaves of each drawing option of `ex` (Milestone 348): an
+/// option whose first [`SEEDS`] rendered schedules are the same without it draws nothing. Such
+/// an option is refused, one line each (the first list; empty: none). One case is only a
+/// warning, the second list: `--new-faults` with `--strategy process` or `swarm-pos`, which draw
+/// pauses, clock steps and one-way losses themselves. The command lines of most examples give
+/// that pair, and it explores what the strategy alone explores.
+pub fn nothing_drawn(ex: &Ex, strategy: &str) -> (Vec<String>, Vec<String>) {
+    let (mut refused, mut warned) = (Vec::new(), Vec::new());
+    if ex.no_faults || ex.aim.is_some() {
+        // the seeds draw no fault (--no-faults), or are the cells of a grid (--reactive-at)
+        return (refused, warned);
+    }
+    // `--cf-range auto` is measured by a probe run after this check; until then a placeholder
+    // range lets `--more-faults` draw its flush cuts as it will
+    let mut ex = ex.clone();
+    if ex.more_faults && ex.cf_range.is_none() {
+        ex.cf_range = Some((1, 2));
+    }
+    let ex = &ex;
+    let all = draws(ex, strategy);
+    for (name, on, set, why) in DRAWING {
+        if !on(ex) {
+            continue;
+        }
+        let mut off = ex.clone();
+        set(&mut off, false);
+        if draws(&off, strategy) != all {
+            continue;
+        }
+        if name == "--new-faults" && matches!(strategy, "process" | "swarm-pos") {
+            warned.push(format!(
+                "hydo explore: warning: --new-faults adds nothing to --strategy {strategy}, \
+                 which draws pauses, clock steps and one-way losses itself"
+            ));
+            continue;
+        }
+        refused.push(format!(
+            "hydo explore: {name} draws nothing in this exploration ({SEEDS} schedules drawn \
+             with it and without it are the same): {why}; explore without it"
+        ));
+    }
+    (refused, warned)
+}

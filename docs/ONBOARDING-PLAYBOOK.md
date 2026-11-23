@@ -259,10 +259,11 @@ hours. Otherwise stop. Record each blocker as a gap of hydo in the example's `RE
    hydo explore --schedule "<schedule from the audit>"
    ```
 
-4. Explore with the process strategy and the new fault kinds:
+4. Explore with the process strategy, which draws pauses, clock steps and one-way losses
+   too:
 
    ```sh
-   hydo explore --seeds 1-20 --strategy process --new-faults
+   hydo explore --seeds 1-20 --strategy process
    ```
 
 5. Read the problems with `hydo report`, and the minimal schedules with `hydo report --details`.
@@ -287,7 +288,7 @@ Linux. Keep this Mac and the bare-metal machine for the directed runs, such as `
 
 ```sh
 sh ci/remote-explore.sh --example hydo/onboard/examples/<name> --manifest hydo/hydo.yaml \
-  --ref <branch> --seeds 1-60 --shards 20 --explore "--strategy process --new-faults" \
+  --ref <branch> --seeds 1-60 --shards 20 --explore "--strategy process" \
   --prepare "sh hydo/fetch-images.sh x86_64"
 ```
 

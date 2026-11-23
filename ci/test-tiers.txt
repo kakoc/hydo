@@ -53,6 +53,8 @@ hydo-config::inventory                   fast
 hydo-control                             fast
 hydo-control::cgroup2_mount              fast
 hydo-control::clock_cut                  fast
+hydo-control::command_out                fast
+hydo-control::command_path               fast
 hydo-control::conversations              fast
 hydo-control::corpus                     full
 hydo-control::corpus_net                 full

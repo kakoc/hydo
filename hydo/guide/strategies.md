@@ -787,8 +787,9 @@ These findings hold for every type of system:
 
 - **What it is.** `--strategy` chooses how `hydo explore` draws faults: `process` gives 2 to 4
   fault kinds in staggered windows, and `swarm` switches whole categories on and off per run.
-- **What to write.** `hydo explore --seeds 1-20 --strategy process --new-faults` first, and
-  `--strategy swarm --new-faults` last.
+- **What to write.** `hydo explore --seeds 1-20 --strategy process` first, and `--strategy
+  swarm --new-faults` last. The process strategy draws pauses, clock steps and one-way losses
+  itself, so `--new-faults` adds nothing to it.
 - **When it fits.** Every project.
 - **What it found.** On the bug benchmark, out of 24 possible
   detections, random made 19, swarm 21, and process 24. Swarm finds more kinds of failure,

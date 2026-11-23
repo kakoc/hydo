@@ -1174,6 +1174,11 @@ fn env_with(
     m.insert("HYDO_ACKED".into(), l.acked());
     m.insert("HYDO_OUTCOMES".into(), l.outcomes());
     m.insert("HYDO_FAILED".into(), l.failed());
+    // Milestone 348: `guest.path` gives a program that a command starts the guest's programs by
+    // name (open item 170); the manifest's `env:` and the init's exports may set it otherwise
+    if ctx.plan.path == Some(true) {
+        m.insert("PATH".into(), hydo_image::COMMAND_PATH.into());
+    }
     for (k, v) in exports {
         m.insert(k.clone(), v.clone());
     }
@@ -2216,6 +2221,48 @@ pub fn check_output_note(id: &str, out: &str) -> Option<String> {
     if ls.len() < 2 {
         return None;
     }
+    let (kept, omitted) = bounded_tail(&ls);
+    let v = serde_json::json!({"id": id, "lines": kept, "omitted": omitted});
+    Some(format!("{CHECK_OUT_PREFIX} {v}"))
+}
+
+/// The note that carries a failing workload command's output (Milestone 348).
+pub const CMD_OUT_PREFIX: &str = "HYDO-CMD-OUT";
+
+/// A composed workload command that ended with an exit status other than 0 and 100: the last
+/// lines of its output, bounded as a failing check's are, in one `HYDO-CMD-OUT {"id":...,
+/// "entry":...,"rc":...,"lines":[...],"omitted":n}` note, the first time the command `id` fails
+/// in this conversation (Milestone 348). The output stays in the guest's
+/// `/tmp/hydo/compose/log.<entry>`, so before the note a run's directory showed no word of why a
+/// command failed (open items 157 and 170). A violation (exit 100) gets [`check_output`]'s note of
+/// its finding `compose.<id>.no_violation` instead. No transcript's hash and no fingerprint
+/// covers a note.
+fn cmd_output(fx: &mut F<'_>, id: &str, entry: i64, rc: u32, out: &str) {
+    if let Some(n) = cmd_output_note(id, entry, rc, out) {
+        let mark = format!("cmd-out.{id}");
+        if fx.effect_bool(|h, _| h.marks.insert(mark)) {
+            fx.note(n);
+        }
+    }
+}
+
+/// The note of [`cmd_output`] (None for an output without a line).
+pub fn cmd_output_note(id: &str, entry: i64, rc: u32, out: &str) -> Option<String> {
+    let ls: Vec<&str> = lines(out)
+        .into_iter()
+        .filter(|l| !l.trim().is_empty() && !l.starts_with("HYDO-ASSERT"))
+        .collect();
+    if ls.is_empty() {
+        return None;
+    }
+    let (kept, omitted) = bounded_tail(&ls);
+    let v =
+        serde_json::json!({"id": id, "entry": entry, "rc": rc, "lines": kept, "omitted": omitted});
+    Some(format!("{CMD_OUT_PREFIX} {v}"))
+}
+
+/// The last lines of `ls` that [`check_output_note`] keeps, and how many it leaves out.
+fn bounded_tail(ls: &[&str]) -> (Vec<String>, usize) {
     let mut kept: Vec<String> = Vec::new();
     let mut bytes = 0;
     for l in ls.iter().rev().take(CHECK_OUT_LINES) {
@@ -2228,8 +2275,7 @@ pub fn check_output_note(id: &str, out: &str) -> Option<String> {
     }
     kept.reverse();
     let omitted = ls.len() - kept.len();
-    let v = serde_json::json!({"id": id, "lines": kept, "omitted": omitted});
-    Some(format!("{CHECK_OUT_PREFIX} {v}"))
+    (kept, omitted)
 }
 
 /// At most `n` bytes of `s`, on a character boundary, with `...` when cut.

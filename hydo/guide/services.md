@@ -57,9 +57,10 @@ rules that matter most:
 - `provision`: schemas, topics, users: what must exist before the window under test. Seed data
   that belongs to the test is a `first_<name>` command instead.
 - Images: `image:` plus `mounts:` (bind, volume, tmpfs) and `user:`; tools inside an image run as
-  `hydo-oci <service> <command>`. The program is `/bin/hydo-oci`. A client program that a command
-  starts should call it by that path: Go's `exec.Command("hydo-oci", ...)` did not find it on
-  `PATH` in the Prometheus example. An image root is read-only. A program that writes into its own
+  `hydo-oci <service> <command>`. The program is `/bin/hydo-oci`. The commands that hydo starts
+  have no `PATH`, so a client program that a command starts finds it by name only with
+  `guest.path: true` in `hydo.yaml`; without the key, call it by its path. Go's
+  `exec.Command("hydo-oci", ...)` did not find it in the Prometheus example. An image root is read-only. A program that writes into its own
   files needs `writable: true`, for example for a cache in its home directory, or files generated
   into its install directory. The error is often `ENOENT` or `Read-only file system`. The
   writable layer is kept on the data disk: it survives a kill, and a power cut as far as it was

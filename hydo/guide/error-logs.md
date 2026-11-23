@@ -67,5 +67,9 @@ the run, for CI once the list is reviewed.
 - A service that writes its log into the data disk (`/data/...`): only lines written in the
   current boot are reported. Lines of the first boot that survive a power cut are not counted
   twice.
+- The scan reads every covered service's whole log through the guest agent once per boot. The
+  hvx engine keeps 16 MiB of the agent's lines per boot. A boot whose logs pass that ends at
+  once with `ERROR agent lines full <phase>`. Lower the services' log level, or set
+  `errors: false` for a verbose system.
 - Templates are heuristics: if the same kind shows up under several signatures that differ only in
   an id, add a `normalize:` pattern (it changes the image, so rebuild) and re-accept.
