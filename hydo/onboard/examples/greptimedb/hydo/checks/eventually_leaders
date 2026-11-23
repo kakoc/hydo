@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: every region of hydo_rows and hydo_log has exactly one leader after the faults
+exec /bin/gtc check leaders

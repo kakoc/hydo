@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: every acknowledged CREATE, ALTER and DROP took effect, and every table d<n> answers a query on its listed columns
+exec /bin/gtc check ddl

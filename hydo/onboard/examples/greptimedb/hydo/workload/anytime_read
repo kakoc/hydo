@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=40
+# read both tables through a frontend; exit 100 when a read that succeeded misses a row
+# acknowledged before it started, returns one twice, or returns another value
+exec /bin/gtc read

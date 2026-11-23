@@ -1,0 +1,4 @@
+# The error-log kinds that are expected in this example (hydo guide error-logs).
+format: 1
+unknown: report
+known: []

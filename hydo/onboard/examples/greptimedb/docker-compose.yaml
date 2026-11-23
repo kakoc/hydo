@@ -1,0 +1,111 @@
+# GreptimeDB v1.3.1 in cluster mode, in the shape of a production deployment and small in memory:
+# one etcd as the metasrv's store (the documented default), one metasrv with region failover on,
+# two frontends, two datanodes, the region WAL in Kafka (the remote WAL that region failover
+# needs), and the data on object storage (S3). The configuration files are in ../config.
+# Under hydo, the S3 server is hydo's S3 emulator (hydo/hydo.yaml, emulators:); here it is MinIO,
+# so that `docker compose up` runs the same cluster for a reproduction outside hydo.
+services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.6.17
+    entrypoint: ["/usr/local/bin/etcd"]
+    command: ["--name=etcd", "--data-dir=/var/lib/etcd",
+              "--listen-client-urls=http://0.0.0.0:2379", "--advertise-client-urls=http://etcd:2379",
+              "--listen-peer-urls=http://0.0.0.0:2380", "--initial-advertise-peer-urls=http://etcd:2380",
+              "--initial-cluster=etcd=http://etcd:2380", "--initial-cluster-state=new",
+              "--heartbeat-interval=250", "--election-timeout=1250"]
+    volumes: ["etcd:/var/lib/etcd"]
+    healthcheck:
+      test: ["CMD", "etcdctl", "--endpoints=http://127.0.0.1:2379", "endpoint", "health"]
+    restart: unless-stopped
+
+  kafka:
+    image: apache/kafka:3.9.1
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["/opt/kafka/bin/kafka-storage.sh format --ignore-formatted -t 4L6g3nShT-eMCtK--X86sw -c /etc/kafka-hydo/server.properties && exec /opt/kafka/bin/kafka-server-start.sh /etc/kafka-hydo/server.properties"]
+    environment:
+      KAFKA_HEAP_OPTS: "-Xmx320m -Xms320m"
+      LOG_DIR: /tmp/kafka-logs
+    volumes:
+      - "./config/kafka.properties:/etc/kafka-hydo/server.properties:ro"
+      - "kafka:/var/lib/kafka"
+    restart: unless-stopped
+
+  # the S3 server that hydo's emulator also runs (rclone serve s3), with the bucket greptimedb
+  s3:
+    image: rclone/rclone:1.76.0
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["mkdir -p /data/greptimedb && exec rclone serve s3 --addr :9000 --auth-key hydo,hydo-secret /data"]
+    volumes: ["s3:/data"]
+    restart: unless-stopped
+
+  metasrv:
+    image: greptime/greptimedb:v1.3.1
+    command: ["metasrv", "start", "-c", "/etc/greptimedb/metasrv.toml"]
+    volumes: ["./config/metasrv.toml:/etc/greptimedb/metasrv.toml:ro"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://metasrv:3000/health"]
+    depends_on:
+      etcd: {condition: service_healthy}
+      kafka: {condition: service_started}
+    restart: unless-stopped
+
+  datanode0:
+    image: greptime/greptimedb:v1.3.1
+    command: ["datanode", "start", "-c", "/etc/greptimedb/datanode.toml", "--node-id=0",
+              "--grpc-server-addr=datanode0:3001"]
+    volumes:
+      - "./config/datanode.toml:/etc/greptimedb/datanode.toml:ro"
+      - "dn0:/greptimedb_data"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://datanode0:5000/health"]
+    depends_on:
+      metasrv: {condition: service_healthy}
+      s3: {condition: service_started}
+    restart: unless-stopped
+
+  datanode1:
+    image: greptime/greptimedb:v1.3.1
+    command: ["datanode", "start", "-c", "/etc/greptimedb/datanode.toml", "--node-id=1",
+              "--grpc-server-addr=datanode1:3001"]
+    volumes:
+      - "./config/datanode.toml:/etc/greptimedb/datanode.toml:ro"
+      - "dn1:/greptimedb_data"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://datanode1:5000/health"]
+    depends_on:
+      metasrv: {condition: service_healthy}
+      s3: {condition: service_started}
+    restart: unless-stopped
+
+  frontend0:
+    image: greptime/greptimedb:v1.3.1
+    command: ["frontend", "start", "-c", "/etc/greptimedb/frontend.toml",
+              "--grpc-server-addr=frontend0:4001"]
+    volumes: ["./config/frontend.toml:/etc/greptimedb/frontend.toml:ro"]
+    ports: ["4000:4000"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://frontend0:4000/health"]
+    depends_on:
+      datanode0: {condition: service_healthy}
+      datanode1: {condition: service_healthy}
+    restart: unless-stopped
+
+  frontend1:
+    image: greptime/greptimedb:v1.3.1
+    command: ["frontend", "start", "-c", "/etc/greptimedb/frontend.toml",
+              "--grpc-server-addr=frontend1:4001"]
+    volumes: ["./config/frontend.toml:/etc/greptimedb/frontend.toml:ro"]
+    ports: ["4010:4000"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://frontend1:4000/health"]
+    depends_on:
+      datanode0: {condition: service_healthy}
+      datanode1: {condition: service_healthy}
+    restart: unless-stopped
+
+volumes:
+  etcd: {}
+  kafka: {}
+  s3: {}
+  dn0: {}
+  dn1: {}

@@ -1,0 +1,76 @@
+# The datanodes of the GreptimeDB example: the region WAL in Kafka and the data on S3, with the
+# write cache that the documentation recommends for object storage. Each datanode gets its
+# --node-id and --grpc-server-addr on its command line. Values that differ from
+# config/datanode.example.toml of v1.3.1 say why.
+require_lease_before_startup = true
+init_regions_in_background = false
+
+[http]
+addr = "0.0.0.0:5000"
+
+[grpc]
+bind_addr = "0.0.0.0:3001"
+runtime_size = 4
+
+[meta_client]
+metasrv_addrs = ["metasrv:3002"]
+timeout = "3s"
+ddl_timeout = "10s"
+connect_timeout = "1s"
+
+[wal]
+provider = "kafka"
+broker_endpoints = ["kafka:9092"]
+max_batch_bytes = "1MB"
+consumer_wait_timeout = "100ms"
+overwrite_entry_start_id = false
+
+[storage]
+data_home = "/greptimedb_data"
+type = "S3"
+bucket = "greptimedb"
+root = "data"
+access_key_id = "hydo"
+secret_access_key = "hydo-secret"
+endpoint = "http://s3:9000"
+region = "us-east-1"
+enable_virtual_host_style = false
+
+[storage.http_client]
+connect_timeout = "5s"
+timeout = "10s"
+
+[[region_engine]]
+[region_engine.mito]
+num_workers = 2
+# The default: a region flushes by itself every 10 minutes, after the workload. The workload's
+# ADMIN commands flush and compact the tables during the run.
+auto_flush_interval = "10m"
+# Small buffers, so that writes also trigger flushes (the defaults are 1GB and 2GB).
+global_write_buffer_size = "32MB"
+global_write_buffer_reject_size = "64MB"
+sst_meta_cache_size = "16MB"
+vector_cache_size = "16MB"
+page_cache_size = "32MB"
+selector_result_cache_size = "16MB"
+enable_write_cache = true
+write_cache_size = "128MiB"
+write_cache_ttl = "8h"
+manifest_checkpoint_distance = 10
+experimental_manifest_keep_removed_file_count = 256
+experimental_manifest_keep_removed_file_ttl = "1h"
+manifest_cache_size = "16MB"
+
+[region_engine.mito.index]
+staging_size = "64MB"
+metadata_cache_size = "8MiB"
+content_cache_size = "16MiB"
+result_cache_size = "16MiB"
+
+# The log level is warn, with info for the code that moves and opens regions: at info a run
+# with faults wrote more than the 16 MiB of lines that hvx keeps per boot (RESULTS.md, "What hydo
+# lacked").
+[logging]
+dir = "/tmp/greptimedb_logs"
+level = "warn,mito2::region::opener=info,datanode::alive_keeper=info"
+append_stdout = true

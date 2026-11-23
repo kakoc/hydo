@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: count(*) and sum(v) of each table, also per region, agree with a full read of the table
+exec /bin/gtc check query

@@ -91,7 +91,9 @@ These findings hold for every type of system:
 - **What it misses.** hydo's S3 emulator (`emulators:` with `use: s3`, `rclone serve s3`) was not
   checked for conditional writes. If it ignores the two headers, every race of two writes
   succeeds, and the system's handling of a conflict never runs. The user ran the object store
-  MinIO as a service of its own instead.
+  MinIO as a service of its own instead. Since 0.5.0 the emulator answers both headers as S3
+  does. GreptimeDB's write cache and manifest cache were on in its example, and the manifest
+  cache gave its finding 1.
 - **Cost.** The feature's memory and its setup.
 
 ## Checks
@@ -300,7 +302,10 @@ These findings hold for every type of system:
   the rules.
 - **What it misses.** It found a bug alone in one of three ledgers. Every kind needs a review:
   15 entries in Blnk and 31 kinds in Formance. An id in a log line splits one kind into many
-  (`normalize:` fixes it).
+  (`normalize:` fixes it). On hvx the scan reads every service's whole log through the agent.
+  A run of a verbose system can pass the 16 MiB of lines that hvx keeps per boot. In
+  GreptimeDB's first exploration, with Kafka and five GreptimeDB services, such a run waited for
+  its wall limit, so the example turned the scan off.
 - **Cost.** One line, and the review of each new kind.
 
 ### Concurrent clients without faults
@@ -348,8 +353,11 @@ These findings hold for every type of system:
     merge and a fetch off, `disk=cut | run C=40` lost merged parts on both replicas. Replication
     then stopped for good with rows on one replica. In the first exploration seeds 1 and 5 did it
     blind, and the power cut of seed 8 passed. With every fsync setting on, no cut did.
-- **What it misses.** A relaxed durability setting loses writes by design: make the setting a
-  build parameter and run its durable value, or every value with `hydo explore --configs`. A lying disk or disk I/O errors break the disk's own
+- **What it misses.** hydo's S3 emulator writes its objects without an fsync, so a cut of the
+  guest loses objects that it acknowledged. In GreptimeDB a query of the recovery boot read an
+  SST object shorter than its manifest says. A system whose data lives in object storage needs
+  one service's power loss (`L=`) instead. A relaxed durability setting loses writes by
+  design: make the setting a build parameter and run its durable value, or every value with `hydo explore --configs`. A lying disk or disk I/O errors break the disk's own
   promise. In Valkey's swarm exploration all 28 failures had a disk fault. Use `--durable-only`
   once the first exploration shows them.
 - **Cost.** One recovery boot per cut. In Redpanda most of a 3 to 14 minute schedule went to
@@ -396,6 +404,11 @@ These findings hold for every type of system:
     step before it, the power loss lost a batch that vminsert had stored on that node only
     (finding 3). Damaged files stopped vmstorage at its start in 11 of 30 schedules, and a
     zeroed range returned another value from vmselect.
+  - GreptimeDB (finding 1): seed 13 of 20 cut the datanode's cached copy of a manifest delta.
+    The datanode then stopped at every start, while the object store kept the intact delta. The
+    copy is a cache, so the datanode could read the object again; with the default uncompressed
+    manifests it does not notice the short copy. Six power losses of a datanode (`L=`, also
+    `:strict`) lost cached copies whole and broke nothing.
 - **What it misses.** NATS's 3.3 and 3.5 need faults in a narrow order on chosen nodes, and the
   explorer did not draw them; they were written by hand. `G=` picks its file and offset from its
   seed, so one token damages other files on another image. The explorer never draws
@@ -457,6 +470,10 @@ These findings hold for every type of system:
   restart. Queries stayed running forever. The exploration of 60 seeds with `--strategy process`
   found it blind, and the shrinker reduced a schedule of 4 faults to `P=worker_2@28+2` alone.
 - **What it misses.** A pause shorter than the timeout changes nothing that the peers see. A
+  pause longer than the lease can find a system that counts its lease on the monotonic clock.
+  In GreptimeDB a pause of a datanode for 25 s made the metasrv fail its regions over
+  (`P=datanode0@10+25`). Afterwards the datanode refused the writes that reached it, because its
+  lease had run out. So did 11 s pauses inside a write's WAL append. A
   15 s pause of a Hatchet engine broke nothing, and a kill at the same step lost runs (the entry
   "Kills of the process that holds acknowledged work"). The pause needs the check that every
   accepted operation ends. Without it, a stuck query was an unknown outcome, and the run passed.
@@ -504,7 +521,10 @@ These findings hold for every type of system:
   the audit found one place, in a connector: the server reads the wall clock through its own
   `IggyTimestamp`. A step back of a day there stopped a partition's message expiry for a day,
   because the cleaner deletes the oldest segments first by timestamp. That follows the
-  documented rule, so it is a clock effect and no bug.
+  documented rule, so it is a clock effect and no bug. In GreptimeDB's 1,833 files the audit
+  named 4 functions, none of the metasrv's: its failure detectors, leases, and region
+  migration read the wall clock through the project's own `current_time_millis()`. Steps from
+  30 days back to a year forward, alone and in the blind schedules that drew them, broke nothing.
 - **Cost.** The shrinker spends hours on clock steps; stop an exploration once its failures are
   understood. It runs on every engine.
 
@@ -598,7 +618,11 @@ These findings hold for every type of system:
   - Saleor (finding 1): the lost refund request needs a delayed refund answer and a kill of the
     worker. Each fault alone passes.
 - **What it misses.** A fake answers only what it was written to answer. Medusa's first fake
-  could not send Stripe's signed webhooks, so its finding 2 was partly the fake's.
+  could not send Stripe's signed webhooks, so its finding 2 was partly the fake's. In
+  GreptimeDB, S3 errors, delays, drops and resets on every route of the S3 emulator broke
+  nothing. They made DDL statements end without an answer and take effect later, which the
+  check must allow. GreptimeDB's production path makes no conditional writes: only its
+  experimental object-store WAL does, so `put_if_absent` faults met no request.
 - **Cost.** Fast runs: checkout ran 200 schedules in 242 s on hvx with 4 workers.
 
 ### Pauses of the workload or of one thread
