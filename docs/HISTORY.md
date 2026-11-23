@@ -21004,3 +21004,127 @@ Retro: GreptimeDB v1.3.1, hvx, 2026-11-23
   features behind a flag" of `hydo guide strategies` are updated.
 
 **What is left.** Open item 171.
+
+## Milestone 345 (tentative number): reactions aimed at one event, options the engine cannot use, and one list of several explorations' problems
+
+The user said "do" on 2026-11-23 to three explorer changes learned from automated onboardings.
+Each part is its own commit. None moves a recorded value: they are host-side changes, and a
+schedule without the new forms sends the same commands as before. The fingerprint epoch stays 5.
+
+**1. Reactions aimed at one event.** `--reactive` draws one reaction per schedule over every
+event and six fixed delays (`--kill-now`: ten). A window of one or two milliseconds after one
+event then gets a few hits in a thousand schedules, as Meilisearch's index swap did. The new
+form tries a grid instead:
+
+```sh
+hydo explore --reactive-at <event>[#<k>][@<step>][,...] [--react-delays A..B[/STEP] | A,B,C] [--react-actions kill-now,kill,cut,...]
+```
+
+- The names. The options join `--react-events` in one family, so every `--react-` option shapes
+  a reaction; a bare `--delays` would say nothing about what it delays. `--reactive-at` keeps the
+  name the request gave.
+- The grid. Seed `n` is cell `n - 1`, in the order event, delay, action, so every moment after the
+  event meets every action before the next moment. `kill-now` and `kill` name one action per
+  service; the default is `kill-now,kill,cut`, each only where the manifest's `faults:` and the
+  engine keep it (the probe renders a schedule with the action and looks for it). An action named
+  by hand that they would drop is refused. The default delays are `0..50`, the range of
+  `--kill-now`'s draws. A grid of more than 100,000 cells is refused.
+- The schedules. A seed of the first round is the plain workload with its one reaction
+  (`disk=cut` for a power cut), so nothing else moves the moment. Seeds past the grid try it
+  again with the seed's composition, walk and timing streams. Without `--seeds` the exploration
+  runs the grid once; `hydo explore` no longer adds its default `--seeds 1-20` then. Each
+  schedule is an ordinary one: it is run again, shrunk, replayed and saved. `--reactive`,
+  `--kill-now`, `--sweep`, `--steer` and `--search` do not go with it. The explorer's first line
+  says that it draws no fault, and the next line describes the grid in words.
+- A later record of an event. `A=<event>#<k>...` acts at the k-th record of the event from the
+  arming point. The full form is `A=<event>[#<k>][@<step>][+<ms>]:<action>`; `#1` is not written,
+  as `@0` and `+0` are not. The host's reaction counts the event's records. The kill at the
+  event's moment gets a relay script that counts them in the guest: for the first record the
+  script is Milestone 305's byte for byte (`relay_script(1) == RELAY`), so every earlier
+  schedule sends the same command. The shrinker tries the first record in place of the k-th.
+  The words of a schedule say "for the 3rd time".
+- The moment a write is applied. MANIFEST.md and `hydo guide faults` say how to give it an
+  event: the client polls the operation's status and writes a record when the server reports it
+  started or finished. A reaction to a service's own log line was not built. busybox's `tail -f`
+  reads a file once a second, which is late for a window of a few milliseconds, and a service's
+  output goes to its log file, not to the console that the relay sits over. Such a reaction would
+  need a relay of its own over each service's output.
+
+The proof ran on the Mac engine, on the Meilisearch example built with this tree at the
+fingerprint epoch 5 (`cb5eb6c3…`), with 2 workers of 1,536 MiB. On this image the saved
+regression `A=meili.swap_acked@20+14:kill-now-meilisearch` passes: the window moved with the
+image's bytes, as its RESULTS.md says it does.
+
+- `hydo explore --reactive-at meili.swap_acked@20` gave the grid of 153 schedules (51 delays,
+  three actions) in 4 minutes 24 seconds, with its shrinks. Finding 1, the swap that runs twice
+  (`VIOLATION [swap] sa and sb are swapped otherwise than # succeeded swaps say`), came first at
+  seed 29, `A=meili.swap_acked@20+9:kill-meilisearch`. It came again at seeds 32, 34 and 37:
+  `kill-meilisearch` at 10 ms and `kill-now-meilisearch` at 11 and 12 ms. The edit that runs
+  twice came at seeds 5, 8, 11, 13 and 16 (`kill-meilisearch` at 1 to 3 ms,
+  `kill-now-meilisearch` at 4 and 5 ms). Every power cut broke `docs` or `dumps`, findings 2 and 3. All 60 failures failed again
+  the same way, and each signature shrank to its one reaction.
+- The blind exploration of Milestone 309 on the same image, `--strategy process --reactive fault
+  --react-events meili.swap_acked,meili.edit_acked,meili.add_acked --kill-now --seeds 1-360`, ran
+  the swap twice first at seed 101, and at 5 of its 360 seeds (101, 138, 158, 160 and 307), in
+  12 minutes 29 seconds. The aimed grid found it at its 29th schedule, at 4 of 153 cells.
+- `--reactive-at meili.swap_acked`, armed from the start, ran the swap twice first at seed 20
+  (`kill-meilisearch` 6 ms after the first swap's `202`) and again at seed 25
+  (`kill-now-meilisearch` at 8 ms), in 4 minutes 43 seconds.
+
+**2. Options the engine or the image cannot use.** `hydo explore` already refused a few options
+before any VM: `--more-faults` on the Mac and KVM engines, `--block-faults` on hvx, `--vcpus 2`
+on the Mac, `--cluster-faults` without `groups:`, `--upgrades` without `versions:`. Other options
+drew schedules that the engine then refused one by one, or drew nothing. The new module
+`hydo_explore::refuse` asks before the first run, with the existing rules:
+
+- For each option that draws a kind of its own (`--timing`, `--preempt`, `--more-faults`,
+  `--turns`, `--pause-workload` and `--pause-thread`, `--block-faults`, `--storage-faults`), it
+  draws the first 64 schedules with only that option on and asks `hydo_engine::refusal_on`, the
+  rule each engine applies before a VM (Milestone 208), with the exploration's vCPUs and the
+  image's epoch. A refused draw refuses the option with the engine's reason and one example.
+  `--timing` with `--vcpus 2` on KVM is such a case: its tick jitter is one vCPU's.
+- `--storage-faults` on a manifest without a service with `storage:`, or whose `faults:` allows
+  neither `corrupt` nor `powerloss`, and `--block-faults` on an image without a data disk, are
+  refused: they would draw nothing.
+- `--react-delays` and `--react-actions` without `--reactive-at` are refused.
+
+Each refusal is one line with the option, the reason and what to use instead. The probe prints
+every line it has, and the explorer stops with status 5, as Milestone 328's refusals do, with
+the JSON line for a program. The probe costs no VM. Every option of the explorer's own refusal
+test (`--timing --preempt --new-faults`, and `--more-faults` on hvx) passes on the three engines.
+
+**3. One list of several explorations' problems.** `hydo report A B C` and `hydo report --html A
+B C [-o FILE]` read several explorations of one image and list each problem once. The rounds
+keep their own documents: `hydo explore --merge` merges the shards of one exploration, which
+share one command line, and these rounds do not. Each round's problems come from its own story,
+the same words as its own report. Two failures are one problem when their class group and
+signature agree, the key that each exploration shrinks by, and the keys that one round's report
+shows as one problem stay one. A problem is shown as the first round that found it shows it,
+with that round's minimal schedule, its command, and its own problem number for `hydo inspect
+diagnose`. A line under its title names every round and seed that showed it, and the top of the
+list names each round with its seeds and the options that tell it from the others. The error
+lines of new kinds are one problem with the rounds that wrote them. Two images (by their sha256)
+are refused. The page is the first folder's `report-merged.html`.
+
+On the three Meilisearch rounds of part 1, `hydo report hydo-out/blind hydo-out/aim20
+hydo-out/aim0` listed 5 problems, where the three reports list 5, 3 and 3, 11 in all. The swap
+and the edit that run twice, one problem in each report, read "in 3 of 3 explorations: 1 (seeds
+101, 123, 138, 151, 158, 160, 185, 307 and 1 more), 2 (seeds 5, 8, 11, 13, 16, 29, 32, 34 and 1
+more) and 3 (seeds 20 and 25)". A line names at most 8 seeds and counts the rest. The documents
+lost after a power cut, the empty dumps and the new error line showed in all three rounds, and a
+lost snapshot after a kill and a cut in the blind round only. A key that two rounds share takes
+the first round's words: the aimed rounds' lost documents after a cut joined the blind round's
+problem, whose minimal schedule also pauses the service. `hydo report --html` of the three wrote
+a page of 16 KiB.
+
+**Tests.** `hydo-schedule`'s language test reads and refuses the `#<k>` forms. The controller's
+reaction tests run a later record with the host's reaction and with the relay, and a unit test
+runs the relay's counting line in `sh`. The explorer's `reactive::an_aimed_exploration_tries_every_cell_in_turn`
+checks the grid's order, its canonical schedules and the second round on the Meilisearch
+manifest; `refusals::options_the_engine_or_the_image_cannot_use_are_refused` checks the
+refusals and that the engines' own options pass. `hydo::explore_refusal` runs an aimed
+exploration on the scripted engine (8 schedules without `--seeds`) and the refusal of
+`--storage-faults` with status 5. `merged::a_problem_two_rounds_found_is_listed_once` merges
+two rounds. No explorer or controller golden moved.
+
+**What is left.** Open item 173.
