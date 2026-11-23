@@ -312,6 +312,10 @@ fn host_from(rec: &Recorded, evs: Vec<AgentEv>) -> Option<Diagnosis> {
             "{core}: the phase ran out of its time limit (a command that never ends, a stuck \
              service, or a workload slower than workload.timeout)"
         );
+    } else if core.starts_with("ERROR agent lines full") {
+        // Milestone 348: the hvx engine's verdict names the cause and what to change
+        d.failure = "vm".into();
+        d.summary = core.clone();
     } else if core.starts_with("ERROR vm") || core.starts_with("ERROR harness") {
         d.failure = "vm".into();
         d.summary = format!("{core}: the guest or the engine stopped (see engine.log)");

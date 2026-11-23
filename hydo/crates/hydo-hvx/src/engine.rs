@@ -101,6 +101,26 @@ struct Boot {
 /// (each byte crosses as hex): `TIMEOUT check` after about 386 reads.
 pub const PBUF_CAP: usize = 16 << 20;
 
+/// Milestone 348: what [`Engine::run_until_any`] returns when the agent's lines filled
+/// [`PBUF_CAP`]. The host then waits for a reply that is lost, so the run ends at once with an
+/// ERROR that says why, instead of at its wall limit with `TIMEOUT` (open item 171).
+const LINES_FULL: i32 = -9;
+
+/// The verdict of a phase (`workload`, `check`, `recovery`) that [`Engine::run_until_any`]
+/// ended with `r` < 0 (but -3, the host's own end).
+fn phase_end(r: i32, phase: &str) -> String {
+    match r {
+        -2 => format!("TIMEOUT {phase}"),
+        LINES_FULL => format!(
+            "ERROR agent lines full {phase}: the agent wrote more than {} MiB of lines in this \
+             boot, which the hvx engine does not keep; the error-log scan of large service logs \
+             (errors:) is the usual cause: lower the services' log level, or set errors: false",
+            PBUF_CAP >> 20
+        ),
+        _ => format!("ERROR vm {phase}"),
+    }
+}
+
 /// M138: the snapshot a reusable VM was restored to: its RAM pages and its data partition's,
 /// so that the next in-place restore knows which pages may differ beside the dirty ones.
 struct Tgt {
@@ -1058,7 +1078,7 @@ impl Core {
                     self,
                     "hvx: agent lines full: the agent wrote more than {PBUF_CAP} bytes of lines \
                      through the host-call port in this boot; later lines are lost, and the run \
-                     waits for them until its wall limit"
+                     ends with an ERROR"
                 );
             }
         }
@@ -1979,7 +1999,8 @@ impl Core {
 
     /// `run_until_any` (the C engine's, without the shell images' console markers): -1 VM error,
     /// -2 wall limit, -3 the host ended the run, -4 the host took S1 in a `--control boot one`
-    /// boot, -7 the host said DISKOFF or CUT.
+    /// boot, -7 the host said DISKOFF or CUT, [`LINES_FULL`] the agent's lines filled
+    /// [`PBUF_CAP`].
     fn run_until_any(&mut self, b: &mut Boot) -> i32 {
         loop {
             let r = self.run_until_boot(b);
@@ -2149,6 +2170,10 @@ impl Core {
                     boot::exit_reason_name(reason)
                 );
                 return -1;
+            }
+            // Milestone 348: a reply the host waits for is lost; nothing more can happen
+            if b.pbuf_full {
+                return LINES_FULL;
             }
             if now() - t0 > self.o.wall_secs {
                 return -2;
@@ -2323,11 +2348,7 @@ impl Core {
         }
         let end: End = 'body: {
             if r < 0 && r != -3 {
-                verdict = if r == -2 {
-                    "TIMEOUT workload".into()
-                } else {
-                    "ERROR vm workload".into()
-                };
+                verdict = phase_end(r, "workload");
                 break 'body End::Out;
             }
             if self.o.phases {
@@ -2455,11 +2476,7 @@ impl Core {
                 let r = self.run_until_any(&mut b);
                 self.padd(Ph::Check, pht);
                 if r < 0 && r != -3 {
-                    verdict = if r == -2 {
-                        "TIMEOUT check".into()
-                    } else {
-                        "ERROR vm check".into()
-                    };
+                    verdict = phase_end(r, "check");
                     break 'body End::OutSave;
                 }
                 if self.o.phases {
@@ -2541,11 +2558,7 @@ impl Core {
             from = self.c.from; // Milestone 263: the last boot's console after reboots
             self.padd(Ph::Recov, pht);
             if r < 0 && r != -3 {
-                verdict = if r == -2 {
-                    "TIMEOUT recovery".into()
-                } else {
-                    "ERROR vm recovery".into()
-                };
+                verdict = phase_end(r, "recovery");
                 break 'body End::OutSave;
             }
             if self.o.phases {
@@ -2783,8 +2796,8 @@ impl Core {
             } else {
                 Self::last_verdict(b, 0)
             }
-        } else if r == -2 {
-            "TIMEOUT boot".into()
+        } else if r == -2 || r == LINES_FULL {
+            phase_end(r, "boot")
         } else if r == -5 {
             "ERROR harness boot vm".into()
         } else {
@@ -3979,6 +3992,18 @@ mod tests {
         assert_eq!(GuestClock::Tsc.tsc_step(), FINE_TSC_STEP);
         assert_eq!(FINE_TSC_STEP, 1_600);
         assert_eq!(BOOT_TSC_STEP, 0x10000);
+    }
+
+    /// Milestone 348: a boot whose agent lines filled the buffer ends with an ERROR that says
+    /// so; the wall limit and a VM's error keep their verdicts.
+    #[test]
+    fn a_full_line_buffer_ends_the_phase_with_its_own_error() {
+        use super::{phase_end, LINES_FULL};
+        assert_eq!(phase_end(-2, "workload"), "TIMEOUT workload");
+        assert_eq!(phase_end(-1, "check"), "ERROR vm check");
+        let v = phase_end(LINES_FULL, "check");
+        assert!(v.starts_with("ERROR agent lines full check: "), "{v}");
+        assert!(v.contains("16 MiB") && v.contains("errors: false"), "{v}");
     }
 
     /// `hydo run` finds the note by its mark, and the note names the module's limit.
