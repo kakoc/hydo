@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# INCR of one of four counters, then WAIT 2
+exec /bin/kvc op incr

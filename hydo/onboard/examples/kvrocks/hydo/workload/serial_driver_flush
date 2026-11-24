@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# FLUSHMEMTABLE on the master: its memtables become SST files, as with a larger data set
+exec /bin/kvc flush

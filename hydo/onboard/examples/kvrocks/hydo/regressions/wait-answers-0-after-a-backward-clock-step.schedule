@@ -1,0 +1,10 @@
+# A new candidate in Kvrocks 2.17.0 and on `unstable` (RESULTS.md, finding 2). With the client's
+# mode master (the token M), no WAIT follows the writes. After a backward step of the wall clock by
+# 300 s before step 17, both replicas hold every write (eventually_converge holds), but WAIT 2 on
+# the master answers 0 for the step's length, and INFO replication reports a lag for both. A
+# replica sends its periodic REPLCONF ACK only when the wall clock has moved a second past its
+# last ack (src/cluster/replication.cc, sendReplConfAck), and an idle master sends pings, which do
+# not force an ack. Without the step the same run passes.
+# commands: anytime_read first_init parallel_driver_cas parallel_driver_del parallel_driver_hset parallel_driver_incr parallel_driver_lua parallel_driver_over parallel_driver_rpush parallel_driver_sadd parallel_driver_set parallel_driver_setex parallel_driver_txn parallel_driver_zadd serial_driver_failover serial_driver_flush
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=0 | run M=master T=17:-300 W=740c6cfa,p1,q3,r500

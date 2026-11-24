@@ -1,0 +1,11 @@
+# A new candidate in Kvrocks 2.17.0 and on `unstable` (RESULTS.md, finding 1). A failover leaves
+# the old master kv1 with one late write that the new master lacks, so kv1 rejoins by a full
+# synchronization. It fetches the new master's checkpoint (SST files, MANIFEST, CURRENT, a WAL)
+# with WritableFile::Append and renames the files and the directory into place, with no fsync
+# (src/cluster/replication.cc, fetchFile; src/storage/storage.cc, RestoreFromCheckpoint), and
+# destroys its old database. A power cut 5.5 s later, with rocksdb.write_options.sync yes, leaves
+# the fetched SST files empty: kv1 stops at every start with "Corruption: Sst file size mismatch
+# between expected 2080 and file system 0".
+# commands: anytime_read first_init parallel_driver_cas parallel_driver_del parallel_driver_hset parallel_driver_incr parallel_driver_lua parallel_driver_over parallel_driver_rpush parallel_driver_sadd parallel_driver_set parallel_driver_setex parallel_driver_txn parallel_driver_zadd serial_driver_failover serial_driver_flush
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut dseed=0 | run W=6311ab23,p4,q3,r500 A=kvrocks.failover_done+5500:cut

@@ -14,7 +14,7 @@ results page: new as far as the search found, known, by design, or a deployment 
 
 | system | its promise | the techniques that found most | where they found bugs |
 |---|---|---|---|
-| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus |
+| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults; failovers by the client with a late write | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus, Kvrocks |
 | object store | an acknowledged object stays as written; a listing shows what exists | a listing compared with a read of each key; kills and pauses of one node; clock steps | Garage |
 | log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults | Redpanda, NATS |
 | job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate |
@@ -416,6 +416,13 @@ These findings hold for every type of system:
     never answered again. A check that the cluster answers within 120 s of the recovery boot's
     start (`eventually_available`) caught it; without one the run ended in an ERROR of a timed
     out check.
+  - Kvrocks (finding 1): a node that has just rejoined by a full synchronization writes the
+    master's checkpoint without a sync. A cut in the next seconds left its SST files empty, and
+    it stopped at every start. Blind, a cut at the end of the workload did it, shrunk to
+    `disk=cut | run C=40` with the composition. One node's power loss (`L=`) did it too. The
+    checkpoint held SST files only after the client ran `FLUSHMEMTABLE` on the master. A small
+    data set fits in the memtables, and its checkpoint is a WAL, which RocksDB's open replays
+    into a synced file.
 - **What it misses.** hydo's S3 emulator writes its objects without an fsync, so a cut of the
   guest loses objects that it acknowledged. In GreptimeDB a query of the recovery boot read an
   SST object shorter than its manifest says. A system whose data lives in object storage needs
@@ -588,6 +595,13 @@ These findings hold for every type of system:
     clock alone, while every other write takes the newest version's time plus 1. Blind
     in 23 of 200 schedules, shrunk to one step, `T=17:-162000`. A read through another
     node right after each acknowledged write showed it at once.
+  - Kvrocks (finding 2): a replica acknowledges only when the wall clock has moved a second past
+    its last acknowledgement. After a step back, `WAIT 2` on an idle master answered 0 for the
+    step's length, while both replicas held every write. Blind in 9 of 40 schedules of the mode
+    where the master's reply alone acknowledges a write, shrunk to `T=17:-648000` alone. With a
+    `WAIT` after every write it never showed, because each `WAIT` forces an acknowledgement. A
+    check that `WAIT` answers after the heal (`eventually_wait`) beside the check that the data
+    agrees told the two apart.
 - **What it misses.** Many clock effects are by design. Examples are Temporal's delayed timers,
   and River's runs of every periodic job that a forward step skipped. The audit reads text. It
   found no place in Redpanda's 2,694 C++ files, whose transaction expiry uses Seastar's wall
@@ -607,9 +621,36 @@ These findings hold for every type of system:
   30 days back to a year forward, alone and in the blind schedules that drew them, broke nothing.
   The audit looks for durations only. Garage orders an object's versions by wall-clock
   timestamps, a last-writer-wins order, and the audit named only the request signatures' date
-  checks there, not the copy of Garage's finding 1.
+  checks there, not the copy of Garage's finding 1. In Kvrocks's 255 C++ files it named
+  none: the server reads the wall clock through its own `util::GetTimeStamp`, and finding 2's
+  place was found by reading the replication code.
 - **Cost.** The shrinker spends hours on clock steps; stop an exploration once its failures are
   understood. It runs on every engine.
+
+### Failovers by the client, with a late write
+
+- **What it is.** The client fails a master over to a replica, as an operator's tool such as
+  Redis Sentinel does, during the run. After the promotion it sends one more write to the old
+  master, as a client does that has not learned of the failover yet. The old master's history
+  then differs from the new master's, so it must rejoin by a full synchronization, the path of
+  a store's replication that the faults reach least.
+- **What to write.** A `serial_driver_` command that promotes a replica and records the new
+  master in a synced file on the data disk. It writes once to the old master and records that
+  write's outcome. Then it points every node at the new master and makes the roles last across
+  restarts. Give
+  the group a `primary:` command that prints the recorded master, and an event after the
+  failover for reactions. The Kvrocks example's `kvc failover` is one to copy.
+- **When it fits.** A store with a master and replicas whose failover is outside the store:
+  Redis-compatible stores, databases with an external failover manager.
+- **What it found.** Kvrocks (finding 1): the old master and every replica that had taken the
+  late write rejoined by a full synchronization. A power cut or one node's power loss in the
+  next seconds left that node unable to start. Blind in 10 of 60 schedules, and in 14 of 30
+  cuts aimed after the failover's event.
+- **What it misses.** The failover runs between workload steps, so a fault inside its own steps
+  comes only from a reaction at its events. The client's failover is not Sentinel's: it has no
+  quorum and no election.
+- **Cost.** A synced file for the master's name, and a check that the replicas agree with the
+  master after the heal. It runs on every engine.
 
 ### Cluster faults and group selectors
 
@@ -692,6 +733,11 @@ These findings hold for every type of system:
     LMDB may undo its last transaction at a crash there, but Garage commits other transactions
     within milliseconds. The kills of one node in the same grid showed finding 2, a listing of
     deleted keys.
+  - Kvrocks (finding 1): a scan of seconds, not milliseconds. `--reactive-at
+    kvrocks.failover_done --react-delays 500..25000/2500 --react-actions cut` cut the guest 0.5 s
+    to 23 s after a failover, and 14 of 30 schedules left a node that did not start again. A
+    grid with `--seeds` runs one point per seed, so the whole grid three times needs as many
+    seeds as three grids have points.
 - **What it misses.** The window moves with the program's bytes. A second build of
   `mender-update` moved it to 65, 70, and 75 ms.
 - **Cost.** One run per delay and action: 153 runs for one service and the 51 default delays.

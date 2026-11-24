@@ -1,0 +1,49 @@
+# Apache Kvrocks 2.17.0 (the newest release, 2026-09-19) as a master with two replicas, the shape
+# of Kvrocks's master-replica replication (kvrocks.conf, "slaveof"). Each node keeps its RocksDB
+# data and its configuration in a volume of its own. The test client fails the master over to a
+# replica with SLAVEOF and CONFIG REWRITE, as Redis Sentinel does. The nodes run as root, so that
+# a fresh volume needs no change of owner; the image's default user is 999.
+services:
+  kv1:
+    image: apache/kvrocks:2.17.0
+    user: root
+    entrypoint: ["sh", "/etc/kvc/start.sh"]
+    environment:
+      KVROCKS_SYNC: "yes"
+      KVROCKS_RSID: "yes"
+    volumes:
+      - ./config/kvrocks.conf:/etc/kvc/kvrocks.conf:ro
+      - ./config/start.sh:/etc/kvc/start.sh:ro
+      - kv1:/var/lib/kvrocks
+    ports: ["6666:6666"]
+    restart: unless-stopped
+  kv2:
+    image: apache/kvrocks:2.17.0
+    user: root
+    entrypoint: ["sh", "/etc/kvc/start.sh", "kv1"]
+    environment:
+      KVROCKS_SYNC: "yes"
+      KVROCKS_RSID: "yes"
+    volumes:
+      - ./config/kvrocks.conf:/etc/kvc/kvrocks.conf:ro
+      - ./config/start.sh:/etc/kvc/start.sh:ro
+      - kv2:/var/lib/kvrocks
+    depends_on: [kv1]
+    restart: unless-stopped
+  kv3:
+    image: apache/kvrocks:2.17.0
+    user: root
+    entrypoint: ["sh", "/etc/kvc/start.sh", "kv1"]
+    environment:
+      KVROCKS_SYNC: "yes"
+      KVROCKS_RSID: "yes"
+    volumes:
+      - ./config/kvrocks.conf:/etc/kvc/kvrocks.conf:ro
+      - ./config/start.sh:/etc/kvc/start.sh:ro
+      - kv3:/var/lib/kvrocks
+    depends_on: [kv1]
+    restart: unless-stopped
+volumes:
+  kv1: {}
+  kv2: {}
+  kv3: {}

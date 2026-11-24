@@ -1,0 +1,25 @@
+# Finding 1 found blind (RESULTS.md): seed 37 of exploration e2, shrunk to one power cut of the
+# whole guest at the end of the workload. Its last failover made kv1 rejoin by a full
+# synchronization, and the cut left the fetched SST files empty: kv1 stops at every start with
+# "Corruption: Sst file size mismatch between expected 1538 and file system 0".
+# found by `hydo explore` (seed 37): durable-defaults
+# verdict: HYDO-ORACLE: VIOLATION service cannot recover (committed data unrecoverable) (kv1)
+# composition: r0: parallel_driver_hset | r1: parallel_driver_setex | r2: parallel_driver_txn, parallel_driver_cas | r3: parallel_driver_sadd, parallel_driver_sadd | r4: parallel_driver_over, parallel_driver_sadd | r5: serial_driver_failover | r6: parallel_driver_setex | r7: parallel_driver_lua, parallel_driver_setex | r8: parallel_driver_cas, parallel_driver_lua | r9: parallel_driver_incr, parallel_driver_over 
+# commands: anytime_read first_init parallel_driver_cas parallel_driver_del parallel_driver_hset parallel_driver_incr parallel_driver_lua parallel_driver_over parallel_driver_rpush parallel_driver_sadd parallel_driver_set parallel_driver_setex parallel_driver_txn parallel_driver_zadd serial_driver_failover serial_driver_flush
+# command-sha: parallel_driver_cas 1ebb2509fdaa8dc9
+# command-sha: parallel_driver_del cdbd1534182d38a4
+# command-sha: parallel_driver_hset 8461c409b3a8262c
+# command-sha: parallel_driver_incr a45ccd807bcbbea2
+# command-sha: parallel_driver_lua 9860cb90acdf107f
+# command-sha: parallel_driver_over 54df2d5851234f29
+# command-sha: parallel_driver_rpush 889f3c806022589b
+# command-sha: parallel_driver_sadd eb761ca4edc430d8
+# command-sha: parallel_driver_set ac36cdbecedfe90e
+# command-sha: parallel_driver_setex aff957b386b4f44d
+# command-sha: parallel_driver_txn 6c56b68178f91a6c
+# command-sha: parallel_driver_zadd c97e49d8e4febb66
+# command-sha: serial_driver_failover 6e1309e50029ff31
+# command-sha: serial_driver_flush f5ddeb10cab31441
+# note: the resolved composition is too long for a schedule line; a saved regression carries it as W=@c81d05f8ed8b (unconfirmed: the explorer reproduced this failure with the composition's seed form and has not run this form; `hydo build` and then `hydo repro --regressions` run it and say whether it fails the same way)
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut dseed=0 | run C=40 W=d6d260d0,p3,q2,r500,oanytime_read

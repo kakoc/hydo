@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: within 120 s of the heal WAIT 2 on the master answers 2: both replicas acknowledged every write
+exec /bin/kvc check wait

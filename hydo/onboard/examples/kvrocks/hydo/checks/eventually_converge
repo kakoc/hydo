@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: within 120 s of the heal both replicas are connected and hold what the master holds, key for key
+exec /bin/kvc check converge

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# SET of a new string key, then WAIT 2 and a read of it on both replicas
+exec /bin/kvc op set
