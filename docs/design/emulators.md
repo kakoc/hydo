@@ -51,7 +51,7 @@ emulators:
 ```
 
 The keys are `use` (the catalog entry), `name` (default: the `use` value), `port`, `ref`, `tls`
-(Stripe only), `buckets` (S3 only) and `description`. A new top-level list keeps the format of
+(Stripe only), `buckets` and `durable` (S3 only), and `description`. A new top-level list keeps the format of
 `fakes:` as it is: a fake needs `port` and `routes`, and an emulator has neither.
 
 ## What an entry becomes
@@ -106,7 +106,50 @@ that needs objects at the start writes them in `provision:` or a `first_` comman
 An emulator's state lives in the guest. A power cut (`cf=`) loses what the emulator held in memory
 and what it did not flush, which the real provider would keep. Checks over the record of hydo's
 proxy survive a cut, because hydo-world carries the record into the recovery boot. Checks over an
-emulator's own state, such as Mailpit's mailbox, are valid in runs without a cut.
+emulator's own state, such as Mailpit's mailbox, are valid in runs without a cut. The S3 server's
+objects survive a cut with `durable: true` (the next section).
+
+## Objects that survive a power cut
+
+Real object storage keeps every object that it acknowledged. rclone 1.76.0 does not: its local
+backend (`backend/local/local.go`) writes an object's file and closes it without an `fsync`, and
+no option of the backend makes one. `rclone serve s3` writes an object under a temporary name and
+renames it into place, both through rclone's file layer, before it answers. The file's data and
+the rename then wait in the guest's page cache and journal for the next writeback. A power cut of
+the guest loses them. So the GreptimeDB example of Milestone 343 could not run `cut`.
+
+Four ways were compared:
+
+| Way | What it changes | Chosen |
+|---|---|---|
+| An option of rclone | nothing: rclone 1.76.0 has none | no |
+| A mount option such as `sync` | the whole data disk of every service: `sync` is a flag of the file system, not of a bind mount | no |
+| A sync in hydo's proxy before it forwards an answer | `hydo-world`, a pinned guest program, so every image's bytes at its next re-pin | no |
+| ext4's attribute `S` on the emulator's folders | one command in the emulator's `setup:`, for an entry that asks for it | yes |
+
+With `durable: true`, the `setup:` of an `s3` entry ends with `&& chattr +S /data/<name>
+/data/<name>/<bucket> ...`, with busybox's `chattr`. On a file with the attribute, every
+`write(2)` returns after the kernel wrote the data and the inode and flushed the disk's write
+cache (`generic_write_sync`). In a folder with it, a create, a rename, an unlink, and a mkdir commit
+the journal before they return (`IS_DIRSYNC`). New files and folders inherit the attribute. So the
+temporary file, its rename and a DELETE's unlink are on the disk before rclone answers, and the
+proxy forwards the answer after that. A copy is a read and a PUT, and a multipart upload that
+completes is a rename, so both are covered too.
+
+The key is opt-in, a format-1 addition. Without it the setup is the one of Milestone 242, so an
+image built without the key keeps its bytes and its fingerprints. Every write costs a flush of the
+disk's cache, and a multipart upload's parts are written as they come.
+
+What `durable: true` does not cover:
+
+- A multipart upload that is not completed. rclone keeps the upload's record in memory
+  (`cmd/serve/s3/multipart.go`), so the emulator of the recovery boot does not know the upload.
+  Real object storage keeps it. No run tested this case.
+- The metadata that rclone keeps in memory (`storeObjectMeta` in `cmd/serve/s3/backend.go`),
+  such as an object's user metadata (`x-amz-meta-*`). A restart of the emulator loses it, with or
+  without a cut.
+
+The proof is `hydo/onboard/examples/checkout/hydo-s3-cut.yaml` (Milestone 354, `docs/HISTORY.md`).
 
 ## Conditional writes
 

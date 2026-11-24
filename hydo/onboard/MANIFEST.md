@@ -1949,6 +1949,7 @@ emulators:
     addr: 10.89.1.10           # the service's address (default with network: bridge: below)
   - use: s3
     buckets: [receipts]        # s3 only: directories /data/<name>/<bucket>, made in setup:
+    durable: true              # s3 only (default false): acknowledged writes survive a power cut
 ```
 
 | `use:` | image (fetched by digest) | service `<name>_emulator` | proxy `<name>` |
@@ -1984,6 +1985,18 @@ emulators:
   (`If-Match`), each with S3's `PreconditionFailed` XML as its 412 answer (`errors:`).
   `H=s3.put_if_absent@3-6:status=412` answers 412 without reaching rclone, as when another writer
   won. `hydo explore --protocol-faults` draws 412 on these routes too.
+- Writes that survive a power cut on `s3` (Milestone 354). rclone 1.76.0 answers a write before
+  its file reaches the disk: its local backend calls no `fsync`, and no option changes that. A
+  power cut of the guest then loses objects that the emulator acknowledged. `durable: true` adds
+  `&& chattr +S /data/<name> /data/<name>/<bucket> ...` to the service's `setup:`. ext4's
+  attribute `S` makes each write to a file below reach the disk before `write(2)` returns, and
+  each create, rename and delete in a folder below commit the journal first. New files and folders
+  inherit it. So an acknowledged PUT, copy, completed multipart upload and DELETE are on the disk
+  before the proxy forwards the answer. The default is `false`, the setup of Milestone 242, so
+  images built without the key keep their bytes. A multipart upload that is not completed is
+  still lost at a cut: rclone keeps the upload's record in memory. The example
+  `checkout/hydo-s3-cut.yaml` loses acknowledged writes at `C=3` with `durable: false`, and none
+  with `true`.
 - The validated data keeps `_emulators` (the expanded names and the image pins). The explorer
   draws no kill, pause, freeze or network fault on an emulator's service; `H=` on the proxy is its
   fault. A schedule written by hand may still name the service.

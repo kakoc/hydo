@@ -629,6 +629,17 @@ user's onboarding with 0.4.1, each fix its own commit; none moves a recorded val
 - Both releases ship the shell assertion SDK as `hydo/sdk/hydo_assert.sh`, and `hydo guide
   hydo_assert.sh` prints it; `hydo guide sdks` puts it into an image with `root.files`. Its
   records reach the property table of `result.json` (a Mac engine run).
+
+**The s3 emulator across a power cut (M354, tentative number).** rclone 1.76.0 answers a write
+before its file reaches the disk, and no option of it syncs. So a power cut of the guest lost
+objects that the s3 emulator acknowledged. `durable: true` on an `s3` entry (a format-1 addition,
+default `false`) ends the emulator's `setup:` with `chattr +S` on its data folder and buckets.
+ext4 then writes each write, rename and unlink below to the disk before the call returns, so
+before rclone answers. On the Mac engine `checkout/hydo-s3-cut.yaml` lost 10 to 13 acknowledged
+writes at `C=3`, `C=4` and two `A=s3.acked` cuts without it, and none with it (PUTs, copies,
+completed multipart uploads, DELETEs). An image without the key keeps its bytes. The reference
+is MANIFEST.md "Ready-made emulators"; the details are in `docs/HISTORY.md` Milestone 354.
+
 **Each image service's own `/tmp` (M331, tentative number; fingerprint epoch 5).** An image
 service of an image built at epoch 5 has a `/tmp` of its own, as a container has. It is the
 guest's folder `/tmp/oci/<service>` (`hydo_image::defaults`, `oci_own_tmp`). The guest's
@@ -2452,7 +2463,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     its next re-pin. M329's (the proxy's `Content-Length` and whole bodies, `if_header:`, and
     `errors:` on an `http` proxy's route) reached 0.5.0. Since M341 the s3 proxy's request shapes
     and conditional routes ran in a VM on hvx and on the Mac engine (`checkout/hydo-s3.yaml`).
-    So the s3 emulator ran on the Mac too. KVM ran them too, on Xeon 6975P-C hosts.
+    So the s3 emulator ran on the Mac too. KVM ran them too, on Xeon 6975P-C hosts. Since M354
+    `durable: true` keeps the s3 emulator's acknowledged writes across a power cut, on the Mac
+    engine; hvx and KVM did not run it. A multipart upload that is not completed and the user
+    metadata that rclone keeps in memory are still lost, and `durable` is opt-in.
 117. The clock audit (M248, M350). It reads text, so a reading that passes through an interface
     with several implementations, a channel or a queue is not followed. Its schedules place the
     steps at fixed workload steps. Only the Valkey schedules ran; the Temporal and River
@@ -3309,7 +3323,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       M346 counted 57, and the next run of the same tree 39, the list of `main`; the cause was not
       found. Six are from M306: two mutants with a
       `contracts:` key the recorded answers do not list. Twelve are from M329: the known keys of
-      a fake's and a proxy's route. The others name the guest keys of later milestones.
+      a fake's and a proxy's route. The others name the guest keys of later milestones. Since
+      M354 hydo-manifest's `equivalence::same_as_hydo_build` has four more: the known keys of an
+      emulator entry, which its recorded answers do not list.
 166. The three gaps of a user's onboarding with 0.4.0 (M324, tentative number). What is left:
     - Since M338 the estimate on the Mac counts the whole root and its compressed archive, and
       the build measures the staged root. The estimate takes 8 % for the files' whole pages and
@@ -3422,8 +3438,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       manifest made it, and no power loss left a short copy.
     - The S3 emulator writes objects without an fsync (rclone's local backend). So a power cut
       of the whole guest loses objects that it acknowledged. The example leaves `cut` out, and
-      no run of `C=` or `cf=` judged the database. A durable object store in the guest is not
-      built.
+      no run of `C=` or `cf=` judged the database. Since M354 `durable: true` on the `s3` entry
+      keeps every acknowledged write across a cut. The example did not run again with it and
+      `cut`.
     - The error-log scan reads every service's whole log through the agent. On hvx a run of
       Kafka and five GreptimeDB services passed the 16 MiB of lines that hvx keeps per boot. The
       run then waited for its wall limit, so the example turns `errors:` off. Since M348 such a
@@ -4636,6 +4653,11 @@ build machine, before 2026-10-13.
   wall-clock readings kept as an order or a version of data, and names Garage's CopyObject; the
   known places of Valkey, Temporal, and River keep their ranks. A messages claim with nothing to
   judge beside one that judged is no vacuous pass. Nothing recorded moved
+- M354 (tentative number): the s3 emulator keeps its acknowledged writes across a power cut.
+  `durable: true` on an `s3` entry gives its folders ext4's attribute `S`, so rclone's writes,
+  renames and deletes reach the disk before it answers. On the Mac engine the new example
+  `checkout/hydo-s3-cut.yaml` lost 10 to 13 acknowledged writes at four power cuts without the
+  key, and none with it. Opt-in; nothing recorded moved
 
 ## Where to look
 

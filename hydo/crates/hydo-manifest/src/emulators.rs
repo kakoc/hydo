@@ -28,6 +28,7 @@ pub const KNOWN: &[&str] = &[
     "ref",
     "tls",
     "buckets",
+    "durable",
     "addr",
     "description",
 ];
@@ -254,6 +255,22 @@ fn entrypoint(e: &Entry, inner: i64, name: &str, host: &str) -> Vec<String> {
     v
 }
 
+/// The end of the s3 emulator's `setup:` with `durable: true` (Milestone 354).
+///
+/// rclone 1.76.0 writes an object's file and answers without an fsync: its local backend calls
+/// no `Sync`, and no option of it makes one. So a power cut of the guest loses objects that the
+/// emulator acknowledged, which real object storage keeps. ext4's attribute `S` (synchronous
+/// updates, `chattr +S`) on the data folder and its buckets closes that gap without a change of
+/// the emulator. Each `write(2)` to a file below returns after its data and its inode are on the
+/// disk (the kernel's `generic_write_sync`, which flushes the disk's write cache). Each create,
+/// rename, unlink and mkdir in such a folder commits the journal before it returns
+/// (`IS_DIRSYNC`). New files and folders inherit the attribute. rclone writes an object under a
+/// temporary name and renames it into place before it answers. So an acknowledged PUT, copy,
+/// completed multipart upload and DELETE are on the disk when the proxy forwards the answer.
+fn durable_cmd(folders: &[String]) -> String {
+    format!(" && chattr +S {}", folders.join(" "))
+}
+
 /// An S3 bucket name as rclone and S3 accept it.
 fn bucket_ok(b: &str) -> bool {
     let n = b.len();
@@ -379,6 +396,18 @@ pub fn expand(m: &mut Value) -> R<()> {
                 buckets.push(s);
             }
         }
+        // Milestone 354: `durable: true` keeps the s3 emulator's acknowledged writes across a
+        // power cut (`durable_cmd`)
+        let durable = match get(x, "durable") {
+            None => false,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => return Err(err(format!("{wh}: durable: true or false"))),
+        };
+        if durable && e.id != "s3" {
+            return Err(err(format!(
+                "{wh}: durable: only for use: s3 (the {id} emulator keeps nothing on the disk)"
+            )));
+        }
         let addr = match get(x, "addr") {
             Some(Value::String(a)) => Some(a.clone()),
             Some(v) => return Err(err(format!("{wh}: addr {}: an address", py::repr(v)))),
@@ -411,9 +440,11 @@ pub fn expand(m: &mut Value) -> R<()> {
             }
         }
         if e.id == "s3" {
-            let mut cmd = format!("mkdir -p /data/{name}");
-            for b in &buckets {
-                cmd.push_str(&format!(" /data/{name}/{b}"));
+            let mut folders = vec![format!("/data/{name}")];
+            folders.extend(buckets.iter().map(|b| format!("/data/{name}/{b}")));
+            let mut cmd = format!("mkdir -p {}", folders.join(" "));
+            if durable {
+                cmd.push_str(&durable_cmd(&folders));
             }
             s["setup"] = Value::String(cmd);
             dirs.push(Value::String(name.clone()));
@@ -774,6 +805,40 @@ mod tests {
             "routes": [{"name": "r", "if_header": "If Match"}]}]);
         let e = crate::validate_data(&mut m).unwrap_err().to_string();
         assert!(e.contains("if_header: a header's name"), "{e}");
+    }
+
+    /// Milestone 354: `durable: true` marks the data folder and its buckets synchronous, and
+    /// changes nothing else; without it the setup is the one of Milestone 242.
+    #[test]
+    fn a_durable_s3_emulator_marks_its_folders_synchronous() {
+        let m = expanded(json!([
+            {"use": "s3", "buckets": ["receipts", "invoices"], "durable": true},
+            {"use": "s3", "name": "plain", "port": 9100, "buckets": ["a1b"], "durable": false}
+        ]));
+        assert_eq!(
+            m["services"][0]["setup"],
+            "mkdir -p /data/s3 /data/s3/receipts /data/s3/invoices \
+             && chattr +S /data/s3 /data/s3/receipts /data/s3/invoices"
+        );
+        assert_eq!(
+            m["services"][1]["setup"],
+            "mkdir -p /data/plain /data/plain/a1b"
+        );
+        let plain = expanded(json!([{"use": "s3", "buckets": ["receipts", "invoices"]}]));
+        let mut s = m["services"][0].clone();
+        s["setup"] = plain["services"][0]["setup"].clone();
+        assert_eq!(s, plain["services"][0]);
+        assert_eq!(m["proxies"][0], plain["proxies"][0]);
+        assert_eq!(
+            refused(json!([{"use": "smtp", "durable": true}])),
+            "emulators[0]: durable: only for use: s3 (the smtp emulator keeps nothing on the disk)"
+        );
+        assert_eq!(
+            refused(json!([{"use": "s3", "durable": "yes"}])),
+            "emulators[0]: durable: true or false"
+        );
+        // stripe with durable: false is accepted (false is the default for every kind)
+        expanded(json!([{"use": "stripe", "durable": false}]));
     }
 
     #[test]

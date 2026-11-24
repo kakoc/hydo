@@ -2,7 +2,7 @@
 # Build the two checkout programs of the emulators example (hydo.yaml in this directory): the
 # planted bug (src/key_buggy.go) and the fix (src/key_fixed.go, the Go build tag "fixed"), as
 # static Linux programs, standard library only. It also builds s3probe (s3probe/) for amd64 and
-# arm64, the client of hydo-s3.yaml.
+# arm64, the client of hydo-s3.yaml and hydo-s3-cut.yaml.
 #   hydo/onboard/examples/checkout/build.sh [out dir]    (default: build/ at the repository root)
 #   CHECKOUT_GOARCH=arm64 (for the Mac engine) or amd64 (the default); HYDO_GO names the Go.
 # Then, with a hydo release:

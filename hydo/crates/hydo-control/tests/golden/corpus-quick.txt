@@ -2,6 +2,7 @@
 # (hydo/crates/hydo-control/tests/corpus.rs). Re-record: HYDO_BLESS=1 cargo test -p hydo-control --test corpus
 input	hydo/onboard/examples/agent-workspace/hydo.yaml	4dc6d76eb4536726474b0b2b735846925a0d13be3a69c9898b315de80ffbceee
 input	hydo/onboard/examples/avx2/hydo.yaml	c0d18567ef65d9300820b8944ffcee57cd228512eedf147ac7e624b8eff2592a
+input	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	499a137ed8211bc55b5b886fa4e84783d7515c62049d497375d8600e8ee04bd9
 input	hydo/onboard/examples/checkout/hydo-s3.yaml	531334f70c1b933df0167338aa5bfb2c0071b9b76188e7f47e8fdacde9abc906
 input	hydo/onboard/examples/checkout/hydo.yaml	6d3a39f3dd44406819ab082bf020dcda7191b99895917872d5c0033e4d2e8144
 input	hydo/onboard/examples/compose-voting/hydo-loopback.yaml	a4ba83796fb727145d516a32229c1896e3fffcbfcfb0ee40b6f447ea4e093ab4
@@ -120,6 +121,49 @@ chunk	hydo/onboard/examples/avx2/hydo.yaml	1	500	f83c16dfe78b4cced59f0f76f624ec5
 chunk	hydo/onboard/examples/avx2/hydo.yaml	2	500	95e2ce91002e08d394d7a8704df671c0835cf6bcd2a51fe649bd7efe17584e9f
 chunk	hydo/onboard/examples/avx2/hydo.yaml	3	500	298604a95357d3d1e9fb88fd7e5e36c4d01d22fef9016e3f01ee10e916134543
 chunk	hydo/onboard/examples/avx2/hydo.yaml	4	184	dd74f560d339b08b85c9e06ae39e28576bb2956125a65a36341769d4e923e89d
+manifest	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	core
+boot	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	hydo/onboard/examples/checkout/hydo-s3-cut.yaml#0	snapshot	bbdb027728347eed
+counts	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	identity=49 recovery:error=4 recovery:ok=39 recovery:violation=10 refused=1 run:cut=53 run:error=14 run:ok=178 run:violation=31 token:C=55 token:H=277 token:K=5 token:P=6 token:Q=1 token:X=4 token:Z=1 written=227
+boot-transcript	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	bbdb027728347eed
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	0	500	65c7100fb2fedd12ed6f1e2d61c14469162ab8922b5dd94490fe5782f96b4926
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	1	500	0ced450bf3742770392b8a99dbdf60d28681da668be57c7b6b41c9f71c80aa30
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	2	500	5cc2f405770baffcd86513bde4678f61bed728a699baf667b448eb2fccda1505
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	3	500	142cd205dae0dd21e34eedc38e34f82d54dc69a3f9d9475a791ecd9cbc95f1de
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	4	500	aed43b0a4d8115fc82e31fac54636645d457646b340601abeaf1cd0e900c855b
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	5	500	e0db7f33deaa6e770a3221dfe579b7c476b1c997f75287c8bf784b08caed35ce
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	6	500	f81e54782abcf822a88eefc49b87476cf2a26c4bff046d601926aa454265b1e8
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	7	500	d9a081ef952eda66fa60b3ef1b0c4571d404e6345b74e54d05709d212031a31b
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	8	500	1545d7f961154ebe7a48ba26dbe19cd35a5f4d738a09cf8aced8b1fe75be9ecd
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	9	500	293fa571954bc38a2549c4d5edc6341b26df6099870fc722255376beee84234a
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	10	500	cb2ff3cd60415995f7433ed5ae14b7fea2ce6832e0531af94d16b0776373a1d2
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	11	500	587f84ad7b0263ae40aeb73af834f5bb56c0e83c0768409e276a89c639ebeb98
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	12	500	f3cfae5c586b89fa348f31c475e3c994526e47f7ef58fd2c1e8433e2170ad4ba
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	13	500	f0a07edf2b4bed167591cde746fb167453b8693306b419bd11b42b75f8081bc5
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	14	500	808a2690089d8249a187b6f8dafd787cd2319ed951d853ba6bad2fc568e9b1a6
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	15	500	30ec2574333eb490ecf260f595cbc0e3e19edf14fe5e673cab52bbfeb9c290f5
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	16	500	afb9be54f833c26c76de6f005a0dc0b4cf1c1ffbc450e9b00e4f3c758ff934b7
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	17	500	51f6a8b2903fc42954596ca57410cbbf1f97405a087a407ebf5fe13b93d4b178
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	18	500	62cd00ce3b0f701f2c6ea6b4196162553167fd35418aef9dae233cdc8d7ec8b6
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	19	500	d777e5d8554d7972d52340190291a06d02bbfcc4531ca8baee96c20b712b6e9a
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	20	500	1ba64fc00412793ece021f2598c9ceab6baebd6e6b10bedb4c0ec9f9a6e9a868
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	21	500	ac12ac2585ba077070d4bcd43fcfa82608f87f0764f4eb367d5df131bae1ecc2
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	22	500	39fff19c1300188ff21ea48b42d4b1221ce2302806e833a932a1ff6a34aa62ee
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	23	500	dfd53fc83d0b631ee62182edb617a73202c37ce1a6de559a5d1447180c97c5a0
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	24	500	779e0170b1e2f0edbd357cf2c4dc85feb716678125c272b91d027445f9f49e85
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	25	500	7ea533673eafef9d3c08cc9880e9f3a8dec0a604a0fed09bd8474fb915e36648
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	26	500	b088b524639f4a69e13efcd5aba3a2897622f2d55485e13de81a14d3b0a2a666
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	27	500	42aea55d6a56da1339dc05140ae52dfec4067156979ee818fa947c7a2f1057fc
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	28	500	74e8745c7e0ee6a0c6ac050be3cd2230ddbe28c1cf61626edb9346ba841c0fea
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	29	500	9c6d10554da334a5196bcd38a928e5a868df1429ac1d07caa7724f2b5ca23741
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	30	500	551c43367cb56a07ab4b25b6804e136f3e76fc392bff427d33d6c12fdf7b92fc
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	31	500	ebc5113b2d742b266929c9229fe78925c5159c9d1906b4aed67a139fb8e543f5
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	32	500	4c66967db9bf93ce56aef288a8c76ee1dcfffae44cd5c0ac5c63f314e852d6ca
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	33	500	29f00dbed4e51d84ce7a787b15c25b84227333d654ecf7f2913551e0a1b03006
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	34	500	e2fa5f2e81a4b7a5ec674c9f47b708ee650aac3d1e647bba98866366f710613b
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	35	500	d165490771cae0fc10ded9162afee2002df6d94d5454a74a8ff3c2876ff0f97e
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	36	500	b6be297e1aa601b2cf955c2c6ae6e7a2593fe5f130404c1aa059ae9f63c02763
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	37	500	d8dcb27f49dad0cc0a416dc11f2c4627f4576da30c9dd62d9e1cdcce31e4933d
+chunk	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	38	16	1690be23169f44309bd1eb1271bbbe6ca1007bf257b2ba677a21c88dd2e0751c
 manifest	hydo/onboard/examples/checkout/hydo-s3.yaml	core
 boot	hydo/onboard/examples/checkout/hydo-s3.yaml	hydo/onboard/examples/checkout/hydo-s3.yaml#0	snapshot	9a069af6a2d4c06b
 counts	hydo/onboard/examples/checkout/hydo-s3.yaml	identity=27 recovery:error=4 recovery:ok=21 recovery:violation=7 refused=1 run:cut=32 run:error=19 run:ok=183 run:violation=21 token:C=34 token:H=254 token:K=5 token:P=6 token:Q=1 token:X=4 token:Z=1 written=228
@@ -8445,4 +8489,4 @@ chunk	hydo/onboard/examples-mac/redis/hydo.yaml	51	500	e02ba73a9415c9ac4e7e25a04
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	52	500	8d00fac468029554551fba8d3992ca9d724791f31e8bf5eaa501ccc9186a8eba
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	53	500	e22eb348ab9122fa5e9f51a4e5178da4197e9b7a81f2ccfc684c8d4526a798bd
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	54	198	af95ed52789fee7243d56afd40ad8ad646c910c0e9ab9367d109dea204e4f5f0
-refused	other=68
+refused	other=69
