@@ -392,6 +392,12 @@ The directed runs:
 4. **One worker.** The explorer sized its pool to one worker of 1,024 MiB from this Mac's free
    memory, which other sessions shared, so the explorations ran at 160 to 860 runs an hour.
 
+Milestone 350 fixed the first three. `hydo rules scan --kind writes` lists 42 write routes of
+Garage v2.5.0 with their handlers, every operation of the workload among them. The clock audit
+names the copy's `now_msec()` (`src/api/s3/copy.rs` line 293) as a wall-clock reading kept as a
+version. A check whose `no-phantom` judges nothing beside `acked-outcome` no longer counts as a
+vacuous pass.
+
 ## Time
 
 The onboarding started at 21:40 local time on 2026-11-23. Other agents shared this Mac, and its

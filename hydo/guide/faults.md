@@ -394,6 +394,29 @@ to where the code runs in your workload. In the Valkey example the audit ranks
 schedule `disk=none | run K=valkey3@2+3 T=10:-300` is the example's saved
 regression for valkey-io/valkey#5406, and it fails on the Mac engine.
 
+The report has a second section: the code that keeps a wall-clock reading as the order or the
+version of data. Some systems keep the write with the highest timestamp. After a step back of the
+clock, a new write gets an older timestamp than the writes before it, and such a system loses it.
+Such a place stores a reading under a name about an order (`timestamp`, `ts`,
+`version`). It is `high` when the code also compares two values of that name, in a merge, a
+maximum, or a sort key:
+
+```text
+2. src/api/s3/copy.rs:293, in handle_copy_metaonly [high]
+     let new_timestamp = now_msec();
+   It keeps a wall-clock reading as timestamp, and the code orders data by comparing two values of it (src/api/s3/put.rs:723). ...
+     back           disk=none | run T=20:-300
+     back-long      disk=none | run T=20:-3600
+     back-after     disk=none | run K=<service>@2+3 T=10:-300
+```
+
+A reading kept higher than the earlier value, such as `max(prev + 1, now_msec())`, is the safe
+form, and the audit leaves it out. The writes run in every workload step, so the steps back need
+no fault. `back` and `back-long` step the clock back in the middle of the workload. `back-after`
+steps it back after a restart of the service that runs the code. In the Garage example the
+copy's place is second of 4, and its saved regression `disk=none | run T=17:-3600` loses a copy.
+`--json` lists these places as `clock_orders`.
+
 ## Clock after a power cut
 
 Every boot starts its clock at `guest.clock_start`. Without `guest.clock_after_cut`, the recovery
