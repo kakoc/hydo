@@ -8,6 +8,11 @@
 //	                   proxy gave without reaching the server (an H= rule; the server has no
 //	                   such change).
 //	s3probe check      every round in $HYDO_ACKED left its objects on the server, read directly
+//	s3probe cut-step <n>  one round of hydo-s3-cut.yaml (Milestone 354): a PUT of 64 bytes, a PUT
+//	                   of 1 MiB, a copy, a multipart upload of 5 MiB and 1 KiB, and a DELETE of
+//	                   the round before's first object. Each acknowledged write is a word in
+//	                   $HYDO_ACKED and then the SDK event s3.acked, at which a reaction may cut.
+//	s3probe cut-check  every write in $HYDO_ACKED is on the server as acknowledged, read directly
 //
 // Every request and its answer is one console line ("s3probe <n> <what> ..."). Standard library
 // only.
@@ -236,6 +241,221 @@ func check() int {
 	return 0
 }
 
+// content is the bytes of a key of hydo-s3-cut.yaml: `size` bytes made from the key's name.
+func content(key string, size int) []byte {
+	b := make([]byte, size)
+	h := sha256.Sum256([]byte(key))
+	for i := range b {
+		b[i] = h[i%len(h)] ^ byte(i>>5)
+	}
+	return b
+}
+
+// the objects of one round of hydo-s3-cut.yaml: name suffix and size
+const (
+	smallSize = 64
+	largeSize = 1 << 20
+	partSize  = 5 << 20 // S3's least size of a part that is not the last
+	lastPart  = 1024
+)
+
+// event writes an SDK assertion record to the console: the event of a reaction
+// (A=s3.acked@<step>+<ms>:cut).
+func event(id, msg string) {
+	f, err := os.OpenFile("/dev/console", os.O_WRONLY, 0)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "HYDO-ASSERT {\"t\":\"sometimes\",\"id\":%q,\"ok\":true,\"msg\":%q}\n", id, msg)
+}
+
+// ack appends an acknowledged write to $HYDO_ACKED, before the event that a reaction may cut at.
+func ack(word string) error {
+	f, err := os.OpenFile(os.Getenv("HYDO_ACKED"), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(f, word); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	event("s3.acked", word)
+	return nil
+}
+
+// between returns the text between the first `open` and the next `close` in b.
+func between(b []byte, open, close string) string {
+	s := string(b)
+	i := strings.Index(s, open)
+	if i < 0 {
+		return ""
+	}
+	s = s[i+len(open):]
+	j := strings.Index(s, close)
+	if j < 0 {
+		return ""
+	}
+	return s[:j]
+}
+
+// cutStep is one round of hydo-s3-cut.yaml through the proxy at $AWS_ENDPOINT_URL_S3. Each write
+// that S3 answers 200 (204 for the DELETE) is a word in $HYDO_ACKED and then the event s3.acked:
+//
+//	put:o<n>a   a PUT of 64 bytes
+//	put:o<n>b   a PUT of 1 MiB
+//	copy:o<n>c  a copy of o<n>a (x-amz-copy-source)
+//	mp:o<n>m    a multipart upload of 5 MiB and 1 KiB, completed
+//	del:o<n-1>a a DELETE of the round before's o<n-1>a
+func cutStep(n int) int {
+	proxy := os.Getenv("AWS_ENDPOINT_URL_S3")
+	if proxy == "" {
+		fmt.Println("s3probe: AWS_ENDPOINT_URL_S3 is not set")
+		return 2
+	}
+	client.Timeout = 120 * time.Second // a synchronous emulator writes 5 MiB in many flushes
+	base := proxy + "/receipts/"
+	fail := func(what string, a answer, err error) int {
+		if err != nil {
+			fmt.Printf("s3probe cut %d %s: %v\n", n, what, err)
+		} else {
+			fmt.Printf("s3probe cut %d %s: status %d %q\n", n, what, a.status, a.body)
+		}
+		return 1
+	}
+	done := func(word string) int {
+		if err := ack(word); err != nil {
+			fmt.Printf("s3probe cut %d: cannot record %s: %v\n", n, word, err)
+			return 2
+		}
+		fmt.Printf("s3probe cut %d %s acknowledged\n", n, word)
+		return 0
+	}
+	for _, o := range []struct {
+		suffix string
+		size   int
+	}{{"a", smallSize}, {"b", largeSize}} {
+		key := fmt.Sprintf("o%d%s", n, o.suffix)
+		a, err := do("PUT", base+key, content(key, o.size), nil)
+		if err != nil || a.status != 200 {
+			return fail("PUT "+key, a, err)
+		}
+		if r := done("put:" + key); r != 0 {
+			return r
+		}
+	}
+	src := fmt.Sprintf("o%da", n)
+	key := fmt.Sprintf("o%dc", n)
+	a, err := do("PUT", base+key, nil, map[string]string{"x-amz-copy-source": "/receipts/" + src})
+	if err != nil || a.status != 200 {
+		return fail("copy "+key, a, err)
+	}
+	if r := done("copy:" + key); r != 0 {
+		return r
+	}
+	key = fmt.Sprintf("o%dm", n)
+	a, err = do("POST", base+key+"?uploads", nil, nil)
+	if err != nil || a.status != 200 {
+		return fail("create multipart "+key, a, err)
+	}
+	id := between(a.body, "<UploadId>", "</UploadId>")
+	if id == "" {
+		return fail("create multipart "+key+" (no UploadId)", a, nil)
+	}
+	whole := content(key, partSize+lastPart)
+	var parts strings.Builder
+	parts.WriteString("<CompleteMultipartUpload>")
+	for i, p := range [][]byte{whole[:partSize], whole[partSize:]} {
+		a, err = do("PUT", fmt.Sprintf("%s%s?partNumber=%d&uploadId=%s", base, key, i+1, id), p, nil)
+		if err != nil || a.status != 200 {
+			return fail(fmt.Sprintf("part %d of %s", i+1, key), a, err)
+		}
+		fmt.Fprintf(&parts, "<Part><PartNumber>%d</PartNumber><ETag>%s</ETag></Part>", i+1, a.header.Get("ETag"))
+	}
+	parts.WriteString("</CompleteMultipartUpload>")
+	a, err = do("POST", fmt.Sprintf("%s%s?uploadId=%s", base, key, id), []byte(parts.String()), nil)
+	if err != nil || a.status != 200 || strings.Contains(string(a.body), "<Error>") {
+		return fail("complete multipart "+key, a, err)
+	}
+	if r := done("mp:" + key); r != 0 {
+		return r
+	}
+	if n > 0 {
+		key = fmt.Sprintf("o%da", n-1)
+		a, err = do("DELETE", base+key, nil, nil)
+		if err != nil || (a.status != 204 && a.status != 200) {
+			return fail("DELETE "+key, a, err)
+		}
+		if r := done("del:" + key); r != 0 {
+			return r
+		}
+	}
+	return 0
+}
+
+// cutCheck reads every acknowledged write of $HYDO_ACKED from the server's own port: a put, a
+// copy and a multipart upload have their bytes, and a deleted key is gone.
+func cutCheck() int {
+	b, err := os.ReadFile(os.Getenv("HYDO_ACKED"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		fmt.Println("cannot read the acknowledged writes:", err)
+		return 2
+	}
+	deleted := map[string]bool{}
+	var words []string
+	for _, w := range strings.Fields(string(b)) {
+		words = append(words, w)
+		if k, ok := strings.CutPrefix(w, "del:"); ok {
+			deleted[k] = true
+		}
+	}
+	lost := 0
+	for _, w := range words {
+		kind, key, _ := strings.Cut(w, ":")
+		a, err := do("GET", direct+"/receipts/"+key, nil, nil)
+		if err != nil {
+			fmt.Println("s3:", err)
+			return 2
+		}
+		var want []byte
+		switch kind {
+		case "put":
+			size := smallSize
+			if strings.HasSuffix(key, "b") {
+				size = largeSize
+			}
+			want = content(key, size)
+		case "copy":
+			want = content(strings.TrimSuffix(key, "c")+"a", smallSize)
+		case "mp":
+			want = content(key, partSize+lastPart)
+		case "del":
+			if a.status != 404 {
+				fmt.Printf("lost: %s was acknowledged, but %s reads %d with %d bytes on the server\n", w, key, a.status, len(a.body))
+				lost++
+			}
+			continue
+		}
+		if deleted[key] {
+			continue // a later acknowledged DELETE removed it
+		}
+		if a.status != 200 || !bytes.Equal(a.body, want) {
+			fmt.Printf("lost: %s was acknowledged, but %s reads %d with %d bytes (sha256 %s, sent %s) on the server\n",
+				w, key, a.status, len(a.body), short(a.body), short(want))
+			lost++
+		}
+	}
+	if lost > 0 {
+		fmt.Printf("%d of %d acknowledged writes lost\n", lost, len(words))
+		return 1
+	}
+	fmt.Printf("%d acknowledged writes: each on the server as acknowledged\n", len(words))
+	return 0
+}
+
 func main() {
 	if len(os.Args) == 3 && os.Args[1] == "step" {
 		os.Exit(step(os.Args[2]))
@@ -243,6 +463,15 @@ func main() {
 	if len(os.Args) == 2 && os.Args[1] == "check" {
 		os.Exit(check())
 	}
-	fmt.Fprintln(os.Stderr, "usage: s3probe step <n> | check")
+	if len(os.Args) == 3 && os.Args[1] == "cut-step" {
+		n, err := strconv.Atoi(os.Args[2])
+		if err == nil {
+			os.Exit(cutStep(n))
+		}
+	}
+	if len(os.Args) == 2 && os.Args[1] == "cut-check" {
+		os.Exit(cutCheck())
+	}
+	fmt.Fprintln(os.Stderr, "usage: s3probe step <n> | check | cut-step <n> | cut-check")
 	os.Exit(2)
 }

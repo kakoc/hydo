@@ -1,0 +1,54 @@
+# The s3 emulator across a power cut (Milestone 354): with `durable: true` every write that the
+# emulator acknowledged is on the disk before its answer leaves, so a power cut of the guest
+# loses none of them. The same file with `durable: false` (the default) loses them.
+#
+# Each step is one round of s3probe (s3probe/, Go, standard library only) through the proxy at
+# $AWS_ENDPOINT_URL_S3: a PUT of 64 bytes, a PUT of 1 MiB, a copy of the first object, a multipart
+# upload of 5 MiB and 1 KiB, and a DELETE of the round before's first object. Each write that S3
+# answered is a word in $HYDO_ACKED (put:o2a, copy:o2c, mp:o2m, del:o1a, ...), and then the SDK
+# event s3.acked, at which a reaction can cut the power. The check reads every acknowledged write
+# from the server's own port in the recovery boot: an object has its bytes, a deleted key is gone.
+#
+# Inputs: build.sh builds s3probe-amd64 and s3probe-arm64 next to the checkout programs.
+#   disk=cut | run C=3                     -> OK with durable: true; with false, objects of the
+#                                             rounds before the cut are lost or short
+#   disk=cut | run A=s3.acked@2+5:cut      -> the same, with the cut 5 ms after round 2's first
+#                                             acknowledged write
+name: checkout-s3-cut
+description: the s3 emulator keeps every acknowledged write across a power cut.
+
+params:
+  bin: "../../../../build"       # where build.sh put s3probe-amd64 and s3probe-arm64
+  arch: amd64                    # amd64 for hvx and KVM, arm64 for the Mac engine
+
+guest:
+  ram_mib: 1024
+
+root:
+  files:
+    - {src: "{{bin}}/s3probe-{{arch}}", dst: /bin/s3probe, mode: "0755"}
+
+emulators:
+  - use: s3                      # $AWS_ENDPOINT_URL_S3 is http://127.0.0.1:9000
+    buckets: [receipts]
+    durable: true                # false: rclone answers before its files reach the disk
+    ref: path:2                  # PUT /receipts/<key>
+
+workload:
+  steps: 4                       # step i: round i
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      if s3probe cut-step $i > /dev/console 2>&1; then echo "$i ack" >> $HYDO_OUTCOMES
+      else echo "$i unknown" >> $HYDO_OUTCOMES; fi
+      i=$((i + 1))
+    done
+  timeout: 600
+  process: s3probe
+
+invariants:
+  - id: s3.acked_kept
+    msg: every write that the s3 emulator acknowledged is on the server after the run
+    cmd: s3probe cut-check
+
+faults: [cut, kill, pause, protocol]

@@ -1864,6 +1864,13 @@ pub struct Emulator {
     /// s3: buckets that exist from the start.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub buckets: Option<Vec<Text>>,
+    /// s3: true makes every write that the emulator acknowledged survive a power cut of the guest
+    /// (Milestone 354; default false). The data folder and its buckets get ext4's attribute S
+    /// (chattr +S), so each write and each change of a folder reaches the disk before rclone
+    /// answers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = false))]
+    pub durable: Option<bool>,
     /// The emulator's service's address (Milestone 316). With network: bridge the default is
     /// the first free one of 10.89.1.1, 10.89.1.2, ...
     #[serde(default, skip_serializing_if = "Option::is_none")]
