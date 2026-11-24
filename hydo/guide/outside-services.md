@@ -26,8 +26,8 @@ emulators:
     name: email                  # the proxy's name, which H= and the checks use (default: the use: value)
 ```
 
-Each entry also takes `port:` (the port the system calls) and, for `stripe`, `tls: false` (only
-the plain port). An entry makes a service `<name>_emulator`. The explorer draws no fault on it;
+Each entry also takes `port:` (the port the system calls), for `stripe` `tls: false` (only
+the plain port), and for `s3` `durable: true` (below). An entry makes a service `<name>_emulator`. The explorer draws no fault on it;
 the outside world's faults are `H=` tokens on the proxy. `hydo build`, also with `--check`,
 fetches each emulator's image by its pinned digest into `emulators/` next to the manifest: keep
 that folder out of git.
@@ -54,6 +54,19 @@ What the emulators do and do not do:
   `hydo explore --protocol-faults` draws 412 on these routes too.
 - An emulator's state is inside the guest: a power cut loses what it held in memory. The record of
   the proxy survives a cut; a check over an emulator's own state is valid in runs without a cut.
+- The S3 server answers a write before its file reaches the disk, so a power cut loses objects
+  that it acknowledged. Real object storage keeps them. To test a system on object storage under
+  power cuts, add `durable: true` to the `s3` entry:
+
+  ```yaml
+  emulators:
+    - use: s3
+      buckets: [receipts]
+      durable: true              # every acknowledged PUT, copy, multipart upload and DELETE survives a cut
+  ```
+
+  Each write then reaches the disk before the server answers. A multipart upload that is not
+  completed is still lost at a cut. The default is `false`.
 
 The example `hydo/onboard/examples/checkout` in hydo's repository uses all three.
 

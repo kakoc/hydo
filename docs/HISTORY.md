@@ -21523,3 +21523,86 @@ Retro: Garage v2.5.0, the Mac engine, 2026-11-23
   and the first table has a row for object stores.
 
 **What is left.** Open item 177.
+
+## Milestone 354 (tentative number): the s3 emulator keeps its writes across a power cut
+
+Status: done on 2026-11-24, on the Mac engine. A format-1 addition, opt-in. Nothing recorded
+moved, and the fingerprint epoch stays 5.
+
+**The problem.** `emulators:` with `use: s3` runs `rclone serve s3` 1.76.0 over `/data/<name>`.
+rclone's local backend writes an object's file and closes it without an `fsync`
+(`backend/local/local.go`, `Update`), and no option of the backend makes one. `rclone serve s3`
+writes an object under a temporary name and renames it into place before it answers
+(`cmd/serve/s3/backend.go`, `PutObject` and `commitObject`). A completed multipart upload is a
+rename of the streamed file (`multipart.go`), and a copy is a read and a PUT. So the data and the
+renames of every write wait in the guest's page cache and in ext4's journal for the next
+writeback. A power cut of the guest then loses objects that the emulator acknowledged. For that
+reason the GreptimeDB example of Milestone 343 left `cut` out of its faults (open item 171).
+
+**The way.** Four ways were compared (`docs/design/emulators.md`, "Objects that survive a power
+cut"). rclone has no option. A mount option `sync` is a flag of the whole file system, so every
+service's writes on the data disk would become synchronous. A sync in hydo's proxy before it
+forwards an answer is a change of `hydo-world`, a pinned guest program, so every image built after
+its re-pin would get new bytes. The chosen way is one command: ext4's attribute `S` on the
+emulator's folders. The entry's new key `durable: true` (a format-1 addition, `false` by default)
+ends the service's `setup:` with `&& chattr +S /data/<name> /data/<name>/<bucket> ...`, with
+busybox's `chattr`. On a file with the attribute each `write(2)` returns after the data and the
+inode are written and the disk's cache is flushed (`generic_write_sync`). In a folder with it each
+create, rename, unlink and mkdir commits the journal first (`IS_DIRSYNC`). New files and folders
+inherit it. So the temporary file, its rename, and a DELETE's unlink are on the disk before rclone
+answers. The validator refuses the key on `stripe` and `smtp`, and it refuses a value that is not
+a boolean. Without the key the setup is the one of Milestone 242, so no image changes.
+
+**The proof.** The new example `hydo/onboard/examples/checkout/hydo-s3-cut.yaml` runs s3probe's
+new mode `cut-step <n>` in each of 4 steps, through the s3 proxy:
+
+- a PUT of 64 bytes (`o<n>a`) and a PUT of 1 MiB (`o<n>b`);
+- a copy of `o<n>a` (`o<n>c`, `x-amz-copy-source`);
+- a multipart upload of 5 MiB and 1 KiB, completed (`o<n>m`);
+- a DELETE of the round before's `o<n-1>a`.
+
+Each acknowledged write is a word in `$HYDO_ACKED` (`put:o2a`, `copy:o2c`, `mp:o2m`, `del:o1a`),
+and then the SDK event `s3.acked`. The check `s3probe cut-check` reads every word from rclone's
+own port in the recovery boot: an object has its bytes, and a deleted key answers 404. The same
+file with `durable: false` is the image without the change. The runs used the Mac engine, the
+hydo of this tree, and the engine and guest files of the 0.5.0 release. Each schedule ran twice
+on each image, and each pair gave one fingerprint:
+
+| Schedule | `durable: false` | `durable: true` |
+|---|---|---|
+| `disk=none \| run` | OK, 19 writes, `f34d92e89cce6a1d` | OK, 19 writes, `af9757495fc433ff` |
+| `disk=cut \| run C=3` | VIOLATION, 10 of 14 writes lost, `6d19b0e30e92a637` | OK, 14 writes, `913ad97e4f50437a` |
+| `disk=cut \| run C=4` | VIOLATION, 13 of 19 lost, `d06d02e14d31d4ef` | OK, 19 writes, `a49afd22824e9090` |
+| `disk=cut \| run A=s3.acked@2+5:cut` | VIOLATION, 10 of 12 lost, `687f41f069d3399c` | OK, 10 writes, `a2c42221aa293e9d` |
+| `disk=cut \| run A=s3.acked@3:cut` | VIOLATION, 11 of 15 lost, `4053f698800d2958` | OK, 15 writes, `db6a871eaa8c0fa1` |
+
+Without the attribute every lost object answered 404 in the recovery boot. Its rename never
+reached the disk. At `C=3` the run lost ten writes. They were the three of step 0 and of step 1
+that no DELETE removed, and the four objects of step 2. The reaction `A=s3.acked@2+5:cut` cuts
+5 ms of guest time after the first acknowledged write of step 2. Before that cut the run with the
+attribute acknowledged 10 writes, and the run without it 12, because each write takes longer
+with it. The run without faults made 6,070 engine stops with the attribute and 841 without it.
+It took 1.9 s of the engine against 1.0 s.
+
+The DELETE is judged only together with its object: in the runs without the attribute each
+deleted object was lost with its create, so a lost unlink did not show. In the runs with the
+attribute every deleted key answered 404 after the cut.
+
+**Tests.** `emulators::a_durable_s3_emulator_marks_its_folders_synchronous` checks the setup, that
+nothing else of the expansion changes, and the two refusals. The project schema has the key
+(`HYDO_BLESS=1 cargo test -p hydo-manifest --test it format::`). The explorer's corpus and identity
+goldens and the controller's corpus golden are re-recorded with the new example. The recorded
+answer of `hydo guide manifest` is re-recorded with the new text. hydo-manifest's equivalence
+corpus gains four mismatches: mutants with an unknown key on an emulator entry. Their message
+lists the known keys, which the recorded answers do not have.
+
+**What is left.**
+
+- hvx and KVM did not run the example. The attribute is a property of the guest kernel's ext4,
+  the same on every engine. The x86_64 busybox 1.37.0 of the 0.5.0 Linux release has `chattr`
+  (its `chattr_main`).
+- A multipart upload that is not completed is still lost at a cut: rclone keeps the upload's
+  record in memory. So is the user metadata that rclone keeps in memory. No run tested either.
+- `durable` stays opt-in. It could be the default of the next fingerprint epoch, keyed on the
+  image's epoch as `guest.path` is (Milestone 348).
+- GreptimeDB's example did not run again with `durable: true` and `cut` (open item 171).

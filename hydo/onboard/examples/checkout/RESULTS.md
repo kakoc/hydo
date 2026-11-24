@@ -71,3 +71,27 @@ schedules, each run twice with one fingerprint:
   order o2 is charged twice. `fp=697297ee352d0eb5`.
 
 None of the schedules that the explorations wrote names an emulator's service.
+
+## The s3 emulator across a power cut
+
+`hydo-s3-cut.yaml` (Milestone 354) checks that every write the s3 emulator acknowledged is on the
+server after a power cut. Each step sends five writes through the s3 proxy:
+
+- a PUT of 64 bytes and a PUT of 1 MiB;
+- a copy of the first object;
+- a multipart upload of 5 MiB and 1 KiB;
+- a DELETE of the step before's first object.
+
+`s3probe cut-check` reads each acknowledged write from rclone's own port in the recovery boot.
+The runs used the Mac engine on 2026-11-24, each schedule twice with one fingerprint:
+
+| Schedule | `durable: false` | `durable: true` (the file's value) |
+|---|---|---|
+| `disk=none \| run` | OK, 19 writes | OK, 19 writes |
+| `disk=cut \| run C=3` | VIOLATION, 10 of 14 writes lost | OK, 14 writes |
+| `disk=cut \| run C=4` | VIOLATION, 13 of 19 writes lost | OK, 19 writes |
+| `disk=cut \| run A=s3.acked@2+5:cut` | VIOLATION, 10 of 12 writes lost | OK, 10 writes |
+| `disk=cut \| run A=s3.acked@3:cut` | VIOLATION, 11 of 15 writes lost | OK, 15 writes |
+
+Without `durable: true` every lost object answered 404: rclone renamed it into place, but the
+rename stayed in the guest's memory. The fingerprints are in `docs/HISTORY.md` Milestone 354.

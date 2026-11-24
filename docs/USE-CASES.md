@@ -33,7 +33,7 @@ at release, and after release. The tables below take the chart's techniques in i
 |---|---|---|---|
 | Unit tests | `workload.kind: test` runs a team's own test program in the VM as one step, with faults only when `faults:` lists them. | built | M205; the examples `nats-flaky-8363`, `etcd-flaky-22796`, and `qdrant-flaky-10200` |
 | Functional tests | Commands in `hydo/workload/` use the system, and checks in `hydo/checks/` say what must hold after each run. | built | Every example; `docs/ONBOARD.md` |
-| Component tests | One service runs against fakes of its outside services (`fakes:`), ready-made emulators (`emulators:` for Stripe, SMTP, and S3), or a fake from an OpenAPI description (`hydo fake from-openapi`). Emulators run on service networks (`network: bridge`) too since M316. The s3 emulator answers conditional writes 412 as S3 does, and `H=s3.put_if_absent@...:status=412` makes a lost race (M329). The s3 emulator writes its objects without an fsync, so a power cut of the whole guest loses objects it acknowledged (M343). The s3 emulator answers conditional writes 412 as S3 does, and `H=s3.put_if_absent@...:status=412` makes a lost race (M329). The s3 proxy's request shapes and conditional routes ran in a VM on hvx, the Mac engine, and KVM in M341. | built | M89, M242 (`checkout`), M249 (`openapi-payouts`), M316, M329, M341 (`checkout/hydo-s3.yaml`), M343 (`greptimedb`); open item 171 |
+| Component tests | One service runs against fakes of its outside services (`fakes:`), ready-made emulators (`emulators:` for Stripe, SMTP, and S3), or a fake from an OpenAPI description (`hydo fake from-openapi`). Emulators run on service networks (`network: bridge`) too since M316. The s3 emulator answers conditional writes 412 as S3 does, and `H=s3.put_if_absent@...:status=412` makes a lost race (M329). The s3 emulator writes its objects without an fsync, so a power cut of the whole guest loses objects it acknowledged (M343). Since M354 `durable: true` keeps them: the emulator's folders get ext4's attribute `S`. The s3 emulator answers conditional writes 412 as S3 does, and `H=s3.put_if_absent@...:status=412` makes a lost race (M329). The s3 proxy's request shapes and conditional routes ran in a VM on hvx, the Mac engine, and KVM in M341. | built | M89, M242 (`checkout`), M249 (`openapi-payouts`), M316, M329, M341 (`checkout/hydo-s3.yaml`), M343 (`greptimedb`), M354 (`checkout/hydo-s3-cut.yaml`); open item 171 |
 | Fuzz tests | `hydo fuzz` calls a Rust function with generated inputs natively. `hydo fuzz --vm` makes the calls inside the VM under power cuts and disk errors, and under clock steps, pauses, and kills inside a call. `hydo explore` draws the faults of each run from a seed. | partly built | M275, M282, M289, M292, M296 (`fuzz-vm`), M307 (enumerations, trait methods, `build` lines), M308 (a third evaluation: 9 known upstream bugs reproduced), M318 and M326 (its findings fixed). M327: a fourth evaluation, and M333 its findings fixed. Open items 139 and 163. |
 | Property-based tests | Function contracts (`// hydo: requires` and `ensures`) judge each generated input of `hydo fuzz`, and each call in a whole-system run. Value properties (`// hydo: keep`) judge a recorded value along its history. | partly built | M241, M255, M291 (`blnk`); open items 113 and 146 |
 | Formal verification | Not hydo's job. A proof covers every state of a model, and hydo checks only the runs that it makes. | not hydo's job | |
@@ -148,7 +148,6 @@ Ideas that would answer more:
 - [A walk that follows the page](#a-walk-that-follows-the-page);
 - [Faults inside a step](#faults-inside-a-step); and
 - [Stateful emulators](#stateful-emulators).
-- [A durable object store emulator](#a-durable-object-store-emulator).
 
 ### A library author in Rust
 
@@ -528,16 +527,6 @@ that a milestone builds moves into the tables of this page with its new status.
 - **What it needs.** An image with Node.js 24 that hydo builds and pins, for the emulate project
   of vercel-labs.
 - **Where it came from.** Open item 116.
-
-### A durable object store emulator
-
-- **What it is.** An S3 emulator that syncs each object before it answers, as real object
-  storage keeps what it acknowledged.
-- **Why it matters.** rclone's `serve s3` writes objects without an fsync, so a power cut of the
-  guest loses objects that it acknowledged. A system whose data lives in object storage, such as
-  GreptimeDB, cannot run `C=` or hvx's `cf=` against it.
-- **What it needs.** An fsync in the emulator's writes, or a small S3 server of hydo's own.
-- **Where it came from.** Open item 171 (M343).
 
 ### A rules scan that reads syntax
 
