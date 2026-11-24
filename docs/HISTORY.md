@@ -21757,6 +21757,110 @@ no deliveries to judge. Milestone 350 changed that rule.
 
 **What is left.** Open items 173 and 174 are updated.
 
+## Milestone 353 (tentative number): the fingerprint epoch 6
+
+Status: done on 2026-11-24. The fingerprint epoch is 6. No value of an older epoch moved, and the
+epoch-6 values wait for the 0.6.0 pass.
+
+This is the first step of hydo 0.6.0. Two defaults had waited for an epoch change, because each
+moves the runs of every image that has it:
+
+- `guest.outcomes_after_cut` (Milestone 184). Without the key, the recovery boot after a power
+  cut starts with an empty `$HYDO_OUTCOMES`. A check that looks up the ids listed there then
+  reports every acknowledged id lost, or passes without checking anything. Open item 62 kept the
+  key opt-in until an epoch change, and the epoch 2 (Milestone 204) did not take it in. 28
+  manifests of 21 examples set it by hand.
+- `guest.path` (Milestone 348). Without it, the commands that hydo starts have no `PATH`, so a
+  program that such a command starts does not find `hydo-oci` by name. Milestone 348 keyed it as
+  on from epoch 6 and left the epoch where it was.
+
+The lead's recommendation, accepted for this step, was to turn both on at epoch 6.
+
+**The change.** `hydo_image::EPOCH` is 6. `hydo_image::EpochDefaults` gets `outcomes_after_cut`,
+true from epoch 6 on both architectures, and `command_path` was already true from epoch 6. The
+host controller's plan keeps the manifest's value of `guest.outcomes_after_cut` as an `Option`
+(`Plan::outcomes_after_cut`), as it does for `guest.cgroup2` and `guest.path`.
+`agent::plan_of_image` puts in what an absent key means at the image's epoch. Every place that
+reads the key reads the plan's value: the outcomes kept at a power cut, the report line at the
+cut and at the run's end, and the write into the recovery boot's file. No other crate reads the key. A plan read from a
+manifest alone, as the controller's corpora read theirs, keeps the manifest's value, so their
+recorded transcripts stay the same.
+
+The project schema keeps `"default": false` for both keys, because `hydo-schema-compat` allows no
+change of a released default; the descriptions name the epoch. MANIFEST.md (the commented tour,
+"Outcomes after a power cut", "Services from a Docker/OCI image") and the guide topics
+`composer`, `invariant-patterns`, `services` and `strategies` say the new defaults.
+
+**The examples that set the key by hand** keep the line, and their bytes, until the pass:
+`blnk` (`hydo.yaml`, `hydo-contracts.yaml`, `hydo-paths.yaml`, `hydo-values.yaml`),
+`clickhouse`, `dragonfly`, `formance-ledger`, `garage`, `greptimedb`, `hatchet`, `iggy`
+(`hydo.yaml`, `hydo-configs.yaml`), `lago`, `meilisearch`, `memos`, `mender` (`hydo.yaml`,
+`hydo-devices.yaml`), `rauc`, `restate`, `river`, `saleor`, `surrealdb` (`hydo/hydo.yaml`,
+`upgrade/hydo.yaml`), `swupdate` (`hydo.yaml`, `hydo-devices.yaml`), `temporal`, `valkey` and
+`vikunja`. None of them is in `hydo/onboard/recorded.json`. The line is redundant at epoch 6 and
+can go when an example is built again.
+
+**What moves.** docs/REBASELINE.md section 30 has the list. Every image built at epoch 6 has new
+bytes through its record. Every run of such an image moves on every engine: each command that the
+controller starts carries `PATH`, which is in guest RAM and in the control transcript. Every
+run's transcript also ends with the outcomes report line (`hydo-explore-outcomes:`), which only
+the host reads. The 77 runs of the list with a whole-guest power cut also carry the outcomes into
+the recovery boot, so a check there can change its verdict. AGENTS.md open item 105 has the line.
+
+**Proof on the Mac engine.** The release's Redis example (`examples/redis` of the installed 0.5.0
+release, the quickstart's) ran with this tree's `hydo`, `hydo-build` and `hydo-hvm` in a copy of
+the 0.5.0 release's files. The shared Mac VM lock was free.
+
+- Built at epoch 5 by the installed 0.5.0 `hydo`, the image is the recorded `4f1e9207868ff352…`
+  (`hvm/release-redis`). This tree's `hydo` gave the recorded values: `disk=none | run`
+  `cce52f9e8565f6e2` (`ctl` `f8953914130df454`), `disk=cut | run C=12 R=everysec`
+  `b9a2d62ab3eaf0cb` (`k:0` lost, `ctl` `20a90cbaf59735ae`), and `disk=cut | run C=12`
+  `b46eb1de79e18bda` (OK, `acked=12`, `ctl` `4ff78a981f7b66dd`). Its recovery boot wrote nothing
+  into `$HYDO_OUTCOMES`, and no command had a `PATH`, as at epoch 5.
+- Built at epoch 6 by this tree, the same `hydo.yaml` gives the image `502d75403a6eebb4…`, whose
+  record says epoch 6. `disk=cut | run C=12` ended OK with `acked=12` twice, with one fingerprint
+  `da264396142d8e52` (`ctl` `66688c0d45750f76`). The first boot's transcript ends with
+  `hydo-explore-outcomes: 0=ack 1=ack ... 11=ack`, and its ending carries the 12 lines. The
+  recovery boot's control transcript has one write of `/tmp/hydo/outcomes` with the 12 lines
+  `0 ack` to `11 ack`, the first boot's last outcomes. Its commands carry
+  `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`. `disk=none | run` gave
+  `f7d1de1935d77df4` (`ctl` `4a1ab7a2081a474f`), OK with `acked=20`.
+
+The shared cargo target folder of this work was also used by another session from another
+worktree with the same relative paths. Cargo then took that session's newer `hydo-image` for
+this tree's release build, and the first epoch-6 build gave the epoch-5 image. After the changed
+files were touched, cargo built them again and the proof above ran with this tree's code.
+
+**Tests.** `hydo_image`'s `epoch_defaults` says that no epoch up to 5 has either default on, on
+either architecture, and that epoch 6 is epoch 5 with both on. The controller's
+`silent::the_image_epoch_decides_what_an_absent_outcomes_after_cut_means` builds the Redis
+example's manifest into images with records of epochs 1, 4, 5 and 6, with and without the key.
+It runs `disk=cut | run C=12` on the scripted agent. The recovery boot of an epoch-6 image
+without the key gets the first boot's last outcomes, and the images of epochs 1, 4 and 5 get an
+empty file, as before. `false` at epoch 6 and `true` at epoch 5 decide. The test of Milestone 184
+(`outcomes_after_cut_carries_the_last_outcomes_into_the_recovery_boot`) passes unchanged with the
+plan's `Option`. Every control transcript of the controller's corpora held unchanged.
+
+**Goldens re-recorded** (`HYDO_BLESS=1`), each for the epoch only:
+
+- The explorer's fake-engine goldens (`hydo-explore/tests/golden/fake/`, 52 files). Each run
+  records the hydo's epoch, so `"epoch":5` became `"epoch":6` in the plain files. In each
+  `.sha256` file only the whole file's hash and the first chunk's hash changed, the chunk with
+  the epoch line. The scripted engine's plans are read from manifests without an image record,
+  so no run of them moved.
+- The CLI's recorded answers of `hydo guide composer` and `hydo guide manifest`
+  (`hydo-cli/tests/golden/cli.jsonl`, four lines for the two platforms): the guide's new text.
+- The project schema `hydo/schema/project-v1.json`: the descriptions of `guest.outcomes_after_cut`
+  and `guest.path`. `hydo-schema-compat` passes.
+- `hydo_image`'s unit test of the canonical record reads `"epoch":6`.
+
+The equivalence corpora of `hydo-manifest` and `hydo-build` fail as before this milestone (54
+and 57 mismatches, all of the known guest keys and later format additions; open items 115 and
+165). None of them names the epoch, the record or `outcomes_after_cut`'s default.
+
+**What is left.** Open item 105 (the epoch-6 values), and the first bullet of open item 176 is
+updated. Open item 62 is closed.
+
 ## Milestone 354 (tentative number): the s3 emulator keeps its writes across a power cut
 
 Status: done on 2026-11-24, on the Mac engine. A format-1 addition, opt-in. Nothing recorded

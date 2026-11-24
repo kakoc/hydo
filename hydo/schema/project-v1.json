@@ -399,7 +399,7 @@
           "format": "int64"
         },
         "outcomes_after_cut": {
-          "description": "After a power cut the recovery boot's $HYDO_OUTCOMES starts with the first boot's last\noutcome of every id (without it the file starts empty there).",
+          "description": "After a power cut the recovery boot's $HYDO_OUTCOMES starts with the first boot's last\noutcome of every id (without it the file starts empty there). On by default for images\nbuilt at fingerprint epoch 6 and later; an image built earlier keeps it off (the schema's\ndefault is that of the released format). false: the file starts empty there.",
           "type": [
             "boolean",
             "null"
@@ -497,7 +497,7 @@
           "default": true
         },
         "path": {
-          "description": "Every command that hydo starts in the guest (the workload's, the checks', a service's\nown) gets PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin in its\nenvironment, so a program that such a command starts finds the guest's programs, hydo-oci\namong them, by name. Without it the commands have no PATH: busybox's shell finds the\nprograms, but Go's exec.Command(\"hydo-oci\") does not. Off by default for images built at\nfingerprint epoch 5 and earlier, because the variable is in guest RAM and so in every\nfingerprint (Milestone 348).",
+          "description": "Every command that hydo starts in the guest (the workload's, the checks', a service's\nown) gets PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin in its\nenvironment, so a program that such a command starts finds the guest's programs, hydo-oci\namong them, by name. Without it the commands have no PATH: busybox's shell finds the\nprograms, but Go's exec.Command(\"hydo-oci\") does not. Off by default for images built at\nfingerprint epoch 5 and earlier, because the variable is in guest RAM and so in every\nfingerprint (Milestone 348); on for images built at epoch 6 and later.",
           "type": [
             "boolean",
             "null"

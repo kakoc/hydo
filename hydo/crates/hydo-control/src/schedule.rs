@@ -2788,7 +2788,7 @@ fn failed_ids_outcomes(fx: &mut F<'_>, ctx: &Ctx) -> Step<(String, Vec<String>)>
     let l = &ctx.plan.layout;
     let outcomes = read_all(fx, &l.outcomes())?;
     let failed = failed_of(&outcomes);
-    let last = if ctx.plan.outcomes_after_cut {
+    let last = if ctx.plan.outcomes_after_cut == Some(true) {
         last_outcomes(&outcomes)
     } else {
         Vec::new()
@@ -3551,7 +3551,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             failed.replace('\n', " ")
         ));
         // guest.outcomes_after_cut: the last outcomes, for the recovery boot
-        if ctx.plan.outcomes_after_cut {
+        if ctx.plan.outcomes_after_cut == Some(true) {
             fx.report(format!("{OUTCOMES_PREFIX} {}", outcomes_words(&outcomes)));
         }
         // Milestone 238: the switched services' versions, for the recovery boot
@@ -3663,7 +3663,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         failed.replace('\n', " ")
     ));
     // guest.outcomes_after_cut: a cf= power cut at the workload's end hands these over
-    if ctx.plan.outcomes_after_cut {
+    if ctx.plan.outcomes_after_cut == Some(true) {
         fx.report(format!("{OUTCOMES_PREFIX} {}", outcomes_words(&outcomes)));
     }
     // Milestone 238: so does the line of the switched services' versions
@@ -3730,7 +3730,7 @@ fn disk_cut(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         "hydo-explore-failed: {}",
         failed.replace('\n', " ")
     ));
-    if ctx.plan.outcomes_after_cut {
+    if ctx.plan.outcomes_after_cut == Some(true) {
         fx.report(format!("{OUTCOMES_PREFIX} {}", outcomes_words(&outcomes)));
     }
     if !ctx.run.u.is_empty() {

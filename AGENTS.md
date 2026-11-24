@@ -171,7 +171,7 @@ These rules are in force. Do not break them.
 - Keep existing fingerprints stable. A new module feature must be opt-in and inert when off, so
   that every recorded baseline stays the same. Check this with `deploy-metal.sh` and the pinned
   reproducers before and after the change.
-- The fingerprint epoch rule. `hydo_image::EPOCH` (now 5, since M317; 4 from M269, 3 from M234, 2 from M204, 1 from M155) names the
+- The fingerprint epoch rule. `hydo_image::EPOCH` (now 6, since M353; 5 from M317, 4 from M269, 3 from M234, 2 from M204, 1 from M155) names the
   generation of fingerprints. Raise it by one in the same commit as any change that moves a
   recorded fingerprint. Such changes are changes of an engine, the host controller, the agent pin
   or the guest kernels, or of a default that an image's run depends on. Add a section of
@@ -298,8 +298,11 @@ this way. Other tags, such as the action's moving tag `v1`, do not start it. `pa
 dry-runs the packages on every pull request that changes one. The details are in
 `docs/PUBLISHING.md`, section "Publishing from GitHub Actions" (M186).
 
-**Fingerprints.** The fingerprint epoch is 5 (M317; 4 from M269, 3 from M234, 2 from M204, 1
-from M155). An image built at epoch 5 has the image services' launchers of M317, which mount the
+**Fingerprints.** The fingerprint epoch is 6 (M353; 5 from M317, 4 from M269, 3 from M234, 2
+from M204, 1 from M155). An image built at epoch 6 carries the first boot's outcomes into a
+recovery boot and gives the controller's commands a `PATH` (M353, below). Its values wait for the
+0.6.0 pass (open item 105): `hydo/onboard/recorded.json` keeps its epoch-5 values until then. An
+image built at epoch 5 has the image services' launchers of M317, which mount the
 system folders once per boot. Since M331 they also give each image service a `/tmp` of its own. On hvx an x86_64 image built at epoch 5 keeps time with its TSC
 (M323, `guest.exact_tick`). The 0.5.0 release's pass re-recorded every value of the list at
 epoch 5 (docs/REBASELINE.md section 29). An image built at epoch 3 or later boots the Mac and KVM guest kernels
@@ -2007,7 +2010,7 @@ details are in `docs/HISTORY.md` Milestone 345 (open item 173).
 moves a recorded value:
 - `guest.path: true` (a format-1 addition) gives every command that hydo starts `PATH`, so a
   program that a workload command starts finds `hydo-oci` by name. The variable is in guest RAM,
-  so an absent key means off up to the fingerprint epoch 5 and on from epoch 6
+  so an absent key means off up to the fingerprint epoch 5 and on from epoch 6, which M353 made
   (`hydo_image::EpochDefaults::command_path`).
 - A composed command that fails leaves its last lines in `one.log`: a `HYDO-CMD-OUT` note, or for
   a violation the `HYDO-CHECK-OUT` note of `compose.<id>.no_violation`, which `result.json`
@@ -2021,6 +2024,21 @@ moves a recorded value:
 The references are `hydo guide inspect`, `hydo guide error-logs`, `hydo guide workflow` and the
 section "Services from a Docker/OCI image" of MANIFEST.md; the details are in `docs/HISTORY.md`
 Milestone 348.
+
+**The fingerprint epoch 6 (M353, tentative number).** The first step of 0.6.0. `hydo_image::EPOCH`
+is 6, and two defaults are keyed on it in `hydo_image::defaults`:
+- `guest.outcomes_after_cut` (M184) is on for an image built at epoch 6 or later
+  (`outcomes_after_cut`). The recovery boot after a power cut then starts with the first boot's
+  last outcome of every id in `$HYDO_OUTCOMES`. A check that looks ids up there no longer
+  reports false losses or passes without checking. `false` turns it off.
+- `guest.path` (M348) is on from epoch 6 (`command_path`), as M348 prepared.
+
+An image built at epoch 5 or before keeps its epoch's defaults, so the pinned reproducers and
+every recorded value of an older epoch stay. 28 manifests of 21 examples set
+`outcomes_after_cut: true` by hand; they keep the line, and their bytes, until the pass. Every
+value of `hydo/onboard/recorded.json` built at epoch 6 moves and waits for the 0.6.0 pass (open
+item 105, docs/REBASELINE.md section 30). The reference is MANIFEST.md "Outcomes after a power
+cut"; the details are in `docs/HISTORY.md` Milestone 353.
 
 **Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 64 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
@@ -2185,8 +2203,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A closed socket of the dead node sends its end again after a timeout, which can reach a
       peer after the bridge port is up again. Without `network: bridge` no link is cut.
     - It ran on hvx only, and the explorer does not draw it.
-62. [user decision] `guest.outcomes_after_cut` stays opt-in until an epoch change (M184). The
-    epoch 2 (M204) did not take it in: it was not among the defaults the user named.
 63. [user decision] Trusted publishing works since 0.3.0. The npm entry expires after two days
     unused, so add it just before a release. A crate new to `cargo install hydo` needs its first
     version published by hand (M186).
@@ -2377,8 +2393,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `skill-v1.0.0` to `skill-v2.4.0` wait for deletion after 0.5.0 is published.
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
-    milestone and the values it moves; the pass removes the lines. Empty since the 0.5.0
-    release's pass (docs/REBASELINE.md section 29).
+    milestone and the values it moves; the pass removes the lines.
+    - M353 (the fingerprint epoch 6): every image of the list gets new bytes when it is built
+      (its record says epoch 6): hvm 21, kvm 6, and hvx 43. Every run of an epoch-6 image moves,
+      because each command the controller starts has `PATH` in its environment (guest RAM and
+      `ctl`). The runs with a power cut also carry the first boot's outcomes into the recovery
+      boot: the controller reports them at the cut and writes them into the recovery boot's
+      `$HYDO_OUTCOMES`. A check that read an empty `$HYDO_OUTCOMES` there before can change its verdict. The
+      pass decides each verdict change (docs/REBASELINE.md section 30).
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -3552,9 +3574,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       no arm and no type named for it handles is left out, also when a handler of another shape
       exists. No onboarding used the list of an enumeration yet.
 176. Five gaps of recent onboardings (M348, tentative number). What is left:
-    - `guest.path` is off for every image built now; it is the default from the next fingerprint
-      epoch. No example was built with the key, and no VM ran a Go program that finds `hydo-oci`
-      by name; the controller's test checks the commands' environment.
+    - `guest.path` is on for an image built at the fingerprint epoch 6 (M353). No VM ran a Go
+      program that finds `hydo-oci` by name; the controller's test checks the commands'
+      environment.
     - A failed composed command's `HYDO-CMD-OUT` note is in `one.log` only: `result.json` keeps
       the lines of a violation (exit 100), not of another exit status. A plain `workload.run`'s
       output reaches the run directory only through the diagnosis replay, which `hydo run`
@@ -4667,6 +4689,11 @@ build machine, before 2026-10-13.
   index deletion broke `acked_outcome` by the deletion's effect at 6 ms. Every failure ran again
   with its fingerprint, and both hosts' models gave the same values. The refusals stopped with
   status 5 before any run. Nothing recorded moved
+- M353 (tentative number): the fingerprint epoch 6, the first step of the next release. An
+  image built at epoch 6 carries the first boot's outcomes into the recovery boot after a power
+  cut (`guest.outcomes_after_cut`, open item 62 closed). It gives the controller's commands a `PATH`
+  (`guest.path`). A manifest's `false` turns either off. An image built before keeps its
+  epoch's defaults. Every epoch-6 value waits for the 0.6.0 pass (open item 105)
 - M354 (tentative number): the s3 emulator keeps its acknowledged writes across a power cut.
   `durable: true` on an `s3` entry gives its folders ext4's attribute `S`, so rclone's writes,
   renames and deletes reach the disk before it answers. On the Mac engine the new example
@@ -4678,8 +4705,8 @@ build machine, before 2026-10-13.
 - `docs/HISTORY.md`: every milestone with its evidence, and the superseded values.
 - `docs/USE-CASES.md`: every use case with its status, by testing stage and by who asks, and the
   ideas not built yet.
-- `docs/REBASELINE.md`: the recorded fingerprints by section; section 13 is epoch 1, section 19
-  is epoch 2, section 24 is epoch 3, section 26 is epoch 4, section 29 is epoch 5.
+- `docs/REBASELINE.md`: the recorded fingerprints by section. Sections 13, 19, 24, 26, 29, and
+  30 name the epochs 1 to 6.
 - `docs/BUILD-PINS.md`: the pinned toolchain and guest programs.
 - `docs/CI.md`: what CI runs, where, and how long it takes.
 - `docs/RELEASING.md` and `docs/PUBLISHING.md`: the release and publishing steps.

@@ -57,9 +57,10 @@ rules that matter most:
 - `provision`: schemas, topics, users: what must exist before the window under test. Seed data
   that belongs to the test is a `first_<name>` command instead.
 - Images: `image:` plus `mounts:` (bind, volume, tmpfs) and `user:`; tools inside an image run as
-  `hydo-oci <service> <command>`. The program is `/bin/hydo-oci`. The commands that hydo starts
-  have no `PATH`, so a client program that a command starts finds it by name only with
-  `guest.path: true` in `hydo.yaml`; without the key, call it by its path. Go's
+  `hydo-oci <service> <command>`. The program is `/bin/hydo-oci`. In an image built by hydo
+  0.6.0 or later (the fingerprint epoch 6), the commands that hydo starts have a `PATH`. A
+  client program that such a command starts then finds it by name. An image built before gives them no `PATH`
+  unless `hydo.yaml` says `guest.path: true`; there, call it by its path. Go's
   `exec.Command("hydo-oci", ...)` did not find it in the Prometheus example. An image root is read-only. A program that writes into its own
   files needs `writable: true`, for example for a cache in its home directory, or files generated
   into its install directory. The error is often `ENOENT` or `Read-only file system`. The
@@ -87,8 +88,9 @@ Guest settings:
   built on Red Hat Enterprise Linux 8 or a rebuild of it (AlmaLinux 8, Rocky Linux 8, UBI 8).
   Without it, that glibc's AVX `memcpy` crashes, because CPUID describes no caches.
 - `guest.clock_after_cut: 60` when a check compares times written before and after a power cut.
-- `guest.outcomes_after_cut: true` when a check reads `$HYDO_OUTCOMES`. Without it, that file is
-  empty in the recovery boot after a power cut.
+- `guest.outcomes_after_cut: true` when a check reads `$HYDO_OUTCOMES` and the image is built
+  before the fingerprint epoch 6 (hydo 0.5 and older). Without it, that file is empty in the
+  recovery boot after a power cut. From epoch 6 it is the default.
 
 Other top-level keys:
 

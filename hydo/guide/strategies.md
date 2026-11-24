@@ -173,8 +173,9 @@ These findings hold for every type of system:
   stored. A kill after an index deletion's `202` left the deletion `failed` with
   `index_not_found` although the index was gone, an error the declaration named as the
   client's; the recorded effect broke the claim.
-- **What it misses.** `$HYDO_OUTCOMES` is empty in the recovery boot after a power cut unless
-  `guest.outcomes_after_cut: true` is set (`hydo guide composer`). A check that asks about every
+- **What it misses.** In an image built before the fingerprint epoch 6, `$HYDO_OUTCOMES` is
+  empty in the recovery boot after a power cut unless `guest.outcomes_after_cut: true` is set
+  (`hydo guide composer`). A check that asks about every
   operation on every poll starts many processes. In the user's first version, the run ended as
   `ERROR check: exit budget exhausted` while queries were stuck. Stop at the first operation
   that has not ended, as the example does.

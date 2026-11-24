@@ -146,7 +146,8 @@ guest:
                                #   hydo init and hydo compose write the day they ran)
   clock_after_cut: 60          # optional: after a power cut the recovery boot's clock continues from the cut, + 60 s
                                #   (without it the recovery boot's clock starts at clock_start again)
-  outcomes_after_cut: true     # optional: after a power cut the recovery boot's $HYDO_OUTCOMES holds the first boot's last outcomes
+  outcomes_after_cut: false    # optional: after a power cut the recovery boot's $HYDO_OUTCOMES holds the first boot's last outcomes
+                               #   (default true since fingerprint epoch 6); see "Outcomes after a power cut"
   reboot: true                 # optional: a guest program may ask for a reboot (console line HYDO-REBOOT); see "Reboots"
   disks:                       # optional (the Mac and KVM engines): disks beside the main one; see "Added disks"
     - {name: emmc, size_mib: 64, cache: volatile}
@@ -164,9 +165,9 @@ guest:
                                # true since fingerprint epoch 4); see "The cgroup2 mount"
   exact_tick: true             # optional (hvx): the guest keeps time with its TSC (default
                                # from epoch 5); see "The guest's timer tick on hvx"
-  path: true                   # optional: every command hydo starts gets PATH, so a program it
-                               # starts finds hydo-oci by name (default false); see "Services
-                               # from a Docker/OCI image"
+  path: false                  # optional: every command hydo starts gets PATH, so a program it
+                               # starts finds hydo-oci by name (default true since fingerprint
+                               # epoch 6); see "Services from a Docker/OCI image"
 
 network: bridge                # loopback (default): one network for everything in the guest;
                                # bridge: each service in its own network namespace at its addr:
@@ -416,12 +417,14 @@ What the build does:
   in the service's root with its env and working directory, as root. Use it in `ready:`, the
   workload, knobs and invariants (`hydo-oci cache redis-cli GET k`). A static busybox is put at
   `/.hydo/busybox` in each image root for `env -i`, `cd` and the user switch, so images without
-  a shell (distroless) work. The program is `/bin/hydo-oci`. A shell command finds it by name,
-  but the commands that hydo starts have no `PATH`, so a program that such a command starts
-  (Go's `exec.Command("hydo-oci", ...)`) does not. `guest.path: true` gives every command
-  `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`. The variable is in guest
-  RAM, so the key moves the image's fingerprints; it is off by default until the next
-  fingerprint epoch (Milestone 348).
+  a shell (distroless) work. The program is `/bin/hydo-oci`. A shell command finds it by name.
+  `guest.path: true` gives every command that hydo starts
+  `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`, so a program that such a
+  command starts (Go's `exec.Command("hydo-oci", ...)`) finds it too. The variable is in guest
+  RAM, so the key moves the image's fingerprints. It is on by default for an image built at the
+  fingerprint epoch 6 or later (Milestone 353), and `guest.path: false` turns it off. An image
+  built before epoch 6 gives the commands no `PATH` unless its manifest says `true`
+  (Milestone 348).
 - A killed, paused or frozen image service is the same process tree as any other service (the
   launcher `exec`s down to the program), so every fault applies unchanged.
 - **Reproducible:** owners, groups and modes (including setuid) come from the layer tars and
@@ -1205,8 +1208,14 @@ and reports "every acknowledged id lost" or passes without checking anything. Wi
 `guest.outcomes_after_cut: true` the host controller reads the first boot's `$HYDO_OUTCOMES` at the
 cut and writes the last outcome of every id into the recovery boot's file (`<id> <outcome>`, one
 line per id, in numeric order of the ids); `hydo-read hydo unknown` and the checks then see what
-the client saw. Opt-in, so that images built before it keep their recorded fingerprints: a
-manifest without the key gets an empty file there, as before.
+the client saw.
+
+From the fingerprint epoch 6 (Milestone 353) this is the default: an image built at epoch 6 or
+later carries the outcomes without the key, and `guest.outcomes_after_cut: false` turns it off.
+An image built before epoch 6 (Milestone 184 made the key) gets an empty file there unless its
+manifest says `true`, so it keeps its recorded fingerprints. The controller's reads at the cut and
+the file's lines in the recovery boot are in every fingerprint and control transcript of a run
+with a power cut.
 
 ### Reboots (`guest.reboot`)
 

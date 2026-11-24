@@ -5,10 +5,11 @@ numbered-steps manifest; the body is the same). Exit 0 = holds, 1 = violated, 2 
 evaluated now. Print one line of details last. Files: `$HYDO_ACKED` (one acknowledged id per
 line), `$HYDO_OUTCOMES` (`<id> ack|failed|unknown`, the last line per id wins), `$HYDO_FAILED`
 (ids whose last outcome was `failed`). After a power cut the recovery boot's checks get
-`$HYDO_ACKED` and `$HYDO_FAILED` carried over. `$HYDO_OUTCOMES` is carried, with the last outcome
-of every id, only with `guest.outcomes_after_cut: true` in the manifest. Without that key it is
-empty there, so a check that looks up the ids in `$HYDO_OUTCOMES` checks nothing after a power
-cut. Where a ready-made `hydo-check` line exists it is shown
+`$HYDO_ACKED` and `$HYDO_FAILED` carried over. `$HYDO_OUTCOMES` is carried too, with the last
+outcome of every id, for an image built at the fingerprint epoch 6 or later. An image built
+before carries it only with `guest.outcomes_after_cut: true` in the manifest. Without the carry
+it is empty there, so a check that looks up the ids in `$HYDO_OUTCOMES` checks nothing after a
+power cut. Where a ready-made `hydo-check` line exists it is shown
 first; use the shell version where `hydo-read` is not available (`hydo guide capabilities`) or the store is
 not one it reads.
 
