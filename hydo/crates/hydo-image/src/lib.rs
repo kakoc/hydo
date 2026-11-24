@@ -71,8 +71,11 @@ pub const VERSION: u64 = 1;
 /// and (Milestone 338) an arm64 root keeps its hard links ([`EpochDefaults::cpio_hard_links`]),
 /// an image service sees the guest's cgroup2 files ([`EpochDefaults::oci_sys_rbind`]), and a
 /// timed pause of threads finds the workload as a reaction's does
-/// ([`EpochDefaults::pause_largest_session`]).
-pub const EPOCH: u64 = 5;
+/// ([`EpochDefaults::pause_largest_session`]). Epoch 6 (Milestone 353): the recovery boot after a
+/// power cut starts with the first boot's last outcomes in `$HYDO_OUTCOMES`
+/// ([`EpochDefaults::outcomes_after_cut`]), and (Milestone 348) every command that the host
+/// controller starts gets a `PATH` ([`EpochDefaults::command_path`]).
+pub const EPOCH: u64 = 6;
 
 /// The epoch of a run, exploration or cache entry that recorded none (written before M155).
 pub const EPOCH_BEFORE_RECORDS: u64 = 1;
@@ -169,9 +172,19 @@ pub struct EpochDefaults {
     /// `hydo-oci` among them, by name. Before, the kernel gave init no `PATH`, busybox's shell
     /// exported none, and Go's `exec.Command("hydo-oci", ...)` failed with `executable file
     /// not found in $PATH` (open item 170). The variable is in each command's environment, so
-    /// in guest RAM: it moves every fingerprint and control transcript. So it waits for the
-    /// next fingerprint epoch, 6 (Milestone 348); until then `guest.path: true` turns it on.
+    /// in guest RAM: it moves every fingerprint and control transcript. So it waited for the
+    /// next fingerprint epoch (Milestone 348): on from epoch 6 (Milestone 353), and before it
+    /// `guest.path: true` turns it on.
     pub command_path: bool,
+    /// What an absent `guest.outcomes_after_cut` means: the host controller reads the first
+    /// boot's `$HYDO_OUTCOMES` at a power cut and writes the last outcome of every id into the
+    /// recovery boot's file, so a check that looks up the ids of `$HYDO_OUTCOMES` there sees what
+    /// the client saw. Before, the recovery boot's file started empty, and such a check reported
+    /// every acknowledged id lost or passed without checking anything (Milestone 184, open item
+    /// 62). The controller reports the outcomes at the cut and sends the recovery boot one more
+    /// command, the write of the file, which is then in guest RAM, so every run with a power cut
+    /// gets another control transcript and fingerprint. From epoch 6 (Milestone 353).
+    pub outcomes_after_cut: bool,
 }
 
 /// The `PATH` that `guest.path` gives the project's commands: busybox's own default.
@@ -196,6 +209,7 @@ pub fn defaults(epoch: u64, arch: &str) -> EpochDefaults {
         oci_sys_rbind: epoch >= 5,
         pause_largest_session: epoch >= 5,
         command_path: epoch >= 6,
+        outcomes_after_cut: epoch >= 6,
     }
 }
 
@@ -539,7 +553,7 @@ mod tests {
     fn canonical_sorts_and_reads_back() {
         let r = kernels::record_for("x86_64", false);
         let t = canonical(&r);
-        assert!(t.starts_with("{\"arch\":\"x86_64\",\"epoch\":5,\"initrd\":{"));
+        assert!(t.starts_with("{\"arch\":\"x86_64\",\"epoch\":6,\"initrd\":{"));
         assert!(t.ends_with("}\n") && !t.contains(": "));
         assert_eq!(parse_record(&t).unwrap(), r);
         let mut v: Value = serde_json::from_str(&t).unwrap();
@@ -645,12 +659,27 @@ mod tests {
         assert!(defaults(5, "arm64").oci_own_tmp);
         // hvx runs x86_64 images only
         assert!(!defaults(5, "arm64").exact_tick);
-        assert_eq!(defaults(EPOCH, "x86_64"), five);
-        // Milestone 348: `guest.path` waits for the next epoch, so no image built now has it on
+        // Milestones 348 and 353: `guest.path` and `guest.outcomes_after_cut` are off at every
+        // epoch up to 5, so an image built before epoch 6 keeps its runs
         for e in 1..=5 {
-            assert!(!defaults(e, "x86_64").command_path && !defaults(e, "arm64").command_path);
+            for arch in ["x86_64", "arm64"] {
+                assert!(!defaults(e, arch).command_path, "epoch {e} {arch}");
+                assert!(!defaults(e, arch).outcomes_after_cut, "epoch {e} {arch}");
+            }
         }
-        assert!(defaults(6, "x86_64").command_path && defaults(6, "arm64").command_path);
+        // epoch 6 (M353): both on; the rest as at epoch 5
+        let six = defaults(6, "x86_64");
+        assert_eq!(
+            six,
+            EpochDefaults {
+                command_path: true,
+                outcomes_after_cut: true,
+                ..five
+            }
+        );
+        assert!(defaults(6, "arm64").command_path && defaults(6, "arm64").outcomes_after_cut);
+        assert!(!defaults(6, "arm64").exact_tick);
+        assert_eq!(defaults(EPOCH, "x86_64"), six);
     }
 
     #[test]

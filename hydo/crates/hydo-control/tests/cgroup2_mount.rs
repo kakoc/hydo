@@ -110,8 +110,8 @@ fn a_recovery_boot_starts_from_s0_and_mounts_nothing_again() {
 }
 
 /// An arm64 image of `text` built at `epoch`: the manifest, the pinned tools' paths that the
-/// manifest's default faults need (`manifest.sh`) and the image record only.
-fn image(d: &Path, text: &str, epoch: u64) -> PathBuf {
+/// manifest's default faults need (`manifest.sh`) and the image record only (also `silent.rs`).
+pub(crate) fn image(d: &Path, text: &str, epoch: u64) -> PathBuf {
     let root = d.join(format!("root{epoch}"));
     let etc = root.join("etc/hydo");
     std::fs::create_dir_all(&etc).unwrap();

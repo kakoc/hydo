@@ -73,7 +73,7 @@ so a typo does not silently do nothing.
 | `HYDO_ROUND` | the round it started in |
 | `HYDO_SEED` | a number from the composition's random stream, for the command's own choices |
 | `HYDO_ACKED` | file: append one id per line for every operation the client saw acknowledged (carried across a power cut) |
-| `HYDO_OUTCOMES` | file: append `<id> ack\|failed\|unknown` per attempt; the last line per id wins. It is carried across a power cut only with `guest.outcomes_after_cut: true`, and then the recovery boot's file holds the last outcome of every id. Without that key the file is empty there. A check that looks ids up in it then checks nothing after a power cut. |
+| `HYDO_OUTCOMES` | file: append `<id> ack\|failed\|unknown` per attempt; the last line per id wins. It is carried across a power cut, and the recovery boot's file holds the last outcome of every id. This is the default for an image built at the fingerprint epoch 6 or later (hydo 0.6.0); `guest.outcomes_after_cut: false` turns it off. An image built before carries it only with `guest.outcomes_after_cut: true`. Without the carry the file is empty there, and a check that looks ids up in it checks nothing after a power cut. |
 | `HYDO_FAILED` | file (checks only): ids whose last outcome was `failed` |
 
 A `first_` command sees these files too, but each run starts with them empty, so an operation

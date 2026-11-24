@@ -3881,3 +3881,48 @@ programs. Their epoch-5 images (`4b78d7a8…` and `8951cf69…`, the list's `sta
 `stack-fix`, copied to `~/hydo/build/rel050`) give `b6e78273b1d21304`
 (VIOLATION, order 11) and `b531d6bcaa8489b7` (OK) on hvx, and `4b9f52b31c1a58b4` and
 `8672be7cd62d3d75` on KVM (AMD).
+
+## 30. The fingerprint epoch 6 (M353, 2026-11-24)
+
+Open item 62 kept `guest.outcomes_after_cut` (Milestone 184) opt-in until an epoch change. Without
+the key, the recovery boot after a power cut starts with an empty `$HYDO_OUTCOMES`. A check that
+looks up the ids listed there then reports every acknowledged id lost, or passes without checking
+anything. 28 manifests of 21 examples set the key by hand. Milestone 348 made `guest.path` and
+keyed it on the next epoch. This section records the decision of the first step of 0.6.0: both
+defaults are on from epoch 6. Under the rule "Re-recording runs in batches" (AGENTS.md), the
+values are not re-recorded with the change. `hydo/onboard/recorded.json` keeps its epoch-5 values
+of section 29 and its `epoch` 5 until the re-recording pass before the 0.6.0 release (AGENTS.md
+open item 105).
+
+**The fingerprint epoch is 6.** For an image built at epoch 6 or later, an absent key means on
+(`hydo_image::defaults`: `outcomes_after_cut` and `command_path`):
+
+- At a power cut the host controller reads the first boot's `$HYDO_OUTCOMES` and writes the last
+  outcome of every id into the recovery boot's file. `guest.outcomes_after_cut: false` turns it
+  off.
+- Every command that the controller starts gets
+  `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin` in its environment.
+  `guest.path: false` turns it off.
+
+An image built at epoch 5 or before keeps the defaults of its own epoch, so it runs as it did:
+an empty file in the recovery boot and no `PATH`, unless its manifest says `true`. The project
+schema keeps `"default": false` for both keys, the meaning of the released format, because the
+format check allows no change of a default. The descriptions name the epoch.
+
+**What moves.** Every image of the list built at epoch 6 has new bytes, because its record
+`/etc/hydo/image.json` says epoch 6: hvm 21 images, kvm 6 and hvx 43. Nothing else in an image
+changes: hydo-build writes the same files as at epoch 5. Every run of an epoch-6 image moves on
+all three engines. Each command the controller starts carries `PATH`, so the commands of the
+control transcript (`ctl`) and the guest's RAM change. Of the list's runs, 48 on hvx, 22 on the
+Mac and 7 on KVM have a whole-guest power cut (`C=` or `cf=`), and no image of the list sets
+`outcomes_after_cut`. In those runs the controller also reports the outcomes at the cut and
+writes the first boot's last outcomes into the recovery boot's file. A check that reads that file
+there sees ids it did not see before, so its verdict can change. The pass decides each verdict
+change as sections 20, 26 and 29 did.
+
+**The pinned reproducers** keep their images and values. This hydo boots the epoch-2 images in
+`~/hydo/build/m204` (`a76d7fe857fdb37c`, `efbde7b57264be0f`), the epoch-4 images in
+`~/hydo/build/m302` (`e153f376096a072c`, `6a5c2fe208174af3`) and the epoch-5 images in
+`~/hydo/build/rel050` (`b6e78273b1d21304`, `b531d6bcaa8489b7`) with the defaults of their own
+epochs. The change was not run on the bare-metal machine: the controller's tests with images of
+epochs 1, 4 and 5 show the old defaults (docs/HISTORY.md Milestone 353).

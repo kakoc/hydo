@@ -227,10 +227,12 @@ pub struct Plan {
     /// `guest.clock_after_cut`: seconds the machine is off at a power cut; the recovery boot's
     /// clock continues from the first boot's (features/clock.rs).
     pub clock_after_cut: Option<i64>,
-    /// `guest.outcomes_after_cut: true`: the recovery boot after a power cut starts with the
-    /// first boot's last outcome of every id in `$HYDO_OUTCOMES` (without it that file starts
-    /// empty there).
-    pub outcomes_after_cut: bool,
+    /// `guest.outcomes_after_cut` (Milestone 184): the recovery boot after a power cut starts
+    /// with the first boot's last outcome of every id in `$HYDO_OUTCOMES` (without it that file
+    /// starts empty there). The manifest's value here; `agent::plan_of_image` puts in what an
+    /// absent key means at the image's fingerprint epoch (on from epoch 6, Milestone 353,
+    /// `hydo_image::EpochDefaults::outcomes_after_cut`). None or false: an empty file.
+    pub outcomes_after_cut: Option<bool>,
     /// `guest.reboot: true` (Milestone 263, docs/design/devices.md): a guest program may ask for
     /// a reboot with the console line `HYDO-REBOOT`.
     pub reboot: bool,
@@ -760,7 +762,7 @@ impl Plan {
                 None => None,
                 Some(c) => Some(int(c, "guest.clock_after_cut")?),
             },
-            outcomes_after_cut: get(guest, "outcomes_after_cut").is_some_and(py::truthy),
+            outcomes_after_cut: get(guest, "outcomes_after_cut").and_then(Value::as_bool),
             reboot: get(guest, "reboot").is_some_and(py::truthy),
             cgroup2: get(guest, "cgroup2").and_then(Value::as_bool),
             path: get(guest, "path").and_then(Value::as_bool),

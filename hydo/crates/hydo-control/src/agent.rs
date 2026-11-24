@@ -190,6 +190,15 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
     if plan.path.is_none() {
         plan.path = Some(hydo_engine::image::image_defaults(image).1.command_path);
     }
+    // Milestone 353: without `guest.outcomes_after_cut` the image's epoch decides (the first
+    // boot's outcomes carried into a recovery boot from epoch 6)
+    if plan.outcomes_after_cut.is_none() {
+        plan.outcomes_after_cut = Some(
+            hydo_engine::image::image_defaults(image)
+                .1
+                .outcomes_after_cut,
+        );
+    }
     // Milestone 338: from epoch 5 a timed pause of threads finds the workload as a reaction does
     plan.pause_largest_session = hydo_engine::image::image_defaults(image)
         .1

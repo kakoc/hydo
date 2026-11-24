@@ -2,7 +2,8 @@
 //! ([`hydo_control::names`]), every recorded schedule is still accepted, and with
 //! `guest.outcomes_after_cut: true` the recovery boot after a power cut gets the first boot's
 //! last outcomes in `$HYDO_OUTCOMES` (without it nothing changes: the recorded transcripts of
-//! the other tests are the proof).
+//! the other tests are the proof). What an absent key means is the image's fingerprint epoch:
+//! on from epoch 6 (Milestone 353, [`hydo_control::agent::plan_of_image`]).
 
 use crate::support;
 use crate::tmpdir::TmpDir;
@@ -238,7 +239,7 @@ fn outcomes_after_cut_carries_the_last_outcomes_into_the_recovery_boot() {
     assert_eq!(writes_to(&rc.items, &outcomes), "");
     // with it: the first boot's last outcome per id, in the ending, the transcript and the
     // recovery boot's $HYDO_OUTCOMES
-    p.outcomes_after_cut = true;
+    p.outcomes_after_cut = Some(true);
     let b = support::boot(&p, "silent").unwrap();
     let on = support::run_schedule(&b, &sched).unwrap();
     let file = on.run.fake.world_file(&outcomes);
@@ -280,6 +281,51 @@ fn outcomes_after_cut_carries_the_last_outcomes_into_the_recovery_boot() {
         .map(str::to_string)
         .collect();
     assert_eq!(hydo_control::schedule::outcomes_of_words(&words), want);
+}
+
+/// Milestone 353: an image built at the fingerprint epoch 6 carries the outcomes into the
+/// recovery boot without the key; an image built before keeps the empty file of its epoch, and
+/// the key decides at every epoch.
+#[test]
+fn the_image_epoch_decides_what_an_absent_outcomes_after_cut_means() {
+    let top = support::top();
+    let text = std::fs::read_to_string(top.join("hydo/onboard/examples/redis/hydo.yaml")).unwrap();
+    assert!(!text.contains("outcomes_after_cut"));
+    let keyed = |b: bool| format!("{text}\nguest:\n  outcomes_after_cut: {b}\n");
+    let d = TmpDir::new(&format!("hydo-control-outcomes-{}", std::process::id()));
+    let sched = Schedule::parse("disk=cut | run C=12").unwrap();
+    for (epoch, key, want) in [
+        (1, None, false),
+        (4, None, false),
+        (5, None, false),
+        (6, None, true),
+        (6, Some(false), false),
+        (5, Some(true), true),
+    ] {
+        let sub = d.join(format!("e{epoch}-{key:?}"));
+        std::fs::create_dir_all(&sub).unwrap();
+        let t = key.map(keyed).unwrap_or_else(|| text.clone());
+        let img = crate::cgroup2_mount::image(&sub, &t, epoch);
+        let p = hydo_control::agent::plan_of_image(&img).unwrap_or_else(|e| panic!("{e:?}"));
+        let what = format!("epoch {epoch}, guest.outcomes_after_cut {key:?}");
+        assert_eq!(p.outcomes_after_cut, Some(want), "{what}");
+        // the recovery boot's $HYDO_OUTCOMES: the first boot's last outcomes, or nothing
+        let outcomes = p.layout.outcomes();
+        let b = support::boot(&p, "silent-epoch").unwrap();
+        let r = support::run_schedule(&b, &sched).unwrap();
+        let first = hydo_control::schedule::last_outcomes(&r.run.fake.world_file(&outcomes));
+        assert!(!first.is_empty(), "{what}: the workload wrote no outcome");
+        let rc = r.recovery.as_ref().expect("a recovery boot");
+        let wrote: Vec<String> = writes_to(&rc.items, &outcomes)
+            .lines()
+            .map(str::to_string)
+            .collect();
+        if want {
+            assert_eq!(wrote, first, "{what}");
+        } else {
+            assert!(wrote.is_empty(), "{what}: {wrote:?}");
+        }
+    }
 }
 
 #[test]

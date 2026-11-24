@@ -764,7 +764,9 @@ pub struct Guest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clock_after_cut: Option<i64>,
     /// After a power cut the recovery boot's $HYDO_OUTCOMES starts with the first boot's last
-    /// outcome of every id (without it the file starts empty there).
+    /// outcome of every id (without it the file starts empty there). On by default for images
+    /// built at fingerprint epoch 6 and later; an image built earlier keeps it off (the schema's
+    /// default is that of the released format). false: the file starts empty there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = false))]
     pub outcomes_after_cut: Option<bool>,
@@ -833,7 +835,7 @@ pub struct Guest {
     /// among them, by name. Without it the commands have no PATH: busybox's shell finds the
     /// programs, but Go's exec.Command("hydo-oci") does not. Off by default for images built at
     /// fingerprint epoch 5 and earlier, because the variable is in guest RAM and so in every
-    /// fingerprint (Milestone 348).
+    /// fingerprint (Milestone 348); on for images built at epoch 6 and later.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = false))]
     pub path: Option<bool>,
