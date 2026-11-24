@@ -1444,8 +1444,11 @@ fn cmd_scan(argv: &[String]) -> i32 {
             .collect();
         let mut doc = json!({"dir": dir, "files_read": read, "evidence": items});
         if only.is_none() {
-            let matches = crate::clockscan::audit(root).matches;
-            doc["clock"] = Value::Array(matches.iter().map(crate::clockscan::match_json).collect());
+            let a = crate::clockscan::audit(root);
+            doc["clock"] =
+                Value::Array(a.matches.iter().map(crate::clockscan::match_json).collect());
+            doc["clock_orders"] =
+                Value::Array(a.orders.iter().map(crate::clockscan::match_json).collect());
             let w = crate::writescan::scan_writes(root);
             doc["writes"] = Value::Array(
                 w.routes
@@ -1477,19 +1480,37 @@ fn cmd_scan(argv: &[String]) -> i32 {
     }
     if only.is_none() {
         // the clock audit's places, one line each; --kind clock gives the schedules
-        let matches = crate::clockscan::audit(root).matches;
-        println!(
-            "\nclock ({}): durations measured with the wall clock (--kind clock proposes the schedules that test them)",
-            matches.len()
-        );
-        for m in matches.iter().take(max) {
-            println!("  {}:{}: [{}] {}", m.file, m.line, m.confidence, m.text);
-        }
-        if matches.len() > max {
+        let a = crate::clockscan::audit(root);
+        let kinds = [
+            (
+                "clock",
+                "durations measured with the wall clock",
+                &a.matches,
+            ),
+            (
+                "clock orders",
+                "orders and versions of data taken from the wall clock",
+                &a.orders,
+            ),
+        ];
+        for (what, says, places) in kinds {
+            // the orders of Milestone 350 only when there are some
+            if what != "clock" && places.is_empty() {
+                continue;
+            }
             println!(
-                "  ... {} more (--max N, or --json for all)",
-                matches.len() - max
+                "\n{what} ({}): {says} (--kind clock proposes the schedules that test them)",
+                places.len()
             );
+            for m in places.iter().take(max) {
+                println!("  {}:{}: [{}] {}", m.file, m.line, m.confidence, m.text);
+            }
+            if places.len() > max {
+                println!(
+                    "  ... {} more (--max N, or --json for all)",
+                    places.len() - max
+                );
+            }
         }
         // the routes that write, one line each; --kind writes gives the handlers
         let w = crate::writescan::scan_writes(root);

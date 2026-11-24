@@ -485,3 +485,52 @@ fn the_clock_audit_ranks_the_code_that_the_services_run_first() {
     assert_eq!(idle["rank"], 1);
     assert_eq!(doc["tests_left_out"]["functions"], 1);
 }
+
+/// Milestone 350: the clock audit's second kind of place, a wall-clock reading kept as the
+/// version that a merge orders by (a last-writer-wins register). The report shows it in its own
+/// section with its schedules, `--json` gives it under `clock_orders`, and the scan without
+/// `--kind` counts it in a line of its own.
+#[test]
+fn the_clock_audit_names_versions_taken_from_the_wall_clock() {
+    let t = T::new("clockorder");
+    let w = |rel: &str, text: &str| {
+        let p = t.dir.join("proj").join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, text).unwrap();
+    };
+    w(
+        "src/lww.rs",
+        "pub struct Lww<T> {\n    ts: u64,\n    v: T,\n}\n\nimpl<T> Lww<T> {\n    pub fn new(v: T) -> Self {\n        Self {\n            ts: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64,\n            v,\n        }\n    }\n\n    pub fn merge(&mut self, other: &Self) {\n        if other.ts > self.ts {\n            self.ts = other.ts;\n        }\n    }\n}\n",
+    );
+    let (rc, text) = t.hydo(&["rules", "scan", "proj", "--kind", "clock"]);
+    assert_eq!(rc, 0, "{text}");
+    for want in [
+        "hydo rules scan --kind clock: 0 functions in 1 source files of proj measure a duration",
+        "\nNo lease, timeout, throttle, lag or delay was found that reads the wall clock.\n",
+        "\n1 function keeps a wall-clock reading as the order or the version of stored data.\n",
+        "\n1. src/lww.rs:9, in new [high]\n",
+        "It keeps a wall-clock reading as ts, and the code orders data by comparing two values of it (src/lww.rs:15).",
+        "     back           disk=none | run T=10:-300\n",
+        "     back-long      disk=none | run T=10:-3600\n",
+        "     back-after     disk=none | run K=<service>@2+3 T=10:-300\n",
+        "\nTo try a schedule: hydo explore --schedule",
+    ] {
+        assert!(text.contains(want), "{want:?}\n{text}");
+    }
+    let (rc, text) = t.hydo(&["rules", "scan", "proj", "--kind", "clock", "--json"]);
+    assert_eq!(rc, 0, "{text}");
+    let doc: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(doc["clock"].as_array().unwrap().len(), 0, "{text}");
+    let o = &doc["clock_orders"][0];
+    assert_eq!(o["shape"], "order");
+    assert_eq!(o["rank"], 1);
+    assert_eq!(o["order"]["name"], "ts");
+    assert_eq!(o["order"]["compared_at"], "src/lww.rs:15");
+    assert_eq!(o["schedules"].as_array().unwrap().len(), 3);
+    let (rc, text) = t.hydo(&["rules", "scan", "proj"]);
+    assert_eq!(rc, 0, "{text}");
+    assert!(
+        text.contains("\nclock orders (1): orders and versions of data taken from the wall clock"),
+        "{text}"
+    );
+}
