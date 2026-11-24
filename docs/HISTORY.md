@@ -21501,8 +21501,11 @@ names it), but Garage's next commits come within milliseconds.
 e5 (`--configs`, both values of `fsync`, 20 seeds each). All on one worker of 1,024 MiB, at 160 to
 860 runs an hour.
 
-**Tests.** The explorer's corpus and identity goldens (quick and full) and the controller's
-corpus golden are re-recorded for the new example's inputs (`HYDO_BLESS=1`).
+**Tests.** `cargo fmt --all --check` passes. The explorer's corpus and identity goldens (quick
+and full) and the controller's corpus golden are not re-recorded for the new example's inputs
+yet, and `cargo test -p hydo-explore --test it`, `-p hydo --test it docs::` and `-p hydo-agents
+--test it public_content::` did not run: the Mac had 12 GB of free disk and a full swap, and a
+test build needs several GB (open item 179).
 
 Retro: Garage v2.5.0, the Mac engine, 2026-11-23
 - Time to the first clean run: 50 minutes of wall time, 20 of them waiting for free disk.

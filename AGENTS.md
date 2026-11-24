@@ -3649,6 +3649,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The Mac's disk and memory stopped the work early. The client's fix of its expiry check
       (`/data/kvc/maxclock`) did not run in a VM. `hydo explore --configs` did not reach
       `use-rsid-psync no`. RESULTS.md's fingerprints are of the image before that fix.
+    - The explorer's corpus and identity goldens and the controller's corpus golden are not
+      re-recorded for the example (`HYDO_BLESS=1`), so `cargo test -p hydo-explore --test it`
+      and `-p hydo-control` are expected to fail until they are. The tests `docs::`,
+      `equivalence::` and `public_content::` did not run after the change either.
     - Each workload has about 70 writes. These were not tried: the write commands of Kvrocks's
       table beyond the families of RESULTS.md, the cluster mode with kvrocks-controller, Redis
       Sentinel itself, `replication-group-sync`, hvx, and KVM.
