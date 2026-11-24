@@ -343,8 +343,16 @@ In the order of the time each cost:
 7. **No reaction cuts one service's power.** A reaction can cut the whole guest (`:cut`), kill
    or stop a service, but not take one node's power (`L=`). Finding 1 with one node's power loss
    came only from blind `L=` schedules.
-8. **Passing runs counted as vacuous** (open item 177): 17 of 20, 44 of 60 and 23 of 40 passing
-   runs carried the warning, although `acked-outcome` judged about 70 writes in each.
+8. **Passing runs counted as vacuous** (open item 177): with the hydo of `b8c698d7`, 17 of 20,
+   44 of 60 and 23 of 40 passing runs carried the warning, although `acked-outcome` judged about
+   70 writes in each. Milestone 350 fixed it: a claim with nothing to judge beside one that
+   judged is no vacuous pass.
+9. **A tree build in a target folder of its own has no release.** hydo uses `HYDO_RELEASE_DIR`
+   only when its program runs from `<checkout>/target/...` (`checkout_of` in
+   `hydo/crates/hydo-cli/src/ctx.rs`). Built with `CARGO_TARGET_DIR` outside the checkout, as
+   worktrees beside each other must, `hydo build` looked for the guest files beside the target
+   folder and stopped (`cannot read .../target/guest/tc-closure.txt`). A folder with
+   `SHA256SUMS`, links to the release's files and copies of the three programs worked.
 
 ## Time
 
