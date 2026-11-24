@@ -367,7 +367,7 @@ boundaries: the failing bands are 18,103 to 18,135, 18,421 to 18,453, and 18,895
 end at 19,000 (the default sweep's 19,498 passes). The comment
 in `hydo.yaml` keeps the epoch-2 lengths, because the manifest's text is inside the image.
 
-## The fingerprint epoch 5 (hydo 0.5.0): the current values
+## The fingerprint epoch 5 (hydo 0.5.0)
 
 At the fingerprint epoch 5 hvx keeps the guest's time with the virtual TSC (`guest.exact_tick`),
 and the test fails at most turn lengths: `q=19726` fails now. On the images built at epoch 5
@@ -384,6 +384,25 @@ twice from a fresh boot on the bare-metal machine:
 | buggy | `disk=none \| run` | 1 | VIOLATION | `3d658ef45e859aca` |
 
 These four runs replace the epoch-4 ones in `hydo/onboard/recorded.json`.
+
+## The fingerprint epoch 6 (the 0.6.0 re-recording pass): the current values
+
+At the fingerprint epoch 6 every command that the host starts gets a `PATH`, and the timing moved
+again: `q=18813` fails now. On the images built at epoch 6 (buggy `a5fc4269f668390d…`, fixed
+`d620faf2745a7d65…`) the default turn sweep (25 runs and 4 repetitions) passed only between
+`q=6394` and `q=18407`. It found two boundaries, `q=6325` and `q=6394`, and `q=18407` and
+`q=18496`, each reproduced. Each schedule below ran twice from a fresh boot on the bare-metal
+machine:
+
+| image | schedule | vCPUs | verdict | fingerprint (both runs) |
+|---|---|---|---|---|
+| buggy | `disk=none q=18496 \| run` | 2 | VIOLATION, line 72, `3 vs 2` | `267184765fb36ceb` |
+| buggy | `disk=none q=18407 \| run` | 2 | OK, `pass=2 of 2` | `af012bd50c2562d8` |
+| fixed | `disk=none q=18496 \| run` | 2 | OK | `057a84ac54b5d56b` |
+| buggy | `disk=none \| run` | 1 | VIOLATION | `352102520635b733` |
+
+These four runs replace the epoch-5 ones in `hydo/onboard/recorded.json`. The fixed test also
+passes at `q=18407` (`8890c7adb2e3db64`).
 
 ## Files
 

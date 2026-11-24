@@ -281,6 +281,42 @@ const CITED_ELSEWHERE: &[(&str, &str)] = &[
         "fp of the messages tutorial's clean run on the Mac engine, twice, at the fingerprint \
          epoch 5 (docs/ONBOARD.md; docs/HISTORY.md, the 0.5.0 release)",
     ),
+    // The quickstarts describe the published 0.5.0 release, whose values are of the fingerprint
+    // epoch 5. The 0.6.0 pass re-recorded the list at epoch 6 (docs/REBASELINE.md section 31),
+    // and 0.6.0's release step 6a moves the pages to its values. Until then these epoch-5 values
+    // of the list (docs/REBASELINE.md section 29) stay cited.
+    (
+        "cce52f9e8565f6e2",
+        "fp of hvx/release-redis `disk=none | run` at the fingerprint epoch 5 (section 29)",
+    ),
+    (
+        "09116271ef7d92f0",
+        "ctl of hvx/release-redis `disk=none | run` at the fingerprint epoch 5 (section 29)",
+    ),
+    (
+        "8bee301c59ad1b12",
+        "fp of hvx/release-redis `disk=cut | run C=12 R=everysec` at the fingerprint epoch 5 \
+         (section 29)",
+    ),
+    (
+        "ed29619ccdd76831",
+        "ctl of hvx/release-redis `disk=cut | run C=12 R=everysec` at the fingerprint epoch 5 \
+         (section 29)",
+    ),
+    (
+        "8966aa3944388f9d",
+        "fp of hvx/release-redis `disk=cut | run C=12` at the fingerprint epoch 5 (section 29)",
+    ),
+    (
+        "b7d0027938426fb9",
+        "fp of hvx/release-redis `disk=lying:2 dseed=17144527b62d669c | run C=17` at the \
+         fingerprint epoch 5 (section 29)",
+    ),
+    (
+        "2124171a52edf77e",
+        "fp of hvx/release-redis-netem `disk=none | run N=redis@3-6:delay,300ms` at the \
+         fingerprint epoch 5 (section 29)",
+    ),
 ];
 
 /// Options that the help text does not show because the command hands them to a program of its

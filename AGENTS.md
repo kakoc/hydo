@@ -300,8 +300,9 @@ dry-runs the packages on every pull request that changes one. The details are in
 
 **Fingerprints.** The fingerprint epoch is 6 (M353; 5 from M317, 4 from M269, 3 from M234, 2
 from M204, 1 from M155). An image built at epoch 6 carries the first boot's outcomes into a
-recovery boot and gives the controller's commands a `PATH` (M353, below). Its values wait for the
-0.6.0 pass (open item 105): `hydo/onboard/recorded.json` keeps its epoch-5 values until then. An
+recovery boot and gives the controller's commands a `PATH` (M353, below). The 0.6.0 pass
+re-recorded the list's hvx values at epoch 6 (docs/REBASELINE.md section 31). Its KVM and Mac
+values are still those of epoch 5 (open item 105). An
 image built at epoch 5 has the image services' launchers of M317, which mount the
 system folders once per boot. Since M331 they also give each image service a `/tmp` of its own. On hvx an x86_64 image built at epoch 5 keeps time with its TSC
 (M323, `guest.exact_tick`). The 0.5.0 release's pass re-recorded every value of the list at
@@ -320,12 +321,14 @@ two values on hvx. Their epoch-4 images (`728e344c…` and `b83e3d39…`, in `~/
 give `e153f376096a072c` and `6a5c2fe208174af3` on hvx and `66da20bdbfafd6d2` and
 `0bcce788f5ef3f4d` on KVM (AMD). Their epoch-5 images (`4b78d7a8…` and `8951cf69…`, in
 `~/hydo/build/rel050`) give `b6e78273b1d21304` and `b531d6bcaa8489b7` on hvx and
-`4b9f52b31c1a58b4` and `8672be7cd62d3d75` on KVM (AMD). Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
+`4b9f52b31c1a58b4` and `8672be7cd62d3d75` on KVM (AMD). Their epoch-6 images (`38f503b1…` and
+`cd7d31c8…`, in `~/hydo/build/rel060`) give `db33d71069816103` and `c421af1ccb714225` on hvx. Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
 `ba0aa0612502a1df` under this hydo, because an image keeps the defaults of its own epoch
 (`hydo_image::defaults`). `hydo/onboard/examples/stack/build-reproducers.sh` rebuilds both
 images. The quickstart's Redis example gives `cce52f9e8565f6e2` (OK) and `8bee301c59ad1b12`
 (`C=12 R=everysec`, `k:1` lost) on hvx, `cc6abeb1ec4e4f29` and `b9a2d62ab3eaf0cb` (`k:0` lost)
-on the Mac, and `d2e4da56c54ce2a1` and `af9a168ee9d9071c` (`k:1` lost) on KVM (AMD). Every recorded example value is in `hydo/onboard/recorded.json`, and
+on the Mac, and `d2e4da56c54ce2a1` and `af9a168ee9d9071c` (`k:1` lost) on KVM (AMD), at epoch 5.
+At epoch 6 its image gives `2f5a6dc34e0c8ba6` and `f2715295eae4d5a2` (`k:1` lost) on hvx. Every recorded example value is in `hydo/onboard/recorded.json`, and
 `hydo-bench rebaseline` checks or re-records them (`docs/REBASELINE.md` "How to re-baseline").
 
 **The hvx engine.** The module (`hv/hvx/hvx.c`, ABI `hvx_abi.h`) boots Linux 6.6.35
@@ -2070,7 +2073,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
    investigated (M78). At the fingerprint epoch 4 no schedule of a 90-schedule sweep reached the
    second symptom (M302). At epoch 5 a sweep of 30 schedules reached it again with
    `K=etcd2@25+1 P=etcd1@27+1`, and the list shows the issue by both symptoms (the 0.5.0
-   release). A search with timed kills and pauses inside a step was not run.
+   release). At epoch 6 that schedule still gives the second symptom, and since the 0.6.0 pass it
+   also breaks the history check of `hydo-hist.yaml`. A search with timed kills and pauses inside
+   a step was not run.
 9. Explorer gaps. The oracle reads Kafka before its restart after a kill at the last order (M55).
    The `xt` shrinker keeps a seeded policy (M49). An OK verdict shows only the first invariant's
    details (M47).
@@ -2400,7 +2405,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `ctl`). The runs with a power cut also carry the first boot's outcomes into the recovery
       boot: the controller reports them at the cut and writes them into the recovery boot's
       `$HYDO_OUTCOMES`. A check that read an empty `$HYDO_OUTCOMES` there before can change its verdict. The
-      pass decides each verdict change (docs/REBASELINE.md section 30).
+      pass decides each verdict change (docs/REBASELINE.md section 30). The 0.6.0 pass
+      re-recorded the 43 hvx images and their 141 runs (docs/REBASELINE.md section 31). The Mac
+      values (21 images, 76 runs) and the KVM values (6 images, 19 runs) still wait for it.
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -4699,6 +4706,12 @@ build machine, before 2026-10-13.
   renames and deletes reach the disk before it answers. On the Mac engine the new example
   `checkout/hydo-s3-cut.yaml` lost 10 to 13 acknowledged writes at four power cuts without the
   key, and none with it. Opt-in; nothing recorded moved
+- The 0.6.0 re-recording pass (no milestone number): the list's values at the fingerprint epoch 6
+  on hvx. All 43 images and 141 runs moved. Each image built twice the same, and each run gave
+  one result twice. Four verdict changes were decided: one accepted (the same class), and new
+  schedules for the nats turn boundary and both symptoms of etcd issue 14685. The pinned
+  reproducers' epoch-6 images are in `~/hydo/build/rel060`. The KVM and Mac values wait (open
+  item 105)
 
 ## Where to look
 
