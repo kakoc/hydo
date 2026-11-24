@@ -26,6 +26,14 @@
 //! Precision matters more than recall: a match is `high` when the line also compares the
 //! duration with a limit or stores a lease, and `medium` when only its words suggest it. Weaker
 //! matches are dropped. Tests and vendored code are not read.
+//!
+//! A second kind of place (Milestone 350): a reading of the clock kept as the order or the
+//! version of data, `order`. The reading is the value of a name about an order (`timestamp`,
+//! `ts`, `version`), or of a variable that the function then stores in such a field. It is
+//! `high` when the code compares two values of that name: a merge (`other.ts > self.ts`), a
+//! maximum or a sort key (`.map(|v| v.timestamp).max()`, `fn cmp_key`). A reading kept above
+//! the earlier value (`max(prev + 1, now)`) is no match. After a step back, a later write gets
+//! an older version than the writes before it and can lose to them, as Garage's CopyObject did.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -998,6 +1006,12 @@ fn func_header(lang: Lang, code: &str) -> Option<String> {
             let i = t.find("fn ")?;
             if i > 0 && is_ident(t[..i].chars().next_back()?) {
                 return None;
+            }
+            // `fn new(...)` is a constructor's name, not Java's `new X(...)` (Milestone 350)
+            if t[i + 3..].trim_start().starts_with("new(")
+                || t[i + 3..].trim_start().starts_with("new<")
+            {
+                return Some("new".into());
             }
             ident_before_paren(&t[i + 3..])
         }
@@ -2048,6 +2062,20 @@ fn propagate(files: &[SrcFile], t: &mut Taint) {
                         .is_empty()
                         && f.code[*k].trim() != "end"
                 });
+                // a tail expression that goes on over lines starts where its chain starts
+                // (Milestone 350): `SystemTime::now()` over `.duration_since(UNIX_EPOCH)` and
+                // `.as_millis() as u64`
+                let tail = last.and_then(|l| {
+                    let mut k = l;
+                    while k > fu.start + 1 && f.code[k].trim_start().starts_with(['.', '?']) {
+                        k -= 1;
+                    }
+                    // a chain that measures a duration is no reading
+                    let chain = f.code[k..=l].join(" ");
+                    let duration = has_any(&chain, &[".elapsed()", ".Sub(", "Since("])
+                        || chain.contains(".duration_since(") && !chain.contains("UNIX_EPOCH");
+                    (!duration).then_some(k)
+                });
                 let mut found = None;
                 for i in fu.start..=fu.end.min(f.code.len() - 1) {
                     let code = &f.code[i];
@@ -2055,7 +2083,7 @@ fn propagate(files: &[SrcFile], t: &mut Taint) {
                     // `return <reading>`, or a last expression that is one (Rust, Ruby)
                     let at = match code.find("return ") {
                         Some(p) => Some(p + 7),
-                        None if Some(i) == last
+                        None if (Some(i) == last || Some(i) == tail)
                             && i > fu.start
                             && matches!(f.lang, Lang::Rust | Lang::Ruby) =>
                         {
@@ -2110,6 +2138,17 @@ pub struct ClockMatch {
     /// whether the file is in one of the repository's main languages (at least a fifth of its
     /// source files, SQL always): a client library in another language ranks lower
     pub main_lang: bool,
+    /// for a place of the shape `order` (Milestone 350): the name that keeps the reading as an
+    /// order or a version of data, and where the code compares two values of it
+    pub order: Option<Order>,
+}
+
+/// How a wall-clock reading orders data: the field or variable that keeps it, and the line
+/// that compares two of its values (a merge, a maximum, a sort key).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Order {
+    pub name: String,
+    pub compared_at: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -2740,7 +2779,10 @@ fn unit_of_name(name: &str, default: &str) -> &'static str {
 /// a default in a table of configuration settings.
 fn read_limit(files: &[SrcFile], first: usize, name: &str, unit: &str) -> Option<(f64, String)> {
     let unit = unit_of_name(name, unit);
-    for f in std::iter::once(&files[first]).chain(files.iter()) {
+    // a plain word (`timeout`, `delay`) of another file is another value of that name: only a
+    // name of a constant or a setting is looked up in the other files (Milestone 350)
+    let others = distinctive(name);
+    for f in std::iter::once(&files[first]).chain(files.iter().filter(|_| others)) {
         for (i, code) in f.code.iter().enumerate() {
             if !code.contains(name) {
                 continue;
@@ -2803,6 +2845,78 @@ fn read_limit(files: &[SrcFile], first: usize, name: &str, unit: &str) -> Option
     None
 }
 
+/// The names of the types of time and duration: a type is no limit (`Duration` of
+/// `Duration::hours(24)` named Garage's `Duration` constant of another file, Milestone 350).
+const TIME_TYPES: &[&str] = &[
+    "Duration",
+    "TimeDelta",
+    "TimeSpan",
+    "Instant",
+    "SystemTime",
+    "DateTime",
+    "NaiveDateTime",
+    "ChronoUnit",
+    "TimeUnit",
+    "Timeout",
+];
+
+/// Whether a name is a constant's or a setting's, so that another file's definition of it is
+/// the same value: it has two words (`refreshMin`, `repl_min_replicas_max_lag`) or is written in
+/// capitals (`TIMEOUT`).
+fn distinctive(name: &str) -> bool {
+    name.contains('_')
+        || name.len() >= 4 && name.chars().all(|c| !c.is_ascii_lowercase())
+        || name
+            .as_bytes()
+            .windows(2)
+            .any(|w| w[0].is_ascii_lowercase() && w[1].is_ascii_uppercase())
+}
+
+/// A duration written as a literal on a Rust line, as the limit when no name holds one:
+/// `Duration::hours(24)`, `Duration::from_secs(600)`.
+fn literal_limit(code: &str) -> Option<Limit> {
+    const UNITS: &[(&str, f64)] = &[
+        ("::days(", 86400.0),
+        ("::hours(", 3600.0),
+        ("::minutes(", 60.0),
+        ("::seconds(", 1.0),
+        ("::milliseconds(", 1e-3),
+        ("::from_secs(", 1.0),
+        ("::from_millis(", 1e-3),
+        ("::from_mins(", 60.0),
+        ("::from_hours(", 3600.0),
+    ];
+    for (pat, unit) in UNITS {
+        for (p, _) in code.match_indices(pat) {
+            let n: String = code[p + pat.len()..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit() || *c == '_')
+                .collect();
+            let rest = &code[p + pat.len() + n.len()..];
+            let Ok(v) = n.replace('_', "").parse::<f64>() else {
+                continue;
+            };
+            if !rest.starts_with(')') || v <= 0.0 {
+                continue;
+            }
+            let ty: String = code[..p]
+                .chars()
+                .rev()
+                .take_while(|c| is_ident(*c))
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            return Some(Limit {
+                name: format!("{ty}{pat}{n})"),
+                seconds: Some(v * unit),
+                at: None,
+            });
+        }
+    }
+    None
+}
+
 fn find_limit(
     files: &[SrcFile],
     fi: usize,
@@ -2822,7 +2936,7 @@ fn find_limit(
     }
     let mut cands: Vec<String> = names
         .iter()
-        .filter(|n| duration_name(n) && !computed.contains(*n))
+        .filter(|n| duration_name(n) && !computed.contains(*n) && !TIME_TYPES.contains(&n.as_str()))
         .cloned()
         .collect();
     // the lines of the same function, nearest first
@@ -2832,7 +2946,11 @@ fn find_limit(
         for k in ks.into_iter().take(60) {
             if has_comparison(&f.code[k]) || k == i {
                 for n in other_names(&f.code[k], &[]) {
-                    if duration_name(&n) && !cands.contains(&n) && !computed.contains(&n) {
+                    if duration_name(&n)
+                        && !cands.contains(&n)
+                        && !computed.contains(&n)
+                        && !TIME_TYPES.contains(&n.as_str())
+                    {
                         cands.push(n);
                     }
                 }
@@ -2854,11 +2972,283 @@ fn find_limit(
             first = Some(n.clone());
         }
     }
+    if f.lang == Lang::Rust {
+        if let Some(l) = literal_limit(&f.code[i]) {
+            return Some(l);
+        }
+    }
     first.map(|n| Limit {
         name: n,
         seconds: None,
         at: None,
     })
+}
+
+// ---------------------------------------------------------------- orders and versions
+
+/// Words of a name that keeps an order or a version of data (Milestone 350).
+const ORDER_WORDS: &[&str] = &[
+    "timestamp",
+    "ts",
+    "version",
+    "revision",
+    "rev",
+    "seq",
+    "sequence",
+    "lamport",
+    "hlc",
+    "mtime",
+    "modified",
+    "updated",
+    "order",
+];
+
+/// Words of a name that keeps a time for a duration or a record, not an order: the duration
+/// audit and nobody's merge read those.
+const NOT_ORDER_WORDS: &[&str] = &[
+    "created",
+    "creation",
+    "expire",
+    "expires",
+    "expiry",
+    "expiration",
+    "deadline",
+    "ttl",
+    "timeout",
+    "lease",
+    "heartbeat",
+    "start",
+    "started",
+    "next",
+    "retry",
+    "backoff",
+    "tombstone",
+];
+
+/// Whether a name keeps an order or a version: `timestamp`, `new_timestamp`, `ts`, `version`.
+fn order_name(n: &str) -> bool {
+    let ws = name_words(n);
+    ws.iter().any(|w| ORDER_WORDS.contains(&w.as_str()))
+        && !ws.iter().any(|w| NOT_ORDER_WORDS.contains(&w.as_str()))
+}
+
+/// The fields `.name` on a line that are not calls.
+fn dotted_fields(code: &str) -> Vec<String> {
+    let b = code.as_bytes();
+    let mut out = Vec::new();
+    for (p, _) in code.match_indices('.') {
+        let mut k = p + 1;
+        while k < b.len() && is_ident(b[k] as char) {
+            k += 1;
+        }
+        if k == p + 1 || b[p + 1].is_ascii_digit() || code[k..].starts_with('(') {
+            continue;
+        }
+        out.push(code[p + 1..k].to_string());
+    }
+    out
+}
+
+/// The names whose values the code compares with each other to order data, with the first
+/// line that does: two values of one field compared or given to a maximum (`other.ts >
+/// self.ts`, `max(a.version, b.version)`), a field that a sort or a maximum keys on
+/// (`.map(|v| v.timestamp).max()`, `sort_by_key(|v| v.ts)`), and the fields of `self` in a
+/// function named for an order or a sort key (`fn cmp_key(&self) { (self.timestamp, self.uuid)
+/// }`).
+fn ordered_names(files: &[SrcFile]) -> HashMap<String, String> {
+    let mut out: HashMap<String, String> = HashMap::new();
+    let ordering = [
+        "max(",
+        "min(",
+        "cmp(",
+        "partial_cmp(",
+        "compare(",
+        "Compare(",
+        "compareTo(",
+        "Before(",
+        "After(",
+    ];
+    let keyed = [
+        "sort_by_key(",
+        "max_by_key(",
+        "min_by_key(",
+        ".max()",
+        ".min()",
+        "sortBy(",
+        "orderBy(",
+        "order_by(",
+        "sorted(",
+        "comparing(",
+    ];
+    for f in files {
+        // a fuzz target or a benchmark compares what the product's code orders, so it is no
+        // place to show
+        let low = f.rel.to_ascii_lowercase();
+        if f.lang == Lang::Sql
+            || low
+                .split('/')
+                .any(|d| d.starts_with("fuzz") || d == "benches")
+        {
+            continue;
+        }
+        for (i, code) in f.code.iter().enumerate() {
+            if !code.contains('.') {
+                continue;
+            }
+            let fields = dotted_fields(code);
+            if fields.is_empty() {
+                continue;
+            }
+            let at = format!("{}:{}", f.rel, i + 1);
+            let compares = has_comparison(code) || has_any(code, &ordering);
+            let keys = has_any(code, &keyed);
+            let in_key_fn = f.scope[i].is_some_and(|s| {
+                let ws = name_words(&f.funcs[s].name);
+                ws.iter()
+                    .any(|w| matches!(w.as_str(), "cmp" | "compare" | "order" | "sort"))
+                    && ws.iter().any(|w| w == "key")
+            }) && code.contains("self.");
+            for (k, fd) in fields.iter().enumerate() {
+                if fd.len() < 2 || !order_name(fd) {
+                    continue;
+                }
+                let twice = fields[k + 1..].contains(fd);
+                if (twice && compares) || keys || in_key_fn {
+                    out.entry(fd.clone()).or_insert_with(|| at.clone());
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Whether the reading at `at` is kept increasing over an earlier value (`max(prev + 1,
+/// now_msec())`): the order that a step back cannot break on one node.
+fn guarded(code: &str, at: usize) -> bool {
+    for (p, _) in code.match_indices("max(") {
+        let open = p + 3;
+        let close = call_end(code, open);
+        if open < at && at < close && code[open..close].contains(',') {
+            return true;
+        }
+    }
+    false
+}
+
+/// The name a line stores a value under, and where the value starts: an assignment
+/// (`let new_timestamp = ...`, `x.version = ...`, Python's `ts=...`) or a field of a struct
+/// literal (`timestamp: now_msec(),`).
+fn stored_as(lang: Lang, code: &str) -> Option<(String, bool, usize)> {
+    if let Some((name, field, _, rhs)) = assignment(lang, code) {
+        return Some((name, field, rhs));
+    }
+    let t = code.trim_start();
+    let c = t.find(':')?;
+    if t[c..].starts_with("::") || !t[c + 1..].starts_with(' ') {
+        return None;
+    }
+    let key = &t[..c];
+    if key.is_empty() || !key.chars().all(is_ident) {
+        return None;
+    }
+    Some((key.to_string(), true, code.len() - t.len() + c + 1))
+}
+
+/// A place that keeps a wall-clock reading as the order or the version of data: the reading is
+/// the value of a name about an order (`timestamp`, `version`), or of a variable that the same
+/// function then stores in such a field, and it is not kept increasing over the earlier value.
+/// The place is `high` when the code compares two values of the name.
+fn order_line(
+    files: &[SrcFile],
+    fi: usize,
+    i: usize,
+    t: &Taint,
+    ordered: &HashMap<String, String>,
+) -> Option<(Span, Order)> {
+    let f = &files[fi];
+    if f.lang == Lang::Sql {
+        return None;
+    }
+    let code = &f.code[i];
+    if has_any(&words_of(code), REPORT_WORDS) {
+        return None;
+    }
+    let (name, field, rhs) = stored_as(f.lang, code)?;
+    // Go's `time.Now()` is a wall-clock reading once stored: its monotonic part is not
+    let sp: Vec<Span> = spans(f, fi, i, t)
+        .into_iter()
+        .map(|mut s| {
+            s.weak = false;
+            s
+        })
+        .collect();
+    let s = rhs_reading(code, rhs, &sp)?.clone();
+    // the clock read here, or through a function that returns its reading: a field or a
+    // variable that holds one is followed by the duration audit's guesses, too loose to name
+    // an order (`Version: row.Version` after one `Version` set from a clock somewhere)
+    if guarded(code, s.start) || matches!(s.from, Err(Key::Field(_) | Key::Local(..))) {
+        return None;
+    }
+    // the clock now: not a time made from a stored value (`time.Unix(0, 0)`), not a getter
+    // the duration audit follows (`GetVisibilityTime()`), and no text for a log
+    let now = match &s.from {
+        Ok(pat) => !pat.starts_with("time.Unix") && !has_any(pat, &["from", "parse", "Parse"]),
+        Err(Key::Call(n)) => name_words(n)
+            .iter()
+            .any(|w| matches!(w.as_str(), "now" | "clock" | "timestamp" | "current")),
+        Err(_) => false,
+    };
+    let formatted = has_any(
+        &code[s.start..],
+        &[
+            ".Format(",
+            ".format(",
+            "strftime",
+            "isoformat",
+            "to_rfc3339",
+            "toISOString",
+            ".String()",
+            "to_string()",
+        ],
+    );
+    if !now || formatted {
+        return None;
+    }
+    // a variable: the fields the same function stores it in (`timestamp: new_timestamp,`)
+    let mut names = Vec::new();
+    if !field {
+        if let Some(sc) = f.scope[i] {
+            let end = f.funcs[sc].end.min(f.code.len() - 1);
+            for k in i + 1..=end {
+                let c = &f.code[k];
+                for (p, _) in c.match_indices(name.as_str()) {
+                    let e = p + name.len();
+                    let whole = (p == 0 || !is_ident(c.as_bytes()[p - 1] as char))
+                        && c[e..].chars().next().is_none_or(|x| !is_ident(x));
+                    if !whole || !c[e..].trim_start().starts_with([',', '}', ';', ')']) {
+                        continue;
+                    }
+                    if let Some((n, _, r)) = stored_as(f.lang, c) {
+                        if r <= p && c[r..p].trim().is_empty() && !names.contains(&n) {
+                            names.push(n);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    names.push(name);
+    let pick = names
+        .iter()
+        .find(|n| order_name(n) && ordered.contains_key(*n))
+        .or_else(|| names.iter().find(|n| order_name(n)))?;
+    Some((
+        s,
+        Order {
+            name: pick.clone(),
+            compared_at: ordered.get(pick).cloned(),
+        },
+    ))
 }
 
 // ---------------------------------------------------------------- the audit
@@ -2870,6 +3260,8 @@ pub struct Audit {
     /// The source files read.
     pub read: usize,
     pub matches: Vec<ClockMatch>,
+    /// The places that keep a reading as an order or a version of data (Milestone 350).
+    pub orders: Vec<ClockMatch>,
     /// The test code left out of those files (Milestone 324).
     pub tests: TestItems,
 }
@@ -2911,9 +3303,11 @@ pub fn audit(root: &Path) -> Audit {
         tests.functions += f.tests.functions;
         tests.modules += f.tests.modules;
     }
+    let (matches, orders) = audit_files(&files);
     Audit {
         read: files.len(),
-        matches: audit_files(&files),
+        matches,
+        orders,
         tests,
     }
 }
@@ -2946,6 +3340,12 @@ fn source_file(rel: String, lang: Lang, text: &str) -> SrcFile {
 /// Audits files given as (path, text): the unit tests' entry.
 #[cfg(test)]
 pub fn audit_texts(texts: &[(&str, &str)]) -> Vec<ClockMatch> {
+    audit_both(texts).0
+}
+
+/// Audits files given as (path, text): the durations and the orders.
+#[cfg(test)]
+pub fn audit_both(texts: &[(&str, &str)]) -> (Vec<ClockMatch>, Vec<ClockMatch>) {
     let files: Vec<SrcFile> = texts
         .iter()
         .filter_map(|(rel, text)| lang_of(rel).map(|l| source_file(rel.to_string(), l, text)))
@@ -2953,10 +3353,13 @@ pub fn audit_texts(texts: &[(&str, &str)]) -> Vec<ClockMatch> {
     audit_files(&files)
 }
 
-fn audit_files(files: &[SrcFile]) -> Vec<ClockMatch> {
+/// The places of both kinds: the durations, and the orders and versions (Milestone 350).
+fn audit_files(files: &[SrcFile]) -> (Vec<ClockMatch>, Vec<ClockMatch>) {
     let mut t = Taint::default();
     propagate(files, &mut t);
+    let ordered = ordered_names(files);
     let mut out = Vec::new();
+    let mut orders = Vec::new();
     // the main languages: at least a fifth of the source files that are not SQL
     let code_files = files.iter().filter(|f| f.lang != Lang::Sql).count().max(1);
     let main: HashSet<Lang> = files
@@ -3008,6 +3411,7 @@ fn audit_files(files: &[SrcFile]) -> Vec<ClockMatch> {
                         confidence: conf,
                         function,
                         main_lang: f.lang == Lang::Sql || main.contains(&f.lang),
+                        order: None,
                         origin: vec![format!(
                             "{} reads the database server's wall clock",
                             n.trim_end_matches('(')
@@ -3033,11 +3437,30 @@ fn audit_files(files: &[SrcFile]) -> Vec<ClockMatch> {
                     origin: describe_origin(files, &t, &span.from),
                     main_lang: main.contains(&f.lang),
                     limit,
+                    order: None,
+                });
+            } else if let Some((span, order)) = order_line(files, fi, i, &t, &ordered) {
+                orders.push(ClockMatch {
+                    file: f.rel.clone(),
+                    line: i + 1,
+                    lang: f.lang.name(),
+                    text,
+                    shape: "order",
+                    confidence: if order.compared_at.is_some() {
+                        "high"
+                    } else {
+                        "medium"
+                    },
+                    function,
+                    origin: describe_origin(files, &t, &span.from),
+                    main_lang: main.contains(&f.lang),
+                    limit: None,
+                    order: Some(order),
                 });
             }
         }
     }
-    out
+    (out, orders)
 }
 
 // ---------------------------------------------------------------- the schedules
@@ -3427,6 +3850,9 @@ pub fn step_sizes(limit: Option<f64>) -> (u64, u64) {
 /// The schedules aimed at a match: a step back before the fault, a step back after it, and a
 /// step forward.
 pub fn proposals(m: &ClockMatch, svcs: &Services) -> (String, Vec<Proposal>) {
+    if m.shape == "order" {
+        return order_proposals(m, svcs);
+    }
     let (role, who, why) = fault_for(m, svcs);
     let (back, fwd) = step_sizes(m.limit.as_ref().and_then(|l| l.seconds));
     let steps = svcs.steps.unwrap_or(20).max(4);
@@ -3483,7 +3909,65 @@ pub fn proposals(m: &ClockMatch, svcs: &Services) -> (String, Vec<Proposal>) {
 }
 
 /// What a match does, in plain words.
+/// The schedules aimed at a place that orders data by the wall clock (Milestone 350): the
+/// writes run in every workload step, so a step back alone makes a later write older than the
+/// writes before it. A short step, a long one, and a step while the system recovers from a
+/// fault.
+fn order_proposals(m: &ClockMatch, svcs: &Services) -> (String, Vec<Proposal>) {
+    // the fault restarts the service that writes, whatever the words of the code say
+    let who = services_running(m, svcs)
+        .filter(|v| v.len() == 1)
+        .map(|v| v[0].clone())
+        .unwrap_or_else(|| "<service>".into());
+    let steps = svcs.steps.unwrap_or(20).max(4);
+    let mid = steps / 2;
+    let (a, n) = if steps >= 8 { (2, 3) } else { (1, 1) };
+    let after = (a + n + 5).min(steps - 1).max(a + n);
+    let fault = format!("K={who}@{a}+{n}");
+    let fault_words = format!(
+        "{who} is killed before step {a} and starts again before step {}",
+        a + n
+    );
+    let older = "a write after it gets an older version than the writes before it";
+    (
+        "the code runs at every write, so the step back alone makes a later write older".into(),
+        vec![
+            Proposal {
+                name: "back",
+                schedule: format!("disk=none | run T={mid}:-300"),
+                says: format!("the clock goes back by 5 minutes before step {mid}; {older}"),
+            },
+            Proposal {
+                name: "back-long",
+                schedule: format!("disk=none | run T={mid}:-3600"),
+                says: format!(
+                    "the clock goes back by 1 hour before step {mid}, longer than the time between two writes of one key; {older}"
+                ),
+            },
+            Proposal {
+                name: "back-after",
+                schedule: format!("disk=none | run {fault} T={after}:-300"),
+                says: format!(
+                    "{fault_words}; the clock goes back by 5 minutes before step {after}, while the system recovers and writes again"
+                ),
+            },
+        ],
+    )
+}
+
 pub fn what_it_does(m: &ClockMatch) -> String {
+    if let Some(o) = &m.order {
+        return match &o.compared_at {
+            Some(at) => format!(
+                "It keeps a wall-clock reading as {}, and the code orders data by comparing two values of it ({at}). After a step back, a later write gets an older {} and can lose to the writes before it.",
+                o.name, o.name
+            ),
+            None => format!(
+                "It keeps a wall-clock reading as {}, a name of an order or a version; no comparison of two of its values was found.",
+                o.name
+            ),
+        };
+    }
     let lim = match &m.limit {
         Some(Limit {
             name,
@@ -3658,7 +4142,7 @@ fn targets<'a>(matches: &'a [ClockMatch], svcs: &Services) -> Vec<&'a ClockMatch
 pub const TOP: usize = 5;
 
 pub fn match_json(m: &ClockMatch) -> serde_json::Value {
-    serde_json::json!({
+    let mut v = serde_json::json!({
         "file": m.file,
         "line": m.line,
         "lang": m.lang,
@@ -3668,17 +4152,21 @@ pub fn match_json(m: &ClockMatch) -> serde_json::Value {
         "function": m.function,
         "origin": m.origin,
         "limit": m.limit.as_ref().map(|l| serde_json::json!({"name": l.name, "seconds": l.seconds, "at": l.at})),
-    })
+    });
+    if let Some(o) = &m.order {
+        v["order"] = serde_json::json!({"name": o.name, "compared_at": o.compared_at});
+    }
+    v
 }
 
-pub fn json_report(dir: &str, a: &Audit, svcs: &Services) -> String {
-    let (read, matches) = (a.read, &a.matches[..]);
+/// The places of one kind as JSON, each target with its rank and schedules.
+fn places_json(matches: &[ClockMatch], svcs: &Services) -> Vec<serde_json::Value> {
     let t: HashMap<(String, usize), usize> = targets(matches, svcs)
         .iter()
         .enumerate()
         .map(|(k, m)| ((m.file.clone(), m.line), k + 1))
         .collect();
-    let items: Vec<serde_json::Value> = matches
+    matches
         .iter()
         .map(|m| {
             let mut v = match_json(m);
@@ -3696,8 +4184,16 @@ pub fn json_report(dir: &str, a: &Audit, svcs: &Services) -> String {
             }
             v
         })
-        .collect();
-    let mut doc = serde_json::json!({"dir": dir, "files_read": read, "clock": items});
+        .collect()
+}
+
+pub fn json_report(dir: &str, a: &Audit, svcs: &Services) -> String {
+    let mut doc = serde_json::json!({
+        "dir": dir,
+        "files_read": a.read,
+        "clock": places_json(&a.matches, svcs),
+        "clock_orders": places_json(&a.orders, svcs),
+    });
     doc["tests_left_out"] =
         serde_json::json!({"functions": a.tests.functions, "modules": a.tests.modules});
     if !svcs.names.is_empty() {
@@ -3706,11 +4202,141 @@ pub fn json_report(dir: &str, a: &Audit, svcs: &Services) -> String {
     serde_json::to_string_pretty(&doc).unwrap_or_default()
 }
 
+/// One place of the text report, with its schedules; `same` holds the places of its kind.
+fn place_text(o: &mut String, k: usize, m: &ClockMatch, same: &[ClockMatch], svcs: &Services) {
+    use std::fmt::Write;
+    let _ = writeln!(
+        o,
+        "\n{}. {}:{}{} [{}]",
+        k + 1,
+        m.file,
+        m.line,
+        m.function
+            .as_ref()
+            .map(|f| format!(", in {f}"))
+            .unwrap_or_default(),
+        m.confidence
+    );
+    let _ = writeln!(o, "     {}", m.text);
+    let _ = writeln!(o, "   {}", what_it_does(m));
+    match svcs.map.run_by(&m.file) {
+        Some(v) if v.is_empty() => {
+            let _ = writeln!(
+                o,
+                "   No service of hydo.yaml and not the workload runs this code."
+            );
+        }
+        Some(v) => {
+            let _ = writeln!(
+                o,
+                "   Run by {} ({}).",
+                and_words(&v),
+                svcs.map.programs_of(&m.file).join(", ")
+            );
+        }
+        None => {}
+    }
+    match m.origin.len() {
+        0 => {}
+        1 | 2 => {
+            let _ = writeln!(o, "   Where the time comes from: {}.", m.origin.join("; "));
+        }
+        n => {
+            let _ = writeln!(
+                o,
+                "   Where the time comes from: {}; after {} more step{}, {}.",
+                m.origin[0],
+                n - 2,
+                if n == 3 { "" } else { "s" },
+                m.origin[n - 1]
+            );
+        }
+    }
+    let more: Vec<String> = same
+        .iter()
+        .filter(|x| x.file == m.file && x.function == m.function && x.line != m.line)
+        .map(|x| x.line.to_string())
+        .collect();
+    if !more.is_empty() {
+        let whole = if m.function.is_some() {
+            "function"
+        } else {
+            "file"
+        };
+        let _ = writeln!(
+            o,
+            "   The same {whole} also does it at lines {}.",
+            more.join(", ")
+        );
+    }
+    let (why, ps) = proposals(m, svcs);
+    let _ = writeln!(
+        o,
+        "   The schedules (the fault that makes this code run: {why}):"
+    );
+    for p in &ps {
+        let _ = writeln!(o, "     {:<14} {}", p.name, p.schedule);
+        let _ = writeln!(o, "     {:<14} {}", "", p.says);
+    }
+    if let Some(w) = placeholder_why(m, svcs) {
+        let _ = writeln!(o, "   {w}.");
+    }
+}
+
+/// The places of one kind: the targets shown, one line for the rest without `--all`, and with
+/// `--all` the medium places. Returns the targets shown.
+fn kind_text<'a>(
+    o: &mut String,
+    places: &'a [ClockMatch],
+    svcs: &Services,
+    max: usize,
+    all: bool,
+    medium_words: &str,
+) -> Vec<&'a ClockMatch> {
+    use std::fmt::Write;
+    let ts = targets(places, svcs);
+    let shown = if all { max } else { TOP.min(max) };
+    for (k, m) in ts.iter().take(shown).enumerate() {
+        place_text(o, k, m, places, svcs);
+    }
+    let rest: Vec<&ClockMatch> = places.iter().filter(|m| m.confidence != "high").collect();
+    if !all {
+        // one per function: the functions not shown, with a high place or only medium ones
+        let functions: HashSet<(String, String)> = places
+            .iter()
+            .map(|m| (m.file.clone(), m.function.clone().unwrap_or_default()))
+            .collect();
+        let more = functions.len().saturating_sub(shown.min(ts.len()));
+        if more > 0 {
+            let _ = writeln!(o, "\nand {more} more: hydo rules scan --kind clock --all");
+        }
+    } else {
+        if ts.len() > shown {
+            let _ = writeln!(
+                o,
+                "\n... {} more places with schedules (--max N, or --json for all)",
+                ts.len() - shown
+            );
+        }
+        if !rest.is_empty() {
+            let _ = writeln!(o, "\nMedium confidence ({medium_words}; read the code before you aim a schedule at it):");
+            for m in rest.iter().take(max) {
+                let _ = writeln!(o, "  {}:{}: {}", m.file, m.line, m.text);
+            }
+            if rest.len() > max {
+                let _ = writeln!(o, "  ... {} more", rest.len() - max);
+            }
+        }
+    }
+    ts.into_iter().take(shown).collect()
+}
+
 pub fn text_report(dir: &str, a: &Audit, svcs: &Services, max: usize, all: bool) -> String {
     use std::fmt::Write;
     let (read, matches) = (a.read, &a.matches[..]);
     let mut o = String::new();
     let ts = targets(matches, svcs);
+    let ords = targets(&a.orders, svcs);
     let _ = writeln!(
         o,
         "hydo rules scan --kind clock: {} functions in {read} source files of {dir} measure a duration with the wall clock",
@@ -3744,127 +4370,47 @@ pub fn text_report(dir: &str, a: &Audit, svcs: &Services, max: usize, all: bool)
     if !svcs.names.is_empty() {
         let _ = writeln!(o, "{}", svcs.map.words());
     }
+    let mut shown: Vec<&ClockMatch> = Vec::new();
     if ts.is_empty() {
         let _ = writeln!(
             o,
             "\nNo lease, timeout, throttle, lag or delay was found that reads the wall clock."
         );
+    } else {
+        let _ = writeln!(
+            o,
+            "\nNTP or an operator can step the wall clock. A duration measured on it then lasts longer\nby the size of a step back, or ends early after a step forward. The most likely places first:"
+        );
+        shown.extend(kind_text(
+            &mut o,
+            matches,
+            svcs,
+            max,
+            all,
+            "the words suggest a deadline",
+        ));
+    }
+    // the orders and versions of data (Milestone 350)
+    if !ords.is_empty() {
+        let _ = writeln!(
+            o,
+            "\n{} {} a wall-clock reading as the order or the version of stored data.\nAfter a step back, a later write gets an older version than the writes before it, so it can\nlose to them. The most likely places first:",
+            ords.len(),
+            if ords.len() == 1 { "function keeps" } else { "functions keep" }
+        );
+        shown.extend(kind_text(
+            &mut o,
+            &a.orders,
+            svcs,
+            max,
+            all,
+            "the name speaks of a version, but no comparison of two of its values was found",
+        ));
+    }
+    if shown.is_empty() {
         return o;
     }
-    let _ = writeln!(
-        o,
-        "\nNTP or an operator can step the wall clock. A duration measured on it then lasts longer\nby the size of a step back, or ends early after a step forward. The most likely places first:"
-    );
-    let shown = if all { max } else { TOP.min(max) };
-    for (k, m) in ts.iter().take(shown).enumerate() {
-        let _ = writeln!(
-            o,
-            "\n{}. {}:{}{} [{}]",
-            k + 1,
-            m.file,
-            m.line,
-            m.function
-                .as_ref()
-                .map(|f| format!(", in {f}"))
-                .unwrap_or_default(),
-            m.confidence
-        );
-        let _ = writeln!(o, "     {}", m.text);
-        let _ = writeln!(o, "   {}", what_it_does(m));
-        match svcs.map.run_by(&m.file) {
-            Some(v) if v.is_empty() => {
-                let _ = writeln!(
-                    o,
-                    "   No service of hydo.yaml and not the workload runs this code."
-                );
-            }
-            Some(v) => {
-                let _ = writeln!(
-                    o,
-                    "   Run by {} ({}).",
-                    and_words(&v),
-                    svcs.map.programs_of(&m.file).join(", ")
-                );
-            }
-            None => {}
-        }
-        match m.origin.len() {
-            0 => {}
-            1 | 2 => {
-                let _ = writeln!(o, "   Where the time comes from: {}.", m.origin.join("; "));
-            }
-            n => {
-                let _ = writeln!(
-                    o,
-                    "   Where the time comes from: {}; after {} more step{}, {}.",
-                    m.origin[0],
-                    n - 2,
-                    if n == 3 { "" } else { "s" },
-                    m.origin[n - 1]
-                );
-            }
-        }
-        let more: Vec<String> = matches
-            .iter()
-            .filter(|x| x.file == m.file && x.function == m.function && x.line != m.line)
-            .map(|x| x.line.to_string())
-            .collect();
-        if !more.is_empty() {
-            let whole = if m.function.is_some() {
-                "function"
-            } else {
-                "file"
-            };
-            let _ = writeln!(
-                o,
-                "   The same {whole} also does it at lines {}.",
-                more.join(", ")
-            );
-        }
-        let (why, ps) = proposals(m, svcs);
-        let _ = writeln!(
-            o,
-            "   The schedules (the fault that makes this code run: {why}):"
-        );
-        for p in &ps {
-            let _ = writeln!(o, "     {:<14} {}", p.name, p.schedule);
-            let _ = writeln!(o, "     {:<14} {}", "", p.says);
-        }
-        if let Some(w) = placeholder_why(m, svcs) {
-            let _ = writeln!(o, "   {w}.");
-        }
-    }
-    let rest: Vec<&ClockMatch> = matches.iter().filter(|m| m.confidence != "high").collect();
-    if !all {
-        // one per function: the functions not shown, with a high place or only medium ones
-        let functions: HashSet<(String, String)> = matches
-            .iter()
-            .map(|m| (m.file.clone(), m.function.clone().unwrap_or_default()))
-            .collect();
-        let more = functions.len().saturating_sub(shown.min(ts.len()));
-        if more > 0 {
-            let _ = writeln!(o, "\nand {more} more: hydo rules scan --kind clock --all");
-        }
-    } else {
-        if ts.len() > shown {
-            let _ = writeln!(
-                o,
-                "\n... {} more places with schedules (--max N, or --json for all)",
-                ts.len() - shown
-            );
-        }
-        if !rest.is_empty() {
-            let _ = writeln!(o, "\nMedium confidence (the words suggest a deadline; read the code before you aim a schedule at it):");
-            for m in rest.iter().take(max) {
-                let _ = writeln!(o, "  {}:{}: {}", m.file, m.line, m.text);
-            }
-            if rest.len() > max {
-                let _ = writeln!(o, "  ... {} more", rest.len() - max);
-            }
-        }
-    }
-    let ts: Vec<&ClockMatch> = ts.into_iter().take(shown).collect();
-    let placeholders = ts.iter().any(|m| {
+    let placeholders = shown.iter().any(|m| {
         proposals(m, svcs)
             .1
             .iter()
@@ -4112,6 +4658,7 @@ mod tests {
             function: Some("shouldStartChildReplication".into()),
             origin: vec![],
             main_lang: true,
+            order: None,
             limit: Some(Limit {
                 name: "repl_diskless_sync_delay".into(),
                 seconds: Some(5.0),
@@ -4130,5 +4677,82 @@ mod tests {
         );
         let (_, p) = proposals(&m, &Services::default());
         assert_eq!(p[0].schedule, "disk=none | run T=1:-300 K=<replica>@2+3");
+    }
+
+    /// Milestone 350: a wall-clock reading kept as the version of data that the code orders by
+    /// (an object store's shape: a copy takes `now_msec()` as its version's timestamp, while a
+    /// put keeps it above the newest version). The reading comes through a function whose tail
+    /// expression goes on over three lines.
+    #[test]
+    fn a_reading_kept_as_a_version_is_an_order() {
+        let time = "pub fn now_msec() -> u64 {\n\tSystemTime::now()\n\t\t.duration_since(UNIX_EPOCH)\n\t\t.expect(\"Fix your clock :o\")\n\t\t.as_millis() as u64\n}\n";
+        let object = "impl ObjectVersion {\n\tfn cmp_key(&self) -> (u64, Uuid) {\n\t\t(self.timestamp, self.uuid)\n\t}\n}\n";
+        let put = "pub(crate) fn next_timestamp(existing: Option<&Object>) -> u64 {\n\texisting\n\t\t.and_then(|obj| obj.versions().iter().map(|v| v.timestamp).max())\n\t\t.map(|t| std::cmp::max(t + 1, now_msec()))\n\t\t.unwrap_or_else(now_msec)\n}\n";
+        let copy = "async fn handle_copy_metaonly(ctx: ReqCtx) -> Result<SaveStreamResult, Error> {\n\tlet new_timestamp = now_msec();\n\tlet res = SaveStreamResult {\n\t\tversion_timestamp: new_timestamp,\n\t};\n\tlet v = ObjectVersion {\n\t\tuuid: dest_info.uuid,\n\t\ttimestamp: new_timestamp,\n\t};\n\tOk(res)\n}\n";
+        let key = "fn new_key() -> Key {\n\tKey {\n\t\tcreated: Some(now_msec()),\n\t\tlast_seen: now_msec(),\n\t}\n}\n";
+        let (durations, orders) = audit_both(&[
+            ("src/util/time.rs", time),
+            ("src/model/object_table.rs", object),
+            ("src/api/put.rs", put),
+            ("src/api/copy.rs", copy),
+            ("src/model/key.rs", key),
+        ]);
+        assert!(durations.is_empty(), "{durations:#?}");
+        // the copy's reading, not the put's increasing one, not a creation time
+        let at: Vec<(&str, usize, &str)> = orders
+            .iter()
+            .map(|m| (m.file.as_str(), m.line, m.confidence))
+            .collect();
+        assert_eq!(at, [("src/api/copy.rs", 2, "high")], "{orders:#?}");
+        let m = &orders[0];
+        assert_eq!(m.shape, "order");
+        assert_eq!(
+            m.order,
+            Some(Order {
+                name: "timestamp".into(),
+                compared_at: Some("src/model/object_table.rs:3".into()),
+            })
+        );
+        assert!(
+            m.origin[0].starts_with("now_msec() returns a wall-clock reading"),
+            "{:?}",
+            m.origin
+        );
+        let (_, p) = proposals(m, &Services::default());
+        let got: Vec<&str> = p.iter().map(|x| x.schedule.as_str()).collect();
+        assert_eq!(
+            got,
+            [
+                "disk=none | run T=10:-300",
+                "disk=none | run T=10:-3600",
+                "disk=none | run K=<service>@2+3 T=10:-300",
+            ]
+        );
+        // Go: a field merged by its newer value, and a stamp for a log that is not one
+        let merge = "package kv\n\nfunc (s *Store) Put(k string) {\n\ts.items[k] = Item{\n\t\tVersion: time.Now().UnixNano(),\n\t}\n}\n\nfunc newer(a, b Item) bool {\n\treturn a.Version > b.Version\n}\n\nfunc logLine() Line {\n\treturn Line{\n\t\tTimestamp: time.Now().UTC().Format(time.RFC3339),\n\t}\n}\n";
+        let (_, orders) = audit_both(&[("kv/store.go", merge)]);
+        assert_eq!(orders.len(), 1, "{orders:#?}");
+        assert_eq!(orders[0].line, 5);
+        assert_eq!(orders[0].confidence, "high");
+    }
+
+    /// Milestone 350: a limit is a name of the line's code, not a type (`Duration`), and a plain
+    /// word of another file is another value; a literal duration of Rust gives the limit.
+    #[test]
+    fn a_limit_is_no_type_and_no_plain_word_of_another_file() {
+        let other = "pub(crate) const RESYNC_DELAY: Duration = Duration::from_secs(600);\nconst timeout = 7;\n";
+        let sig = "fn check(date: DateTime<Utc>) -> Result<(), Error> {\n    if Utc::now() - date > Duration::hours(24) {\n        return Err(Error::bad_request(\"too old\"));\n    }\n    Ok(())\n}\n";
+        let m = audit_texts(&[("src/block/manager.rs", other), ("src/api/sig.rs", sig)]);
+        assert_eq!(m.len(), 1, "{m:#?}");
+        let l = m[0].limit.as_ref().unwrap();
+        assert_eq!(
+            (l.name.as_str(), l.seconds, l.at.as_deref()),
+            ("Duration::hours(24)", Some(86400.0), None)
+        );
+        assert!(distinctive("repl_min_replicas_max_lag"));
+        assert!(distinctive("refreshMin"));
+        assert!(distinctive("TIMEOUT"));
+        assert!(!distinctive("timeout"));
+        assert!(!distinctive("idle"));
     }
 }

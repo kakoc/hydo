@@ -1430,6 +1430,11 @@ Valkey, Temporal, and River at their tagged versions. On the Mac engine its sche
 gave the fingerprint of the example's regression for valkey-io/valkey#5406. The skill (2.3.0)
 runs the audit during onboarding and offers the first three places. Since M324 it leaves out
 test code inside source files and ranks first the code that the services of `hydo.yaml` run.
+Since M350 (tentative number) a section of its own lists a reading of the clock kept as the
+order or the version of data. Garage's CopyObject is one: it takes its version's timestamp from
+`now_msec()`. A place is `high` when the code compares two values of that name, and it gets
+three steps back of the clock. A limit is no type name, and a plain word such as `timeout` is
+read in the place's own file only.
 The guide is the section "Find the durations measured on the
 wall clock" of `hydo guide faults`. The design and the precision numbers are in the section
 "The clock audit" of `docs/design/rule-suggestion.md`.
@@ -1441,6 +1446,8 @@ reads text, with the clock audit's rules for test code, and each route has its h
 line. It reads these sources:
 
 - the router code of Rust (axum, actix-web, the route tables of a macro);
+- since M350 (tentative number), a Rust enumeration of endpoints, as in Garage: an `enum` whose
+  variants a match on the request's method names, or that a macro's table lists after methods;
 - the router code of Go (net/http, gorilla/mux, chi, gin, labstack's router, httprouter);
 - the router code of JavaScript and TypeScript (express, fastify, koa, hapi, NestJS);
 - the router code of Python (FastAPI, Flask, Django), and of Java and Kotlin (Spring, JAX-RS);
@@ -1451,7 +1458,8 @@ It joins the prefixes of nests, groups and mounts by name, and lists a route tha
 declare once. A POST route whose name says that it reads is left out. Each route has a class
 (`data`, `admin`, `session`, `runtime`), and the list is grouped by resource and ranked by class.
 On the sources of Meilisearch, Iggy, Prometheus, GreptimeDB, Hatchet, and Memos it listed 14 to
-99 routes. 109 of 114 sampled routes wrote. Every write of the examples' RESULTS.md pages was
+99 routes. 109 of 114 sampled routes wrote. On Garage it lists 42 routes, every write of its
+workload among them. Every write of the examples' RESULTS.md pages was
 there, the index swap, the dump, and the snapshot among them. The skill's step that writes the
 workload runs it (`hydo guide rules`, "List the routes that write"; the design and the numbers
 are the section "The write routes" of `docs/design/rule-suggestion.md`; open item 175).
@@ -1590,7 +1598,10 @@ records with `Messages::status`. The Meilisearch example's check `queue` declare
 finding 2 breaks it. A kill between an index deletion's two commits there leaves the deletion
 `failed` with `index_not_found` although the index is gone
 (`A=meili.delete_index_acked+13:kill-now-meilisearch`): the effect breaks the claim. The
-reference is the section "Read back the final states" of `hydo guide messages`.
+reference is the section "Read back the final states" of `hydo guide messages`. A client that
+records no deliveries leaves `no-phantom` with nothing to judge. Since M350 (tentative number)
+such a claim no longer makes `hydo explore` count the pass as vacuous when another claim of the
+check judged operations.
 
 **Format-1 additions of M202.** `services[].start_after: started` starts a cluster's members
 before their readiness checks run. `services[].logs` names a service's own log files for the
@@ -2442,10 +2453,21 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `errors:` on an `http` proxy's route) reached 0.5.0. Since M341 the s3 proxy's request shapes
     and conditional routes ran in a VM on hvx and on the Mac engine (`checkout/hydo-s3.yaml`).
     So the s3 emulator ran on the Mac too. KVM ran them too, on Xeon 6975P-C hosts.
-117. The clock audit (M248). It reads text, so a reading that passes through an interface with
-    several implementations, a channel or a queue is not followed. Its schedules place the steps
-    at fixed workload steps. Only the Valkey schedules ran; the Temporal and River schedules, and
-    the audit inside a new onboarding, did not.
+117. The clock audit (M248, M350). It reads text, so a reading that passes through an interface
+    with several implementations, a channel or a queue is not followed. Its schedules place the
+    steps at fixed workload steps. Only the Valkey schedules ran; the Temporal and River
+    schedules, and the audit inside a new onboarding, did not. What M350's places of an order or
+    a version leave:
+    - No schedule of the kind ran in a VM. For Garage `back-long` steps the clock back by an
+      hour before step 20; M349's regression of its finding 1 is the same step before step 17.
+      Temporal's 4 places were not judged.
+    - A place is found where the reading is stored under a name about an order, in the function
+      that reads the clock. A version that a SQL statement sets (`SET version = now()`), or that
+      a function of another file gets as a parameter, is not found.
+    - The comparison that makes a place `high` is found by the field's name in any file, so two
+      structures with a field `timestamp` share it.
+    - Every service of a guest shares one clock, so no schedule gives one node a clock behind
+      the others' (the idea "Clocks per service" of `docs/USE-CASES.md`).
 118. Fakes from OpenAPI descriptions (M249). Response headers (`Location`), nested echoed fields
     and OpenAPI 3.1 `webhooks:` are not generated, and the business reference is not inferred
     (`--ref` names it). A `DELETE` does not remove the saved object, and a `PATCH` saves nothing.
@@ -3476,6 +3498,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       reads none: it has no task uid for such a request.
     - `hydo explore` draws nothing aimed at the window between an effect's commit and its
       status's commit; the kill reactions of `--kill-now` reach it by chance.
+    - Since M350 a claim with nothing to judge beside a claim of its check that judged
+      operations is no vacuous pass. The fix was tested on findings only; no exploration of
+      Garage ran again to show its count of vacuous passes fall from 48.
 175. The write routes (M344, tentative number; `docs/design/rule-suggestion.md`, "The write
     routes"). What is left:
     - It reads text. A route that a program builds at run time, or registers through a function of
@@ -3491,7 +3516,15 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A gRPC method is found by its name, so it can point at another type's method of that name
       (Hatchet's `SendStepActionEvent`). A handler that answers `unimplemented` is listed.
     - `hydo rules check` does not read the list yet; the skill reads it when it writes the
-      workload. No onboarding used it yet.
+      workload. The Garage onboarding (M349) ran it and got no route, because Garage's S3 router
+      is an enumeration of its own (`Endpoint`), not a web framework's route table.
+    - Since M350 an enumeration of endpoints in Rust is read: a match on the request's method
+      that names its variants, or a macro's table that lists them after their methods. Its
+      route's path is `<Enum>::<Variant>`, not the URL, because the URL comes from the query and
+      the headers; the scan does not read them. A variant that a function of another file
+      chooses, or a router of this shape in another language, is not found. An operation that
+      no arm and no type named for it handles is left out, also when a handler of another shape
+      exists. No onboarding used the list of an enumeration yet.
 176. Five gaps of recent onboardings (M348, tentative number). What is left:
     - `guest.path` is off for every image built now; it is the default from the next fingerprint
       epoch. No example was built with the key, and no VM ran a Go program that finds `hydo-oci`
@@ -3506,19 +3539,16 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The refusal of an option that draws nothing checks the first 64 seeds of the given
       strategy. `--freeze-call`, `--protocol-cover`, `--concurrency` and `--reactive` are not
       checked.
-      workload. The Garage onboarding (M349) ran it and got no route. Garage's S3 router is an
-      enumeration of its own (`Endpoint`), not a web framework's route table.
 177. What the example `garage` left (M349, tentative number):
     - The three candidates are not reported upstream. Garage's tracker is a Forgejo instance
       that needs an account, not GitHub. Finding 1 is fixed on `main-v2` and waits for a
       release.
-    - `hydo rules scan --kind writes` found no route in Garage (open item 175). The clock audit
-      named only the request signatures' date checks. It looks for durations, and Garage orders
-      an object's versions by wall-clock timestamps. It also explained each place with a
-      constant of another file ("10 minutes by default (src/block/manager.rs:49)").
-    - An `acked_outcome` check that records no delivery keeps its implicit claim `no-phantom`
-      without anything to judge. `hydo explore` then counts every passing run as a vacuous pass
-      ("may have checked nothing"), although `acked-outcome` judged about 80 operations a run.
+    - M350 fixed the three gaps of hydo that the onboarding named. `hydo rules scan --kind
+      writes` lists Garage's 42 write routes with their handlers (open item 175). The clock
+      audit names the copy's `now_msec()` among Garage's 4 places that keep a wall-clock
+      reading as a version. It no longer explains a place with a constant of another file
+      (open item 117). An `acked_outcome` check whose `no-phantom` judges nothing no longer
+      makes each passing run a vacuous pass (open item 174).
     - One node's `storage:` takes one directory, so a node's metadata and data share one file
       system; production puts the metadata on an SSD and the data on disks.
     - The uploads check judges only the uploads that Garage acknowledged as aborted. An upload
@@ -4600,6 +4630,12 @@ build machine, before 2026-10-13.
   each node filters its copy before the merge. A cluster formed with `garage node connect`
   loses its peers at a power loss in its first minute. A CopyObject after a backward clock step
   has no effect, fixed on `main-v2` but not released. Nothing recorded moved
+- M350 (tentative number): the three gaps of the Garage onboarding, each its own commit. `hydo
+  rules scan --kind writes` reads Rust enumerations of endpoints and lists Garage's 42 write
+  routes with their handlers; the six projects of M344 keep their lists. The clock audit lists
+  wall-clock readings kept as an order or a version of data, and names Garage's CopyObject; the
+  known places of Valkey, Temporal, and River keep their ranks. A messages claim with nothing to
+  judge beside one that judged is no vacuous pass. Nothing recorded moved
 
 ## Where to look
 

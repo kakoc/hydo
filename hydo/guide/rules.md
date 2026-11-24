@@ -51,6 +51,7 @@ It reads the project's own sources and description files, as text:
 | what | where it looks |
 |---|---|
 | HTTP routes with `POST`, `PUT`, `PATCH`, and `DELETE` | Rust (axum, actix-web, and the route tables of a macro) |
+| | Rust enumerations of endpoints: an `enum` whose variants a match on the request's method names (`Method::PUT => ...`), or that a macro's table lists after their methods (`POST CreateKey (body)`) |
 | | Go (net/http, gorilla/mux, chi, gin, labstack's router, and httprouter) |
 | | JavaScript and TypeScript (express, fastify, koa, hapi, and NestJS) |
 | | Python (FastAPI, Flask, and Django), Java and Kotlin (Spring and JAX-RS) |
@@ -87,6 +88,16 @@ swap-indexes (1)
   POST   /swap-indexes  [data]
          handler swap_indexes (crates/meilisearch/src/routes/swap_indexes.rs:92)
          declared at crates/meilisearch/src/routes/swap_indexes.rs:21: POST in a route table of a macro; it changes the system's data (swap)
+```
+
+An operation of an enumeration of endpoints has the path `<Enum>::<Variant>`, because its URL
+comes from the request's query and headers. Its handler is the call that the code makes for the
+variant. On Garage v2.5.0 the entry of CopyObject, in the resource `object`, reads:
+
+```text
+  PUT    Endpoint::CopyObject  [data]
+         handler handle_copy (src/api/s3/copy.rs:47)
+         declared at src/api/s3/router.rs:480: PUT in an enumeration of endpoints; it changes the system's data
 ```
 
 Give the workload one command for each route of class `data` or `admin`, or say why a route

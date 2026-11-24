@@ -10,7 +10,7 @@ use hydo_results::{
     PropertyTable, Run, Verdict,
 };
 use serde_json::{json, Map, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
@@ -635,6 +635,8 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
 ///   check saw an operation. A run without that report (it ended before the workload's end) is
 ///   not judged.
 /// - A history check that passed with no operation (`ops` 0 in its details).
+/// - A messages claim that passed with nothing to judge (`judged` 0), unless another claim of
+///   the same check judged operations (Milestone 350).
 pub fn vacuous(consoles: &[(String, String)], findings: &[Finding]) -> Vec<String> {
     let mut out = Vec::new();
     let ops = |f: &Finding| {
@@ -682,6 +684,31 @@ pub fn vacuous(consoles: &[(String, String)], findings: &[Finding]) -> Vec<Strin
                 .to_string(),
         );
     }
+    // a messages check whose claims judged operations (Milestone 350): another claim of the
+    // check that had nothing to judge does not make the pass vacuous. Garage's `acked_outcome`
+    // check judged about 80 operations a run, and its implicit `no-phantom` judged none, because
+    // the client records no deliveries
+    let judged = |f: &Finding| {
+        f.details
+            .get("details")
+            .and_then(|d| d.get("judged"))
+            .and_then(Value::as_u64)
+    };
+    let check_of = |f: &Finding| -> Option<String> {
+        let claim = f
+            .details
+            .get("details")
+            .and_then(|d| d.get("claim"))
+            .and_then(Value::as_str)?;
+        f.id.strip_suffix(claim)
+            .and_then(|c| c.strip_suffix('.'))
+            .map(String::from)
+    };
+    let judging: HashSet<String> = hist
+        .iter()
+        .filter(|f| judged(f).is_some_and(|n| n > 0))
+        .filter_map(|f| check_of(f))
+        .collect();
     for f in hist {
         if f.status == status::OK && ops(f) == Some(0) {
             out.push(format!(
@@ -691,9 +718,11 @@ pub fn vacuous(consoles: &[(String, String)], findings: &[Finding]) -> Vec<Strin
             ));
         } else if f.status == status::OK {
             // a messages claim that had nothing to judge holds vacuously
-            let d = f.details.get("details");
-            let judged = d.and_then(|d| d.get("judged")).and_then(Value::as_u64);
-            if d.and_then(|d| d.get("claim")).is_some() && judged == Some(0) {
+            let claim = check_of(f);
+            if claim.is_some()
+                && judged(f) == Some(0)
+                && !claim.as_ref().is_some_and(|c| judging.contains(c))
+            {
                 out.push(format!(
                     "the messages claim {} had nothing to judge: it holds vacuously",
                     f.id
@@ -1449,6 +1478,49 @@ mod tests {
         );
         // a run that ended before the workload's end is not judged
         assert!(vacuous(&con("HYDO-ORACLE: ERROR provision failed\n"), &[]).is_empty());
+    }
+
+    /// Milestone 350: a messages check is one finding per claim. A claim with nothing to judge
+    /// makes the pass vacuous only when no claim of the same check judged an operation: Garage's
+    /// `acked-outcome` judged about 80 operations a run while `no-phantom` judged none, and every
+    /// passing run counted as vacuous.
+    #[test]
+    fn a_messages_claim_with_nothing_to_judge_beside_one_that_judged_is_no_vacuous_pass() {
+        let claim = |check: &str, name: &str, judged: u64| {
+            let mut d = Map::new();
+            d.insert(
+                "details".into(),
+                serde_json::json!({"ops": 82, "claim": name, "judged": judged, "undecided": 0}),
+            );
+            Finding {
+                kind: kind::HISTORY_CHECK.into(),
+                id: format!("{check}.{name}"),
+                status: status::OK.into(),
+                message: String::new(),
+                details: d,
+            }
+        };
+        let acked = con("hydo-explore-acked: 1 2\n");
+        let garage = [
+            claim("objects", "no-phantom", 0),
+            claim("objects", "acked-outcome", 80),
+        ];
+        assert!(vacuous(&acked, &garage).is_empty());
+        // every claim of the check judged nothing: vacuous, one sentence per claim
+        let none = [
+            claim("objects", "no-phantom", 0),
+            claim("objects", "acked-outcome", 0),
+        ];
+        assert_eq!(vacuous(&acked, &none).len(), 2);
+        // a claim of another check that judged operations does not cover this one
+        let other = [
+            claim("objects", "no-phantom", 0),
+            claim("queue", "no-loss", 12),
+        ];
+        assert_eq!(
+            vacuous(&acked, &other),
+            ["the messages claim objects.no-phantom had nothing to judge: it holds vacuously"]
+        );
     }
 
     #[test]

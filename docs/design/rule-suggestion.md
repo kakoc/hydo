@@ -237,10 +237,64 @@ example's recorded fingerprint `d3c8c0fed4a3dbd8`. The `back-before` schedule pa
 the replica's request is stamped after that step. The `forward-after` schedule passed too: a
 step forward only shortens the 5-second wait.
 
+### Orders and versions (Milestone 350)
+
+The Garage onboarding (Milestone 349) found a bug of another shape. Garage's CopyObject takes the
+timestamp of its new version from `now_msec()`, while PutObject keeps it above the key's newest
+version. Garage keeps the version with the highest timestamp. So after a step back of the clock,
+a copy onto an existing key is acknowledged and has no effect. No duration is measured there,
+and the audit did not see it.
+
+The audit has a second kind of place now, the shape `order`. A line is one when it keeps a
+reading of the clock as the order or the version of data:
+
+- The reading is the value of a name about an order: `timestamp`, `ts`, `version`, `seq`,
+  `revision`, `mtime`, `updated`. A variable counts when the same function stores it in such a
+  field (`let new_timestamp = now_msec();` and later `timestamp: new_timestamp,`). A name about
+  a duration or a record, such as `created`, `expires`, or `lease`, does not count.
+- The line reads the clock itself, or calls a function whose name says that it does (`now`,
+  `clock`, `timestamp`). A time made from a stored value, such as Go's `time.Unix(0, 0)`, does
+  not count, and neither does a stamp formatted for a log.
+- A reading kept above the earlier value, `max(prev + 1, now_msec())`, is the safe form and does
+  not count.
+
+A place is `high` when the code compares two values of its name: two values of one field on a
+line with a comparison or a maximum (`other.ts > self.ts`), a field that a maximum or a sort keys
+on (`.map(|v| v.timestamp).max()`, `sort_by_key`), or a field of `self` in a function named for
+an order key (`fn cmp_key`). Only `high` places get schedules. The places have a section of their
+own in the report, ranked by the same points, with their own 5 shown, so the durations keep their
+ranks. Each gets three schedules:
+
+| name | schedule | what it tests |
+|---|---|---|
+| `back` | `T=<middle>:-300` | a write after the step gets an older version than the writes before it |
+| `back-long` | `T=<middle>:-3600` | the same, with a step longer than the time between two writes of one key |
+| `back-after` | `K=<service>@2+3 T=10:-300` | the writes of a service that restarted get older versions |
+
+On Garage v2.5.0, with the example's hydo.yaml, the audit names 4 functions, all `high`, and the
+copy's `now_msec()` (`src/api/s3/copy.rs` line 293) is the second. M349's regression of the copy
+is `back-long` at step 17. The other three are timestamps of a key's permissions on a bucket and
+the constructor of Garage's last-writer-wins register; `next_timestamp` and the register's
+`update` keep their readings above the earlier ones and are not listed. Valkey and River have no
+such place, and Temporal has 4, versions stamped with `time.Now().UnixNano()` that a merge
+compares.
+
+The same milestone fixed what the limits said. The audit explained Garage's places with "10
+minutes by default (src/block/manager.rs:49)", a constant of another file, because it took the
+type `Duration` of `Duration::hours(24)` for the limit's name. A type is no limit now. A plain
+word such as `timeout`, `idle`, or `interval` is read in the place's own file only, and a name
+of two words or in capitals in every file, as before. A literal duration of Rust, such as
+`Duration::hours(24)`, gives the limit when no name does. Garage's `now_msec()` returns a chain
+that starts with `SystemTime::now()` on one line and goes on over three more, and a Rust tail
+expression is now read from the first line of its chain.
+
 ### What the clock audit does not do
 
 - It reads text, so a reading passed through an interface with several implementations, or
   through a channel or a queue, is not followed.
+- An order or a version that a SQL statement sets, or that a function of another file gets as a
+  parameter, is not found. The comparison that makes such a place `high` is matched by the
+  field's name in every file, so two structures with a field `timestamp` share it.
 - The schedules place the steps at fixed workload steps (the fault before step 2, the step
   back before step 10 of a 20-step workload). Code that runs at another time needs the steps
   moved by hand.
@@ -273,6 +327,17 @@ comments, with its strings, and with each call's name, receiver, and arguments.
 - Decorators and annotations name the function after them: FastAPI and Flask, NestJS, Spring and
   JAX-RS, and the attributes of actix-web and rocket. A Django URL pattern names a view, and the
   view's methods (`def post`, a REST framework base class, `@require_POST`) give the routes.
+- An enumeration of endpoints in Rust (Milestone 350) is an `enum` whose variants are an API's
+  operations, chosen by the project's own code instead of a router library. A match on the
+  request's method gives each variant its method, when its arm names the variant or calls a
+  function of the file whose arms name the variants: `Method::PUT => Self::from_put(...)`, and
+  in `from_put` the arms `EMPTY header "x-amz-copy-source" => CopyObject` and `EMPTY =>
+  PutObject`. A table in a macro's invocation that lists `POST CreateKey (body),` does the
+  same. The handler is the first call of the arm that matches the variant (`Endpoint::PutObject
+  { key } => handle_put(...)`), or of the block of an `if let`, or else the first method of a
+  type named for the variant (`impl RequestHandler for CreateKeyRequest`). An operation that no
+  code handles is left out. The route's path is `<Enum>::<Variant>`, its resource the variant's
+  first noun, and its class comes from the variant's words.
 - A `.proto` service gives one route per method, with its HTTP mapping when it has one. A Go type
   that embeds `Unimplemented<Service>Server` and a Rust `#[async_trait] impl Service for T` whose
   methods take a `Request<...>` give the methods of a gRPC server without a `.proto` file in the
@@ -350,6 +415,15 @@ The scan's own mistakes outside the sample:
 - A gRPC method found by name can point at another type's method of that name, as Hatchet's
   `SendStepActionEvent` does.
 
+Garage v2.5.0 (Milestone 349) gave no route: its S3, K2V and admin APIs are enumerations of
+endpoints. With Milestone 350's reading of them the scan read 205 files and listed 42 routes in
+10 resources, 34 `data` and 8 `admin`, each with its handler. It left out 3 POST operations whose
+names read. Every write of the workload's table in Garage's RESULTS.md is there: PutObject,
+DeleteObject, DeleteObjects, CopyObject, the four multipart operations, and CreateBucket. So are
+the admin API's operations that the workload's first command calls, such as
+`ConnectClusterNodes` and `ApplyClusterLayout`. The six projects above gave the same JSON as
+before, byte for byte.
+
 ### What the write scan does not do
 
 - It reads text, so a route that a program builds at run time, or registers through a function
@@ -361,6 +435,9 @@ The scan's own mistakes outside the sample:
   are GraphQL mutations and warp's filters.
 - A route whose verb of change is inflected (`poll_messages_committing`) can be taken for a
   read.
+- An enumeration of endpoints gives no URL, because the URL comes from the query and the
+  headers. A variant that a function of another file chooses, or such a router in another
+  language, is not found.
 
 ## What is not built
 

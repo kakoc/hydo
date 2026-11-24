@@ -21523,3 +21523,151 @@ Retro: Garage v2.5.0, the Mac engine, 2026-11-23
   and the first table has a row for object stores.
 
 **What is left.** Open item 177.
+
+## Milestone 350 (tentative number): the three gaps of the Garage onboarding
+
+Status: done on 2026-11-24. Nothing recorded moved, and the fingerprint epoch stays 5.
+
+The Garage onboarding (M349) named three gaps of hydo in the section "What hydo lacked" of its
+RESULTS.md. Each fix is its own commit. The proofs read the sources of Garage v2.5.0, of the six
+projects of M344 at their tags, and of Valkey 9.1.3, Temporal 1.32.2 and River v0.51.2, cloned
+from their repositories, with a debug build on this Mac. No VM ran.
+
+1. **The write routes of an enumeration of endpoints.** `hydo rules scan --kind writes` found no
+   route in Garage. Garage's S3 router is a Rust `enum Endpoint` whose variants are the
+   operations. A match on the request's method calls `from_get`, `from_put` and the others,
+   whose arms name the variants from the query and the headers (`EMPTY header
+   "x-amz-copy-source" => CopyObject`). The admin API lists each variant after its method in a
+   macro's table (`POST CreateKey (body),`). The scan now reads both shapes in Rust:
+   - a match on the request's method (`Method::PUT => ...`) whose arm names a variant, or calls
+     a function of the file whose arms name the variants;
+   - a table in a macro's invocation that names a variant after `POST`, `PUT`, `PATCH` or
+     `DELETE`.
+
+   An operation's handler is the first call of the arm that matches its variant
+   (`Endpoint::PutObject { key } => handle_put(ctx, req, &key).await`), or of the block of an
+   `if let Endpoint::CreateBucket {} = endpoint`. When no arm names the variant, the handler is
+   the first method of a type named for it (`impl RequestHandler for CreateKeyRequest`). Garage's
+   S3, K2V and admin routers each have an `Endpoint`, so an arm in the files nearest to the
+   router wins. An operation that no code handles is left out: Garage answers "not implemented"
+   to most of S3's bucket settings. The path is `<Enum>::<Variant>`. The resource is the
+   variant's first noun (`bucket` of `PutBucketCors`), and the class comes from the variant's
+   words, not from the enumeration's name.
+2. **Versions ordered by the wall clock.** The clock audit looked only for durations. Garage's
+   CopyObject takes its version's timestamp from `now_msec()` (`src/api/s3/copy.rs` line 293),
+   while PutObject keeps it above the key's newest version (`next_timestamp`, `put.rs` line
+   720). The audit has a second kind of place now, the shape `order`: a reading of the clock
+   kept as the order or the version of data.
+   - The reading is the value of a name about an order (`timestamp`, `ts`, `version`, `seq`,
+     `revision`), or of a variable that the function then stores in such a field.
+   - It reads the clock now: no time made from a stored value (`time.Unix(0, 0)`), no getter
+     that the duration audit follows, and no stamp formatted for a log.
+   - A reading kept above the earlier value (`max(prev + 1, now_msec())`) is no place.
+
+   A place is `high` when the code compares two values of the name: a merge (`other.ts >
+   self.ts`), a maximum or a sort key (`.map(|v| v.timestamp).max()`), or the fields of a
+   function named `cmp_key`. The places are ranked as the durations are, in a section of their
+   own with its own 5 shown, so the durations keep their ranks. Each gets three schedules: a step
+   back of 5 minutes and one of an hour in the middle of the workload, and a step back of 5
+   minutes after a restart of the service that runs the code. `--json` gives them as
+   `clock_orders`, and the scan without `--kind` counts them in a line of its own.
+
+   Garage's `now_msec()` returns `SystemTime::now()` over three lines of a chain, and the audit
+   read a Rust tail expression on its last line only. It now starts at the chain's first line,
+   unless the chain measures a duration (`.elapsed()`). The limits had a second friction: the
+   audit explained Garage's places with "10 minutes by default (src/block/manager.rs:49)", a
+   constant of another file. The name it took was `Duration`, of `Duration::hours(24)`. Now a
+   type is no limit, and a plain word such as `timeout`, `idle` or `interval` is read in the
+   place's own file only. A name of two words or in capitals is still read in every file, as
+   Valkey's `repl_min_replicas_max_lag` is. A literal of Rust (`Duration::hours(24)`,
+   `Duration::from_secs(600)`) gives the limit when no name does. A Rust `fn new` counts as a
+   function now; the rule against Java's `new X(...)` had left it out.
+3. **A messages check with one claim that judged nothing.** A `type: messages` check gives one
+   finding per claim. Garage's check declares `acked_outcome` and records no deliveries, so its
+   implicit `no-phantom` judged nothing while `acked-outcome` judged about 80 operations a run.
+   `hydo explore` then counted all 48 passing runs of e4 as vacuous passes. Now a claim with
+   nothing to judge makes the pass vacuous only when no claim of the same check judged an
+   operation (`hydo_explore::results::vacuous`). The history checker's own warning, that the
+   claim holds vacuously, stays.
+
+**Proof of item 1.** On Garage v2.5.0 the scan read 205 files and listed 42 routes in 10
+resources (34 `data`, 8 `admin`), each with its handler. It left out 3 POST operations whose
+names read: `ReadBatch`, `PollRange` and `PreviewClusterLayoutChanges`. Every write of the
+workload's table in RESULTS.md is in the list with its handler:
+
+| operation | handler |
+|---|---|
+| PutObject | `handle_put` (`src/api/s3/put.rs:58`) |
+| DeleteObject | `handle_delete` (`src/api/s3/delete.rs:56`) |
+| DeleteObjects | `handle_delete_objects` (`src/api/s3/delete.rs:66`) |
+| CopyObject | `handle_copy` (`src/api/s3/copy.rs:47`) |
+| CreateMultipartUpload | `handle_create_multipart_upload` (`src/api/s3/multipart.rs:35`) |
+| UploadPart | `handle_put_part` (`src/api/s3/multipart.rs:121`) |
+| CompleteMultipartUpload | `handle_complete_multipart_upload` (`src/api/s3/multipart.rs:290`) |
+| AbortMultipartUpload | `handle_abort_multipart_upload` (`src/api/s3/multipart.rs:573`) |
+| CreateBucket | `handle_create_bucket` (`src/api/s3/bucket.rs:168`) |
+
+The other bucket operations are DeleteBucket and the bucket's CORS, lifecycle and website
+settings. The admin API's writes of `first_init` are there too: `ConnectClusterNodes`,
+`UpdateClusterLayout`, `ApplyClusterLayout`, `ImportKey`, `CreateBucket` and `AllowBucketKey`,
+each with its `<Variant>Request::handle`. The six projects of M344 gave the same JSON as before,
+byte for byte: Meilisearch 83 routes, Iggy 38, Prometheus 14, GreptimeDB 53, Hatchet 99 and
+Memos 49.
+
+**Proof of item 2.** With the example's hydo.yaml the audit names 4 functions of Garage that
+keep a wall-clock reading as a version, all `high`. The copy's `now_msec()` is the second:
+
+```text
+4 functions keep a wall-clock reading as the order or the version of stored data.
+...
+2. src/api/s3/copy.rs:293, in handle_copy_metaonly [high]
+     let new_timestamp = now_msec();
+   It keeps a wall-clock reading as timestamp, and the code orders data by comparing two values of it (src/api/s3/put.rs:723). ...
+     back           disk=none | run T=20:-300
+     back-long      disk=none | run T=20:-3600
+     back-after     disk=none | run K=<service>@2+3 T=10:-300
+```
+
+The other three are the timestamps of a key's permissions on a bucket (`src/api/admin/bucket.rs`
+line 253 and `src/garage/server.rs` line 387), and the constructor of Garage's last-writer-wins
+register (`src/util/crdt/lww.rs` line 66). `put.rs` line 724 and the register's `update` keep
+their reading above the earlier one, and the audit leaves them out. M349's finding 1 is the
+schedule `back-long` at step 17: `disk=none | run T=17:-3600`. With `now_msec()` followed, the
+durations of Garage grew from 4 functions to 9, among them the delays of the garbage collection
+of blocks (`src/block/rc.rs`). Those two places name `BLOCK_GC_DELAY`, 10 minutes, which `rc.rs`
+imports from `manager.rs` line 49. The places of the request signatures no longer name it.
+
+The known places of the three public cases keep their ranks:
+
+| project | the known place | rank with hydo.yaml (without) | functions with an order place |
+|---|---|---|---|
+| Valkey 9.1.3 | `refreshGoodReplicasCount`, `shouldStartChildReplication` | 2 and 4 (4 and 6) | 0 |
+| Temporal 1.32.2 | `reconnect` in `db_handle.go` | 1 (3) | 4 |
+| River v0.51.2 | `river_leader.sql` | 2 (2) | 0 |
+
+Temporal's 4 order places stamp versions with `time.Now().UnixNano()`, such as the ephemeral
+data of `service/matching/user_data_manager.go` that `mergeEphemeralDataLocked` merges by its
+`Version`. Nobody judged them further. The rule for limits moved a few places of the reports
+lower, below the top 5. A place whose explanation has a value from the code went from 30 to 29
+on Valkey, from 16 to 15 on Temporal, and from 1 to 0 on River. Valkey's `clientMatchesFilter`
+had named `idle, 10 seconds by default (src/anet.c:201)`, and River's place had named `Duration,
+1 minute by default` from River's Java client.
+
+**Proof of item 3.** The unit test
+`a_messages_claim_with_nothing_to_judge_beside_one_that_judged_is_no_vacuous_pass` gives Garage's
+pair of claims, `no-phantom` with 0 operations judged and `acked-outcome` with 80, and gets no
+reason. Two claims of one check that both judged nothing give two reasons. A claim of another
+check that judged operations does not cover a claim with nothing to judge. No exploration ran
+again.
+
+**Tests.** `writescan::tests::enumerations_of_endpoints_with_their_handlers` reads both shapes,
+an `if let`, a request type's handler, an operation without a handler, and a POST that reads.
+`clockscan::tests::a_reading_kept_as_a_version_is_an_order` has the copy, the put that keeps its
+reading above the newest version, a time of creation, the three-line `now_msec()`, a Go merge,
+and a stamp for a log. `a_limit_is_no_type_and_no_plain_word_of_another_file` checks the limits,
+and `hydo::rules::the_clock_audit_names_versions_taken_from_the_wall_clock` checks the report,
+the JSON, and the scan without `--kind`.
+
+**What moved.** No value of `hydo/onboard/recorded.json`, no example's value, and no golden.
+
+**What is left.** Open items 117, 174, 175 and 177 are updated.
