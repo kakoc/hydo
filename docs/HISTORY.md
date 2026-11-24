@@ -21672,6 +21672,91 @@ the JSON, and the scan without `--kind`.
 
 **What is left.** Open items 117, 174, 175 and 177 are updated.
 
+## Milestone 352 (tentative number): aimed reactions, refusals and the claim `acked_outcome` on KVM
+
+Status: done on 2026-11-24. Nothing recorded moved, and the fingerprint epoch stays 5.
+
+Milestones 345, 346 and 348 ran on the Mac engine only (open items 173 and 174). This milestone
+ran them on the KVM engine, on GitHub's runners, and records what held. No code changed.
+
+### How the runs were made
+
+The one-off workflow `.github/workflows/tmp-m345-m346-kvm.yml` and its script ran on the branch
+`tmp-m345-m346-kvm` (commit `37c014fc`, on `main` at `b8c698d7`, which has Milestones 345 to
+349). It ran as run 45371753189, and the branch is not merged. Three `ubuntu-24.04` jobs ran it.
+Each job built the branch's `hydo`, and took the 0.5.0 release's guest files with `hydo setup
+--get 0.5.0`. The KVM engine runs in the `hydo` process, so the controller of Milestones 345 to
+348 was the branch's. The job then built the Meilisearch example
+(`hydo/onboard/examples/meilisearch`) for x86_64 and ran the proofs, each schedule twice.
+
+The hosts were two Intel Xeon 6975P-C and one Intel Xeon Platinum 8370C. GitHub gave no AMD host.
+Every host built the image `3de31c71…`, and every host gave the same fingerprints, the same
+failures, and the same shrinks. On Intel a KVM fingerprint of an image built at epoch 3 or later
+leaves out DR6's host bits (Milestone 252), so the two models agree.
+
+### The claim `acked_outcome` of Milestone 346
+
+| schedule | verdict | `queue.acked-outcome` | fingerprint (`wfp`) |
+|---|---|---|---|
+| `disk=none \| run` | OK, 159 of 159 commands succeeded | held over 173 acknowledged tasks | `890cecf05c958416` (`f1e85a586253c8ed`) |
+| `A=meili.delete_index_acked+13:kill-now-meilisearch` (the saved regression) | OK | held over 8 | `29b491ad67043204` |
+| `A=meili.swap_acked@20+14:kill-now-meilisearch` (the saved regression) | OK | held over 70 | `98aedc015867eec2` |
+| `A=meili.delete_index_acked+6:kill-now-meilisearch` (found by the grid below) | `VIOLATION [tasks]` | broken: `delidx.4 (system id 14) was acknowledged and ended failed with index_not_found, but its effect is there` | `8385564e5978c59b` (`865d132dbc333ef3`) |
+
+Each schedule gave one fingerprint in its two runs on each host. The clean run held over 173
+tasks, as on the Mac. Both saved kill regressions pass on KVM: the window after an event sits at
+another delay on each engine, as it moves with the image's bytes on one engine.
+
+### The aimed grids of Milestone 345
+
+`hydo explore --backend kvm --workers 2 --reactive-at meili.swap_acked@20` ran the grid of 153
+schedules (51 delays, three actions) in 17 to 23 minutes. 21 first runs failed, and each failed
+again with its own fingerprint.
+
+- The swap that runs twice (finding 1, `VIOLATION [swap]`) came at 6 cells:
+  `kill-meilisearch` 0, 1 and 2 ms after the swap's `202`, and `kill-now-meilisearch` at 3, 8
+  and 9 ms. The first was seed 2, `disk=none dseed=0 | run A=meili.swap_acked@20:kill-meilisearch`.
+  It shrank to itself, and both confirmations gave `42d6871a086075e1`. `hydo run` of it gave
+  the same value twice on each host, the value of the explorer's first run.
+- 15 of the 51 power cuts, from 2 ms to 50 ms, broke `edits`: an edit runs twice (`cnt's k has
+  n=20 after 19 succeeded edits`). On Milestone 345's image the Mac's power cuts broke `docs` or `dumps`. No run
+  of this grid broke `acked_outcome`.
+
+`hydo explore --backend kvm --workers 2 --reactive-at meili.delete_index_acked --react-actions
+kill-now,kill` ran 102 schedules in 7 to 10 minutes. 8 first runs failed, each with
+`VIOLATION [tasks]`, and each failed again with its own fingerprint:
+
+- `kill-now-meilisearch` at 1 to 5 ms and `kill-meilisearch` at 3 ms: the creation of `x4` runs
+  twice, and the claim names `mkidx.4 ... ended failed with index_already_exists, not an error
+  the client causes`. This is the Mac's form at 7 ms.
+- `kill-now-meilisearch` at 6 ms and `kill-meilisearch` at 8 ms: the deletion runs twice, and
+  the claim names the deletion's effect, the Mac's form at 13 ms.
+
+Both forms have one signature, so the explorer shrank one of them, seed 3 (`+1`), to itself.
+
+### The refusals of Milestones 345 and 348
+
+Each of these stopped with status 5 in 0 to 6 seconds, before any run, with one line that names
+the option and the reason:
+
+- `--timing --vcpus 2`: the KVM engine refuses the tick jitter `tj=` with several vCPUs.
+- `--more-faults`: `cf=` runs on hvx only.
+- `--cluster-faults`, `--upgrades` and `--protocol-faults`: the manifest has no groups, no
+  versions, and no fakes or proxies. With `--json` the explorer printed `{"refused": ...,
+  "status": 5}`.
+- `--react-delays 0..5` without `--reactive-at`.
+- `--reactive-at` with `--kill-now --reactive fault`.
+- `--react-actions kill-nobody`: the manifest and the engine leave that reaction out.
+
+`--strategy process --new-faults` warned that `--new-faults` adds nothing to the strategy, and
+ran its one seed (status 0).
+
+The explorer's runs came before Milestone 350. Every passing first run carried the warning that
+it checked nothing: 132 of 153, and 94 of 102. It came from the claim `no-phantom`, which had
+no deliveries to judge. Milestone 350 changed that rule.
+
+**What is left.** Open items 173 and 174 are updated.
+
 ## Milestone 354 (tentative number): the s3 emulator keeps its writes across a power cut
 
 Status: done on 2026-11-24, on the Mac engine. A format-1 addition, opt-in. Nothing recorded

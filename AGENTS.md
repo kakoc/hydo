@@ -3483,7 +3483,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       shares nothing with its parent.
 173. Aimed reactions, refused options and the merged list (M345, tentative number). What is
     left:
-    - Only the Mac engine ran an aimed exploration. hvx and KVM run the same controller code.
+    - The Mac engine and KVM (M352, three Intel runners, no AMD host) ran aimed explorations;
+      hvx did not. On KVM `--reactive-at meili.swap_acked@20` found the swap that runs twice at
+      6 of 153 cells, and every failure ran again with its fingerprint. The refusals of M345 and
+      M348 stopped with status 5 before any run there.
+    - A window after an event sits at other delays on each engine. On KVM the saved
+      regressions `swap-runs-twice-after-a-kill` (`+14`) and
+      `index-deletion-runs-twice-after-a-kill` (`+13`) pass, and the failing cells of the grids
+      lie between 0 and 9 ms and between 1 and 8 ms. A regression's `# expect: violation` line holds for the Mac engine only.
     - A grid has one reaction per schedule, and its first round no other fault. An event's
       arming step and its record are fixed per item of `--reactive-at`; a range of steps or
       records is written as several items.
@@ -3502,8 +3509,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       table, no list of what held, and no statistics. The error lines of new kinds are the first
       round's, with the rounds that wrote any. The accept keys are each round's.
 174. The claim `acked_outcome` (M346, tentative number). What is left:
-    - It ran on the Mac engine only, with the Meilisearch example. hvx and KVM did not run it, and
-      no other example declares it.
+    - It ran on the Mac engine and on KVM (M352, three Intel runners, no AMD host), not on hvx.
+      On KVM it held over 173 tasks without faults. It broke on the deletion's effect at
+      `A=meili.delete_index_acked+6:kill-now-meilisearch`, which the aimed grid found; each
+      schedule gave one fingerprint in two runs. The Garage example (M349) declares it too.
     - The read-back must wait for the system's pending work itself. A task still pending at the
       read is `s=info` and breaks the claim, so a read-back that stops too early reports a
       false loss.
@@ -4653,6 +4662,11 @@ build machine, before 2026-10-13.
   wall-clock readings kept as an order or a version of data, and names Garage's CopyObject; the
   known places of Valkey, Temporal, and River keep their ranks. A messages claim with nothing to
   judge beside one that judged is no vacuous pass. Nothing recorded moved
+- M352 (tentative number): the work of Milestones 345, 346 and 348 on KVM, on three Intel runners.
+  The aimed grid over Meilisearch's swap found the swap that runs twice, and the grid over the
+  index deletion broke `acked_outcome` by the deletion's effect at 6 ms. Every failure ran again
+  with its fingerprint, and both hosts' models gave the same values. The refusals stopped with
+  status 5 before any run. Nothing recorded moved
 - M354 (tentative number): the s3 emulator keeps its acknowledged writes across a power cut.
   `durable: true` on an `s3` entry gives its folders ext4's attribute `S`, so rclone's writes,
   renames and deletes reach the disk before it answers. On the Mac engine the new example
