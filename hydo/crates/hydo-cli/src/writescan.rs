@@ -10,6 +10,11 @@
 //!   (axum, actix-web, and route tables of a macro), Go (net/http, gorilla/mux, chi, gin, labstack's router,
 //!   httprouter, Prometheus's route package), JavaScript and TypeScript (express, fastify, koa,
 //!   hapi, NestJS), Python (FastAPI, Flask, Django), and Java and Kotlin (Spring, JAX-RS);
+//! - the operations of an enumeration of endpoints in Rust (Milestone 350): an `enum` whose
+//!   variants the project's own code chooses from a request's method (`Method::PUT =>
+//!   Self::from_put(...)`, whose arms name the variants) or lists after their methods in a
+//!   macro's table (`POST CreateKey (body)`), each with the first call of the arm that handles
+//!   it, or the method of a type named for it;
 //! - RPC methods whose names do not say that they read, from `.proto` files, from gRPC servers
 //!   in Go (a type that embeds `Unimplemented<Service>Server`) and Rust (tonic's
 //!   `#[async_trait] impl Service for T`);
@@ -438,6 +443,9 @@ fn classify(method: &str, path: &str, handler: &str) -> (&'static str, Option<St
     // an RPC's path names its package and service; only its method's name says what it does
     let mut ws = if method == "RPC" {
         Vec::new()
+    } else if let Some((_, v)) = path.rsplit_once("::").filter(|_| !path.contains('/')) {
+        // a variant of an enumeration of endpoints: the enumeration's name says nothing
+        words(v)
     } else {
         words(path)
     };
@@ -479,6 +487,30 @@ fn resource_of(method: &str, path: &str) -> String {
         // /<package>.<Service>/<Method>
         let svc = path.trim_start_matches('/').split('/').next().unwrap_or("");
         return svc.rsplit('.').next().unwrap_or(svc).to_string();
+    }
+    // a variant of an enumeration of endpoints (`Endpoint::PutBucketCors`): its first word
+    // after its verbs (`bucket`), without a plural's `s`
+    if let Some((_, v)) = path.rsplit_once("::").filter(|_| !path.contains('/')) {
+        const MORE_VERBS: &[&str] = &[
+            "abort", "copy", "allow", "deny", "revert", "connect", "cleanup", "apply", "skip",
+            "cancel", "launch", "retry", "rename", "move", "attach", "detach", "enable", "disable",
+            "grant", "revoke", "close", "open", "mark", "approve", "reject", "post",
+        ];
+        let ws = words(v);
+        let noun = ws
+            .iter()
+            .find(|w| {
+                !WRITE_VERBS.contains(&w.as_str())
+                    && !READ_WORDS.contains(&w.as_str())
+                    && !MORE_VERBS.contains(&w.as_str())
+            })
+            .or(ws.last())
+            .cloned()
+            .unwrap_or_default();
+        return match noun.strip_suffix('s') {
+            Some(n) if n.len() > 2 && !n.ends_with('s') => n.to_string(),
+            _ => noun,
+        };
     }
     let segs: Vec<&str> = path
         .split('/')
@@ -1603,6 +1635,420 @@ fn next_function(f: &Src, line: usize) -> (String, Option<usize>) {
         break;
     }
     ("<unknown>".into(), None)
+}
+
+// ---------------------------------------------------------------- enumerations of endpoints
+
+/// One operation of an enumeration of endpoints (Milestone 350): a Rust `enum` whose variants
+/// are an API's operations, chosen by the project's own code from a request's method, and from
+/// its path, query or headers, instead of a router library's route table.
+#[derive(Clone, Debug)]
+struct EnumOp {
+    method: &'static str,
+    /// the enumeration, from the `impl` block that chooses the variant
+    owner: String,
+    variant: String,
+    file: usize,
+    line: usize,
+}
+
+/// Names that start with a capital letter and are no variant of an API.
+const NOT_VARIANTS: &[&str] = &[
+    "Ok", "Err", "Some", "None", "Self", "Box", "Vec", "String", "Arc", "Rc", "Cow", "Default",
+];
+
+/// The method of an uppercase method word (`POST` of `Method::POST`).
+fn method_word(w: &str) -> Option<&'static str> {
+    match w {
+        "POST" => Some("POST"),
+        "PUT" => Some("PUT"),
+        "PATCH" => Some("PATCH"),
+        "DELETE" => Some("DELETE"),
+        _ => None,
+    }
+}
+
+/// An identifier that names a variant: a capital first letter and a small letter after it
+/// (`PutObject`, not `EMPTY`), and no name of the language's own types.
+fn variant_like(w: &str) -> bool {
+    w.starts_with(|c: char| c.is_ascii_uppercase())
+        && w.chars().any(|c| c.is_ascii_lowercase())
+        && w.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+        && !NOT_VARIANTS.contains(&w)
+}
+
+/// The identifier that starts at `at` (after spaces), and where it ends.
+fn ident_at(s: &str, at: usize) -> (String, usize) {
+    let b = s.as_bytes();
+    let mut i = at;
+    while i < b.len() && (b[i] == b' ' || b[i] == b'\t' || b[i] == b'\n') {
+        i += 1;
+    }
+    let st = i;
+    while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
+        i += 1;
+    }
+    (s[st..i].to_string(), i)
+}
+
+/// The path of identifiers that starts at `at` (`Self::PutObject`, `Ok(Endpoint::X`): its
+/// segments, without the wrappers `Ok(` and `Some(`, and where it ends.
+fn path_at(s: &str, at: usize) -> (Vec<String>, usize) {
+    let b = s.as_bytes();
+    let mut segs = Vec::new();
+    let mut i = at;
+    loop {
+        let (w, e) = ident_at(s, i);
+        if w.is_empty() {
+            break;
+        }
+        i = e;
+        if segs.is_empty() && matches!(w.as_str(), "Ok" | "Some") && b.get(i) == Some(&b'(') {
+            i += 1;
+            continue;
+        }
+        segs.push(w);
+        if s[i..].starts_with("::") {
+            i += 2;
+            continue;
+        }
+        break;
+    }
+    (segs, i)
+}
+
+/// The type of the `impl` block that holds `line`: `Endpoint` of `impl Endpoint {`, `T` of
+/// `impl<'a> Trait for T<'a> {`.
+fn impl_type(code: &[String], line: usize) -> Option<String> {
+    for i in (0..=line.min(code.len().saturating_sub(1))).rev() {
+        let t = code[i].trim_start();
+        let Some(rest) = t.strip_prefix("impl") else {
+            continue;
+        };
+        if !(rest.starts_with(' ') || rest.starts_with('<')) {
+            continue;
+        }
+        let mut head = rest.split('{').next().unwrap_or(rest).trim();
+        // the generic parameters of the impl itself
+        if head.starts_with('<') {
+            let mut depth = 0;
+            let mut cut = head.len();
+            for (k, c) in head.char_indices() {
+                match c {
+                    '<' => depth += 1,
+                    '>' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            cut = k + 1;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            head = head[cut..].trim();
+        }
+        let ty = head.rsplit(" for ").next().unwrap_or(head).trim();
+        let ty = ty.split('<').next().unwrap_or(ty);
+        let ty = ty.rsplit("::").next().unwrap_or(ty).trim();
+        return (!ty.is_empty() && ty.bytes().all(is_ident_char)).then(|| ty.to_string());
+    }
+    None
+}
+
+/// The end of a match arm or of a list item that starts at `from`: the first `,` at its depth,
+/// or the bracket that closes the list.
+fn item_end(fl: &Flat, from: usize, limit: usize) -> usize {
+    let b = fl.s.as_bytes();
+    let mut depth = 0i32;
+    for (k, ch) in b.iter().enumerate().take(limit).skip(from) {
+        if fl.instr[k] {
+            continue;
+        }
+        match ch {
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => {
+                depth -= 1;
+                if depth < 0 {
+                    return k;
+                }
+            }
+            b',' if depth == 0 => return k,
+            _ => {}
+        }
+    }
+    limit
+}
+
+/// The operations of the enumerations of endpoints in one Rust file. Two shapes declare them:
+///
+/// - a match on the request's method whose arms choose the variant, directly or through a
+///   function of the file: `Method::PUT => Self::from_put(key, &mut query, req.headers())?`,
+///   and in `from_put` the arms `EMPTY header "x-amz-copy-source" => CopyObject` and
+///   `EMPTY => PutObject`;
+/// - a table in a macro's invocation that names each variant after its method:
+///   `POST CreateKey (body),`.
+fn rust_endpoint_ops(fi: usize, f: &Src) -> Vec<EnumOp> {
+    let fl = &f.flat;
+    let s = &fl.s;
+    let b = s.as_bytes();
+    let mut out: Vec<EnumOp> = Vec::new();
+    let mut push = |method: &'static str, owner: Option<String>, variant: &str, at: usize| {
+        let Some(owner) = owner else { return };
+        if out
+            .iter()
+            .any(|o| o.method == method && o.owner == owner && o.variant == variant)
+        {
+            return;
+        }
+        out.push(EnumOp {
+            method,
+            owner,
+            variant: variant.to_string(),
+            file: fi,
+            line: fl.line(at),
+        });
+    };
+    // the variants that a range chooses: the path after each `=>`
+    let chosen = |a: usize, z: usize, owner: &Option<String>| -> Vec<(String, usize)> {
+        let mut v = Vec::new();
+        let mut i = a;
+        while let Some(x) = s[i..z].find("=>") {
+            let at = i + x;
+            i = at + 2;
+            if fl.instr[at] {
+                continue;
+            }
+            let (segs, _) = path_at(s, at + 2);
+            let Some(last) = segs.last() else { continue };
+            let prefix_ok = segs.len() == 1
+                || (segs.len() == 2
+                    && (segs[0] == "Self" || owner.as_deref() == Some(segs[0].as_str())));
+            if prefix_ok && variant_like(last) {
+                v.push((last.clone(), at));
+            }
+        }
+        v
+    };
+    // the first shape: `Method::POST => ...`
+    for (p, _) in s.match_indices("Method::") {
+        if fl.instr[p] || (p > 0 && is_ident_char(b[p - 1])) {
+            continue;
+        }
+        let (w, e) = ident_at(s, p + 8);
+        let Some(method) = method_word(&w) else {
+            continue;
+        };
+        let rest = s[e..].trim_start();
+        if !rest.starts_with("=>") {
+            continue;
+        }
+        let arrow = s.len() - rest.len();
+        let end = item_end(fl, arrow + 2, s.len());
+        let owner = impl_type(&f.code, fl.line(p));
+        // the arm names the variant itself
+        let (segs, _) = path_at(s, arrow + 2);
+        if segs.len() == 2
+            && (segs[0] == "Self" || owner.as_deref() == Some(segs[0].as_str()))
+            && variant_like(&segs[1])
+        {
+            push(method, owner.clone(), &segs[1], p);
+            continue;
+        }
+        // or a function of this file chooses it
+        let Some(call) = fl
+            .calls
+            .iter()
+            .find(|c| c.at > arrow && c.at < end && !NOT_VARIANTS.contains(&c.name.as_str()))
+        else {
+            continue;
+        };
+        let Some(&(_, fs, fe)) = f.funcs.iter().find(|x| x.0 == call.name) else {
+            continue;
+        };
+        let a = fl.starts.get(fs).copied().unwrap_or(s.len());
+        let z = fl.starts.get(fe + 1).copied().unwrap_or(s.len());
+        let fowner = impl_type(&f.code, fs).or(owner);
+        for (v, at) in chosen(a, z, &fowner) {
+            push(method, fowner.clone(), &v, at);
+        }
+    }
+    // the second shape: `POST CreateKey (body),` in a macro's invocation
+    for c in &fl.calls {
+        if c.open == 0 || b[c.open - 1] != b'!' {
+            continue;
+        }
+        let owner = impl_type(&f.code, fl.line(c.at));
+        let mut i = c.open + 1;
+        while i < c.close {
+            if fl.instr[i] || !b[i].is_ascii_uppercase() || is_ident_char(b[i - 1]) {
+                i += 1;
+                continue;
+            }
+            let (w, e) = ident_at(s, i);
+            let Some(method) = method_word(&w) else {
+                i = e.max(i + 1);
+                continue;
+            };
+            let before = s[c.open + 1..i].trim_end();
+            let opens = before.is_empty() || before.ends_with([',', '[', '(', '{']);
+            let (v, ve) = ident_at(s, e);
+            let after = s[ve..c.close].trim_start();
+            if opens
+                && s[e..].starts_with([' ', '\t'])
+                && variant_like(&v)
+                && (after.starts_with(['(', ',', ']', ')']) || after.is_empty())
+            {
+                push(method, owner.clone(), &v, i);
+            }
+            i = e;
+        }
+    }
+    out
+}
+
+/// Where the code handles a variant of an enumeration of endpoints: the first call of the arm
+/// `Owner::Variant { .. } => handle_put(ctx, req, &key).await`, or of the block of `if let
+/// Owner::Variant = endpoint { return handle_post_object(...) }`; else the first method of a
+/// type named for the variant (`impl RequestHandler for CreateKeyRequest { fn handle ... }`).
+/// None when no code handles it, as for an operation that answers "not implemented".
+fn endpoint_handler(files: &[Src], op: &EnumOp) -> Option<(String, usize, Option<usize>)> {
+    // calls that wrap or convert, not a handler
+    const WRAPPERS: &[&str] = &[
+        "Ok",
+        "Err",
+        "Some",
+        "Box",
+        "pin",
+        "Arc",
+        "new",
+        "into",
+        "clone",
+        "to_owned",
+        "to_string",
+        "map",
+        "map_err",
+        "unwrap",
+        "expect",
+        "from",
+        "as_ref",
+        "await",
+    ];
+    const PANICS: &[&str] = &["unreachable", "todo", "unimplemented", "panic"];
+    let pat = format!("{}::{}", op.owner, op.variant);
+    // two enumerations of one name in two modules: the code nearest to the router first
+    let near = |fi: usize| -> usize {
+        files[fi]
+            .rel
+            .split('/')
+            .zip(files[op.file].rel.split('/'))
+            .take_while(|(a, b)| a == b)
+            .count()
+    };
+    type Found = (String, usize, Option<usize>);
+    let mut best: Option<(usize, Found)> = None;
+    let take = |best: &mut Option<(usize, Found)>, fi: usize, h: Found| {
+        if best.as_ref().is_none_or(|(n, _)| near(fi) > *n) {
+            *best = Some((near(fi), h));
+        }
+    };
+    for (fi, f) in files.iter().enumerate() {
+        if f.lang != Lang::Rust || !f.flat.s.contains(&pat) {
+            continue;
+        }
+        let fl = &f.flat;
+        let s = &fl.s;
+        let b = s.as_bytes();
+        for (p, _) in s.match_indices(&pat) {
+            let e = p + pat.len();
+            if fl.instr[p]
+                || (p > 0 && is_ident_char(b[p - 1]))
+                || b.get(e).is_some_and(|c| is_ident_char(*c))
+            {
+                continue;
+            }
+            // the fields of the pattern: `{ key, .. }` or `(req)`
+            let mut k = e;
+            while k < b.len() && b[k].is_ascii_whitespace() {
+                k += 1;
+            }
+            if k < b.len() && (b[k] == b'{' || b[k] == b'(') {
+                let mut depth = 0i32;
+                while k < b.len() {
+                    if !fl.instr[k] {
+                        match b[k] {
+                            b'{' | b'(' => depth += 1,
+                            b'}' | b')' => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    k += 1;
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    k += 1;
+                }
+            }
+            let rest = s[k..].trim_start();
+            let at = s.len() - rest.len();
+            let range = if rest.starts_with("=>") {
+                (at + 2, item_end(fl, at + 2, s.len()))
+            } else if rest.starts_with('=') && !rest.starts_with("==") {
+                // `if let Owner::Variant = endpoint { ... }`: the block after it
+                if !s[..p].trim_end().ends_with("let") {
+                    continue;
+                }
+                let Some(open) = s[at..].find('{').map(|x| at + x) else {
+                    continue;
+                };
+                (open + 1, item_end(fl, open + 1, s.len()))
+            } else {
+                continue;
+            };
+            let first = fl.calls.iter().find(|c| {
+                c.at >= range.0 && c.at < range.1 && !WRAPPERS.contains(&c.name.as_str())
+            });
+            let Some(c) = first else { continue };
+            if PANICS.contains(&c.name.as_str()) {
+                continue;
+            }
+            take(&mut best, fi, (c.name.clone(), fi, None));
+        }
+    }
+    if best.is_some() {
+        return best.map(|b| b.1);
+    }
+    // a type named for the variant, and its first method
+    for (fi, f) in files.iter().enumerate() {
+        if f.lang != Lang::Rust {
+            continue;
+        }
+        for (i, l) in f.code.iter().enumerate() {
+            if !l.trim_start().starts_with("impl") {
+                continue;
+            }
+            let Some(ty) = impl_type(&f.code, i) else {
+                continue;
+            };
+            let named = ty
+                .strip_prefix(op.variant.as_str())
+                .is_some_and(|r| matches!(r, "Request" | "Handler" | "Command" | "Op"));
+            if !named {
+                continue;
+            }
+            if let Some(fd) = f
+                .funcs
+                .iter()
+                .filter(|x| x.1 > i && x.1 <= i + 40)
+                .min_by_key(|x| x.1)
+            {
+                take(&mut best, fi, (format!("{ty}::{}", fd.0), fi, Some(fd.1)));
+            }
+        }
+    }
+    best.map(|b| b.1)
 }
 
 fn go_routes(cx: &mut Ctx) {
@@ -3063,6 +3509,37 @@ pub fn scan_writes(root: &Path) -> Writes {
         add(r, &mut routes, &mut reads, read);
     }
 
+    // the operations of enumerations of endpoints (Milestone 350); an operation that no code
+    // handles (it answers "not implemented") is left out
+    for (fi, f) in files.iter().enumerate() {
+        if f.lang != Lang::Rust {
+            continue;
+        }
+        for op in rust_endpoint_ops(fi, f) {
+            let Some((handler, hfi, hline)) = endpoint_handler(&files, &op) else {
+                continue;
+            };
+            let handler_at = match hline {
+                Some(l) => Some((files[hfi].rel.clone(), l + 1)),
+                None => find_fn(&handler, Some(hfi), None),
+            };
+            let path = format!("{}::{}", op.owner, op.variant);
+            let read = op.method == "POST" && reads_by_name(&path, &op.variant);
+            let r = make_route(
+                op.method,
+                path,
+                Vec::new(),
+                handler,
+                handler_at,
+                f.rel.clone(),
+                op.line + 1,
+                "an enumeration of endpoints",
+                "an enumeration of endpoints",
+            );
+            add(r, &mut routes, &mut reads, read);
+        }
+    }
+
     // RPC methods: the .proto files first, then servers without one
     let mut declared: HashSet<(String, String)> = HashSet::new();
     for (rel, text) in &protos {
@@ -3840,6 +4317,149 @@ func createOrder(c *gin.Context) {}
                 .any(|x| x.contains("GetMemo") || x.contains("Listen") || x.contains("get_status")),
             "{:#?}",
             found(&w)
+        );
+    }
+
+    /// Milestone 350: an API whose operations are the variants of an enumeration, chosen from
+    /// the request's method by the project's own code (an S3 server's shape), and a table of a
+    /// macro that names each variant after its method (an admin API's shape). An operation
+    /// that no code handles is left out, and so is a GET.
+    #[test]
+    fn enumerations_of_endpoints_with_their_handlers() {
+        let router = r#"
+use hyper::{Method, Request};
+
+pub enum Endpoint {
+	PutObject { key: String },
+	CopyObject { key: String },
+	DeleteObject { key: String },
+	DeleteObjects {},
+	CreateBucket {},
+	PutBucketAcl {},
+	GetObject { key: String },
+	SelectObjectContent { key: String },
+	Options,
+}
+
+impl Endpoint {
+	pub fn from_request<T>(req: &Request<T>) -> Result<Self, Error> {
+		if *req.method() == Method::OPTIONS {
+			return Ok(Self::Options);
+		}
+		let res = match *req.method() {
+			Method::GET => Self::from_get(key, &mut query)?,
+			Method::POST => Self::from_post(key, &mut query)?,
+			Method::PUT => Self::from_put(key, &mut query, req.headers())?,
+			Method::DELETE => Self::from_delete(key, &mut query)?,
+			_ => return Err(Error::bad_request("Unknown method")),
+		};
+		Ok(res)
+	}
+	fn from_get(key: String, query: &mut QueryParameters<'_>) -> Result<Self, Error> {
+		router_match! { @gen_parser (query.keyword.take(), key, query, None),
+			key: [ EMPTY => GetObject (query_opt::version_id), ] }
+	}
+	fn from_post(key: String, query: &mut QueryParameters<'_>) -> Result<Self, Error> {
+		router_match! { @gen_parser (query.keyword.take(), key, query, None),
+			key: [ SELECT => SelectObjectContent (query::select_type), ],
+			no_key: [ DELETE => DeleteObjects, ] }
+	}
+	fn from_put(key: String, query: &mut QueryParameters<'_>, headers: &HeaderMap) -> Result<Self, Error> {
+		router_match! { @gen_parser (query.keyword.take(), key, query, headers),
+			key: [
+				EMPTY header "x-amz-copy-source" => CopyObject,
+				EMPTY => PutObject,
+			],
+			no_key: [ EMPTY => CreateBucket, ACL => PutBucketAcl, ] }
+	}
+	fn from_delete(key: String, query: &mut QueryParameters<'_>) -> Result<Self, Error> {
+		router_match! { @gen_parser (query.keyword.take(), key, query, None),
+			key: [ EMPTY => DeleteObject (query_opt::version_id), ] }
+	}
+}
+"#;
+        let server = r#"
+async fn handle(endpoint: Endpoint, req: Request) -> Result<Response, Error> {
+	if let Endpoint::CreateBucket {} = endpoint {
+		return handle_create_bucket(&garage, req).await;
+	}
+	match endpoint {
+		Endpoint::GetObject { key } => handle_get(ctx, &key).await,
+		Endpoint::CopyObject { key } => handle_copy(ctx, &req, &key).await,
+		Endpoint::PutObject { key } => handle_put(ctx, req, &key).await,
+		Endpoint::DeleteObject { key, .. } => handle_delete(ctx, &key).await,
+		Endpoint::DeleteObjects {} => handle_delete_objects(ctx, req).await,
+		Endpoint::CreateBucket {} => unreachable!(),
+		endpoint => Err(Error::NotImplemented(endpoint.name().to_owned())),
+	}
+}
+async fn handle_copy(ctx: ReqCtx, req: &Request, key: &str) -> Result<Response, Error> { todo() }
+async fn handle_put(ctx: ReqCtx, req: Request, key: &str) -> Result<Response, Error> { todo() }
+"#;
+        let admin = r#"
+impl AdminApiRequest {
+	pub async fn from_request(req: Request<IncomingBody>) -> Result<Self, Error> {
+		let res = router_match!(@gen_path_parser_v2 (&method, path, "/v2/", query, req) [
+			@special GET "/health" => Health (),
+			GET GetKeyInfo (query_opt::id),
+			POST CreateKey (body),
+			POST PreviewClusterLayoutChanges (),
+		]);
+		Ok(res)
+	}
+}
+"#;
+        let handlers = r#"
+impl RequestHandler for CreateKeyRequest {
+	type Response = CreateKeyResponse;
+
+	async fn handle(self, garage: &Arc<Garage>) -> Result<CreateKeyResponse, Error> {
+		todo()
+	}
+}
+impl RequestHandler for PreviewClusterLayoutChangesRequest {
+	async fn handle(self, garage: &Arc<Garage>) -> Result<PreviewResponse, Error> {
+		todo()
+	}
+}
+"#;
+        let w = scan_texts(&[
+            ("src/api/s3/router.rs", router),
+            ("src/api/s3/api_server.rs", server),
+            ("src/api/admin/router_v2.rs", admin),
+            ("src/api/admin/key.rs", handlers),
+        ]);
+        let mut f = found(&w);
+        f.sort();
+        assert_eq!(
+            f,
+            [
+                "DELETE Endpoint::DeleteObject -> handle_delete",
+                "POST AdminApiRequest::CreateKey -> CreateKeyRequest::handle",
+                "POST Endpoint::DeleteObjects -> handle_delete_objects",
+                "PUT Endpoint::CopyObject -> handle_copy",
+                "PUT Endpoint::CreateBucket -> handle_create_bucket",
+                "PUT Endpoint::PutObject -> handle_put",
+            ]
+        );
+        let put = w.routes.iter().find(|r| r.handler == "handle_put").unwrap();
+        assert_eq!(
+            put.handler_at,
+            Some(("src/api/s3/api_server.rs".into(), 17))
+        );
+        assert_eq!((put.resource.as_str(), put.class), ("object", "data"));
+        let key = w
+            .routes
+            .iter()
+            .find(|r| r.handler == "CreateKeyRequest::handle")
+            .unwrap();
+        assert_eq!(key.handler_at, Some(("src/api/admin/key.rs".into(), 5)));
+        assert_eq!((key.resource.as_str(), key.class), ("key", "data"));
+        // a POST whose name reads is left out and counted
+        assert_eq!(w.reads.len(), 1, "{:?}", w.reads);
+        assert_eq!(
+            w.reads[0].path,
+            "AdminApiRequest::PreviewClusterLayoutChanges"
         );
     }
 }
