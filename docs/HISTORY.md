@@ -21943,3 +21943,168 @@ lists the known keys, which the recorded answers do not have.
 - `durable` stays opt-in. It could be the default of the next fingerprint epoch, keyed on the
   image's epoch as `guest.path` is (Milestone 348).
 - GreptimeDB's example did not run again with `durable: true` and `cut` (open item 171).
+
+## Milestone 355 (tentative number): seven gaps of the Kvrocks onboarding
+
+Status: done on 2026-11-25, on the Mac engine and on this Mac's copies of seven projects'
+sources. The Kvrocks onboarding (Milestone 351, on its own branch) named what hydo lacked in the
+section "What hydo lacked" of its RESULTS.md. Each fix below is its own commit. Two are format-1
+additions: the build parameters of a regression, and the reaction `powerloss-<svc>`. One is a
+results addition: `unfired_reactions` of an exploration's summary. Nothing recorded moved, and
+the fingerprint epoch stays 6.
+
+**1. A reaction that never fires says so.** In the onboarding, three schedules of
+`A=kvrocks.failover_done+...:cut` passed, and nothing said that no failover had run, so no cut
+came. The explorer warned only when no record of the run named the event at all
+(`results::unseen_events`, a misspelt id). Now, at the end of the workload's steps, the
+controller writes one note for each reaction that did not act:
+`HYDO-REACT-UNFIRED {"token":..,"event":..,"nth":k,"at":step,"armed":bool,"seen":n,"cut":bool}`.
+`seen` counts the records of the event after the reaction was armed, from the count of records
+that the main sequence keeps when it arms the reaction. A note is for people: no control
+transcript's hash and no fingerprint covers it, as for `HYDO-CHECK-OUT`.
+`results::unfired_reactions` turns each note into a warning of the run, such as `the reaction
+A=client.step3_acked@10:kill-redis never fired: no record of its event client.step3_acked came
+after it was armed before step 10; the run did not test it`. Other forms name the k-th record
+that a reaction waits for, a power cut that ended the steps first, and a step that the run never
+reached. The warning is in `result.json`, `hydo run` prints it, and `hydo report <run dir>` shows
+it under "What hydo saw". An exploration counts its first runs with such a warning in
+`unfired_reactions` of its summary (a results addition; `hydo explore --merge` adds the parts'
+counts). It prints the count with one example, and `hydo report`, `report.md` and the web page
+name it. These runs no longer count as vacuous passes, also the ones that `unseen_events` names.
+
+On the Mac engine, a Redis project with an event at step 3 (the proof project below) ran
+`disk=none | run A=client.step3_acked@10:kill-redis`: OK, with the warning above in the output of
+`hydo run`, in `result.json` and in `hydo report`. The aimed exploration `--reactive-at
+client.step3_acked@10 --react-delays 0..1 --react-actions kill --seeds 1-3` printed `in 3 of 3
+first runs a reaction never fired`, and `exploration.json` has `unfired_reactions: 3`. In the
+controller's test of a reaction that never fires, the run's records are those of the run without
+the reaction, apart from the declaration and the note. The controller's corpus and identity
+goldens did not move.
+
+**2. What `--seeds` means with `--reactive-at`.** `--seeds 1-3` ran the grid's first three cells,
+and the guide read as if it ran the grid three times. Milestone 345 defined it: seed `n` is cell
+`n - 1`, seeds past the grid run it again with each seed's composition, and the options alone fix
+the order of the cells, so seed `n` names the same schedule in every exploration of the same
+options, also in shards and with `--time-limit`. That is the right meaning, because a seed is one
+schedule everywhere else, and a shard splits seeds. So the code keeps it, and the words now say it
+exactly: `hydo guide faults`, MANIFEST.md, `hydo explore --help`, and the explorer's first lines
+(`Seed k runs cell k of the grid: seeds 1-153 run it once with the plain workload, and seeds
+154-306 run it again with each seed's composition`). Seeds that are not whole rounds of the grid
+get one more line, for example `--seeds 1-3 runs cells 1 to 3 of the grid's 153, one cell per
+seed. To run the whole grid once, give --seeds 1-153; three times, --seeds 1-459.`
+(`aim::seeds_words`).
+
+**3. The clock audit follows a project's own wrapper of the clock in C++.** The audit named no
+function in Kvrocks 2.17.0's 255 source files. Kvrocks reads the clock through
+`util::GetTimeStamp` (`src/common/time_util.h`), a template that returns
+`std::chrono::duration_cast<Duration>(std::chrono::system_clock::now().time_since_epoch()).count()`,
+and `GetTimeStampMS()`, which calls `GetTimeStamp<std::chrono::milliseconds>()`. The audit already
+followed a small function with a name about time that returns a reading, in every language it
+reads, and through as many levels as the functions call each other. It missed these for three
+reasons of C++ text. In C and C++ files a reading now starts at its namespaces, a call with
+template arguments is a call, and a cast of one reading (`duration_cast<...>(`,
+`time_point_cast<...>(`, `static_cast<...>(`) keeps it a reading unless its argument is a
+difference. A function that returns a reading is no limit any more.
+
+With the example's `hydo.yaml` the audit names 22 functions in Kvrocks. The fourth is the place
+of finding 2, `src/cluster/replication.cc` line 670 in `sendReplConfAck` (lines 666 to 682):
+`if (force || (now - last_ack_time_secs_) >= 1)`, `high`, with `now` traced to
+`util::GetTimeStamp()` and `system_clock::now()`. The JSON and text reports of the clock audit on
+Valkey 9.1.3, Temporal 1.32.2, River v0.51.2 and Garage v2.5.0, each with its example's
+`hydo.yaml`, are byte for byte those of the binary before the change, so their known places keep
+their ranks.
+
+**4. The scan of write routes reads command tables.** `hydo rules scan --kind writes` read one
+file of Kvrocks and found no route: the commands of a Redis-compatible server are a table in C or
+C++. The scan reads such tables now (`writescan::command_entries`), by their shape. An entry is a
+call or an initializer whose first argument names a command, with an integer arity and an
+argument that flags it: a string of flag words (`"write"`, `"read-only"`) or flag constants
+joined with `|` (`CMD_WRITE`, `CO::WRITE`). A file with three entries or more is a table, and
+only such a C or C++ file counts among the files read. Each write entry is a route `CMD <NAME>`.
+Its handler is the class of the call's template argument, a function argument named for a
+command, or the argument of `.HFUNC(...)`. Its resource is the entry's group, or the stem of the
+table's file without `cmd_` or `t_`.
+
+On Kvrocks 2.17.0 the scan reads 21 files and lists 142 write commands in 18 resources, 137
+`data` and 5 `admin`, each with the class and the line of its handler. That is every entry of its
+tables flagged `write`; the hand count of 143 had a commented-out entry of the Cuckoo filter too.
+On Valkey 9.1.3 it lists the 118 commands of `src/commands.def` with `CMD_WRITE`. The JSON and
+text reports of Meilisearch v1.57.0, Iggy server-0.10.0, Prometheus v3.16.0, GreptimeDB v1.3.1,
+Hatchet v0.120.5, Memos 26.11.0 and Garage v2.5.0 are byte for byte those before the change.
+
+**5. The diagnosis of a failed restart after one service's power loss quotes the service's log.**
+For `ERROR kv2 restart failed (after its power loss)` the `hydo: diagnosis:` line named only the
+error. `verdict_service` read `ERROR <svc> restart failed` but not the reason in parentheses that
+the restart of a storage fault adds. So the diagnosis did not know the service, read no log of it
+first, and quoted nothing. It reads the form now, and the summary says `while it was restarted
+after its power loss`. On the Mac engine, the proof project built with `--set refuse=yes` (its
+service refuses a second start, as a node whose files a power loss damaged does) gave:
+
+- `disk=none | run L=redis@5+2`: `ERROR redis restart failed (after its power loss)`, and
+  `hydo: diagnosis: redis exited while it was restarted after its power loss, before its
+  readiness check passed (exit status 1); its log ends: Failed to open the database: Corruption:
+  the marker of an earlier start is there`;
+- `disk=cut | run C=5`: `VIOLATION service cannot recover (committed data unrecoverable)
+  (redis)`, with the same quote from the recovery boot, as before.
+
+**6. A saved regression names the build parameters it needs.** Finding 2 of Kvrocks needed the
+client's other mode, first built as a parameter, and became a token so that one image carries
+all three regressions. A regression file may now have a line `# params: <name>=<value> ...`, and a
+`test.regressions` entry the key `params:` (format-1 additions). `hydo build` refuses a name that
+`params:` does not declare. When the build has other values, it warns and names the `hydo build
+--set ...` that makes the image of the regression. `hydo repro --regressions` (and `hydo ci run`)
+replays such a regression only on an image whose `/etc/hydo/params` has its values. On another
+image it prints `SKIP` with the build command and counts it apart. A file without the line reads
+as before, and its entry in `<image>.regressions.json` has no new key. The regressions stay out of
+the image, so the image's bytes do not change with the line. On the Mac engine the proof project
+had two regressions, `plain` and one with `# params: refuse=yes` and `# expect:
+fp=8b08a99152bfdfbf`:
+
+- `hydo build`: the warning, and the image's sha256 the same as before the regressions were added
+  (`c7a4263a…`, the disk `887eb24e…`);
+- `hydo repro --regressions` on that image: `PASS plain`, `SKIP restart-refused-after-a-power-loss
+  ... it needs the build parameters refuse=yes (this image: refuse=no)`, and `1 of 1 regressions as
+  expected, 1 left out`;
+- on the image of `--set refuse=yes`: both PASS, the second with its recorded fingerprint;
+- a line `# params: nosuch=1`: `hydo build --check` stops with `# params: names nosuch, which
+  params: does not declare (params: refuse)`.
+
+**7. A reaction cuts the power of one service.** A reaction could cut the whole guest, kill or
+stop a service, but not take one node's power, and finding 1 with one node's power loss came only
+from blind `L=` schedules. The action `powerloss-<svc>` (`A=<event>[#<k>][@<step>][+<ms>]:
+powerloss-<svc>`) does at the reaction point what `L=<svc>@<step>+<down>` does before a step: the
+service stops, its own file system shuts down and is mounted again, and the service stays down
+until the heal's restart pass, as after `kill-<svc>`. The name follows the fault kind `powerloss`
+of `faults:`. The service needs `storage: {dir:, size_mib:}`, and the controller's check of names
+refuses the action otherwise. The run reports the record of `L=`. `--react-actions powerloss`
+names one action per service with `storage:`, and the explorer keeps the action where `faults:`
+allows `powerloss`. It runs on the engines where `L=` runs, because it is the same controller
+code. On the Mac engine `disk=none | run A=client.step3_acked+50:powerloss-redis` logged `POWER
+LOSS of redis at the reaction A=client.step3_acked+50:powerloss-redis (/dev/vda5 shut down and
+mounted again ...)`, restarted Redis at the heal, and passed; `hydo repro` gave its fingerprint
+`7f93836fa6c29e4b` again. `--reactive-at client.step3_acked --react-actions powerloss` ran its
+grid of two cells.
+
+**The proof project.** The Redis example of the installed 0.5.0 release, copied into the scratch
+folder, with `storage: {dir: redis, size_mib: 96}` on its service, `powerloss` in `faults:`, a
+console record `client.step3_acked` after the acknowledged write of step 3, and a build parameter
+`refuse` that makes the service refuse its second start. It ran with this tree's `hydo`,
+`hydo-build` and `hydo-hvm` beside the release's guest files, under the shared Mac VM lock.
+
+**Tests.** The controller's `react::a_reaction_that_never_fires_is_inert` checks the note and
+that nothing else changes, and
+`storage::a_reactions_power_loss_shuts_the_file_system_down_at_the_event` checks the power loss at
+the event. `results::a_reaction_that_never_fired_is_named`,
+`aim::seeds_that_are_not_whole_rounds_say_what_they_run`,
+`clockscan::cpp_follows_a_projects_own_wrapper_of_the_wall_clock`,
+`writescan::command_tables_list_their_write_commands`,
+`diagnose::a_failed_restart_after_a_power_loss_quotes_the_service_log`,
+`runs::a_regression_of_other_build_parameters_names_its_image` and
+`composer::a_regression_file_names_its_build_parameters` check the other parts. The results and
+project schemas are re-recorded with the new fields (`HYDO_BLESS=1`), and so is the recorded
+answer of `hydo guide manifest` in the CLI's golden, with the new text of MANIFEST.md. The
+`hydo` tests `onboard::the_fetch_step_names_the_release_fetcher_when_it_is_not_on_path` and
+`update::a_checkout_build_is_left_alone_with_the_commands` fail with a target folder outside the
+checkout, as every build of this worktree has; they do not touch these parts.
+
+**What is left.** Open item 180.

@@ -643,6 +643,34 @@ writes at `C=3`, `C=4` and two `A=s3.acked` cuts without it, and none with it (P
 completed multipart uploads, DELETEs). An image without the key keeps its bytes. The reference
 is MANIFEST.md "Ready-made emulators"; the details are in `docs/HISTORY.md` Milestone 354.
 
+**Seven gaps of the Kvrocks onboarding (M355, tentative number).** Each fix is its own commit;
+none moves a recorded value:
+- A reaction that never fires leaves a note that no hash covers, and the run gets the warning
+  `the reaction <token> never fired: ...` in `result.json`, `hydo run` and `hydo report`. An
+  exploration counts such runs (`unfired_reactions`, a results addition) apart from the passes
+  that checked nothing.
+- With `--reactive-at` a seed is one cell of the grid, as Milestone 345 defined it: `--seeds 1-3`
+  runs three cells. The guide, MANIFEST.md, `--help` and the explorer's first lines say so, and
+  seeds that are not whole rounds of the grid are named.
+- The clock audit reads a C++ project's own wrapper of the clock (namespaces, template
+  arguments, `duration_cast` of `system_clock::now()`). It names Kvrocks's finding 2 place
+  (`replication.cc:670`) among 22 functions; Valkey, Temporal, River, and Garage keep their
+  reports byte for byte.
+- `hydo rules scan --kind writes` reads the command tables of Redis-compatible servers in C and
+  C++, by their shape, as routes `CMD <NAME>`: 142 write commands of Kvrocks, each with its
+  handler. M344's six projects and Garage keep their reports byte for byte.
+- The diagnosis of `ERROR <svc> restart failed (after its power loss)` names the service and
+  quotes its log, as after a whole-guest cut.
+- A regression file's `# params: k=v` (a format-1 addition, `params:` in `test.regressions`)
+  names the build parameters it needs. `hydo build` checks the names and warns of other values,
+  and `hydo repro --regressions` replays it only on an image built with them and prints `SKIP`
+  with the build command otherwise.
+- The reaction `powerloss-<svc>` (a format-1 addition) is one service's power loss at an event,
+  as `L=` makes it before a step; `--react-actions powerloss` aims a grid at it.
+
+The proofs ran on the Mac engine; the details are in `docs/HISTORY.md` Milestone 355 (open item
+180).
+
 **Each image service's own `/tmp` (M331, tentative number; fingerprint epoch 5).** An image
 service of an image built at epoch 5 has a `/tmp` of its own, as a container has. It is the
 guest's folder `/tmp/oci/<service>` (`hydo_image::defaults`, `oci_own_tmp`). The guest's
@@ -2504,6 +2532,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       structures with a field `timestamp` share it.
     - Every service of a guest shares one clock, so no schedule gives one node a clock behind
       the others' (the idea "Clocks per service" of `docs/USE-CASES.md`).
+    - Since M355 a C++ wrapper of the clock is followed (namespaces, template arguments,
+      `duration_cast`). A wrapper in another language is followed only when its name is about
+      time and its `return` starts with a reading; GreptimeDB's `current_time_millis()` and
+      Restate's `WallClock` (open items 152 and 171) did not run again.
 118. Fakes from OpenAPI descriptions (M249). Response headers (`Location`), nested echoed fields
     and OpenAPI 3.1 `webhooks:` are not generated, and the business reference is not inferred
     (`--ref` names it). A `DELETE` does not remove the saved object, and a `PATCH` saves nothing.
@@ -3103,6 +3135,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       Mac engine only, with the process strategy.
     - KVM did not run it. The mechanism is the same controller code as on the Mac and hvx, with
       no engine change.
+    - Since M355 a reaction that never fired is named in its run's warnings with how many
+      records of its event the host saw after it was armed. So a `kill-now-` reaction whose
+      record went past the relay (a descriptor opened before it) shows a count of one or more.
 155. Error paths (M306, tentative number; `docs/design/error-paths.md`). What is left:
     - Only the Mac engine watches them. KVM's root is on a disk, so a program's pages reach guest
       RAM only when the guest reads them; the engine would search at system calls and write
@@ -3527,6 +3562,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `--new-faults` with `--strategy process` or `swarm-pos` only warns, because about 100
       command lines of the examples' pages and RESULTS.md files give that pair. Those lines were
       not changed; the guide's and the playbook's were.
+    - Since M355 the words say what M345 built: a seed is one cell of the grid, and seeds that
+      are not whole rounds of it are named. `powerloss` in `--react-actions` names one power loss
+      per service with `storage:`; the default actions stay `kill-now,kill,cut`.
     - The merged list shows each problem as its first round shows it. It merges no property
       table, no list of what held, and no statistics. The error lines of new kinds are the first
       round's, with the rounds that wrote any. The accept keys are each round's.
@@ -3573,6 +3611,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       chooses, or a router of this shape in another language, is not found. An operation that
       no arm and no type named for it handles is left out, also when a handler of another shape
       exists. No onboarding used the list of an enumeration yet.
+    - Since M355 the command tables of Redis-compatible servers in C and C++ are read
+      (`CMD <NAME>`). An entry over several lines, a table that registers each command with a
+      call without a flag argument, and subcommands under their parent's name are not read;
+      `hydo rules check` and the skill did not use such a list yet.
 176. Five gaps of recent onboardings (M348, tentative number). What is left:
     - `guest.path` is on for an image built at the fingerprint epoch 6 (M353). No VM ran a Go
       program that finds `hydo-oci` by name; the controller's test checks the commands'
@@ -3609,6 +3651,22 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - No native run: the causes are plain in the code. hvx and KVM did not run the example; the
       image has an amd64 build. A cluster of several zones, a gateway node, a layout change
       under faults, and the experimental Fjall engine were not tried.
+180. Seven gaps of the Kvrocks onboarding (M355, tentative number). What is left:
+    - The proofs ran on the Mac engine and in the scripted tests; hvx and KVM ran none of the
+      seven. The note of a reaction that never fired and the power loss at a reaction are the
+      same controller code on every engine.
+    - Kvrocks itself did not run again: its branch is not on `main`. Its finding 1 with one node's
+      power loss (`A=kvrocks.failover_done+<ms>:powerloss-kv2`) and its regressions with
+      `# params:` are still to write there.
+    - `powerloss-<svc>` has no strict form (`L=...:strict` stops the writeback from the run's
+      start), and the explorer's `--reactive` draws do not draw it; only `--reactive-at` with
+      `--react-actions powerloss` and a written token use it.
+    - A regression's `# params:` is checked against the image's `/etc/hydo/params`. `hydo ci run`
+      replays a regression of other parameters as left out, and builds no second image for it.
+      `hydo explore` and `hydo-bench` read no `# params:` line.
+    - `hydo-manifest`'s and `hydo-build`'s equivalence tests fail on 58 and 57 recorded answers
+      (open item 165 lists their causes); none of the mismatches names a regression's key.
+
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -4699,6 +4757,12 @@ build machine, before 2026-10-13.
   renames and deletes reach the disk before it answers. On the Mac engine the new example
   `checkout/hydo-s3-cut.yaml` lost 10 to 13 acknowledged writes at four power cuts without the
   key, and none with it. Opt-in; nothing recorded moved
+- M355 (tentative number): seven gaps of the Kvrocks onboarding, each its own commit. A reaction
+  that never fires is named in the run and counted in an exploration. `--reactive-at`'s seeds are
+  cells, and the words say so. The clock audit follows a C++ wrapper of the clock and names
+  Kvrocks's finding 2. The write scan reads command tables (142 Kvrocks commands). A failed
+  restart after `L=` quotes the log. A regression names its build parameters (`# params:`), and
+  `powerloss-<svc>` is a reaction. Nothing recorded moved
 
 ## Where to look
 
