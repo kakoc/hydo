@@ -6,7 +6,7 @@
 # R <tab> group <tab> request <tab> ok|err|crash|oci <tab> 32-bit digests of data (d), warnings (w),
 #   --check lines (c) and meta (m) (keys sorted, paths as <root> and <tmp>) | the message (JSON string;
 #   over 80 characters: its first 60, … and the digest of the whole); a group ^ is the line before's
-I	.claude-plugin/marketplace.json	0f6e72c2c4adf024a359c99585ef854c96a519ac83aad4c0209c146ce3c1542b
+I	.claude-plugin/marketplace.json	8a2c13b06804e46930fd9ce0e3a797c491ab773f8aea3c51a5e3852357c0e62d
 I	.github/workflows/ci-full.yml	068483317f716968083ea6d5503d03d453c6a3300517b1fb3ba114214d694342
 I	.github/workflows/ci.yml	6c7baef3136f5d6d757115f303d4ce00f1854f3f6c2a6b54a4d53474a4da20d8
 I	.github/workflows/docs.yml	e8a288305982a758ee25d465685e41b100a658a68bf59c511733999f17a902bb
@@ -22,10 +22,10 @@ I	.vale/styles/hydo/NotJustButAlso.yml	3869c1279468665df0a60cb96eace5c08aeb9f5d4
 I	.vale/styles/hydo/Questions.yml	25eb633d5549ed09db0b0f5bad677de039a455658a491904e733c8d78ff6fd76
 I	.vale/styles/hydo/SentenceLength.yml	84d7971d99f3bb5e72c916170d084ebc3f40c5c0af3617579664fbf6681f08d4
 I	.vale/styles/hydo/Weasel.yml	56bfd2653ac78826108af62cd1687ad08f7609821542d72777556c7bbb31ac8b
-I	action/action.yml	a714f890a47f840184e3ea6bfbc8e2457490d72ce467a32f79ef2750165854b5
-I	action/examples/hydo-record.yml	0f9f044c9e71c82d232e329375d48508bf30cfada3c1d0d9403105bded4237e9
-I	action/examples/hydo.yml	2ff9b748626a2e3e94ba33bf2f924194a053e876902d3a33e97ac4fda0969dbf
-I	action/gitlab/hydo.gitlab-ci.yml	f8b98154a1f9585643d013c3b710d44e56a91dcc6d58ac6919a6a10eaad47de2
+I	action/action.yml	71f76e1c4cd0f585eb2bdccb9c190384c9a1d55012804ba5fde55a498aec0ffd
+I	action/examples/hydo-record.yml	5f9e5d28fa78372e58493a0c3d31b397dfb1a1deb6299cb28c78bcbe6c776b5f
+I	action/examples/hydo.yml	ea7d8690f020168e0d2b735398bb13d23955298e76ce249aea0d1a31a9cc0c83
+I	action/gitlab/hydo.gitlab-ci.yml	10b5e7bd0bc5973c6c73e5c66fd0abed9e314acc3840459c6fdbb064fecf2b14
 I	docs/design/rule-suggestion/blnk-bulk.yaml	9022001efee8d771f75e333dcf25244fc1492b8af2c22d295a138e1d9082e5bf
 I	docs/design/rule-suggestion/blnk-failed-operations.yaml	5eacf33f30c29ad80a399131843889f363594c63f1dda3a472cc808a24c9ce7a
 I	docs/design/rule-suggestion/blnk.yaml	240b1ccdcdb9f79fbd1665a144e72ae1214271266ebfbd155575220616fd539d
@@ -264,7 +264,7 @@ I	hydo/onboard/examples/prometheus/hydo/hydo.yaml	284a361fb4cce02db89e954e6f6649
 I	hydo/onboard/examples/prometheus/hydo/known-errors.yaml	6a27dec48f5de629014dc073a50c4a111bdfe52d38a7c73514746e7615b8419a
 I	hydo/onboard/examples/pulsar/docker-compose.yaml	b806e2bdf13e8db1f1391db04b683b0f21fca4d0325f9d9a6b3906da9fe0ce91
 I	hydo/onboard/examples/pulsar/hydo/hydo-compose.lock.json	2dc56c81076337357ab40bd6cc4be2829f0a6d57dcc53469dd6927f94df416e4
-I	hydo/onboard/examples/pulsar/hydo/hydo.yaml	bbf7ac97d7bc2551851bdd2307f516d2a98dbcd014050d12852486e29ebfff45
+I	hydo/onboard/examples/pulsar/hydo/hydo.yaml	636a31d3ef4e14a1fcde088260e6cf098fcd3b3505750eddb5d132aa19fe4dba
 I	hydo/onboard/examples/python-kv/hydo-mac-hist.yaml	f5b1bb0d84df3db0115e938aa9e31c1088c75ff09ba5af7698347e618a75e84b
 I	hydo/onboard/examples/python-kv/hydo-mac.yaml	19ae1d6b5ec2705e9583e9d81d211586ef923b4efbef4ebafff6e4d4a7293d88
 I	hydo/onboard/examples/qdrant-flaky-10200/hydo.yaml	7a0715a35c8a4209da18621151fa894f1796efde4ae2742014f82f62d5c07667
@@ -361,7 +361,7 @@ I	hydo/onboard/examples/yugabyte/hydo/hydo-compose.lock.json	1e110be98e1441c646c
 I	hydo/onboard/examples/yugabyte/hydo/hydo.yaml	2a7bd08e0f305646485929ca38f3550e53044b60b0977b0c7bb9e9fbdc661014
 I	hydo/onboard/recorded.json	4b29bbfe629d717c75b74cdde04dbfe6e2964a6e1d95dcaed1f057d9483954a3
 I	hydo/stack/grpc-hints.yaml	14affe885365284f669ce608060c39376e7f7a6ee42df7ad4f1f46334ee465c9
-I	plugin/.claude-plugin/plugin.json	2dbbd54f2727e94a5d8265390a058d247840c16f35dbd957424a7d25017212a7
+I	plugin/.claude-plugin/plugin.json	bd15ae4650207d392bf562989b922656654bfef18e628239cd2fc7c6f0d8e37b
 I	sdk/cases/assert/always.json	60ca493f4722fd2400e8f95141732ee6eb470e1807e815733c103f41493d2de1
 I	sdk/cases/assert/always_or_unreachable.json	7daf932e0a7d183e433eb83541c085ba951dda333380aa52a21656e4eb0c4e53
 I	sdk/cases/assert/details_absent_or_empty.json	96ad7cd6f524f739721a374de7916347b2376544968f848cff5bfec4baaa4f1b
@@ -433,7 +433,7 @@ I	sdk/cases/programs/rust.json	4c01f91f15d568be3e4f150f4bee16987a4134680de0980f2
 I	sdk/cases/steer/at_most_64_records.json	8ec66f0769db8dfde2feaba07f20278d02876d630b20404818458375bde7e71a
 I	sdk/cases/steer/maximize_and_two_ids.json	9de5fb509efb14ab139094d90fc4129a55cdfd61966696cd93d9ca5cf9db21d8
 I	sdk/cases/steer/minimize.json	66c431eb263f8db842766306519b38862da75cf601f4447e8faed5593cddab0d
-I	sdk/js/package.json	b1ab1178985e6741d932f02be3b4926d825e7cdd17866e9c813e0624ec3c19dd
+I	sdk/js/package.json	6cf2550a4f3684c0de94c458b17ab633a7d64605c860fa06496fffd1c333e1e5
 R	--set	<root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml --arch x86_64 [("transfer", "racy")]	ok	d:1c22569b w:4f53cda1 c:8c31c405 m:74234e98
 R	^	<root>/hydo/onboard/examples/redis-composed/hydo/hydo.yaml --arch x86_64 [("nope", "1")]	err	"--set nope: the manifest declares no parameter 'nope' (params: transfer)"
 R	^	<root>/hydo/onboard/examples/redis/hydo.yaml --arch x86_64 [("x", "1")]	err	"--set x: the manifest declares no parameter 'x' (params: none)"
@@ -674,12 +674,12 @@ R	^	<tmp>/cases/plan-provision.json --arch x86_64 []	ok	d:c351caa2 w:4f53cda1 c:
 R	^	<tmp>/cases/plan-provision.json --arch arm64 []	ok	d:c351caa2 w:4f53cda1 c:f1e74b3b m:74234e98
 R	^	<tmp>/cases/plan-inv-clash.json --arch x86_64 []	err	"invariants: id 'compose.commands' is also a test command or check"
 R	^	<tmp>/cases/plan-inv-clash.json --arch arm64 []	err	"invariants: id 'compose.commands' is also a test command or check"
-R	^	<tmp>/cases/plan-format-2.json --arch x86_64 []	err	"format: this file is written in project format 2, and this h…#040ec1653a175fbe"
-R	^	<tmp>/cases/plan-format-2.json --arch arm64 []	err	"format: this file is written in project format 2, and this h…#040ec1653a175fbe"
+R	^	<tmp>/cases/plan-format-2.json --arch x86_64 []	err	"format: this file is written in project format 2, and this h…#4f91962d2ec1c963"
+R	^	<tmp>/cases/plan-format-2.json --arch arm64 []	err	"format: this file is written in project format 2, and this h…#4f91962d2ec1c963"
 R	^	<tmp>/cases/plan-format-1.json --arch x86_64 []	ok	d:2c42f88d w:4f53cda1 c:01fee13e m:74234e98
 R	^	<tmp>/cases/plan-format-1.json --arch arm64 []	ok	d:2c42f88d w:4f53cda1 c:01fee13e m:74234e98
-R	^	<tmp>/cases/plan-format-true.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#5e8ac86bf29722f4"
-R	^	<tmp>/cases/plan-format-true.json --arch arm64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#5e8ac86bf29722f4"
+R	^	<tmp>/cases/plan-format-true.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#b0d8b3754945c92e"
+R	^	<tmp>/cases/plan-format-true.json --arch arm64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#b0d8b3754945c92e"
 R	^	<tmp>/cases/plan-format-no-test.json --arch x86_64 []	ok	d:8d9d3c2f w:4f53cda1 c:7e3bcfdc m:74234e98
 R	^	<tmp>/cases/plan-format-no-test.json --arch arm64 []	ok	d:8d9d3c2f w:4f53cda1 c:7e3bcfdc m:74234e98
 R	^	<tmp>/cases/plan-test-list.json --arch x86_64 []	err	"test: must be a mapping"
@@ -772,8 +772,8 @@ R	^	<tmp>/cases/plan-version-bad.json --arch x86_64 []	err	"hydo_version: \"0.1\
 R	^	<tmp>/cases/plan-version-bad.json --arch arm64 []	err	"hydo_version: \"0.1\", \"0.1.0\" or \">=0.1\" (got 'v1')"
 R	^	<tmp>/cases/plan-version-new.json --arch x86_64 []	ok	d:962ab7c5 w:4f53cda1 c:75a4ca60 m:74234e98
 R	^	<tmp>/cases/plan-version-new.json --arch arm64 []	ok	d:962ab7c5 w:4f53cda1 c:75a4ca60 m:74234e98
-R	^	<tmp>/cases/plan-version-ge-new.json --arch x86_64 []	err	"hydo_version: the plan needs hydo at least 1.0, this hydo is…#dd06b4cc887b85bb"
-R	^	<tmp>/cases/plan-version-ge-new.json --arch arm64 []	err	"hydo_version: the plan needs hydo at least 1.0, this hydo is…#dd06b4cc887b85bb"
+R	^	<tmp>/cases/plan-version-ge-new.json --arch x86_64 []	err	"hydo_version: the plan needs hydo at least 1.0, this hydo is…#1ded0890ce8fec97"
+R	^	<tmp>/cases/plan-version-ge-new.json --arch arm64 []	err	"hydo_version: the plan needs hydo at least 1.0, this hydo is…#1ded0890ce8fec97"
 R	^	<tmp>/cases/plan-version-int.json --arch x86_64 []	ok	d:75a1848f w:4f53cda1 c:4eaeb4c3 m:74234e98
 R	^	<tmp>/cases/plan-version-int.json --arch arm64 []	ok	d:75a1848f w:4f53cda1 c:4eaeb4c3 m:74234e98
 R	^	<tmp>/cases/v-minimal.json --arch x86_64 []	ok	d:6369658e w:4f53cda1 c:cf612d4a m:74234e98
@@ -1299,7 +1299,7 @@ R	^	<tmp>/mutants/m26.45.json --arch x86_64 []	err	"workload: missing required f
 R	^	<tmp>/mutants/m26.46.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m26.47.json --arch x86_64 []	err	"services[1]: port must be a number"
 R	^	<tmp>/mutants/m26.48.json --arch x86_64 []	err	"services: {{p}} is not a declared parameter"
-R	^	<tmp>/mutants/m26.49.json --arch x86_64 []	err	"format: this file is written in project format 4096, and thi…#1a30749ea899020a"
+R	^	<tmp>/mutants/m26.49.json --arch x86_64 []	err	"format: this file is written in project format 4096, and thi…#4943ebf782d437a0"
 R	^	<tmp>/mutants/m26.50.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m26.51.json --arch x86_64 []	err	"top level: field 'name' must be a str"
 R	^	<tmp>/mutants/m26.52.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -2900,7 +2900,7 @@ R	^	<tmp>/mutants/m124.26.json --arch x86_64 []	err	"name: use lowercase letters
 R	^	<tmp>/mutants/m124.27.json --arch x86_64 []	err	"test: unknown field(s) bogus (known: budget_ms, check_every,…#012c83bb81a435c1"
 R	^	<tmp>/mutants/m124.28.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
 R	^	<tmp>/mutants/m124.29.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
-R	^	<tmp>/mutants/m124.30.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#f14b1f75954cb44f"
+R	^	<tmp>/mutants/m124.30.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#29f30b0830285abe"
 R	^	<tmp>/mutants/m124.31.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
 R	^	<tmp>/mutants/m124.32.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m124.33.json --arch x86_64 []	err	"hydo_version: \"0.1\", \"0.1.0\" or \">=0.1\" (got 'True')"
@@ -2921,10 +2921,10 @@ R	^	<tmp>/mutants/m124.47.json --arch x86_64 []	err	"test.parallel: a whole numb
 R	^	<tmp>/mutants/m124.48.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m124.49.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m124.50.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
-R	^	<tmp>/mutants/m124.51.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#b2f48cad0a818516"
+R	^	<tmp>/mutants/m124.51.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#4f529ec02af5b338"
 R	^	<tmp>/mutants/m124.52.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
 R	^	<tmp>/mutants/m124.53.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
-R	^	<tmp>/mutants/m124.54.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#c520740bf2f3a4d3"
+R	^	<tmp>/mutants/m124.54.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#5d895dcfb9a94ecf"
 R	^	<tmp>/mutants/m124.55.json --arch x86_64 []	err	"test.per_round: a whole number in [1, 8] (got 'x')"
 R	^	<tmp>/mutants/m124.56.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
 R	^	<tmp>/mutants/m124.57.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '@NAME@')"
@@ -3328,7 +3328,7 @@ R	^	<tmp>/mutants/m131.34.json --arch x86_64 []	err	"workload: missing required 
 R	^	<tmp>/mutants/m131.35.json --arch x86_64 []	err	"test.command_timeout: a whole number in [1, 3600] (got 'x')"
 R	^	<tmp>/mutants/m131.36.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m131.37.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m131.38.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#0d32de0f6351037a"
+R	^	<tmp>/mutants/m131.38.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#32f08d425650f115"
 R	^	<tmp>/mutants/m131.39.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m131.40.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m131.41.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -3344,7 +3344,7 @@ R	^	<tmp>/mutants/m131.50.json --arch x86_64 []	err	"workload: missing required 
 R	^	<tmp>/mutants/m131.51.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m131.52.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m131.53.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m131.54.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#2ac445caf8c50dfa"
+R	^	<tmp>/mutants/m131.54.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#6d345cca2834ea72"
 R	^	<tmp>/mutants/m131.55.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m131.56.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m131.57.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -3668,7 +3668,7 @@ R	^	<tmp>/mutants/m137.14.json --arch x86_64 []	err	"name: use lowercase letters
 R	^	<tmp>/mutants/m137.15.json --arch x86_64 []	err	"env.GIT_CONFIG_NOSYSTEM: a string, a number or true/false, n…#61c423d91f4148ca"
 R	^	<tmp>/mutants/m137.16.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m137.17.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '10.89.0.7')"
-R	^	<tmp>/mutants/m137.18.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#f14b1f75954cb44f"
+R	^	<tmp>/mutants/m137.18.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#29f30b0830285abe"
 R	^	<tmp>/mutants/m137.19.json --arch x86_64 []	err	"root.files[1].src: a string (or a whole number), not ['kill'…#6844bd93caf138d2"
 R	^	<tmp>/mutants/m137.20.json --arch x86_64 []	err	"env: invalid type: string \"10.89.0.7\", expected a mapping (p…#ca85629f9acfeb41"
 R	^	<tmp>/mutants/m137.21.json --arch x86_64 []	err	"invariants[0]: unknown field(s) bogus (known: after, cmd, de…#cc796248e472a6a1"
@@ -3679,7 +3679,7 @@ R	^	<tmp>/mutants/m137.25.json --arch x86_64 []	ok	d:cba0a7e6 w:4f53cda1 c:33775
 R	^	<tmp>/mutants/m137.26.json --arch x86_64 []	err	"root.files[0]: missing field `src` (project format 1; the sc…#995df533c1ff08e2"
 R	^	<tmp>/mutants/m137.27.json --arch x86_64 []	err	"workload.timeout: invalid type: mapping, expected a whole nu…#1c028d6f31778ddb"
 R	^	<tmp>/mutants/m137.28.json --arch x86_64 []	err	"provision: {{p}} is not a declared parameter"
-R	^	<tmp>/mutants/m137.29.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#031931a3d9ec3cd2"
+R	^	<tmp>/mutants/m137.29.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#387126717f6b4414"
 R	^	<tmp>/mutants/m137.30.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, kind, …#9dccb4f7c32693e2"
 R	^	<tmp>/mutants/m137.31.json --arch x86_64 []	ok	d:a6cc3d87 w:4f53cda1 c:9e24e183 m:74234e98
 R	^	<tmp>/mutants/m137.32.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
@@ -3689,7 +3689,7 @@ R	^	<tmp>/mutants/m137.35.json --arch x86_64 []	ok	d:ef76ae39 w:4f53cda1 c:cd331
 R	^	<tmp>/mutants/m137.36.json --arch x86_64 []	err	"invariants[0].id: a string (or a whole number), not False (p…#c38a0713229af235"
 R	^	<tmp>/mutants/m137.37.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m137.38.json --arch x86_64 []	ok	d:ba8eb321 w:4f53cda1 c:344181e4 m:74234e98
-R	^	<tmp>/mutants/m137.39.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#d8c03951fbd0b200"
+R	^	<tmp>/mutants/m137.39.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#f813c2389a9b72c7"
 R	^	<tmp>/mutants/m137.40.json --arch x86_64 []	err	"env.GIT_COMMITTER_EMAIL: a string, a number or true/false, n…#415cabd3774460e6"
 R	^	<tmp>/mutants/m137.41.json --arch x86_64 []	err	"env: invalid type: integer `1`, expected a mapping (project …#a883fd6e16d7319d"
 R	^	<tmp>/mutants/m137.42.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got 'x')"
@@ -4308,7 +4308,7 @@ R	^	<tmp>/mutants/m150.54.json --arch x86_64 []	err	"faults[1]: {{p}} is not a d
 R	^	<tmp>/mutants/m150.55.json --arch x86_64 []	err	"services[0] (clickhouse): image <tmp>/mutants/../hydo/images…#7a54ff506b5d97b7"
 R	^	<tmp>/mutants/m150.56.json --arch x86_64 []	err	"services[0] (clickhouse): image <tmp>/mutants/../hydo/images…#7a54ff506b5d97b7"
 R	^	<tmp>/mutants/m150.57.json --arch x86_64 []	err	"services[0] (clickhouse): image <tmp>/mutants/../hydo/images…#7a54ff506b5d97b7"
-R	^	<tmp>/mutants/m150.58.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 1 or newer, this hydo is 0…#f6abb57568f1fada"
+R	^	<tmp>/mutants/m150.58.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 1 or newer, this hydo is 0…#87d656016940b8c0"
 R	^	<tmp>/mutants/m150.59.json --arch x86_64 []	err	"invariants: at least one invariant (or one entry in checks:)…#2cc2f7924780106c"
 R	^	<tmp>/mutants/m151.0.json --arch x86_64 []	err	"invariants[3]: unknown field(s) bogus (known: after, cmd, de…#de4ac01f91bee045"
 R	^	<tmp>/mutants/m151.1.json --arch x86_64 []	err	"services[0]: field 'ready' must be a str"
@@ -5147,7 +5147,7 @@ R	^	<tmp>/mutants/m168.53.json --arch x86_64 []	err	"workload: missing required 
 R	^	<tmp>/mutants/m168.54.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m168.55.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m168.56.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m168.57.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#2ac445caf8c50dfa"
+R	^	<tmp>/mutants/m168.57.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#6d345cca2834ea72"
 R	^	<tmp>/mutants/m168.58.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m168.59.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m170.0.json --arch x86_64 []	err	"params: must be a mapping of name: default value"
@@ -5600,7 +5600,7 @@ R	^	<tmp>/mutants/m184.26.json --arch x86_64 []	err	"services[0]: unknown field(
 R	^	<tmp>/mutants/m184.27.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got True)"
 R	^	<tmp>/mutants/m184.28.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m184.29.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m184.30.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#031931a3d9ec3cd2"
+R	^	<tmp>/mutants/m184.30.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#387126717f6b4414"
 R	^	<tmp>/mutants/m184.31.json --arch x86_64 []	err	"services[0]: missing required field 'name'"
 R	^	<tmp>/mutants/m184.32.json --arch x86_64 []	err	"guest.ram_mib: a whole number of MiB in [256, 8192] (got 0)"
 R	^	<tmp>/mutants/m184.33.json --arch x86_64 []	err	"invariants: at least one invariant (or one entry in checks:)…#2cc2f7924780106c"
@@ -5611,7 +5611,7 @@ R	^	<tmp>/mutants/m184.37.json --arch x86_64 []	err	"workload: field 'run' must 
 R	^	<tmp>/mutants/m184.38.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: 'int' object is not iterable"
 R	^	<tmp>/mutants/m184.39.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m184.40.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m184.41.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#af618b48f1698dfe"
+R	^	<tmp>/mutants/m184.41.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#9013a1973aa748cb"
 R	^	<tmp>/mutants/m184.42.json --arch x86_64 []	err	"invariants[1]: duplicate id 'glibc.copies_work'"
 R	^	<tmp>/mutants/m184.43.json --arch x86_64 []	err	"services[0]: field 'name' must be a str"
 R	^	<tmp>/mutants/m184.44.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
@@ -5660,7 +5660,7 @@ R	^	<tmp>/mutants/m185.26.json --arch x86_64 []	err	"services[0] (alma): image <
 R	^	<tmp>/mutants/m185.27.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m185.28.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m185.29.json --arch x86_64 []	err	"guest: unknown field(s) ., 0, 1, 7, 8, 9 (known: branch_tick…#9e2483fb0fd9272e"
-R	^	<tmp>/mutants/m185.30.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#2ac445caf8c50dfa"
+R	^	<tmp>/mutants/m185.30.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#6d345cca2834ea72"
 R	^	<tmp>/mutants/m185.31.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m185.32.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m185.33.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
@@ -5779,7 +5779,7 @@ R	^	<tmp>/mutants/m192.25.json --arch x86_64 []	err	"services[0] (postgres): ima
 R	^	<tmp>/mutants/m192.26.json --arch x86_64 []	err	"services[0] (postgres): image <tmp>/mutants/images/postgres-…#538d92914826e02e"
 R	^	<tmp>/mutants/m192.27.json --arch x86_64 []	err	"services[5]: depends_on names unknown service 5000"
 R	^	<tmp>/mutants/m192.28.json --arch x86_64 []	err	"services[0] (postgres): image <tmp>/mutants/images/postgres-…#538d92914826e02e"
-R	^	<tmp>/mutants/m192.29.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#b2f48cad0a818516"
+R	^	<tmp>/mutants/m192.29.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#4f529ec02af5b338"
 R	^	<tmp>/mutants/m192.30.json --arch x86_64 []	err	"services[0] (postgres): image <tmp>/mutants/images/postgres-…#538d92914826e02e"
 R	^	<tmp>/mutants/m192.31.json --arch x86_64 []	err	"services[0] (postgres): image <tmp>/mutants/images/postgres-…#538d92914826e02e"
 R	^	<tmp>/mutants/m192.32.json --arch x86_64 []	err	"services[0] (postgres): image <tmp>/mutants/images/postgres-…#538d92914826e02e"
@@ -5792,7 +5792,7 @@ R	^	<tmp>/mutants/m192.38.json --arch x86_64 []	err	"services[0] (postgres): ima
 R	^	<tmp>/mutants/m192.39.json --arch x86_64 []	err	"services[4]: unknown field(s) bogus (known: addr, cmd, compa…#23ab3ab8fb86f3c7"
 R	^	<tmp>/mutants/m192.40.json --arch x86_64 []	err	"services[0] (postgres): image <tmp>/mutants/images/postgres-…#538d92914826e02e"
 R	^	<tmp>/mutants/m192.41.json --arch x86_64 []	err	"services[9]: unknown field(s) bogus (known: addr, cmd, compa…#01166df3acd54dc9"
-R	^	<tmp>/mutants/m192.42.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#915cddc17960160a"
+R	^	<tmp>/mutants/m192.42.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#73a3426eb223f96c"
 R	^	<tmp>/mutants/m192.43.json --arch x86_64 []	err	"services[0] (postgres): image <tmp>/mutants/images/postgres-…#538d92914826e02e"
 R	^	<tmp>/mutants/m192.44.json --arch x86_64 []	err	"services[0] (postgres): image <tmp>/mutants/images/postgres-…#538d92914826e02e"
 R	^	<tmp>/mutants/m192.45.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: 'int' object …#9a09befbd6965a92"
@@ -5891,7 +5891,7 @@ R	^	<tmp>/mutants/m197.17.json --arch x86_64 []	err	"configs.bogus: 'bogus' is n
 R	^	<tmp>/mutants/m197.18.json --arch x86_64 []	err	"test: must be a mapping"
 R	^	<tmp>/mutants/m197.19.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m197.20.json --arch x86_64 []	err	"services: must be a list (it may be empty: a project that is only a workload)"
-R	^	<tmp>/mutants/m197.21.json --arch x86_64 []	err	"format: this file is written in project format 4096, and thi…#1a30749ea899020a"
+R	^	<tmp>/mutants/m197.21.json --arch x86_64 []	err	"format: this file is written in project format 4096, and thi…#4943ebf782d437a0"
 R	^	<tmp>/mutants/m197.22.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m197.23.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m197.24.json --arch x86_64 []	err	"workload: unknown field(s) bogus (known: description, kind, …#9dccb4f7c32693e2"
@@ -5935,7 +5935,7 @@ R	^	<tmp>/mutants/m198.1.json --arch x86_64 []	err	"workload: missing required f
 R	^	<tmp>/mutants/m198.2.json --arch x86_64 []	err	"services[0]: field 'name' must be a str"
 R	^	<tmp>/mutants/m198.3.json --arch x86_64 []	err	"services[0]: storage: unknown key \"bogus\" (dir, size_mib, description)"
 R	^	<tmp>/mutants/m198.4.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m198.5.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#2ac445caf8c50dfa"
+R	^	<tmp>/mutants/m198.5.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#6d345cca2834ea72"
 R	^	<tmp>/mutants/m198.6.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m198.7.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m198.8.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -6197,7 +6197,7 @@ R	^	<tmp>/mutants/m206.23.json --arch x86_64 []	err	"workload: missing required 
 R	^	<tmp>/mutants/m206.24.json --arch x86_64 []	err	"test.round_ms: a whole number in [10, 60000] (got 'eventually')"
 R	^	<tmp>/mutants/m206.25.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m206.26.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m206.27.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#0b9c30ee25155f03"
+R	^	<tmp>/mutants/m206.27.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#59466c3e8732f0b9"
 R	^	<tmp>/mutants/m206.28.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, compa…#36f10e736ec55e9f"
 R	^	<tmp>/mutants/m206.29.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m206.30.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -6500,13 +6500,13 @@ R	^	<tmp>/mutants/m223.26.json --arch x86_64 []	err	"workload: missing required 
 R	^	<tmp>/mutants/m223.27.json --arch x86_64 []	err	"test.parallel: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m223.28.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m223.29.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m223.30.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#59bb3a6b87e37474"
+R	^	<tmp>/mutants/m223.30.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#dc73de5108d33a34"
 R	^	<tmp>/mutants/m223.31.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m223.32.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m223.33.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m223.34.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m223.35.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m223.36.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#915cddc17960160a"
+R	^	<tmp>/mutants/m223.36.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#73a3426eb223f96c"
 R	^	<tmp>/mutants/m223.37.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m223.38.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m223.39.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -6654,7 +6654,7 @@ R	^	<tmp>/mutants/m229.0.json --arch x86_64 []	err	"workload: missing required f
 R	^	<tmp>/mutants/m229.1.json --arch x86_64 []	err	"services[0]: field 'ready' must be a str"
 R	^	<tmp>/mutants/m229.2.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m229.3.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m229.4.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#915cddc17960160a"
+R	^	<tmp>/mutants/m229.4.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#73a3426eb223f96c"
 R	^	<tmp>/mutants/m229.5.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m229.6.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m229.7.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -6662,7 +6662,7 @@ R	^	<tmp>/mutants/m229.8.json --arch x86_64 []	err	"workload: missing required f
 R	^	<tmp>/mutants/m229.9.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m229.10.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m229.11.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m229.12.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#6aeac67aed08a081"
+R	^	<tmp>/mutants/m229.12.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#cf3d3064978edef1"
 R	^	<tmp>/mutants/m229.13.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m229.14.json --arch x86_64 []	err	"test.round_ms: a whole number in [10, 60000] (got '')"
 R	^	<tmp>/mutants/m229.15.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
@@ -6677,7 +6677,7 @@ R	^	<tmp>/mutants/m229.23.json --arch x86_64 []	err	"workload: missing required 
 R	^	<tmp>/mutants/m229.24.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m229.25.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m229.26.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m229.27.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#2ac445caf8c50dfa"
+R	^	<tmp>/mutants/m229.27.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#6d345cca2834ea72"
 R	^	<tmp>/mutants/m229.28.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m229.29.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m229.30.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -6702,7 +6702,7 @@ R	^	<tmp>/mutants/m229.48.json --arch x86_64 []	err	"workload: missing required 
 R	^	<tmp>/mutants/m229.49.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m229.50.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m229.51.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m229.52.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#f605e09c211ab01e"
+R	^	<tmp>/mutants/m229.52.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#1809c8f9325ef32a"
 R	^	<tmp>/mutants/m229.53.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m229.54.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m229.55.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -7041,7 +7041,7 @@ R	^	<tmp>/mutants/m238.27.json --arch x86_64 []	err	"top level: field 'name' mus
 R	^	<tmp>/mutants/m238.28.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m238.29.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m238.30.json --arch x86_64 []	err	"top level: field 'name' must be a str"
-R	^	<tmp>/mutants/m238.31.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#86f4ff75f3426343"
+R	^	<tmp>/mutants/m238.31.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#550c9f20be7c063b"
 R	^	<tmp>/mutants/m238.32.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, compa…#02d31f561f25facd"
 R	^	<tmp>/mutants/m238.33.json --arch x86_64 []	err	"test.command_timeout: a whole number in [1, 3600] (got 'v3')"
 R	^	<tmp>/mutants/m238.34.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -7475,7 +7475,7 @@ R	^	<tmp>/mutants/m248.41.json --arch x86_64 []	err	"workload: missing required 
 R	^	<tmp>/mutants/m248.42.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m248.43.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m248.44.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m248.45.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#f605e09c211ab01e"
+R	^	<tmp>/mutants/m248.45.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#1809c8f9325ef32a"
 R	^	<tmp>/mutants/m248.46.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m248.47.json --arch x86_64 []	err	"test.check_every: a whole number in [1, 3600] (got 5000)"
 R	^	<tmp>/mutants/m248.48.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -7531,7 +7531,7 @@ R	^	<tmp>/mutants/m254.37.json --arch x86_64 []	err	"workload: missing required 
 R	^	<tmp>/mutants/m254.38.json --arch x86_64 []	err	"services[0].cmd[8]: {{adjust}} is not a declared parameter"
 R	^	<tmp>/mutants/m254.39.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m254.40.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m254.41.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#6aeac67aed08a081"
+R	^	<tmp>/mutants/m254.41.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#cf3d3064978edef1"
 R	^	<tmp>/mutants/m254.42.json --arch x86_64 []	err	"top level: field 'name' must be a str"
 R	^	<tmp>/mutants/m254.43.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m254.44.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -7923,7 +7923,7 @@ R	^	<tmp>/mutants/m264.9.json --arch x86_64 []	err	"workload: missing required f
 R	^	<tmp>/mutants/m264.10.json --arch x86_64 []	err	"services[0]: must be a mapping"
 R	^	<tmp>/mutants/m264.11.json --arch x86_64 []	err	"test.per_round: a whole number in [1, 8] (got '10.89.0.7')"
 R	^	<tmp>/mutants/m264.12.json --arch x86_64 []	err	"test: unknown field(s) bogus (known: budget_ms, check_every,…#012c83bb81a435c1"
-R	^	<tmp>/mutants/m264.13.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 1 or newer, this hydo is 0…#f6abb57568f1fada"
+R	^	<tmp>/mutants/m264.13.json --arch x86_64 []	err	"hydo_version: the plan needs hydo 1 or newer, this hydo is 0…#87d656016940b8c0"
 R	^	<tmp>/mutants/m264.14.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m264.15.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m264.16.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -7973,7 +7973,7 @@ R	^	<tmp>/mutants/m264.59.json --arch x86_64 []	err	"test: unknown field(s) bogu
 R	^	<tmp>/mutants/m265.0.json --arch x86_64 []	err	"test.checks[0]: unknown field(s) bogus"
 R	^	<tmp>/mutants/m265.1.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m265.2.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m265.3.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#59bb3a6b87e37474"
+R	^	<tmp>/mutants/m265.3.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#dc73de5108d33a34"
 R	^	<tmp>/mutants/m265.4.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m265.5.json --arch x86_64 []	err	"services[0]: missing required field 'name'"
 R	^	<tmp>/mutants/m265.6.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -8032,7 +8032,7 @@ R	^	<tmp>/mutants/m265.58.json --arch x86_64 []	err	"workload: missing required 
 R	^	<tmp>/mutants/m265.59.json --arch x86_64 []	err	"services[0]: port must be a number"
 R	^	<tmp>/mutants/m266.0.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m266.1.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m266.2.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#c520740bf2f3a4d3"
+R	^	<tmp>/mutants/m266.2.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#5d895dcfb9a94ecf"
 R	^	<tmp>/mutants/m266.3.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m266.4.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m266.5.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -8045,7 +8045,7 @@ R	^	<tmp>/mutants/m266.11.json --arch x86_64 []	err	"workload: missing required 
 R	^	<tmp>/mutants/m266.12.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m266.13.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m266.14.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m266.15.json --arch x86_64 []	err	"format: this file is written in project format 5000, and thi…#5ea0ba0217433c2e"
+R	^	<tmp>/mutants/m266.15.json --arch x86_64 []	err	"format: this file is written in project format 5000, and thi…#e0f42d67b12e3248"
 R	^	<tmp>/mutants/m266.16.json --arch x86_64 []	err	"test: unknown field(s) bogus (known: budget_ms, check_every,…#012c83bb81a435c1"
 R	^	<tmp>/mutants/m266.17.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m266.18.json --arch x86_64 []	err	"workload: field 'steps' must be a int"
@@ -8115,7 +8115,7 @@ R	^	<tmp>/mutants/m267.21.json --arch x86_64 []	err	"top level: unknown field(s)
 R	^	<tmp>/mutants/m267.22.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m267.23.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m267.24.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m267.25.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#af618b48f1698dfe"
+R	^	<tmp>/mutants/m267.25.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#9013a1973aa748cb"
 R	^	<tmp>/mutants/m267.26.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m267.27.json --arch x86_64 []	err	"services[0].port: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m267.28.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
@@ -9020,7 +9020,7 @@ R	^	<tmp>/mutants/m295.26.json --arch x86_64 []	err	"workload: missing required 
 R	^	<tmp>/mutants/m295.27.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m295.28.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m295.29.json --arch x86_64 []	err	"services[2]: addr 'None': with network: bridge, an address i…#8202d19151d8bc6a"
-R	^	<tmp>/mutants/m295.30.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#f605e09c211ab01e"
+R	^	<tmp>/mutants/m295.30.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#1809c8f9325ef32a"
 R	^	<tmp>/mutants/m295.31.json --arch x86_64 []	err	"services[4]: unknown field(s) bogus (known: addr, cmd, compa…#23ab3ab8fb86f3c7"
 R	^	<tmp>/mutants/m295.32.json --arch x86_64 []	err	"test.parallel: a whole number in [1, 16] (got ['x'])"
 R	^	<tmp>/mutants/m295.33.json --arch x86_64 []	err	"services[0]: name '4096' must match [a-z][a-z0-9_]* (it beco…#3cbdbd6814c8f0e7"
@@ -9870,7 +9870,7 @@ R	^	<tmp>/mutants/m319.36.json --arch x86_64 []	err	"services[0] (postgresql): i
 R	^	<tmp>/mutants/m319.37.json --arch x86_64 []	err	"services[0] (postgresql): image <tmp>/mutants/images/postgre…#8eb7dadf2aed6975"
 R	^	<tmp>/mutants/m319.38.json --arch x86_64 []	err	"services[0] (postgresql): image <tmp>/mutants/images/postgre…#8eb7dadf2aed6975"
 R	^	<tmp>/mutants/m319.39.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, compa…#8b82abe1df7895aa"
-R	^	<tmp>/mutants/m319.40.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#915cddc17960160a"
+R	^	<tmp>/mutants/m319.40.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#73a3426eb223f96c"
 R	^	<tmp>/mutants/m319.41.json --arch x86_64 []	err	"services[0] (postgresql): image <tmp>/mutants/images/postgre…#8eb7dadf2aed6975"
 R	^	<tmp>/mutants/m319.42.json --arch x86_64 []	err	"services[1]: unknown field(s) bogus (known: addr, cmd, compa…#8b82abe1df7895aa"
 R	^	<tmp>/mutants/m319.43.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
@@ -9992,7 +9992,7 @@ R	^	<tmp>/mutants/m324.38.json --arch x86_64 []	err	"workload: missing required 
 R	^	<tmp>/mutants/m324.39.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m324.40.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m324.41.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m324.42.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#5e8ac86bf29722f4"
+R	^	<tmp>/mutants/m324.42.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#b0d8b3754945c92e"
 R	^	<tmp>/mutants/m324.43.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m324.44.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m324.45.json --arch x86_64 []	err	"services[0]: missing required field 'name'"
@@ -10123,7 +10123,7 @@ R	^	<tmp>/mutants/m326.49.json --arch x86_64 []	err	"top level: missing required
 R	^	<tmp>/mutants/m326.50.json --arch x86_64 []	err	"services[1]: addr 10.89.0.12 is used by two services"
 R	^	<tmp>/mutants/m326.51.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m326.52.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m326.53.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#f14b1f75954cb44f"
+R	^	<tmp>/mutants/m326.53.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#29f30b0830285abe"
 R	^	<tmp>/mutants/m326.54.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m326.55.json --arch x86_64 []	err	"services[2]: unknown field(s) bogus (known: addr, cmd, compa…#36f10e736ec55e9f"
 R	^	<tmp>/mutants/m326.56.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -10142,7 +10142,7 @@ R	^	<tmp>/mutants/m327.8.json --arch x86_64 []	err	"workload: missing required f
 R	^	<tmp>/mutants/m327.9.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, cmd, compa…#02d31f561f25facd"
 R	^	<tmp>/mutants/m327.10.json --arch x86_64 []	err	"hydo_version: \"0.1\", \"0.1.0\" or \">=0.1\" (got 'A b')"
 R	^	<tmp>/mutants/m327.11.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m327.12.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#2ac445caf8c50dfa"
+R	^	<tmp>/mutants/m327.12.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#6d345cca2834ea72"
 R	^	<tmp>/mutants/m327.13.json --arch x86_64 []	err	"test.per_round: a whole number in [1, 8] (got '127.0.0.1')"
 R	^	<tmp>/mutants/m327.14.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m327.15.json --arch x86_64 []	err	"workload: missing required field 'run'"
@@ -10186,7 +10186,7 @@ R	^	<tmp>/mutants/m327.52.json --arch x86_64 []	err	"workload: missing required 
 R	^	<tmp>/mutants/m327.53.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m327.54.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m327.55.json --arch x86_64 []	err	"workload: missing required field 'run'"
-R	^	<tmp>/mutants/m327.56.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.5.0…#031931a3d9ec3cd2"
+R	^	<tmp>/mutants/m327.56.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.6.0…#387126717f6b4414"
 R	^	<tmp>/mutants/m327.57.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m327.58.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m327.59.json --arch x86_64 []	err	"root.files[0].src: {{tb}} is not a declared parameter"
