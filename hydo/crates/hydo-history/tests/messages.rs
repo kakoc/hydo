@@ -226,7 +226,8 @@ fn ack(h: &mut H, p: i64, t: i64, item: &str, out: &'static str) {
 }
 
 /// The NSQ trial's shape (Milestone 359, frictions 1 and 2): every message is sent before the
-/// named group's first receive completes, and the group receives each.
+/// named group's first receive completes, the group receives each, and one delivery is never
+/// acknowledged and never comes back.
 #[test]
 fn a_group_that_received_a_message_had_to_receive_it() {
     fn grp(h: &mut H, p: i64, t: i64, f: &str, items: &[&str], out: &'static str) {
@@ -253,7 +254,35 @@ fn a_group_that_received_a_message_had_to_receive_it() {
     let r = run(&shape(true, 80_000), lease);
     assert_eq!(st(&r, "no-loss"), Status::Held, "{r:?}");
     assert!(r["no-loss"].1.contains("(2 judged"), "{r:?}");
+    // m1 received and never acknowledged, the drain ended after its lease: lost
+    let r = run(&shape(false, 80_000), lease);
+    assert_eq!(st(&r, "no-loss"), Status::Violated, "{r:?}");
+    assert!(
+        r["no-loss"].1.contains("never acknowledged there")
+            && r["no-loss"].1.contains("lease of 60000 ms"),
+        "{r:?}"
+    );
+    // ... undecided while its lease could still hold at the drain's end
+    let r = run(&shape(false, 50_000), lease);
+    assert_eq!(st(&r, "no-loss"), Status::Held, "{r:?}");
+    assert!(r["no-loss"].1.contains("1 undecided"), "{r:?}");
+    // ... and when its acknowledgement's outcome is unknown, which may have been accepted (the
+    // trial's FIN to a killed nsqd)
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m1", "ok");
+    grp(&mut h, 5, 10, "recv", &["m1"], "ok");
+    h.rec(5, "invoke", 2500, "ack", &["c", "work", "m1"]);
+    h.rec(5, "info", 2501, "ack", &["c", "work", "m1"]);
+    h.rec(100, "ok", 80_000, "drained", &["c", "work"]);
+    let r = run(&h.text(), lease);
+    assert_eq!(st(&r, "no-loss"), Status::Held, "{r:?}");
+    assert!(r["no-loss"].1.contains("1 undecided"), "{r:?}");
+    // ... and without a lease the claim does not say it comes back (`processing: once` does)
     let alo = r#"{"id":"c","type":"messages","history":"q","claims":{"delivery":"at-least-once"}}"#;
+    assert_eq!(
+        st(&run(&shape(false, 80_000), alo), "no-loss"),
+        Status::Held
+    );
 
     // a drained group that received none of the messages sent before it joined: the ERROR
     // names the real reason

@@ -167,7 +167,7 @@ pub enum Fate {
 
 pub fn fate(ix: &Ix<'_>, m: &Msg, g: &Gk) -> Fate {
     if !ix.deliveries(&m.m, g).is_empty() {
-        return Fate::Delivered;
+        return unreturned(ix, m, g).unwrap_or(Fate::Delivered);
     }
     if ix
         .acks_of(&m.m, g)
@@ -223,6 +223,56 @@ pub fn fate(ix: &Ix<'_>, m: &Msg, g: &Gk) -> Fate {
         }
     }
     Fate::Lost
+}
+
+/// A delivered message that never came back: with a `lease` and explicit acknowledgements, a
+/// delivery that no acknowledgement accepted must come back once its lease has run out. When the
+/// group's drain ended after that, in the same boot and without a clock step between, and no
+/// delivery of the message in the group was acknowledged, given back for good (`r=0`) or
+/// dead-lettered, the message is lost (Milestone 360: NSQ lost a message that a consumer held
+/// when `nsqd` was killed, and `no-loss` counted it as delivered). An acknowledgement whose
+/// outcome is unknown (`info`) may have been accepted, so such a message is undecided, not lost.
+/// `None`: delivered as before.
+fn unreturned(ix: &Ix<'_>, m: &Msg, g: &Gk) -> Option<Fate> {
+    if ix.d.ack != Ack::Explicit || ix.d.lease == Lease::None {
+        return None;
+    }
+    let ds = ix.deliveries(&m.m, g);
+    let acks = ix.acks_of(&m.m, g);
+    let accepted = acks.iter().any(|a| {
+        (a.kind == OpKind::Ack && a.out == Out::Ok)
+            || (a.kind == OpKind::Nack && a.out != Out::Fail && a.item.r.as_deref() == Some("0"))
+    });
+    let maybe = acks
+        .iter()
+        .any(|a| a.kind == OpKind::Ack && a.out == Out::Info);
+    if accepted || fate_dead_lettered(ix, m) {
+        return None;
+    }
+    if let Some(dl) = &ix.d.dead_letter {
+        if dl.to.is_none() && ds.len() as i64 >= dl.after {
+            return Some(Fate::Excused(Excuse::DeadLettered));
+        }
+    }
+    let dr = &ix.h.drained[ix.groups.get(g)?.drained?];
+    let last = *ds.iter().max_by_key(|&&d| ix.dlv_key(d))?;
+    let ret = ix.dlv_ret(last);
+    if ret.pos > dr.at.pos {
+        // delivered after the drain's record: the drain did not judge it
+        return None;
+    }
+    let Some(len) = lease_of(ix, last) else {
+        return Some(Fate::Undecided);
+    };
+    if ret.boot != dr.at.boot || ix.clock_between(ret.pos, dr.at.pos) {
+        // Across a power cut the acknowledgement's record may be lost with the cut (as in
+        // `processing`), and a clock step moves a lease that the system keeps on the wall clock.
+        return Some(Fate::Undecided);
+    }
+    match (lease_end(ix, last, len), dr.at.t) {
+        (Some((end, _)), Some(t)) if t >= end && !maybe => Some(Fate::Lost),
+        _ => Some(Fate::Undecided),
+    }
 }
 
 /// The witness of a loss: the message's acknowledged send, the group's drained record, and a
@@ -360,9 +410,47 @@ pub fn no_loss(ix: &Ix<'_>, every: bool) -> Claim {
             None
         };
         if let Some(g) = bad {
-            let (w, extra) = loss_witness(ix, m, g);
+            let (mut w, extra) = loss_witness(ix, m, g);
             let s = ix.first_ok(m).expect("acknowledged");
             let op = ix.op(s.op);
+            if let Some(&d) = ix
+                .deliveries(&m.m, g)
+                .iter()
+                .max_by_key(|&&d| ix.dlv_key(d))
+            {
+                // delivered, never acknowledged, and not delivered again after its lease
+                w.op(ix, ix.dl[d].op);
+                let n = ix.deliveries(&m.m, g).len();
+                return violated(
+                    name,
+                    judged,
+                    und,
+                    format!(
+                        "{} was acknowledged to process {} at {} and delivered {} in {}, but \
+                         never acknowledged there, and it was not delivered again before the \
+                         drain ended after its lease of {} ms had run out",
+                        m.m,
+                        op.proc_,
+                        secs(op.ret.and_then(|r| r.shown)),
+                        if n == 1 {
+                            format!(
+                                "to process {} at {}",
+                                ix.dlv_op(d).proc_,
+                                secs(ix.dlv_ret(d).shown)
+                            )
+                        } else {
+                            format!(
+                                "{n} times, last to process {} at {},",
+                                ix.dlv_op(d).proc_,
+                                secs(ix.dlv_ret(d).shown)
+                            )
+                        },
+                        gname(g),
+                        lease_of(ix, d).unwrap_or(0) / MS
+                    ),
+                    w,
+                );
+            }
             return violated(
                 name,
                 judged,

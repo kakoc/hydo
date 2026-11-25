@@ -189,6 +189,9 @@ record. Write it to these three rules:
    acknowledge before a fault comes back only when its lease or visibility timeout runs out.
    The quiet window is the time of empty receives after which the drain calls a group empty.
    Make it longer than the longest lease and visibility timeout of the system.
+   With a `lease` declared, `no-loss` counts such a message as lost when the drain ends after
+   its lease ran out and it never came back. An acknowledgement recorded as `info` may have been
+   accepted, so the message is then undecided. Without a lease, `processing: once` judges it.
 2. Outlast the system's recovery after a power cut. In the recovery boot the system can refuse
    or redirect requests until a takeover lease runs out or a leader is elected. Treat an error,
    a refusal and a redirect as "not yet": wait a second and ask again until the deadline. Count

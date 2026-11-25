@@ -392,6 +392,15 @@ subscribed `from=start`, and since Milestone 360 every group that received m.
 **Claim.** Every acknowledged message is delivered at least once to every group that must
 receive it and that was drained.
 
+With a `lease` (which needs explicit acknowledgements), a delivery that no acknowledgement
+accepted must come back once its lease has run out. Since Milestone 360 a message whose
+deliveries in a drained group none of the group's acknowledgements accepted (an `ok` ack, or a
+reject), and that was not delivered again, is lost when the drain's record comes after the last
+delivery's lease ended, in the same boot and with no clock step between. Before that end, across
+a power cut, across a clock step, or with an acknowledgement whose outcome is unknown (`info`,
+which may have been accepted) it is undecided. Without a lease the claim does
+not say that such a message comes back; `processing: once` judges it.
+
 **Excused** (counted, never a violation): moved to the dead-letter channel and delivered there
 (`dead_letter` with `to:`); stopped after its last allowed delivery (`dead_letter` without
 `to:`); expired (`retention_ms`, when the drain began more than that after the send completed,
