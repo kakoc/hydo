@@ -135,6 +135,19 @@ fn render(
         }
         o.push_str(&item(n + 1, it, &label, shown, n + 1));
     }
+    // Milestone 355: runs whose reaction never fired tested nothing of it
+    if let Some(n) = s.unfired_reactions.filter(|n| *n > 0) {
+        o.push('\n');
+        o.push_str(&wrap(
+            &format!(
+                "Reactions that never fired: in {n} of {} runs the schedule's reaction (A=) never \
+                 fired, because its event did not come after it was armed. Those runs did not \
+                 test the reaction; each run's record in events.jsonl names it.",
+                st.total
+            ),
+            "",
+        ));
+    }
     tail(&mut o, st, shown, stats);
     o
 }
@@ -319,6 +332,14 @@ pub fn run(dir: &Path, run: &Run, shown: &str) -> String {
     }
     o.push_str("\nWhat hydo saw:\n");
     o.push_str(&seen(&story::seen(run, &evs, &what, &pr), INDENT));
+    // Milestone 355: a reaction that never fired, which the run did not test
+    for w in run
+        .warnings
+        .iter()
+        .filter(|w| hydo_explore::results::is_unfired_warning(w))
+    {
+        o.push_str(&hang(&format!("{INDENT}! "), w, &format!("{INDENT}  ")));
+    }
     o.push('\n');
     let words = story::needs_first_words(&pr, image);
     let words = if failed {

@@ -3257,6 +3257,14 @@ fn exploration_details(
             )),
         ));
     }
+    if let Some(n) = s_.unfired_reactions.filter(|n| *n > 0) {
+        f.push((
+            "Reactions that never fired".into(),
+            esc(&format!(
+                "in {n} runs the schedule's reaction never fired, so those runs did not test it"
+            )),
+        ));
+    }
     if let Some(n) = s_.refused.filter(|n| *n > 0) {
         f.push((
             "Refused".into(),

@@ -48,7 +48,7 @@ use super::{
 };
 use hydo_agent_proto::msg::Sig;
 use hydo_schedule::{React, ReactAction};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The declaration a run with reactions reports (its record when a reaction acts).
 pub const REACT_DECL: (&str, &str, &str) = (
@@ -64,6 +64,63 @@ pub(super) struct State {
     pub fired: BTreeSet<usize>,
     /// The first reaction whose power cut is due (its delay is over).
     pub cut: Option<usize>,
+    /// Milestone 355: the number of assertion records seen when each reaction was armed, so that
+    /// the end of the steps can say how often a reaction that never fired saw its event.
+    pub from: BTreeMap<usize, usize>,
+}
+
+/// Milestone 355: the note of a reaction that never fired (`HYDO-REACT-UNFIRED {...}`). A note is
+/// for people: no control transcript's hash and no fingerprint covers it.
+pub const UNFIRED_PREFIX: &str = "HYDO-REACT-UNFIRED";
+
+/// Milestone 355: remember how many assertion records the run had when reaction `i` was armed
+/// (in the main sequence, before its thread starts at the same stop).
+pub(super) fn armed_at(fx: &mut F<'_>, i: usize) {
+    fx.effect(|h, f| {
+        h.react.from.entry(i).or_insert(f.asserts.len());
+        Memo::Unit
+    });
+}
+
+/// Milestone 355: one `HYDO-REACT-UNFIRED {"token":..,"event":..,"nth":k,"at":step,
+/// "armed":bool,"seen":n,"cut":bool}` note for each reaction of `reactions` that never acted, at
+/// the end of the steps. `seen` counts the event's records after the reaction was armed; `cut`
+/// says that a power cut ended the steps. Before, such a run passed without a word (the Kvrocks
+/// onboarding, Milestone 351).
+pub(super) fn note_unfired(fx: &mut F<'_>, reactions: &[(usize, React)], cut: bool) {
+    let notes = fx.effect_text(|h, f| {
+        let mut out = Vec::new();
+        for (i, r) in reactions {
+            if h.react.fired.contains(i) || h.react.cut == Some(*i) {
+                continue;
+            }
+            let armed = h.react.from.get(i).copied();
+            let seen = armed.map_or(0, |from| {
+                f.asserts.get(from..).map_or(0, |l| {
+                    l.iter().filter(|(id, ev)| *ev && *id == r.event).count()
+                })
+            });
+            out.push(unfired_note(r, armed.is_some(), seen as u64, cut));
+        }
+        out.join("\n")
+    });
+    for n in notes.lines() {
+        fx.note(n.to_string());
+    }
+}
+
+/// The text of one [`note_unfired`] note.
+pub fn unfired_note(r: &React, armed: bool, seen: u64, cut: bool) -> String {
+    let v = serde_json::json!({
+        "token": format!("A={r}"),
+        "event": r.event,
+        "nth": r.nth,
+        "at": r.at,
+        "armed": armed,
+        "seen": seen,
+        "cut": cut,
+    });
+    format!("{UNFIRED_PREFIX} {v}")
 }
 
 /// An assertion record of the console: (id, whether it is the assertion's event).

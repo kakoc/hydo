@@ -588,7 +588,20 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
     } else {
         Vec::new()
     };
-    warnings.extend(unseen_events(text, consoles));
+    let unseen = unseen_events(text, consoles);
+    // Milestone 355: a reaction that the controller noted as never fired, unless the line of
+    // unseen_events already says that no record names its event
+    warnings.extend(
+        unfired_reactions(consoles)
+            .into_iter()
+            .filter(|(tok, _)| {
+                !unseen
+                    .iter()
+                    .any(|u| u.contains(&format!("reaction {tok} ")))
+            })
+            .map(|(_, w)| w),
+    );
+    warnings.extend(unseen);
     warnings.extend(failures_of_unmatched(consoles));
     let messages: Vec<hydo_results::MessagesCheck> = match r.get(MESSAGES) {
         Some(Value::Array(a)) => a
@@ -1365,6 +1378,77 @@ pub fn unseen_events(schedule: &str, consoles: &[(String, String)]) -> Vec<Strin
     out
 }
 
+/// Milestone 355: the reactions that the controller noted as never fired (its
+/// `HYDO-REACT-UNFIRED {...}` notes), each as its token and one warning in words. The first
+/// note of a token wins.
+pub fn unfired_reactions(consoles: &[(String, String)]) -> Vec<(String, String)> {
+    const PRE: &str = "HYDO-REACT-UNFIRED ";
+    let mut out: Vec<(String, String)> = Vec::new();
+    for (_, c) in consoles {
+        for l in c.lines() {
+            let Some(i) = l.find("HYDO-REACT-UNFIRED {") else {
+                continue;
+            };
+            let Ok(v) = serde_json::from_str::<Value>(&l[i + PRE.len()..]) else {
+                continue;
+            };
+            let tok = v.get("token").and_then(Value::as_str).unwrap_or("A=?");
+            if out.iter().any(|(t, _)| t == tok) {
+                continue;
+            }
+            out.push((tok.to_string(), unfired_words(&v)));
+        }
+    }
+    out
+}
+
+/// Whether a run's warning is one of a reaction that never fired ([`unfired_reactions`] or
+/// [`unseen_events`]): the explorer counts such runs apart from the passes that checked nothing.
+pub fn is_unfired_warning(w: &str) -> bool {
+    w.starts_with("the reaction ") && w.contains(" never fired")
+}
+
+/// One [`unfired_reactions`] note in words.
+fn unfired_words(v: &Value) -> String {
+    let tok = v.get("token").and_then(Value::as_str).unwrap_or("A=?");
+    let ev = v.get("event").and_then(Value::as_str).unwrap_or("?");
+    let n = |k: &str| v.get(k).and_then(Value::as_u64).unwrap_or(0);
+    let (nth, at, seen) = (n("nth").max(1), n("at"), n("seen"));
+    let b = |k: &str| v.get(k).and_then(Value::as_bool).unwrap_or(false);
+    let armed_at = if at == 0 {
+        "from the start of the workload".to_string()
+    } else {
+        format!("before step {at}")
+    };
+    let why = if !b("armed") {
+        if b("cut") {
+            format!("a power cut ended the steps before step {at}, where it is armed")
+        } else {
+            format!("the run ended before step {at}, where it is armed")
+        }
+    } else if seen >= nth {
+        "its event came only as the steps ended, when the reactions stop".to_string()
+    } else {
+        let came = match seen {
+            0 => format!("no record of its event {ev} came after it was armed {armed_at}"),
+            1 => format!("its event {ev} came once after it was armed {armed_at}"),
+            k => format!("its event {ev} came {k} times after it was armed {armed_at}"),
+        };
+        let want = if nth > 1 {
+            format!(", and it acts at record {nth} of the event")
+        } else {
+            String::new()
+        };
+        let end = if b("cut") {
+            ", before a power cut ended the steps"
+        } else {
+            ""
+        };
+        format!("{came}{want}{end}")
+    };
+    format!("the reaction {tok} never fired: {why}; the run did not test it")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1534,5 +1618,72 @@ mod tests {
         let decl = "HYDO-ASSERT-DECL {\"t\":\"sometimes\",\"id\":\"client.place_failed\"}\n";
         assert!(unseen_events(s, &con(decl)).is_empty());
         assert!(unseen_events("disk=none | run K=redis@3+2", &con("")).is_empty());
+    }
+
+    /// Milestone 355: the controller's note of a reaction that never fired is a warning in
+    /// words, once per token.
+    #[test]
+    fn a_reaction_that_never_fired_is_named() {
+        let note = |armed: bool, seen: u64, nth: u64, cut: bool| {
+            let v = serde_json::json!({"token": "A=kv.failover_done@4+5500:cut",
+                "event": "kv.failover_done", "nth": nth, "at": 4, "armed": armed,
+                "seen": seen, "cut": cut});
+            format!("hydo-ob: x\nHYDO-REACT-UNFIRED {v}\n")
+        };
+        let w = unfired_reactions(&con(&note(true, 0, 1, false)));
+        assert_eq!(w.len(), 1);
+        assert_eq!(
+            w[0].1,
+            "the reaction A=kv.failover_done@4+5500:cut never fired: no record of its event \
+             kv.failover_done came after it was armed before step 4; the run did not test it"
+        );
+        assert!(is_unfired_warning(&w[0].1));
+        let w = unfired_reactions(&con(&note(true, 2, 3, true)));
+        assert!(
+            w[0].1.contains(
+                "came 2 times after it was armed before step 4, and it acts at record 3 of the \
+                 event, before a power cut ended the steps"
+            ),
+            "{w:?}"
+        );
+        let w = unfired_reactions(&con(&note(false, 0, 1, false)));
+        assert!(
+            w[0].1
+                .contains("the run ended before step 4, where it is armed"),
+            "{w:?}"
+        );
+        // one note per token, also when another console repeats it
+        let mut two = con(&note(true, 0, 1, false));
+        two.push(("one.recovery.log".into(), note(true, 0, 1, false)));
+        assert_eq!(unfired_reactions(&two).len(), 1);
+        // in a run's record: one warning
+        let text = "disk=none | run A=kv.failover_done@4+5500:cut";
+        let r: crate::pool::Res =
+            serde_json::from_str(r#"{"verdict":"OK","fp":"0"}"#).expect("json");
+        let mut c = con(&note(true, 0, 1, false));
+        c[0].1.push_str(
+            "HYDO-ASSERT-DECL {\"t\":\"sometimes\",\"id\":\"kv.failover_done\"}\n\
+             hydo-explore-acked: 1\n",
+        );
+        let run = run_of("seed-1", text, &r, &c);
+        let unfired: Vec<&String> = run
+            .warnings
+            .iter()
+            .filter(|w| is_unfired_warning(w))
+            .collect();
+        assert_eq!(unfired.len(), 1, "{:?}", run.warnings);
+        // a misspelt event keeps the line of unseen_events alone
+        let text = "disk=none | run A=kv.failover_dne@4+5500:cut";
+        let v = serde_json::json!({"token": "A=kv.failover_dne@4+5500:cut",
+            "event": "kv.failover_dne", "nth": 1, "at": 4, "armed": true, "seen": 0, "cut": false});
+        let c = con(&format!("HYDO-REACT-UNFIRED {v}\n"));
+        let run = run_of("seed-1", text, &r, &c);
+        let unfired: Vec<&String> = run
+            .warnings
+            .iter()
+            .filter(|w| is_unfired_warning(w))
+            .collect();
+        assert_eq!(unfired.len(), 1, "{:?}", run.warnings);
+        assert!(unfired[0].contains("misspelt"), "{unfired:?}");
     }
 }

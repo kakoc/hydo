@@ -923,6 +923,7 @@ pub fn merge(dirs: &[PathBuf], out: &Path) -> Result<Exploration, String> {
         },
         runs_with_new_error_kinds: sums(&|s| s.runs_with_new_error_kinds),
         vacuous_passes: sums(&|s| s.vacuous_passes),
+        unfired_reactions: sums(&|s| s.unfired_reactions),
         refused: sums(&|s| s.refused),
         ..Summary::default()
     };

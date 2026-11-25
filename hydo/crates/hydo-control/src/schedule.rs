@@ -3489,6 +3489,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             if r.at as i64 == p {
                 // Milestone 305: a kill-now reaction's relay watches the console before the step
                 react::arm_now(fx, ctx, *i)?;
+                react::armed_at(fx, *i);
                 rthreads.push((*i, fx.start(Part::React(*i))?));
             }
         }
@@ -3512,6 +3513,8 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             cut = true;
             rcut = true;
         }
+        // Milestone 355: a reaction that never acted says so (a note: no hash covers it)
+        react::note_unfired(fx, &reactions, cut);
     }
     if cut {
         if rcut {

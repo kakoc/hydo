@@ -3116,6 +3116,9 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
     // 264) first runs whose page check judged no failed request (results::failures_of_unmatched)
     let mut unmatched: Vec<String> = Vec::new();
     let mut nunmatched = 0u64;
+    // Milestone 355: first runs with a reaction that never fired, counted apart
+    let mut unfired: Vec<String> = Vec::new();
+    let mut nunfired = 0u64;
     let vacuous = seeds
         .iter()
         .filter(|sd| {
@@ -3132,10 +3135,32 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                         }
                     }
                 }
-                r.warnings.iter().any(|w| !u.contains(w))
+                let nf: Vec<&String> = r
+                    .warnings
+                    .iter()
+                    .filter(|w| results::is_unfired_warning(w))
+                    .collect();
+                if !nf.is_empty() {
+                    nunfired += 1;
+                    if unfired.is_empty() {
+                        unfired.push(nf[0].clone());
+                    }
+                }
+                r.warnings
+                    .iter()
+                    .any(|w| !u.contains(w) && !results::is_unfired_warning(w))
             })
         })
         .count() as u64;
+    if nunfired > 0 {
+        summary.unfired_reactions = Some(nunfired);
+        eprintln!(
+            "hydo: warning: in {nunfired} of {} first runs a reaction never fired, so those runs \
+             did not test it; for example {}",
+            seeds.len(),
+            unfired.first().map(String::as_str).unwrap_or("")
+        );
+    }
     if nunmatched > 0 {
         eprintln!(
             "hydo: warning: in {nunmatched} of {} first runs {}",
