@@ -29,7 +29,7 @@ the hvx engine, and looks for bugs that nobody reported.
      connects to it. After a power cut of the whole guest, the recovery boot ran no
      transactional client, so a transaction left open before the cut stayed open, and an
      acknowledged message, also of a committed transaction, was never delivered. Found blind
-     three times; `disk=cut | run C=34` shows it on the default composition
+     three times; `disk=cut | run C=35` shows it on the default composition
      (`regressions/transaction-left-open-after-a-restart.schedule`). A transactional client
      aborted it at once.
 - **What held?** No acknowledged publish was lost, deduplication stored each message once, and
@@ -149,7 +149,7 @@ leaves open, and producers and consumers that a partition being unloaded refused
 | file | expect | fingerprint |
 |---|---|---|
 | `transaction-left-open-after-a-backward-clock-step.schedule` | violation | `bcfa5492766b3941` |
-| `transaction-left-open-after-a-restart.schedule` | violation | `0aa2f73c75dcea55` twice |
+| `transaction-left-open-after-a-restart.schedule` | violation | `c26c630a0f1df04e` twice |
 | `aborted-transaction-messages-stay-hidden.schedule` | ok; with `--set client=release` a violation | `811b19bbb54fcf71`; `8cf005d04d8a1961` with the release client |
 
 ## What was found
@@ -235,17 +235,57 @@ code, so no native run was made.
 
 ### 3. New: after a restart, an open transaction waits for a transactional client
 
-On the final image `disk=cut | run C=34` fails twice the same way (`fp=0aa2f73c75dcea55`):
+On the final image `disk=cut | run C=35` fails twice the same way (`fp=c26c630a0f1df04e`, once
+from a fresh checkout of `main` at `3bac22f8` with hydo built there):
 
 ```text
-VIOLATION [no_open_transaction] not satisfied 203.21s after heal, deadline 180s (last check rc=2: no partition's transaction buffer answered)
+VIOLATION [no_open_transaction] not satisfied 184.99s after heal, deadline 180s (last check rc=1: 2 of 3 partitions hold back their messages behind an open transaction)
+  t-partition-0: 1 open transactions, reads end at 67:10
+  t-partition-2: 1 open transactions, reads end at 82:0
+VIOLATION [pulsar.no-loss] m57.1 was acknowledged to process 57 at 138.980 s and never delivered in group f of channel t, which was drained
+VIOLATION [txn] 1 of 14 transactions not all or nothing: 1 committed, 0 aborted, 0 unknown
+  x59 committed, delivered a=false b=false
 ```
 
-There command 54's client left its transaction open at about 137 s, and the cut came before
-step 34, inside the transaction's timeout. In that recovery boot no partition answered for its
-transaction buffer, and the drain did not finish either (its `final:` exited with status 1, so
-`no-loss` was undecided); why the partitions did not serve at all was not traced, on a host
-loaded by two other VMs. On the image before the 180 s deadline (`3ff0fec1…`, deadline 90 s),
+There command 54's client left its transaction open at 136.96 s, with `m54.a` at `84:0`
+(partition 2) and `m54.b` at `67:11` (partition 0). The cut came before step 35, about 5 s
+later and inside the transaction's timeout. After the recovery boot the plain message `m57.1`
+(`67:13`, acknowledged at 138.98 s) was never delivered. Neither were both messages of the
+committed transaction `x59` (`84:3` and `84:4`, its commit acknowledged at 141.51 s). Each stands
+behind the open transaction's entry on its partition. The cuts before steps 30 and 32 left it
+open too (`fp=64f7f37dc52cfe4c` and `60c4ae0fa4861169`).
+
+In a `hydo inspect` session after that run's checks, 211 s after the recovery boot started:
+- `coordinatorStats` answered 500 on both brokers with `Transaction coordinator not found!
+  coordinator id : 0`, and `transactionMetadata/1/11` answered 404 with `Transaction
+  coordinator with id 1 not found!`;
+- the open transaction is `(1,11)`: the entry `67:11` has `X-Pulsar-txnid-most-bits: 1`,
+  `X-Pulsar-txnid-least-bits: 11` and `X-Pulsar-txn-uncommitted: true`, and
+  `transactionInBufferStats` of partitions 0 and 2 gave `{"startPosition":"67:11","aborted":false}`
+  and `{"startPosition":"84:0","aborted":false}`;
+- each partition's transaction buffer was `Ready`, with `ongoingTxnSize` 1 and
+  `maxReadPosition` `67:10` and `82:0`; its recovery had ended 107 s before the coordinators'
+  recovery below;
+- the cursors of `s`, `f` and `a` read at `67:11` and `84:0`, and the last entries were `67:18`
+  and `84:5`;
+- `/bin/pulsarc provision`, which begins and aborts one transaction, took 1.5 s. Then
+  `coordinatorStats` answered 200, with every coordinator `Ready` and recovered in that second.
+  `transactionMetadata/1/11` said `not found`, and `transactionInBufferStats` said
+  `{"aborted":true}`. `ongoingTxnSize` was 0 on both partitions, and a drain read `s` and `f` of
+  partition 0 to its last entry.
+
+A second session gave the same answers.
+
+The cut before step 34, the regression of M356, fails otherwise (`fp=0aa2f73c75dcea55` twice):
+`no_open_transaction` ends with `rc=2: no partition's transaction buffer answered`, and the
+drain does not finish. In that recovery boot bookie2's AutoRecovery stopped 23 s after its start.
+Its auditor's bookie check failed with `KeeperException$BadVersionException` for
+`/ledgers/underreplication/ledgers/0000/0000/0000/0027/urL0000000039`, so
+`AutoRecoveryDeathWatcher` ended the whole bookie with exit status 0. The example's `restart:
+on-failure` does not restart a process that exits 0. With two bookies the brokers cannot create
+a ledger of ensemble 3 (`Not enough non-faulty bookies available`). So no partition loaded:
+each partition's transaction buffer answered 404, and every consumer was refused. Why the
+auditor met another version of the znode was not traced. On the image before the 180 s deadline (`3ff0fec1…`, deadline 90 s),
 the same schedule gave `VIOLATION [no_open_transaction] not satisfied 94.15s after heal ...
 (last check rc=1: 1 of 3 partitions hold back their messages behind an open transaction)`
 (`fp=3408de439ffd0c0d`). On the image before the check, the blind seed 52
@@ -288,7 +328,7 @@ to that coordinator. In the runs that client never came. Without the cut the nex
 command reconnects to the coordinators, which is why kills of the brokers alone did not show it.
 The check `eventually_no_open_transaction` asks each partition's transaction buffer for open
 transactions after the heal; it judges the wait also when no acknowledged message is behind the
-open transaction, as at `disk=cut | run C=34`. With the cut before step 37 (after the
+open transaction. With the cut before step 37 (after the
 transaction's timeout) the check held 94.78 s after the heal on the image with the deadline of
 90 s: a recovery boot loads every partition anew, so the deadline is 180 s now.
 

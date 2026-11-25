@@ -1113,7 +1113,7 @@ judge it. Nothing was posted:
   shows the bug.
 - New: a broker loads a transaction coordinator only when a transactional client connects to it.
   After a power cut, a transaction that a crashed client left open stays open until such a client
-  comes. Until then its partitions deliver nothing sent after it (`disk=cut | run C=34`).
+  comes. Until then its partitions deliver nothing sent after it (`disk=cut | run C=35`).
 - New, a clock effect: the coordinator times a transaction out on the wall clock
   (`TransactionTimeoutTrackerImpl`). After a step back inside such a transaction's timeout, it
   stays open for the step's length (`disk=none | run T=32:-600`).
@@ -3773,6 +3773,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - `journalSyncData=false` lost nothing in three power cuts, also 5 ms after an acknowledged
       send, and why the entry survived was not traced. The journal's sync interval with that
       setting is measured on the wall clock, and no run stepped the clock with it.
+    - At `disk=cut | run C=34` bookie2's AutoRecovery stops in the recovery boot on a
+      `BadVersionException` of an under-replication znode, and BookKeeper ends the whole bookie
+      with exit status 0. The example's `restart: on-failure` does not restart it, and with two
+      bookies no ledger of ensemble 3 can be created. Why the znode had another version was not
+      traced, and whether a bookie should exit 0 there was not judged.
     - The recovery boot runs only the drain and the checks, so it runs no transactional client.
       Finding 3 needs just that; a project whose clients come back after a crash would meet it
       only when they all stay away.
