@@ -4791,6 +4791,16 @@
               "type": "null"
             }
           ]
+        },
+        "params": {
+          "description": "The build parameters the regression needs, name -> value (a file's `# params: k=v`;\nadded in Milestone 355). `hydo repro --regressions` runs it only on an image built with\nthese values, and says which image to build otherwise.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Text"
+          }
         }
       },
       "additionalProperties": false,

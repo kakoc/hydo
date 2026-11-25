@@ -2347,6 +2347,11 @@ pub struct TestRegression {
     pub saved_schedule: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
+    /// The build parameters the regression needs, name -> value (a file's `# params: k=v`;
+    /// added in Milestone 355). `hydo repro --regressions` runs it only on an image built with
+    /// these values, and says which image to build otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub params: Option<IndexMap<String, Text>>,
 }
 
 // ------------------------------------------------------------------ reading

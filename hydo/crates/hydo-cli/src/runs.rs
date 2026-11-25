@@ -1622,6 +1622,38 @@ fn regression_precheck(r: &Value, meta: &Value) -> Option<String> {
     None
 }
 
+/// Milestone 355: why a regression whose `# params: k=v` line names build parameters does not run
+/// on an image built with `built` (its `/etc/hydo/params`): the values it needs, the image's, and
+/// the build that makes its image. None when the image has every value (or the regression names
+/// none).
+pub fn regression_params_differ(r: &Value, built: &[(String, String)]) -> Option<String> {
+    let Value::Object(want) = r.get("params")? else {
+        return None;
+    };
+    let mut other: Vec<String> = Vec::new();
+    for (k, v) in want {
+        let v = py_str(v);
+        match built.iter().find(|(n, _)| n == k) {
+            Some((_, h)) if *h == v => {}
+            Some((_, h)) => other.push(format!("{k}={v} (this image: {k}={h})")),
+            None => other.push(format!("{k}={v} (this image has no parameter {k})")),
+        }
+    }
+    if other.is_empty() {
+        return None;
+    }
+    let sets: Vec<String> = want
+        .iter()
+        .map(|(k, v)| format!("--set {k}={}", py_str(v)))
+        .collect();
+    Some(format!(
+        "it needs the build parameters {}; build its image with `hydo build {}` and run `hydo \
+         repro --regressions` on that image",
+        other.join(", "),
+        sets.join(" ")
+    ))
+}
+
 /// Every saved regression an image carries, replayed from fresh boots into `base/<k>-<name>`, one
 /// result each (`hydo repro --regressions`, `hydo ci run`). Prints a PASS or FAIL line per
 /// regression.
@@ -1629,11 +1661,27 @@ pub fn replay_regressions(ctx: &Ctx, image: &Path, base: &Path) -> Vec<hydo_resu
     let got = image_regressions(image);
     let (meta, regs) = (got.meta, got.regressions);
     let eargs = engine_args(image, None, None, 1);
+    // Milestone 355: the image's build parameters, for a regression's `# params:` line
+    let built: Vec<(String, String)> = hydo_engine::image::embedded_file(image, "etc/hydo/params")
+        .map(|t| hydo_manifest::parse_params_file(&t))
+        .unwrap_or_default();
     let mut out = Vec::new();
     for (k, r) in regs.iter().enumerate() {
         let name = py_str(&r["name"]);
         let sched = py_str(&r["schedule"]);
         let ex = py_str(&r["expect"]);
+        if let Some(why) = regression_params_differ(r, &built) {
+            println!("SKIP  {name}  expect {ex}  not run: {why}\n      {sched}");
+            out.push(hydo_results::CiRegression {
+                name,
+                schedule: sched,
+                expect: ex,
+                as_expected: true,
+                error: Some(format!("not run: {why}")),
+                ..Default::default()
+            });
+            continue;
+        }
         if let Some(e) = regression_precheck(r, &meta) {
             out.push(hydo_results::CiRegression {
                 name,
@@ -1727,10 +1775,24 @@ fn cmd_regressions(ctx: &Ctx, mut args: Vec<String>) -> i32 {
         }
     }
     let bad = got.iter().filter(|r| !r.as_expected).count();
+    // Milestone 355: the regressions of other build parameters, which did not run here
+    let skipped = got
+        .iter()
+        .filter(|r| {
+            r.error
+                .as_deref()
+                .is_some_and(|e| e.starts_with("not run: it needs the build parameters"))
+        })
+        .count();
+    let others = if skipped > 0 {
+        format!(", {skipped} left out: they need other build parameters")
+    } else {
+        String::new()
+    };
     println!(
-        "hydo: {} of {} regressions as expected (consoles under {})",
-        regs.len() - bad,
-        regs.len(),
+        "hydo: {} of {} regressions as expected{others} (consoles under {})",
+        regs.len() - bad - skipped,
+        regs.len() - skipped,
         base.display()
     );
     if bad > 0 {
@@ -1823,6 +1885,30 @@ pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::final_verdict_line;
+
+    /// Milestone 355: a regression that names build parameters runs only on an image built with
+    /// them, and the reason names the build that makes its image.
+    #[test]
+    fn a_regression_of_other_build_parameters_names_its_image() {
+        use super::regression_params_differ;
+        let r = serde_json::json!({"name": "wait", "params": {"mode": "master"}});
+        let master = [("mode".to_string(), "master".to_string())];
+        let wait = [("mode".to_string(), "wait".to_string())];
+        assert_eq!(regression_params_differ(&r, &master), None);
+        assert_eq!(
+            regression_params_differ(&r, &wait).as_deref(),
+            Some(
+                "it needs the build parameters mode=master (this image: mode=wait); build its \
+                 image with `hydo build --set mode=master` and run `hydo repro --regressions` on \
+                 that image"
+            )
+        );
+        assert!(regression_params_differ(&r, &[])
+            .unwrap()
+            .contains("this image has no parameter mode"));
+        let plain = serde_json::json!({"name": "x"});
+        assert_eq!(regression_params_differ(&plain, &wait), None);
+    }
 
     /// `hydo save` from inside the `hydo/` folder writes into its `regressions/`, not into a
     /// nested `hydo/hydo/regressions` (the Valkey onboarding's friction).
