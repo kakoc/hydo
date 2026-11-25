@@ -3148,6 +3148,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       killer end one of its runs; its scripts then held one lock for every VM.
     - Only hvx ran it: not the Mac engine (the images have arm64 builds) and not KVM. No `cf=`
       run, no third replica, and no Distributed table, materialized view, or lightweight update.
+    - The variant `single/` (M357) runs one server. It shows a new candidate after a power cut.
+      A modification of a column that a later change dropped fails for good there. Every later
+      mutation of the part then waits. It ran on hvx only, with hydo 0.5.0.
 
 158. The example `victoriametrics` (M312, tentative number). What is left:
     - The three candidates are not reported upstream. Each cause is plain in the code, so no
@@ -4699,6 +4702,11 @@ build machine, before 2026-10-13.
   renames and deletes reach the disk before it answers. On the Mac engine the new example
   `checkout/hydo-s3-cut.yaml` lost 10 to 13 acknowledged writes at four power cuts without the
   key, and none with it. Opt-in; nothing recorded moved
+- M357 (tentative number): a ClickHouse candidate from an automated onboarding, verified on hvx.
+  After a power cut, a `MODIFY COLUMN` of a column that a later `DROP COLUMN` removed fails for
+  good. Every later mutation of the part waits behind it. The variant
+  `clickhouse/single/` fails `disk=cut | run C=6` and passes with the merge fsync on. Nothing
+  recorded moved
 
 ## Where to look
 

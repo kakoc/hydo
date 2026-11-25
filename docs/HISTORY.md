@@ -21943,3 +21943,23 @@ lists the known keys, which the recorded answers do not have.
 - `durable` stays opt-in. It could be the default of the next fingerprint epoch, keyed on the
   image's epoch as `guest.path` is (Milestone 348).
 - GreptimeDB's example did not run again with `durable: true` and `cut` (open item 171).
+
+## Milestone 357 (tentative number): a ClickHouse mutation of a dropped column after a power cut
+
+Status: done on 2026-11-25. Nothing recorded moved, and the fingerprint epoch stays 6.
+
+A candidate from an automated onboarding of ClickHouse v26.10.6.18 on one server, verified by hand
+on hvx and reduced to the variant `hydo/onboard/examples/clickhouse/single/` (RESULTS.md, section
+"One server: a mutation of a dropped column after a power cut"). A table syncs its inserted parts;
+the workload adds a column, inserts, modifies the column, drops it, and updates the row.
+`disk=none | run` passes. `disk=cut | run C=6` fails twice with `fp=b1992b2c7f5ea453` (hydo 0.5.0,
+an image built at epoch 5): the `MODIFY COLUMN`, the `DROP COLUMN` and the `ALTER UPDATE` stay not
+done with `UNKNOWN_IDENTIFIER`, because the mutated parts were never synced, came back with their
+mutations unfinished, and the table's metadata no longer has the column. With `--set
+merge_fsync=1` the same cut passes. A kill in Docker with the mutated parts removed gave the same
+stuck queue, and `KILL MUTATION` freed it. The cause is in `MutateTask.cpp` (`splitAndModifyMutationCommands`
+keeps a column the table no longer has) and `MutationsInterpreter.cpp`; the closest report,
+#120975, is closed with a fix of a test only. The example's RESULTS.md has the duplicate search.
+
+**What is left.** Open item 157. The variant ran on hvx only, with hydo 0.5.0.
+
