@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: timeout=30
+# Two messages with keys from the seed, each sent with an explicit sequence id from a producer of
+# the name p<id>. A send that fails is sent once more from a new producer of the same name with
+# the same sequence id: producer deduplication must store it once. A send is ok with its ledger
+# and entry, or info when no answer came.
+exec /bin/pulsarc produce "$HYDO_CMD_ID" "$HYDO_SEED"

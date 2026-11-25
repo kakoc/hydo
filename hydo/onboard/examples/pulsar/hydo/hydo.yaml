@@ -1,0 +1,333 @@
+# Apache Pulsar 5.0.1 (BookKeeper 4.18.1, ZooKeeper 3.9.6) in production's shape, as
+# ../docker-compose.yaml runs it: three ZooKeeper servers, three bookies and two brokers, each
+# JVM with a small heap. Every entry goes to 3 bookies and is acknowledged by 2 (ensemble 3,
+# write quorum 3, ack quorum 2), each bookie syncs its journal before it acknowledges, and the
+# brokers deduplicate producers and run transactions. Each ZooKeeper server's data and each
+# bookie's journal and ledgers are on a file system of their own. RESULTS.md has the promises
+# under test and what was found.
+#
+#   sh ../build.sh            # bin/pulsarc-{fix,release}-amd64, the test client (../client)
+#   sh fetch-images.sh        # the image by digest
+#   hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --cluster-faults --storage-faults
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The services below are the importer's,
+# with these changes:
+# - each ZooKeeper server and each bookie keeps its data on a file system of its own (storage:),
+#   the target of L= and G=, instead of a folder on the shared data disk;
+# - readiness: a ZooKeeper server that serves (srvr names its mode), a bookie's port, a broker
+#   that answers /admin/v2/brokers/ready; the importer had none;
+# - zk2 and zk3 start with zk1 (a quorum needs two), the bookies and the brokers together;
+# - only bookie1 runs the cluster's initialization in its setup (conf/init.sh keeps what exists);
+# - the durability settings are build parameters, for `hydo explore --configs`;
+# - the test client pulsarc is in the image (../build.sh).
+format: 1
+name: pulsar
+description: "Apache Pulsar 5.0.1, three ZooKeeper servers, three bookies and two brokers with ensemble 3, write quorum 3 and ack quorum 2: acknowledged publishes stay and reach every subscription once stored, deduplication stores each message once, a failover subscription keeps each key's order, an acknowledged message is not delivered again, and transactions are all or nothing, under kills, pauses past the session timeouts, partitions, one node's power loss or damaged files, power cuts and clock steps"
+hydo_version: "0.5"
+
+params:
+  ackquorum: "2"   # managedLedgerDefaultAckQuorum of both brokers: 2 (durable, the docs' advice for 3 copies) | 1 | 3
+  jsync: "true"    # journalSyncData of every bookie: true (the default) | false
+  client: fix      # the test client: fix (pulsar-client-go with pull request 1499) | release (v0.21.0, finding 1)
+
+configs:
+  ackquorum:
+    values: ["2", "1", "3"]
+    service: [broker1, broker2]
+    doc: "https://pulsar.apache.org/docs/next/reference-configuration/#managedledgerdefaultackquorum"
+    tradeoff:
+      "1": "an entry is acknowledged when one bookie has it: a loss of that bookie before the others got the entry loses an acknowledged message (concepts-architecture, Ack quorum)"
+  jsync:
+    values: ["true", "false"]
+    service: [bookie1, bookie2, bookie3]
+    doc: "https://bookkeeper.apache.org/docs/reference/config#journal-settings"
+    tradeoff:
+      "false": "the journal is written but not synced before the acknowledgement: a power loss of a bookie can lose acknowledged entries (journalSyncData)"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 5120   # 8 JVMs with small heaps (the env below), the page cache and the client
+  clock_start: 1795564800   # 2026-11-25 00:00 UTC, the day of the import
+  clock_after_cut: 60       # the recovery boot continues the clock: ledgers and cursors keep timestamps
+
+data:
+  size_mib: 256   # the shared data disk: the run's own files; the nodes' data are on their own file systems
+  dirs: [vol/zk1, vol/zk2, vol/zk3, vol/bookie1, vol/bookie2, vol/bookie3]
+
+root:
+  files:
+    - {src: ../conf, dst: /etc/hydo/compose/bind/0-conf}
+    - {src: "../bin/pulsarc-{{client}}-amd64", dst: /bin/pulsarc, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 zk1
+      10.89.0.12 zk2
+      10.89.0.13 zk3
+      10.89.0.14 pulsar-init
+      10.89.0.15 bookie1
+      10.89.0.16 bookie2
+      10.89.0.17 bookie3
+      10.89.0.18 broker1
+      10.89.0.19 broker2
+  # the nine services run one image, apachepulsar/pulsar:5.0.1: one unpacked copy in the root,
+  # each service with its own /tmp and mounts
+  share_images: true
+
+# K=zks.primary and the like: the ZooKeeper leader; the broker that owns partition 0 of t
+groups:
+  - name: zks
+    services: [zk1, zk2, zk3]
+    primary: |
+      for z in zk1 zk2 zk3; do
+        printf srvr | nc -w 2 $z 2181 2>/dev/null | grep -q 'Mode: leader' && { echo $z; exit 0; }
+      done
+      exit 1
+  - name: bookies
+    services: [bookie1, bookie2, bookie3]
+  - name: brokers
+    services: [broker1, broker2]
+    primary: |
+      for b in broker1 broker2; do
+        u=$(timeout 4 wget -q -T 3 -O - "http://$b:8080/lookup/v2/topic/persistent/public/default/t-partition-0" 2>/dev/null | sed -n 's/.*"brokerUrl" *: *"pulsar:\/\/\([a-z0-9]*\):.*/\1/p')
+        case $u in broker1|broker2) echo "$u"; exit 0 ;; esac
+      done
+      exit 1
+
+services:
+  # image apachepulsar/pulsar:5.0.1 = docker.io/apachepulsar/pulsar@sha256:4507075d8c11b34629f3a0b41f48e3c659951e601538562ee0c088cd2c737ec0
+  #   linux/amd64: sha256:fb95bc2d73687ef7df3a21f3424a897860926e25303bd3857898ab887ead85c3
+  #   linux/arm64: sha256:5e5a13f0f5c5bd82466a41a12f299b925c1771f5f58781eca61a9d2a20c7b3ef
+  - name: zk1
+    image: {x86_64: images/apachepulsar-pulsar-5.0.1-amd64.docker.tar, arm64: images/apachepulsar-pulsar-5.0.1-arm64-oci}
+    image_ref: "apachepulsar/pulsar:5.0.1"
+    cmd: [sh, /etc/pulsar-hydo/start.sh, zookeeper, "1"]
+    env: &zkenv
+      PULSAR_GC: "-XX:+UseSerialGC -XX:TieredStopAtLevel=1"
+      PULSAR_GC_LOG: "-Xlog:disable"
+      PULSAR_LOG_DIR: "/tmp/logs"
+      PULSAR_MEM: "-Xms64m -Xmx96m -XX:MaxDirectMemorySize=32m"
+    user: "0"
+    port: 2181
+    addr: 10.89.0.11
+    ready: "tcp:2181"   # the port opens before the quorum; zk2 and zk3 wait for the quorum
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/zk1, size_mib: 64}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-conf, dst: /etc/pulsar-hydo}
+      - {src: /data/vol/zk1, dst: /pulsar/data/zookeeper}
+  - name: zk2
+    image: {x86_64: images/apachepulsar-pulsar-5.0.1-amd64.docker.tar, arm64: images/apachepulsar-pulsar-5.0.1-arm64-oci}
+    image_ref: "apachepulsar/pulsar:5.0.1"
+    cmd: [sh, /etc/pulsar-hydo/start.sh, zookeeper, "2"]
+    env: *zkenv
+    user: "0"
+    port: 2181
+    addr: 10.89.0.12
+    start_after: started   # the three servers form the quorum together
+    ready: "printf srvr | nc -w 2 10.89.0.12 2181 | grep -q Mode:"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/zk2, size_mib: 64}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-conf, dst: /etc/pulsar-hydo}
+      - {src: /data/vol/zk2, dst: /pulsar/data/zookeeper}
+  - name: zk3
+    image: {x86_64: images/apachepulsar-pulsar-5.0.1-amd64.docker.tar, arm64: images/apachepulsar-pulsar-5.0.1-arm64-oci}
+    image_ref: "apachepulsar/pulsar:5.0.1"
+    cmd: [sh, /etc/pulsar-hydo/start.sh, zookeeper, "3"]
+    env: *zkenv
+    user: "0"
+    port: 2181
+    addr: 10.89.0.13
+    start_after: started
+    ready: "printf srvr | nc -w 2 10.89.0.13 2181 | grep -q Mode:"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/zk3, size_mib: 64}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-conf, dst: /etc/pulsar-hydo}
+      - {src: /data/vol/zk3, dst: /pulsar/data/zookeeper}
+  # a one-shot job: it idles here, and its command runs in the setup: of bookie1
+  - name: pulsar_init
+    image: {x86_64: images/apachepulsar-pulsar-5.0.1-amd64.docker.tar, arm64: images/apachepulsar-pulsar-5.0.1-arm64-oci}
+    image_ref: "apachepulsar/pulsar:5.0.1"
+    entrypoint: [/.hydo/busybox, sleep, "2147483647"]
+    env:
+      PULSAR_GC: "-XX:+UseSerialGC -XX:TieredStopAtLevel=1"
+      PULSAR_GC_LOG: "-Xlog:disable"
+      PULSAR_LOG_DIR: "/tmp/logs"
+      PULSAR_MEM: "-Xmx96m"
+    user: "0"
+    addr: 10.89.0.14
+    depends_on: [zk1, zk2, zk3]
+    start_after: started
+    ready: "true"
+    recovery: false
+    restart: "no"
+    job: true   # a one-shot job: never a fault target (MANIFEST.md "One-shot jobs")
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-conf, dst: /etc/pulsar-hydo}
+  - name: bookie1
+    image: {x86_64: images/apachepulsar-pulsar-5.0.1-amd64.docker.tar, arm64: images/apachepulsar-pulsar-5.0.1-arm64-oci}
+    image_ref: "apachepulsar/pulsar:5.0.1"
+    cmd: [sh, /etc/pulsar-hydo/start.sh, bookie, "1"]
+    env: &bkenv
+      PULSAR_GC: "-XX:+UseSerialGC -XX:TieredStopAtLevel=1"
+      PULSAR_GC_LOG: "-Xlog:disable"
+      PULSAR_LOG_DIR: "/tmp/logs"
+      BOOKIE_MEM: "-Xms128m -Xmx192m -XX:MaxDirectMemorySize=160m"
+      JOURNAL_SYNC_DATA: "{{jsync}}"
+    user: "0"
+    port: 3181
+    addr: 10.89.0.15
+    depends_on: [pulsar_init]
+    setup: "[ -f /tmp/hydo/job.pulsar_init.done ] || { hydo-oci pulsar_init sh /etc/pulsar-hydo/init.sh && : > /tmp/hydo/job.pulsar_init.done; }"
+    ready: "tcp:3181"
+    ready_timeout: 300
+    restart: "on-failure"
+    storage: {dir: vol/bookie1, size_mib: 384}   # journal/ and ledgers/
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-conf, dst: /etc/pulsar-hydo}
+      - {src: /data/vol/bookie1, dst: /pulsar/data/bookkeeper}
+  - name: bookie2
+    image: {x86_64: images/apachepulsar-pulsar-5.0.1-amd64.docker.tar, arm64: images/apachepulsar-pulsar-5.0.1-arm64-oci}
+    image_ref: "apachepulsar/pulsar:5.0.1"
+    cmd: [sh, /etc/pulsar-hydo/start.sh, bookie, "2"]
+    env: *bkenv
+    user: "0"
+    port: 3181
+    addr: 10.89.0.16
+    depends_on: [bookie1]
+    start_after: started
+    ready: "tcp:3181"
+    ready_timeout: 300
+    restart: "on-failure"
+    storage: {dir: vol/bookie2, size_mib: 384}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-conf, dst: /etc/pulsar-hydo}
+      - {src: /data/vol/bookie2, dst: /pulsar/data/bookkeeper}
+  - name: bookie3
+    image: {x86_64: images/apachepulsar-pulsar-5.0.1-amd64.docker.tar, arm64: images/apachepulsar-pulsar-5.0.1-arm64-oci}
+    image_ref: "apachepulsar/pulsar:5.0.1"
+    cmd: [sh, /etc/pulsar-hydo/start.sh, bookie, "3"]
+    env: *bkenv
+    user: "0"
+    port: 3181
+    addr: 10.89.0.17
+    depends_on: [bookie2]
+    start_after: started
+    ready: "tcp:3181"
+    ready_timeout: 300
+    restart: "on-failure"
+    storage: {dir: vol/bookie3, size_mib: 384}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-conf, dst: /etc/pulsar-hydo}
+      - {src: /data/vol/bookie3, dst: /pulsar/data/bookkeeper}
+  - name: broker1
+    image: {x86_64: images/apachepulsar-pulsar-5.0.1-amd64.docker.tar, arm64: images/apachepulsar-pulsar-5.0.1-arm64-oci}
+    image_ref: "apachepulsar/pulsar:5.0.1"
+    cmd: [sh, /etc/pulsar-hydo/start.sh, broker, "1"]
+    env: &brenv
+      PULSAR_GC: "-XX:+UseSerialGC -XX:TieredStopAtLevel=1"
+      PULSAR_GC_LOG: "-Xlog:disable"
+      PULSAR_LOG_DIR: "/tmp/logs"
+      PULSAR_MEM: "-Xms192m -Xmx320m -XX:MaxDirectMemorySize=192m"
+      ACK_QUORUM: "{{ackquorum}}"
+    user: "0"
+    port: 6650
+    addr: 10.89.0.18
+    depends_on: [bookie3]
+    start_after: started
+    ready: "timeout 5 wget -q -T 4 -O - http://10.89.0.18:8080/admin/v2/brokers/ready 2>/dev/null | grep -q ok"
+    ready_timeout: 300
+    restart: "on-failure"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-conf, dst: /etc/pulsar-hydo}
+  - name: broker2
+    image: {x86_64: images/apachepulsar-pulsar-5.0.1-amd64.docker.tar, arm64: images/apachepulsar-pulsar-5.0.1-arm64-oci}
+    image_ref: "apachepulsar/pulsar:5.0.1"
+    cmd: [sh, /etc/pulsar-hydo/start.sh, broker, "2"]
+    env: *brenv
+    user: "0"
+    port: 6650
+    addr: 10.89.0.19
+    depends_on: [bookie3]
+    start_after: started
+    ready: "timeout 5 wget -q -T 4 -O - http://10.89.0.19:8080/admin/v2/brokers/ready 2>/dev/null | grep -q ok"
+    ready_timeout: 300
+    restart: "on-failure"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-conf, dst: /etc/pulsar-hydo}
+
+# the topic t (3 partitions) and the subscriptions s, f and a, before the window under test
+provision: /bin/pulsarc provision
+
+# 40 rounds of 1 s with up to 2 commands each: about 50 commands, whose records fit hvx's 64 KiB
+# of console per boot. A pause past ZooKeeper's session timeout (30 s) needs most of the workload.
+workload:
+  steps: 40
+  timeout: 300    # also the drain's limit: it gives up after 230 s
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 1000
+  command_timeout: 120   # final_txn drains the subscription a: up to 100 s
+  drain_timeout: 45
+
+checks:
+  - id: pulsar
+    type: messages
+    history: p
+    msg: what Pulsar promises its producers and subscriptions
+    final: /bin/pulsarc drain
+    acknowledgement: explicit       # every consumer acknowledges with the broker's answer
+    claims:
+      delivery: at-least-once       # every acknowledged publish is delivered (no-loss)
+      duplicates: forbidden         # deduplication: a message is stored once (one ledger and entry)
+      fan_out: every-group          # s and f each receive every message
+      # after_ack: no-redelivery breaks at every crash of a broker, by design: an acknowledgement's
+      # receipt does not keep the message from coming again (RESULTS.md, "By design")
+      after_ack: allowed
+  - id: order
+    type: messages
+    history: o
+    msg: the failover subscription delivers each key's messages in the order they were published
+    acknowledgement: explicit       # the drain of the check pulsar writes f's records here too
+    claims:
+      order: {kind: fifo, scope: key}
+
+faults: [kill, pause, network, oneway, cut, clock, corrupt, powerloss]

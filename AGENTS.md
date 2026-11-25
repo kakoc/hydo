@@ -1095,6 +1095,31 @@ node. Two new candidates, not posted:
   W=740c6cfa,p1,q3,r500`).
 
 Open item 179 has what is left.
+**Apache Pulsar (M356, tentative number).** Pulsar 5.0.1 runs in one hvx guest of 5,120 MiB in
+`hydo/onboard/examples/pulsar` (RESULTS.md), with BookKeeper 4.18.1 and ZooKeeper 3.9.6 inside.
+It was imported with `hydo compose` in the shape of Pulsar's own multi-node Compose file. Three
+ZooKeeper servers, three bookies and two brokers run, each JVM with a small heap. Every entry goes
+to 3 bookies and is acknowledged by 2, and each bookie syncs its journal. The brokers deduplicate
+producers and run transactions. Each ZooKeeper server's and each bookie's data is on a file
+system of its own. A Go client on pulsar-client-go produces with explicit sequence ids and sends a
+message again after a crash. It consumes a shared and a failover subscription with the broker's
+receipts, unloads partitions, and runs transactions; it leaves 1 in 8 open, as a crashed client
+does. A messages check, an all-or-nothing check and an `eventually_` check of the transactions
+judge it. Nothing was posted:
+- Known (pulsar-client-go#1498, pull request 1499 open): with v0.21.0 every message of an aborted
+  transaction is delivered. The client puts the transaction's id into the send command, not into
+  the message's metadata, and the dispatcher filters by the metadata. It failed the first run
+  without faults. The example runs the client of pull request 1499, and `--set client=release`
+  shows the bug.
+- New: a broker loads a transaction coordinator only when a transactional client connects to it.
+  After a power cut, a transaction that a crashed client left open stays open until such a client
+  comes. Until then its partitions deliver nothing sent after it (`disk=cut | run C=34`).
+- New, a clock effect: the coordinator times a transaction out on the wall clock
+  (`TransactionTimeoutTrackerImpl`). After a step back inside such a transaction's timeout, it
+  stays open for the step's length (`disk=none | run T=32:-600`).
+
+An acknowledgement with the broker's receipt can come back after a broker crashes, by design and
+as the client's documentation says (open item 181).
 
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
@@ -3724,6 +3749,37 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - `hydo-manifest`'s and `hydo-build`'s equivalence tests fail on 58 and 57 recorded answers
       (open item 165 lists their causes); none of the mismatches names a regression's key.
 
+181. What the example `pulsar` left (M356, tentative number):
+    - No finding is posted. Finding 1 is pulsar-client-go#1498, with the approved pull request
+      1499 open. The example builds its client from that pull request's head, a fork 14 commits
+      behind v0.21.0. Findings 2 and 3 (the coordinator's timeouts) are new as far as the search
+      found.
+    - hvx keeps 64 KiB of the guest's console per boot. A run that wrote more printed no
+      warning, although MANIFEST.md says that `hydo run` warns. The first workload's records
+      were cut off, and the claims were undecided with a message about the drain.
+    - `hydo explore` reads a check's claims without the build's parameters, so a claim cannot be
+      a parameter (as open item 140 for `faults:`). `kill-workload/<name>` finds no process of
+      a composed workload's commands.
+    - A process has one operation in flight. So the acknowledgement inside a transaction needs a
+      process number of its own, and the claims judge it as a plain acknowledgement. The idea
+      "Transactions across messages" of `docs/USE-CASES.md` would judge a transaction whole.
+    - `hydo rules scan --kind writes` lists the 256 routes of the administrator's API. It lists
+      none of the binary protocol's operations: produce, acknowledge, and transactions.
+    - The explorations cannot leave clock steps out without a copy of the manifest. Every step
+      back near an open transaction fails with finding 2, and the shrinker spent 27 runs on the
+      first such failure. For the same reason the configs exploration was stopped after its
+      first combination. `journalSyncData=false` ran in directed runs only, and the ack quorums
+      1 and 3 did not run.
+    - `journalSyncData=false` lost nothing in three power cuts, also 5 ms after an acknowledged
+      send, and why the entry survived was not traced. The journal's sync interval with that
+      setting is measured on the wall clock, and no run stepped the clock with it.
+    - The recovery boot runs only the drain and the checks, so it runs no transactional client.
+      Finding 3 needs just that; a project whose clients come back after a crash would meet it
+      only when they all stay away.
+    - Not run: KVM and the Mac engine (the image has an arm64 build), several vCPUs, a proxy, geo
+      replication, Key_Shared subscriptions, and the newer load manager. Also not run: the new
+      transaction coordinator of scalable topics, tiered storage, and the Java client. The
+      redelivery after a broker crash is by design and is not checked (`after_ack: allowed`).
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -4826,6 +4882,12 @@ build machine, before 2026-10-13.
   Kvrocks's finding 2. The write scan reads command tables (142 Kvrocks commands). A failed
   restart after `L=` quotes the log. A regression names its build parameters (`# params:`), and
   `powerloss-<svc>` is a reaction. Nothing recorded moved
+- M356 (tentative number): the onboarding of Apache Pulsar 5.0.1 on hvx: three ZooKeeper servers,
+  three bookies, and two brokers. Deduplication and transactions are on. With pulsar-client-go
+  v0.21.0 an aborted transaction's messages are delivered (known, pulsar-client-go#1498). The
+  transaction coordinator has two new bugs. After a restart, a transaction that a crashed client
+  left open waits for a transactional client. After a clock step back it waits the step's length.
+  Meanwhile its partitions deliver nothing after it. Nothing recorded moved
 - M357 (tentative number): a ClickHouse candidate from an automated onboarding, verified on hvx.
   After a power cut, a `MODIFY COLUMN` of a column that a later `DROP COLUMN` removed fails for
   good. Every later mutation of the part waits behind it. The variant

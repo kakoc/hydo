@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo-msg: every transaction is all or nothing: a committed one has both of its messages, an aborted one neither
+# The subscription a, which nothing else reads, from the start until it is empty: a committed
+# transaction must have both messages, an aborted one neither, one without a known outcome both
+# or neither. Exit 2 when the brokers give no quiet window.
+exec /bin/pulsarc txncheck

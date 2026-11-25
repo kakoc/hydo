@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo: timeout=30
+# An operator's write of the admin API (PUT .../unload, from hydo rules scan --kind writes): one
+# partition of t, chosen by the seed, is unloaded, so its broker hands it over while producers
+# and consumers use it.
+exec /bin/pulsarc unload "$HYDO_CMD_ID" "$HYDO_SEED"

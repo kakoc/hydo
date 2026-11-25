@@ -1,0 +1,79 @@
+# Apache Pulsar 5.0.1 in production's shape, scaled down in memory: three ZooKeeper servers, three
+# BookKeeper bookies and two brokers, as Pulsar's own multi-node Compose file deploys a cluster
+# (docker-compose/kitchen-sink/docker-compose.yml of the Pulsar repository), without its proxy,
+# functions worker and websocket. Each ZooKeeper server and each bookie keeps its data in a volume
+# of its own. Every entry is written to 3 bookies and acknowledged by 2 (ensemble 3, write quorum
+# 3, ack quorum 2), and each bookie syncs its journal before it acknowledges (journalSyncData).
+# The brokers deduplicate producers and run the transaction coordinator. conf/ holds the keys that
+# change from the image's own configuration files.
+x-pulsar: &pulsar
+  image: apachepulsar/pulsar:5.0.1
+  user: "0"
+  restart: on-failure
+  volumes:
+    - ./conf:/etc/pulsar-hydo:ro
+x-env: &env
+  PULSAR_GC: -XX:+UseSerialGC -XX:TieredStopAtLevel=1
+  PULSAR_GC_LOG: -Xlog:disable
+  PULSAR_LOG_DIR: /tmp/logs
+
+services:
+  zk1:
+    <<: *pulsar
+    command: sh /etc/pulsar-hydo/start.sh zookeeper 1
+    environment: {<<: *env, PULSAR_MEM: -Xms64m -Xmx96m -XX:MaxDirectMemorySize=32m}
+    volumes: [./conf:/etc/pulsar-hydo:ro, zk1:/pulsar/data/zookeeper]
+  zk2:
+    <<: *pulsar
+    command: sh /etc/pulsar-hydo/start.sh zookeeper 2
+    environment: {<<: *env, PULSAR_MEM: -Xms64m -Xmx96m -XX:MaxDirectMemorySize=32m}
+    volumes: [./conf:/etc/pulsar-hydo:ro, zk2:/pulsar/data/zookeeper]
+  zk3:
+    <<: *pulsar
+    command: sh /etc/pulsar-hydo/start.sh zookeeper 3
+    environment: {<<: *env, PULSAR_MEM: -Xms64m -Xmx96m -XX:MaxDirectMemorySize=32m}
+    volumes: [./conf:/etc/pulsar-hydo:ro, zk3:/pulsar/data/zookeeper]
+  pulsar-init:
+    <<: *pulsar
+    restart: "no"
+    command: sh /etc/pulsar-hydo/init.sh
+    environment: {<<: *env, PULSAR_MEM: -Xmx96m}
+    depends_on: [zk1, zk2, zk3]
+  bookie1:
+    <<: *pulsar
+    command: sh /etc/pulsar-hydo/start.sh bookie 1
+    environment: {<<: *env, BOOKIE_MEM: -Xms128m -Xmx192m -XX:MaxDirectMemorySize=160m, JOURNAL_SYNC_DATA: "true"}
+    volumes: [./conf:/etc/pulsar-hydo:ro, bookie1:/pulsar/data/bookkeeper]
+    depends_on:
+      pulsar-init: {condition: service_completed_successfully}
+  bookie2:
+    <<: *pulsar
+    command: sh /etc/pulsar-hydo/start.sh bookie 2
+    environment: {<<: *env, BOOKIE_MEM: -Xms128m -Xmx192m -XX:MaxDirectMemorySize=160m, JOURNAL_SYNC_DATA: "true"}
+    volumes: [./conf:/etc/pulsar-hydo:ro, bookie2:/pulsar/data/bookkeeper]
+    depends_on: [bookie1]
+  bookie3:
+    <<: *pulsar
+    command: sh /etc/pulsar-hydo/start.sh bookie 3
+    environment: {<<: *env, BOOKIE_MEM: -Xms128m -Xmx192m -XX:MaxDirectMemorySize=160m, JOURNAL_SYNC_DATA: "true"}
+    volumes: [./conf:/etc/pulsar-hydo:ro, bookie3:/pulsar/data/bookkeeper]
+    depends_on: [bookie2]
+  broker1:
+    <<: *pulsar
+    command: sh /etc/pulsar-hydo/start.sh broker 1
+    environment: {<<: *env, PULSAR_MEM: -Xms192m -Xmx320m -XX:MaxDirectMemorySize=192m, ACK_QUORUM: "2"}
+    depends_on: [bookie3]
+    ports: ["6650:6650", "8080:8080"]
+  broker2:
+    <<: *pulsar
+    command: sh /etc/pulsar-hydo/start.sh broker 2
+    environment: {<<: *env, PULSAR_MEM: -Xms192m -Xmx320m -XX:MaxDirectMemorySize=192m, ACK_QUORUM: "2"}
+    depends_on: [bookie3]
+
+volumes:
+  zk1: {}
+  zk2: {}
+  zk3: {}
+  bookie1: {}
+  bookie2: {}
+  bookie3: {}

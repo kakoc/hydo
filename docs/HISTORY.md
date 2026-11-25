@@ -22211,6 +22211,120 @@ checkout, as every build of this worktree has; they do not touch these parts.
 
 **What is left.** Open item 180.
 
+## Milestone 356 (tentative number): Apache Pulsar, its transactions, and a timeout on the wall clock
+
+The onboarding of Apache Pulsar 5.0.1 (2026-10-26, the newest release, with BookKeeper 4.18.1 and
+ZooKeeper 3.9.6) on hvx, 2026-11-25, by `docs/ONBOARDING-PLAYBOOK.md`, with this tree's hydo
+(0.5.0 and Milestones 340 to 354, the fingerprint epoch 6) in a copy of the 0.5.0 Linux release's
+guest files. The example is `hydo/onboard/examples/pulsar`; its RESULTS.md has the evidence. One
+known bug of the official Go client and one new clock effect of the transaction coordinator.
+Nothing was posted. Nothing recorded moved.
+
+**The example.** `hydo/onboard/examples/pulsar` (RESULTS.md) runs production's shape as Pulsar's
+own multi-node Compose file (`docker-compose/kitchen-sink`) deploys it: three ZooKeeper servers,
+three bookies and two brokers, each JVM with a small heap, the serial collector and the first JIT
+tier, in one hvx guest of 5,120 MiB. `hydo compose` imported the example's Compose file. Each
+ZooKeeper server's data and each bookie's journal and ledgers are on a file system of their own;
+the configuration is the image's own files with the keys of `conf/` set (`conf/pconf.sh`):
+ensemble 3, write quorum 3, ack quorum 2, `journalSyncData=true`, deduplication and transactions
+on, and ledgers that roll over after 100 entries. The build parameters `ackquorum`, `jsync` and
+`client` choose the settings and the client. The client `pulsarc` (`client/main.go`, on
+pulsar-client-go) produces two messages per command with explicit sequence ids and sends a
+message again after its process ended, consumes a shared subscription and a failover one with
+the broker's receipts, unloads partitions through the admin API, and runs transactions with a
+message acknowledged inside; 1 transaction in 8 is left open, as a crashed client does. A
+`type: messages` check (no loss, one stored copy, every subscription), a second one for each
+key's order on the failover subscription, a final check that each transaction is all or
+nothing, and an `eventually_` check that no partition keeps an open transaction after the heal
+judge it. Two clean runs on the final image (`16f3c0f9…`) give one fingerprint, `811b19bbb54fcf71`.
+
+**Finding 1, known.** With pulsar-client-go v0.21.0 every message of an aborted transaction is
+delivered. The client puts the transaction's id into `CommandSend` only
+(`pulsar/internal/batch_builder.go` lines 233 to 236, `commands.go` lines 357 to 360), and the
+broker's dispatcher drops an aborted message by the id in its metadata
+(`AbstractBaseDispatcher.java` lines 188 to 209). It broke the first run without faults.
+pulsar-client-go#1498 names it, and pull request 1499 (approved, open) fixes it; the example
+builds its default client from that pull request's head (`client/go.fix.mod`). With
+`--set client=release`, `disk=none | run` fails on every run (`fp=8cf005d04d8a1961`).
+
+**Finding 2, new, a clock effect.** The coordinator times a transaction out on the wall clock:
+`TransactionTimeoutTrackerImpl` reads `Clock.systemUTC()` (line 55) for the deadline and for the
+check (lines 65, 112 to 119). After a step back inside the timeout of a transaction that its
+client left open, the transaction stays open for the step's length, and its partitions hold back
+every later message for every subscription (`TopicTransactionBuffer`'s max read position).
+`disk=none | run T=32:-600` left 18 acknowledged messages undelivered and showed a committed
+transaction with one of its two messages; on the final image it breaks the open-transaction
+check (`fp=bcfa5492766b3941`). A step before the transaction began or after its timeout
+passes. Blind at e1's seed 4 (a step back of 30 days) and in two schedules of e2.
+
+**Finding 3, new.** A broker opens a transaction coordinator's store and starts its timeouts only
+when a client connects to that coordinator (`TransactionMetadataStoreService.handleTcClientConnect`,
+lines 109 to 145, from `ServerCnx.handleTcClientConnectRequest`). After a power cut of the whole
+guest the recovery boot runs no transactional client, so a transaction that a crashed client
+left open before the cut is never aborted, and its partitions deliver nothing after it: a
+committed transaction showed one of its two messages. `coordinatorStats` answered 500 on both
+brokers; one transactional client in that state loaded the coordinators and the transaction was
+aborted at once. `disk=cut dseed=0 | run C=16 W=adbbc231,p4,q1,r500` gave a committed transaction with one of
+its two messages; on the final image `disk=cut | run C=34` breaks the open-transaction check
+twice (`fp=0aa2f73c75dcea55`). Blind as e3's
+seeds 51 and 52 and e2's problem 4, with and without its clock step.
+
+**By design and the environment.** An acknowledgement with the broker's receipt can come back
+after a broker crashes: the broker writes a subscription's position at most once a second
+(`ManagedCursorImpl`, the mark-delete rate limit) and the Java client's `isAckReceiptEnabled`
+documentation says so; `after_ack: no-redelivery` broke at the first power cut on a copy of the
+manifest (`fp=42acd95fa46b424f`), and the check claims `after_ack: allowed`. A damaged file of a
+ZooKeeper server (six schedules) or 32 flipped bits of a bookie's file (one) stop that server at
+every start.
+
+**What held.** No acknowledged publish was lost, deduplication stored every message once, and
+the failover subscription kept each key's order, through kills, pauses past ZooKeeper's session
+timeout, partitions and one-way loss of nodes and groups, one node's power loss or damaged
+files, power cuts at steps and at disk flushes, 15 power cuts aimed 0 to 40 ms after an
+acknowledged send, an acknowledgement or a transaction's end, and the clock steps that came
+near no open transaction. `journalSyncData=false` lost nothing in three power cuts, also 5 ms
+after an acknowledged send; why was not traced.
+
+**Explorations.** 84 blind schedules on one worker of 5,120 MiB, on the images before the
+final check: e1 (process, cluster faults, seeds 1-5, stopped in its shrink of finding 2), e2
+(process with cluster, storage and more faults, seeds 6-40), cf1 (`--configs --configs-mode
+one`, its default combination only, stopped), e4 (`--reactive-at` power cuts 0 to 40 ms after
+three events, 15 schedules, none failed), e3 (swarm with new faults, seeds 46-56, stopped by a
+memory guard), and e5 (seeds 76-87, three failures of the first version of the open-transaction
+check). About 50 directed runs separated the faults and checked the settings.
+
+**hydo.** No code of hydo changed. The guide's strategies have the Pulsar evidence in five
+entries and the first table. `docs/USE-CASES.md` names the transaction checks under
+"Transactions across messages". The new example enters the explorer's and the controller's
+corpora: their goldens are re-recorded with `HYDO_BLESS=1` in a copy of the tree without git on
+the bare-metal machine, and checked there.
+
+Retro: Apache Pulsar 5.0.1, hvx, 2026-11-25
+- Time to the first clean run: 1 hour 10 minutes of wall time (scouting 30 minutes, the build
+  of this tree's hydo on the bare-metal machine 5 minutes, the import and the folder 35 minutes);
+  the first run without faults found finding 1.
+- Schedules run before the first finding: none; finding 1 broke the first run without faults.
+  Finding 2 came from reading the coordinator after the clock audit, then blind at e1's seed 4.
+  Finding 3 came blind in e2 and e3. No failure was a mistake of the rules after the console
+  records were made short.
+- The findings: 2 new (the coordinator after a restart; the timeout on the wall clock, a clock
+  effect), 1 known (the Go client's aborted messages), 1 by design (acknowledgements after a
+  broker crash), and the environment (damaged files of ZooKeeper and of one bookie).
+- What took the most time: hvx's 64 KiB of console, which cut the first records off without a
+  warning (40 minutes); the shrinks of clock steps and the explorations' memory on the shared
+  machine (about an hour of stopped or wasted runs); finding 3's cause, which needed three
+  inspections of the end state (40 minutes).
+- What hydo lacked: no warning when the console passes 64 KiB on hvx; a claim cannot be a
+  build parameter for `hydo explore`; `kill-workload/` does not reach a composed workload; one
+  operation per process also when the history is the only reason; the write-route scan sees
+  no binary protocol. Open item 181.
+- Strategies: "How each unknown outcome ends" (a client that leaves transactions open, and the
+  check that each one ends), "Clock steps and the clock audit" (finding 2), "Power cuts of the
+  whole guest" (finding 3), and "The messages check's claims" (`after_ack` by design, and the
+  order claim on a failover subscription) are updated, and the first table names Pulsar.
+
+**What is left.** Open item 181.
+
 ## Milestone 357 (tentative number): a ClickHouse mutation of a dropped column after a power cut
 
 Status: done on 2026-11-25. Nothing recorded moved, and the fingerprint epoch stays 6.

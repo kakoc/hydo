@@ -1,0 +1,11 @@
+# New as far as the search found (RESULTS.md, finding 3). In the default composition command
+# 54's client leaves its transaction open at about 137 s of uptime, as a crashed client does. The
+# power cut before step 34 restarts every broker within the transaction's timeout. A broker loads
+# a transaction coordinator, and starts its timeouts, only when a client connects to it
+# (TransactionMetadataStoreService.handleTcClientConnect). The recovery boot runs no
+# transactional client, so the open transaction is never aborted, and its partition delivers
+# nothing stored after it: eventually_no_open_transaction finds it open 180 s after the heal.
+# The blind finds were e3's seeds 51 and 52; seed 52 shrinks by hand to
+# disk=cut dseed=0 | run C=16 W=adbbc231,p4,q1,r500 on the image before the check.
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run C=34

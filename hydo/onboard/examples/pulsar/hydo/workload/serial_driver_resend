@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=30
+# The producer r, one process at a time: first the message whose send got no answer in the
+# command before (with its sequence id, as a client that restarts sends it again), then a new one.
+exec /bin/pulsarc resend "$HYDO_CMD_ID" "$HYDO_SEED"
