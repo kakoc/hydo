@@ -678,23 +678,24 @@ none moves a recorded value:
 The proofs ran on the Mac engine; the details are in `docs/HISTORY.md` Milestone 355 (open item
 180).
 
-**The features of `main` since 0.5.0 on hvx (M358, tentative number).** hvx ran, with this tree's
-programs over the 0.5.0 release's guest files, the features that had run on the Mac engine and
-KVM only. Each held, with one fingerprint over two runs:
+**The features of `main` since 0.5.0 on hvx and KVM (M358, tentative number).** hvx and KVM (run
+45612798752, Intel and AMD hosts) ran, with this tree's programs over the 0.5.0 release's guest
+files, the features that had run on the Mac engine only. Each held, with one fingerprint over two
+runs per engine and host:
 - the epoch-6 Redis quickstart's `C=12` (the list's values) with the first boot's outcomes in
   the recovery boot, and `PATH` in every command, which a Go program used to run `hydo-oci`;
-- `ERROR agent lines full check` after 35 s, where the 0.5.0 engine waited 900 s;
-- `durable: true` of the s3 emulator at `C=`, `A=s3.acked` and `cf=` cuts, and 8 to 13 lost
-  writes without it;
+- on hvx, `ERROR agent lines full check` after 35 s, where the 0.5.0 engine waited 900 s;
+- `durable: true` of the s3 emulator at `C=`, `A=s3.acked` and (on hvx) `cf=` cuts, and 8 to 13
+  lost writes without it;
 - the note of a reaction that never fired, `powerloss-<svc>`, `# params:` with `hydo repro
   --regressions`, and the diagnosis after one service's power loss;
 - Meilisearch's `acked_outcome`, its `HYDO-CMD-OUT` notes and command logs, and the refusals.
 
 The aimed grid at Meilisearch's index deletion found nothing in the default 0 to 50 ms on hvx.
 It found the deletion that runs twice at 112 to 116 ms (`kill`) and the creation that runs twice
-from 192 ms (`kill-now`). No first run counted as a vacuous pass. One fix: a hydo built in a
-checkout started the release's `hydo-hvx` under sudo; it now takes the one built next to it.
-The workflow `tmp-m358-kvm` for KVM is ready and did not run. The details are in
+from 192 ms (`kill-now`). On KVM the creation ran twice at 4 to 8 ms (`kill-now`) and 10 to 11
+ms (`kill`). No first run counted as a vacuous pass. One fix: a hydo built in a checkout started
+the release's `hydo-hvx` under sudo; it now takes the one built next to it. The details are in
 `docs/HISTORY.md` Milestone 358 (open item 182).
 
 **Each image service's own `/tmp` (M331, tentative number; fingerprint epoch 5).** An image
@@ -2560,8 +2561,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     and conditional routes ran in a VM on hvx and on the Mac engine (`checkout/hydo-s3.yaml`).
     So the s3 emulator ran on the Mac too. KVM ran them too, on Xeon 6975P-C hosts. Since M354
     `durable: true` keeps the s3 emulator's acknowledged writes across a power cut, on the Mac
-    engine and since M358 on hvx, also at `cf=` cuts after 20 to 800 flushes; KVM did not run
-    it. A multipart upload that is not completed and the user
+    engine and since M358 on hvx (also at `cf=` cuts after 20 to 800 flushes) and on KVM (an
+    Intel and an AMD host). A multipart upload that is not completed and the user
     metadata that rclone keeps in memory are still lost, and `durable` is opt-in.
 117. The clock audit (M248, M350). It reads text, so a reading that passes through an interface
     with several implementations, a channel or a queue is not followed. Its schedules place the
@@ -3595,7 +3596,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       M345 and M348 stopped with status 5 before any run there, and on hvx. On hvx
       `--reactive-at meili.delete_index_acked` found nothing in the default 0 to 50 ms; the
       windows sit at 112 to 116 ms (`kill`) and from 192 ms (`kill-now`). So a grid with the
-      default delays can miss an engine's window, and nothing says so.
+      default delays can miss an engine's window, and nothing says so. On KVM (M358, two AMD
+      hosts) the epoch-6 image ran the creation twice at 4 to 8 ms and 10 to 11 ms.
     - A window after an event sits at other delays on each engine. On KVM the saved
       regressions `swap-runs-twice-after-a-kill` (`+14`) and
       `index-deletion-runs-twice-after-a-kill` (`+13`) pass, and the failing cells of the grids
@@ -3621,11 +3623,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       table, no list of what held, and no statistics. The error lines of new kinds are the first
       round's, with the rounds that wrote any. The accept keys are each round's.
 174. The claim `acked_outcome` (M346, tentative number). What is left:
-    - It ran on the Mac engine, on KVM (M352, three Intel runners, no AMD host), and on hvx
-      (M358). On KVM and hvx it held over 173 tasks without faults. It broke on the deletion's
-      effect at `A=meili.delete_index_acked+6:kill-now-meilisearch` on KVM and at
-      `+112:kill-meilisearch` on hvx, which the aimed grids found; each schedule gave one
-      fingerprint in two runs. The Garage example (M349) declares it too.
+    - It ran on the Mac engine, on KVM (M352 on three Intel runners, M358 on two AMD runners),
+      and on hvx (M358). On KVM and hvx it held over 173 tasks without faults. It broke on the
+      deletion's effect at `A=meili.delete_index_acked+6:kill-now-meilisearch` on KVM (an image
+      of epoch 5) and at `+112:kill-meilisearch` on hvx, which the aimed grids found; each
+      schedule gave one fingerprint in two runs. On KVM's epoch-6 image the grid found only the
+      creation that runs twice. The Garage example (M349) declares it too.
     - The read-back must wait for the system's pending work itself. A task still pending at the
       read is `s=info` and breaks the claim, so a read-back that stops too early reports a
       false loss.
@@ -3639,8 +3642,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       status's commit; the kill reactions of `--kill-now` reach it by chance.
     - Since M350 a claim with nothing to judge beside a claim of its check that judged
       operations is no vacuous pass. No exploration of Garage ran again to show its count of
-      vacuous passes fall from 48. On hvx (M358) the aimed Meilisearch grids had none in 388
-      passing first runs, where KVM counted 94 of 102 before the fix.
+      vacuous passes fall from 48. In M358 the aimed Meilisearch grids had none in 388
+      passing first runs on hvx and 95 on each of two KVM hosts, where KVM counted 94 of 102
+      before the fix.
 175. The write routes (M344, tentative number; `docs/design/rule-suggestion.md`, "The write
     routes"). What is left:
     - It reads text. A route that a program builds at run time, or registers through a function of
@@ -3670,9 +3674,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       registers each command with a call without a flag argument, and subcommands under their
       parent's name. `hydo rules check` and the skill did not use such a list yet.
 176. Five gaps of recent onboardings (M348, tentative number). What is left:
-    - `guest.path` is on for an image built at the fingerprint epoch 6 (M353). On hvx (M358) a
-      Go program in a check ran `exec.Command("hydo-oci", ...)` in the redis-oci example and found
-      `/bin/hydo-oci`. The Prometheus client of open item 170 did not run again.
+    - `guest.path` is on for an image built at the fingerprint epoch 6 (M353). On hvx and KVM
+      (M358) a Go program in a check ran `exec.Command("hydo-oci", ...)` in the redis-oci example
+      and found `/bin/hydo-oci`. The Prometheus client of open item 170 did not run again.
     - A failed composed command's `HYDO-CMD-OUT` note is in `one.log` only: `result.json` keeps
       the lines of a violation (exit 100), not of another exit status. A plain `workload.run`'s
       output reaches the run directory only through the diagnosis replay, which `hydo run`
@@ -3738,8 +3742,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The proofs ran on the Mac engine and in the scripted tests. Since M358 hvx ran four of the
       seven on a copy of the Redis quickstart and on Meilisearch: the note of a reaction that
       never fired, `powerloss-<svc>`, `# params:` with `hydo repro --regressions`, and the
-      diagnosis after one service's power loss. KVM ran none; the workflow `tmp-m358-kvm` is
-      ready.
+      diagnosis after one service's power loss. KVM ran the same four (run 45612798752, an Intel
+      and an AMD host).
     - Kvrocks itself did not run again: its branch is not on `main`. Its finding 1 with one node's
       power loss (`A=kvrocks.failover_done+<ms>:powerloss-kv2`) and its regressions with
       `# params:` are still to write there.
@@ -3752,11 +3756,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - `hydo-manifest`'s and `hydo-build`'s equivalence tests fail on 58 and 57 recorded answers
       (open item 165 lists their causes); none of the mismatches names a regression's key.
 182. The features of `main` since 0.5.0 on hvx and KVM (M358, tentative number). What is left:
-    - KVM ran none of M358's parts. The workflow `.github/workflows/tmp-m358-kvm.yml` and its
-      script are on the branch `tmp-m358-kvm` (on `d1931461`), ready to push. It runs the
-      epoch-6 outcomes, `guest.path` with a Go program, the note of an unfired reaction,
-      `powerloss-<svc>`, `# params:`, `durable: true`, and Meilisearch's notes and vacuous passes,
-      each part on two hosts.
+    - KVM ran each part on two hosts (run 45612798752). No Intel host ran the Meilisearch part,
+      and the two `durable: true` jobs had runners with other Go versions, so other `s3probe`
+      bytes. The branch `tmp-m358-kvm` can be deleted.
     - Since M358 a hydo built in a checkout starts the `hydo-hvx` next to it. A checkout where
       only `hydo` was built still starts the release's or the install cache's engine, without a
       word. `hydo doctor` checks the release's `bin/hydo-hvx`, and the default that
@@ -4883,10 +4885,10 @@ build machine, before 2026-10-13.
   others got new schedules: the nats turn boundary, both symptoms of etcd issue 14685, the KVM
   Redis power cut (`C=11 R=everysec`), and Qdrant's KVM pause (179 ms). No Mac verdict changed. The pinned
   reproducers' epoch-6 images are in `~/hydo/build/rel060`. Open item 105 is empty
-- M358 (tentative number): the features of `main` since 0.5.0 on hvx; the KVM workflow is ready
-  and did not run. On hvx the epoch-6 outcomes reached the recovery boot, a Go program ran `hydo-oci` by
-  name, a full buffer of agent lines ended its run in 35 s, and `durable: true` kept every
-  acknowledged s3 write across `C=`, `A=` and `cf=` cuts. The note of an unfired reaction,
+- M358 (tentative number): the features of `main` since 0.5.0 on hvx and KVM (Intel and AMD
+  runners). The epoch-6 outcomes reached the recovery boot, a Go program ran `hydo-oci` by name,
+  and `durable: true` kept every acknowledged s3 write across `C=` and `A=` cuts, and on hvx
+  `cf=` cuts. On hvx a full buffer of agent lines ended its run in 35 s. The note of an unfired reaction,
   `powerloss-<svc>`, `# params:` and the aimed Meilisearch grid held, with no vacuous pass. One
   fix: a checkout's hydo ran the release's hvx engine. Nothing recorded moved
 

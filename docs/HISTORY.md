@@ -22324,9 +22324,8 @@ empty.
 
 ## Milestone 358 (tentative number): the features of `main` since 0.5.0 on hvx and KVM
 
-Status: hvx done on 2026-11-25; the KVM workflow is ready and did not run yet. One fix, of the
-hvx engine that a checkout's hydo starts. Nothing recorded moved, and the fingerprint epoch
-stays 6.
+Status: done on 2026-11-25 on hvx and KVM. One fix, of the hvx engine that a checkout's hydo
+starts. Nothing recorded moved, and the fingerprint epoch stays 6.
 
 Milestones 345 to 355 ran on the Mac engine, and Milestone 352 ran 345, 346 and 348 on KVM. This
 milestone runs them on hvx and on KVM, as Milestone 341 did for 0.5.0. It records what held and
@@ -22340,9 +22339,9 @@ fixes what was wrong.
   VM ran through `hvx-run` under umask 022, one at a time, with one explorer worker. The module
   stayed `91D86B693F4D4035C368F9B`.
 - KVM: the workflow `.github/workflows/tmp-m358-kvm.yml` on the branch `tmp-m358-kvm` (commits
-  `f12dd2db` and `d524d18a`, on `d1931461`). Eight jobs run four parts, `redis`, `oci`, `s3` and
-  `meili`, on two hosts each. Each job builds the branch's `hydo` and takes the 0.5.0 release's
-  guest files and its `examples/redis`.
+  `f12dd2db` and `d524d18a`, on `d1931461`), run 45612798752 on GitHub's runners. Eight jobs ran
+  four parts, `redis`, `oci`, `s3` and `meili`, on two hosts each. Each job built the branch's
+  `hydo` and took the 0.5.0 release's guest files and its `examples/redis`.
 - One script, `.github/workflows/tmp-m358-kvm.sh` on that branch, makes the projects and runs
   each schedule twice on both engines. A pair with two fingerprints, or a run without a result,
   fails its part. The Go programs were built on this Mac for hvx; the jobs build them with the
@@ -22534,17 +22533,75 @@ its own reason: the grid and the random reactions do not go together. `--strateg
 
 ### KVM
 
-The workflow is on the branch `tmp-m358-kvm`, ready for the lead to push. It did not run while
-this milestone was written, so no KVM value is recorded here.
+Run 45612798752 ran the eight jobs, and each passed its part. Every job's log and artifact was
+read: no job logged an error or a warning, each summary ends with `bad=0`, and each schedule gave
+one fingerprint over its two runs. The hosts:
+
+| Part | Host 1 | Host 2 |
+|---|---|---|
+| `redis` | Intel Xeon 6973P-C | AMD EPYC 9V74 |
+| `oci` | Intel Xeon Platinum 8573C | AMD EPYC 9V45 |
+| `s3` | Intel Xeon 6975P-C | AMD EPYC 7763 |
+| `meili` | AMD EPYC 9V45 | AMD EPYC 9V74 |
+
+A KVM fingerprint holds for one CPU vendor (open item 102), so the table below gives both. The
+`ctl` values of one image agree between the vendors.
+
+| Schedule | Verdict | Intel | AMD |
+|---|---|---|---|
+| quickstart `disk=none \| run` | OK, `acked=20` | `903c9107987de10b` | `b222402de473ea1b` |
+| quickstart `disk=cut \| run C=12` | OK, `acked=12` | `c0c2c033358e8a0d` | `03ff0b2cb2ea75a0` |
+| `r355` `disk=none \| run` | OK | `0b71c7d8aa6c3c43` | `beef7cef727fd01d` |
+| `r355` `A=client.step3_acked@10:kill-redis` | OK, with the warning | `1d9004eef5162dbe` | `4d738b9bdf72a409` |
+| `r355` `A=client.step3_acked+50:kill-redis` | OK, `acked=20` | `343a75ba0d853bc9` | `493903e4242c6413` |
+| `r355` `A=client.step3_acked+50:powerloss-redis` | OK, `acked=20` | `0d59607b4ca0719f` | `2b8e33f4de7689c6` |
+| `r355` `L=redis@5+2` (`refuse=yes`) | `ERROR redis restart failed (after its power loss)` | `2dd5e462eab2e2b8` | `b712df2a2750296d` |
+| `redis-oci-path` `disk=none \| run` | OK | `bcf97666725f15fd` | `611abf4129919fb3` |
+| `redis-oci-path` `K=redis@5+2` | OK, `acked=18` | `5678e1060236c505` | `a59d6d6a665d47c6` |
+
+- **The epoch 6.** The quickstart's image is `8fae6946…`, as on hvx, and the AMD values are the
+  list's KVM values. The recovery boot of `C=12` wrote the lines `0 ack` to `11 ack` into
+  `/tmp/hydo/outcomes` on both hosts, and the commands carry `PATH`.
+- **`guest.path`.** The `pathprobe` of the runner's Go 1.26.11 found `/bin/hydo-oci` and got
+  `PONG` in every run, on the image `c97c6107…`.
+- **Milestone 355.** The images of `r355` are hvx's `5bee04f5…` and `78c48827…`. The warning of
+  the reaction that never fired, the power loss at the reaction, the exploration's
+  `unfired_reactions: 3`, the two power-loss cells, and the diagnosis that quotes Redis's log
+  came out as on hvx. On KVM all 20 writes were acknowledged with the kill and with the power
+  loss 50 ms after step 3's record, where hvx acknowledged 7, so on KVM both came after the
+  client's last write. `hydo repro --regressions` gave `PASS`
+  and `SKIP` on the image of `refuse=no`, and two `PASS` on the image of `refuse=yes` (Intel
+  `705fa7bd98a3c115` and `f06f0081717d70c5`, AMD `87dcc1e5601af54b` and `67c22db37a0221a4`).
+- **`durable: true`.** The two jobs' runners had Go 1.24.13 and Go 1.26.11, so their `s3probe`
+  and images differ (`789b7b0c…` and `7c6387fb…` with the attribute). The verdicts are the same
+  on both hosts. With the attribute every schedule held with every acknowledged write: 19
+  without faults, 14 at `C=3`, 19 at `C=4`, 10 at `A=s3.acked@2+5:cut`, and 15 at
+  `A=s3.acked@3:cut`. Without it the cuts lost 10 of 14, 13 of 19, 10 of 12, and 11 of 15 writes,
+  the Mac's numbers of Milestone 354. KVM has no `cf=`.
+- **Meilisearch.** Both jobs built `3994a902…`, hvx's image; the client built by the example's
+  `build.sh` (Go 1.27.3) is `a6138b92…`, the Mac's bytes. Both AMD hosts gave the same values.
+  `disk=none | run` held with `queue.acked-outcome` over 173 tasks (`c6ce990069a27eeb`). The
+  reaction at the 40th swap never fired and gave the warning, with the clean run's fingerprint.
+  The power loss at `A=meili.add_acked@10+20` held (`7a10a0ac68ffcf1b`), with 126 failed
+  commands and 10 `HYDO-CMD-OUT` notes in `one.log`. Where hvx lost an addition's payload, KVM's
+  power loss came at another moment.
+- **The aimed grid at the index deletion** (`0..50` ms, `kill-now,kill`) ran in 761 s and 821 s.
+  7 of 102 first runs failed, each again with its own fingerprint: `kill-now-meilisearch` 4 to 8
+  ms and `kill-meilisearch` 10 and 11 ms after the deletion's acknowledgement. Each ran the
+  creation of `x4` twice (`mkidx.4 ... ended failed with index_already_exists`). The deletion's
+  own effect, which M352 found at 6 and 8 ms on an image built at epoch 5, did not come. The
+  explorer shrank seed 9 to itself, `disk=none dseed=0 | run
+  A=meili.delete_index_acked+4:kill-now-meilisearch`, and `hydo run` gave `2a7b8c891134964d`
+  twice. `hydo inspect diagnose --evidence` wrote four command logs. No passing first run of the
+  95 counts as a vacuous pass, where M352 counted 94 of 102.
 
 ### What did not run, and what is left
 
-- KVM ran none of the parts: the epoch-6 outcomes, `guest.path` with `pathprobe`, the note of a
-  reaction that never fired, `powerloss-<svc>`, `# params:`, the s3 emulator's `durable: true`,
-  and Meilisearch's `HYDO-CMD-OUT` notes and vacuous passes after Milestone 350.
+- No Intel host ran the Meilisearch part, and no AMD host ran `durable: true` with the same
+  `s3probe` as an Intel host.
 - A window after an event sits at other delays on each engine (open item 173). On hvx the
   default delays of `--reactive-at`, 0 to 50 ms, missed the deletion's window, which starts at
-  112 ms.
+  112 ms. On KVM the epoch-6 image showed only the creation that runs twice.
 - The saved Meilisearch regressions (`+13` and `+14`) did not run on hvx.
 - Open item 182 has what is left of the fix.
 
