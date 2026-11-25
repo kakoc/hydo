@@ -386,6 +386,23 @@ fn check_token(plan: &Plan, t: &GuestToken) -> Result<(), String> {
             | ReactAction::KillNow(svc)
             | ReactAction::Stop(svc, _)
             | ReactAction::Cont(svc) => service(plan, t, svc),
+            // Milestone 355: one service's power loss needs its own file system, as L= does
+            ReactAction::PowerLoss(svc) => {
+                service(plan, t, svc)?;
+                if plan.storage_of(svc).is_some_and(|s| s.part.is_some()) {
+                    return Ok(());
+                }
+                Err(format!(
+                    "{t} cuts the power of the service {svc}, whose storage: has no file system \
+                     of its own (give it storage: {{dir:, size_mib:}}; services with one: {})",
+                    list(
+                        plan.storage
+                            .iter()
+                            .filter(|s| s.part.is_some())
+                            .map(|s| s.svc.clone())
+                    )
+                ))
+            }
         },
         // Milestone 258: a walk needs a workload that walks
         GuestToken::Walk(_) if plan.walk => Ok(()),

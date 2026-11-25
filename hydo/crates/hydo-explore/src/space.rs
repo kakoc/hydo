@@ -794,6 +794,12 @@ impl Space {
             "stop" | "cont" => {
                 self.has_fault("pause") && a.svc().is_some_and(|v| self.svcs.iter().any(|x| x == v))
             }
+            // Milestone 355: one service's power loss, where L= may go
+            "powerloss" => {
+                self.has_fault("powerloss")
+                    && a.svc()
+                        .is_some_and(|v| self.storage_svcs.iter().any(|x| x == v))
+            }
             _ => false,
         });
         // single upper-case keys other than K N C P T O F H: knobs only when the manifest has the

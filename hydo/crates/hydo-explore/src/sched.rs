@@ -120,6 +120,10 @@ impl Ra {
         if let Some(s) = self.action.strip_prefix("kill-now-") {
             return Some(s);
         }
+        // Milestone 355: `powerloss-<svc>`
+        if let Some(s) = self.action.strip_prefix("powerloss-") {
+            return Some(s);
+        }
         let mut it = self.action.split('-');
         it.next();
         it.next()

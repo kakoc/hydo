@@ -1319,6 +1319,7 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
                 ReactAction::KillNow(s) => {
                     format!("kills {} at that moment, before it runs on", code(s))
                 }
+                ReactAction::PowerLoss(s) => format!("cuts the power of {}", code(s)),
                 ReactAction::Stop(s, n) => format!("pauses {} for {}", code(s), ms(*n)),
                 ReactAction::Cont(s) => format!("lets {} continue", code(s)),
                 ReactAction::Clock(d) if *d < 0 => {
@@ -1349,6 +1350,10 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
                 ReactAction::Kill(s) | ReactAction::KillNow(s) => {
                     ("crashes", format!("after {} was killed", code(s)))
                 }
+                ReactAction::PowerLoss(s) => (
+                    "power losses",
+                    format!("after {} lost its power", code(s)),
+                ),
                 ReactAction::Stop(s, _) => ("pauses", format!("while {} was paused", code(s))),
                 ReactAction::Cont(s) => ("pauses", format!("after {} continued", code(s))),
                 ReactAction::Clock(_) => ("clock jumps", "after a clock jump".to_string()),

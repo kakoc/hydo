@@ -209,7 +209,9 @@ fn a_reaction_acts_where_its_event_is_seen_and_replays() {
                             )
                         }
                         // Milestone 305: its own test below
-                        ReactAction::KillNow(_) => unreachable!("not in SCHEDULES"),
+                        ReactAction::KillNow(_) | ReactAction::PowerLoss(_) => {
+                            unreachable!("not in SCHEDULES")
+                        }
                         ReactAction::Cut => {
                             // the main sequence freezes the workload and every service at once
                             let ending = ran.run.fin.ending.as_ref().unwrap();

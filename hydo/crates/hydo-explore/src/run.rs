@@ -871,8 +871,19 @@ fn aim_setup(cx: &mut Cx) {
         });
         ex.render(&s).contains(&format!("A=x:{act}"))
     };
-    let actions = crate::aim::actions(a.react_actions.as_deref(), &cx.ex.pause_svcs, &keep)
-        .unwrap_or_else(|e| fail(e));
+    let storage: Vec<String> = cx
+        .ex
+        .space
+        .as_ref()
+        .map(|sp| sp.storage_svcs.clone())
+        .unwrap_or_default();
+    let actions = crate::aim::actions(
+        a.react_actions.as_deref(),
+        &cx.ex.pause_svcs,
+        &storage,
+        &keep,
+    )
+    .unwrap_or_else(|e| fail(e));
     let aim = crate::aim::Aim {
         events,
         delays,

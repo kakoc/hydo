@@ -3098,7 +3098,12 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         let (t, id, msg) = storage::CORRUPT_DECL;
         fx.report(decl(t, id, msg));
     }
-    if cfg.l.is_some() {
+    // Milestone 355: a reaction's power loss of one service reports the same record
+    let react_loss = cfg
+        .a
+        .iter()
+        .any(|r| matches!(r.action, hydo_schedule::ReactAction::PowerLoss(_)));
+    if cfg.l.is_some() || react_loss {
         let (t, id, msg) = storage::POWER_LOSS_DECL;
         fx.report(decl(t, id, msg));
     }
@@ -3400,7 +3405,8 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         }
         if p == lat {
             fx.until(|h, _| !h.starting.contains(&lsvc))?;
-            (ldown, lcut) = storage::power_loss(fx, ctx, &lsvc, p, lstrict)?;
+            (ldown, lcut) =
+                storage::power_loss(fx, ctx, &lsvc, &format!("before step {p}"), lstrict)?;
         }
         if let (true, Some(t)) = (p == zat, &ztarget) {
             let how = cfg.z.as_ref().map(|z| z.3.clone()).expect("G= read");

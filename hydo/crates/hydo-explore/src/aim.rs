@@ -249,14 +249,16 @@ pub fn parse_delays(v: &str) -> Result<Vec<i64>, String> {
     Ok(out)
 }
 
-/// The actions of `--react-actions`: `kill-now` and `kill` name one action per service, `cut` a
-/// power cut, and any other item is one action as `A=` writes it (`kill-now-db`,
-/// `stop-db-500`). `None`: the default, `kill-now`, `kill` and `cut`, each only where the
+/// The actions of `--react-actions`: `kill-now` and `kill` name one action per service,
+/// `powerloss` one per service with `storage:` (`storage`, Milestone 355), `cut` a power cut, and
+/// any other item is one action as `A=` writes it (`kill-now-db`, `stop-db-500`,
+/// `powerloss-db`). `None`: the default, `kill-now`, `kill` and `cut`, each only where the
 /// manifest's faults and the engine keep it (`keep`). An action given by name that they drop is
 /// an error, so an aimed exploration never runs schedules whose reaction was left out.
 pub fn actions(
     list: Option<&str>,
     svcs: &[String],
+    storage: &[String],
     keep: &dyn Fn(&str) -> bool,
 ) -> Result<Vec<String>, String> {
     let given = list.is_some();
@@ -273,6 +275,7 @@ pub fn actions(
     for it in &items {
         let expanded: Vec<String> = match it.as_str() {
             "kill-now" | "kill" => svcs.iter().map(|v| format!("{it}-{v}")).collect(),
+            "powerloss" => storage.iter().map(|v| format!("powerloss-{v}")).collect(),
             _ => vec![it.clone()],
         };
         for a in expanded {
@@ -380,17 +383,17 @@ mod tests {
         let svcs = vec!["db".to_string(), "api".to_string()];
         let all = |_: &str| true;
         assert_eq!(
-            actions(None, &svcs, &all).unwrap(),
+            actions(None, &svcs, &[], &all).unwrap(),
             ["kill-now-db", "kill-now-api", "kill-db", "kill-api", "cut"]
         );
         let no_cut = |a: &str| a != "cut";
-        assert_eq!(actions(None, &svcs, &no_cut).unwrap().len(), 4);
-        assert!(actions(Some("cut"), &svcs, &no_cut)
+        assert_eq!(actions(None, &svcs, &[], &no_cut).unwrap().len(), 4);
+        assert!(actions(Some("cut"), &svcs, &[], &no_cut)
             .unwrap_err()
             .contains("leaves that reaction out"));
-        assert!(actions(Some("boom"), &svcs, &all).is_err());
+        assert!(actions(Some("boom"), &svcs, &[], &all).is_err());
         assert_eq!(
-            actions(Some("kill-now,stop-db-500"), &svcs, &all).unwrap(),
+            actions(Some("kill-now,stop-db-500"), &svcs, &[], &all).unwrap(),
             ["kill-now-db", "kill-now-api", "stop-db-500"]
         );
     }

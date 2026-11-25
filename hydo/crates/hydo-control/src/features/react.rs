@@ -26,6 +26,10 @@
 //!   cut's path: the workload's client and every service are frozen at once, then the ids are
 //!   read and the recovery boot follows, as for `C=`.
 //!
+//! - `powerloss-<svc>` (Milestone 355): the power loss of one service, as `L=` makes it before a
+//!   step (schedule/storage.rs): its threads stop, its own file system loses what was not
+//!   written back, and it stays down until the heal's restart pass, as after `kill-<svc>`;
+//!
 //! - `kill-now-<svc>` (Milestone 305): SIGKILL the service's tree at the moment the event's record
 //!   is written, before any thread of the service runs again. The kills above act when the host
 //!   has seen the record at a stop and the agent has run, and the service's threads run on until
@@ -43,8 +47,8 @@
 //! byte for byte.
 
 use super::{
-    bb, clock, die_oracle, env, log, run, secs, spawn_cmd, svc_sig, threads, timeout_argv, xassert,
-    Ctx, Facts, Memo, Step, F,
+    bb, clock, die_oracle, env, log, run, secs, spawn_cmd, storage, svc_sig, threads, timeout_argv,
+    xassert, Ctx, Facts, Memo, Step, F,
 };
 use hydo_agent_proto::msg::Sig;
 use hydo_schedule::{React, ReactAction};
@@ -549,6 +553,14 @@ pub(super) fn watch(fx: &mut F<'_>, ctx: &Ctx, i: usize) -> Step<()> {
         }
         ReactAction::KillProcs(t) => {
             threads::kill_procs_now(fx, ctx, t, &format!("reaction A={r}"))?;
+        }
+        ReactAction::PowerLoss(s) => {
+            // Milestone 355: one service's power loss, as L= makes it before a step; the
+            // service stays down until the heal's restart pass, as after kill-<svc>
+            if ctx.plan.service(s).is_some_and(|x| x.restart.restarts()) {
+                fx.until(|h, _| !h.starting.contains(s))?;
+            }
+            storage::power_loss(fx, ctx, s, &format!("at the reaction A={r}"), None)?;
         }
         ReactAction::KillNow(_) => unreachable!("watch_relay acts for it"),
     }

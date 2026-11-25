@@ -573,6 +573,22 @@ Half of its fault reactions are such a kill of any service, and the schedule the
 or `P=` on that service. So a project with one service gets these kills too. A schedule has at
 most one `kill-now-` reaction.
 
+`A=<event>+<ms>:powerloss-<svc>` cuts the power of one service at that moment, as
+`L=<svc>@<step>+<down>` does before a step. What the service had not written back to its own file
+system is lost, and it stays down until the heal, as after `kill-<svc>`. It needs a service with
+`storage: {dir:, size_mib:}`. `--react-actions powerloss` aims a grid at it, one action per
+service with `storage:`:
+
+```sh
+hydo explore --reactive-at kvrocks.failover_done --react-delays 0..20000/500 --react-actions powerloss
+```
+
+A reaction whose event never comes after it is armed does nothing, and the run says so. `hydo
+run` prints `hydo: warning: the reaction <token> never fired: ...` with how many records of its
+event came, `result.json` has the warning, and `hydo report` shows it. An exploration counts
+these runs, and its report says how many runs did not test their reaction. Fix the event's name,
+the step that arms it, or the workload that writes the event.
+
 A reaction can also act inside the workload's own work:
 
 - `clock+<s>` or `clock-<s>` steps the clock by `s` seconds at that moment.

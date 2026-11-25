@@ -361,7 +361,7 @@ fn an_aimed_exploration_tries_every_cell_in_turn() {
     e.aim = Some(aim::Aim {
         events: aim::parse_events("meili.swap_acked@20,meili.edit_acked#2").unwrap(),
         delays: aim::parse_delays("0..50").unwrap(),
-        actions: aim::actions(None, &e.pause_svcs, &keep).unwrap(),
+        actions: aim::actions(None, &e.pause_svcs, &[], &keep).unwrap(),
     });
     let a = e.aim.clone().unwrap();
     assert_eq!(
