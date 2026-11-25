@@ -12,7 +12,9 @@ system. The CI system only runs it, keeps its files and, if you want, posts its 
 3. It builds and explores the base commit's image the same way (a pull request's target).
 4. It replays every finding's minimal schedule on the other commit's image, so each finding gets
    a state that a run proves (the table in section 7).
-5. It replays the saved regressions in `hydo/regressions/`.
+5. It replays the saved regressions in `hydo/regressions/`. A regression whose `# params:` line
+   names other build parameters than the image's is left out, as `hydo repro --regressions`
+   leaves it out (`hydo guide workflow`).
 6. It marks the findings that `hydo/known-findings.yaml` accepts (section 9).
 7. It writes `ci-run.json`, `report.md`, `comment.md` and `junit.xml` into its output
    directory (default `hydo-ci`).
@@ -143,7 +145,8 @@ Every other system uses the same command and files:
 7. Fail the job with `hydo ci run`'s exit status.
 
 Every finding and every saved regression is one test case in `junit.xml`. A finding in a state
-that `fail_on` names is a failed test, and a finding already on the base is a skipped test. The
+that `fail_on` names is a failed test, and a finding already on the base is a skipped test. A
+regression left out for its build parameters is a skipped test, and `report.md` names it. The
 test's text has the minimal schedule and the command that reproduces it.
 
 `hydo ci run` reads the commit, the base, the change number and the job's link from these

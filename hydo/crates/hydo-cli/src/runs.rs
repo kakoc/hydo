@@ -1654,6 +1654,15 @@ pub fn regression_params_differ(r: &Value, built: &[(String, String)]) -> Option
     ))
 }
 
+/// Milestone 360: a regression that [`replay_regressions`] left out, because its `# params:`
+/// line names other build parameters than the image's.
+pub fn left_out(g: &hydo_results::CiRegression) -> bool {
+    g.verdict.is_none()
+        && g.error
+            .as_deref()
+            .is_some_and(|e| e.starts_with("not run: it needs the build parameters"))
+}
+
 /// Every saved regression an image carries, replayed from fresh boots into `base/<k>-<name>`, one
 /// result each (`hydo repro --regressions`, `hydo ci run`). Prints a PASS or FAIL line per
 /// regression.
