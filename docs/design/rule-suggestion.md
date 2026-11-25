@@ -288,6 +288,40 @@ of two words or in capitals in every file, as before. A literal duration of Rust
 that starts with `SystemTime::now()` on one line and goes on over three more, and a Rust tail
 expression is now read from the first line of its chain.
 
+### A project's own wrapper of the clock (Milestone 355)
+
+The Kvrocks onboarding (Milestone 351) found that the audit named no function in Kvrocks 2.17.0,
+although its finding 2 is a wall-clock throttle. Kvrocks reads the clock through its own helper:
+
+```cpp
+template <typename Duration = std::chrono::seconds>
+auto GetTimeStamp() {
+  return std::chrono::duration_cast<Duration>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+inline uint64_t GetTimeStampMS() { return GetTimeStamp<std::chrono::milliseconds>(); }
+```
+
+The audit already followed a small function with a name about time that returns a reading. It
+missed this one for three reasons of C++ text, which it now reads in C and C++ files only:
+
+- A reading starts at its namespaces: `std::chrono::system_clock::now()` and
+  `util::GetTimeStamp()` start where `std::` and `util::` start, so an assignment's right-hand
+  side starts with the reading.
+- A call with template arguments is a call: `GetTimeStamp<std::chrono::milliseconds>()`.
+- A cast of one reading keeps it a reading: `duration_cast<...>(`, `time_point_cast<...>(` and
+  `static_cast<...>(`, when the cast's argument is not a difference.
+
+A function that returns a reading is also no limit any more, so `util::GetTimeStampMS() -
+last_connect_timestamp < 1000` does not name `GetTimeStampMS` as its limit.
+
+On Kvrocks 2.17.0 with the example's `hydo.yaml` the audit names 22 functions in 255 source
+files, where it named none. The fourth is finding 2's place, `src/cluster/replication.cc` line
+670 in `sendReplConfAck` (lines 666 to 682), `high`, with its reading traced to `now =
+util::GetTimeStamp()` and `system_clock::now()`. The third is the reconnect throttle of the same
+file, line 362. The JSON and text reports of Valkey 9.1.3, Temporal 1.32.2, River v0.51.2 and
+Garage v2.5.0, each with its example's `hydo.yaml`, are the same as before, byte for byte, so
+their known places keep their ranks.
+
 ### What the clock audit does not do
 
 - It reads text, so a reading passed through an interface with several implementations, or

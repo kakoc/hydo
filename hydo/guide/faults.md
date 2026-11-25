@@ -341,8 +341,12 @@ The report's head counts what it left out. A place is one of three shapes:
 
 The audit follows a reading through small functions, variables, fields, and parameters. For
 example, Go's `time.Now().UTC()` drops the monotonic reading, so a `Now()` method that returns
-it is a wall-clock reading too. Each place says where its reading comes from, and the limit
-with its value when the code states it.
+it is a wall-clock reading too. A project's own wrapper of the clock counts the same way: in C++
+the audit reads past namespaces and template arguments, and past a cast such as
+`std::chrono::duration_cast<Duration>(system_clock::now().time_since_epoch()).count()`. So
+Kvrocks's `util::GetTimeStamp()` and `GetTimeStampMS()` are readings, and the replica's
+acknowledgement throttle `now - last_ack_time_secs_ >= 1` is a place. Each place says where its
+reading comes from, and the limit with its value when the code states it.
 
 A place is `high` when the code compares the duration with a limit or keeps a lease, and
 `medium` when only its names suggest a deadline. Only `high` places get schedules. A reading
