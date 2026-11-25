@@ -458,6 +458,33 @@ the admin API's operations that the workload's first command calls, such as
 `ConnectClusterNodes` and `ApplyClusterLayout`. The six projects above gave the same JSON as
 before, byte for byte.
 
+### Command tables (Milestone 355)
+
+A Redis-compatible server has no routes: its commands are a table in C or C++, and the Kvrocks
+onboarding (Milestone 351) listed its 143 write commands by hand. The scan reads such a table now,
+by its shape and not by a project's names. An entry is a call or an initializer whose first
+argument is a string that names a command, with an integer argument (the arity) and an argument
+that flags it:
+
+- a flags string of flag words only, such as `"write"`, `"write use-memory @string"` or
+  `"read-only"` (a command's description, which speaks of write commands, is no flags string);
+- flag constants joined with `|`, such as `CMD_WRITE|CMD_DENYOOM` or `CO::WRITE | CO::FAST`.
+
+A file with at least three entries is a table. Each entry flagged as a write is a route with the
+method `CMD` and the command's name as its path. Its handler is the class of the call's template
+argument (`MakeCmdAttr<CommandSet>`), a function argument named for a command (`setCommand`), or
+`.HFUNC(Set)` after the entry. Its resource is the group that the entry names (`@string`,
+`COMMAND_GROUP_LIST`), else the stem of the table's file without `cmd_` or `t_`. A generated
+`.def` table counts, and a C or C++ file counts among the files read only when it holds a table.
+
+On Kvrocks 2.17.0 the scan reads 21 files and lists 142 write commands in 18 resources, 137 `data`
+and 5 `admin` (`FLUSHALL`, `FLUSHDB`, `FLUSHMEMTABLE`, `FLUSHBLOCKCACHE`, `RESTORE`), each with
+its handler's class and line. They are every entry of its tables with a `write` flag. The hand
+count of 143 also took a line of the Cuckoo filter's commands, which are commented out in
+2.17.0. On Valkey 9.1.3, whose table is the generated `src/commands.def`, it lists 118 commands
+with `CMD_WRITE` and their functions. The JSON and text reports of Meilisearch, Iggy,
+Prometheus, GreptimeDB, Hatchet, Memos and Garage are the same as before, byte for byte.
+
 ### What the write scan does not do
 
 - It reads text, so a route that a program builds at run time, or registers through a function
@@ -472,6 +499,9 @@ before, byte for byte.
 - An enumeration of endpoints gives no URL, because the URL comes from the query and the
   headers. A variant that a function of another file chooses, or such a router in another
   language, is not found.
+- A command table is read line by line, so an entry that spans lines is not found, and a
+  subcommand (`CONFIG SET`) is listed under its own name. A table that registers commands
+  through a function call per command, without a flag argument, is not read.
 
 ## What is not built
 

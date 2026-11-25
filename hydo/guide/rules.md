@@ -58,6 +58,7 @@ It reads the project's own sources and description files, as text:
 | RPC methods whose names do not say that they read | `.proto` files with their `google.api.http` mappings |
 | | a Go type that embeds `Unimplemented<Service>Server`, a Rust `impl` of a tonic service |
 | operations | OpenAPI 3 and Swagger 2 files, also through `$ref` files |
+| commands flagged as writes | the command table of a Redis-compatible server in C or C++: an entry that names a command, its arity, and a write flag, such as `MakeCmdAttr<CommandSet>("set", -3, "write", ...)`, `{"set", setCommand, -3, "write ...", ...}`, a generated `MAKE_CMD(..., CMD_WRITE, ...)` table, or `CI{"SET", CO::WRITE, -3, ...}` |
 
 It leaves out test files, the test code inside source files, examples, vendored code, and
 generated code. It also leaves out a `POST` route or an RPC method whose name says that it
@@ -98,6 +99,18 @@ variant. On Garage v2.5.0 the entry of CopyObject, in the resource `object`, rea
   PUT    Endpoint::CopyObject  [data]
          handler handle_copy (src/api/s3/copy.rs:47)
          declared at src/api/s3/router.rs:480: PUT in an enumeration of endpoints; it changes the system's data
+```
+
+A command of a command table has the method `CMD` and the command's name as its path. Its
+resource is the command's group, or the name of its table's file (`cmd_string.cc` gives
+`string`), and its handler is the class or function that the entry names. A command that the
+entry flags as a read (`read-only`, `CMD_READONLY`) is left out, and so is an entry in a comment.
+On Kvrocks 2.17.0 the scan lists 142 write commands in 18 resources; the entry of `SET` reads:
+
+```text
+  CMD    SET  [data]
+         handler CommandSet (src/commands/cmd_string.cc:341)
+         declared at src/commands/cmd_string.cc:890: its command table entry flags it as a write; it changes the system's data (set)
 ```
 
 Give the workload one command for each route of class `data` or `admin`, or say why a route
