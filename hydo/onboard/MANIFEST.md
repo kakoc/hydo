@@ -1047,7 +1047,11 @@ and `size_mib:`), and the manifest's `faults:` must allow `powerloss` for the ex
 action. It runs on the engines where `L=` runs, and the strict form of `L=` has no reaction. For
 example, `A=kvrocks.failover_done+5500:powerloss-kv2` cuts one replica's power 5.5 s after a
 failover, and `hydo explore --reactive-at kvrocks.failover_done --react-actions powerloss` tries
-every delay with a power loss of each service with `storage:`.
+every delay with a power loss of each service with `storage:`. Since Milestone 360 `hydo explore
+--reactive fault` draws it too: a quarter of the fault reactions that `--kill-now` does not take
+are the power loss of a service with `storage:`, from a stream of their own, when `faults:`
+allows `powerloss` (not with `cf=`). A project without such a service draws the schedules it
+drew before.
 
 A reaction acts at the first record of its event after it is armed. `A=<event>#<k>...` (Milestone
 345) acts at the k-th record instead, for example `A=meili.swap_acked#3+12:kill-now-meilisearch`

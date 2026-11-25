@@ -413,3 +413,57 @@ fn an_aimed_exploration_tries_every_cell_in_turn() {
         "A=meili.edit_acked#2:kill-now-meilisearch"
     );
 }
+
+/// Milestone 360: `--reactive` draws a power loss of one service with `storage:`, from a stream
+/// of its own. The schedule of a seed is the one without it but for the action of a taken fault
+/// reaction, and a space without such a service draws exactly as before.
+#[test]
+fn a_fault_reaction_can_take_one_service_s_power() {
+    let sp = hydo_explore::space::Space::from_path(
+        &support::top().join("hydo/onboard/examples/meilisearch/hydo/hydo.yaml"),
+    )
+    .expect("the example loads");
+    assert_eq!(sp.storage_svcs, ["meilisearch"]);
+    let mut e = Ex::default();
+    sp.apply(&mut e);
+    e.react_fault = true;
+    e.react_events = vec!["meili.swap_acked".into()];
+    let mut off = e.clone();
+    if let Some(s) = off.space.as_mut() {
+        s.storage_svcs.clear();
+    }
+    let (mut taken, mut with_a) = (0u64, 0u64);
+    for seed in 1..=1000u64 {
+        let s = e.compose_seed("process", seed, false);
+        let o = off.compose_seed("process", seed, false);
+        assert_eq!(s.a.len(), o.a.len(), "seed {seed}");
+        with_a += u64::from(!s.a.is_empty());
+        for (a, b) in s.a.iter().zip(&o.a) {
+            if a.action == "powerloss-meilisearch" {
+                taken += 1;
+                assert_eq!((&a.event, a.at, a.delay), (&b.event, b.at, b.delay));
+            } else {
+                assert_eq!(a, b, "seed {seed}");
+            }
+        }
+        let (mut sa, mut oa) = (s.clone(), o.clone());
+        sa.a.clear();
+        oa.a.clear();
+        // a reaction's power cut makes the disk `cut`; a taken reaction leaves the disk
+        if s.a.iter().any(|r| r.action.starts_with("powerloss-")) {
+            oa.disk = sa.disk.clone();
+        }
+        assert_eq!(e.render(&sa), e.render(&oa), "seed {seed}");
+        let text = e.render(&s);
+        assert_eq!(
+            Schedule::parse(&text).unwrap().to_string(),
+            text,
+            "canonical"
+        );
+    }
+    eprintln!("{taken} of {with_a} fault reactions took the service's power");
+    assert!(
+        taken * 100 >= with_a * 15 && taken * 100 <= with_a * 35,
+        "{taken} of {with_a}"
+    );
+}
