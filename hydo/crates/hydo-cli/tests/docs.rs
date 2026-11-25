@@ -317,6 +317,35 @@ const CITED_ELSEWHERE: &[(&str, &str)] = &[
         "fp of hvx/release-redis-netem `disk=none | run N=redis@3-6:delay,300ms` at the \
          fingerprint epoch 5 (section 29)",
     ),
+    (
+        "23c3b28038b26115",
+        "the first 16 digits of the release Redis image's sha256 at the fingerprint epoch 5 \
+         (section 29)",
+    ),
+    (
+        "a9374bd83addf933",
+        "the first 16 digits of the release Redis netem image's sha256 at the fingerprint \
+         epoch 5 (section 29)",
+    ),
+    (
+        "d2e4da56c54ce2a1",
+        "fp of kvm/release-redis `disk=none | run` on AMD at the fingerprint epoch 5 (section 29)",
+    ),
+    (
+        "af9a168ee9d9071c",
+        "fp of kvm/release-redis `disk=cut | run C=12 R=everysec` on AMD at the fingerprint \
+         epoch 5 (section 29)",
+    ),
+    (
+        "2c486eb24aedfd7f",
+        "fp of kvm/release-redis `disk=cut | run C=12` on AMD at the fingerprint epoch 5 \
+         (section 29)",
+    ),
+    (
+        "5f02bc6f56c1ca5c",
+        "fp of kvm/release-redis-netem `disk=none | run N=redis@3-6:delay,300ms` on AMD at the \
+         fingerprint epoch 5 (section 29)",
+    ),
 ];
 
 /// Options that the help text does not show because the command hands them to a program of its

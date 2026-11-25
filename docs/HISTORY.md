@@ -21946,7 +21946,8 @@ lists the known keys, which the recorded answers do not have.
 
 ## The 0.6.0 re-recording pass
 
-Status: the hvx part done on 2026-11-25; the KVM and Mac parts wait. No milestone number. The pass
+Status: the hvx part and most of the KVM part done on 2026-11-25. The two Qdrant KVM images and
+the Mac part wait. No milestone number. The pass
 re-records the values of `hydo/onboard/recorded.json` at the fingerprint epoch 6 of Milestone
 353, under the rule "Re-recording runs in batches" (AGENTS.md). It raises no version, builds no
 release, and publishes nothing. docs/REBASELINE.md section 31 has every value and decision.
@@ -21999,9 +22000,27 @@ The quickstarts still cite the values of the published 0.5.0 release. So `tests/
 the seven hvx values of epoch 5 that left the list in `CITED_ELSEWHERE`, with their source.
 0.6.0's release step 6a moves the pages to the epoch-6 values and removes the entries.
 
-**KVM.** The one-off workflow `.github/workflows/tmp-rel060-kvm.yml` on the branch
-`tmp-rel060-kvm` re-records the KVM list with `--write --thorough` on six of GitHub's runners,
-runs the Linux quickstart's KVM section, and runs the Qdrant example's `pause-check.sh` on four
-more. It is committed and waits for the lead's push.
+**KVM.** The bare-metal machine never runs KVM, so the one-off workflow
+`.github/workflows/tmp-rel060-kvm.yml` ran on GitHub's runners (branch `tmp-rel060-kvm`, run
+45517605164, with the published 0.5.0 release's guest files and this tree's programs). Six jobs
+ran `--write --thorough` of the whole KVM list and the Linux quickstart's KVM section. Four more
+jobs ran the Qdrant example's `pause-check.sh`. Two of the ten hosts were AMD EPYC 7763, the
+others Intel Xeon 6975P-C and one Xeon Platinum 8573C. Every job's report and log was read. Each
+rebaseline job built the 6 images twice with the same bytes and ran all 38 runs in about 7
+minutes. Each pause job ran its 131 starts and passed its 5 checks. No job logged a warning or an
+error; each rebaseline exited 1 only for the two verdict changes below.
 
-**The Mac.** Not run: the Mac had 4 GB of free disk, and the pass needs about 15 GB.
+| Verdict change on every host | Decision |
+|---|---|
+| `kvm/release-redis` `disk=cut \| run C=12 R=everysec` passes | the job's `R=everysec` cuts lose `k:1` before 11 of the steps 2 to 19; `C=11 R=everysec`, run twice on the same image, replaces it |
+| `kvm/qdrant-flaky-buggy` `P=workload/tests::wal_reco@0~207:500` passes | `pause-check.sh` found the failing starts 179 and 222 ms of 131; the pauses at 179 ms (fails) and 180 ms (passes) replace 207 and 208 ms, and the fixed test moves to 179 ms |
+
+The list takes the AMD host's values of the release Redis, netem, and stack images. For the
+Redis power cut it takes the quickstart section's `C=11 R=everysec` run. The pinned
+reproducers' epoch-6 images give `96b8fd4017db3274` (VIOLATION, order 11) and `87d6319a26da08c7` (OK) on KVM (AMD). The two Qdrant
+images keep their epoch-5 values until the workflow's second commit `d3803d5c` runs. That commit
+re-records the three images whose entries moved, and it waits for a push. The quickstart's
+exploration on the AMD host gave 15 of 15 reproduced.
+
+**The Mac.** Not run. The Mac had about 4 GB of free disk, and its pass waits for at least 12 GB
+(open item 105).

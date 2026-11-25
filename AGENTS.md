@@ -301,8 +301,9 @@ dry-runs the packages on every pull request that changes one. The details are in
 **Fingerprints.** The fingerprint epoch is 6 (M353; 5 from M317, 4 from M269, 3 from M234, 2
 from M204, 1 from M155). An image built at epoch 6 carries the first boot's outcomes into a
 recovery boot and gives the controller's commands a `PATH` (M353, below). The 0.6.0 pass
-re-recorded the list's hvx values at epoch 6 (docs/REBASELINE.md section 31). Its KVM and Mac
-values are still those of epoch 5 (open item 105). An
+re-recorded the list's hvx values and four of its six KVM images at epoch 6 (docs/REBASELINE.md
+section 31). The two Qdrant KVM images and the Mac values are still those of epoch 5 (open item
+105). An
 image built at epoch 5 has the image services' launchers of M317, which mount the
 system folders once per boot. Since M331 they also give each image service a `/tmp` of its own. On hvx an x86_64 image built at epoch 5 keeps time with its TSC
 (M323, `guest.exact_tick`). The 0.5.0 release's pass re-recorded every value of the list at
@@ -322,13 +323,15 @@ give `e153f376096a072c` and `6a5c2fe208174af3` on hvx and `66da20bdbfafd6d2` and
 `0bcce788f5ef3f4d` on KVM (AMD). Their epoch-5 images (`4b78d7a8…` and `8951cf69…`, in
 `~/hydo/build/rel050`) give `b6e78273b1d21304` and `b531d6bcaa8489b7` on hvx and
 `4b9f52b31c1a58b4` and `8672be7cd62d3d75` on KVM (AMD). Their epoch-6 images (`38f503b1…` and
-`cd7d31c8…`, in `~/hydo/build/rel060`) give `db33d71069816103` and `c421af1ccb714225` on hvx. Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
+`cd7d31c8…`, in `~/hydo/build/rel060`) give `db33d71069816103` and `c421af1ccb714225` on hvx and
+`96b8fd4017db3274` and `87d6319a26da08c7` on KVM (AMD). Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
 `ba0aa0612502a1df` under this hydo, because an image keeps the defaults of its own epoch
 (`hydo_image::defaults`). `hydo/onboard/examples/stack/build-reproducers.sh` rebuilds both
 images. The quickstart's Redis example gives `cce52f9e8565f6e2` (OK) and `8bee301c59ad1b12`
 (`C=12 R=everysec`, `k:1` lost) on hvx, `cc6abeb1ec4e4f29` and `b9a2d62ab3eaf0cb` (`k:0` lost)
 on the Mac, and `d2e4da56c54ce2a1` and `af9a168ee9d9071c` (`k:1` lost) on KVM (AMD), at epoch 5.
-At epoch 6 its image gives `2f5a6dc34e0c8ba6` and `f2715295eae4d5a2` (`k:1` lost) on hvx. Every recorded example value is in `hydo/onboard/recorded.json`, and
+At epoch 6 its image gives `2f5a6dc34e0c8ba6` and `f2715295eae4d5a2` (`k:1` lost) on hvx, and
+`b222402de473ea1b` on KVM (AMD), where `C=11 R=everysec` loses `k:1` (`3e8260560d47b5b0`). Every recorded example value is in `hydo/onboard/recorded.json`, and
 `hydo-bench rebaseline` checks or re-records them (`docs/REBASELINE.md` "How to re-baseline").
 
 **The hvx engine.** The module (`hv/hvx/hvx.c`, ABI `hvx_abi.h`) boots Linux 6.6.35
@@ -2292,7 +2295,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       guest kernels with cgroups). It fails Qdrant's test on the Mac at 11 of 81 starts. On KVM
       with one vCPU it fails it at 1 of 81 starts (239 ms) on four AMD and Intel hosts. At the
       fingerprint epoch 4 it fails it at 1 of 120 starts (208 ms, M302). At epoch 5 it fails it
-      at 1 of 120 (207 ms, the 0.5.0 release). With two vCPUs
+      at 1 of 120 (207 ms, the 0.5.0 release). At epoch 6 it fails it at 2 of 131 starts from
+      179 to 309 ms (179 and 222 ms, on AMD and Intel, the 0.6.0 pass). With two vCPUs
       no start from 390 to 460 ms failed it on KVM: 50 passed and 21 ended in ERROR. A wider
       window was not searched, and the ERROR's cause was not read.
     - On an image built before epoch 5 the timer's freeze script ends the run with an error. This
@@ -2406,8 +2410,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       boot: the controller reports them at the cut and writes them into the recovery boot's
       `$HYDO_OUTCOMES`. A check that read an empty `$HYDO_OUTCOMES` there before can change its verdict. The
       pass decides each verdict change (docs/REBASELINE.md section 30). The 0.6.0 pass
-      re-recorded the 43 hvx images and their 141 runs (docs/REBASELINE.md section 31). The Mac
-      values (21 images, 76 runs) and the KVM values (6 images, 19 runs) still wait for it.
+      re-recorded the 43 hvx images and their 141 runs (docs/REBASELINE.md section 31). It also
+      re-recorded four of the six KVM images with 15 of their 19 runs. Still waiting:
+      - the two Qdrant KVM images (4 runs), whose new pauses at 179 and 180 ms the workflow
+        commit `d3803d5c` on the branch `tmp-rel060-kvm` re-records;
+      - the Mac values (21 images, 76 runs): the Mac had about 4 GB of free disk.
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -4710,8 +4717,9 @@ build machine, before 2026-10-13.
   on hvx. All 43 images and 141 runs moved. Each image built twice the same, and each run gave
   one result twice. Four verdict changes were decided: one accepted (the same class), and new
   schedules for the nats turn boundary and both symptoms of etcd issue 14685. The pinned
-  reproducers' epoch-6 images are in `~/hydo/build/rel060`. The KVM and Mac values wait (open
-  item 105)
+  reproducers' epoch-6 images are in `~/hydo/build/rel060`. On KVM (AMD) four of six images moved
+  with every run; the Redis power cut moves to `C=11 R=everysec`. The two Qdrant KVM images and
+  the Mac values wait (open item 105)
 
 ## Where to look
 

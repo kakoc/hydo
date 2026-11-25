@@ -3968,9 +3968,35 @@ on the pass's images.
 
 The example's RESULTS.md pages of etcd and nats-flaky-8363 have the sweeps.
 
+**KVM** (GitHub's runners, the one-off workflow `tmp-rel060-kvm`, run 45517605164). Six jobs ran
+`--write --thorough --accept-verdicts` of the whole KVM list: one on an AMD EPYC 7763 and five on
+Intel Xeon 6975P-C hosts. Each built all 6 images twice with the same bytes, and the bytes are
+those of hvx's images of the same names. Each ran all 19 schedules twice from fresh boots with the
+same values, and every run moved. The recorded values are the AMD host's. The Intel hosts gave
+other fingerprints with the same verdicts. Two verdicts changed on every host:
+
+- `kvm/release-redis` `disk=cut | run C=12 R=everysec`: it passes now (`acked=12`). The job's
+  quickstart section ran `R=everysec` cuts before steps 2 to 19, twice at 11 and 12, on the
+  same image. Eleven of them lost `k:1`, among them `C=11` (`3e8260560d47b5b0`, `ctl`
+  `a8edb4273115e9e5`, twice). The cuts before steps 3, 6, 12, 13, 14, 17 and 18 passed, so the
+  loss depends on where the cut falls against Redis's one-second flush. `C=11 R=everysec` replaces
+  `C=12 R=everysec` with those values.
+- `kvm/qdrant-flaky-buggy` `P=workload/tests::wal_reco@0~207:500`: the test passes now. On four
+  more runners (three Intel, one AMD EPYC 7763) `pause-check.sh` built the same two images. It
+  found 2 failing starts of 131 from 179 to 309 ms: 179 ms and 222 ms. The start at 179 ms failed
+  twice with one fingerprint (AMD `ac35b1539dfeb052`). At 179 ms the fixed test and a pause of the
+  whole workload passed. The pauses at 179 ms (fails) and 180 ms (passes) replace those at 207 and
+  208 ms, and the fixed test moves to 179 ms. The workflow's second commit `d3803d5c` re-records
+  the three images whose entries moved; until its run the two Qdrant images keep their epoch-5
+  values.
+
+The release Redis image's quickstart exploration on the AMD host gave 15 of 15 reproduced, as at
+epoch 5.
+
 **The pinned reproducers.** Their epoch-6 images are the list's `stack-old` (`38f503b1…`) and
 `stack-fix` (`cd7d31c8…`), copied to `~/hydo/build/rel060`. They give `db33d71069816103`
-(VIOLATION, order 11) and `c421af1ccb714225` (OK) on hvx. With the pass's programs the older
+(VIOLATION, order 11) and `c421af1ccb714225` (OK) on hvx, and `96b8fd4017db3274` and
+`87d6319a26da08c7` on KVM (AMD). With the pass's programs the older
 images keep their values: the epoch-2 images in `~/hydo/build/m204` give `a76d7fe857fdb37c` and
 `efbde7b57264be0f`, the epoch-4 images in `~/hydo/build/m302` give `e153f376096a072c` and
 `6a5c2fe208174af3`, and the epoch-5 images in `~/hydo/build/rel050` give `b6e78273b1d21304` and

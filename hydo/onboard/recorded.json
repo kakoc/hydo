@@ -2293,7 +2293,7 @@
     {
       "id": "kvm/release-redis",
       "platform": "kvm",
-      "recorded": "hydo-bench rebaseline --write, 2026-11-20",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-25",
       "note": "recorded with hydo-bench rebaseline --platform kvm --write --thorough on GitHub's runners at the fingerprint epoch 4 (docs/HISTORY.md Milestone 302): the AMD EPYC values (the 9V45, 9V74 and 7763 agree), kernel bzImage-kvm-cg f0e2d441...; Intel Xeon Platinum 8573C and 6975P-C hosts give other fingerprints with the same verdicts and ctl values",
       "build": {
         "stage": "release",
@@ -2301,86 +2301,86 @@
         "manifest": "hydo.yaml",
         "args": []
       },
-      "sha256": "23c3b28038b261154ca37f442c65b741e3b39b7cd2f332650d22f2d95b2689e8",
+      "sha256": "8fae694627b8ba317e740f500910a0ff1169f6434269e4e2265a2791ae318d32",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
-          "fp": "d2e4da56c54ce2a1",
-          "ctl": "f718b1096d24963a"
+          "fp": "b222402de473ea1b",
+          "ctl": "0662311f670f9678"
         },
         {
-          "schedule": "disk=cut | run C=12 R=everysec",
+          "schedule": "disk=cut | run C=11 R=everysec",
           "verdict": "VIOLATION [redis.acked_writes_survive] key k:1 lost",
-          "fp": "af9a168ee9d9071c",
-          "ctl": "ce7d9d26ed82d840"
+          "fp": "3e8260560d47b5b0",
+          "ctl": "a8edb4273115e9e5"
         },
         {
           "schedule": "disk=cut | run C=12",
           "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)",
-          "fp": "2c486eb24aedfd7f",
-          "ctl": "20ec3972d117cdd9"
+          "fp": "03ff0b2cb2ea75a0",
+          "ctl": "915b2dce7dea7b99"
         },
         {
           "schedule": "disk=none | run K=redis@5+2",
           "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=18 all present)",
-          "fp": "8e0bd61fa3cc91b9",
-          "ctl": "fb4fc6f85ff5ba19"
+          "fp": "80ba454aff04f451",
+          "ctl": "be09c698e5bd4324"
         },
         {
           "schedule": "disk=none | run P=redis@4+3",
           "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=17 all present)",
-          "fp": "5bd8280d2757ee43",
-          "ctl": "420de7ee389d0e3d"
+          "fp": "9a302f0cc970fab7",
+          "ctl": "acafabc26637a281"
         },
         {
           "schedule": "disk=none | run T=6:3600",
           "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
-          "fp": "87215a729c0586a6",
-          "ctl": "86201bd4633ab1b2"
+          "fp": "33896752258647c5",
+          "ctl": "e45233be0f979c6a"
         },
         {
           "schedule": "disk=ioerr:20 dseed=7 | run",
           "verdict": "ERROR restart after the faults (redis)",
-          "fp": "6bdaffff57f4d2ff",
-          "ctl": "b86510e42c563cf6"
+          "fp": "cec7ac685aaaa3a3",
+          "ctl": "5a18e8696cc125c0"
         },
         {
           "schedule": "disk=none tj=99 tjpm=900 tjmax=900 | run",
           "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
-          "fp": "a9451dbb0e7622d9",
-          "ctl": "ffce56a306544529"
+          "fp": "f585c61c85c260ad",
+          "ctl": "9c91e4036cc07621"
         },
         {
           "schedule": "disk=none pct=99 pctn=4 | run",
           "verdict": "OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)",
-          "fp": "798b3ccefd6ca52c",
-          "ctl": "3887ec9adf7f7b2e"
+          "fp": "b30fd31212e4c9f5",
+          "ctl": "20efde5bc8d05525"
         },
         {
           "schedule": "disk=lying:6 dseed=b3c3d806a5d34604 | run C=5",
           "verdict": "VIOLATION data disk unmountable (mount: mounting /dev/vda2 on /data failed: Data consistency error)",
-          "fp": "d09e357c78807908",
-          "ctl": "cd2bef37b3ba5a8b"
+          "fp": "a2f1f292f69d87c7",
+          "ctl": "81636ee7e327f071"
         },
         {
           "schedule": "disk=lying:3 dseed=eac0b527c5ac67d9 | run C=20",
           "verdict": "VIOLATION [redis.acked_writes_survive] key k:3 lost",
-          "fp": "a7d1b5928dd22660",
-          "ctl": "b73e7777e82c44ac"
+          "fp": "16994ed06bf4e5d0",
+          "ctl": "93058165d9e3c691"
         },
         {
           "schedule": "disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no",
           "verdict": "VIOLATION [redis.acked_writes_survive] key k:0 lost",
-          "fp": "0594136a8c6b0c88",
-          "ctl": "b841508edfa10edf"
+          "fp": "d73115b82e1e7897",
+          "ctl": "e739ef02ede12395"
         }
       ]
     },
     {
       "id": "kvm/release-redis-netem",
       "platform": "kvm",
-      "recorded": "hydo-bench rebaseline --write, 2026-11-20",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-25",
       "note": "recorded with hydo-bench rebaseline --platform kvm --write --thorough on GitHub's runners at the fingerprint epoch 4 (docs/HISTORY.md Milestone 302): the AMD EPYC values (the 9V45, 9V74 and 7763 agree), kernel bzImage-kvm-cg f0e2d441...; Intel Xeon Platinum 8573C and 6975P-C hosts give other fingerprints with the same verdicts and ctl values",
       "build": {
         "stage": "release",
@@ -2388,20 +2388,20 @@
         "manifest": "hydo-netem.yaml",
         "args": []
       },
-      "sha256": "a9374bd83addf933674b4e8ac0aca380c66f668a06224adce2fd8e2e0d7b8003",
+      "sha256": "15a88e799b1e5b9af89a3b06df4f9d49a7ef7a09e2314d1459490d71d3474193",
       "runs": [
         {
           "schedule": "disk=none | run N=redis@3-6:delay,300ms",
-          "verdict": "OK invariants=2 held (net.no_retransmission: retrans=0 timeouts=0 uptime=13.10)",
-          "fp": "5f02bc6f56c1ca5c",
-          "ctl": "a8ebcd88e5b9eb60"
+          "verdict": "OK invariants=2 held (net.no_retransmission: retrans=0 timeouts=0 uptime=14.29)",
+          "fp": "dbfed47d20867cbf",
+          "ctl": "c1f9e6c872a241a5"
         }
       ]
     },
     {
       "id": "kvm/stack-old",
       "platform": "kvm",
-      "recorded": "hydo-bench rebaseline --write, 2026-11-20",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-25",
       "note": "recorded with hydo-bench rebaseline --platform kvm --write --thorough on GitHub's runners at the fingerprint epoch 4 (docs/HISTORY.md Milestone 302): the AMD EPYC values (the 9V45, 9V74 and 7763 agree), kernel bzImage-kvm-cg f0e2d441...; Intel Xeon Platinum 8573C and 6975P-C hosts give other fingerprints with the same verdicts and ctl values; the image is the pinned reproducer of docs/REBASELINE.md 13.3 (hvx/stack-old)",
       "build": {
         "stage": "stack-old",
@@ -2410,21 +2410,21 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "4b78d7a8c525221bb564d547d0f19ffcf95b6744d7e2ec1050351e52ef935255",
+      "sha256": "38f503b176e2994dfe28b8461d5ec93c15238429e12f4c9a5b5fb735a4ff37ad",
       "big": true,
       "runs": [
         {
           "schedule": "disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24",
           "verdict": "VIOLATION [stack.exactly_once] order=11 is in kafka (1 times) but the client was never ACKed",
-          "fp": "4b9f52b31c1a58b4",
-          "ctl": "4f67194634104ea4"
+          "fp": "96b8fd4017db3274",
+          "ctl": "29e04300553e96f2"
         }
       ]
     },
     {
       "id": "kvm/stack-fix",
       "platform": "kvm",
-      "recorded": "hydo-bench rebaseline --write, 2026-11-20",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-25",
       "note": "recorded with hydo-bench rebaseline --platform kvm --write --thorough on GitHub's runners at the fingerprint epoch 4 (docs/HISTORY.md Milestone 302): the AMD EPYC values (the 9V45, 9V74 and 7763 agree), kernel bzImage-kvm-cg f0e2d441...; Intel Xeon Platinum 8573C and 6975P-C hosts give other fingerprints with the same verdicts and ctl values; the image is the pinned reproducer of docs/REBASELINE.md 13.3 (hvx/stack-fix)",
       "build": {
         "stage": "stack-fix",
@@ -2433,14 +2433,14 @@
         "args": [],
         "owners": "keep"
       },
-      "sha256": "8951cf69d1ce0e7e7972324a2c649fa632a5076ebfe1b17e8262f1850f7d500f",
+      "sha256": "cd7d31c8aacffa58deb47b0da98630e10c10d29c855a88eef89aba2692125189",
       "big": true,
       "runs": [
         {
           "schedule": "disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24",
           "verdict": "OK invariants=3 held (mysql.amounts_valid: rows with a wrong amount: 0)",
-          "fp": "8672be7cd62d3d75",
-          "ctl": "856bc395a49d8a71"
+          "fp": "87d6319a26da08c7",
+          "ctl": "753daefd6c5c57c1"
         }
       ]
     },
