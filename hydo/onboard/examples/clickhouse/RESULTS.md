@@ -25,6 +25,11 @@ when enough replicas hold it.
      the closed socket without a pause until the session timeout, 30 s. In seed 20 two handler
      threads of one Keeper took about a third of the guest's CPU. No report found names it, and
      nothing was posted (the section "The busy Keeper threads").
+  4. **A new candidate on one server: after a power cut, a `MODIFY COLUMN` of a column that a
+     later `DROP COLUMN` removed fails for good.** Every later mutation of the part, also an
+     acknowledged `ALTER UPDATE`, waits behind it until `KILL MUTATION`. The variant `single/`
+     shows it with `disk=cut | run C=6`. Nothing was posted (the section "One server: a mutation
+     of a dropped column after a power cut").
 - **What held?** No retried insert was stored twice: not a retry after an error or a timeout, not
   a deliberate second send of an acknowledged block, not with `insert_deduplication_token`, and
   not with async inserts. Every acknowledged quorum insert (`insert_quorum = 2`, parallel or
@@ -393,6 +398,71 @@ the session timeout are guest time, and the slow clock of Milestone 319 made the
 the engine's limit. So the loop kept the CPU busy for the whole run. With the exact tick the loop
 ends after 30 s of guest time, and the run goes on to its verdict.
 
+## One server: a mutation of a dropped column after a power cut (a new candidate)
+
+**The label.** A ClickHouse candidate, not reported upstream, and nothing was posted. It is not
+hydo's damage: the power cut drops only the writes that ClickHouse did not sync, and ClickHouse
+itself detaches the parts that it finds broken at the start. The loss of the unsynced mutated
+parts is the documented cost of the default `min_rows_to_fsync_after_merge = 0`. A mutation
+queue that can never move again is not documented.
+
+**The variant.** `single/` runs one server from the same image with one `MergeTree` table that
+syncs every inserted part (`fsync_after_insert = 1`, `fsync_part_directory = 1`). The table has
+one part without the column `c`. The workload adds `c`, inserts a second part, which stores `c`,
+changes the type of `c`, drops `c`, and updates the row of the second part. ClickHouse
+acknowledges each `ALTER` when its mutation is done. The check `mutations_done` says that every
+mutation ends done and that the acknowledged update stays applied:
+
+```sh
+sh hydo/fetch-images.sh x86_64
+cd single && hydo build hydo.yaml
+hydo run "disk=none | run"        # OK
+hydo run "disk=cut | run C=6"     # the power goes off after the last ALTER was acknowledged
+```
+
+**What happens.** On hvx with hydo 0.5.0 and the image `fa9732112e98ab3f`, `disk=cut | run C=6`
+fails `mutations_done` with `3 mutations not done, row 2 note ''`, fingerprint
+`b1992b2c7f5ea453` in two runs. In the recovery boot:
+
+- `system.detached_parts` has `broken-on-start_all_1_1_0_3` to `_5` and
+  `broken-on-start_all_2_2_0_3` to `_5`;
+- `system.parts` has `all_2_2_0` active at data version 2 with the columns `id`, `note`, `c`, and
+  `all_1_1_0_5`, mutated again after the start;
+- the `MODIFY COLUMN` (`mutation_3.txt`), the `DROP COLUMN` (`mutation_4.txt`) and the `UPDATE`
+  (`mutation_5.txt`) are not done, each with `Unknown expression identifier c ...
+  (UNKNOWN_IDENTIFIER)`, and the server logs the error about once a second.
+
+With `--set merge_fsync=1` (`min_rows_to_fsync_after_merge = 1`) the same schedule passes. The
+blind run that first showed it had one server and a workload of all the write types. It gave the
+same state for `MODIFY COLUMN c46` after the same three `ALTER`s. The acknowledged `ALTER UPDATE`s
+behind it were never applied. `KILL MUTATION` of the failing `MODIFY` frees the queue; a native
+check in Docker showed that.
+
+**The cause in the code** (the tag of v26.10.6.18; `master` on 2026-11-25 has the same code):
+
+- A mutated part is synced only with `min_rows_to_fsync_after_merge` or
+  `min_compressed_bytes_to_fsync_after_merge` (`MergeTreeSettings::needSyncPart`,
+  `src/Storages/MergeTree/MergeTreeSettings.cpp`, line 3540). The mutation files and the
+  table's metadata are synced. So after the cut the mutations are unfinished again for the
+  source parts, and the metadata has no `c`.
+- `StorageMergeTree::selectPartsToMutate` puts every unfinished mutation of a part, from the
+  first one on, into one mutation of the part (`src/Storages/StorageMergeTree.cpp`, lines 2566
+  to 2640).
+- `splitAndModifyMutationCommands` keeps the `MODIFY`'s `READ_COLUMN c` when the source part has
+  `c`, without checking that the table still has it (`src/Storages/MergeTree/MutateTask.cpp`,
+  lines 992 to 1000).
+- `MutationsInterpreter` reads `c` (`src/Interpreters/MutationsInterpreter.cpp`, lines 1535 to
+  1538 and 1673 to 1677) and resolves it against the current metadata (line 1967), which throws.
+  The part keeps its data version, so the `DROP` and the `UPDATE` behind the `MODIFY` never run
+  on it.
+- Without a restart the state cannot happen: `DROP COLUMN c` is refused while a mutation that
+  reads `c` is unfinished (`MergeTreeData::checkDropOrRenameCommandDoesntAffectInProgressMutations`,
+  `src/Storages/MergeTree/MergeTreeData.cpp`, line 14105).
+
+ClickHouse issue #120975 names the same check in `splitAndModifyMutationCommands` for an empty
+part that a restart brought back, and says that a part with rows would still fail. Its fix,
+#125293, changed only a test. The searches for this candidate are in the next section.
+
 ## The duplicate searches
 
 Each phrase was searched in ClickHouse's issues and pull requests, open and closed, with `gh
@@ -430,6 +500,18 @@ requests. On that day `gh search issues --include-prs` returned nothing for any 
 
 The last commits to `KeeperTCPHandler.cpp` on `master` (2026-09-11 to 2026-10-31) change timeout
 messages, the handshake of an expired session, statistics, and the shutdown of TLS connections.
+
+The phrases of the mutation of a dropped column were searched on 2026-11-25 with `gh search
+issues --repo ClickHouse/ClickHouse` and `gh search prs`. The searches covered open and closed
+items.
+
+| phrase | what it found |
+|---|---|
+| `mutation stuck dropped column` | #134094 (a `DROP COLUMN c, ADD COLUMN c` in one `ALTER` with a skip index on `c`), #63545 (`Not found column` on replicated tables, no reproduction), #113459 (a crash inside `RENAME COLUMN`): other causes |
+| `mutation UNKNOWN_IDENTIFIER` | #120975 (closed): an empty part that a restart brought back fails with `UNKNOWN_IDENTIFIER` until cleanup drops it. Same check in `splitAndModifyMutationCommands`; the issue says a part with rows would still fail, and its fix #125293 changed only a test. #130353, #130110: `ADD COLUMN` and `UPDATE` in one `ALTER` |
+| `broken-on-start mutation` | #132832 (a `ReplicatedMergeTree` merge lost at a host crash, `NO_REPLICA_HAS_PART`), #125904, #113179: other paths |
+| `splitAndModifyMutationCommands`, `splitAndModifyMutationCommands READ_COLUMN` | #120869 (`DROP COLUMN` accepted with a column the table lacks), #123602 (a mutation queued before `RENAME COLUMN`), #119354 (merged: a column absent from the table in some part formats); none covers a `MODIFY` of a dropped column on a part with rows |
+| `MergeTreeMutationEntry` (the first run's search; #111380 read again) | #111380 and #111416: the mutation files are not synced after their rename, so an acknowledged `DELETE` or `KILL MUTATION` can be lost; here the files survived |
 
 ## The explorations
 
