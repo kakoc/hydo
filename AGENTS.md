@@ -678,6 +678,29 @@ none moves a recorded value:
 The proofs ran on the Mac engine; the details are in `docs/HISTORY.md` Milestone 355 (open item
 180).
 
+**The frictions of the 0.6.0 trial (M360, tentative number).** Nine fixes for what the trial of
+M359 ranked, each its own commit; none moves a recorded value:
+- A named group of a messages check has to receive every message it received, also one sent
+  before its first receive. When no message can be judged, the ERROR names the cause and the
+  `sub ... from=start` record to write, and a held `no-loss` names the messages it did not judge.
+- With a `lease`, `no-loss` counts a received message that no acknowledgement accepted and that
+  never came back after its lease as lost; an `info` acknowledgement leaves it undecided.
+- `hydo save` writes `# params: name=value` for an image built with `--set`, and gives a second
+  finding of one filename the next free name (`<name>-2.schedule`).
+- A problem of the class `process` shows its minimal schedule as its command and its steps.
+- The property table reads a host check's violation records longer than 1,023 bytes.
+- `hydo stats A B` is refused with one line, and a reaction's `powerloss-<svc>` counts as a power
+  loss of that service.
+- A build in a target folder outside the checkout (`CARGO_TARGET_DIR`) is the checkout's build,
+  so `HYDO_RELEASE_DIR` works for it.
+- `hydo ci run` reports a regression of other build parameters as left out, in its counts,
+  `report.md` and `junit.xml`.
+- `hydo explore --reactive` draws `powerloss-<svc>` for a service with `storage:`, from a stream
+  of its own.
+
+The proofs ran on the Mac engine with the trial's NSQ project and in the tests; the details are
+in `docs/HISTORY.md` Milestone 360 (open item 183).
+
 **Each image service's own `/tmp` (M331, tentative number; fingerprint epoch 5).** An image
 service of an image built at epoch 5 has a `/tmp` of its own, as a container has. It is the
 guest's folder `/tmp/oci/<service>` (`hydo_image::defaults`, `oci_own_tmp`). The guest's
@@ -3699,12 +3722,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       were low, and the exploration was stopped after its second combination. The epoch-6
       image ran only the clean runs, the regressions and one check of the client's fix; no
       exploration ran at epoch 6.
-    - A hydo built with `CARGO_TARGET_DIR` outside its checkout ignores `HYDO_RELEASE_DIR`,
-      because `checkout_of` looks for `<checkout>/target/`, so `hydo build` cannot find the guest
-      files. A release-like folder with links to the release and copies of the programs worked.
-      Two tests of `-p hydo --test it` (`onboard::the_fetch_step_names_the_release_fetcher_when_it_is_not_on_path`
-      and `update::a_checkout_build_is_left_alone_with_the_commands`) fail with such a target
-      folder too: they expect a hydo built in its checkout's `target/`.
+    - Since M360 a hydo built with `CARGO_TARGET_DIR` outside its checkout is the checkout's
+      build. It reads cargo's `CACHEDIR.TAG` and the build's source path. So `HYDO_RELEASE_DIR`
+      works, and the two tests of `-p hydo --test it` that failed with such a folder pass.
     - Each workload has about 70 writes. These were not tried: the write commands of Kvrocks's
       table beyond the families of RESULTS.md, the cluster mode with kvrocks-controller, Redis
       Sentinel itself, `replication-group-sync`, hvx, and KVM.
@@ -3716,13 +3736,35 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       power loss (`A=kvrocks.failover_done+<ms>:powerloss-kv2`) and its regressions with
       `# params:` are still to write there.
     - `powerloss-<svc>` has no strict form (`L=...:strict` stops the writeback from the run's
-      start). The explorer's `--reactive` draws do not draw it. Only `--reactive-at` with
-      `--react-actions powerloss` and a written token use it.
-    - A regression's `# params:` is checked against the image's `/etc/hydo/params`. `hydo ci run`
-      replays a regression of other parameters as left out, and builds no second image for it.
-      `hydo explore` and `hydo-bench` read no `# params:` line.
+      start). Since M360 `hydo explore --reactive` draws it in a quarter of its fault reactions
+      for a service with `storage:`; no exploration with it ran in a VM.
+    - A regression's `# params:` is checked against the image's `/etc/hydo/params`. Since M360
+      `hydo ci run` reports a regression of other parameters as left out (counts, `report.md`,
+      a skipped case of `junit.xml`), and builds no second image for it. `hydo explore` replays
+      no saved regression, and `hydo-bench` reads no `# params:` line.
     - `hydo-manifest`'s and `hydo-build`'s equivalence tests fail on 58 and 57 recorded answers
       (open item 165 lists their causes); none of the mismatches names a regression's key.
+183. The frictions of the 0.6.0 trial (M360, tentative number). What is left:
+    - A group still starts at the first `sub` or `recv` that it completed, and a delivery of a
+      message also makes the group judge that message. A message sent before that receive and
+      received by none is not judged. The summary counts it, and a `sub ... from=start` record
+      makes `no-loss` judge it. In the trial's aimed run `m1` to `m3` are such messages.
+    - `no-loss` judges a received message that never came back only with a `lease`. The trial's
+      client records its `FIN` to a killed `nsqd` as `info`, so its in-flight loss is undecided
+      in `no-loss` and stays a finding of `acked_outcome` only. No VM run showed `no-loss`
+      break this way; the tests do.
+    - `hydo save`'s `# params:` line was shown on a real image with an `exploration.json` given
+      that image's sha256, not after a VM exploration of the `--set` image: the Mac had 10 GB of
+      free disk. A regression found on the default build still names no parameter, so it runs on
+      every build.
+    - `hydo explore --reactive` with power losses ran in the generator's tests on the Meilisearch
+      example's space, not in a VM.
+    - The trial's smaller frictions are not fixed. They are the import's unused `data.dirs` and
+      its placeholder against the first service, and the clock scan's `<database>` for a known
+      service. The Go SDK has no call for `drained`, and `hydo inspect diagnose --text` prints
+      JSON. A message with no final state reads `(no error code)`, and NSQ's title reads `Nsq`.
+    - A long composition word (`W=`) hides the tokens after it in a problem's command; the trial's
+      tester missed an `L=` there.
 
 ## Milestone index
 
@@ -4844,6 +4886,13 @@ build machine, before 2026-10-13.
   was there. Also `no-loss` passes a received message that never came back, and `hydo save`
   writes no `# params:` and drops findings of one filename. Three NSQ candidates, not posted.
   Nothing recorded moved
+- M360 (tentative number): the trial's frictions, each its own commit. The messages check
+  judges a group by what it received and names the real cause of its ERROR. `no-loss` with a
+  lease judges a received message that never came back. `hydo save` writes `# params:` and keeps
+  every finding. A problem's command is its minimal schedule, and the property table counts long
+  violation records. `hydo stats` refuses two folders. A target folder outside the checkout
+  knows its checkout. `hydo ci run` names left-out regressions, and `--reactive` draws one
+  service's power loss. Nothing recorded moved
 
 ## Where to look
 
