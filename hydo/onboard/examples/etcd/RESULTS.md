@@ -311,3 +311,38 @@ The list records a schedule of each symptom for both releases, each run twice:
 The history check of `hydo-hist.yaml` (`etcd.kv_linearizable`) now breaks on 3.5.5 with `K=etcd1@10+1
 P=etcd3@26+1`, the second symptom seen as a read that no order of the operations explains, and
 3.5.6 passes it.
+
+## The fingerprint epoch 6 (the 0.6.0 re-recording pass)
+
+At the fingerprint epoch 6 every command that the host starts gets a `PATH`, and a recovery boot
+gets the first boot's outcomes (docs/REBASELINE.md section 31). The timing moved again on hvx:
+`C=20` passes on 3.5.5 now, and on `hydo-hist.yaml` the history check passes with `K=etcd1@10+1
+P=etcd3@26+1`. A hand sweep of 46 schedules on the epoch-6 images (3.5.5 `267cd0a1…`, its history
+image `95c918a6…`) reached both symptoms again:
+
+- Power cuts (`disk=cut dseed=1 | run C=<k>`): the cuts before steps 5, 17, 21 and 22 broke
+  `etcd.members_agree` on 3.5.5. The cuts before steps 10, 15, 18, 19, 20, 23 and 25 to 30
+  passed.
+- Kills right after a defrag (`K=etcd<n>@<5,10,15,20,25>+2`): 11 of 15 broke
+  `etcd.members_agree` on 3.5.5.
+- etcd2 killed before step 25 and etcd1 paused for one step: the pauses before steps 21, 23 and
+  24 passed, and the pauses before steps 22 and 26 broke `etcd.members_agree`. The pause before
+  step 27, the recorded schedule, still gives the second symptom, `client.revisions_monotonic`,
+  and so does the pause before step 28.
+- On the history image, `K=etcd1@10+1` with a pause of etcd3 before any step from 22 to 29
+  passed. `K=etcd2@25+1` with a pause of etcd1 before step 22, 26 or 27 broke
+  `etcd.kv_linearizable`.
+
+The list records these schedules for both releases, each run twice from a fresh boot:
+
+| image | schedule | verdict | fingerprint |
+|---|---|---|---|
+| 3.5.5 | `disk=cut dseed=1 \| run C=21` | VIOLATION `etcd.members_agree`: members disagree, revisions 69 69 70 | `3de54221c2fa78e8` |
+| 3.5.6 | `disk=cut dseed=1 \| run C=21` | OK, acked=63, every invariant holds | `b2641e8c805cef38` |
+| 3.5.5 | `disk=none dseed=1 \| run K=etcd2@25+1 P=etcd1@27+1` | VIOLATION `client.revisions_monotonic`: a client read revision 87 through etcd3 after 88 through etcd2 | `7c4c09e9fd1f57b6` |
+| 3.5.6 | `disk=none dseed=1 \| run K=etcd2@25+1 P=etcd1@27+1` | OK, acked=90, every invariant holds | `e6a996414c3dd6b1` |
+| 3.5.5, `hydo-hist.yaml` | `disk=none dseed=1 \| run K=etcd2@25+1 P=etcd1@27+1` | history VIOLATION `etcd.kv_linearizable`: a read of `k75` that no order of the operations explains | `78f91e333132b219` |
+| 3.5.6, `hydo-hist.yaml` | `disk=none dseed=1 \| run K=etcd2@25+1 P=etcd1@27+1` | history OK, 187 operations on 90 keys linearizable | `e693ac56bf9c7236` |
+
+The history image now uses the plain image's schedule of the second symptom, so both checks of
+issue 14685 run on one schedule.

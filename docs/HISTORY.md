@@ -21962,4 +21962,95 @@ keeps a column the table no longer has) and `MutationsInterpreter.cpp`; the clos
 #120975, is closed with a fix of a test only. The example's RESULTS.md has the duplicate search.
 
 **What is left.** Open item 157. The variant ran on hvx only, with hydo 0.5.0.
+## The 0.6.0 re-recording pass
 
+Status: done on 2026-11-25 on hvx, KVM, and the Mac. No milestone number. The pass
+re-records the values of `hydo/onboard/recorded.json` at the fingerprint epoch 6 of Milestone
+353, under the rule "Re-recording runs in batches" (AGENTS.md). It raises no version, builds no
+release, and publishes nothing. docs/REBASELINE.md section 31 has every value and decision.
+
+**How it ran.** `hydo-bench rebaseline` ran this tree's programs over the guest files of the
+published 0.5.0 Linux release (`2b5d45fd…`, unpacked under umask 022 and set up with `hydo
+setup`). No guest kernel and no pinned guest program changed since 0.5.0. The order services of
+the stack images came from the repository's commits `d26ed1d` and `0112b48` as archives
+(`HYDO_STACK_SRC`). The Qdrant example's two test programs were the pinned ones of an earlier
+pass's inputs, checked by sha256. Every VM went through `~/bin/hvx-run`, and the module stayed
+`91D86B693F4D4035C368F9B`.
+
+**hvx.** A first `--check` (6,968 s) built every image once and ran every schedule; each run
+whose values moved ran a second time from a fresh boot. All 141 runs moved, each run gave one
+result twice, and four verdicts changed. After the decisions below, `--write --thorough
+--accept-verdicts` (9,398 s) built all 43 images twice with the same bytes and ran all 141
+schedules twice from fresh boots with the same values. Every fingerprint and every `ctl` value
+moved, because each command that the controller starts carries `PATH`.
+
+| Verdict change | Decision |
+|---|---|
+| `hvx/stack-errors-fix` `disk=ioerr:5 dseed=1 \| run`: the failed restart is mysql's, not redis's | accepted: the same class, as at epoch 4 |
+| `hvx/nats-flaky-buggy` `q=18813` on 2 vCPUs fails | the turn sweep's boundary `q=18407` (OK) and `q=18496` (VIOLATION) replaces `q=18813` and `q=18870`; the fixed test passes at `q=18496` |
+| `hvx/etcd-3.5.5` `disk=cut dseed=1 \| run C=20` passes | `C=21` gives the first symptom of etcd issue 14685 and replaces it for both releases |
+| `hvx/etcd-hc-3.5.5` `K=etcd1@10+1 P=etcd3@26+1`: the history check holds | `K=etcd2@25+1 P=etcd1@27+1`, the plain image's schedule of the second symptom, breaks it; it replaces the schedule for both releases |
+
+The searches ran one VM at a time on the pass's images. They were the default turn sweep of the
+nats image (25 runs and 4 repetitions) and 46 etcd schedules. The RESULTS.md pages of the two
+examples list their results. 48 recorded hvx runs cut the whole guest's power, and their recovery boots
+now get the first boot's outcomes. Only etcd's `C=20` changed its class among them. Its check
+compares the members' revisions and reads no outcome, and the cuts before steps 21 and 22 still
+break it, so the timing moved its window. Three other verdict lines of power cuts differ in their
+words and keep their class: miniflux's `C=20 S=off`, the composed Redis history's `C=12
+R=everysec`, and etcd 3.5.6's `C=21`.
+
+**The pinned reproducers.** The epoch-6 images, the list's `stack-old` and `stack-fix`, are kept
+in `~/hydo/build/rel060`: `disk=none dseed=4d5cb825dfaab05b | run K=redis@11+1 C=24` gives
+`db33d71069816103` (VIOLATION, order 11) and `c421af1ccb714225` (OK). With the pass's programs
+the epoch-2, epoch-4 and epoch-5 images in `~/hydo/build/m204`, `m302` and `rel050` gave their
+recorded values: `a76d7fe857fdb37c`, `efbde7b57264be0f`, `e153f376096a072c`,
+`6a5c2fe208174af3`, `b6e78273b1d21304` and `b531d6bcaa8489b7`. So the epoch-6 defaults reach no
+image built before.
+
+**The goldens and the tests.** In full mode on the bare-metal machine, hydo-explore's `it`
+passed 59 of 60 tests, its `fake_engine` 31 of 31, and hydo-control's `it` 120 of 120. The
+corpus and identity goldens needed no new recording. The one failure,
+`identity::local_outputs_are_no_inputs`, needs a git checkout, and the tree there was an archive.
+`hydo`'s `docs::`, hydo-bench's `recorded::` and hydo-control's `silent::` pass with the new list.
+The quickstarts still cite the values of the published 0.5.0 release. So `tests/docs.rs` names
+the 17 values of epoch 5 that left the list in `CITED_ELSEWHERE`, with their source. Seven are
+of hvx, six of KVM and of the images, and four of the Mac.
+0.6.0's release step 6a moves the pages to the epoch-6 values and removes the entries.
+
+**KVM.** The bare-metal machine never runs KVM, so the one-off workflow
+`.github/workflows/tmp-rel060-kvm.yml` ran on GitHub's runners (branch `tmp-rel060-kvm`, run
+45517605164, with the published 0.5.0 release's guest files and this tree's programs). Six jobs
+ran `--write --thorough` of the whole KVM list and the Linux quickstart's KVM section. Four more
+jobs ran the Qdrant example's `pause-check.sh`. Two of the ten hosts were AMD EPYC 7763, the
+others Intel Xeon 6975P-C and one Xeon Platinum 8573C. Every job's report and log was read. Each
+rebaseline job built the 6 images twice with the same bytes and ran all 38 runs in about 7
+minutes. Each pause job ran its 131 starts and passed its 5 checks. No job logged a warning or an
+error; each rebaseline exited 1 only for the two verdict changes below.
+
+| Verdict change on every host | Decision |
+|---|---|
+| `kvm/release-redis` `disk=cut \| run C=12 R=everysec` passes | the job's `R=everysec` cuts lose `k:1` before 11 of the steps 2 to 19; `C=11 R=everysec`, run twice on the same image, replaces it |
+| `kvm/qdrant-flaky-buggy` `P=workload/tests::wal_reco@0~207:500` passes | `pause-check.sh` found the failing starts 179 and 222 ms of 131; the pauses at 179 ms (fails) and 180 ms (passes) replace 207 and 208 ms, and the fixed test moves to 179 ms |
+
+The list takes the AMD host's values of the release Redis, netem, and stack images. For the
+Redis power cut it takes the quickstart section's `C=11 R=everysec` run. The pinned
+reproducers' epoch-6 images give `96b8fd4017db3274` (VIOLATION, order 11) and `87d6319a26da08c7` (OK) on KVM (AMD). The workflow's
+second commit `d3803d5c` (run 45521477592) re-recorded the three images whose entries moved on six
+more runners, one of them AMD. Each built them twice with the same bytes, gave all 16 runs twice
+with one result, and changed no verdict; every job's log was read. The AMD values of the two Qdrant
+images are the list's now, and they equal the ones `pause-check.sh` gave. The quickstart's
+exploration on the AMD host of the first run gave 15 of 15 reproduced.
+
+**The Mac.** The pass ran this tree's programs over the signed 0.5.0 Mac release (`44860817…`)
+on this Mac, built in a target folder of its own. It took one image at a time under the shared Mac
+VM lock and kept at least 12 GB of the disk free. It deleted each image after its values were
+written. `--write --thorough` built all 21 images twice with the same bytes. It ran all 76
+schedules twice from fresh boots with one result each, in 1,419 s (builds 668 s, runs 753 s). All
+21 images have new bytes and all 76 runs moved. No verdict changed, also not in the 22 runs with a
+power cut. Five images have verdict lines that differ in their numbers or ids and keep their class
+and property: `hvm/ledger` (two lines), `hvm/redis-composed-racy`, `hvm/redis-hist`,
+`hvm/python-kv-hist`, and `hvm/voting`. The release Redis image (`502d7540…`) gives the values of
+Milestone 353's proof: `f7d1de1935d77df4` without faults and `da264396142d8e52` at `C=12`. Its
+`C=12 R=everysec` loses `k:0` (`6a3d1a0456e48e01`). The list's `epoch` is 6, and open item 105 is
+empty.
