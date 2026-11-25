@@ -16,7 +16,7 @@ results page: new as far as the search found, known, by design, or a deployment 
 |---|---|---|---|
 | database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus |
 | object store | an acknowledged object stays as written; a listing shows what exists | a listing compared with a read of each key; kills and pauses of one node; clock steps | Garage |
-| log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults | Redpanda, NATS |
+| log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults; a client that leaves transactions open, and power cuts and clock steps | Redpanda, NATS, Pulsar |
 | job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate |
 | distributed query or compute engine with schedulers and workers | an accepted query ends; a completed query's result stays readable | production's topology and features; checks of how each unknown outcome ends; pauses of a worker past its failure detector; kills of the worker that holds the results | a user's query engine |
 | ledger or billing system | the books match the acknowledged operations; a limit holds | the generic rule beside domain rules; concurrent clients without faults; value properties | Blnk, Lago, Formance Ledger |
@@ -173,6 +173,14 @@ These findings hold for every type of system:
   stored. A kill after an index deletion's `202` left the deletion `failed` with
   `index_not_found` although the index was gone, an error the declaration named as the
   client's; the recorded effect broke the claim.
+  Pulsar (findings 1 to 3): a final check over a subscription that nothing else reads judged
+  each transaction of `$HYDO_OUTCOMES` all or nothing, the unknown ones too. It broke in the
+  first run without faults: the Go client's aborted transactions were delivered
+  (pulsar-client-go#1498, known). The client then left 1 transaction in 8 open, as a crashed
+  client does. A clock step back of 600 s inside the transaction's timeout kept it open, and its
+  partitions held back every later message. After a power cut such a transaction stayed open
+  until a transactional client connected. The `eventually_` check that no partition has an open
+  transaction after the heal judges the end of each one.
 - **What it misses.** In an image built before the fingerprint epoch 6, `$HYDO_OUTCOMES` is
   empty in the recovery boot after a power cut unless `guest.outcomes_after_cut: true` is set
   (`hydo guide composer`). A check that asks about every
@@ -262,6 +270,11 @@ These findings hold for every type of system:
     recorded one delivery per stored copy of a block. `fan-out` broke with the rule `converge`
     when a power cut left rows on one replica only, while `no-loss` held. `at-most-once` held in
     every schedule: no retried insert was stored twice.
+  - Pulsar: `after_ack: no-redelivery` broke at the first power cut, by design. A broker keeps a
+    subscription's acknowledgements in memory and writes them at most once a second. The
+    client's documentation says that a receipt does not keep a message from coming again. A
+    failover subscription served by one consumer process at a time kept `order: {kind: fifo,
+    scope: key}` judgeable; a shared one with prefetching consumers does not keep it.
 - **What it misses.** The drain's output stays in the guest, also when it fails. A drain that
   stops before the leases end and the recovery finishes reports false losses. Three of four
   failed explorations of a user's queue came from the plan.
@@ -416,6 +429,14 @@ These findings hold for every type of system:
     never answered again. A check that the cluster answers within 120 s of the recovery boot's
     start (`eventually_available`) caught it; without one the run ended in an ERROR of a timed
     out check.
+  - Pulsar (finding 3): a cut restarts every broker, and a broker loads a transaction
+    coordinator only when a transactional client connects to it. The recovery boot ran none.
+    A transaction that a crashed client left open before the cut was never aborted. Its
+    partitions delivered nothing after it. Blind in 3 schedules of two explorations, shrunk by
+    hand to `C=16` and the composition. An `eventually_` check that no partition has an open
+    transaction after the heal shows the wait even when no acknowledged message is behind it.
+    The recovery boot runs only the drain and the checks. A system whose recovery waits for a
+    client of some kind meets no such client there, and then the wait is the finding.
 - **What it misses.** hydo's S3 emulator writes its objects without an fsync, so a cut of the
   guest loses objects that it acknowledged. In GreptimeDB a query of the recovery boot read an
   SST object shorter than its manifest says. A system whose data lives in object storage needs
@@ -588,6 +609,12 @@ These findings hold for every type of system:
     clock alone, while every other write takes the newest version's time plus 1. Blind
     in 23 of 200 schedules, shrunk to one step, `T=17:-162000`. A read through another
     node right after each acknowledged write showed it at once.
+  - Pulsar (finding 2): the transaction coordinator times a transaction out on the wall clock
+    (`TransactionTimeoutTrackerImpl`, `Clock.systemUTC()`). A client that leaves a transaction
+    open, and a step back of 600 s within its timeout of 10 s, keep it open for 600 s. Its
+    partitions hold back every later message, so 18 acknowledged messages were not delivered by
+    the drain (`T=32:-600`). The audit named the new coordinator's deadline scan
+    (`TxnMetadataStore`) as its place 26, not the timeout tracker of the coordinator that runs.
 - **What it misses.** Many clock effects are by design. Examples are Temporal's delayed timers,
   and River's runs of every periodic job that a forward step skipped. The audit reads text. It
   found no place in Redpanda's 2,694 C++ files, whose transaction expiry uses Seastar's wall

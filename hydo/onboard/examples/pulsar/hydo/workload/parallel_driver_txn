@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: timeout=40
+# One transaction with a timeout of 10 s: two messages, and the acknowledgement of one message of
+# s, then a commit (3 in 4) or an abort. In 1 of 8 the client exits before either, as a client
+# that crashes in the middle: the coordinator must abort the transaction after its timeout. The
+# outcome also goes to $HYDO_OUTCOMES as x<id> for checks/final_txn.
+exec /bin/pulsarc txn "$HYDO_CMD_ID" "$HYDO_SEED"

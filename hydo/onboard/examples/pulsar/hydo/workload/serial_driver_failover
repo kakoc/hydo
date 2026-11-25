@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=30
+# A consumer of the failover subscription f, one process at a time: receive up to 5..24 messages
+# and acknowledge each one. Its deliveries are also judged for the order of each key.
+exec /bin/pulsarc failover "$HYDO_CMD_ID" "$HYDO_SEED"

@@ -1,0 +1,11 @@
+# A known bug of pulsar-client-go v0.21.0 (RESULTS.md, finding 1; pulsar-client-go#1498, with the
+# open pull request 1499). The image of hydo.yaml has the client with pull request 1499 (the
+# build parameter client=fix), and this run without faults passes: no aborted transaction's
+# message is delivered. Built with --set client=release (pulsar-client-go v0.21.0) the same run
+# fails on every run: the client writes the transaction's id into the send command only, not
+# into the message's metadata, and the broker's dispatcher filters aborted messages by the
+# metadata (AbstractBaseDispatcher), so every message of an aborted transaction is delivered:
+#   VIOLATION [txn] 3 of 16 transactions not all or nothing: 0 committed, 3 aborted, 0 unknown
+# (fp=8cf005d04d8a1961 on the image built with --set client=release --out .hydo-release)
+# expect: ok      (with --set client=release: violation)
+disk=none | run

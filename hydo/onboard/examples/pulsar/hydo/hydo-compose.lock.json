@@ -1,0 +1,69 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "apachepulsar/pulsar:5.0.1": {
+   "index_digest": "sha256:4507075d8c11b34629f3a0b41f48e3c659951e601538562ee0c088cd2c737ec0",
+   "name": "apachepulsar/pulsar",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "/bin/sh"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/jvm/bin:/pulsar/bin",
+       "LANG=C.UTF-8",
+       "JAVA_HOME=/opt/jvm",
+       "PULSAR_MIN_JAVA_VERSION=21",
+       "PULSAR_PID_DIR=/pulsar/logs",
+       "ROCKSDB_MUSL_LIBC=true",
+       "LD_PRELOAD=/usr/lib/libmimalloc.so.3:/lib/libgcompat.so.0"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": "10000",
+      "Volumes": null,
+      "WorkingDir": "/pulsar"
+     },
+     "digest": "sha256:fb95bc2d73687ef7df3a21f3424a897860926e25303bd3857898ab887ead85c3",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "/bin/sh"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/jvm/bin:/pulsar/bin",
+       "LANG=C.UTF-8",
+       "JAVA_HOME=/opt/jvm",
+       "PULSAR_MIN_JAVA_VERSION=21",
+       "PULSAR_PID_DIR=/pulsar/logs",
+       "ROCKSDB_MUSL_LIBC=true",
+       "LD_PRELOAD=/usr/lib/libmimalloc.so.3:/lib/libgcompat.so.0"
+      ],
+      "ExposedPorts": null,
+      "Healthcheck": null,
+      "User": "10000",
+      "Volumes": null,
+      "WorkingDir": "/pulsar"
+     },
+     "digest": "sha256:5e5a13f0f5c5bd82466a41a12f299b925c1771f5f58781eca61a9d2a20c7b3ef",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "apachepulsar/pulsar:5.0.1",
+   "registry": "docker.io",
+   "repo": "apachepulsar/pulsar",
+   "tag": "5.0.1"
+  }
+ }
+}

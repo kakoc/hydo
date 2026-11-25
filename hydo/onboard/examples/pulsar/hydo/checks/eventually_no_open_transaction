@@ -1,0 +1,11 @@
+#!/bin/sh
+# hydo: within=180 after=heal poll=5
+# hydo-msg: no transaction stays open after the faults heal (each partition's transaction buffer ends its transactions)
+# A transaction that its client left open, as a crashed client does, ends by its timeout of 10 s:
+# the coordinator aborts it. Until then its partitions deliver nothing stored after its first
+# message, to any subscription. The check asks each partition's transaction buffer
+# (/admin/v3/transactions/transactionBufferStats) for its open transactions, after it loads every
+# partition with a producer that sends nothing and uses no transaction; exit 2 when no broker
+# answers yet. A partition that both brokers still answer with 404 is left out. The deadline is
+# 180 s: in a recovery boot every partition loads anew, and one run held only after 95 s.
+exec /bin/pulsarc hanging

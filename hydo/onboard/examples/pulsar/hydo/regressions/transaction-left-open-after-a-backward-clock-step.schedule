@@ -1,0 +1,11 @@
+# A clock effect, new as far as the search found (RESULTS.md, finding 2). The client of command
+# 54 leaves its transaction open at 136.9 s of uptime, as a crashed client does, with one message
+# on each of two partitions. The clock goes back by 600 s before step 32, inside the transaction's
+# timeout of 10 s. The coordinator compares the transaction's deadline, set on the wall clock at
+# its start, with the wall clock (TransactionTimeoutTrackerImpl, Clock.systemUTC()), so it aborts
+# the transaction only 600 s later. Until then both partitions hold back every later message
+# (TopicTransactionBuffer's maxReadPosition stays before the open transaction): the drain gets no
+# acknowledged message sent after it, and a committed transaction shows one of its two messages.
+# Without the step the same composition passes (disk=none | run).
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run T=32:-600

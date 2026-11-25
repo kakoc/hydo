@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=30
+# A consumer of the shared subscription s: receive up to 5..24 messages, acknowledge each one and
+# wait for the broker's answer (AckWithResponse).
+exec /bin/pulsarc consume "$HYDO_CMD_ID" "$HYDO_SEED"

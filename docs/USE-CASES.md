@@ -543,9 +543,12 @@ that a milestone builds moves into the tables of this page with its new status.
 - **What it is.** A claim of the messages check over consume-transform-produce transactions, with
   a cycle search over them.
 - **Why it matters.** Redpanda's half-committed transaction shows as a loss today, without the
-  transaction it belongs to.
+  transaction it belongs to. The Pulsar example (Milestone 356) needed a hand-written final check
+  over a subscription of its own to judge each transaction all or nothing. The claims judged the
+  acknowledgements inside a transaction as plain ones.
 - **What it needs.** A `txn` operation with send and commit parts in the history format.
-- **Where it came from.** The section "Left open" of `docs/design/messaging.md`.
+- **Where it came from.** The section "Left open" of `docs/design/messaging.md`, and open item
+  181.
 
 ### A fleet that hydo runs
 
