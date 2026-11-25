@@ -22269,6 +22269,17 @@ its two messages; on the final image `disk=cut | run C=34` breaks the open-trans
 twice (`fp=0aa2f73c75dcea55`). Blind as e3's
 seeds 51 and 52 and e2's problem 4, with and without its clock step.
 
+A later check for the upstream report found why `C=34` gave `no partition's transaction buffer
+answered`. In that recovery boot bookie2's AutoRecovery stopped on a `BadVersionException` of an
+under-replication znode, BookKeeper ended the bookie with exit status 0, and `restart:
+on-failure` left it down; with two bookies no ledger of ensemble 3 could be created. The saved
+regression is `disk=cut | run C=35` now (`fp=c26c630a0f1df04e` twice, once from a fresh checkout
+of `3bac22f8`). All bookies run, two partitions hold back behind the open transaction `(1,11)`,
+the acknowledged `m57.1` is never delivered, and the committed `x59` delivers neither message. In a
+`hydo inspect` session `coordinatorStats` answered `Transaction coordinator not found!` until one
+transactional client loaded the coordinators, which aborted `(1,11)` at once. The cuts before
+steps 30 and 32 fail the same way.
+
 **By design and the environment.** An acknowledgement with the broker's receipt can come back
 after a broker crashes: the broker writes a subscription's position at most once a second
 (`ManagedCursorImpl`, the mark-delete rate limit) and the Java client's `isAckReceiptEnabled`
