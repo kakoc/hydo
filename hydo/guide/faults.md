@@ -550,9 +550,12 @@ hydo explore --reactive-at meili.swap_acked@20
 It tries every delay from 0 to 50 ms after the event, each with `kill-now-<svc>`, `kill-<svc>` and
 a power cut, one schedule per seed: 153 schedules for one service. `--react-delays 0..200/5`
 changes the delays and `--react-actions kill-now` the actions. Name several events with commas,
-for example `meili.swap_acked@20,meili.swap_acked#3`. Without `--seeds` it runs the grid once;
-more seeds run it again with each seed's composition. Each failure is shrunk and replayed as in
-any exploration. Take the Meilisearch example on the Mac engine, with an image built at the
+for example `meili.swap_acked@20,meili.swap_acked#3`. One seed is one cell of the grid: seed `k`
+runs cell `k`. Without `--seeds` the seeds are the grid's, 1 to 153 here, and the grid runs once
+with the plain workload. `--seeds 1-3` runs only the grid's first three cells, not the grid three
+times. Seeds past the grid run it again, each with its seed's composition: `--seeds 1-306` runs
+it twice, and `--seeds 1-459` three times. The explorer names the cells of seeds that are not
+whole rounds of the grid. Each failure is shrunk and replayed as in any exploration. Take the Meilisearch example on the Mac engine, with an image built at the
 fingerprint epoch 5. The swap ran twice first at seed 29, a `kill-meilisearch` 9 ms after the
 swap's `202`. The grid of 153 schedules took 4 minutes and 24 seconds with 2 workers.
 

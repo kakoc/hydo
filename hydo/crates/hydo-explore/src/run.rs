@@ -889,6 +889,14 @@ fn aim_setup(cx: &mut Cx) {
         cx.a.seeds = format!("1-{}", aim.cells());
     }
     eprintln!("{}", aim.words());
+    // Milestone 355: seeds that are not whole rounds of the grid say which cells they run
+    if a.seeds_given && a.schedule.is_none() && a.shard.is_none() {
+        if let Some((lo, hi)) = hydo_manifest::ci::parse_seeds(&a.seeds) {
+            if let Some(w) = aim.seeds_words(lo, hi) {
+                eprintln!("{w}");
+            }
+        }
+    }
     cx.ex.aim = Some(aim);
 }
 

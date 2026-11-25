@@ -117,14 +117,47 @@ impl Aim {
             }
             [] => "no delay".into(),
         };
+        let n = self.cells();
         format!(
-            "hydo explore: aimed reactions (--reactive-at): {} schedules, one per seed: after {}, \
-             {delays}, with {}. Seeds after {} try the grid again with each seed's composition.",
-            self.cells(),
+            "hydo explore: aimed reactions (--reactive-at): a grid of {n} schedules, after {}, \
+             {delays}, with {}. Seed k runs cell k of the grid: seeds 1-{n} run it once with the \
+             plain workload, and seeds {}-{} run it again with each seed's composition.",
             and_list(&events),
             and_list(&self.actions),
-            self.cells()
+            n + 1,
+            2 * n
         )
+    }
+
+    /// Milestone 355: what the seeds `lo`-`hi` of `--seeds` run of the grid, in words, when they
+    /// are not whole rounds of it (None for 1-n, 1-2n and so on). A seed is one cell: `--seeds
+    /// 1-3` runs the grid's first three cells, not the grid three times (the Kvrocks onboarding,
+    /// Milestone 351, read the guide the other way).
+    pub fn seeds_words(&self, lo: u64, hi: u64) -> Option<String> {
+        let n = self.cells().max(1);
+        let lo = lo.max(1);
+        let count = hi.saturating_sub(lo) + 1;
+        if lo == 1 && count.is_multiple_of(n) {
+            return None;
+        }
+        let cell = |seed: u64| (seed - 1) % n + 1;
+        let what = if count < n {
+            format!(
+                "cells {} to {} of the grid's {n}, one cell per seed",
+                cell(lo),
+                cell(hi)
+            )
+        } else {
+            format!(
+                "{count} cells, {:.1} rounds of the grid's {n}",
+                count as f64 / n as f64
+            )
+        };
+        Some(format!(
+            "hydo explore: --seeds {lo}-{hi} runs {what}. To run the whole grid once, give \
+             --seeds 1-{n}; three times, --seeds 1-{}.",
+            3 * n
+        ))
     }
 }
 
@@ -277,6 +310,33 @@ mod tests {
             delays: parse_delays("0..2").unwrap(),
             actions: vec!["kill-now-db".into(), "cut".into()],
         }
+    }
+
+    /// Milestone 355: a seed is one cell, and seeds that are not whole rounds of the grid say
+    /// which cells they run and how to run the grid itself again.
+    #[test]
+    fn seeds_that_are_not_whole_rounds_say_what_they_run() {
+        let a = aim();
+        assert_eq!(a.seeds_words(1, 12), None);
+        assert_eq!(a.seeds_words(1, 36), None);
+        assert_eq!(
+            a.seeds_words(1, 3).as_deref(),
+            Some(
+                "hydo explore: --seeds 1-3 runs cells 1 to 3 of the grid's 12, one cell per \
+                 seed. To run the whole grid once, give --seeds 1-12; three times, --seeds 1-36."
+            )
+        );
+        assert!(a
+            .seeds_words(13, 15)
+            .unwrap()
+            .contains("cells 1 to 3 of the grid's 12"));
+        assert!(a
+            .seeds_words(1, 18)
+            .unwrap()
+            .contains("18 cells, 1.5 rounds"));
+        assert!(a
+            .words()
+            .contains("Seed k runs cell k of the grid: seeds 1-12 run it once"));
     }
 
     #[test]
