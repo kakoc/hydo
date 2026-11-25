@@ -18,7 +18,10 @@
 //! are compared on the machines themselves (docs/HISTORY.md: the release proofs). In six cases
 //! the old Python CLIs crashed with a traceback (a missing flag value, a missing known-errors
 //! file); the golden holds the Rust CLI's `hydo:` message there (M101, M104). A golden answer
-//! that still holds a traceback accepts any `hydo:` message.
+//! that still holds a traceback accepts any `hydo:` message. `hydo build --check`'s warning about
+//! missing `root.files` sources is left out of a case whose manifest names a source that differs
+//! between machines or checkouts (an absolute path, or a relative one that is no tracked file);
+//! see `host_neutral` (Milestone 361).
 
 use crate::tmpdir::{self, TmpDir};
 use serde_json::{json, Value};
@@ -221,6 +224,93 @@ fn host() -> &'static Host {
     })
 }
 
+/// `p` with `.` and `..` resolved by its text.
+fn lexical(p: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// The repository's tracked files, as absolute paths.
+fn tracked_files() -> &'static std::collections::HashSet<PathBuf> {
+    static T: std::sync::OnceLock<std::collections::HashSet<PathBuf>> = std::sync::OnceLock::new();
+    T.get_or_init(|| {
+        let o = Command::new("git")
+            .arg("-C")
+            .arg(repo())
+            .arg("ls-files")
+            .output()
+            .expect("git ls-files");
+        String::from_utf8_lossy(&o.stdout)
+            .lines()
+            .map(|l| repo().join(l))
+            .collect()
+    })
+}
+
+/// `hydo build <manifest> --check`'s stdout without the warning about missing `root.files`
+/// sources when the manifest names a source whose presence differs between machines and
+/// checkouts (open item 115, Milestone 361): an absolute path (a Nix store path is there on the
+/// bare-metal machine and not on the Mac), or a relative one that is neither a tracked file of
+/// the repository nor in the case's own folder (a binary that a build left in the checkout). A
+/// `~/` source is under the case's own HOME, so its warning stays, and so does every other line.
+fn host_neutral(stdout: &[u8], args: &[&str], cwd: &Path) -> Vec<u8> {
+    const WARNING: &str = " source files of root.files are missing (";
+    let text = String::from_utf8_lossy(stdout);
+    if args.first() != Some(&"build") || !args.contains(&"--check") || !text.contains(WARNING) {
+        return stdout.to_vec();
+    }
+    let mf = args
+        .iter()
+        .find(|a| a.ends_with(".yaml") || a.ends_with(".yml") || a.ends_with(".json"))
+        .copied()
+        .unwrap_or("hydo/hydo.yaml");
+    let mf = cwd.join(mf);
+    let Ok(m) = std::fs::read_to_string(&mf).map_err(|_| ()).and_then(|t| {
+        hydo_manifest::parse_text(
+            &t,
+            &hydo_manifest::py::basename(&mf.to_string_lossy()),
+            false,
+        )
+        .map_err(|_| ())
+    }) else {
+        return stdout.to_vec();
+    };
+    let mdir = mf.parent().unwrap_or(Path::new("/"));
+    let varies = m
+        .get("root")
+        .and_then(|r| r.get("files"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|f| f.get("src").and_then(Value::as_str))
+        .any(|src| {
+            if src.starts_with("~/") {
+                return false;
+            }
+            if src.starts_with('/') {
+                return true;
+            }
+            let p = lexical(&mdir.join(src));
+            !p.starts_with(lexical(cwd)) && !tracked_files().contains(&p)
+        });
+    if !varies {
+        return stdout.to_vec();
+    }
+    text.split_inclusive('\n')
+        .filter(|l| !l.contains(WARNING))
+        .collect::<String>()
+        .into_bytes()
+}
+
 fn run_one(root: &Path, cwd: &Path, platform: &str, args: &[&str]) -> Value {
     let mut c = if record_python() {
         let mut c = Command::new("python3");
@@ -252,7 +342,7 @@ fn run_one(root: &Path, cwd: &Path, platform: &str, args: &[&str]) -> Value {
         .collect();
     json!({
         "rc": o.status.code(),
-        "stdout": keep(&n(&o.stdout), 4096),
+        "stdout": keep(&n(&host_neutral(&o.stdout, args, cwd)), 4096),
         "stderr": keep(&traceback_tail(&n(&o.stderr)), 4096),
         "files": files,
     })

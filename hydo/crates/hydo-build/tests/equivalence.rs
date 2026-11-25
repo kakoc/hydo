@@ -29,6 +29,17 @@
 //! From now on Rust is the reference: after a deliberate change, `HYDO_BLESS=1 cargo test -p
 //! hydo-build --test it equivalence::` rewrites the golden from the Rust answers (the pinned list from
 //! the files as they are now); review the diff of `tests/golden/answers.txt` before committing.
+//!
+//! The answers do not depend on the machine or the checkout (Milestone 361). Every run reads a
+//! copy of the repository's own files (`git ls-files --cached --others --exclude-standard`) in the
+//! temporary directory, so a git-ignored file of the checkout (an image that `fetch-images.sh`
+//! saved, a binary that a build left beside an example) cannot change an answer. One line of
+//! `--check`'s output depends on the host's own files: the warning that names missing
+//! `root.files` sources, for a manifest whose sources lie outside the repository (a Nix store
+//! path, a `~/` path). For such a manifest that one line is left out of the compared stdout; a
+//! manifest whose sources are all in the repository keeps it. Each repository file's mutants
+//! come from a seed of their own and are named by the file's place in the pinned list, so a
+//! change of one file changes only its own mutants, and a failure names that file.
 
 use crate::tmpdir::TmpDir;
 use serde_json::{json, Value};
@@ -49,9 +60,11 @@ fn golden_path() -> PathBuf {
     crate_dir().join("tests/golden/answers.txt")
 }
 
-fn run_rust(argv: &[String]) -> (i32, String, String) {
+/// One command line run by the Rust hydo-build, with the onboard/ directory of the repository
+/// copy `root`.
+fn run_rust(argv: &[String], root: &Path) -> (i32, String, String) {
     let ctx = hydo_build::Ctx {
-        onboard: repo().join("hydo/onboard"),
+        onboard: root.join("hydo/onboard"),
         release: hydo_build::Release::None,
         inputs: Default::default(),
     };
@@ -69,6 +82,122 @@ fn run_rust(argv: &[String]) -> (i32, String, String) {
         String::from_utf8_lossy(&o).into_owned(),
         String::from_utf8_lossy(&e).into_owned(),
     )
+}
+
+/// A copy of the repository's own files at `dest`: the tracked ones as the work tree has them and
+/// the untracked ones that git does not ignore, with their modes and symbolic links. Nothing that
+/// a checkout keeps beside them (fetched images, built binaries, secrets) is copied.
+fn clean_copy(repo: &Path, dest: &Path) {
+    use std::os::unix::ffi::OsStrExt;
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args([
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+        ])
+        .output()
+        .expect("git ls-files");
+    assert!(out.status.success(), "git ls-files in {}", repo.display());
+    for rel in out.stdout.split(|b| *b == 0).filter(|r| !r.is_empty()) {
+        let rel = Path::new(std::ffi::OsStr::from_bytes(rel));
+        let src = repo.join(rel);
+        // a tracked file deleted in the work tree, or a nested repository (`<dir>/`)
+        let Ok(md) = std::fs::symlink_metadata(&src) else {
+            continue;
+        };
+        let dst = dest.join(rel);
+        std::fs::create_dir_all(dst.parent().unwrap()).unwrap();
+        if md.file_type().is_symlink() {
+            std::os::unix::fs::symlink(std::fs::read_link(&src).unwrap(), &dst).unwrap();
+        } else if md.is_file() {
+            std::fs::copy(&src, &dst).unwrap_or_else(|e| panic!("{}: {e}", src.display()));
+        }
+    }
+}
+
+/// `p` with `.` and `..` resolved by its text.
+fn lexical(p: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for c in p.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::CurDir => {}
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// `--check`'s stdout without the line that depends on the host's own files: the warning about
+/// missing `root.files` sources, when a source of the manifest lies outside the test's own
+/// folders `own` (the repository copy and the scratch folder): an absolute path, a `~/` path, or
+/// a relative one that leaves them. Whether such a file exists differs between machines (open
+/// item 115: a Nix store path is there on the bare-metal machine and not on the Mac). The
+/// warning of a manifest whose sources are all in those folders stays, and so does every other
+/// output.
+fn host_neutral(out: &str, argv: &[String], own: &[&Path]) -> String {
+    const WARNING: &str = " source files of root.files are missing (";
+    if !argv.iter().any(|a| a == "--check") || !out.contains(WARNING) {
+        return out.to_string();
+    }
+    let mut opts = hydo_manifest::LoadOptions {
+        onboard_dir: own[0].join("hydo/onboard"),
+        ..hydo_manifest::LoadOptions::default()
+    };
+    let mut i = 1;
+    while i < argv.len() {
+        match argv[i].as_str() {
+            "--arch" if i + 1 < argv.len() => {
+                opts.arch = argv[i + 1].clone();
+                i += 1;
+            }
+            "--set" if i + 1 < argv.len() => {
+                if let Some((k, v)) = argv[i + 1].split_once('=') {
+                    opts.sets.push((k.to_string(), v.to_string()));
+                }
+                i += 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    let Ok(l) = hydo_manifest::load(Path::new(&argv[0]), &opts) else {
+        return out.to_string();
+    };
+    let mdir = Path::new(&argv[0]).parent().unwrap_or(Path::new("/"));
+    let outside = l
+        .manifest
+        .data
+        .get("root")
+        .and_then(|r| r.get("files"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|f| f.get("src").and_then(Value::as_str))
+        .any(|src| {
+            let p = lexical(&mdir.join(src));
+            src.starts_with('/')
+                || src.starts_with('~')
+                || !own.iter().any(|d| p.starts_with(lexical(d)))
+        });
+    if !outside {
+        return out.to_string();
+    }
+    out.split_inclusive('\n')
+        .filter(|l| !l.contains(WARNING))
+        .collect()
+}
+
+/// The seed of one repository file's mutants: its pinned name's digest.
+fn seed_of(rel: &str) -> u64 {
+    let d = Sha256::digest(rel.as_bytes());
+    u64::from_le_bytes(d[..8].try_into().unwrap())
 }
 
 /// The manifest candidates as they are tracked now (used only to record: HYDO_BLESS).
@@ -479,9 +608,16 @@ impl Compact {
 
 #[test]
 fn print_and_check_outputs_match_hydo_build() {
-    let root = repo();
+    let repo = repo();
     let tmp =
         TmpDir::fresh(std::env::temp_dir().join(format!("hydo-build-eq-{}", std::process::id())));
+    // every run reads the repository's own files only, wherever this checkout is and whatever
+    // it keeps beside them (Milestone 361)
+    let copy = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-build-eq-root-{}", std::process::id())),
+    );
+    clean_copy(&repo, &copy);
+    let root = copy.to_path_buf();
     let norm = Norm::new(&root, &tmp);
     let mode = mode();
     let golden = (mode == Mode::Golden).then(read_golden);
@@ -506,7 +642,7 @@ fn print_and_check_outputs_match_hydo_build() {
             let names = |v: &[(String, String)]| v.iter().map(|(r, _)| r.clone()).collect();
             (names(&g.inputs), names(&g.guest))
         }
-        None => (tracked_now(&root), guest_files_now(&root)),
+        None => (tracked_now(&repo), guest_files_now(&root)),
     };
     let files: Vec<String> = pinned
         .iter()
@@ -562,10 +698,11 @@ fn print_and_check_outputs_match_hydo_build() {
         }
     }
     // seeded mutants of every repository manifest: a value replaced by another type or an edge
-    // value, a key removed or renamed, a list entry removed or doubled
-    let mut rng = SplitMix(0x6879_646f_2d62_7569);
+    // value, a key removed or renamed, a list entry removed or doubled. Each file's mutants have a
+    // seed of their own and its place in the pinned list in their names (`mutant<place>.<k>.json`),
+    // so an edit of one file changes only its own mutants.
     let mut nmut = 0;
-    for f in &files {
+    for (place, f) in files.iter().enumerate() {
         let Ok(text) = std::fs::read_to_string(f) else {
             continue;
         };
@@ -576,13 +713,14 @@ fn print_and_check_outputs_match_hydo_build() {
         if base.get("workload").is_none() && base.get("test").is_none() {
             continue;
         }
+        let mut rng = SplitMix(0x6879_646f_2d62_7569 ^ seed_of(&pinned[place]));
         for k in 0..MUTANTS_PER_FILE {
             let mut m = base.clone();
             mutate(&mut m, &mut rng);
             if k % 3 == 0 {
                 mutate(&mut m, &mut rng);
             }
-            let p = tmp.join(format!("mutant{nmut:05}.json"));
+            let p = tmp.join(format!("mutant{place}.{k}.json"));
             nmut += 1;
             std::fs::write(&p, m.to_string()).unwrap();
             let arch = if k % 4 == 0 { "arm64" } else { "x86_64" };
@@ -639,7 +777,8 @@ fn print_and_check_outputs_match_hydo_build() {
         for r in reqs {
             total += 1;
             let label = norm.s(&r.join(" "));
-            let (rc, out, err) = run_rust(r);
+            let (rc, out, err) = run_rust(r, &root);
+            let out = host_neutral(&out, r, &[&root, &tmp]);
             let mine = record(rc, &out, &err, &norm);
             let reference = match mode {
                 Mode::Golden => {
@@ -709,7 +848,7 @@ fn print_and_check_outputs_match_hydo_build() {
         cases.len()
     );
     for m in mismatches.iter().take(25) {
-        eprintln!("MISMATCH {m}\n");
+        eprintln!("MISMATCH {}\n", mutant_note(m, &pinned, &changed));
     }
     assert!(
         mismatches.is_empty(),
@@ -721,6 +860,24 @@ fn print_and_check_outputs_match_hydo_build() {
             format!("\n{}", changed_note(&changed))
         }
     );
+}
+
+/// A mismatch of a mutant names the repository file it came from, and says when that file
+/// changed since the recording: the mutant is then another manifest than the recorded one.
+fn mutant_note(m: &str, pinned: &[String], changed: &[String]) -> String {
+    let place = m
+        .split("<tmp>/mutant")
+        .nth(1)
+        .and_then(|r| r.split('.').next())
+        .and_then(|p| p.parse::<usize>().ok());
+    let Some(rel) = place.and_then(|p| pinned.get(p)) else {
+        return m.to_string();
+    };
+    if changed.contains(rel) {
+        format!("{m}\n  (a mutant of {rel}, which changed since the recording)")
+    } else {
+        format!("{m}\n  (a mutant of {rel})")
+    }
 }
 
 /// What a failure says about pinned inputs whose bytes differ from the recording.
