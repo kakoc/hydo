@@ -2447,7 +2447,7 @@
     {
       "id": "kvm/qdrant-flaky-buggy",
       "platform": "kvm",
-      "recorded": "hydo-bench rebaseline --write, 2026-11-20",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-25",
       "note": "Qdrant's flaky test_wal_replay_loads_pending_to_queue (issue 10200). At the fingerprint epoch 4 (M302) a pause of the test's thread for 500 ms, 208 ms after the workload's start, lets the update worker drain the queue before the test reads its length, and the start at 207 ms does not (pause-check.sh: 1 failing start of 120 from 190 to 309 ms). At epoch 3 (M244) the failing start was 239 ms. AMD EPYC values; Intel gives other fingerprints with the same verdicts",
       "build": {
         "stage": "qdrant-flaky",
@@ -2455,32 +2455,32 @@
         "manifest": "hydo.yaml",
         "args": []
       },
-      "sha256": "73dd233cac12da10abceeac908fe36fc46342ef337b5b1f09cad40c824a8581b",
+      "sha256": "473fc1acbac4d9039378de94a47480aa131313c711c6016202d2639c76d2713a",
       "runs": [
         {
-          "schedule": "disk=none | run P=workload/tests::wal_reco@0~208:500",
+          "schedule": "disk=none | run P=workload/tests::wal_reco@0~180:500",
           "verdict": "OK invariants=1 held (qdrant.test_passes: passed; after load: { length: 27, op_num: Some(472), deferred_points: Some(0) })",
-          "fp": "c5d668284fd59fd6",
-          "ctl": "f2dabc988505e68c"
+          "fp": "b83231bf4097fb7c",
+          "ctl": "9888337f681859d8"
         },
         {
-          "schedule": "disk=none | run P=workload/tests::wal_reco@0~207:500",
+          "schedule": "disk=none | run P=workload/tests::wal_reco@0~179:500",
           "verdict": "VIOLATION [qdrant.test_passes] failed: update queue should have pending operations after WAL replay; after load: { length: 0, op_num: Some(500), deferred_points: Some(0) }",
-          "fp": "1e3a56d501f794a2",
-          "ctl": "4bd26f630a93ca71"
+          "fp": "ac35b1539dfeb052",
+          "ctl": "9e749d37b81112a6"
         },
         {
           "schedule": "disk=none | run",
-          "verdict": "OK invariants=1 held (qdrant.test_passes: passed; after load: { length: 20, op_num: Some(479), deferred_points: Some(0) })",
-          "fp": "55683e98c66166b2",
-          "ctl": "d46565a68c746cab"
+          "verdict": "OK invariants=1 held (qdrant.test_passes: passed; after load: { length: 12, op_num: Some(487), deferred_points: Some(0) })",
+          "fp": "365fc266bf14a5e2",
+          "ctl": "7af458bcbffc7e8b"
         }
       ]
     },
     {
       "id": "kvm/qdrant-flaky-fixed",
       "platform": "kvm",
-      "recorded": "hydo-bench rebaseline --write, 2026-11-20",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-25",
       "build": {
         "stage": "qdrant-flaky",
         "dir": "hydo/onboard/examples/qdrant-flaky-10200",
@@ -2490,13 +2490,13 @@
           "variant=fixed"
         ]
       },
-      "sha256": "291a6531335da361e7f5477d7197e73c9e349e908b95cc80adca8abbeaac8dbf",
+      "sha256": "145977df8444a406675f58ea881f01aaf2aa6d19ff5c4870e7663964f3984e84",
       "runs": [
         {
-          "schedule": "disk=none | run P=workload/tests::wal_reco@0~207:500",
+          "schedule": "disk=none | run P=workload/tests::wal_reco@0~179:500",
           "verdict": "OK invariants=1 held (qdrant.test_passes: passed; after load: { length: 0, op_num: Some(500), deferred_points: Some(0) })",
-          "fp": "ead409a459af4d68",
-          "ctl": "c3b837c5bee22082"
+          "fp": "f6d5b94924cd4271",
+          "ctl": "1aaed8066393c1df"
         }
       ]
     }

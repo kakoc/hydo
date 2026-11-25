@@ -301,9 +301,8 @@ dry-runs the packages on every pull request that changes one. The details are in
 **Fingerprints.** The fingerprint epoch is 6 (M353; 5 from M317, 4 from M269, 3 from M234, 2
 from M204, 1 from M155). An image built at epoch 6 carries the first boot's outcomes into a
 recovery boot and gives the controller's commands a `PATH` (M353, below). The 0.6.0 pass
-re-recorded the list's hvx values and four of its six KVM images at epoch 6 (docs/REBASELINE.md
-section 31). The two Qdrant KVM images and the Mac values are still those of epoch 5 (open item
-105). An
+re-recorded the list's hvx and KVM values at epoch 6 (docs/REBASELINE.md section 31). Its Mac
+values are still those of epoch 5 (open item 105). An
 image built at epoch 5 has the image services' launchers of M317, which mount the
 system folders once per boot. Since M331 they also give each image service a `/tmp` of its own. On hvx an x86_64 image built at epoch 5 keeps time with its TSC
 (M323, `guest.exact_tick`). The 0.5.0 release's pass re-recorded every value of the list at
@@ -2410,11 +2409,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       boot: the controller reports them at the cut and writes them into the recovery boot's
       `$HYDO_OUTCOMES`. A check that read an empty `$HYDO_OUTCOMES` there before can change its verdict. The
       pass decides each verdict change (docs/REBASELINE.md section 30). The 0.6.0 pass
-      re-recorded the 43 hvx images and their 141 runs (docs/REBASELINE.md section 31). It also
-      re-recorded four of the six KVM images with 15 of their 19 runs. Still waiting:
-      - the two Qdrant KVM images (4 runs), whose new pauses at 179 and 180 ms the workflow
-        commit `d3803d5c` on the branch `tmp-rel060-kvm` re-records;
-      - the Mac values (21 images, 76 runs): the Mac had about 4 GB of free disk.
+      re-recorded the 43 hvx images and their 141 runs, and the 6 KVM images and their 19 runs
+      (docs/REBASELINE.md section 31). The Mac values (21 images, 76 runs) still wait: the Mac
+      had about 4 GB of free disk.
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -4717,9 +4714,9 @@ build machine, before 2026-10-13.
   on hvx. All 43 images and 141 runs moved. Each image built twice the same, and each run gave
   one result twice. Four verdict changes were decided: one accepted (the same class), and new
   schedules for the nats turn boundary and both symptoms of etcd issue 14685. The pinned
-  reproducers' epoch-6 images are in `~/hydo/build/rel060`. On KVM (AMD) four of six images moved
-  with every run; the Redis power cut moves to `C=11 R=everysec`. The two Qdrant KVM images and
-  the Mac values wait (open item 105)
+  reproducers' epoch-6 images are in `~/hydo/build/rel060`. On KVM (AMD) all 6 images and 19 runs moved;
+  the Redis power cut moves to `C=11 R=everysec` and Qdrant's pause to 179 ms. The Mac values
+  wait (open item 105)
 
 ## Where to look
 

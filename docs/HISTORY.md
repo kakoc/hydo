@@ -21946,8 +21946,7 @@ lists the known keys, which the recorded answers do not have.
 
 ## The 0.6.0 re-recording pass
 
-Status: the hvx part and most of the KVM part done on 2026-11-25. The two Qdrant KVM images and
-the Mac part wait. No milestone number. The pass
+Status: the hvx and KVM parts done on 2026-11-25. The Mac part waits. No milestone number. The pass
 re-records the values of `hydo/onboard/recorded.json` at the fingerprint epoch 6 of Milestone
 353, under the rule "Re-recording runs in batches" (AGENTS.md). It raises no version, builds no
 release, and publishes nothing. docs/REBASELINE.md section 31 has every value and decision.
@@ -22017,10 +22016,12 @@ error; each rebaseline exited 1 only for the two verdict changes below.
 
 The list takes the AMD host's values of the release Redis, netem, and stack images. For the
 Redis power cut it takes the quickstart section's `C=11 R=everysec` run. The pinned
-reproducers' epoch-6 images give `96b8fd4017db3274` (VIOLATION, order 11) and `87d6319a26da08c7` (OK) on KVM (AMD). The two Qdrant
-images keep their epoch-5 values until the workflow's second commit `d3803d5c` runs. That commit
-re-records the three images whose entries moved, and it waits for a push. The quickstart's
-exploration on the AMD host gave 15 of 15 reproduced.
+reproducers' epoch-6 images give `96b8fd4017db3274` (VIOLATION, order 11) and `87d6319a26da08c7` (OK) on KVM (AMD). The workflow's
+second commit `d3803d5c` (run 45521477592) re-recorded the three images whose entries moved on six
+more runners, one of them AMD. Each built them twice with the same bytes, gave all 16 runs twice
+with one result, and changed no verdict; every job's log was read. The AMD values of the two Qdrant
+images are the list's now, and they equal the ones `pause-check.sh` gave. The quickstart's
+exploration on the AMD host of the first run gave 15 of 15 reproduced.
 
 **The Mac.** Not run. The Mac had about 4 GB of free disk, and its pass waits for at least 12 GB
 (open item 105).

@@ -3986,9 +3986,14 @@ other fingerprints with the same verdicts. Two verdicts changed on every host:
   found 2 failing starts of 131 from 179 to 309 ms: 179 ms and 222 ms. The start at 179 ms failed
   twice with one fingerprint (AMD `ac35b1539dfeb052`). At 179 ms the fixed test and a pause of the
   whole workload passed. The pauses at 179 ms (fails) and 180 ms (passes) replace those at 207 and
-  208 ms, and the fixed test moves to 179 ms. The workflow's second commit `d3803d5c` re-records
-  the three images whose entries moved; until its run the two Qdrant images keep their epoch-5
-  values.
+  208 ms, and the fixed test moves to 179 ms.
+
+The workflow's second commit `d3803d5c` (run 45521477592) re-recorded the three images whose
+entries moved, with `--write --thorough`. It ran on one AMD EPYC 7763, four Xeon 6975P-C, and one
+Xeon Platinum 8573C host. Every host built them twice with the same bytes. Each of the 16 runs gave one
+result twice, and no verdict changed. On the AMD host the Redis values were the first run's.
+The Qdrant values were `pause-check.sh`'s: `ac35b1539dfeb052` at 179 ms (VIOLATION),
+`b83231bf4097fb7c` at 180 ms (OK), and the fixed test's `f6d5b94924cd4271` at 179 ms (OK).
 
 The release Redis image's quickstart exploration on the AMD host gave 15 of 15 reproduced, as at
 epoch 5.
