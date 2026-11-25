@@ -22321,3 +22321,232 @@ and property: `hvm/ledger` (two lines), `hvm/redis-composed-racy`, `hvm/redis-hi
 Milestone 353's proof: `f7d1de1935d77df4` without faults and `da264396142d8e52` at `C=12`. Its
 `C=12 R=everysec` loses `k:0` (`6a3d1a0456e48e01`). The list's `epoch` is 6, and open item 105 is
 empty.
+
+## Milestone 358 (tentative number): the features of `main` since 0.5.0 on hvx and KVM
+
+Status: hvx done on 2026-11-25; the KVM workflow is ready and did not run yet. One fix, of the
+hvx engine that a checkout's hydo starts. Nothing recorded moved, and the fingerprint epoch
+stays 6.
+
+Milestones 345 to 355 ran on the Mac engine, and Milestone 352 ran 345, 346 and 348 on KVM. This
+milestone runs them on hvx and on KVM, as Milestone 341 did for 0.5.0. It records what held and
+fixes what was wrong.
+
+### How the runs were made
+
+- hvx: the bare-metal machine, in a tree of its own made from `main` at `d1931461`. The tree's
+  `hydo`, `hydo-hvx`, `hydo-build`, `hydo-compose` and `hydo-fetch-image` ran over the guest
+  files of the published 0.5.0 Linux release (`2b5d45fd…`, through `HYDO_RELEASE_DIR`). Every
+  VM ran through `hvx-run` under umask 022, one at a time, with one explorer worker. The module
+  stayed `91D86B693F4D4035C368F9B`.
+- KVM: the workflow `.github/workflows/tmp-m358-kvm.yml` on the branch `tmp-m358-kvm` (commits
+  `f12dd2db` and `d524d18a`, on `d1931461`). Eight jobs run four parts, `redis`, `oci`, `s3` and
+  `meili`, on two hosts each. Each job builds the branch's `hydo` and takes the 0.5.0 release's
+  guest files and its `examples/redis`.
+- One script, `.github/workflows/tmp-m358-kvm.sh` on that branch, makes the projects and runs
+  each schedule twice on both engines. A pair with two fingerprints, or a run without a result,
+  fails its part. The Go programs were built on this Mac for hvx; the jobs build them with the
+  runner's Go.
+
+Three projects were made for the proofs, beside the examples:
+
+- `r355`: the 0.5.0 release's Redis quickstart with `storage: {dir: redis, size_mib: 96}`,
+  `powerloss` in `faults:`, a record `client.step3_acked` after the acknowledged write of step 3,
+  and a build parameter `refuse`. With `refuse=yes` the service refuses its second start, as a
+  node whose files a power loss damaged does. A second check, `env.path`, fails when a command
+  that hydo starts has no `PATH`. Its regressions are `plain` (`disk=none | run`, `expect: ok`)
+  and `restart-refused-after-a-cut` (`# params: refuse=yes`, `expect: violation`, `disk=cut |
+  run C=5`). It is Milestone 355's proof project, written again.
+- `redis-oci-path`: `redis-oci/hydo-sys.yaml` with a Go program, `pathprobe`, and the check
+  `oci.path_by_name`. The program runs `exec.Command("hydo-oci", "redis", "redis-cli",
+  "ping")`, the call that failed in the Prometheus client (open item 170).
+- `lines`: one service that writes 400,000 error lines of 87 bytes to its log, with `errors:
+  true`.
+
+### The fix: a checkout's hydo ran the hvx engine of another version
+
+On the bare-metal machine `hydo` cannot open `/dev/hvx` itself, so it starts the engine as a
+program under sudo. A hydo built in a checkout took that program from its root. That root is the
+install cache or the release tree of `HYDO_RELEASE_DIR`, so this tree's hydo ran the 0.5.0
+release's `hydo-hvx` with this tree's host controller, and said nothing. The first round of hvx
+runs (redis, oci and s3) had that pair. The `lines` project showed it. With the 0.5.0 engine its
+run waited 900.2 s for the wall limit and ended `TIMEOUT check`; Milestone 348's engine ends it
+at once (the section on the agent lines below).
+
+Commit `192af3fc` makes such a hydo take the `hydo-hvx` in its own folder when there is one
+(`hvxenv::engine`). `HYDO_HVX_EXPLORE` still decides first, and a release or a cargo install
+keeps its engine. The unit test is
+`hvxenv::tests::a_checkout_build_takes_the_engine_built_next_to_it`. The build, the test and
+clippy ran on the bare-metal machine. In a tree with the fix and without `HYDO_HVX_EXPLORE`, the
+process list showed the tree's `target/release/hydo-hvx` under sudo. `lines` then ended `ERROR
+agent lines full check` in 27 s, twice, and the Redis quickstart gave `2f5a6dc34e0c8ba6` twice.
+
+Every later hvx run used the tree's engine, named by `HYDO_HVX_EXPLORE`. The only engine changes
+since 0.5.0 are Milestone 340's snapshots of shrinks, which are off on hvx, and Milestone 348's
+end of a full buffer. So the second round of the redis and oci parts gave every fingerprint and
+`ctl` value of the first round again, and the s3 part every one of the schedules that both
+rounds ran.
+
+### The fingerprint epoch 6 (Milestone 353)
+
+The quickstart's Redis built at epoch 6 is `8fae6946…`, the image of `hvx/release-redis` in
+`hydo/onboard/recorded.json`, with `"epoch": 6` in its record. Each schedule gave one
+fingerprint twice:
+
+- `disk=none | run`: OK, `acked=20`, `2f5a6dc34e0c8ba6` (`ctl` `21f6fe353462b188`);
+- `disk=cut | run C=12`: OK, `acked=12`, `47ae607ed0a15c48` (`ctl` `b8dfb4051945f4ab`).
+
+These are the list's hvx values. The first boot's transcript ends with `hydo-explore-outcomes:
+0=ack 1=ack ... 11=ack`. The recovery boot's control transcript has one write of
+`/tmp/hydo/outcomes` with the lines `0 ack` to `11 ack`, before it starts Redis. Every command
+of both boots carries `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`.
+
+### `guest.path` and a Go program (Milestone 348)
+
+`redis-oci-path` (`afe58cd8…` on hvx, with the image file `2a18d78d…` that `hydo-fetch-image`
+saved) held its three checks. `pathprobe` printed `found /bin/hydo-oci with
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin; redis-cli ping answered
+"PONG\n"` in every run. `disk=none | run` gave `c1971f9ae985a430`, and `disk=none | run
+K=redis@5+2` gave `3e8696991ebfb915` (`acked=18`), each twice. In `r355` the check `env.path`
+held in every run.
+
+### The note of a reaction that never fired, `powerloss-<svc>`, and `# params:` (Milestone 355)
+
+The images of `r355` are `5bee04f5…` (`refuse=no`) and `78c48827…` (`refuse=yes`). Each schedule
+gave one fingerprint twice on hvx:
+
+| Schedule | Verdict | Fingerprint |
+|---|---|---|
+| `disk=none \| run` | OK, `acked=20` | `6bb7610d40759e15` |
+| `disk=none \| run A=client.step3_acked@10:kill-redis` | OK, with the warning below | `f51e7e953de9f23f` |
+| `disk=none \| run A=client.step3_acked+50:kill-redis` | OK, `acked=7`, no warning | `b4f974f433df1729` |
+| `disk=none \| run A=client.step3_acked+50:powerloss-redis` | OK, `acked=7` | `f6b2b78e5af5b2e5` |
+| `disk=none \| run L=redis@5+2` (`refuse=yes`) | `ERROR redis restart failed (after its power loss)` | `371fe35ee1ff1fc8` |
+
+- The warning reads `the reaction A=client.step3_acked@10:kill-redis never fired: no record of
+  its event client.step3_acked came after it was armed before step 10; the run did not test it`.
+  It is in `hydo run`'s output, in `result.json` and in `hydo report`. The reaction that fired
+  has none. The run with the reaction that never fired has another fingerprint than the run
+  without it, because the reaction's step 10 splits the workload's calls there.
+- `hydo explore --reactive-at client.step3_acked@10 --react-delays 0..1 --react-actions kill
+  --seeds 1-3` printed `in 3 of 3 first runs a reaction never fired`, and its summary has
+  `unfired_reactions: 3`. Seed 3 is the second round's first cell. Without a composition its
+  schedule is seed 1's, so the exploration took seed 1's result.
+- The power loss logged `hydo-ob: POWER LOSS of redis at the reaction
+  A=client.step3_acked+50:powerloss-redis (/dev/vda5 shut down and mounted again; what was not
+  written back is lost)`, and Redis started again at the heal. `--reactive-at client.step3_acked
+  --react-delays 0,50 --react-actions powerloss` ran its two cells, `A=client.step3_acked:powerloss-redis`
+  and `+50`, and both held.
+- The diagnosis after one service's power loss read `redis exited while it was restarted after
+  its power loss, before its readiness check passed (exit status 1); its log ends: Failed to open
+  the database: Corruption: the marker of an earlier start is there`.
+- `hydo build` of `refuse=no` warned that `restart-refused-after-a-cut needs the build parameters
+  refuse=yes`, and named `hydo build --set refuse=yes`. `hydo repro --regressions` on that image
+  gave `PASS plain` and `SKIP restart-refused-after-a-cut`, and `1 of 1 regressions as expected,
+  1 left out`, with the exit status 0. On the image of `refuse=yes` it gave `PASS plain`
+  (`a1fdf35589f7d060`) and `PASS restart-refused-after-a-cut` (`5afcf6fef935b54d`), `2 of 2`.
+  `<image>.regressions.json` names the parameters for the second regression only.
+
+### `ERROR agent lines full` on hvx (Milestone 348)
+
+In `lines` the error-log scan reads the service's log of 35 MB through the agent. With the tree's
+engine, `disk=none | run` ended in 35 s and 32 s with `ERROR agent lines full check: the agent
+wrote more than 16 MiB of lines in this boot, which the hvx engine does not keep; the error-log
+scan of large service logs (errors:) is the usual cause: lower the services' log level, or set
+errors: false`. Both runs gave `494ccd9e15bdace4` (`ctl` `8e3203c3bbd73cba`), and the diagnosis
+line has the verdict's words. With the 0.5.0 engine the same run waited 900.2 s and ended
+`TIMEOUT check`, with the same fingerprint and `ctl`.
+
+### The s3 emulator's `durable: true` (Milestone 354)
+
+`checkout/hydo-s3-cut.yaml` (`durable: true`, `882820ca…` on hvx) ran beside a copy with
+`durable: false` and another name (`0235f54d…`). Each schedule gave one fingerprint twice:
+
+| Schedule | `durable: true` | `durable: false` |
+|---|---|---|
+| `disk=none \| run` | OK, 19 writes, `219a4a6b6cc196eb` | OK, 19 writes, `c4ba5354c3eab4c4` |
+| `disk=cut \| run C=3` | OK, 14 writes, `5b0bfad8953a39a0` | 10 of 14 writes lost, `8e9ea1f3a921bc64` |
+| `disk=cut \| run C=4` | OK, 19 writes, `6c585bd0bd2cdf07` | 13 of 19 lost, `816c74e609c032c1` |
+| `disk=cut \| run A=s3.acked@2+5:cut` | OK, 10 writes, `2c1e6d112a9600d4` | 8 of 10 lost, `a7f4c9eeaaa542cb` |
+| `disk=cut \| run A=s3.acked@3:cut` | OK, 15 writes, `5c08da8bd0b38f40` | 11 of 15 lost, `d3001486b9aad7d7` |
+| `disk=cut cf=20 \| run` | OK, 1 write, `62458c4aa95a7f4c` | 13 of 19 lost, `79f0886a7ce1427d` |
+| `disk=cut cf=120 \| run` | OK, 3 writes, `04f9d901df2c81a3` | the same |
+| `disk=cut cf=400 \| run` | OK, 3 writes, `1308f1d571898efd` | the same |
+| `disk=cut cf=800 \| run` | OK, 7 writes, `9983e1aacebd0c36` | the same |
+
+The losses without the attribute are the Mac's numbers of Milestone 354 at `C=3`, `C=4` and
+`A=s3.acked@3:cut`. With the attribute every write and rename is a flush: the run of `cf=120` cut
+after its 119th flush, with three writes acknowledged. Without it the workload made no flush, so
+every `cf=` cut came after the last step, and those runs have one fingerprint with other `ctl`
+values.
+
+### Meilisearch: aimed reactions, `acked_outcome`, the notes, and the vacuous passes
+
+The Meilisearch example built at epoch 6 with this tree is `3994a902…` on hvx, with the client
+`mlc` built on this Mac (`a6138b92…`).
+
+- `disk=none | run`: OK, 159 of 159 commands succeeded, and `queue.acked-outcome` held over 173
+  acknowledged tasks, twice with `88a4e3f64fe74822`. `result.json` has no warning that the run
+  checked nothing, although `no-phantom` judged 0 deliveries (Milestone 350).
+- `disk=none | run A=meili.swap_acked#40:kill-meilisearch`: OK with the warning `its event
+  meili.swap_acked came 16 times after it was armed from the start of the workload, and it acts
+  at record 40 of the event; the run did not test it`. It gave the clean run's fingerprint, with
+  another `ctl`, twice.
+- `disk=none | run A=meili.add_acked@10+20:powerloss-meilisearch`: `VIOLATION [tasks]`,
+  twice with `54a210d05c581415`. The claim reads `add.32 (system id 43) was acknowledged and
+  ended failed with internal, not an error the client causes`, with the new error line `Failure
+  to delete the content files associated with task #. Error: No such file or directory`. That is
+  the example's finding 2, a payload lost at a power cut, here from one service's power loss.
+  `one.log` has 10 `HYDO-CMD-OUT` notes, such as `mlc: POST /indexes: no answer: ... connect:
+  connection refused`.
+
+The aimed grid of Milestone 345 at the index deletion, `--reactive-at meili.delete_index_acked
+--react-actions kill-now,kill`, ran in parts on one worker:
+
+- `--react-delays 0..50`, the default range: 102 schedules in 330 s, none failed. On KVM the
+  failing cells lay between 1 and 8 ms (Milestone 352).
+- `--react-delays 51..200`: 300 schedules in 1,194 s, 14 failed, and each failed again with its
+  own fingerprint. `kill-meilisearch` 112 to 116 ms after the deletion's acknowledgement runs the
+  deletion twice. The claim reads `delidx.4 (system id 15) was acknowledged and ended failed with
+  index_not_found, but its effect is there`, KVM's form at 6 and 8 ms. `kill-now-meilisearch` at
+  192 to 200 ms runs the creation of `x4` twice instead: `mkidx.4 (system id 13) ... ended failed
+  with index_already_exists`.
+  A third part, `--react-delays 201..260 --react-actions kill-now` with `--no-shrink`, failed
+  all 60 cells the same way, and each failed again with its own fingerprint.
+
+`hydo run` of `disk=none dseed=0 | run A=meili.delete_index_acked+112:kill-meilisearch` gave
+`VIOLATION [tasks]` twice with `c9327412a6f0befe`, the explorer's value. Its `one.log` has 10
+`HYDO-CMD-OUT` notes. `hydo inspect diagnose <run> --evidence` wrote `logs/meilisearch.log` and
+four command logs: `command.parallel_driver_add.log`, `command.parallel_driver_delidx.log`,
+`command.parallel_driver_snap.log` and `command.parallel_driver_swap.log`.
+
+No first run of these grids counts as a vacuous pass: `vacuous_passes` is absent from every
+summary. Before Milestone 350, 94 of KVM's 102 such runs did (Milestone 352). Every reaction of
+the grids fired.
+
+The refusals of Milestones 345 and 348 stopped with the exit status 5 before any VM, each with
+its JSON line under `--json`. They were `--block-faults` (hvx's disk is in its module),
+`--cluster-faults`, `--upgrades`, `--protocol-faults`, `--react-delays` and `--react-actions`
+without `--reactive-at`, and `--react-actions kill-nobody`. `--reactive-at` with `--kill-now
+--reactive fault` stopped first for the missing `--react-events`, and with `--react-events` for
+its own reason: the grid and the random reactions do not go together. `--strategy process
+--new-faults` warned and ran its seed.
+
+### KVM
+
+The workflow is on the branch `tmp-m358-kvm`, ready for the lead to push. It did not run while
+this milestone was written, so no KVM value is recorded here.
+
+### What did not run, and what is left
+
+- KVM ran none of the parts: the epoch-6 outcomes, `guest.path` with `pathprobe`, the note of a
+  reaction that never fired, `powerloss-<svc>`, `# params:`, the s3 emulator's `durable: true`,
+  and Meilisearch's `HYDO-CMD-OUT` notes and vacuous passes after Milestone 350.
+- A window after an event sits at other delays on each engine (open item 173). On hvx the
+  default delays of `--reactive-at`, 0 to 50 ms, missed the deletion's window, which starts at
+  112 ms.
+- The saved Meilisearch regressions (`+13` and `+14`) did not run on hvx.
+- Open item 182 has what is left of the fix.
+
+The commit with the fix is `192af3fc`; the branch `tmp-m358-kvm` adds the workflow on
+`d1931461`. Open items 116, 173, 174, 176 and 180 are updated, and open item 182 is new.
