@@ -1,0 +1,104 @@
+# ClickHouse v26.10.6.18 as one server with one MergeTree table: a MODIFY COLUMN of a column that
+# a later DROP COLUMN removed, after a power cut. ../RESULTS.md, the section "One server: a
+# mutation of a dropped column after a power cut", says what it shows.
+#
+#   sh ../hydo/fetch-images.sh   # the server's image by digest, into ../hydo/images/
+#   hydo build hydo.yaml         # x86_64: hvx or KVM
+#   hydo run "disk=none | run"          # OK: every ALTER is done, the update is applied
+#   hydo run "disk=cut | run C=6"       # the power goes off after the last ALTER was acknowledged
+#   hydo build hydo.yaml --set merge_fsync=1   # a mutated part is synced too: C=6 passes
+#
+# The table syncs every inserted part (fsync_after_insert, fsync_part_directory), so the cut loses
+# no inserted row. A mutated part is synced only with min_rows_to_fsync_after_merge or
+# min_compressed_bytes_to_fsync_after_merge, which are 0 by default, so the cut loses the parts
+# that the ALTERs wrote. Their mutation files and the table's metadata were synced.
+format: 1
+name: clickhouse-single
+description: "ClickHouse v26.10.6.18, one server: every acknowledged ALTER of a MergeTree table ends done after a power cut"
+hydo_version: "0.3"
+
+params:
+  merge_fsync: "0"   # min_rows_to_fsync_after_merge of the table: 0 is ClickHouse's default, 1 syncs every merged and mutated part
+
+guest:
+  ram_mib: 2048
+  cpu: v3   # the official x86_64 binary stops with SIGILL on the x86-64-v2 guest
+  clock_start: 1795392000   # 2026-11-23 00:00 UTC
+
+data:
+  size_mib: 512   # the data disk: the server's data directory (the fault target)
+  dirs: [vol/ch]
+
+root:
+  files:
+    - {src: server.xml, dst: /etc/hydo/single/server.xml}
+
+shell: |
+  # q <query>: one query through the image's clickhouse-client, with a deadline of 30 s
+  q() { timeout 30 /bin/hydo-oci clickhouse clickhouse-client --query "$1"; }
+
+services:
+  # image clickhouse/clickhouse-server:26.10.6 = docker.io/clickhouse/clickhouse-server@sha256:9c55d8d8a77e03e1fd399d59e4d0a1c7a5e42df70098ff1c5d8bd18eb1a5d106
+  #   linux/amd64: sha256:9084cd79bde01fa4a99060d8d9cf71acdc4d3df44fce586230f566890277b2d6
+  #   linux/arm64: sha256:d610448be0bfbb32c1aae9dfb900054f7175a77084d692840f95593d60a35274
+  - name: clickhouse
+    image: {x86_64: ../hydo/images/clickhouse-clickhouse-server-26.10.6-amd64.docker.tar, arm64: ../hydo/images/clickhouse-clickhouse-server-26.10.6-arm64-oci}
+    image_ref: "clickhouse/clickhouse-server:26.10.6"
+    user: ""
+    entrypoint: [/usr/bin/clickhouse-server]   # the image's entrypoint.sh changes owners in its read-only root
+    cmd: ["--config-file=/etc/clickhouse-server/config.xml"]
+    env:
+      CLICKHOUSE_WATCHDOG_ENABLE: "0"
+    port: 9000
+    ready: "q 'SELECT 1'"
+    ready_timeout: 180
+    restart: "always"
+    mounts:
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/single/server.xml, dst: /etc/clickhouse-server/config.d/hydo.xml}
+      - {src: /data/vol/ch, dst: /var/lib/clickhouse}
+
+# The table and its first part, without the column c, before the window under test.
+provision: |
+  q "CREATE TABLE t (id UInt64, note String DEFAULT '') ENGINE = MergeTree ORDER BY id SETTINGS fsync_after_insert = 1, fsync_part_directory = 1, min_rows_to_fsync_after_merge = {{merge_fsync}}"
+  q "INSERT INTO t (id) VALUES (1)"
+
+# Step 0 adds the column c and inserts a second part, which stores c. Steps 1 and 2 change the
+# column's type and drop it; ClickHouse acknowledges each only when its mutation is done
+# (alter_sync = 1, the default). Step 3 updates the row of the second part and waits for it.
+# Steps 4 and 5 only wait, so that every ALTER is acknowledged before C=6 cuts the power.
+workload:
+  steps: 8
+  timeout: 120
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      case $i in
+        0) q "ALTER TABLE t ADD COLUMN c UInt32 DEFAULT 7" && q "INSERT INTO t (id) VALUES (2)" && echo add >> $HYDO_ACKED ;;
+        1) q "ALTER TABLE t MODIFY COLUMN c UInt64 DEFAULT 7" && echo modify >> $HYDO_ACKED ;;
+        2) q "ALTER TABLE t DROP COLUMN c" && echo drop >> $HYDO_ACKED ;;
+        3) q "ALTER TABLE t UPDATE note = 'u' WHERE id = 2 SETTINGS mutations_sync = 1" && echo update >> $HYDO_ACKED ;;
+        *) sleep 1 ;;
+      esac
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: mutations_done
+    type: eventually
+    within: 60
+    msg: every acknowledged ALTER ends done, and the acknowledged ALTER UPDATE stays applied
+    cmd: |
+      left=$(q "SELECT count() FROM system.mutations WHERE table = 't' AND NOT is_done") || exit 1
+      note=$(q "SELECT note FROM t WHERE id = 2") || exit 1
+      if [ "$left" = 0 ] && { [ "$note" = u ] || ! grep -qx update $HYDO_ACKED; }; then
+        echo "every mutation done, row 2 note '$note'"; exit 0
+      fi
+      q "SELECT mutation_id, command, latest_fail_reason FROM system.mutations WHERE table = 't' AND NOT is_done FORMAT TSV"
+      q "SELECT 'active part', name, data_version, groupArray(column) FROM system.parts_columns WHERE table = 't' AND active GROUP BY name, data_version ORDER BY name FORMAT TSV"
+      q "SELECT 'detached part', name, reason FROM system.detached_parts WHERE table = 't' ORDER BY name FORMAT TSV"
+      echo "$left mutations not done, row 2 note '$note'"
+      exit 1
+
+faults: [kill, pause, cut, clock, disk]

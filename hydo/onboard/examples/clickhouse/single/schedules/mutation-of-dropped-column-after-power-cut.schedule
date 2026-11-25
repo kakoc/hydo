@@ -1,0 +1,11 @@
+# A new candidate (../../RESULTS.md, "One server: a mutation of a dropped column after a power
+# cut"). The power goes off before step 6, after the ADD, MODIFY and DROP COLUMN of c and an
+# ALTER UPDATE were acknowledged. The recovery boot detaches the mutated parts as broken-on-start
+# and loads all_2_2_0 again, which stores c. Its MODIFY COLUMN then fails with
+# UNKNOWN_IDENTIFIER on every retry, and the DROP COLUMN and the UPDATE behind it are never
+# applied: mutations_done fails ("3 mutations not done, row 2 note ''"), fingerprint
+# b1992b2c7f5ea453 on hvx with hydo 0.5.0 and the image fa9732112e98ab3f (twice). With
+# --set merge_fsync=1 the schedule passes.
+#   hydo run "$(tail -1 schedules/mutation-of-dropped-column-after-power-cut.schedule)"
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run C=6
