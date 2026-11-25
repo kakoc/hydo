@@ -22321,3 +22321,33 @@ and property: `hvm/ledger` (two lines), `hvm/redis-composed-racy`, `hvm/redis-hi
 Milestone 353's proof: `f7d1de1935d77df4` without faults and `da264396142d8e52` at `C=12`. Its
 `C=12 R=everysec` loses `k:0` (`6a3d1a0456e48e01`). The list's `epoch` is 6, and open item 105 is
 empty.
+
+## Milestone 359 (tentative number): a new user's trial of 0.6.0's features on NSQ
+
+Status: done on 2026-11-25 on the Mac engine. Nothing recorded moved, and nothing was posted.
+A tester who had not used hydo tried the features new since 0.5.0 from the guide alone, on NSQ
+v1.3.0 with `--mem-queue-size=0`. The hydo was the release build of `main` at `d1931461`.
+The page is `docs/design/0.6.0-user-trial.md`: per feature what was done, the time, what
+worked, each friction with its exact message, a verdict, and the frictions ranked.
+
+The features were `hydo onboard` from a Compose file, the write and clock scans, a messages check
+with `acked_outcome` and `effect: recorded`, `--reactive-at`, `hydo stats` and `hydo report` of
+two rounds, `powerloss-<svc>` from a reaction, and `hydo save` with `hydo repro --regressions`
+and `# params:`. The s3 emulator did not apply, because NSQ uses no object store.
+
+The three frictions that cost most:
+
+1. A messages check ended in `ERROR check jobs.no-loss could not be evaluated: no group that had
+   to receive the acknowledged messages has a drained record`, although the drain had written its
+   `drained` record. It happened when every acknowledged message had been received once.
+2. `no-loss` with `acknowledgement: explicit` does not judge a message that a consumer received,
+   never acknowledged, and that never came back. Only the tester's read-back for
+   `acked_outcome` caught such a loss.
+3. `hydo save` wrote no `# params:` line for an exploration of an image built with `--set`, and
+   kept no file for findings whose names matched an earlier file (`exists, kept`).
+
+The trial found three candidates in NSQ, each replayed with its fingerprint. A kill of `nsqd`
+loses the messages of a topic before its queue's first metadata sync, because go-diskqueue
+v1.1.0 starts an empty queue when the metadata file is missing. A kill loses a message that a
+consumer holds in flight. After a step back of the wall clock, every publish to an existing topic
+waits until the clock passes the last message id's time (`nsqd/guid.go`, `nsqd/topic.go`).
