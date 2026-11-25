@@ -4838,6 +4838,12 @@ build machine, before 2026-10-13.
   others got new schedules: the nats turn boundary, both symptoms of etcd issue 14685, the KVM
   Redis power cut (`C=11 R=everysec`), and Qdrant's KVM pause (179 ms). No Mac verdict changed. The pinned
   reproducers' epoch-6 images are in `~/hydo/build/rel060`. Open item 105 is empty
+- M359 (tentative number): a new user's trial of 0.6.0's features on NSQ v1.3.0, on the Mac
+  engine (`docs/design/0.6.0-user-trial.md`). Every feature gave a first result from the guide
+  alone. The worst friction was a messages check's ERROR about a missing `drained` record that
+  was there. Also `no-loss` passes a received message that never came back, and `hydo save`
+  writes no `# params:` and drops findings of one filename. Three NSQ candidates, not posted.
+  Nothing recorded moved
 
 ## Where to look
 
