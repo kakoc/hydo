@@ -341,8 +341,12 @@ The report's head counts what it left out. A place is one of three shapes:
 
 The audit follows a reading through small functions, variables, fields, and parameters. For
 example, Go's `time.Now().UTC()` drops the monotonic reading, so a `Now()` method that returns
-it is a wall-clock reading too. Each place says where its reading comes from, and the limit
-with its value when the code states it.
+it is a wall-clock reading too. A project's own wrapper of the clock counts the same way: in C++
+the audit reads past namespaces and template arguments, and past a cast such as
+`std::chrono::duration_cast<Duration>(system_clock::now().time_since_epoch()).count()`. So
+Kvrocks's `util::GetTimeStamp()` and `GetTimeStampMS()` are readings, and the replica's
+acknowledgement throttle `now - last_ack_time_secs_ >= 1` is a place. Each place says where its
+reading comes from, and the limit with its value when the code states it.
 
 A place is `high` when the code compares the duration with a limit or keeps a lease, and
 `medium` when only its names suggest a deadline. Only `high` places get schedules. A reading
@@ -550,9 +554,12 @@ hydo explore --reactive-at meili.swap_acked@20
 It tries every delay from 0 to 50 ms after the event, each with `kill-now-<svc>`, `kill-<svc>` and
 a power cut, one schedule per seed: 153 schedules for one service. `--react-delays 0..200/5`
 changes the delays and `--react-actions kill-now` the actions. Name several events with commas,
-for example `meili.swap_acked@20,meili.swap_acked#3`. Without `--seeds` it runs the grid once;
-more seeds run it again with each seed's composition. Each failure is shrunk and replayed as in
-any exploration. Take the Meilisearch example on the Mac engine, with an image built at the
+for example `meili.swap_acked@20,meili.swap_acked#3`. One seed is one cell of the grid: seed `k`
+runs cell `k`. Without `--seeds` the seeds are the grid's, 1 to 153 here, and the grid runs once
+with the plain workload. `--seeds 1-3` runs only the grid's first three cells, not the grid three
+times. Seeds past the grid run it again, each with its seed's composition: `--seeds 1-306` runs
+it twice, and `--seeds 1-459` three times. The explorer names the cells of seeds that are not
+whole rounds of the grid. Each failure is shrunk and replayed as in any exploration. Take the Meilisearch example on the Mac engine, with an image built at the
 fingerprint epoch 5. The swap ran twice first at seed 29, a `kill-meilisearch` 9 ms after the
 swap's `202`. The grid of 153 schedules took 4 minutes and 24 seconds with 2 workers.
 
@@ -565,6 +572,22 @@ record is the event (`hydo guide manifest`, section `Reactions`).
 Half of its fault reactions are such a kill of any service, and the schedule then has no `K=`
 or `P=` on that service. So a project with one service gets these kills too. A schedule has at
 most one `kill-now-` reaction.
+
+`A=<event>+<ms>:powerloss-<svc>` cuts the power of one service at that moment, as
+`L=<svc>@<step>+<down>` does before a step. What the service had not written back to its own file
+system is lost, and it stays down until the heal, as after `kill-<svc>`. It needs a service with
+`storage: {dir:, size_mib:}`. `--react-actions powerloss` aims a grid at it, one action per
+service with `storage:`:
+
+```sh
+hydo explore --reactive-at kvrocks.failover_done --react-delays 0..20000/500 --react-actions powerloss
+```
+
+A reaction whose event never comes after it is armed does nothing, and the run says so. `hydo
+run` prints `hydo: warning: the reaction <token> never fired: ...` with how many records of its
+event came, `result.json` has the warning, and `hydo report` shows it. An exploration counts
+these runs, and its report says how many runs did not test their reaction. Fix the event's name,
+the step that arms it, or the workload that writes the event.
 
 A reaction can also act inside the workload's own work:
 

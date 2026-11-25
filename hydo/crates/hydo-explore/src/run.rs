@@ -871,8 +871,19 @@ fn aim_setup(cx: &mut Cx) {
         });
         ex.render(&s).contains(&format!("A=x:{act}"))
     };
-    let actions = crate::aim::actions(a.react_actions.as_deref(), &cx.ex.pause_svcs, &keep)
-        .unwrap_or_else(|e| fail(e));
+    let storage: Vec<String> = cx
+        .ex
+        .space
+        .as_ref()
+        .map(|sp| sp.storage_svcs.clone())
+        .unwrap_or_default();
+    let actions = crate::aim::actions(
+        a.react_actions.as_deref(),
+        &cx.ex.pause_svcs,
+        &storage,
+        &keep,
+    )
+    .unwrap_or_else(|e| fail(e));
     let aim = crate::aim::Aim {
         events,
         delays,
@@ -889,6 +900,14 @@ fn aim_setup(cx: &mut Cx) {
         cx.a.seeds = format!("1-{}", aim.cells());
     }
     eprintln!("{}", aim.words());
+    // Milestone 355: seeds that are not whole rounds of the grid say which cells they run
+    if a.seeds_given && a.schedule.is_none() && a.shard.is_none() {
+        if let Some((lo, hi)) = hydo_manifest::ci::parse_seeds(&a.seeds) {
+            if let Some(w) = aim.seeds_words(lo, hi) {
+                eprintln!("{w}");
+            }
+        }
+    }
     cx.ex.aim = Some(aim);
 }
 
@@ -3116,6 +3135,9 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
     // 264) first runs whose page check judged no failed request (results::failures_of_unmatched)
     let mut unmatched: Vec<String> = Vec::new();
     let mut nunmatched = 0u64;
+    // Milestone 355: first runs with a reaction that never fired, counted apart
+    let mut unfired: Vec<String> = Vec::new();
+    let mut nunfired = 0u64;
     let vacuous = seeds
         .iter()
         .filter(|sd| {
@@ -3132,10 +3154,32 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                         }
                     }
                 }
-                r.warnings.iter().any(|w| !u.contains(w))
+                let nf: Vec<&String> = r
+                    .warnings
+                    .iter()
+                    .filter(|w| results::is_unfired_warning(w))
+                    .collect();
+                if !nf.is_empty() {
+                    nunfired += 1;
+                    if unfired.is_empty() {
+                        unfired.push(nf[0].clone());
+                    }
+                }
+                r.warnings
+                    .iter()
+                    .any(|w| !u.contains(w) && !results::is_unfired_warning(w))
             })
         })
         .count() as u64;
+    if nunfired > 0 {
+        summary.unfired_reactions = Some(nunfired);
+        eprintln!(
+            "hydo: warning: in {nunfired} of {} first runs a reaction never fired, so those runs \
+             did not test it; for example {}",
+            seeds.len(),
+            unfired.first().map(String::as_str).unwrap_or("")
+        );
+    }
     if nunmatched > 0 {
         eprintln!(
             "hydo: warning: in {nunmatched} of {} first runs {}",

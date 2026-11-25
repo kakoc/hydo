@@ -626,6 +626,11 @@ pub enum ReactAction {
     /// the record wakes, so no thread of the service runs in between. `kill-<svc>` acts later,
     /// when the host has seen the record and the agent has run.
     KillNow(String),
+    /// `powerloss-<svc>` (Milestone 355): the power loss of one service at the reaction point,
+    /// as `L=` makes it before a step: the service's threads stop at once, its own file system
+    /// loses what was not written back, and the service stays down until the heal's restart
+    /// pass, as after `kill-<svc>`. The service needs `storage:` with a file system of its own.
+    PowerLoss(String),
 }
 
 impl ReactAction {
@@ -636,7 +641,8 @@ impl ReactAction {
         let bad = || {
             err(format!(
                 "{what}: the action is cut, kill-<svc>, stop-<svc>-<ms>, cont-<svc>, \
-                 clock+<s> or clock-<s>, stop-workload/<thread>-<ms> or kill-workload/<name>"
+                 clock+<s> or clock-<s>, stop-workload/<thread>-<ms>, kill-workload/<name> or \
+                 powerloss-<svc>"
             ))
         };
         // Milestone 296: a clock step at the reaction point
@@ -657,6 +663,11 @@ impl ReactAction {
         if let Some(svc) = v.strip_prefix("kill-now-") {
             name(svc, what)?;
             return Ok(ReactAction::KillNow(svc.to_string()));
+        }
+        // Milestone 355: one service's power loss
+        if let Some(svc) = v.strip_prefix("powerloss-") {
+            name(svc, what)?;
+            return Ok(ReactAction::PowerLoss(svc.to_string()));
         }
         let (kind, rest) = v.split_once('-').ok_or_else(bad)?;
         // Milestone 296: threads or processes of the workload
@@ -705,6 +716,7 @@ impl ReactAction {
             | ReactAction::KillProcs(_) => None,
             ReactAction::Kill(s)
             | ReactAction::KillNow(s)
+            | ReactAction::PowerLoss(s)
             | ReactAction::Stop(s, _)
             | ReactAction::Cont(s) => Some(s),
         }
@@ -717,6 +729,7 @@ impl fmt::Display for ReactAction {
             ReactAction::Cut => f.write_str("cut"),
             ReactAction::Kill(s) => write!(f, "kill-{s}"),
             ReactAction::KillNow(s) => write!(f, "kill-now-{s}"),
+            ReactAction::PowerLoss(s) => write!(f, "powerloss-{s}"),
             ReactAction::Stop(s, ms) => write!(f, "stop-{s}-{ms}"),
             ReactAction::Cont(s) => write!(f, "cont-{s}"),
             ReactAction::Clock(d) if *d > 0 => write!(f, "clock+{d}"),

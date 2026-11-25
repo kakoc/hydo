@@ -155,6 +155,44 @@ fn a_power_loss_shuts_the_file_system_down_and_restarts_the_service() {
     assert!(has(&notes(&r.run.items), "L: web has no own file system"));
 }
 
+/// Milestone 355: a reaction cuts the power of one service at its event, as `L=` does before a
+/// step, and the service stays down until the heal's restart pass.
+#[test]
+fn a_reactions_power_loss_shuts_the_file_system_down_at_the_event() {
+    let sched = "disk=none | run A=server.place_acked@2:powerloss-db";
+    let r = run(&plan(), sched);
+    let ns = notes(&r.run.items);
+    assert!(
+        has(
+            &ns,
+            "POWER LOSS of db at the reaction A=server.place_acked@2:powerloss-db"
+        ),
+        "{ns:#?}"
+    );
+    assert!(has(
+        &ns,
+        "REACT A=server.place_acked@2:powerloss-db: saw server.place_acked"
+    ));
+    assert!(has(&ns, "db is down; restarting it"), "{ns:#?}");
+    assert!(!has(&ns, "HYDO-REACT-UNFIRED"), "{ns:#?}");
+    assert!(runs(&r.run.items)
+        .iter()
+        .any(|c| c.contains("echo hydo-power-loss > /sys/fs/ext4/vda5/trigger_fs_error")));
+    assert_eq!(mounts(&r.run.items)[0].0, "/dev/vda5");
+    verdict(&r.run);
+    // the power loss reports the record of L=
+    assert!(r.run.fin.transcript.records.iter().any(|x| matches!(
+        x,
+        hydo_control::transcript::Record::Report { line, .. } if line.contains("fault.service_power_loss")
+    )));
+    // a service without its own file system: logged and ignored
+    let r = run(
+        &plan(),
+        "disk=none | run A=server.place_acked@2:powerloss-web",
+    );
+    assert!(has(&notes(&r.run.items), "L: web has no own file system"));
+}
+
 #[test]
 fn a_corruption_while_down_kills_and_restarts() {
     let r = run(&plan(), "disk=none | run G=web@3+2:flip,n=2,seed=5");

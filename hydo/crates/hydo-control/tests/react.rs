@@ -209,7 +209,9 @@ fn a_reaction_acts_where_its_event_is_seen_and_replays() {
                             )
                         }
                         // Milestone 305: its own test below
-                        ReactAction::KillNow(_) => unreachable!("not in SCHEDULES"),
+                        ReactAction::KillNow(_) | ReactAction::PowerLoss(_) => {
+                            unreachable!("not in SCHEDULES")
+                        }
                         ReactAction::Cut => {
                             // the main sequence freezes the workload and every service at once
                             let ending = ran.run.fin.ending.as_ref().unwrap();
@@ -291,15 +293,39 @@ fn a_reaction_that_never_fires_is_inert() {
         let keep = |r: &&Record| {
             !matches!(r, Record::Report { line, .. } if line.contains("\"fault.reacted\""))
                 && !matches!(r, Record::Note { line, .. } if line.starts_with("hydo-ob: command:"))
+                && !matches!(r, Record::Note { line, .. } if line.starts_with("HYDO-REACT-UNFIRED "))
         };
         let ra: Vec<&Record> = a.fin.transcript.records.iter().filter(keep).collect();
         let ro: Vec<&Record> = o.fin.transcript.records.iter().filter(keep).collect();
         assert_eq!(ra, ro, "{with}");
         assert_eq!(a.fin.ending, o.fin.ending, "{with}");
+        // Milestone 355: the note that the reaction never fired, which no hash covers
+        let unfired: Vec<&str> = a
+            .fin
+            .transcript
+            .records
+            .iter()
+            .filter_map(|r| match r {
+                Record::Note { line, .. } if line.starts_with("HYDO-REACT-UNFIRED ") => {
+                    Some(line.as_str())
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(unfired.len(), 1, "{with}: {unfired:?}");
+        assert!(
+            unfired[0].contains("\"armed\":true") && unfired[0].contains("\"seen\":0"),
+            "{with}: {unfired:?}"
+        );
+        assert_eq!(
+            unfired[0].contains("\"cut\":true"),
+            with.contains("C=12"),
+            "{with}: {unfired:?}"
+        );
         assert_eq!(
             a.fin.transcript.records.len(),
-            o.fin.transcript.records.len() + 1,
-            "{with}: only the declaration is added"
+            o.fin.transcript.records.len() + 2,
+            "{with}: only the declaration and the note are added"
         );
     }
 }

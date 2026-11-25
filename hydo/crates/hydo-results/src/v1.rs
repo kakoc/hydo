@@ -1850,6 +1850,11 @@ pub struct Summary {
     /// records' `warnings`; added after 0.1.0).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vacuous_passes: Option<u64>,
+    /// First runs whose schedule has a reaction (`A=`) that never fired: its event did not come
+    /// after it was armed, so the run did not test it (added in Milestone 355). Absent when
+    /// every reaction fired or no schedule had one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unfired_reactions: Option<u64>,
     /// First runs the engine refused before running them (a combination of host tokens it
     /// cannot arm, a host token it cannot apply): their run records have the class `refused`,
     /// and they are not failures (added in Milestone 208).

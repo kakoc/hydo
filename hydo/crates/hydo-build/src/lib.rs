@@ -403,6 +403,10 @@ pub fn prepare(
     } else {
         stage::take_regressions(&mut data)
     };
+    // Milestone 355: the build parameters that each regression names
+    for r in &regressions {
+        stage::check_regression_params(r, &loaded.params, io)?;
+    }
     Ok(Prepared {
         data,
         loaded,

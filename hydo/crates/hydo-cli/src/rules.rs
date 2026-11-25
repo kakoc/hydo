@@ -44,7 +44,8 @@ pub const HELP: &str = "usage: hydo rules scan [DIR] [--kind K] [--json] [--max 
   --kind writes lists every route of the API that writes: the HTTP routes with the methods POST,
   PUT, PATCH and DELETE of the router code (Rust, Go, JavaScript and TypeScript, Python, Java and
   Kotlin), the RPC methods of .proto files and gRPC servers whose names do not say that they
-  read, and the operations of OpenAPI files. Each has its handler with the file and the line, and
+  read, the operations of OpenAPI files, and the write commands of a Redis-compatible server's
+  command table in C or C++ (method CMD). Each has its handler with the file and the line, and
   why it counts as a write. They are grouped by resource, and ranked by class: data (it changes
   the system's data), admin (a snapshot, a dump, a compaction), session (a sign-in or a token),
   runtime (health, metrics, a reload). A POST route whose name says that it reads is left out

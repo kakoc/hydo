@@ -67,6 +67,60 @@ pub fn take_regressions(m: &mut Value) -> Vec<Value> {
     }
 }
 
+/// Milestone 355: the build parameters that a regression's `# params: k=v` line names (`params`
+/// of the entry). A name that the manifest's `params:` does not declare is refused. Values other
+/// than this build's (`have`, the effective `params:` values) give a warning that names the
+/// build that makes the regression's image: `hydo repro --regressions` replays such a regression
+/// only on an image built with its values.
+pub fn check_regression_params(
+    r: &Value,
+    have: &[(String, String)],
+    io: &mut Io,
+) -> Result<(), Fail> {
+    let Some(Value::Object(want)) = r.get("params") else {
+        return Ok(());
+    };
+    let name = py::str_of(&r["name"]);
+    let mut other: Vec<String> = Vec::new();
+    for (k, v) in want {
+        let v = py::str_of(v);
+        match have.iter().find(|(n, _)| n == k) {
+            None => {
+                let mut ks: Vec<&str> = have.iter().map(|(n, _)| n.as_str()).collect();
+                ks.sort();
+                return Err(Fail::Manifest(format!(
+                    "regression {name}: # params: names {k}, which params: does not declare \
+                     (params: {})",
+                    if ks.is_empty() {
+                        "none".to_string()
+                    } else {
+                        ks.join(", ")
+                    }
+                )));
+            }
+            Some((_, h)) if *h != v => other.push(format!("{k}={v} (this build: {k}={h})")),
+            Some(_) => {}
+        }
+    }
+    if !other.is_empty() {
+        let sets: Vec<String> = want
+            .iter()
+            .map(|(k, v)| format!("--set {k}={}", py::str_of(v)))
+            .collect();
+        outln(
+            io,
+            &format!(
+                "hydo-build: warning: regression {name} needs the build parameters {}: \
+                 `hydo repro --regressions` leaves it out on this image; build its image with \
+                 `hydo build {}` and replay it there",
+                other.join(", "),
+                sets.join(" ")
+            ),
+        );
+    }
+    Ok(())
+}
+
 /// Write the saved regressions beside the finished `image` (`<image>.regressions.json`), or
 /// remove a stale file when the plan has none.
 pub fn write_regressions(image: &Path, regs: &[Value], io: &mut Io) -> Result<(), Fail> {

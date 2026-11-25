@@ -498,12 +498,14 @@ pub(super) fn links_up(fx: &mut F<'_>, ctx: &Ctx, svc: &str, when: &str) -> Step
 /// (logged, nothing done); a file system that does not come back is the verdict
 /// `HYDO-ORACLE: VIOLATION <svc> storage unmountable after its power loss (...)`. `strict`
 /// (Milestone 245): the sectors [`strict_start`] found written; the service's links are cut
-/// right after it stops, and the dirty pages and the partition's writes are logged.
+/// right after it stops, and the dirty pages and the partition's writes are logged. `when` says
+/// when in the log lines (`before step 5`, or a reaction's `at the reaction A=...`, Milestone
+/// 355).
 pub(super) fn power_loss(
     fx: &mut F<'_>,
     ctx: &Ctx,
     svc: &str,
-    p: i64,
+    when: &str,
     strict: Option<u64>,
 ) -> Step<(bool, bool)> {
     let l = &ctx.plan.layout;
@@ -553,7 +555,7 @@ pub(super) fn power_loss(
         log(
             fx,
             format!(
-                "STRICT power loss of {svc} before step {p}: {} sectors written to {dev} since \
+                "STRICT power loss of {svc} {when}: {} sectors written to {dev} since \
                  the run's start; the guest's {}{}",
                 now.saturating_sub(before),
                 mem.join(", "),
@@ -631,7 +633,7 @@ pub(super) fn power_loss(
         log(
             fx,
             format!(
-                "POWER LOSS of {svc} before step {p} ({dev} shut down and mounted again; what was not synced is lost{})",
+                "POWER LOSS of {svc} {when} ({dev} shut down and mounted again; what was not synced is lost{})",
                 if cut { "; its links stay cut until it starts again" } else { "" }
             ),
         );
@@ -639,7 +641,7 @@ pub(super) fn power_loss(
         log(
             fx,
             format!(
-                "POWER LOSS of {svc} before step {p} ({dev} shut down and mounted again; what was not written back is lost)"
+                "POWER LOSS of {svc} {when} ({dev} shut down and mounted again; what was not written back is lost)"
             ),
         );
     }

@@ -793,7 +793,7 @@ verdict rules are in `hydo/HISTORIES.md`.
 | `N=<a>,<b>/<c>@...`, `N=<group>.<shape>@...` | a partition: netem on every link between two components, or the links that a shape over a group cuts (`halves`, `isolate`, `ring`, `bridge`, `primary`); see "Groups of services and partitions" |
 | `F=<svc>><peer>@<step>[#<n>][:<match>]:<dur>` | freeze `<svc>` at the n-th packet it **sends** to `<peer>` (`<` = **receives** from) at/after step `<step>`, for `<dur>` ms; only with `freeze` in `faults:` (see "Freeze at a call") |
 | `H=<target>@<from>-<to>:<rule>[,<rule>...]` | a protocol fault on a fake or proxy for steps `[from,to)`: an error, slow, missing or reset answer, or a duplicated / reordered / late / lost webhook; see "Fake outside services" |
-| `A=<event>[@<step>][+<ms>]:<action>` | a reaction (M139): from before step `step` (0 when not written) the host watches the console for the first SDK assertion record of `event` (`ok:true` of a `sometimes`/`reachable`, `ok:false` of the others), waits `ms` of guest time and does `<action>`: `cut` (a power cut at that instant: the workload and every service frozen, then the recovery boot), `kill-<svc>` (down until the heal), `kill-now-<svc>` (Milestone 305: the same kill, at the moment the record is written or `ms` after it, before the service runs on; see "Reactions" below), `stop-<svc>-<ms>` or `cont-<svc>` (resume a paused service: a pause healed at the first sign of no progress); since Milestone 296 also `clock+<s>` or `clock-<s>` (a clock step at that instant), `stop-workload-<ms>` (a stop of the workload's own tree), `stop-workload/<thread>[#<k>]-<ms>` (a freeze of the workload's threads of that name) and `kill-workload/<name>[#<k>]` (a kill of the workload's processes of that name, the workload going on); reactions live during the steps only; see "Reactions" below |
+| `A=<event>[@<step>][+<ms>]:<action>` | a reaction (M139): from before step `step` (0 when not written) the host watches the console for the first SDK assertion record of `event` (`ok:true` of a `sometimes`/`reachable`, `ok:false` of the others), waits `ms` of guest time and does `<action>`: `cut` (a power cut at that instant: the workload and every service frozen, then the recovery boot), `kill-<svc>` (down until the heal), `kill-now-<svc>` (Milestone 305: the same kill, at the moment the record is written or `ms` after it, before the service runs on; see "Reactions" below), `stop-<svc>-<ms>` or `cont-<svc>` (resume a paused service: a pause healed at the first sign of no progress); since Milestone 296 also `clock+<s>` or `clock-<s>` (a clock step at that instant), `stop-workload-<ms>` (a stop of the workload's own tree), `stop-workload/<thread>[#<k>]-<ms>` (a freeze of the workload's threads of that name) and `kill-workload/<name>[#<k>]` (a kill of the workload's processes of that name, the workload going on); since Milestone 355 `powerloss-<svc>` (the power loss of one service, as `L=` makes it, down until the heal); reactions live during the steps only; see "Reactions" below |
 | `G=<target>@<at>[+<down>]:<kind>[,...]` | corrupt one file in the service's `storage:` directory before step `at` (`flip`, `zero` or `trunc`), or on the Mac and KVM engines make the disk sectors under a range of it bad (`bad`: reads fail; `rot`: reads return damaged bytes; Milestone 313); with `+<down>` while the service is killed, started again before step `at+down`; the target is a service, a list or a group's selector, as for `K=`; see "Storage faults of one service" |
 | `L=<svc>@<at>+<down>[:strict]` | a power loss of one service before step `at`: its own file system shut down (what was not written back is lost), the service killed and started again before step `at+down`; `:strict` loses every write it had not synced and cuts its links while it is down; see "Storage faults of one service" |
 | `<X>=<value>` | a knob from `knobs:` |
@@ -997,7 +997,11 @@ output, so `hydo repro "<schedule>"` and `hydo repro --transcript <control.jsonl
 it; the shrinker drops a reaction, makes it act at once, arms it from the start or shortens a
 stop, and because the reaction is anchored to its event, dropping another fault does not leave it
 at a meaningless time. A reaction whose event never comes does nothing (its run sends the same
-commands as the schedule without it). `hydo explore --reactive fault|heal|both` draws them on top
+commands as the schedule without it). Since Milestone 355 the run says so: the controller writes
+a note that no hash covers, `result.json` and `hydo run` give the warning `the reaction <token>
+never fired: ...` with how many records of the event came after it was armed, and `hydo report`
+shows it. An exploration counts its runs with such a reaction (`unfired_reactions` of
+`exploration.json`), and its report names the count. `hydo explore --reactive fault|heal|both` draws them on top
 of any strategy from their own random stream (every other field of a seed's schedule stays as it
 was): `fault` adds `A=<event>[@<step>][+<ms>]:cut|kill-<svc>|stop-<svc>-<ms>` to 60% of the
 schedules, `heal` makes 70% of the counted pauses last to the workload's end with a
@@ -1034,6 +1038,17 @@ are a `kill-now-` of any service, and the schedule's `K=` or `P=` on that servic
 (with the heal of that pause). So a manifest with one service, whose `K=` and `P=` the process
 strategy puts on that service in most schedules, still gets these kills.
 
+`powerloss-<svc>` (Milestone 355) is the power loss of one service at the reaction point, as
+`L=<svc>@<step>+<down>` makes it before a step: the service's threads stop at once, its own file
+system shuts down and loses what the kernel had not written back, and the file system is mounted
+again. The service stays down until the heal, as after `kill-<svc>`, and its restart there is the
+restart pass after the faults. The service needs `storage:` with a file system of its own (`dir:`
+and `size_mib:`), and the manifest's `faults:` must allow `powerloss` for the explorer to keep the
+action. It runs on the engines where `L=` runs, and the strict form of `L=` has no reaction. For
+example, `A=kvrocks.failover_done+5500:powerloss-kv2` cuts one replica's power 5.5 s after a
+failover, and `hydo explore --reactive-at kvrocks.failover_done --react-actions powerloss` tries
+every delay with a power loss of each service with `storage:`.
+
 A reaction acts at the first record of its event after it is armed. `A=<event>#<k>...` (Milestone
 345) acts at the k-th record instead, for example `A=meili.swap_acked#3+12:kill-now-meilisearch`
 at the third swap's record. The full form is `A=<event>[#<k>][@<step>][+<ms>]:<action>`, and `#1`
@@ -1052,16 +1067,20 @@ hydo explore --reactive-at meili.swap_acked@20 [--react-delays 0..50] [--react-a
   `<event>[#<k>][@<step>]`.
 - `--react-delays` gives the delays in ms of guest time: `A..B` (every ms), `A..B/STEP`, or a
   list `A,B,C`. The default is `0..50`.
-- `--react-actions` gives the actions. `kill-now` and `kill` name one action per service, `cut` a
-  power cut, and any other item is one action as `A=` writes it (`stop-db-500`). The default is
+- `--react-actions` gives the actions. `kill-now` and `kill` name one action per service,
+  `powerloss` one per service with `storage:` (Milestone 355), `cut` a power cut, and any other
+  item is one action as `A=` writes it (`stop-db-500`). The default is
   `kill-now,kill,cut`, each where the manifest's `faults:` and the engine keep it. An action
   given by name that they would leave out is refused.
 
 Seed `n` is cell `n - 1`, in the order event, delay, action: each moment after the event meets
 every action before the next moment. The seed's schedule is the plain workload with that one
-reaction (`disk=cut` for a power cut). Without `--seeds`, the exploration runs the grid once.
-Seeds past the grid try it again with each seed's composition (`W=`), its walk and the timing
-options, so a longer exploration varies what runs beside the reaction. Every schedule is an
+reaction (`disk=cut` for a power cut). Without `--seeds`, the seeds are the grid's, and the
+exploration runs the grid once. A seed is one cell, so `--seeds 1-3` runs the grid's first three
+cells, not the grid three times (Milestone 355). Seeds past the grid try it again with each
+seed's composition (`W=`), its walk and the timing options, so a longer exploration varies what
+runs beside the reaction: a grid of `G` cells runs `R` times with `--seeds 1-<R×G>`. The
+explorer names the cells of seeds that are not whole rounds of the grid. Every schedule is an
 ordinary one: it is run again, shrunk, replayed and saved like any other. `--reactive` and
 `--kill-now` draw reactions at random and do not go with it. The names of the options join
 `--react-events` in one family: every `--react-` option shapes a reaction.
@@ -2581,6 +2600,24 @@ fingerprint epoch 4 carries its regressions inside (`/hydo/regressions/` and
 part of the manifest, which the image carries, so keep saved regressions in the folder.
 `hydo save <explore dir>` writes an exploration's minimal schedules there (with
 `expect: violation`; change it to `ok` once fixed).
+
+A regression that needs other build parameters than the project's defaults names them on a
+`# params: <name>=<value> ...` line (Milestone 355, a format-1 addition; `params:` in a
+`test.regressions` entry). `hydo build` refuses a name that `params:` does not declare, and when
+the build has other values it warns and names the `hydo build --set` that makes the
+regression's image. `hydo repro --regressions` replays such a regression only on an image built
+with its values (the image's `/etc/hydo/params`). On another image it prints `SKIP` with that
+build command, and the summary counts it apart. For example, a finding that needs the client's
+other mode keeps its own build:
+
+```
+# params: mode=master
+# expect: violation
+disk=none dseed=0 | run T=17:-300 W=740c6cfa,p1,q3,r500
+```
+
+A file without the line is read as before, so the other regressions and `<image>.regressions.json`
+keep their bytes.
 
 ### Stable compositions (command ids)
 

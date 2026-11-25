@@ -180,7 +180,8 @@ fn an_aimed_exploration_runs_its_grid() {
     ]);
     assert_eq!(rc, 0, "{out}{err}");
     assert!(
-        err.contains("aimed reactions (--reactive-at): 8 schedules, one per seed"),
+        err.contains("aimed reactions (--reactive-at): a grid of 8 schedules")
+            && err.contains("Seed k runs cell k of the grid: seeds 1-8 run it once"),
         "{err}"
     );
     let doc: Value =

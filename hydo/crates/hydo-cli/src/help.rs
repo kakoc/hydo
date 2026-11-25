@@ -45,6 +45,9 @@ pub fn of(cmd: &str, linux: bool) -> Option<String> {
   instead. `hydo report` prints the problems it found, `hydo repro hydo-out/explore` runs every failure again, and
   `hydo save hydo-out/explore` keeps the minimal schedules as regressions. `hydo guide faults`
   lists the fault kinds.
+  With --reactive-at a seed is one cell of its grid: seed k runs cell k, and without --seeds the
+  seeds are the grid's. --seeds 1-3 runs the grid's first three cells; seeds past the grid run it
+  again with each seed's composition, so a grid of G cells runs R times with --seeds 1-<R*G>.
   `hydo explore --configs [MANIFEST]` explores each combination of the values the manifest's
   configs: lists, one image each, and says which settings fail under which faults
   (`hydo explore --configs --help`).

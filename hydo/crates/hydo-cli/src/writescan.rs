@@ -3196,6 +3196,325 @@ fn handler_name(expr: &str) -> String {
     }
 }
 
+// ---------------------------------------------------------------- command tables (Milestone 355)
+
+/// A file is a command table when it holds at least this many entries.
+const COMMAND_TABLE_MIN: usize = 3;
+
+/// One entry of a Redis-compatible server's command table: a call or an initializer whose first
+/// argument is the command's name and one of whose arguments flags it as a write or a read.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct CmdEntry {
+    name: String,
+    write: bool,
+    /// The class or function that runs it, when the entry names one.
+    handler: Option<String>,
+    /// The group of the command, when the entry names one (`@string`, `COMMAND_GROUP_STRING`).
+    group: Option<String>,
+    line: usize,
+}
+
+/// The top-level arguments of the call or initializer whose bracket opens at `open`, as text,
+/// and the end after its closing bracket (the line's end when it does not close on the line).
+fn bracket_args(code: &str, open: usize) -> (Vec<&str>, usize) {
+    let b = code.as_bytes();
+    let (mut depth, mut start, mut args) = (0i32, open + 1, Vec::new());
+    let mut in_str = false;
+    let mut i = open;
+    while i < b.len() {
+        let c = b[i];
+        if in_str {
+            if c == b'\\' {
+                i += 2;
+                continue;
+            }
+            if c == b'"' {
+                in_str = false;
+            }
+            i += 1;
+            continue;
+        }
+        match c {
+            b'"' => in_str = true,
+            b'(' | b'{' | b'[' => depth += 1,
+            b')' | b'}' | b']' => {
+                depth -= 1;
+                if depth == 0 {
+                    args.push(code[start..i].trim());
+                    return (args, i + 1);
+                }
+            }
+            b',' if depth == 1 => {
+                args.push(code[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    args.push(code[start.min(b.len())..].trim());
+    (args, b.len())
+}
+
+/// The text of a string literal argument, without its quotes.
+fn literal(arg: &str) -> Option<&str> {
+    let a = arg.trim();
+    let s = a.strip_prefix('"')?.strip_suffix('"')?;
+    (!s.contains('"')).then_some(s)
+}
+
+/// Whether a command table's flags say write (`Some(true)`) or read (`Some(false)`): a flags
+/// string's words (`"write"`, `"read-only"`), or flag constants joined with `|` (`CMD_WRITE`,
+/// `CO::WRITE`, `CMD_READONLY`).
+fn flags_of(arg: &str) -> Option<bool> {
+    if let Some(s) = literal(arg) {
+        let ws: Vec<&str> = s
+            .split(|c: char| c.is_whitespace() || c == ',' || c == '|')
+            .filter(|w| !w.is_empty())
+            .collect();
+        // a flags string holds flag words only (`write use-memory @string`), not a sentence such
+        // as a command's description that speaks of write commands
+        let flag_word = |w: &&str| {
+            let w = w.strip_prefix('@').unwrap_or(w);
+            w.starts_with(|c: char| c.is_ascii_lowercase())
+                && w.chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+        };
+        if ws.is_empty() || ws.len() > 12 || !ws.iter().all(flag_word) {
+            return None;
+        }
+        if ws.iter().any(|w| w.eq_ignore_ascii_case("write")) {
+            return Some(true);
+        }
+        if ws
+            .iter()
+            .any(|w| matches!(w.to_ascii_lowercase().as_str(), "read-only" | "readonly"))
+        {
+            return Some(false);
+        }
+        return None;
+    }
+    let toks: Vec<&str> = arg
+        .split(|c: char| c == '|' || c.is_whitespace() || c == '(' || c == ')')
+        .filter(|w| !w.is_empty())
+        .collect();
+    if toks.is_empty()
+        || !toks.iter().all(|t| {
+            t.chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == ':')
+        })
+    {
+        return None;
+    }
+    let last = |t: &str| t.rsplit([':', '_']).next().unwrap_or(t).to_string();
+    if toks.iter().any(|t| last(t) == "WRITE") {
+        return Some(true);
+    }
+    if toks
+        .iter()
+        .any(|t| last(t) == "READONLY" || t.ends_with("READ_ONLY"))
+    {
+        return Some(false);
+    }
+    None
+}
+
+/// The class that the template argument before a call names (`MakeCmdAttr<CommandSet>` gives
+/// `CommandSet`, `MakeCmdAttr<CommandSort<false>>` gives `CommandSort`).
+fn template_arg(before: &str) -> Option<String> {
+    let b = before.as_bytes();
+    if b.last() != Some(&b'>') {
+        return None;
+    }
+    let mut depth = 0i32;
+    let mut k = b.len();
+    while k > 0 {
+        k -= 1;
+        match b[k] {
+            b'>' => depth += 1,
+            b'<' => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    if depth != 0 {
+        return None;
+    }
+    let inner = before[k + 1..before.len() - 1].trim();
+    let name = inner.split('<').next().unwrap_or("").trim();
+    (!name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == ':'))
+    .then(|| name.to_string())
+}
+
+/// Whether a string is a command's name: a letter, then letters, digits, `.`, `_`, `|` or `-`.
+fn command_name(s: &str) -> bool {
+    s.len() <= 40
+        && s.starts_with(|c: char| c.is_ascii_alphabetic())
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '|' | '-'))
+}
+
+/// The entries of a command table in a C or C++ file's lines (comments removed, strings kept).
+/// A table is generic: `MakeCmdAttr<CommandSet>("set", -3, "write", 1, 1, 1)`, `{"set",
+/// setCommand, -3, "write use-memory @string", ...}`, `MAKE_CMD("set", ..., setCommand, -3,
+/// CMD_WRITE|CMD_DENYOOM, ...)` and `CI{"SET", CO::WRITE | CO::DENYOOM, -3, ...}.HFUNC(Set)`.
+fn command_entries(code: &[String]) -> Vec<CmdEntry> {
+    let mut out = Vec::new();
+    for (ln, l) in code.iter().enumerate() {
+        let b = l.as_bytes();
+        let mut i = 0;
+        while i + 1 < b.len() {
+            if !(matches!(b[i], b'(' | b'{') && b[i + 1] == b'"') {
+                i += 1;
+                continue;
+            }
+            let (args, end) = bracket_args(l, i);
+            let Some(name) = args.first().and_then(|a| literal(a)) else {
+                i += 1;
+                continue;
+            };
+            // an entry has the command's arity, an integer, beside its flags (`{"write",
+            // CMD_WRITE}` names a flag, not a command)
+            let arity = args.iter().skip(1).any(|a| {
+                let a = a.trim();
+                let d = a.strip_prefix('-').unwrap_or(a);
+                !d.is_empty() && d.chars().all(|c| c.is_ascii_digit())
+            });
+            if !command_name(name) || args.len() < 3 || !arity {
+                i += 1;
+                continue;
+            }
+            let flags = args.iter().skip(1).find_map(|a| flags_of(a));
+            let Some(write) = flags else {
+                i += 1;
+                continue;
+            };
+            // the handler: the template argument of the call (`MakeCmdAttr<CommandSet>(`), a
+            // function argument named for a command (`setCommand`), or `.HFUNC(Set)` after it
+            let templ = template_arg(l[..i].trim_end());
+            let named = args.iter().skip(1).find_map(|a| {
+                let a = a.trim();
+                (a.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                    && (a.ends_with("Command") || a.ends_with("Cmd"))
+                    && a.len() > 7)
+                    .then(|| a.to_string())
+            });
+            let after = l[end..].trim_start();
+            let hfunc = after
+                .strip_prefix(".HFUNC(")
+                .or_else(|| after.strip_prefix(".SetHandler("))
+                .and_then(|r| r.split(')').next())
+                .map(|h| h.trim().to_string())
+                .filter(|h| !h.is_empty());
+            let handler = templ.or(named).or(hfunc);
+            // the group: `@string` in a flags string, or a COMMAND_GROUP_ or ACL_CATEGORY_ constant
+            let group = args.iter().skip(1).find_map(|a| {
+                if let Some(s) = literal(a) {
+                    return s
+                        .split_whitespace()
+                        .filter_map(|w| w.strip_prefix('@'))
+                        .find(|w| {
+                            !matches!(
+                                *w,
+                                "write"
+                                    | "read"
+                                    | "fast"
+                                    | "slow"
+                                    | "admin"
+                                    | "dangerous"
+                                    | "keyspace"
+                                    | "blocking"
+                                    | "connection"
+                                    | "pubsub"
+                                    | "scripting"
+                                    | "transaction"
+                            )
+                        })
+                        .map(str::to_string);
+                }
+                let a = a.trim();
+                a.strip_prefix("COMMAND_GROUP_")
+                    .filter(|g| g.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+                    .map(str::to_ascii_lowercase)
+            });
+            out.push(CmdEntry {
+                name: name.to_string(),
+                write,
+                handler,
+                group,
+                line: ln,
+            });
+            i = end.max(i + 1);
+        }
+    }
+    out
+}
+
+/// The resource of a command: its group, else the stem of its table's file without a `cmd_` or
+/// `t_` prefix (Kvrocks's `cmd_string.cc` gives `string`).
+fn command_resource(rel: &str, e: &CmdEntry) -> String {
+    if let Some(g) = &e.group {
+        return g.clone();
+    }
+    let stem = rel
+        .rsplit('/')
+        .next()
+        .unwrap_or(rel)
+        .split('.')
+        .next()
+        .unwrap_or("");
+    stem.trim_start_matches("cmd_")
+        .trim_start_matches("t_")
+        .to_string()
+}
+
+/// Where a command's class or function is defined in the C and C++ files: a `class` or `struct`
+/// of that name with a body, or a function header at a line's start, in the table's own file
+/// first.
+fn c_definition(
+    files: &[(String, Vec<String>)],
+    name: &str,
+    near: &str,
+) -> Option<(String, usize)> {
+    let short = name.rsplit("::").next().unwrap_or(name);
+    let is_def = |l: &str| {
+        let t = l.trim_start();
+        let class = ["class ", "struct "].iter().any(|k| {
+            t.strip_prefix(k).is_some_and(|r| {
+                let r = r.trim_start();
+                r.strip_prefix(short).is_some_and(|x| {
+                    // a declaration without a body (`class X;`) is no definition
+                    !x.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+                        && (x.contains('{') || !x.trim_end().ends_with(';'))
+                })
+            })
+        });
+        let func = !l.starts_with(|c: char| c.is_whitespace())
+            && !t.ends_with(';')
+            && t.find(&format!("{short}(")).is_some_and(|p| {
+                p > 0
+                    && !t[..p].ends_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+                    && !t[..p].contains('=')
+            });
+        class || func
+    };
+    let mut order: Vec<&(String, Vec<String>)> = files.iter().filter(|f| f.0 == near).collect();
+    order.extend(files.iter().filter(|f| f.0 != near));
+    for (rel, code) in order {
+        if let Some(k) = code.iter().position(|l| is_def(l)) {
+            return Some((rel.clone(), k + 1));
+        }
+    }
+    None
+}
+
 /// Reads every route of the project in `root` that writes.
 pub fn scan_writes(root: &Path) -> Writes {
     let mut paths = Vec::new();
@@ -3204,6 +3523,10 @@ pub fn scan_writes(root: &Path) -> Writes {
     let mut protos: Vec<(String, String)> = Vec::new();
     let mut specs: Vec<(String, String)> = Vec::new();
     let mut tests = clockscan::TestItems::default();
+    // Milestone 355: the command tables of C and C++ files, and every C and C++ file's code for
+    // their handlers
+    let mut ctables: Vec<(String, Vec<CmdEntry>)> = Vec::new();
+    let mut c_files: Vec<(String, Vec<String>)> = Vec::new();
     for p in paths {
         let rel = p
             .strip_prefix(root)
@@ -3223,7 +3546,7 @@ pub fn scan_writes(root: &Path) -> Writes {
         let ext = low.rsplit_once('.').map(|x| x.1).unwrap_or("");
         let is_spec = matches!(ext, "yaml" | "yml" | "json");
         let lang = clockscan::lang_of(&rel);
-        if lang.is_none() && ext != "proto" && !is_spec {
+        if lang.is_none() && ext != "proto" && !is_spec && ext != "def" {
             continue;
         }
         let Ok(bytes) = std::fs::read(&p) else {
@@ -3246,6 +3569,17 @@ pub fn scan_writes(root: &Path) -> Writes {
             if head.contains("openapi") || head.contains("swagger") {
                 specs.push((rel, text));
             }
+            continue;
+        }
+        // Milestone 355: a Redis-compatible server's command table in C or C++ (also a
+        // generated `.def` table): its file counts as read only when it holds one
+        if ext == "def" || lang == Some(Lang::C) {
+            let code = clockscan::clean_with(Lang::C, &text, true);
+            let entries = command_entries(&code);
+            if entries.len() >= COMMAND_TABLE_MIN {
+                ctables.push((rel.clone(), entries));
+            }
+            c_files.push((rel, code));
             continue;
         }
         let Some(lang) = lang else { continue };
@@ -3276,7 +3610,7 @@ pub fn scan_writes(root: &Path) -> Writes {
             head,
         });
     }
-    let read = files.len() + protos.len() + specs.len();
+    let read = files.len() + protos.len() + specs.len() + ctables.len();
 
     // the routes of the code
     let mut cands: Vec<Cand> = Vec::new();
@@ -3540,6 +3874,30 @@ pub fn scan_writes(root: &Path) -> Writes {
         }
     }
 
+    // the write commands of command tables (Milestone 355)
+    for (rel, entries) in &ctables {
+        for e in entries.iter().filter(|e| e.write) {
+            let handler = e.handler.clone().unwrap_or_else(|| e.name.clone());
+            let handler_at = e
+                .handler
+                .as_deref()
+                .and_then(|h| c_definition(&c_files, h, rel));
+            let mut r = make_route(
+                "CMD",
+                e.name.to_ascii_uppercase(),
+                Vec::new(),
+                handler,
+                handler_at,
+                rel.clone(),
+                e.line + 1,
+                "a command table",
+                "its command table entry",
+            );
+            r.resource = command_resource(rel, e);
+            add(r, &mut routes, &mut reads, false);
+        }
+    }
+
     // RPC methods: the .proto files first, then servers without one
     let mut declared: HashSet<(String, String)> = HashSet::new();
     for (rel, text) in &protos {
@@ -3687,6 +4045,8 @@ fn make_route(
     };
     let how = if method == "RPC" {
         format!("{shape}, not a read by its name")
+    } else if method == "CMD" {
+        format!("{shape} flags it as a write")
     } else {
         format!("{method} in {shape}")
     };
@@ -3895,6 +4255,94 @@ mod tests {
     fn has_route(w: &Writes, s: &str) {
         let f = found(w);
         assert!(f.iter().any(|x| x == s), "{s} not in {f:#?}");
+    }
+
+    /// Milestone 355: the command tables of Redis-compatible servers in C and C++, by their
+    /// shapes: Kvrocks's `MakeCmdAttr<Class>("name", arity, "flags", ...)`, the classic
+    /// initializer `{"name", fnCommand, arity, "flags", ...}`, a generated `MAKE_CMD(...)` table
+    /// with `CMD_WRITE`, and `CI{"NAME", CO::WRITE, arity, ...}.HFUNC(Name)`. A commented-out
+    /// entry, a read, a description that speaks of writes, and a table of flag names are left out.
+    #[test]
+    fn command_tables_list_their_write_commands() {
+        let kv = "REDIS_REGISTER_COMMANDS(String, MakeCmdAttr<CommandGet>(\"get\", 2, \"read-only\", 1, 1, 1),\n\
+            \x20                       MakeCmdAttr<CommandSet>(\"set\", -3, \"write\", 1, 1, 1),\n\
+            \x20                       MakeCmdAttr<CommandSort<false>>(\"sort\", -2, \"write slow\", 1, 1, 1),\n\
+            \x20                       MakeCmdAttr<CommandIncr>(\"incr\", 2, \"write\", 1, 1, 1))\n\
+            // MakeCmdAttr<CommandCFAdd>(\"cf.add\", 3, \"write\", 1, 1, 1)\n\
+            class CommandSet : public Commander {};\n\
+            template <bool ReadOnly>\nclass CommandSort : public Commander {\n};\n";
+        let classic = "struct redisCommand redisCommandTable[] = {\n\
+            \x20   {\"get\",getCommand,2,\"read-only fast @string\",0,NULL,1,1,1,0,0,0},\n\
+            \x20   {\"append\",appendCommand,3,\"write use-memory fast @string\",0,NULL,1,1,1,0,0,0},\n\
+            \x20   {\"del\",delCommand,-2,\"write @keyspace\",0,NULL,1,-1,1,0,0,0},\n};\n\
+            void appendCommand(client *c) {\n}\n";
+        let def = "{MAKE_CMD(\"wait\",\"Blocks until all preceding write commands are done.\",\"O(1)\",\"3.0.0\",CMD_DOC_NONE,NULL,NULL,\"generic\",COMMAND_GROUP_GENERIC,WAIT_History,0,WAIT_Tips,2,waitCommand,3,CMD_BLOCKING,ACL_CATEGORY_BLOCKING,NULL,WAIT_Keyspecs,0,NULL,2),.args=WAIT_Args},\n\
+            {MAKE_CMD(\"lpush\",\"Prepends elements.\",\"O(1)\",\"1.0.0\",CMD_DOC_NONE,NULL,NULL,\"list\",COMMAND_GROUP_LIST,LPUSH_History,0,LPUSH_Tips,0,lpushCommand,-3,CMD_WRITE|CMD_DENYOOM|CMD_FAST,ACL_CATEGORY_LIST,LPUSH_Keyspecs,1,NULL,2),.args=LPUSH_Args},\n\
+            {MAKE_CMD(\"rpush\",\"Appends elements.\",\"O(1)\",\"1.0.0\",CMD_DOC_NONE,NULL,NULL,\"list\",COMMAND_GROUP_LIST,RPUSH_History,0,RPUSH_Tips,0,rpushCommand,-3,CMD_WRITE|CMD_DENYOOM|CMD_FAST,ACL_CATEGORY_LIST,RPUSH_Keyspecs,1,NULL,2),.args=RPUSH_Args},\n\
+            {MAKE_CMD(\"llen\",\"Length.\",\"O(1)\",\"1.0.0\",CMD_DOC_NONE,NULL,NULL,\"list\",COMMAND_GROUP_LIST,LLEN_History,0,LLEN_Tips,0,llenCommand,2,CMD_READONLY|CMD_FAST,ACL_CATEGORY_LIST,LLEN_Keyspecs,1,NULL,1),.args=LLEN_Args},\n";
+        let df = "void HSetFamily::Register(CommandRegistry* registry) {\n\
+            \x20 *registry << CI{\"HSET\", CO::WRITE | CO::FAST | CO::DENYOOM, -4, 1, 1, acl::kHSet}.HFUNC(HSet)\n\
+            \x20           << CI{\"HGET\", CO::READONLY | CO::FAST, 3, 1, 1, acl::kHGet}.HFUNC(HGet)\n\
+            \x20           << CI{\"HDEL\", CO::FAST | CO::WRITE, -3, 1, 1, acl::kHDel}.HFUNC(HDel);\n}\n\
+            static const char *cats[] = {\"all\", \"read\", \"write\", \"admin\"};\n";
+        let w = scan_texts(&[
+            ("src/commands/cmd_string.cc", kv),
+            ("src/server.c", classic),
+            ("src/commands.def", def),
+            ("src/server/hset_family.cc", df),
+        ]);
+        let mut f = found(&w);
+        f.sort();
+        assert_eq!(
+            f,
+            [
+                "CMD APPEND -> appendCommand",
+                "CMD DEL -> delCommand",
+                "CMD HDEL -> HDel",
+                "CMD HSET -> HSet",
+                "CMD INCR -> CommandIncr",
+                "CMD LPUSH -> lpushCommand",
+                "CMD RPUSH -> rpushCommand",
+                "CMD SET -> CommandSet",
+                "CMD SORT -> CommandSort",
+            ],
+            "{f:#?}"
+        );
+        let set = w.routes.iter().find(|r| r.path == "SET").unwrap();
+        assert_eq!(set.resource, "string");
+        assert_eq!(
+            set.handler_at,
+            Some(("src/commands/cmd_string.cc".to_string(), 6))
+        );
+        let sort = w.routes.iter().find(|r| r.path == "SORT").unwrap();
+        assert_eq!(
+            sort.handler_at,
+            Some(("src/commands/cmd_string.cc".to_string(), 8))
+        );
+        assert_eq!(
+            w.routes
+                .iter()
+                .find(|r| r.path == "APPEND")
+                .unwrap()
+                .resource,
+            "string"
+        );
+        assert_eq!(
+            w.routes
+                .iter()
+                .find(|r| r.path == "LPUSH")
+                .unwrap()
+                .resource,
+            "list"
+        );
+        assert!(set
+            .why
+            .starts_with("its command table entry flags it as a write"));
+        // the four tables are read; a C file without one does not count
+        assert_eq!(w.read, 4);
+        let none = scan_texts(&[("src/util.c", "int main(void) { return 0; }\n")]);
+        assert_eq!(none.read, 0);
+        assert!(none.routes.is_empty());
     }
 
     #[test]

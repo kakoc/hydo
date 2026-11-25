@@ -72,6 +72,7 @@ pub(crate) const KNOWN_REG: &[&str] = &[
     "compose",
     "contents",
     "saved_schedule",
+    "params",
 ];
 pub const DEFAULT_STEPS: i128 = 20;
 pub const SH: &str = "/bin/busybox sh /etc/hydo/compose.sh";
@@ -423,6 +424,8 @@ pub fn read_regression(path: &str) -> R<Value> {
     let mut cmds: Option<Vec<String>> = None;
     let mut compose: Option<String> = None;
     let mut contents: Vec<(String, String)> = Vec::new();
+    // Milestone 355: `# params: k=v ...`, the build parameters the regression needs
+    let mut params: Option<Vec<(String, String)>> = None;
     for line in text.split_inclusive('\n') {
         let st = py::strip(line);
         if st.is_empty() {
@@ -442,6 +445,24 @@ pub fn read_regression(path: &str) -> R<Value> {
             }
             if let Some(g) = pyre::match_dollar(r"#\s*compose:\s*(\S+)\s*", st) {
                 compose = g[0].clone();
+            }
+            if let Some(g) = pyre::match_dollar(r"#\s*params:\s*(.*)", st) {
+                let mut kv: Vec<(String, String)> = Vec::new();
+                for w in py::split_ws(g[0].as_deref().unwrap_or("")) {
+                    let (k, v) = w.split_once('=').unwrap_or((w, ""));
+                    if !pyre::fullmatch("[A-Za-z_][A-Za-z0-9_]*", k) || !w.contains('=') {
+                        return Err(err(format!(
+                            "{path}: # params: takes name=value words, as `hydo build --set` \
+                             does (got {})",
+                            repr_str(w)
+                        )));
+                    }
+                    match kv.iter_mut().find(|(n, _)| n == k) {
+                        Some(e) => e.1 = v.to_string(),
+                        None => kv.push((k.to_string(), v.to_string())),
+                    }
+                }
+                params = Some(kv);
             }
             if let Some(g) = pyre::match_dollar(r"#\s*command-sha:\s*(\S+)\s+(\S+)\s*", st) {
                 let k = g[0].clone().unwrap_or_default();
@@ -482,6 +503,15 @@ pub fn read_regression(path: &str) -> R<Value> {
             m.insert(k, Value::String(v));
         }
         r.insert("contents".into(), Value::Object(m));
+    }
+    // Milestone 355: only a file with the line has the key, so other regressions keep their
+    // bytes in `<image>.regressions.json`
+    if let Some(kv) = params.filter(|kv| !kv.is_empty()) {
+        let mut m = Map::new();
+        for (k, v) in kv {
+            m.insert(k, Value::String(v));
+        }
+        r.insert("params".into(), Value::Object(m));
     }
     let r = Value::Object(r);
     check_regression(&r, path)?;
@@ -926,6 +956,25 @@ pub fn expand(m: &mut Value, folder: Option<&Value>, warn: &mut Vec<String>) -> 
                 cm.insert(k, Value::String(v));
             }
             e.insert("contents".into(), Value::Object(cm));
+        }
+        // Milestone 355: the build parameters the regression needs (`# params:` in its file)
+        if let Some(c) = ro.get("params").filter(|c| !c.is_null()) {
+            let Value::Object(po) = c else {
+                return Err(err(format!(
+                    "{wh}: params is a mapping parameter name -> value"
+                )));
+            };
+            let mut pm = Map::new();
+            for (k, v) in po {
+                if !pyre::fullmatch("[A-Za-z_][A-Za-z0-9_]*", k) {
+                    return Err(err(format!(
+                        "{wh}: params: name {}: letters, digits and '_' only",
+                        repr_str(k)
+                    )));
+                }
+                pm.insert(k.clone(), Value::String(str_of(v)));
+            }
+            e.insert("params".into(), Value::Object(pm));
         }
         regs.push(e);
     }
@@ -1952,6 +2001,34 @@ pub fn has_test(m: &Value) -> Result<bool, ManifestError> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// Milestone 355: a regression file's `# params: k=v` line names the build parameters it
+    /// needs; a file without the line reads as before, with no `params` key.
+    #[test]
+    fn a_regression_file_names_its_build_parameters() {
+        let dir = std::env::temp_dir().join(format!("hydo-reg-params-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let write = |name: &str, text: &str| {
+            let p = dir.join(name);
+            std::fs::write(&p, text).unwrap();
+            p.display().to_string()
+        };
+        let p = write(
+            "wait.schedule",
+            "# params: mode=master  sync=yes\n# expect: violation\ndisk=none | run T=17:-300\n",
+        );
+        let r = read_regression(&p).unwrap();
+        assert_eq!(r["params"], json!({"mode": "master", "sync": "yes"}));
+        assert_eq!(r["expect"], json!("violation"));
+        let p = write("plain.schedule", "# expect: ok\ndisk=none | run\n");
+        let r = read_regression(&p).unwrap();
+        assert!(r.get("params").is_none(), "{r}");
+        let p = write("bad.schedule", "# params: mode\ndisk=none | run\n");
+        let e = read_regression(&p).unwrap_err();
+        assert!(e.to_string().contains("name=value words"), "{e}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn ints() {

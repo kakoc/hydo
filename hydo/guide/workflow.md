@@ -235,6 +235,12 @@ hydo report --html                            # the same as one web page to shar
 hydo save <explore dir>                       # the minimal schedules -> hydo/regressions/
 ```
 
+A saved regression that needs other build parameters names them on a line of its file, for
+example `# params: mode=master`. `hydo build` warns when its own `--set` values differ and names
+the build that makes that regression's image. `hydo repro --regressions` replays the regression
+only on an image built with those values, and on another image prints `SKIP` with the build
+command.
+
 On the Mac a schedule without host tokens is `disk=none | run`. If the first run without faults
 fails, the cause is the folder or a real bug. Read the `hydo: diagnosis:` lines, and the
 `diagnosis` in the run directory's `result.json`: which process ended how, its log, and the

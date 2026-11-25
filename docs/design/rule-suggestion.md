@@ -288,6 +288,40 @@ of two words or in capitals in every file, as before. A literal duration of Rust
 that starts with `SystemTime::now()` on one line and goes on over three more, and a Rust tail
 expression is now read from the first line of its chain.
 
+### A project's own wrapper of the clock (Milestone 355)
+
+The Kvrocks onboarding (Milestone 351) found that the audit named no function in Kvrocks 2.17.0,
+although its finding 2 is a wall-clock throttle. Kvrocks reads the clock through its own helper:
+
+```cpp
+template <typename Duration = std::chrono::seconds>
+auto GetTimeStamp() {
+  return std::chrono::duration_cast<Duration>(std::chrono::system_clock::now().time_since_epoch()).count();
+}
+inline uint64_t GetTimeStampMS() { return GetTimeStamp<std::chrono::milliseconds>(); }
+```
+
+The audit already followed a small function with a name about time that returns a reading. It
+missed this one for three reasons of C++ text, which it now reads in C and C++ files only:
+
+- A reading starts at its namespaces: `std::chrono::system_clock::now()` and
+  `util::GetTimeStamp()` start where `std::` and `util::` start, so an assignment's right-hand
+  side starts with the reading.
+- A call with template arguments is a call: `GetTimeStamp<std::chrono::milliseconds>()`.
+- A cast of one reading keeps it a reading: `duration_cast<...>(`, `time_point_cast<...>(` and
+  `static_cast<...>(`, when the cast's argument is not a difference.
+
+A function that returns a reading is also no limit any more, so `util::GetTimeStampMS() -
+last_connect_timestamp < 1000` does not name `GetTimeStampMS` as its limit.
+
+On Kvrocks 2.17.0 with the example's `hydo.yaml` the audit names 22 functions in 255 source
+files, where it named none. The fourth is finding 2's place, `src/cluster/replication.cc` line
+670 in `sendReplConfAck` (lines 666 to 682), `high`, with its reading traced to `now =
+util::GetTimeStamp()` and `system_clock::now()`. The third is the reconnect throttle of the same
+file, line 362. The JSON and text reports of Valkey 9.1.3, Temporal 1.32.2, River v0.51.2 and
+Garage v2.5.0, each with its example's `hydo.yaml`, are the same as before, byte for byte, so
+their known places keep their ranks.
+
 ### What the clock audit does not do
 
 - It reads text, so a reading passed through an interface with several implementations, or
@@ -424,6 +458,33 @@ the admin API's operations that the workload's first command calls, such as
 `ConnectClusterNodes` and `ApplyClusterLayout`. The six projects above gave the same JSON as
 before, byte for byte.
 
+### Command tables (Milestone 355)
+
+A Redis-compatible server has no routes: its commands are a table in C or C++, and the Kvrocks
+onboarding (Milestone 351) listed its 143 write commands by hand. The scan reads such a table now,
+by its shape and not by a project's names. An entry is a call or an initializer whose first
+argument is a string that names a command, with an integer argument (the arity) and an argument
+that flags it:
+
+- a flags string of flag words only, such as `"write"`, `"write use-memory @string"` or
+  `"read-only"` (a command's description, which speaks of write commands, is no flags string);
+- flag constants joined with `|`, such as `CMD_WRITE|CMD_DENYOOM` or `CO::WRITE | CO::FAST`.
+
+A file with at least three entries is a table. Each entry flagged as a write is a route with the
+method `CMD` and the command's name as its path. Its handler is the class of the call's template
+argument (`MakeCmdAttr<CommandSet>`), a function argument named for a command (`setCommand`), or
+`.HFUNC(Set)` after the entry. Its resource is the group that the entry names (`@string`,
+`COMMAND_GROUP_LIST`), else the stem of the table's file without `cmd_` or `t_`. A generated
+`.def` table counts, and a C or C++ file counts among the files read only when it holds a table.
+
+On Kvrocks 2.17.0 the scan reads 21 files and lists 142 write commands in 18 resources, 137 `data`
+and 5 `admin` (`FLUSHALL`, `FLUSHDB`, `FLUSHMEMTABLE`, `FLUSHBLOCKCACHE`, `RESTORE`), each with
+its handler's class and line. They are every entry of its tables with a `write` flag. The hand
+count of 143 also took a line of the Cuckoo filter's commands, which are commented out in
+2.17.0. On Valkey 9.1.3, whose table is the generated `src/commands.def`, it lists 118 commands
+with `CMD_WRITE` and their functions. The JSON and text reports of Meilisearch, Iggy,
+Prometheus, GreptimeDB, Hatchet, Memos and Garage are the same as before, byte for byte.
+
 ### What the write scan does not do
 
 - It reads text, so a route that a program builds at run time, or registers through a function
@@ -438,6 +499,9 @@ before, byte for byte.
 - An enumeration of endpoints gives no URL, because the URL comes from the query and the
   headers. A variant that a function of another file chooses, or such a router in another
   language, is not found.
+- A command table is read line by line, so an entry that spans lines is not found, and a
+  subcommand (`CONFIG SET`) is listed under its own name. A table that registers commands
+  through a function call per command, without a flag argument, is not read.
 
 ## What is not built
 

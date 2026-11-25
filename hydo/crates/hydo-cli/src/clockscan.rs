@@ -1483,6 +1483,54 @@ const TIME_NAME_WORDS: &[&str] = &[
     "time", "now", "clock", "stamp", "epoch", "date", "utc", "millis",
 ];
 
+/// Milestone 355: the start of the C++ qualifiers before `at` (`std::chrono::` of
+/// `std::chrono::system_clock::now()`, `util::` of `util::GetTimeStamp()`), so that a reading
+/// starts where its expression does.
+fn qualified_start(code: &str, at: usize) -> usize {
+    let b = code.as_bytes();
+    let mut i = at;
+    while i >= 2 && b[i - 1] == b':' && b[i - 2] == b':' {
+        let mut k = i - 2;
+        while k > 0 && is_ident(b[k - 1] as char) {
+            k -= 1;
+        }
+        // `::time(NULL)`: the global namespace
+        if k == i - 2 && (k == 0 || !is_ident(b[k - 1] as char)) {
+            i = k;
+            break;
+        }
+        if k == i - 2 {
+            break;
+        }
+        i = k;
+    }
+    i
+}
+
+/// Milestone 355: the end of a template's arguments that open at `lt` (the index of its `<`),
+/// after its `>`, when they hold only names, `::`, spaces, commas, `*`, `&` and nested
+/// arguments; None for a comparison such as `a < b`.
+fn template_end(code: &str, lt: usize) -> Option<usize> {
+    let b = code.as_bytes();
+    let mut depth = 0i32;
+    let mut i = lt;
+    while i < b.len() {
+        match b[i] {
+            b'<' => depth += 1,
+            b'>' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i + 1);
+                }
+            }
+            c if is_ident(c as char) || matches!(c, b':' | b' ' | b',' | b'*' | b'&') => {}
+            _ => return None,
+        }
+        i += 1;
+    }
+    None
+}
+
 fn spans(f: &SrcFile, fi: usize, i: usize, t: &Taint) -> Vec<Span> {
     let code = &f.code[i];
     let mut out = Vec::new();
@@ -1492,8 +1540,13 @@ fn spans(f: &SrcFile, fi: usize, i: usize, t: &Taint) -> Vec<Span> {
             if s.pat.ends_with('(') {
                 end = call_end(code, end - 1);
             }
+            let start = if f.lang == Lang::C {
+                qualified_start(code, p)
+            } else {
+                p
+            };
             out.push(Span {
-                start: p,
+                start,
                 end,
                 weak: false,
                 from: Ok(s.pat),
@@ -1537,19 +1590,35 @@ fn spans(f: &SrcFile, fi: usize, i: usize, t: &Taint) -> Vec<Span> {
         let name = &code[j..k];
         let before = if j > 0 { b[j - 1] } else { b' ' };
         let dotted = before == b'.' || (before == b'>' && j >= 2 && b[j - 2] == b'-');
-        let next = code[k..].chars().next();
+        let mut next = code[k..].chars().next();
+        // Milestone 355: a C++ call with template arguments, `GetTimeStamp<std::chrono::milliseconds>()`
+        let mut open = k;
+        if f.lang == Lang::C && next == Some('<') {
+            if let Some(e) = template_end(code, k) {
+                if code[e..].starts_with('(') {
+                    open = e;
+                    next = Some('(');
+                }
+            }
+        }
         let mut hit: Option<(Key, usize, usize)> = None;
         if next == Some('(') {
             let key = Key::Call(name.to_string());
             if t.map.contains_key(&key) {
-                let recv_start = if dotted { operand_left(code, j - 1) } else { j };
+                let recv_start = if dotted {
+                    operand_left(code, j - 1)
+                } else if f.lang == Lang::C {
+                    qualified_start(code, j)
+                } else {
+                    j
+                };
                 let recv = code[recv_start..j].trim_end_matches(['.', '>', '-']);
                 let monotonic_recv = matches!(
                     recv,
                     "time" | "performance" | "Instant" | "process" | "loop"
                 );
                 if !monotonic_recv {
-                    hit = Some((key, recv_start, call_end(code, k)));
+                    hit = Some((key, recv_start, call_end(code, open)));
                 }
             }
         } else if dotted {
@@ -1836,8 +1905,20 @@ const CONVERSIONS: &[&str] = &[
     "Ok",
 ];
 
+/// C++ casts that keep a time a time (Milestone 355): `std::chrono::duration_cast<Duration>(...)`
+/// of a reading's `time_since_epoch()`, as a project's own wrapper of the wall clock returns it
+/// (Kvrocks's `util::GetTimeStamp`).
+const CPP_CASTS: &[&str] = &[
+    "std::chrono::duration_cast<",
+    "chrono::duration_cast<",
+    "duration_cast<",
+    "std::chrono::time_point_cast<",
+    "time_point_cast<",
+    "static_cast<",
+];
+
 /// The reading that the expression at `from` starts with, after spaces, parentheses, casts
-/// (`(long long)`) and conversions (`int64(`).
+/// (`(long long)`, C++'s `duration_cast<...>(`) and conversions (`int64(`).
 fn starts_with_span<'a>(code: &str, from: usize, sp: &'a [Span]) -> Option<&'a Span> {
     let b = code.as_bytes();
     let mut i = from;
@@ -1864,6 +1945,19 @@ fn starts_with_span<'a>(code: &str, from: usize, sp: &'a [Span]) -> Option<&'a S
                 i += 1;
             }
             continue;
+        }
+        // Milestone 355: a C++ cast of one reading, not of a difference of two
+        if let Some(c) = CPP_CASTS.iter().find(|c| code[i..].starts_with(**c)) {
+            let lt = i + c.len() - 1;
+            if let Some(gt) = template_end(code, lt) {
+                if code[gt..].starts_with('(') {
+                    let close = call_end(code, gt);
+                    if !code[gt..close].contains(" - ") {
+                        i = gt + 1;
+                        continue;
+                    }
+                }
+            }
         }
         if let Some(c) = CONVERSIONS
             .iter()
@@ -2923,8 +3017,11 @@ fn find_limit(
     i: usize,
     names: &[String],
     unit: &str,
+    t: &Taint,
 ) -> Option<Limit> {
     let f = &files[fi];
+    // Milestone 355: a function that returns a wall-clock reading (`GetTimeStampMS`) is no limit
+    let reader = |n: &str| t.map.contains_key(&Key::Call(n.to_string()));
     // a variable the function computes (`idle`, `max_idle`) is the measured time, not the limit
     let mut computed: HashSet<String> = HashSet::new();
     if let Some(fu) = f.scope[i].map(|s| &f.funcs[s]) {
@@ -2936,7 +3033,12 @@ fn find_limit(
     }
     let mut cands: Vec<String> = names
         .iter()
-        .filter(|n| duration_name(n) && !computed.contains(*n) && !TIME_TYPES.contains(&n.as_str()))
+        .filter(|n| {
+            duration_name(n)
+                && !computed.contains(*n)
+                && !TIME_TYPES.contains(&n.as_str())
+                && !reader(n)
+        })
         .cloned()
         .collect();
     // the lines of the same function, nearest first
@@ -2950,6 +3052,7 @@ fn find_limit(
                         && !cands.contains(&n)
                         && !computed.contains(&n)
                         && !TIME_TYPES.contains(&n.as_str())
+                        && !reader(&n)
                     {
                         cands.push(n);
                     }
@@ -3425,7 +3528,7 @@ fn audit_files(files: &[SrcFile]) -> (Vec<ClockMatch>, Vec<ClockMatch>) {
                 }
             }
             if let Some((shape, conf, span, names)) = code_line(files, fi, i, &t) {
-                let limit = find_limit(files, fi, i, &names, reading_unit(&t, &span));
+                let limit = find_limit(files, fi, i, &names, reading_unit(&t, &span), &t);
                 out.push(ClockMatch {
                     file: f.rel.clone(),
                     line: i + 1,
@@ -4474,6 +4577,55 @@ mod tests {
             "{:?}",
             idle.origin
         );
+    }
+
+    /// Milestone 355: a C++ project's own wrapper of the wall clock, as Kvrocks's
+    /// `util::GetTimeStamp` (a template that casts `system_clock::now()`, and its milliseconds
+    /// twin), makes its callers' readings: finding 2 of the Kvrocks example's place is found,
+    /// and the wrapper is no limit.
+    #[test]
+    fn cpp_follows_a_projects_own_wrapper_of_the_wall_clock() {
+        let util = "#pragma once\n#include <chrono>\nnamespace util {\n\
+            template <typename Duration = std::chrono::seconds>\n\
+            auto GetTimeStamp() {\n  return std::chrono::duration_cast<Duration>(std::chrono::system_clock::now().time_since_epoch()).count();\n}\n\
+            inline uint64_t GetTimeStampMS() { return GetTimeStamp<std::chrono::milliseconds>(); }\n\
+            }  // namespace util\n";
+        let repl = "void ReplicationThread::sendReplConfAck(bufferevent *bev, bool force) {\n\
+            \x20 int64_t now = util::GetTimeStamp();\n\
+            \x20 if (force || (now - last_ack_time_secs_) >= 1) {\n\
+            \x20   last_ack_time_secs_ = now;\n  }\n}\n\
+            Status ReplicationThread::Start() {\n\
+            \x20 if (util::GetTimeStampMS() - last_connect_timestamp < 1000) {\n    return 1;\n  }\n  return 0;\n}\n";
+        let m = audit_texts(&[
+            ("src/common/time_util.h", util),
+            ("src/cluster/replication.cc", repl),
+        ]);
+        let lines: Vec<(&str, usize, &str)> = m
+            .iter()
+            .map(|x| (x.file.as_str(), x.line, x.shape))
+            .collect();
+        assert!(
+            lines.contains(&("src/cluster/replication.cc", 3, "elapsed")),
+            "{m:#?}"
+        );
+        assert!(
+            lines.contains(&("src/cluster/replication.cc", 8, "elapsed")),
+            "{m:#?}"
+        );
+        let start = m.iter().find(|x| x.line == 8).unwrap();
+        assert!(
+            start
+                .limit
+                .as_ref()
+                .is_none_or(|l| l.name != "GetTimeStampMS"),
+            "{start:#?}"
+        );
+        // a cast of a difference is a duration (its own line measures it), not a reading that
+        // its callers keep
+        let diff = "namespace util {\nauto ElapsedTime() {\n  return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start).count();\n}\n}\n\
+            void f() {\n  int64_t t = util::ElapsedTime();\n  if (t - last > 5) {}\n}\n";
+        let d = one("src/x.cc", diff);
+        assert!(d.iter().all(|x| x.line == 3), "{d:#?}");
     }
 
     #[test]
