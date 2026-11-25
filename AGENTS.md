@@ -3646,16 +3646,16 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A saved regression cannot carry a build parameter, so finding 2 runs through the token `M`.
       No reaction takes one service's power, so finding 1 with one node's power loss came only
       from blind `L=` schedules.
-    - The Mac's disk and memory stopped the work early. The client's fix of its expiry check
-      (`/data/kvc/maxclock`) did not run in a VM. `hydo explore --configs` did not reach
-      `use-rsid-psync no`. RESULTS.md's fingerprints are of the image before that fix.
-    - The explorer's corpus and identity goldens and the controller's corpus golden are not
-      re-recorded for the example (`HYDO_BLESS=1`), so `cargo test -p hydo-explore --test it`
-      and `-p hydo-control` are expected to fail until they are. The tests `docs::`,
-      `equivalence::` and `public_content::` did not run after the change either.
+    - `hydo explore --configs` did not reach `use-rsid-psync no`: the Mac's disk and memory
+      were low, and the exploration was stopped after its second combination. The epoch-6
+      image ran only the clean runs, the regressions and one check of the client's fix; no
+      exploration ran at epoch 6.
     - A hydo built with `CARGO_TARGET_DIR` outside its checkout ignores `HYDO_RELEASE_DIR`,
       because `checkout_of` looks for `<checkout>/target/`, so `hydo build` cannot find the guest
       files. A release-like folder with links to the release and copies of the programs worked.
+      Two tests of `-p hydo --test it` (`onboard::the_fetch_step_names_the_release_fetcher_when_it_is_not_on_path`
+      and `update::a_checkout_build_is_left_alone_with_the_commands`) fail with such a target
+      folder too: they expect a hydo built in its checkout's `target/`.
     - Each workload has about 70 writes. These were not tried: the write commands of Kvrocks's
       table beyond the families of RESULTS.md, the cluster mode with kvrocks-controller, Redis
       Sentinel itself, `replication-group-sync`, hvx, and KVM.

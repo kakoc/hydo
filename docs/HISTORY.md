@@ -21501,11 +21501,8 @@ names it), but Garage's next commits come within milliseconds.
 e5 (`--configs`, both values of `fsync`, 20 seeds each). All on one worker of 1,024 MiB, at 160 to
 860 runs an hour.
 
-**Tests.** `cargo fmt --all --check` passes. The explorer's corpus and identity goldens (quick
-and full) and the controller's corpus golden are not re-recorded for the new example's inputs
-yet, and `cargo test -p hydo-explore --test it`, `-p hydo --test it docs::` and `-p hydo-agents
---test it public_content::` did not run: the Mac had 12 GB of free disk and a full swap, and a
-test build needs several GB (open item 179).
+**Tests.** The explorer's corpus and identity goldens (quick and full) and the controller's
+corpus golden are re-recorded for the new example's inputs (`HYDO_BLESS=1`).
 
 Retro: Garage v2.5.0, the Mac engine, 2026-11-23
 - Time to the first clean run: 50 minutes of wall time, 20 of them waiting for free disk.
@@ -22008,8 +22005,24 @@ and e4 (`--configs`, `sync` and `rsid` one at a time, seeds 1-20). e4 was stoppe
 second combination, before `use-rsid-psync no`, because the Mac had 5 GB of free disk and a full
 swap. All on one worker of 1,024 MiB, at 240 to 560 runs an hour. RESULTS.md has the table.
 
-**Tests.** The explorer's corpus and identity goldens (quick and full) and the controller's
-corpus golden are re-recorded for the new example's inputs (`HYDO_BLESS=1`).
+**At the fingerprint epoch 6.** After the branch moved onto `main` at `e1b47cef` (Milestones 350,
+352, 353 and 354), the example's image was built again at epoch 6 with the client's fixed expiry
+check (`ee70237d…`). Every value moved with the image. Two clean runs give `bc3e6d306a811a13`.
+`hydo repro --regressions` gave 3 of 3 as expected: finding 1's directed regression
+`35d9039868e11329` (twice, once more in a `hydo run`), its blind regression `2dc94c8301e58369`,
+and finding 2's `c964be0dc09a2a55`. The schedule that had failed by the check's mistake passes.
+The clock audit and the scan of write routes of `e1b47cef` still found nothing in Kvrocks.
+
+**Tests.** The explorer's corpus and identity goldens (quick and full; `identity-full.txt` did
+not change) and the controller's corpus golden are re-recorded for the new example's inputs
+(`HYDO_BLESS=1`). With a target folder of this branch's own: `cargo fmt --all --check`, `cargo test
+-p hydo-explore --test it` (60 passed), `-p hydo-control` (120 and 41 passed), `-p hydo-agents
+--test it` (14 passed), `-p hydo --test it -- docs:: equivalence::` (23 passed), `sh
+ci/vale.sh` and `sh ci/consolidate-tests.sh --check` pass. The whole `-p hydo --test it` gave 72
+passed and 2 failed: `onboard::the_fetch_step_names_the_release_fetcher_when_it_is_not_on_path`
+and `update::a_checkout_build_is_left_alone_with_the_commands`. Both expect a hydo built in its
+checkout's `target/`, and this one was built in a target folder outside the checkout (open item
+179). No Rust code changed in this milestone.
 
 Retro: Kvrocks 2.17.0, the Mac engine, 2026-11-24
 - Time to the first clean run: 1 hour 50 minutes of wall time from the start, none of it

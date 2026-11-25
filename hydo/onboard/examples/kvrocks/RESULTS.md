@@ -145,18 +145,24 @@ geo, `HyperLogLog`, bit operations, `RENAME`, `MOVE`) and the admin commands tha
 
 ## Without faults, and the regressions
 
-Two runs of `disk=none | run` gave one fingerprint on the first image, `2c217adf40766fc4`, with
-72 writes and one failover. The fingerprints below are of the image before the expiry check's fix
-(section "Not bugs"); the fixed client's image did not run (open item 179). A run has about 70
-writes and one to four failovers.
+The final image was built at the fingerprint epoch 6 (`hydo` of this branch on `main`
+`e1b47cef`), with the client's fixed expiry check: `explore-ob-kvrocks-arm64.cpio.gz`
+`ee70237d…`. Two runs of `disk=none | run` on it give one fingerprint, `bc3e6d306a811a13`, with
+91 commands and no failure. The image is new, so every value moved from the epoch-5 values of the
+explorations; those are in the second column for reference. A run has about 70 writes and one to
+four failovers.
 
-| file | finding | fingerprint |
-|---|---|---|
-| `node-unstartable-after-full-sync-and-power-cut.schedule` | 1, directed | `25cccdf92225932b` |
-| `node-unstartable-after-full-sync-blind.schedule` | 1, as the explorer found and shrank it | `f8292ba2526b369d` |
-| `wait-answers-0-after-a-backward-clock-step.schedule` | 2 | `b4bc897a4805d129` |
+| file | finding | epoch 6 | epoch 5 |
+|---|---|---|---|
+| `node-unstartable-after-full-sync-and-power-cut.schedule` | 1, directed | `35d9039868e11329` (two runs) | `25cccdf92225932b` |
+| `node-unstartable-after-full-sync-blind.schedule` | 1, as the explorer found and shrank it | `2dc94c8301e58369` | `f8292ba2526b369d` |
+| `wait-answers-0-after-a-backward-clock-step.schedule` | 2 | `c964be0dc09a2a55` | `b4bc897a4805d129` |
 
-`hydo repro --regressions` gives each one's violation.
+`hydo repro --regressions` gave each one's violation, 3 of 3 as expected. The directed regression of
+finding 1 gave `35d9039868e11329` in `hydo repro` and again in a `hydo run`, with `Sst file size
+mismatch between expected 2080 and file system 0 sstable: /var/lib/kvrocks/db/000014.sst`. The
+schedule that failed by the expiry check's mistake, `disk=none dseed=0 | run T=17:-648000
+W=740c6cfa,p1,q3,r500`, passes on this image (`1d7ed724399900d4`).
 
 ## What was found
 
@@ -255,7 +261,7 @@ replicas behind for as long. The general idea of reading a monotonic clock was d
   at 24.0 s, so the key had expired as set before the step. The read-back compared the deadline
   with the clock after the step and required the key. The client now records the latest clock
   that the run saw (`/data/kvc/maxclock`) and requires a key only while that clock is before the
-  deadline too. The fixed client did not run yet: the Mac's disk was low (open item 179).
+  deadline too. On the final image the schedule passes.
 - **Detected damage.** In e1, e2 and e3, 16 schedules damaged `CURRENT`, an SST file, a WAL or
   `node.conf` with `G=`. The node then stopped at its start: RocksDB checks its files, and
   Kvrocks does not start with a damaged configuration.
@@ -330,10 +336,14 @@ In the order of the time each cost:
 3. **The clock audit found nothing.** `hydo rules scan --kind clock` named 0 functions in 255
    files. Kvrocks reads the wall clock through its own `util::GetTimeStamp`
    (`src/common/time_util.h`), which the audit does not follow, as open items 152 and 171 say
-   of other projects' clocks. Finding 2's place was found by reading the code.
+   of other projects' clocks. Finding 2's place was found by reading the code. The hydo of
+   `main` at `e1b47cef`, with Milestone 350's readings kept as an order or a version, named none
+   either; Kvrocks's metadata versions mix the clock with a counter (`generateVersion`,
+   `src/storage/redis_metadata.cc` line 208).
 4. **The scan of write routes found nothing.** `hydo rules scan --kind writes` read one file and
    found no route: a Redis-compatible server's commands are a table of `MakeCmdAttr` entries
    with a `write` flag, not routes. The 143 write commands were listed by hand (open item 175).
+   The scan of `e1b47cef`, which reads Rust enumerations of endpoints, found none either.
 5. **A power loss with a failed restart has no log in its diagnosis.** For `ERROR kv2 restart
    failed (after its power loss)` the `hydo: diagnosis:` line names only the error, while
    `logs/kv2.log` has RocksDB's reason. After a whole-guest cut the line quotes the log.
