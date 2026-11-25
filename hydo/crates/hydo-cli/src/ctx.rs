@@ -240,19 +240,39 @@ pub fn release_dir_of(checkout: Option<&Path>, dir: Option<&Path>) -> Option<Pat
 /// cache's copy of its own version's release, as a cargo-installed hydo does (Milestone 169).
 /// A copy of the program in a release-like prefix (deploy-metal.sh, the rebaseline prefix, the CLI
 /// test) is not inside a checkout's target directory and keeps its own root.
+///
+/// A target directory outside the checkout (`CARGO_TARGET_DIR`) has another parent. Cargo marks
+/// every target directory with a `CACHEDIR.TAG` file, so a program inside such a directory is
+/// a build, and its checkout is the one it was built from: the crate's source path that cargo
+/// gave the build (Milestone 360, open item 179: such a hydo ignored `HYDO_RELEASE_DIR`).
 pub fn checkout_of(exe: &Path, root: &Path) -> Option<PathBuf> {
+    checkout_of_built(exe, root, option_env!("CARGO_MANIFEST_DIR").map(Path::new))
+}
+
+/// [`checkout_of`] with the crate's source path of the build (`<checkout>/hydo/crates/hydo-cli`).
+pub fn checkout_of_built(exe: &Path, root: &Path, src: Option<&Path>) -> Option<PathBuf> {
     if root.join("SHA256SUMS").exists() {
         return None;
     }
-    exe.ancestors()
+    let is_checkout = |c: &Path| {
+        c.join("Cargo.toml").is_file()
+            && c.join("hydo").join("VERSION").is_file()
+            && c.join("hydo").join("crates").join("hydo-cli").is_dir()
+    };
+    if let Some(c) = exe
+        .ancestors()
         .filter(|a| a.file_name().is_some_and(|n| n == "target"))
         .filter_map(Path::parent)
-        .find(|c| {
-            c.join("Cargo.toml").is_file()
-                && c.join("hydo").join("VERSION").is_file()
-                && c.join("hydo").join("crates").join("hydo-cli").is_dir()
-        })
-        .map(Path::to_path_buf)
+        .find(|c| is_checkout(c))
+    {
+        return Some(c.to_path_buf());
+    }
+    let in_target = exe
+        .ancestors()
+        .skip(1)
+        .any(|a| a.join("CACHEDIR.TAG").is_file());
+    let c = src?.parent()?.parent()?.parent()?;
+    (in_target && is_checkout(c)).then(|| c.to_path_buf())
 }
 
 /// `hydo: <msg>` on stderr and exit with status 1.
@@ -413,7 +433,7 @@ pub fn recorded_backend(dir: &Path) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{checkout_of, recorded_backend, release_dir_of};
+    use super::{checkout_of, checkout_of_built, recorded_backend, release_dir_of};
     use std::path::Path;
 
     /// `hydo repro <run dir>` follows the engine the run recorded (0.3.0): the engine is read from
@@ -479,6 +499,22 @@ mod tests {
             checkout_of(&other.join("target/release/hydo"), &other.join("target")),
             None
         );
+        // Milestone 360: a target directory outside the checkout (CARGO_TARGET_DIR), marked by
+        // cargo's CACHEDIR.TAG, is the build of the checkout it was built from
+        let src = t.join("hydo/crates/hydo-cli");
+        let out = d.join("scratch/m360-target");
+        std::fs::create_dir_all(out.join("debug")).unwrap();
+        std::fs::write(
+            out.join("CACHEDIR.TAG"),
+            "Signature: 8a477f597d28d172789f06886806bc55",
+        )
+        .unwrap();
+        let exe = out.join("debug/hydo");
+        assert_eq!(checkout_of_built(&exe, &out, Some(&src)), Some(t.clone()));
+        // ... and not without the tag (a copy in a prefix), or when the source is gone
+        assert_eq!(checkout_of_built(&p.join("bin/hydo"), &p, Some(&src)), None);
+        let gone = d.join("gone/hydo/crates/hydo-cli");
+        assert_eq!(checkout_of_built(&exe, &out, Some(&gone)), None);
         let _ = std::fs::remove_dir_all(&d);
     }
 

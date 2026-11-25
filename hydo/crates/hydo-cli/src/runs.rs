@@ -1654,6 +1654,15 @@ pub fn regression_params_differ(r: &Value, built: &[(String, String)]) -> Option
     ))
 }
 
+/// Milestone 360: a regression that [`replay_regressions`] left out, because its `# params:`
+/// line names other build parameters than the image's.
+pub fn left_out(g: &hydo_results::CiRegression) -> bool {
+    g.verdict.is_none()
+        && g.error
+            .as_deref()
+            .is_some_and(|e| e.starts_with("not run: it needs the build parameters"))
+}
+
 /// Every saved regression an image carries, replayed from fresh boots into `base/<k>-<name>`, one
 /// result each (`hydo repro --regressions`, `hydo ci run`). Prints a PASS or FAIL line per
 /// regression.
@@ -1832,7 +1841,122 @@ fn default_regressions_dir(cwd: &Path) -> String {
     }
 }
 
-pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
+/// The image an exploration ran: its resolved path, else the path as given, relative to the
+/// folder it was run in or to the install's guest folder.
+fn exploration_image(ctx: &Ctx, doc: &hydo_results::Exploration) -> Option<PathBuf> {
+    let mut c: Vec<PathBuf> = Vec::new();
+    if let Some(r) = &doc.image.resolved {
+        c.push(PathBuf::from(r));
+    }
+    let p = PathBuf::from(&doc.image.path);
+    c.push(p.clone());
+    if !p.is_absolute() {
+        c.push(ctx.guest().join(&p));
+    }
+    c.into_iter().find(|p| p.is_file())
+}
+
+/// Milestone 360: the build parameters of an exploration's image that differ from the defaults
+/// of its manifest's `params:`, for the `# params:` line of the regressions `hydo save` writes.
+/// Before, the trial of Milestone 359 added the line by hand, and a regression found with `--set
+/// memq=10000` ran on every build. `Err`: the image has `params:` and was built again since the
+/// exploration. An image that is gone gives no line.
+fn exploration_params(
+    ctx: &Ctx,
+    doc: &hydo_results::Exploration,
+) -> Result<Vec<(String, String)>, String> {
+    let Some(img) = exploration_image(ctx, doc) else {
+        // nothing to read: the files keep the form they had before Milestone 360
+        return Ok(Vec::new());
+    };
+    let Ok(text) = hydo_engine::image::embedded_manifest(&img) else {
+        return Ok(Vec::new());
+    };
+    let defaults: Vec<(String, String)> = match hydo_manifest::parse_text(&text, "hydo.yaml", true)
+    {
+        Ok(m) => match m.get("params") {
+            Some(Value::Object(o)) => o
+                .iter()
+                .map(|(k, v)| {
+                    let v = match v {
+                        Value::Null => String::new(),
+                        Value::String(s) => s.clone(),
+                        other => py_str(other),
+                    };
+                    (k.clone(), v)
+                })
+                .collect(),
+            _ => return Ok(Vec::new()),
+        },
+        Err(_) => return Ok(Vec::new()),
+    };
+    if let (Some(want), Ok(got)) = (doc.image.sha256.as_deref(), sha256_file(&img)) {
+        if want != got {
+            return Err(format!(
+                "its image {} was built again since the exploration",
+                img.display()
+            ));
+        }
+    }
+    let built = hydo_engine::image::embedded_file(&img, "etc/hydo/params")
+        .map(|t| hydo_manifest::parse_params_file(&t))
+        .unwrap_or_default();
+    Ok(params_line_values(&defaults, &built))
+}
+
+/// The values of `built` that differ from `defaults` (and those `defaults` lacks), sorted.
+fn params_line_values(
+    defaults: &[(String, String)],
+    built: &[(String, String)],
+) -> Vec<(String, String)> {
+    let mut v: Vec<(String, String)> = built
+        .iter()
+        .filter(|(k, val)| !defaults.iter().any(|(d, dv)| d == k && dv == val))
+        .cloned()
+        .collect();
+    v.sort();
+    v
+}
+
+/// The schedule and the `# params:` words of a saved regression's text: two files of one
+/// finding have the same.
+fn regression_identity(text: &str) -> (String, String) {
+    let mut params = String::new();
+    let mut sched = String::new();
+    for l in text.lines() {
+        let l = l.trim();
+        if let Some(p) = l.strip_prefix("# params:") {
+            params = p.split_whitespace().collect::<Vec<_>>().join(" ");
+        } else if !l.is_empty() && !l.starts_with('#') {
+            sched = l.to_string();
+        }
+    }
+    (sched, params)
+}
+
+/// Where `hydo save` writes a finding named `name`: the first of `name`, `name-2`, `name-3`, ...
+/// that is free, or that already holds the same finding (then `false`: nothing to write). Before
+/// Milestone 360 a second finding with the name of an earlier file was dropped with `exists,
+/// kept`.
+fn save_path(to: &str, name: &str, text: &str) -> (String, bool) {
+    let id = regression_identity(text);
+    let mut k = 1;
+    loop {
+        let n = if k == 1 {
+            name.to_string()
+        } else {
+            format!("{name}-{k}")
+        };
+        let p = pjoin(to, &format!("{n}.schedule"));
+        match std::fs::read_to_string(&p) {
+            Ok(old) if regression_identity(&old) == id => return (p, false),
+            Err(_) if !Path::new(&p).exists() => return (p, true),
+            _ => k += 1,
+        }
+    }
+}
+
+pub fn cmd_save(ctx: &Ctx, argv: &[String]) -> i32 {
     let mut args = argv.to_vec();
     let to = take(&mut args, "--to").unwrap_or_else(|| default_regressions_dir(Path::new(".")));
     if args.len() != 1
@@ -1846,7 +1970,22 @@ pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
     if let Err(e) = std::fs::create_dir_all(&to) {
         die(&format!("{to}: {e}"));
     }
-    let mut n = 0;
+    let params = match exploration_params(ctx, &doc) {
+        Ok(v) => v,
+        Err(why) => {
+            println!(
+                "hydo: warning: the build parameters of the exploration's image were not read \
+                 ({why}); add a `# params: name=value` line to each file if it was built with \
+                 `--set`"
+            );
+            Vec::new()
+        }
+    };
+    let params_line = (!params.is_empty()).then(|| {
+        let kv: Vec<String> = params.iter().map(|(k, v)| format!("{k}={v}")).collect();
+        format!("# params: {}", kv.join(" "))
+    });
+    let (mut n, mut kept) = (0, 0);
     for s in &doc.shrinks {
         // the shrink as the composer reads it (the results format keeps the field names)
         let mut x = serde_json::to_value(s).unwrap_or(Value::Null);
@@ -1862,13 +2001,21 @@ pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
             60,
         );
         let name = name.trim_matches('-');
-        let p = pjoin(&to, &format!("{name}.schedule"));
-        if Path::new(&p).exists() {
-            println!("hydo: {p} exists, kept");
+        let mut text = hydo_composer::saved_regression_text(&x)
+            .unwrap_or_else(|e| die(&format!("{}: {e}", args[0])));
+        if let Some(l) = &params_line {
+            // after the line that names the seed and the class
+            text = match text.split_once('\n') {
+                Some((first, rest)) => format!("{first}\n{l}\n{rest}"),
+                None => format!("{l}\n{text}"),
+            };
+        }
+        let (p, new) = save_path(&to, name, &text);
+        if !new {
+            println!("hydo: {p} holds this finding already, kept");
+            kept += 1;
             continue;
         }
-        let text = hydo_composer::saved_regression_text(&x)
-            .unwrap_or_else(|e| die(&format!("{}: {e}", args[0])));
         if let Err(e) = std::fs::write(&p, text) {
             die(&format!("{p}: {e}"));
         }
@@ -1878,7 +2025,16 @@ pub fn cmd_save(_ctx: &Ctx, argv: &[String]) -> i32 {
             println!("hydo: note: {}", py_str(&x["stable_note"]));
         }
     }
-    println!("hydo: {n} regressions saved; `hydo build` writes them beside the image, `hydo repro --regressions` replays them");
+    let kept = if kept > 0 {
+        format!(", {kept} kept: they were saved before")
+    } else {
+        String::new()
+    };
+    let with = match &params_line {
+        Some(l) => format!(" with `{l}` (the image's build parameters)"),
+        None => String::new(),
+    };
+    println!("hydo: {n} regressions saved{with}{kept}; `hydo build` writes them beside the image, `hydo repro --regressions` replays them");
     0
 }
 
@@ -1908,6 +2064,43 @@ mod tests {
             .contains("this image has no parameter mode"));
         let plain = serde_json::json!({"name": "x"});
         assert_eq!(regression_params_differ(&plain, &wait), None);
+    }
+
+    /// Milestone 360: `hydo save` names the values of `--set` on a `# params:` line, and gives a
+    /// second finding of one name a file of its own instead of dropping it.
+    #[test]
+    fn save_keeps_every_finding_and_names_the_build_parameters() {
+        let kv = |a: &[(&str, &str)]| -> Vec<(String, String)> {
+            a.iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect()
+        };
+        let defaults = kv(&[("memq", "0"), ("sync", "yes")]);
+        assert!(super::params_line_values(&defaults, &defaults).is_empty());
+        assert_eq!(
+            super::params_line_values(&defaults, &kv(&[("sync", "yes"), ("memq", "10000")])),
+            kv(&[("memq", "10000")])
+        );
+        let d = std::env::temp_dir().join(format!("hydo-save-names-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let to = d.to_string_lossy().to_string();
+        let a = "# found by `hydo explore` (seed 2): process\n# expect: violation\ndisk=none | run K=x@1+1\n";
+        let b = "# found by `hydo explore` (seed 9): process\n# expect: violation\ndisk=none | run A=e:kill-x\n";
+        let (p, new) = super::save_path(&to, "process-v", a);
+        assert!(new && p.ends_with("process-v.schedule"));
+        std::fs::write(&p, a).unwrap();
+        // the same finding again: kept, nothing written
+        assert_eq!(super::save_path(&to, "process-v", a), (p.clone(), false));
+        // another finding of the same name: the next free name
+        let (p2, new) = super::save_path(&to, "process-v", b);
+        assert!(new && p2.ends_with("process-v-2.schedule"), "{p2}");
+        std::fs::write(&p2, b).unwrap();
+        // the first finding with other build parameters is another finding
+        let a10 = a.replacen('\n', "\n# params: memq=10000\n", 1);
+        let (p3, new) = super::save_path(&to, "process-v", &a10);
+        assert!(new && p3.ends_with("process-v-3.schedule"), "{p3}");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     /// `hydo save` from inside the `hydo/` folder writes into its `regressions/`, not into a

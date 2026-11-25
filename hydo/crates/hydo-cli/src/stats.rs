@@ -20,7 +20,9 @@ pub const HELP: &str = "usage: hydo stats [DIR] [--json] [--budget TIME] [--work
     this machine fits, and on 4 or 20 shards.
   --budget TIME (90m, 2h, 3600) with --workers N and --shards N adds that estimate. --json prints
   the document instead, with the asked estimate among its fits. DIR defaults to
-  hydo-out/explore. `hydo guide workflow` says how to read the curve.";
+  hydo-out/explore, and it is one exploration: two folders are refused (`hydo explore --merge`
+  makes one exploration of the shards of one). `hydo guide workflow` says how to read the
+  curve.";
 
 /// A time budget: `3600`, `90s`, `90m`, `2h`, `1h30m`.
 pub fn parse_budget(s: &str) -> Option<f64> {
@@ -84,7 +86,16 @@ pub fn cmd_stats(argv: &[String]) -> i32 {
                 }
             }
             x if x.starts_with('-') => die(&format!("hydo stats: unknown option {x}\n{HELP}")),
-            x => dir = Some(x.to_string()),
+            // Milestone 360: two folders printed the second alone, without a word on the first
+            // (the trial of Milestone 359)
+            x => match &dir {
+                Some(first) => die(&format!(
+                    "hydo stats: one exploration at a time, and {first} and {x} are two: run \
+                     `hydo stats` on each (`hydo explore --merge` makes one exploration of the \
+                     shards of one; `hydo report {first} {x}` lists their problems together)"
+                )),
+                None => dir = Some(x.to_string()),
+            },
         }
     }
     let d = dir.unwrap_or_else(|| pjoin(OUT, "explore"));

@@ -364,11 +364,31 @@ pub fn markdown(r: &CiRun, sets: &[(String, String)]) -> String {
     }
     if !r.regressions.is_empty() {
         let bad: Vec<_> = r.regressions.iter().filter(|g| !g.as_expected).collect();
+        // Milestone 360: the regressions of other build parameters, which did not run here
+        let out: Vec<_> = r
+            .regressions
+            .iter()
+            .filter(|g| crate::runs::left_out(g))
+            .collect();
         if bad.is_empty() {
             let _ = writeln!(
                 o,
-                "**Saved regressions**: {} of {} as expected.\n",
-                r.summary.regressions.as_expected, r.summary.regressions.replayed
+                "**Saved regressions**: {} of {} as expected{}.\n",
+                r.summary.regressions.as_expected,
+                r.summary.regressions.replayed,
+                if out.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        ", {} left out: {} other build parameters",
+                        out.len(),
+                        if out.len() == 1 {
+                            "it needs"
+                        } else {
+                            "they need"
+                        }
+                    )
+                }
             );
         } else {
             o.push_str("**Saved regressions not as expected**:\n\n");
@@ -387,6 +407,20 @@ pub fn markdown(r: &CiRun, sets: &[(String, String)]) -> String {
                     code(&g.schedule)
                 );
             }
+            o.push('\n');
+        }
+        for g in out {
+            let _ = writeln!(
+                o,
+                "- `{}` left out: {}",
+                g.name,
+                g.error
+                    .as_deref()
+                    .unwrap_or_default()
+                    .trim_start_matches("not run: ")
+            );
+        }
+        if !r.regressions.iter().all(|g| !crate::runs::left_out(g)) {
             o.push('\n');
         }
     }
@@ -719,7 +753,7 @@ pub fn junit(r: &CiRun) -> String {
         cases_f.push_str("    </testcase>\n");
     }
     let mut cases_r = String::new();
-    let (mut nr, mut fr) = (0, 0);
+    let (mut nr, mut fr, mut sr) = (0, 0, 0);
     for g in &r.regressions {
         nr += 1;
         let _ = writeln!(
@@ -741,7 +775,10 @@ pub fn junit(r: &CiRun) -> String {
             g.fp.as_deref().unwrap_or("-"),
             g.schedule
         );
-        if !g.as_expected {
+        if crate::runs::left_out(g) {
+            sr += 1;
+            let _ = writeln!(cases_r, "      <skipped message=\"{}\"/>", xml(&got));
+        } else if !g.as_expected {
             if fails("regression") {
                 fr += 1;
                 let _ = writeln!(
@@ -775,9 +812,16 @@ pub fn junit(r: &CiRun) -> String {
         "  <testsuite name=\"hydo findings: {}\" tests=\"{nf}\" failures=\"{ff}\" skipped=\"{sf}\">\n{cases_f}  </testsuite>\n",
         xml(&r.project.name)
     );
+    // Milestone 360: the regressions of other build parameters are skipped (only then the
+    // attribute, so that other reports keep their bytes)
+    let skipped = if sr > 0 {
+        format!(" skipped=\"{sr}\"")
+    } else {
+        String::new()
+    };
     let _ = write!(
         o,
-        "  <testsuite name=\"hydo regressions: {}\" tests=\"{nr}\" failures=\"{fr}\">\n{cases_r}  </testsuite>\n",
+        "  <testsuite name=\"hydo regressions: {}\" tests=\"{nr}\" failures=\"{fr}\"{skipped}>\n{cases_r}  </testsuite>\n",
         xml(&r.project.name)
     );
     o.push_str("</testsuites>\n");
@@ -877,6 +921,46 @@ mod tests {
         assert!(j.contains("name=\"VIOLATION &lt;x&gt; &amp; y\""));
         assert!(j.contains("<skipped message=\"present on the base"));
         assert_eq!(xml("a\u{1}b"), "a b");
+    }
+
+    /// Milestone 360: a saved regression of other build parameters is left out, in the report
+    /// and as a skipped case, not counted as one as expected.
+    #[test]
+    fn a_regression_of_other_build_parameters_is_left_out() {
+        let mut r = run();
+        r.regressions = vec![
+            hydo_results::CiRegression {
+                name: "plain".into(),
+                schedule: "disk=none | run".into(),
+                expect: "ok".into(),
+                verdict: Some("HYDO-ORACLE: OK".into()),
+                as_expected: true,
+                ..Default::default()
+            },
+            hydo_results::CiRegression {
+                name: "memq".into(),
+                schedule: "disk=none | run T=7:-1265".into(),
+                expect: "violation".into(),
+                as_expected: true,
+                error: Some(
+                    "not run: it needs the build parameters memq=10000 (this image: memq=0)".into(),
+                ),
+                ..Default::default()
+            },
+        ];
+        r.summary.regressions = hydo_results::CiRegressionCounts {
+            replayed: 1,
+            as_expected: 1,
+        };
+        let m = markdown(&r, &[]);
+        assert!(
+            m.contains("**Saved regressions**: 1 of 1 as expected, 1 left out: it needs other build parameters."),
+            "{m}"
+        );
+        assert!(m.contains("- `memq` left out: it needs the build parameters memq=10000"));
+        let j = junit(&r);
+        assert!(j.contains("failures=\"0\" skipped=\"1\">"), "{j}");
+        assert!(j.contains("<skipped message=\"not run: it needs the build parameters"));
     }
 
     /// Stage 2: an accepted finding, an entry that no longer reproduces, and a budget's cut.

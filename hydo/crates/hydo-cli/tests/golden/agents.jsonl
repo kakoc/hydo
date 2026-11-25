@@ -2,7 +2,7 @@
 # from commit 2a58c4b with Python 3.15.0; `git show 2a58c4b:hydo/onboard/hydo_agents.py`), one
 # command per line (tests/agents_equivalence.rs explains the form). Re-recorded from the Rust with
 # HYDO_BLESS=1 after a deliberate change.
-# skill sha256: b84d7d3242cf8da62481b53b0ed24bed47eb8b4deb473517f40e6a9ea81264c1
+# skill sha256: 282495f1f11b4f79592bea7391d7c7309f4f16637ef3a1cca7a8e07fd55f3ae9
 {"cmd":["guide"],"rc":0,"stdout":{"sha256":"86e7202ae38efce40622b172b5a7d43a766b62207e9c19e64b8d640d19dab2fa","len":3471},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.0"}
 {"cmd":["guide","--help"],"rc":0,"stdout":{"text":"usage: hydo guide [TOPIC | FILE | --list | --path]\n  no argument: how to get the onboarding skill, and the topics of this guide\n  TOPIC: one of `hydo guide --list` (this hydo's facts); `skill`: the onboarding skill's SKILL.md\n  FILE: a file of the examples (examples/...) or of the skill folder (references/...)\n"},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.1"}
 {"cmd":["guide","-h"],"rc":0,"stdout":{"text":"usage: hydo guide [TOPIC | FILE | --list | --path]\n  no argument: how to get the onboarding skill, and the topics of this guide\n  TOPIC: one of `hydo guide --list` (this hydo's facts); `skill`: the onboarding skill's SKILL.md\n  FILE: a file of the examples (examples/...) or of the skill folder (references/...)\n"},"stderr":{"text":""},"files":[["home/","0",{"text":""}]],"setup":"nothing","id":"0.2"}

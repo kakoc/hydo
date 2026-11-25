@@ -679,11 +679,12 @@ The proofs ran on the Mac engine; the details are in `docs/HISTORY.md` Milestone
 180).
 
 **The features of `main` since 0.5.0 on hvx and KVM (M358, tentative number).** hvx and KVM (run
-45612798752, Intel and AMD hosts) ran, with this tree's programs over the 0.5.0 release's guest
-files, the features that had run on the Mac engine only. Each held, with one fingerprint over two
+45612798752, Intel and AMD hosts) ran the features that had run on the Mac engine only. They used
+this tree's programs over the 0.5.0 release's guest files. Each held, with one fingerprint over two
 runs per engine and host:
-- the epoch-6 Redis quickstart's `C=12` (the list's values) with the first boot's outcomes in
-  the recovery boot, and `PATH` in every command, which a Go program used to run `hydo-oci`;
+- the epoch-6 Redis quickstart's `C=12` (the list's values), with the first boot's outcomes in
+  the recovery boot;
+- `PATH` in every command, which a Go program used to run `hydo-oci`;
 - on hvx, `ERROR agent lines full check` after 35 s, where the 0.5.0 engine waited 900 s;
 - `durable: true` of the s3 emulator at `C=`, `A=s3.acked` and (on hvx) `cf=` cuts, and 8 to 13
   lost writes without it;
@@ -697,6 +698,28 @@ from 192 ms (`kill-now`). On KVM the creation ran twice at 4 to 8 ms (`kill-now`
 ms (`kill`). No first run counted as a vacuous pass. One fix: a hydo built in a checkout started
 the release's `hydo-hvx` under sudo; it now takes the one built next to it. The details are in
 `docs/HISTORY.md` Milestone 358 (open item 182).
+**The frictions of the 0.6.0 trial (M360, tentative number).** Nine fixes for what the trial of
+M359 ranked, each its own commit; none moves a recorded value:
+- A named group of a messages check has to receive every message it received, also one sent
+  before its first receive. When no message can be judged, the ERROR names the cause and the
+  `sub ... from=start` record to write, and a held `no-loss` names the messages it did not judge.
+- With a `lease`, `no-loss` counts a received message that no acknowledgement accepted and that
+  never came back after its lease as lost; an `info` acknowledgement leaves it undecided.
+- `hydo save` writes `# params: name=value` for an image built with `--set`, and gives a second
+  finding of one filename the next free name (`<name>-2.schedule`).
+- A problem of the class `process` shows its minimal schedule as its command and its steps.
+- The property table reads a host check's violation records longer than 1,023 bytes.
+- `hydo stats A B` is refused with one line, and a reaction's `powerloss-<svc>` counts as a power
+  loss of that service.
+- A build in a target folder outside the checkout (`CARGO_TARGET_DIR`) is the checkout's build,
+  so `HYDO_RELEASE_DIR` works for it.
+- `hydo ci run` reports a regression of other build parameters as left out, in its counts,
+  `report.md` and `junit.xml`.
+- `hydo explore --reactive` draws `powerloss-<svc>` for a service with `storage:`, from a stream
+  of its own.
+
+The proofs ran on the Mac engine with the trial's NSQ project and in the tests; the details are
+in `docs/HISTORY.md` Milestone 360 (open item 183).
 
 **Each image service's own `/tmp` (M331, tentative number; fingerprint epoch 5).** An image
 service of an image built at epoch 5 has a `/tmp` of its own, as a container has. It is the
@@ -2585,9 +2608,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `errors:` on an `http` proxy's route) reached 0.5.0. Since M341 the s3 proxy's request shapes
     and conditional routes ran in a VM on hvx and on the Mac engine (`checkout/hydo-s3.yaml`).
     So the s3 emulator ran on the Mac too. KVM ran them too, on Xeon 6975P-C hosts. Since M354
-    `durable: true` keeps the s3 emulator's acknowledged writes across a power cut, on the Mac
-    engine and since M358 on hvx (also at `cf=` cuts after 20 to 800 flushes) and on KVM (an
-    Intel and an AMD host). A multipart upload that is not completed and the user
+    `durable: true` keeps the s3 emulator's acknowledged writes across a power cut on the Mac
+    engine. Since M358 it does on hvx too, also at `cf=` cuts after 20 to 800 flushes, and on
+    KVM (an Intel and an AMD host). A multipart upload that is not completed and the user
     metadata that rclone keeps in memory are still lost, and `durable` is opt-in.
 117. The clock audit (M248, M350). It reads text, so a reading that passes through an interface
     with several implementations, a channel or a queue is not followed. Its schedules place the
@@ -3651,7 +3674,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - It ran on the Mac engine, on KVM (M352 on three Intel runners, M358 on two AMD runners),
       and on hvx (M358). On KVM and hvx it held over 173 tasks without faults. It broke on the
       deletion's effect at `A=meili.delete_index_acked+6:kill-now-meilisearch` on KVM (an image
-      of epoch 5) and at `+112:kill-meilisearch` on hvx, which the aimed grids found; each
+      of epoch 5) and at `+112:kill-meilisearch` on hvx. The aimed grids found both, and each
       schedule gave one fingerprint in two runs. On KVM's epoch-6 image the grid found only the
       creation that runs twice. The Garage example (M349) declares it too.
     - The read-back must wait for the system's pending work itself. A task still pending at the
@@ -3668,8 +3691,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Since M350 a claim with nothing to judge beside a claim of its check that judged
       operations is no vacuous pass. No exploration of Garage ran again to show its count of
       vacuous passes fall from 48. In M358 the aimed Meilisearch grids had none in 388
-      passing first runs on hvx and 95 on each of two KVM hosts, where KVM counted 94 of 102
-      before the fix.
+      passing first runs on hvx and in 95 on each of two KVM hosts. Before the fix KVM counted
+      94 of 102.
 175. The write routes (M344, tentative number; `docs/design/rule-suggestion.md`, "The write
     routes"). What is left:
     - It reads text. A route that a program builds at run time, or registers through a function of
@@ -3699,16 +3722,16 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       registers each command with a call without a flag argument, and subcommands under their
       parent's name. `hydo rules check` and the skill did not use such a list yet.
 176. Five gaps of recent onboardings (M348, tentative number). What is left:
-    - `guest.path` is on for an image built at the fingerprint epoch 6 (M353). On hvx and KVM
-      (M358) a Go program in a check ran `exec.Command("hydo-oci", ...)` in the redis-oci example
-      and found `/bin/hydo-oci`. The Prometheus client of open item 170 did not run again.
+    - `guest.path` is on for an image built at the fingerprint epoch 6 (M353). In M358 a Go
+      program in a check of the redis-oci example ran `exec.Command("hydo-oci", ...)`. It found
+      `/bin/hydo-oci` on hvx and KVM. The Prometheus client of open item 170 did not run again.
     - A failed composed command's `HYDO-CMD-OUT` note is in `one.log` only: `result.json` keeps
       the lines of a violation (exit 100), not of another exit status. A plain `workload.run`'s
       output reaches the run directory only through the diagnosis replay, which `hydo run`
       makes for an ERROR and for a violation that names a service.
     - On hvx (M358) a service's log of 400,000 error lines with `errors: true` filled the agent
-      lines' buffer, and the run ended `ERROR agent lines full check` after 35 s; the 0.5.0 engine
-      waited 900 s. The error-log scan is not bounded, so a verbose system on hvx still needs
+      lines' buffer. The run ended `ERROR agent lines full check` after 35 s, where the 0.5.0
+      engine waited 900 s. The error-log scan is not bounded, so a verbose system on hvx still needs
       `errors: false`.
     - The refusal of an option that draws nothing checks the first 64 seeds of the given
       strategy. `--freeze-call`, `--protocol-cover`, `--concurrency` and `--reactive` are not
@@ -3754,48 +3777,30 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       were low, and the exploration was stopped after its second combination. The epoch-6
       image ran only the clean runs, the regressions and one check of the client's fix; no
       exploration ran at epoch 6.
-    - A hydo built with `CARGO_TARGET_DIR` outside its checkout ignores `HYDO_RELEASE_DIR`,
-      because `checkout_of` looks for `<checkout>/target/`, so `hydo build` cannot find the guest
-      files. A release-like folder with links to the release and copies of the programs worked.
-      Two tests of `-p hydo --test it` (`onboard::the_fetch_step_names_the_release_fetcher_when_it_is_not_on_path`
-      and `update::a_checkout_build_is_left_alone_with_the_commands`) fail with such a target
-      folder too: they expect a hydo built in its checkout's `target/`.
+    - Since M360 a hydo built with `CARGO_TARGET_DIR` outside its checkout is the checkout's
+      build. It reads cargo's `CACHEDIR.TAG` and the build's source path. So `HYDO_RELEASE_DIR`
+      works, and the two tests of `-p hydo --test it` that failed with such a folder pass.
     - Each workload has about 70 writes. These were not tried: the write commands of Kvrocks's
       table beyond the families of RESULTS.md, the cluster mode with kvrocks-controller, Redis
       Sentinel itself, `replication-group-sync`, hvx, and KVM.
 180. Seven gaps of the Kvrocks onboarding (M355, tentative number). What is left:
     - The proofs ran on the Mac engine and in the scripted tests. Since M358 hvx ran four of the
-      seven on a copy of the Redis quickstart and on Meilisearch: the note of a reaction that
-      never fired, `powerloss-<svc>`, `# params:` with `hydo repro --regressions`, and the
+      seven, on a copy of the Redis quickstart and on Meilisearch. They are the note of a reaction
+      that never fired, `powerloss-<svc>`, `# params:` with `hydo repro --regressions`, and the
       diagnosis after one service's power loss. KVM ran the same four (run 45612798752, an Intel
       and an AMD host).
     - Kvrocks itself did not run again: its branch is not on `main`. Its finding 1 with one node's
       power loss (`A=kvrocks.failover_done+<ms>:powerloss-kv2`) and its regressions with
       `# params:` are still to write there.
     - `powerloss-<svc>` has no strict form (`L=...:strict` stops the writeback from the run's
-      start). The explorer's `--reactive` draws do not draw it. Only `--reactive-at` with
-      `--react-actions powerloss` and a written token use it.
-    - A regression's `# params:` is checked against the image's `/etc/hydo/params`. `hydo ci run`
-      replays a regression of other parameters as left out, and builds no second image for it.
-      `hydo explore` and `hydo-bench` read no `# params:` line.
+      start). Since M360 `hydo explore --reactive` draws it in a quarter of its fault reactions
+      for a service with `storage:`; no exploration with it ran in a VM.
+    - A regression's `# params:` is checked against the image's `/etc/hydo/params`. Since M360
+      `hydo ci run` reports a regression of other parameters as left out (counts, `report.md`,
+      a skipped case of `junit.xml`), and builds no second image for it. `hydo explore` replays
+      no saved regression, and `hydo-bench` reads no `# params:` line.
     - `hydo-manifest`'s and `hydo-build`'s equivalence tests fail on 58 and 57 recorded answers
       (open item 165 lists their causes); none of the mismatches names a regression's key.
-182. The features of `main` since 0.5.0 on hvx and KVM (M358, tentative number). What is left:
-    - KVM ran each part on two hosts (run 45612798752). No Intel host ran the Meilisearch part,
-      and the two `durable: true` jobs had runners with other Go versions, so other `s3probe`
-      bytes. The branch `tmp-m358-kvm` can be deleted.
-    - Since M358 a hydo built in a checkout starts the `hydo-hvx` next to it. A checkout where
-      only `hydo` was built still starts the release's or the install cache's engine, without a
-      word. `hydo doctor` checks the release's `bin/hydo-hvx`, and the default that
-      `hydo-config/INVENTORY.md` gives for `HYDO_HVX_EXPLORE` does not name the folder of `hydo`.
-    - The first hvx round of M358 had the 0.5.0 engine with this tree's controller. An earlier
-      run of a tree's hydo over a release without sudo had the same pair; under `sudo` hydo opens
-      `/dev/hvx` and runs the engine in its own process, as M305's runs did. `hydo-bench
-      rebaseline` stages its own `bin/hydo-hvx`, so the re-recording passes are not affected.
-    - On hvx the s3 emulator without `durable: true` made no disk flush during the workload, so
-      a `cf=` cut there comes after the last step. A cut between two of its writes needs `C=` or
-      `A=s3.acked`.
-
 181. What the example `pulsar` left (M356, tentative number):
     - No finding is posted. Finding 1 is pulsar-client-go#1498, with the approved pull request
       1499 open. The example builds its client from that pull request's head, a fork 14 commits
@@ -3827,6 +3832,43 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       replication, Key_Shared subscriptions, and the newer load manager. Also not run: the new
       transaction coordinator of scalable topics, tiered storage, and the Java client. The
       redelivery after a broker crash is by design and is not checked (`after_ack: allowed`).
+182. The features of `main` since 0.5.0 on hvx and KVM (M358, tentative number). What is left:
+    - KVM ran each part on two hosts (run 45612798752). No Intel host ran the Meilisearch part,
+      and the two `durable: true` jobs had runners with other Go versions, so other `s3probe`
+      bytes. The branch `tmp-m358-kvm` can be deleted.
+    - Since M358 a hydo built in a checkout starts the `hydo-hvx` next to it. A checkout where
+      only `hydo` was built still starts the release's or the install cache's engine, without a
+      word. `hydo doctor` checks the release's `bin/hydo-hvx`, and the default that
+      `hydo-config/INVENTORY.md` gives for `HYDO_HVX_EXPLORE` does not name the folder of `hydo`.
+    - The first hvx round of M358 had the 0.5.0 engine with this tree's controller. An earlier
+      run of a tree's hydo over a release without sudo had the same pair. Under `sudo` hydo opens
+      `/dev/hvx` and runs the engine in its own process, as M305's runs did. `hydo-bench
+      rebaseline` stages its own `bin/hydo-hvx`, so the re-recording passes are not affected.
+    - On hvx the s3 emulator without `durable: true` made no disk flush during the workload, so
+      a `cf=` cut there comes after the last step. A cut between two of its writes needs `C=` or
+      `A=s3.acked`.
+183. The frictions of the 0.6.0 trial (M360, tentative number). What is left:
+    - A group still starts at the first `sub` or `recv` that it completed, and a delivery of a
+      message also makes the group judge that message. A message sent before that receive and
+      received by none is not judged. The summary counts it, and a `sub ... from=start` record
+      makes `no-loss` judge it. In the trial's aimed run `m1` to `m3` are such messages.
+    - `no-loss` judges a received message that never came back only with a `lease`. The trial's
+      client records its `FIN` to a killed `nsqd` as `info`, so its in-flight loss is undecided
+      in `no-loss` and stays a finding of `acked_outcome` only. No VM run showed `no-loss`
+      break this way; the tests do.
+    - `hydo save`'s `# params:` line was shown on a real image with an `exploration.json` given
+      that image's sha256. No VM exploration of the `--set` image ran, because the Mac had 10 GB
+      of free disk. A regression found on the default build still names no parameter, so it runs on
+      every build.
+    - `hydo explore --reactive` with power losses ran in the generator's tests on the Meilisearch
+      example's space, not in a VM.
+    - The trial's smaller frictions are not fixed. They are the import's unused `data.dirs` and
+      its placeholder against the first service, and the clock scan's `<database>` for a known
+      service. The Go SDK has no call for `drained`, and `hydo inspect diagnose --text` prints
+      JSON. A message with no final state reads `(no error code)`, and NSQ's title reads `Nsq`.
+    - A long composition word (`W=`) hides the tokens after it in a problem's command; the trial's
+      tester missed an `L=` there.
+
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -4948,9 +4990,9 @@ build machine, before 2026-10-13.
   Redis power cut (`C=11 R=everysec`), and Qdrant's KVM pause (179 ms). No Mac verdict changed. The pinned
   reproducers' epoch-6 images are in `~/hydo/build/rel060`. Open item 105 is empty
 - M358 (tentative number): the features of `main` since 0.5.0 on hvx and KVM (Intel and AMD
-  runners). The epoch-6 outcomes reached the recovery boot, a Go program ran `hydo-oci` by name,
-  and `durable: true` kept every acknowledged s3 write across `C=` and `A=` cuts, and on hvx
-  `cf=` cuts. On hvx a full buffer of agent lines ended its run in 35 s. The note of an unfired reaction,
+  runners). The epoch-6 outcomes reached the recovery boot, and a Go program ran `hydo-oci` by
+  name. `durable: true` kept every acknowledged s3 write across `C=` and `A=` cuts, and on hvx
+  across `cf=` cuts. On hvx a full buffer of agent lines ended its run in 35 s. The note of an unfired reaction,
   `powerloss-<svc>`, `# params:` and the aimed Meilisearch grid held, with no vacuous pass. One
   fix: a checkout's hydo ran the release's hvx engine. Nothing recorded moved
 - M359 (tentative number): a new user's trial of 0.6.0's features on NSQ v1.3.0, on the Mac
@@ -4959,6 +5001,13 @@ build machine, before 2026-10-13.
   was there. Also `no-loss` passes a received message that never came back, and `hydo save`
   writes no `# params:` and drops findings of one filename. Three NSQ candidates, not posted.
   Nothing recorded moved
+- M360 (tentative number): the trial's frictions, each its own commit. The messages check
+  judges a group by what it received and names the real cause of its ERROR. `no-loss` with a
+  lease judges a received message that never came back. `hydo save` writes `# params:` and keeps
+  every finding. A problem's command is its minimal schedule, and the property table counts long
+  violation records. `hydo stats` refuses two folders. A target folder outside the checkout
+  knows its checkout. `hydo ci run` names left-out regressions, and `--reactive` draws one
+  service's power loss. Nothing recorded moved
 
 ## Where to look
 

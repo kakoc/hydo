@@ -977,6 +977,23 @@ impl Table {
             lines.pop();
         }
         for raw in lines {
+            // Milestone 360: a record longer than the C header's line keeps its type, id and
+            // outcome. The keys of hydo's own records are sorted, so `details` comes first, and a
+            // violation's long details cut `id`, `ok` and `t` off: the table counted the claims
+            // that held and dropped most that broke (the trial of Milestone 359 read
+            // `jobs.acked-outcome 13 0 PASS` beside a run that broke it).
+            let short;
+            let raw = if raw.len() >= LINE_LEN - 1 {
+                match long_record(raw) {
+                    Some(s) => {
+                        short = s;
+                        short.as_slice()
+                    }
+                    None => raw,
+                }
+            } else {
+                raw
+            };
             let mut line = &raw[..raw.len().min(LINE_LEN - 1)];
             if let Some(z) = line.iter().position(|c| *c == 0) {
                 line = &line[..z];
@@ -997,6 +1014,32 @@ impl Table {
         self.runs += 1;
         self.setup += setup as u64;
     }
+}
+
+/// A HYDO-ASSERT or HYDO-ASSERT-DECL line longer than [`LINE_LEN`], written again with its
+/// `details` last, so that the line's cut at [`LINE_LEN`] keeps every other key. None when the
+/// record is not one JSON object (such a line is read as before).
+fn long_record(raw: &[u8]) -> Option<Vec<u8>> {
+    let (mark, i) = match find(raw, b"HYDO-ASSERT-DECL ") {
+        Some(i) => ("HYDO-ASSERT-DECL ", i),
+        None => ("HYDO-ASSERT ", find(raw, b"HYDO-ASSERT ")?),
+    };
+    let body = std::str::from_utf8(&raw[i + mark.len()..]).ok()?;
+    let Ok(serde_json::Value::Object(o)) = serde_json::from_str::<serde_json::Value>(body.trim())
+    else {
+        return None;
+    };
+    let mut parts: Vec<String> = Vec::new();
+    for (k, v) in o.iter().filter(|(k, _)| k.as_str() != "details") {
+        parts.push(format!("{}:{v}", serde_json::Value::String(k.clone())));
+    }
+    if let Some(d) = o.get("details") {
+        parts.push(format!("\"details\":{d}"));
+    }
+    let mut out = raw[..i].to_vec();
+    out.extend_from_slice(mark.as_bytes());
+    out.extend_from_slice(format!("{{{}}}", parts.join(",")).as_bytes());
+    Some(out)
 }
 
 fn verdict(p: &P) -> &'static str {
@@ -1469,6 +1512,38 @@ mod tests {
                 ("sdk.x".to_string(), "{\"n\":2}".to_string())
             ]
         );
+    }
+
+    /// Milestone 360: a host check's record whose sorted keys put long `details` first counts
+    /// as the violation it is (the trial of Milestone 359 read `13 0 PASS` for a broken claim).
+    #[test]
+    fn a_long_violation_record_counts_as_a_failure() {
+        let rec = |ok: bool, out: &str| {
+            format!(
+                "HYDO-ASSERT {{\"details\":{{\"check\":\"messages\",\"out\":\"{out}\"}},\"id\":\"jobs.acked-outcome\",\"msg\":\"messages history jobs\",\"ok\":{ok},\"t\":\"always\"}}\n"
+            )
+        };
+        let long = "m0 was acknowledged and has no final state; ".repeat(40);
+        let runs = vec![
+            rec(true, "held"),
+            rec(false, &long),
+            rec(false, "short"),
+            "boot only\n".to_string(),
+        ];
+        assert!(rec(false, &long).len() > LINE_LEN);
+        let t = property_table(&runs).unwrap();
+        let p = t
+            .properties
+            .iter()
+            .find(|p| p.id == "jobs.acked-outcome")
+            .unwrap();
+        assert_eq!((p.passes, p.fails, p.runs_failed), (1, 2, 2), "{p:?}");
+        assert_eq!(p.verdict, "FAIL");
+        assert!(p
+            .first_failure
+            .as_deref()
+            .unwrap()
+            .starts_with("{\"check\""));
     }
 
     fn hist(ops: u64) -> Finding {

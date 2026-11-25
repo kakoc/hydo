@@ -679,9 +679,12 @@ pub fn decide(r: &mut CiRun) {
         .iter()
         .filter(|f| f.state != ci_state::FIXED)
         .count() as u64;
+    // Milestone 360: a regression of other build parameters did not run here; it is no replay
+    // and no regression as expected (`report.md` and `junit.xml` name it as left out)
+    let ran = || r.regressions.iter().filter(|g| !runs::left_out(g));
     r.summary.regressions = CiRegressionCounts {
-        replayed: r.regressions.len() as u64,
-        as_expected: r.regressions.iter().filter(|g| g.as_expected).count() as u64,
+        replayed: ran().count() as u64,
+        as_expected: ran().filter(|g| g.as_expected).count() as u64,
     };
     let on = |s: &str| r.outcome.fail_on.iter().any(|f| f == s);
     let mut by = Vec::new();

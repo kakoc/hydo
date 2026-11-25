@@ -42,7 +42,9 @@ HYDO_RELEASE_DIR=/path/to/the/release/tree target/release/hydo doctor
 ```
 
 With `HYDO_RELEASE_DIR`, a `hydo` built in a checkout boots guests with that tree's guest kernels,
-engine programs, and tools. A released or cargo-installed `hydo` ignores the variable.
+engine programs, and tools. A released or cargo-installed `hydo` ignores the variable. A build
+in a target folder outside the checkout (`CARGO_TARGET_DIR`) counts as the checkout's build too:
+cargo marks the folder with `CACHEDIR.TAG`, and the build knows the checkout it came from.
 
 ## Build the engines
 

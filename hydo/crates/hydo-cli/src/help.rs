@@ -79,7 +79,10 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
   saves the minimal schedules of an exploration as regressions, one file each in the --to
   directory (default hydo/regressions, or regressions inside the hydo/ folder). `hydo build`
   writes them beside the image (not into it, so a saved regression leaves the image's bytes
-  alone), and `hydo repro --regressions` replays them."
+  alone), and `hydo repro --regressions` replays them. When the exploration's image was built
+  with other values than the defaults of `params:` (`hydo build --set`), each file gets a
+  `# params: name=value` line with those values. A finding whose file name is taken by another
+  finding gets the next free name (`<name>-2.schedule`); a finding saved before is kept."
             .to_string(),
         "report" => "usage: hydo report [DIR] [--details]
        hydo report DIR DIR... [--html [-o FILE]]

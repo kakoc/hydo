@@ -883,6 +883,60 @@ fn one_problem_under_two_signatures() {
     no_machine_paths_and_links_resolve(&html);
 }
 
+/// A problem of the class `process` (Milestone 328) shows its minimal schedule as its command and
+/// its steps, not the whole failing run (the trial of Milestone 359, Milestone 360: the shrink's
+/// class was compared without its class group).
+#[test]
+fn a_process_problem_shows_its_minimal_schedule() {
+    let d = std::env::temp_dir().join(format!("hydo-htmlreport-p-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    let _rm = Rm(d.clone());
+    let sig = "VIOLATION [jobs.acked-outcome] judged operations did not end";
+    let whole = "disk=none dseed=0 | run K=nsqd@4+3 P=nsqlookupd@12+1";
+    let minimal = "disk=none dseed=0 | run K=nsqd@4+1";
+    let mut f = failure("seed-2", whole, sig);
+    f.run.verdict.kind = "violation".into();
+    f.run.class = Some("process".into());
+    f.run.seed = Some(2);
+    let doc = Exploration {
+        image: Image {
+            path: "/x/explore-ob-nsq-arm64.cpio.gz".into(),
+            ..Default::default()
+        },
+        summary: hydo_results::Summary {
+            schedules: 20,
+            failures: 1,
+            reproduced: Some(1),
+            ..Default::default()
+        },
+        failures: vec![f],
+        shrinks: vec![hydo_results::Shrink {
+            class: "process".into(),
+            signature: sig.into(),
+            from_seed: 2,
+            minimal: minimal.into(),
+            min_class: Some("process".into()),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let st = exploration_story(&d, &doc, None, "hydo-out/explore");
+    assert_eq!(st.items.len(), 1);
+    let it = &st.items[0];
+    assert!(
+        it.command.ends_with(&format!("\"{minimal}\"")),
+        "{}",
+        it.command
+    );
+    assert_eq!(it.whole_run, None);
+    assert!(
+        it.steps.iter().all(|s| !s.contains("nsqlookupd")),
+        "{:?}",
+        it.steps
+    );
+}
+
 /// A run with disk errors and no other fault: the page's first sentence says what the disk did
 /// (0.3.3: it started with "Then redis did not start again.").
 #[test]

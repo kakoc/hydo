@@ -116,6 +116,14 @@ pub const NOW_SALT: u64 = 0x4B11_1A0F_C0FF_EE09;
 /// The share, in percent, of the fault reactions that `--kill-now` takes for a kill at the
 /// event's moment.
 pub const NOW_TAKE_PCT: i64 = 50;
+/// Milestone 360: the stream of the power losses of one service that `--reactive` draws. In
+/// [`POWERLOSS_TAKE_PCT`] percent of the schedules with a fault reaction, the reaction is
+/// `powerloss-<svc>` of a service with `storage:`. Nothing is drawn from it for a manifest
+/// without such a service or without `powerloss` in `faults:`, so such an exploration draws the
+/// schedules it drew before.
+pub const POWERLOSS_SALT: u64 = 0x504C_0551_C0FF_E360;
+/// The share, in percent, of the fault reactions that take a power loss of one service.
+pub const POWERLOSS_TAKE_PCT: i64 = 25;
 /// A heal reaction's delay after its event.
 pub const HEAL_DELAYS: [i64; 5] = [0, 100, 500, 2000, 10000];
 /// How long a `stop-<svc>-<ms>` reaction stops its service.
@@ -1072,6 +1080,9 @@ impl Ex {
     /// - `--kill-now` (Milestones 305 and 309): the kills are `kill-now-<svc>`, and half of the
     ///   fault reactions, drawn from [`NOW_SALT`], kill any service at the event's moment, with
     ///   the `K=` or `P=` of that service left out.
+    /// - a power loss of one service (Milestone 360): a quarter of the fault reactions that
+    ///   `--kill-now` does not take, drawn from [`POWERLOSS_SALT`], are `powerloss-<svc>` of a
+    ///   service with `storage:`, when `faults:` has `powerloss` (not with `cf=`).
     pub fn add_reactive(&self, mut s: S, seed: u64) -> S {
         if !self.react_fault && !self.react_heal {
             return s;
@@ -1096,6 +1107,19 @@ impl Ex {
         let now_take = self.react_kill_now.then(|| {
             let mut n = SplitMix::new(seed ^ NOW_SALT);
             (n.below(100) < NOW_TAKE_PCT, n.next())
+        });
+        // Milestone 360: whether a power loss of one service takes this schedule's fault
+        // reaction, and of which service, from a stream of its own; nothing is drawn without a
+        // service that can lose its power
+        let pl_svcs: Vec<String> = self
+            .space
+            .as_ref()
+            .filter(|sp| sp.has_fault("powerloss"))
+            .map(|sp| sp.storage_svcs.clone())
+            .unwrap_or_default();
+        let pl_take = (!pl_svcs.is_empty()).then(|| {
+            let mut n = SplitMix::new(seed ^ POWERLOSS_SALT);
+            (n.below(100) < POWERLOSS_TAKE_PCT, n.next())
         });
         let pick = |l: &[String], r: u64| -> Option<String> {
             (!l.is_empty()).then(|| l[(r % l.len() as u64) as usize].clone())
@@ -1187,8 +1211,13 @@ impl Ex {
                         s.a.retain(|r| r.action != heal);
                     }
                 }
+                let powerloss = match pl_take {
+                    Some((true, r)) if taken.is_none() && s.cf.is_none() => pick(&pl_svcs, r),
+                    _ => None,
+                };
                 let action = match (f_kind, pick(&svcs, f_svc)) {
                     _ if taken.is_some() => taken.map(|v| format!("kill-now-{v}")),
+                    _ if powerloss.is_some() => powerloss.map(|v| format!("powerloss-{v}")),
                     (0, _) if cut_ok => Some("cut".to_string()),
                     (1, Some(v)) => Some(format!("{kill}-{v}")),
                     (2, Some(v)) => Some(format!("stop-{v}-{f_ms}")),

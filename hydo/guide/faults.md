@@ -576,8 +576,9 @@ most one `kill-now-` reaction.
 `A=<event>+<ms>:powerloss-<svc>` cuts the power of one service at that moment, as
 `L=<svc>@<step>+<down>` does before a step. What the service had not written back to its own file
 system is lost, and it stays down until the heal, as after `kill-<svc>`. It needs a service with
-`storage: {dir:, size_mib:}`. `--react-actions powerloss` aims a grid at it, one action per
-service with `storage:`:
+`storage: {dir:, size_mib:}`. `hydo explore --reactive fault` draws it in a quarter of its
+fault reactions when `faults:` allows `powerloss`. `--react-actions powerloss` aims a grid at
+it, one action per service with `storage:`:
 
 ```sh
 hydo explore --reactive-at kvrocks.failover_done --react-delays 0..20000/500 --react-actions powerloss

@@ -22751,3 +22751,152 @@ loses the messages of a topic before its queue's first metadata sync, because go
 v1.1.0 starts an empty queue when the metadata file is missing. A kill loses a message that a
 consumer holds in flight. After a step back of the wall clock, every publish to an existing topic
 waits until the clock passes the last message id's time (`nsqd/guid.go`, `nsqd/topic.go`).
+
+## Milestone 360 (tentative number): the frictions of the 0.6.0 trial
+
+Status: done on 2026-11-25, on the Mac engine with the trial's NSQ project and in the tests.
+The trial of Milestone 359 (`docs/design/0.6.0-user-trial.md`) ranked what a new user met. Each
+fix below is its own commit, in the order of that ranking, and each says what it changed for the
+user. Nothing recorded moved: every change is in the host's checks, reports and commands, and the
+fingerprint epoch stays 6. The proof project is a copy of the trial's `hydo/` folder of NSQ
+v1.3.0, built with this tree's `hydo`. That `hydo` was a build in a target folder outside the
+checkout with `HYDO_RELEASE_DIR=~/.hydo`, which is also the proof of fix 7.
+
+**1. A messages check's ERROR names the real cause.** The trial's ERROR said `no group that had
+to receive the acknowledged messages has a drained record`, while the drain had written
+`drained jobs work`. The cause was the rule of the groups that must receive a message. A named
+group had to receive only the messages sent after its first completed `sub` or `recv`. The trial's
+client records no `sub`, and its consumer's first `recv` waits for the first message, so the group
+joined after every message sent before that receive. In a run whose messages were all sent early,
+no group had to receive any of them, and the claim had nothing to judge.
+
+Two changes. First, a group that received a message now has to receive it, because the delivery
+proves that the group gets it (`index::must_groups`). Second, when no acknowledged message can be
+judged, the ERROR names one of three causes (`claims::no_drained_group`): no drained record, drained
+records of other channels only, or drained groups that received none of the messages sent before
+they joined. The third names the record to write, `sub <channel> <group> from=start`. A held
+`no-loss` also counts the acknowledged messages it did not judge, with the reason: the trial's
+clean run read `20 judged` for 24 sends without a word.
+
+On the Mac engine the trial's clean run `disk=none | run` judged 24 of 24 sends in `no-loss`. The
+trial's aimed schedule `disk=none dseed=0 | run A=nsq.msg_received:kill-nsqd` sends `m0` to `m3`
+before the consumer's first receive completes, and the consumer receives only `m0`. Before, no
+group had to receive any of them, which is the ERROR that stopped 5 of the trial's 36 aimed runs.
+Now `no-loss` held with `1 judged, 1 undecided` and the words `3 acknowledged message(s) not
+judged: sent before any group of the channel joined, and received by none`. Both runs gave the
+fingerprints that they gave before the change (`f14563fde5c29fc3` and `28aea04d29d339c3`). The
+test `messages::a_group_that_received_a_message_had_to_receive_it` holds the trial's history
+shape and each of the ERROR's forms.
+
+**2. `no-loss` with a lease judges a received message that never came back.** With explicit
+acknowledgements, `no-loss` counted any delivered message as delivered, and `lease` judges only a
+delivery that comes again too early. So the trial's in-flight loss passed both claims. `hydo guide
+messages` says that an unacknowledged message comes back when its lease or visibility timeout runs
+out, and a `lease` is the declaration of that promise. So `no-loss` judges it when the check
+declares a `lease`. A message whose deliveries in a drained group no acknowledgement accepted (an
+`ok` ack, or a reject) and that was not delivered again is lost when the drain's record comes after
+the last delivery's lease ended. The delivery and the record must be in the same boot, with no
+clock step between. Before the lease's end, across a power cut, across a clock step, and with an
+acknowledgement whose outcome is unknown (`info`, which may have been accepted), the message is
+undecided. Without a lease the claim stays as it was, and `processing: once` judges such a
+message (it already did). The declaration did not change, so no shared case of
+`sdk/cases/history/messages` changed, and the SDKs keep their tests.
+
+The trial's client records its `FIN` to a killed `nsqd` as `info`, because the error does not say
+whether the server read it. So in the run above `m0` is undecided, not lost, and `acked_outcome`
+stays the claim that breaks there. The test names the four outcomes: lost after the lease,
+undecided before its end, undecided with an `info` acknowledgement, and held without a lease.
+
+**3. `hydo save` writes the image's build parameters and keeps every finding.** A file was named by
+the class and the start of the verdict, and the first file of a name was kept: a second finding
+with one check got no file, and only `exists, kept` said so. Now a finding whose name is taken by
+another finding gets the next free name, `<name>-2.schedule`. A file that holds the same schedule
+and the same `# params:` words is kept, so a second save of one exploration writes nothing. When the
+exploration's image was built with values other than the defaults of its manifest's `params:`
+(the image's `/etc/hydo/params` against its `/etc/hydo/hydo.yaml`), each file gets a `# params:
+name=value` line with those values, after its first line. An image built again since the
+exploration (another sha256) gives a warning instead, and an image that is gone gives no line.
+
+On the Mac engine the aimed round `hydo explore --reactive-at nsq.msg_received@2 --react-delays
+0..500/500 --react-actions kill,powerloss --seeds 1-12 --workers 3` had three shrunk failures of
+one file name. `hydo save` into the proof's `regressions/`, which held the trial's files, printed
+`... -di.schedule holds this finding already, kept` (the trial had saved that schedule), wrote
+`-di-2.schedule` and `-di-3.schedule`, and ended `2 regressions saved, 1 kept`. A second save wrote
+nothing (`3 kept`). Then `hydo build --set memq=10000` replaced the image, and a save
+of the same round printed the warning `... was built again since the exploration`. With the round's
+`exploration.json` given the new image's sha256 (so that the round reads as an exploration of the
+`memq=10000` image; no VM ran for it), `hydo save` wrote each file with `# params: memq=10000`
+on its second line and ended `3 regressions saved with # params: memq=10000 (the image's build
+parameters)`. The unit test
+`runs::tests::save_keeps_every_finding_and_names_the_build_parameters` covers the names and the
+values. The golden answers of the second `hydo save` in `tests/golden/cli.jsonl` moved for the new
+words (re-recorded with `HYDO_BLESS=1`).
+
+**4. A problem's command, steps and title come from one schedule.** Since Milestone 328 a failure
+of the safe settings has a class of its fault families (`process`), and the explorer shrinks one
+failure per class group (`advice::shrink_group`) and signature. The exploration's story found a
+problem's minimal schedule by the class group, but decided whether the problem was shrunk by the
+shrink's own class. So a problem of the class `process` showed its whole failing run as "See it
+again" and as its steps, beside a title made from its minimal schedule. Both now use the class
+group. The aimed round's problem shows `See it again: hydo run "disk=none dseed=0 | run
+A=nsq.msg_received:kill-nsqd"`, its minimal schedule. The test
+`htmlreport::tests::a_process_problem_shows_its_minimal_schedule` fails without the fix.
+
+The trial's second case was the merged problem whose title named a power loss that the tester did
+not find in its command. Its minimal schedule, which the trial saved, ends `... W=:p1,r100,...
+L=nsqd@1+1`: the power loss is there, after the long composition word, and the steps and the title
+were true. Nothing changed for it.
+
+**5. The property table counts the long violation records.** The table reads each `HYDO-ASSERT`
+line up to 1,023 bytes, the line of the C header it was ported from. hydo's own records of history
+and messages checks have sorted keys, so `details` comes first, and a violation's long details cut
+`id`, `ok` and `t` off. The table dropped such a record: it counted the claims that held and few
+of those that broke. A record longer than the line is now written again with `details` last
+before the cut (`results::long_record`), and a shorter line is read as before. In the aimed round
+the table reads `jobs.acked-outcome 4 8 FAIL`, and 8 of its 12 first runs failed that claim; the
+trial's table had read `19 4 FAIL` beside 15 failing runs.
+
+**6. `hydo stats` of two folders, and a reaction's power loss.** `hydo stats A B` printed B alone.
+It now refuses two folders with one line: `hydo stats: one exploration at a time, and
+hydo-out/aimed and hydo-out/clean are two: run hydo stats on each ...`, with `hydo explore
+--merge` for the shards of one exploration and `hydo report A B` for their problems. The faults
+drawn counted the reaction `powerloss-<svc>` as a reaction not in `faults:`, and the same page then
+said that power losses of one service were never drawn. Such a reaction now counts as a power
+loss of that service at its event's step (`stats::faults_of`). `hydo stats hydo-out/aimed` reads
+`power losses of one service: 4 of 12 runs; on nsqd 4` and `crashes: 8 of 12 runs`, and power
+losses are not among the kinds that were never drawn.
+
+**7. A build in a target folder outside the checkout knows its checkout.** `ctx::checkout_of` looked
+for `<checkout>/target/` among the program's folders, so a build with `CARGO_TARGET_DIR` elsewhere
+was no checkout build, ignored `HYDO_RELEASE_DIR`, and found no guest files (open item 179). Cargo
+marks every target folder with a `CACHEDIR.TAG` file. A program inside such a folder is now the
+build of the checkout of the crate's source path that cargo gave the build, when that folder is a
+hydo checkout (`ctx::checkout_of_built`). A copy of the program in a prefix or a release keeps its
+own root. The tests `onboard::the_fetch_step_names_the_release_fetcher_when_it_is_not_on_path` and
+`update::a_checkout_build_is_left_alone_with_the_commands` pass with this milestone's target folder
+outside the checkout, and every proof above used such a build.
+
+**8. `hydo ci run` reports a regression of other build parameters as left out.** `hydo ci run`
+replays the saved regressions with the code of `hydo repro --regressions`, so a regression whose
+`# params:` names other values than the image's did not run. But it was counted as replayed and as
+expected, and `junit.xml` showed it as a passing test. Now the counts leave it out, `report.md`
+says `N of M as expected, K left out: they need other build parameters` and names each with the
+build it needs, and `junit.xml` has it as a skipped test (`runs::left_out`). `hydo explore` replays
+no saved regression: the explorer reads the regressions only for the saved compositions of
+`W=@<key>`, so it has nothing of `# params:` to honour. The test
+`ci::report::tests::a_regression_of_other_build_parameters_is_left_out` covers the report and
+`junit.xml`.
+
+**9. `hydo explore --reactive` draws a power loss of one service.** A quarter of the fault
+reactions that `--kill-now` does not take are now `powerloss-<svc>` of a service with `storage:`,
+when `faults:` allows `powerloss` and the schedule has no `cf=`. The choice comes from a stream of
+its own (`gen::POWERLOSS_SALT`), and nothing is drawn from it for a manifest without such a service,
+so such an exploration draws the schedules it drew before; the reactive stream's golden did not
+move. On the Meilisearch example's space, 156 of 613 fault reactions of seeds 1-1000 took the
+service's power, and every other part of each schedule stayed as it was
+(`reactive::a_fault_reaction_can_take_one_service_s_power`).
+
+**What is left.** The smaller frictions of the trial's section 9 are not fixed: the import's unused
+`data.dirs` and its placeholder against the first service, the clock scan's `<database>` for a
+known service, the Go SDK's missing call for `drained`, `hydo inspect diagnose --text` that prints
+JSON, and the title `Nsq` for NSQ. Open item 183 lists them with what else is left.

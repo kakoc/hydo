@@ -236,7 +236,10 @@ hydo save <explore dir>                       # the minimal schedules -> hydo/re
 ```
 
 A saved regression that needs other build parameters names them on a line of its file, for
-example `# params: mode=master`. `hydo build` warns when its own `--set` values differ and names
+example `# params: mode=master`. `hydo save` writes the line when the exploration's image was
+built with values other than the defaults of `params:` (`hydo build --set`). It gives a finding
+whose filename is taken by another finding the next free name, `<name>-2.schedule`, and keeps a
+finding that it saved before. `hydo build` warns when its own `--set` values differ and names
 the build that makes that regression's image. `hydo repro --regressions` replays the regression
 only on an image built with those values, and on another image prints `SKIP` with the build
 command.
@@ -382,8 +385,10 @@ record of the host, so it changes no run, no fingerprint, and no verdict. It has
   clock (VM exits on the Mac and KVM engines), the host CPU, and the largest resident memory.
   Each worker's time is split into busy, starting its engine, waiting for a quiet window, and
   idle.
-- The faults drawn. Each fault kind has its runs, its targets, and its workload steps. The kinds
-  that `faults:` allows and no schedule drew are listed, each with the option that draws it.
+- The faults drawn. Each fault kind has its runs, its targets, and its workload steps. A
+  reaction (`A=`) counts as the fault that its action makes: `kill-<svc>` as a crash, `cut` as a power
+  cut, and `powerloss-<svc>` as a power loss of one service. The kinds that `faults:` allows and
+  no schedule drew are listed, each with the option that draws it.
 - An estimate. It says how many first runs fit in a time budget with N workers, or on N machines
   with `--shard I/N`.
 
@@ -392,6 +397,9 @@ hydo stats                                    # hydo-out/explore
 hydo stats <explore dir> --budget 2h --workers 4 --shards 8
 hydo stats <explore dir> --json               # the document, with the asked estimate
 ```
+
+`hydo stats` reads one exploration. It refuses two folders: run it on each, or make one
+exploration of the shards of one with `hydo explore --merge`.
 
 On the Mac engine the Redis quickstart's `hydo explore --seeds 1-60 --strategy swarm --workers 4`
 took 62 s, and `hydo stats` began with this:

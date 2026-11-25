@@ -145,14 +145,20 @@ impl<'a> Ix<'a> {
     }
 
     /// The groups of the message's channel that must receive it: those that exist from the start,
-    /// and those whose first completed sub or recv precedes the message's first live send.
+    /// those whose first completed sub or recv precedes the message's first live send, and those
+    /// that received it. A delivery proves that the group gets the message, also when its first
+    /// receive completed after the send (Milestone 360: a consumer whose first receive waits for
+    /// the first message made every message sent before it unjudged, and a run whose messages
+    /// were all sent early ended in an ERROR about a missing drained record).
     pub fn must_groups(&self, m: &Msg) -> Vec<Gk> {
         let first = self.first_live(m).map(|s| self.h.ops[s.op].inv.pos);
         self.groups
             .iter()
             .filter(|(gk, g)| {
                 gk.0 == m.q
-                    && (g.from_start || matches!((g.joined, first), (Some(j), Some(f)) if j < f))
+                    && (g.from_start
+                        || matches!((g.joined, first), (Some(j), Some(f)) if j < f)
+                        || self.by_mg.contains_key(&(m.m.clone(), (*gk).clone())))
             })
             .map(|(gk, _)| gk.clone())
             .collect()

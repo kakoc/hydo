@@ -384,13 +384,22 @@ record about 600 messages next to its other output, and a KVM or Mac run about 4
 
 Each declared claim is checked separately. "Acknowledged message" means a message with a send
 item whose outcome is `ok`. "A group that must receive m" means every group of m's channel whose
-first completed `sub` (with `from=now`) or `recv` precedes m's send invocation, and every group
-subscribed `from=start`.
+first completed `sub` (with `from=now`) or `recv` precedes m's send invocation, every group
+subscribed `from=start`, and since Milestone 360 every group that received m.
 
 ### no-loss (`delivery: at-least-once`, `exactly-once`; per group with `fan_out`)
 
 **Claim.** Every acknowledged message is delivered at least once to every group that must
 receive it and that was drained.
+
+With a `lease` (which needs explicit acknowledgements), a delivery that no acknowledgement
+accepted must come back once its lease has run out. Since Milestone 360 a message whose
+deliveries in a drained group none of the group's acknowledgements accepted (an `ok` ack, or a
+reject), and that was not delivered again, is lost when the drain's record comes after the last
+delivery's lease ended, in the same boot and with no clock step between. Before that end, across
+a power cut, across a clock step, or with an acknowledgement whose outcome is unknown (`info`,
+which may have been accepted) it is undecided. Without a lease the claim does
+not say that such a message comes back; `processing: once` judges it.
 
 **Excused** (counted, never a violation): moved to the dead-letter channel and delivered there
 (`dead_letter` with `to:`); stopped after its last allowed delivery (`dead_letter` without

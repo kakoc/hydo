@@ -2799,12 +2799,15 @@ pub fn exploration_story<'a>(
     for &i in &order {
         let x = &probs[i];
         // a command hydo did not shrink repeats a whole failing run (0.3.3, a reader of the
-        // quickstart asked why): the one with the fewest faults
+        // quickstart asked why): the one with the fewest faults. A group's key is the shrink's
+        // class group (Milestone 328), as above: comparing the shrink's own class here made a
+        // problem of the class `process` show its whole failing run beside its minimal schedule's
+        // steps (the trial of Milestone 359, Milestone 360).
         let shrunk = x.groups.iter().any(|&gi| {
             let ((c, sig), _) = &groups[gi];
             doc.shrinks
                 .iter()
-                .any(|s| &s.class == c && &s.signature == sig)
+                .any(|s| advice::shrink_group(&s.class) == c.as_str() && &s.signature == sig)
         });
         let first = if shrunk {
             x.failures[0]
