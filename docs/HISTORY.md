@@ -22594,8 +22594,15 @@ first builds and their notarized signatures were thrown away. The release commit
   takes the final Linux tarball from a draft release `candidate-0.6.0`, installs it into a clean
   prefix, runs the quickstart with `--backend kvm`, the exploration and its repro, `hydo-bench
   rebaseline --platform kvm --check --thorough`, `kvm-check.sh` and `smp-check.sh` on six
-  runners. The draft and the push wait for the lead; the run is still to come. The quick
-  candidate's programs gave the list's KVM values in run 45644567681.
+  runners. Its first run (45675001007) passed every job but ran no re-baseline check:
+  `stage.sh prefix` found no checkout build, and the step only logged its exit status. The lead
+  fixed the workflow (`22c21dce`: the check copies the tarball's own `hydo`, `hydo-hvx`,
+  `hydo-build` and `hydo-fetch-image` where the prefix looks, and the step fails on a non-zero
+  check). Run 45677852789: on the three AMD hosts (EPYC 9V74 twice, 9V45) every image built twice
+  with the same bytes and all 19 schedules gave the list's fingerprints twice (`hydo`
+  `7a75bfe1…`), exit 0; on the three Intel hosts (Xeon 6975P-C twice, Platinum 8573C) the verdicts
+  are unchanged and the fingerprints are Intel's own, as every KVM value of the list is AMD's.
+  `kvm-check.sh` passed 15 of 15 on all six. The draft release and the branch are deleted.
 
 **Checks on the release commit**, on this Mac: `cargo fmt --all --check`, `cargo clippy --locked
 --workspace --all-targets -- -D warnings`, `ci/consolidate-tests.sh --check`, and `sh ci/vale.sh`
@@ -22606,9 +22613,10 @@ folder at 0.5.0, and the equivalence corpora, pass.
 
 **Re-baseline checks on the release files** (`--check --thorough`): this Mac, 21 images each
 built twice with the same bytes and 76 schedules each run twice from fresh boots, every value as
-recorded (973 s, the signed tarball installed). The bare-metal machine: 43 images and 141 schedules with
-  the second Linux build's tree and tarball, running at the hand-back (job `after` in
-  `~/hydo-rel060r`); its result is still to be recorded.
+recorded (973 s, the signed tarball installed). The bare-metal machine: 43 images and 141
+schedules with the second Linux build's tree and tarball, each image built twice with the same
+bytes and each schedule run twice from fresh boots, every value as recorded, verdicts unchanged
+(exit 0, 9,066 s).
 
 **Content scans** (as 0.5.0's): the Linux tarball: the GitHub owner only in the project's public
 names, the hosting company's letters as accidental bytes of binary third-party files (the

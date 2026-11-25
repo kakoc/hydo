@@ -222,8 +222,9 @@ Each paragraph gives the current values and where the details are.
 `hydo-linux-0.6.0.tar.gz` `12fe3299…`, `hydo-mac-0.6.0.tar.gz` (signed and notarized)
 `a303331f…` and `hydo-skill-0.6.0.tar.gz` `7d399d1b…`, each platform built twice to the same
 bytes, in `hydo/dist/out/0.6.0/` of the main checkout. It holds Milestones 340 to 361 at the
-fingerprint epoch 6. Publishing waits for the user's word; the record is the section "The 0.6.0
-release" of `docs/HISTORY.md`.
+fingerprint epoch 6. The final files reproduce every recorded value on hvx, the Mac and KVM (AMD
+hosts). Publishing waits for the user's word; the record is the section "The 0.6.0 release" of
+`docs/HISTORY.md`.
 
 hydo 0.5.0 was published on 2026-11-22 from the release commit `4d43a6bd`. The
 GitHub release `v0.5.0` holds both tarballs, their sources archives, the Mac signatures, the
