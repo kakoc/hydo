@@ -150,10 +150,11 @@ else
   # the tree and the Cargo home are remapped to /hydo and /cargo (as the guest programs' builds
   # do), so the programs' panic messages name no directory of the building machine (M153: they
   # named the builder's home); RUSTFLAGS replaces the target's rustflags of .cargo/config.toml,
-  # so +crt-static is repeated here
+  # so +crt-static is repeated here; --cfg hydo_release keeps the build's source path out of
+  # bin/hydo (hydo-cli's ctx.rs, BUILT_FROM), so two trees give the same bytes
   CH=$(cd "${CARGO_HOME:-$HOME/.cargo}" 2>/dev/null && pwd || echo "${CARGO_HOME:-$HOME/.cargo}")
   ( cd "$TOP" && { rustup target add x86_64-unknown-linux-musl >/dev/null 2>&1 || true; } &&
-    RUSTFLAGS="-C target-feature=+crt-static --remap-path-prefix=$TOP=/hydo --remap-path-prefix=$CH=/cargo" \
+    RUSTFLAGS="-C target-feature=+crt-static --remap-path-prefix=$TOP=/hydo --remap-path-prefix=$CH=/cargo --cfg hydo_release" \
     cargo build --release --locked -p hydo -p hydo-hvx -p hydo-kvm -p hydo-build -p hydo-compose -p hydo-grpc-gen \
       --target x86_64-unknown-linux-musl ) >&2
   BD=$TOP/target/x86_64-unknown-linux-musl/release

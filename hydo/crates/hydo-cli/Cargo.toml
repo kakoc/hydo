@@ -23,6 +23,10 @@ include = ["/src/**", "/Cargo.toml", "/LICENSE", "/pins/**", "/README.md"]
 name = "hydo"
 path = "src/main.rs"
 
+# the release scripts compile with `--cfg hydo_release` (src/ctx.rs, BUILT_FROM)
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(hydo_release)"] }
+
 [dependencies]
 hydo-config = { workspace = true }
 hydo-schedule = { workspace = true }

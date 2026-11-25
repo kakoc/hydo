@@ -159,9 +159,10 @@ if [ -n "$HYDO_RUST_BIN_DIR" ]; then
 else
   # the tree and the Cargo home are remapped to /hydo and /cargo (as the Linux release's programs
   # and the guest programs are built), so the programs' panic messages name no directory of the
-  # building Mac (M154; until M153 they named the builder's home); both are found at run time
+  # building Mac (M154; until M153 they named the builder's home); both are found at run time.
+  # --cfg hydo_release keeps the build's source path out of bin/hydo (hydo-cli's ctx.rs, BUILT_FROM)
   CH=$(cd "${CARGO_HOME:-$HOME/.cargo}" 2>/dev/null && pwd || echo "${CARGO_HOME:-$HOME/.cargo}")
-  ( cd "$TOP" && RUSTFLAGS="--remap-path-prefix=$TOP=/hydo --remap-path-prefix=$CH=/cargo" \
+  ( cd "$TOP" && RUSTFLAGS="--remap-path-prefix=$TOP=/hydo --remap-path-prefix=$CH=/cargo --cfg hydo_release" \
     cargo build --release --locked -p hydo -p hydo-build -p hydo-compose -p hydo-hvm --target aarch64-apple-darwin ) >&2
   BD=$TOP/target/aarch64-apple-darwin/release
 fi

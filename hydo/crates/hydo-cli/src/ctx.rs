@@ -246,8 +246,17 @@ pub fn release_dir_of(checkout: Option<&Path>, dir: Option<&Path>) -> Option<Pat
 /// a build, and its checkout is the one it was built from: the crate's source path that cargo
 /// gave the build (Milestone 360, open item 179: such a hydo ignored `HYDO_RELEASE_DIR`).
 pub fn checkout_of(exe: &Path, root: &Path) -> Option<PathBuf> {
-    checkout_of_built(exe, root, option_env!("CARGO_MANIFEST_DIR").map(Path::new))
+    checkout_of_built(exe, root, BUILT_FROM.map(Path::new))
 }
+
+/// The crate's source path of this build ([`checkout_of`]), or None in a release build: the
+/// release scripts compile with `--cfg hydo_release`, so a release's programs name no folder of
+/// the machine that built them and two builds in two trees give the same bytes (the 0.6.0
+/// release: its first two Linux builds differed in this path).
+#[cfg(not(hydo_release))]
+const BUILT_FROM: Option<&str> = option_env!("CARGO_MANIFEST_DIR");
+#[cfg(hydo_release)]
+const BUILT_FROM: Option<&str> = None;
 
 /// [`checkout_of`] with the crate's source path of the build (`<checkout>/hydo/crates/hydo-cli`).
 pub fn checkout_of_built(exe: &Path, root: &Path, src: Option<&Path>) -> Option<PathBuf> {
