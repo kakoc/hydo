@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: each counter on the master is at least its acknowledged INCRs and at most those and the unknown ones
+exec /bin/kvc check counters

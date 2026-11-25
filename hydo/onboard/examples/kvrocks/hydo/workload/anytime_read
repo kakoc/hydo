@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# reads of up to five known keys through any node: each value must be one that a write sent
+exec /bin/kvc read

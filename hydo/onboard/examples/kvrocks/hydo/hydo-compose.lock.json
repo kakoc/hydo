@@ -1,0 +1,101 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "apache/kvrocks:2.17.0": {
+   "index_digest": "sha256:a1e99b3653fb900d5a17b80a9487f74079edc6d5e9b70e3103c01cbfc0d5146a",
+   "name": "apache/kvrocks",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "kvrocks",
+       "-c",
+       "/var/lib/kvrocks/kvrocks.conf",
+       "--dir",
+       "/var/lib/kvrocks",
+       "--pidfile",
+       "/var/run/kvrocks/kvrocks.pid",
+       "--bind",
+       "0.0.0.0"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "MALLOC_CONF=prof:true,prof_active:false,background_thread:true"
+      ],
+      "ExposedPorts": {
+       "6666/tcp": {}
+      },
+      "Healthcheck": {
+       "Interval": 30000000000,
+       "Retries": 3,
+       "StartPeriod": 30000000000,
+       "Test": [
+        "CMD-SHELL",
+        "redis-cli -p 6666 PING | grep -E '(PONG|NOAUTH)' || exit 1"
+       ],
+       "Timeout": 3000000000
+      },
+      "User": "999",
+      "Volumes": {
+       "/var/lib/kvrocks": {}
+      },
+      "WorkingDir": null
+     },
+     "digest": "sha256:d389bf9a7911d243e69b240ee9697cdb83f31ef696a6d1e13fb4aeb6152818df",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "kvrocks",
+       "-c",
+       "/var/lib/kvrocks/kvrocks.conf",
+       "--dir",
+       "/var/lib/kvrocks",
+       "--pidfile",
+       "/var/run/kvrocks/kvrocks.pid",
+       "--bind",
+       "0.0.0.0"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "MALLOC_CONF=prof:true,prof_active:false,background_thread:true"
+      ],
+      "ExposedPorts": {
+       "6666/tcp": {}
+      },
+      "Healthcheck": {
+       "Interval": 30000000000,
+       "Retries": 3,
+       "StartPeriod": 30000000000,
+       "Test": [
+        "CMD-SHELL",
+        "redis-cli -p 6666 PING | grep -E '(PONG|NOAUTH)' || exit 1"
+       ],
+       "Timeout": 3000000000
+      },
+      "User": "999",
+      "Volumes": {
+       "/var/lib/kvrocks": {}
+      },
+      "WorkingDir": null
+     },
+     "digest": "sha256:a56ba7b968d4e0900159af2864606dcf45ade840e90a26f8d45979e4ac4813af",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "apache/kvrocks:2.17.0",
+   "registry": "docker.io",
+   "repo": "apache/kvrocks",
+   "tag": "2.17.0"
+  }
+ }
+}

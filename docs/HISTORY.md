@@ -21672,6 +21672,108 @@ the JSON, and the scan without `--kind`.
 
 **What is left.** Open items 117, 174, 175 and 177 are updated.
 
+## Milestone 351 (tentative number): Kvrocks, a master, two replicas, and WAIT
+
+The onboarding of Apache Kvrocks 2.17.0 (2026-09-19, the newest release) on the Mac engine, by
+`docs/ONBOARDING-PLAYBOOK.md`, with the hydo of `main` at `b8c698d7` (0.5.0 and Milestones 344
+to 349). Two new candidates. Nothing was posted. Nothing recorded moved.
+
+**The example.** `hydo/onboard/examples/kvrocks` (RESULTS.md) runs a master and two replicas from
+the official image, each node's RocksDB data and configuration on a file system of its own, with
+`rocksdb.write_options.sync yes` and `use-rsid-psync yes` (the build parameters `sync` and
+`rsid`; Kvrocks's defaults are `no`). It was imported with `hydo compose` from the example's
+Compose file; `config/start.sh` writes each node's configuration into its volume at the first
+start, because Kvrocks rewrites it. The Go client `kvc` (go-redis v9, without retries) writes
+strings, `SET ... PXAT` keys, hashes, counters, lists, sets, sorted sets, `MULTI`/`EXEC`
+transactions and Lua scripts, and confirms each with `WAIT 2`. It reads each confirmed write on
+both replicas. It fails the master over to a replica as Redis Sentinel does, with one late write
+to the old master, and runs `FLUSHMEMTABLE` so that the data reaches SST files. The token `M`
+switches the client to the mode where the master's reply alone acknowledges a write and no
+failover runs. The checks are a `type: messages` check with M346's `acked_outcome` and `effect:
+recorded`, `eventually_converge` (the replicas hold what the master holds), `eventually_wait`
+(`WAIT 2` answers 2 after the heal), `final_atomic` and `final_counters`.
+
+**Finding 1, new.** A node that has just rejoined by a full synchronization does not start again
+after a power loss. `ReplicationThread::fetchFile` (`src/cluster/replication.cc` lines 1040 to
+1112) writes the master's checkpoint with `WritableFile::Append` and no sync, `SwapTmpFile` and
+`Storage::RestoreFromCheckpoint` (`src/storage/storage.cc` lines 500 to 554) rename the files and
+the directories into place without a sync and destroy the old database. A power cut of the guest
+or of the node alone in the next seconds leaves the fetched SST files at length 0, and the node
+stops at every start with `Corruption: Sst file size mismatch between expected 2080 and file
+system 0`. `disk=cut dseed=0 | run W=6311ab23,p4,q3,r500 A=kvrocks.failover_done+5500:cut` is the
+directed regression; blind, e2 found it in 10 of 60 schedules, shrunk to `disk=cut dseed=0 | run
+C=40 W=d6d260d0,p3,q2,r500,oanytime_read`. The cause is unchanged on `unstable` at `ff8bb662`.
+
+**Finding 2, new, a clock effect.** After a backward step of the wall clock, `WAIT 2` on an idle
+master answers 0 for the step's length, and `INFO replication` reports a lag, although both
+replicas hold every write. `sendReplConfAck` (`src/cluster/replication.cc` lines 666 to 682)
+sends an acknowledgement that is not forced only when `util::GetTimeStamp()`, the wall clock, has
+moved a second past the last one, and an idle master forces none. `disk=none dseed=0 | run
+M=master T=17:-300 W=740c6cfa,p1,q3,r500` is the regression; blind in 9 of 40 schedules with the
+master's reply as the acknowledgement, shrunk to the clock step alone.
+
+**Not bugs.** With Kvrocks's default `rocksdb.write_options.sync no` a power cut lost 8 of 70
+acknowledged writes (e4, seed 1), the documented cost; with `yes` none was lost. In e4 one
+failure was the expiry check's mistake: a key had expired as set before a backward clock step,
+and the read-back required it after the step. The client now records the latest clock the run
+saw. 16 schedules damaged `CURRENT`, an SST file, a WAL or the node's configuration with
+`G=`, and the node then stopped at its start: detected damage. `CONFIG REWRITE` writes without a
+sync (the open apache/kvrocks#3710); no run showed it.
+
+**What held.** With both durable settings, every write that `WAIT 2` confirmed stayed as
+acknowledged through kills, pauses, partitions, failovers with late writes, one node's power loss,
+damaged files, power cuts and clock steps, but where finding 1 stopped a node. Every read of the
+replicas after `WAIT 2` saw the write, every transaction and script was whole on every node, no
+counter passed its `INCR`s, no deadline came early, and no replica served a value that no write
+sent.
+
+**Explorations.** e1 (the first image, seeds 1-20), r1 to r3 (`--reactive-at
+kvrocks.failover_done` with power cuts 0.5 s to 23 s later, 43 schedules), e2 (process, seeds
+21-80, cluster and storage faults), e3 (the master's reply as the acknowledgement, seeds 1-40),
+and e4 (`--configs`, `sync` and `rsid` one at a time, seeds 1-20). e4 was stopped after its
+second combination, before `use-rsid-psync no`, because the Mac had 5 GB of free disk and a full
+swap. All on one worker of 1,024 MiB, at 240 to 560 runs an hour. RESULTS.md has the table.
+
+**At the fingerprint epoch 6.** After the branch moved onto `main` at `e1b47cef` (Milestones 350,
+352, 353 and 354), the example's image was built again at epoch 6 with the client's fixed expiry
+check (`ee70237d…`). Every value moved with the image. Two clean runs give `bc3e6d306a811a13`.
+`hydo repro --regressions` gave 3 of 3 as expected: finding 1's directed regression
+`35d9039868e11329` (twice, once more in a `hydo run`), its blind regression `2dc94c8301e58369`,
+and finding 2's `c964be0dc09a2a55`. The schedule that had failed by the check's mistake passes.
+The clock audit and the scan of write routes of `e1b47cef` still found nothing in Kvrocks.
+
+**Tests.** The explorer's corpus and identity goldens (quick and full; `identity-full.txt` did
+not change) and the controller's corpus golden are re-recorded for the new example's inputs
+(`HYDO_BLESS=1`). With a target folder of this branch's own: `cargo fmt --all --check`, `cargo test
+-p hydo-explore --test it` (60 passed), `-p hydo-control` (120 and 41 passed), `-p hydo-agents
+--test it` (14 passed), `-p hydo --test it -- docs:: equivalence::` (23 passed), `sh
+ci/vale.sh` and `sh ci/consolidate-tests.sh --check` pass. The whole `-p hydo --test it` gave 72
+passed and 2 failed: `onboard::the_fetch_step_names_the_release_fetcher_when_it_is_not_on_path`
+and `update::a_checkout_build_is_left_alone_with_the_commands`. Both expect a hydo built in its
+checkout's `target/`, and this one was built in a target folder outside the checkout (open item
+179). No Rust code changed in this milestone.
+
+Retro: Kvrocks 2.17.0, the Mac engine, 2026-11-24
+- Time to the first clean run: 1 hour 50 minutes of wall time from the start, none of it
+  waiting for machines.
+- Schedules run before the first finding: 43 aimed cuts, of which the first 13 could not reach
+  it (no SST file in the checkpoint, or no failover in the run); blind, seed 22 of e2. One
+  failure was the expiry check's mistake (e4).
+- The findings: 2 new (the unsynced full synchronization, and `WAIT` after a backward clock
+  step), 1 documented setting (`sync no`), and the environment (detected damage).
+- What took the most time: making the full synchronization carry SST files and happen in every
+  run (about 40 minutes); a reaction that never fired and passed (about 15 minutes); separating
+  the data's agreement from the acknowledgements' in the checks (about 15 minutes).
+- What hydo lacked: the scan of write routes and the clock audit found nothing in C++, a
+  reaction whose event never came passed silently, `--reactive-at` with `--seeds` runs one
+  point per seed, the diagnosis of a failed restart after `L=` quotes no log, a regression
+  cannot carry a build parameter, and no reaction cuts one service's power (open item 179).
+- Strategies: a new entry, "Failovers by the client, with a late write", found finding 1. The
+  entries "Power cuts of the whole guest", "Clock steps and the clock audit" and "A scan of a
+  reaction's delay" of `hydo guide strategies` are updated, and the first table names Kvrocks.
+
+**What is left.** Open item 179.
+
 ## Milestone 352 (tentative number): aimed reactions, refusals and the claim `acked_outcome` on KVM
 
 Status: done on 2026-11-24. Nothing recorded moved, and the fingerprint epoch stays 5.

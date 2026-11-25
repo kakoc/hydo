@@ -1046,6 +1046,28 @@ blocks, and power cuts 0 to 30 ms after an acknowledgement. Nothing was posted:
 With Garage's default `fsync=false` a power cut lost acknowledged writes, which `hydo explore
 --configs` labeled the documented trade-off (open item 177).
 
+**Kvrocks (M351, tentative number).** Apache Kvrocks 2.17.0, the Redis-compatible store on
+RocksDB, runs as a master and two replicas in one guest of the Mac engine, in
+`hydo/onboard/examples/kvrocks` (RESULTS.md), imported with `hydo compose`. Each node's data and
+configuration are on a file system of its own, with `rocksdb.write_options.sync yes` and
+`use-rsid-psync yes` (the build parameters `sync` and `rsid`). A Go client on go-redis writes
+strings, expiring keys, hashes, counters, lists, sets, sorted sets, transactions and Lua scripts,
+and confirms each with `WAIT 2`. It fails the master over as Redis Sentinel does, with one late
+write to the old master. The token `M=master` makes the master's reply the acknowledgement. Every
+write that `WAIT 2` confirmed stayed as acknowledged under kills, pauses, partitions, failovers,
+one node's power loss, damaged files, power cuts and clock steps, but where finding 1 stopped a
+node. Two new candidates, not posted:
+- A node that has just rejoined by a full synchronization does not start again after a power
+  loss. It writes the master's checkpoint without a sync and destroys its old database, so a
+  power cut seconds later leaves empty SST files (`Sst file size mismatch ... file system 0`).
+  Blind in 10 of 60 schedules.
+- After a backward clock step, `WAIT 2` on an idle master answers 0 for the step's length,
+  although both replicas hold every write. A replica acknowledges only when the wall clock has
+  moved a second past its last acknowledgement (`disk=none dseed=0 | run M=master T=17:-300
+  W=740c6cfa,p1,q3,r500`).
+
+Open item 179 has what is left.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -3616,6 +3638,34 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - No native run: the causes are plain in the code. hvx and KVM did not run the example; the
       image has an amd64 build. A cluster of several zones, a gateway node, a layout change
       under faults, and the experimental Fjall engine were not tried.
+179. What the example `kvrocks` left (M351, tentative number):
+    - The two candidates are not reported upstream.
+    - `hydo rules scan --kind writes` found no route in Kvrocks: its commands are a C++ table of
+      `MakeCmdAttr` entries with a `write` flag (open item 175). The clock audit named no place
+      in 255 C++ files, because Kvrocks reads the wall clock through its own
+      `util::GetTimeStamp`.
+    - A reaction whose event never came passes without a word: three aimed cuts after a failover
+      passed in runs without a failover.
+    - `hydo explore --reactive-at` with `--seeds A-B` runs one point of the grid per seed, not
+      the grid once per seed, and `hydo guide faults` reads the other way.
+    - The diagnosis of `ERROR <svc> restart failed (after its power loss)` quotes no log line,
+      while the one after a whole-guest cut does; `logs/<svc>.log` has the reason.
+    - A saved regression cannot carry a build parameter, so finding 2 runs through the token `M`.
+      No reaction takes one service's power, so finding 1 with one node's power loss came only
+      from blind `L=` schedules.
+    - `hydo explore --configs` did not reach `use-rsid-psync no`: the Mac's disk and memory
+      were low, and the exploration was stopped after its second combination. The epoch-6
+      image ran only the clean runs, the regressions and one check of the client's fix; no
+      exploration ran at epoch 6.
+    - A hydo built with `CARGO_TARGET_DIR` outside its checkout ignores `HYDO_RELEASE_DIR`,
+      because `checkout_of` looks for `<checkout>/target/`, so `hydo build` cannot find the guest
+      files. A release-like folder with links to the release and copies of the programs worked.
+      Two tests of `-p hydo --test it` (`onboard::the_fetch_step_names_the_release_fetcher_when_it_is_not_on_path`
+      and `update::a_checkout_build_is_left_alone_with_the_commands`) fail with such a target
+      folder too: they expect a hydo built in its checkout's `target/`.
+    - Each workload has about 70 writes. These were not tried: the write commands of Kvrocks's
+      table beyond the families of RESULTS.md, the cluster mode with kvrocks-controller, Redis
+      Sentinel itself, `replication-group-sync`, hvx, and KVM.
 ## Milestone index
 
 Details of each milestone are in `docs/HISTORY.md`. Milestones 1–32 ran inside a nested VM on the
@@ -4691,6 +4741,12 @@ build machine, before 2026-10-13.
   wall-clock readings kept as an order or a version of data, and names Garage's CopyObject; the
   known places of Valkey, Temporal, and River keep their ranks. A messages claim with nothing to
   judge beside one that judged is no vacuous pass. Nothing recorded moved
+- M351 (tentative number): the onboarding of Apache Kvrocks 2.17.0 on the Mac engine, a master
+  and two replicas with `WAIT 2` and failovers by the client. Two new candidates, not posted. A
+  node that has just rejoined by a full synchronization does not start again after a power loss,
+  because the fetched checkpoint is never synced. After a backward clock step, `WAIT` answers 0
+  for the step's length, because a replica's acknowledgement waits for the wall clock. Nothing
+  recorded moved
 - M352 (tentative number): the work of Milestones 345, 346 and 348 on KVM, on three Intel runners.
   The aimed grid over Meilisearch's swap found the swap that runs twice, and the grid over the
   index deletion broke `acked_outcome` by the deletion's effect at 6 ms. Every failure ran again

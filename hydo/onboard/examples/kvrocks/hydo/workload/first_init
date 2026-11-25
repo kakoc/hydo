@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=180
+# wait until the master kv1 has both replicas connected with lag 0
+exec /bin/kvc init

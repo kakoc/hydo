@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# DEL of a known string key, then WAIT 2 and the reads
+exec /bin/kvc op del

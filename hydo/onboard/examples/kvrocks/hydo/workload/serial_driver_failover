@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=120
+# in one call of two (mode wait only): promote a replica, write once more to the old master as a late client does, point the other nodes at the new master, CONFIG REWRITE on each, as Sentinel does
+exec /bin/kvc failover

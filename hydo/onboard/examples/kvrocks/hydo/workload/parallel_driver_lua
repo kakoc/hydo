@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# EVAL of a script that SETs and SADDs two new keys, then WAIT 2 and the reads
+exec /bin/kvc op lua

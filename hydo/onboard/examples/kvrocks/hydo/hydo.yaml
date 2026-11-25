@@ -1,0 +1,190 @@
+# Apache Kvrocks 2.17.0 (the newest release, 2026-09-19), the Redis-compatible key-value store on
+# RocksDB, as ../docker-compose.yaml runs it: a master and two replicas, each with its RocksDB data
+# and its configuration on a file system of its own, rocksdb.write_options.sync yes and
+# use-rsid-psync yes. The test client fails the master over to a replica, as Redis Sentinel does.
+# RESULTS.md has the promises under test and what was found.
+#
+#   sh ../build.sh            # bin/kvc-<arch>, the test client (../client)
+#   sh fetch-images.sh        # the image by digest
+#   hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --new-faults --cluster-faults --storage-faults
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The services below are the importer's,
+# with these changes:
+# - each node's /var/lib/kvrocks is a file system of its own (storage:), the target of L= and G=,
+#   instead of the importer's folder on the shared data disk;
+# - the readiness checks ask PING of the node's own address with the test client, not with the
+#   image's redis-cli through hydo-oci;
+# - the durability settings are build parameters, and the mode of the acknowledgement is the run-time token M;
+# - the test client kvc is in the image (../build.sh).
+format: 1
+name: kvrocks
+description: "Apache Kvrocks 2.17.0, a master and two replicas with WAIT and failovers by SLAVEOF: acknowledged writes of strings, hashes, lists, sets, sorted sets, counters, transactions and Lua scripts stay as acknowledged, every replica reads them after WAIT 2, expiries keep their deadlines, and the replicas converge, under kills, pauses, partitions, one node's power loss or damaged files, power cuts and clock steps"
+hydo_version: "0.5"
+
+params:
+  arch: arm64     # amd64 | arm64: the client's architecture, the same as the image's
+  sync: "yes"     # rocksdb.write_options.sync of every node: yes | no (Kvrocks's default)
+  rsid: "yes"     # use-rsid-psync of every node: yes | no (Kvrocks's default)
+
+configs:
+  sync:
+    values: ["yes", "no"]
+    service: [kv1, kv2, kv3]
+    doc: "https://github.com/apache/kvrocks/blob/v2.17.0/kvrocks.conf (rocksdb.write_options.sync)"
+    tradeoff:
+      "no": "rocksdb.write_options.sync no: if the machine crashes, some recent writes may be lost (kvrocks.conf)"
+  rsid:
+    values: ["yes", "no"]
+    service: [kv1, kv2, kv3]
+    doc: "https://github.com/apache/kvrocks/blob/v2.17.0/kvrocks.conf (use-rsid-psync)"
+    tradeoff:
+      "no": "use-rsid-psync no: the master checks only the sequence number at PSYNC, which is not enough when the replica has another replication history (kvrocks.conf)"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 1024
+  clock_start: 1795478400   # 2026-11-24 00:00 UTC, the day of the import
+  clock_after_cut: 60       # a SET ... PXAT deadline is a wall-clock time: no real clock runs back across a power cut
+  outcomes_after_cut: true  # the read-back in a recovery boot reads the unknown outcomes too
+
+data:
+  size_mib: 640   # the data disk: the three nodes' own file systems of 160 MiB each, and the rest
+  dirs: [vol/kv1, vol/kv2, vol/kv3, kvc]
+
+root:
+  share_images: true   # the three nodes share one tree of the kvrocks image
+  files:                 # bind-mount sources, copied into the read-only root
+    - {src: ../config/kvrocks.conf, dst: /etc/hydo/compose/bind/0-kvrocks.conf}
+    - {src: ../config/start.sh, dst: /etc/hydo/compose/bind/1-start.sh}
+    - {src: "../bin/kvc-{{arch}}", dst: /bin/kvc, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 kv1
+      10.89.0.12 kv2
+      10.89.0.13 kv3
+
+groups:
+  - name: nodes
+    services: [kv1, kv2, kv3]
+    primary: /bin/kvc primary   # the master that the last failover chose (/data/kvc/master)
+
+services:
+  # Compose service kv1, the first master
+  # image apache/kvrocks:2.17.0 = docker.io/apache/kvrocks@sha256:a1e99b3653fb900d5a17b80a9487f74079edc6d5e9b70e3103c01cbfc0d5146a
+  #   linux/amd64: sha256:d389bf9a7911d243e69b240ee9697cdb83f31ef696a6d1e13fb4aeb6152818df
+  #   linux/arm64: sha256:a56ba7b968d4e0900159af2864606dcf45ade840e90a26f8d45979e4ac4813af
+  - name: kv1
+    image: {x86_64: images/apache-kvrocks-2.17.0-amd64.docker.tar, arm64: images/apache-kvrocks-2.17.0-arm64-oci}
+    image_ref: "apache/kvrocks:2.17.0"
+    entrypoint: [sh, /etc/kvc/start.sh]
+    env:
+      KVROCKS_SYNC: "{{sync}}"
+      KVROCKS_RSID: "{{rsid}}"
+    user: "root"
+    port: 6666
+    addr: 10.89.0.11
+    ready: "timeout 5 /bin/kvc ready 10.89.0.11"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/kv1, size_mib: 160}   # RocksDB's db/ and the node's node.conf
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-kvrocks.conf, dst: /etc/kvc/kvrocks.conf}
+      - {src: /etc/hydo/compose/bind/1-start.sh, dst: /etc/kvc/start.sh}
+      - {src: /data/vol/kv1, dst: /var/lib/kvrocks}
+  # Compose service kv2, a replica of kv1 at the first start
+  - name: kv2
+    image: {x86_64: images/apache-kvrocks-2.17.0-amd64.docker.tar, arm64: images/apache-kvrocks-2.17.0-arm64-oci}
+    image_ref: "apache/kvrocks:2.17.0"
+    entrypoint: [sh, /etc/kvc/start.sh, kv1]
+    env:
+      KVROCKS_SYNC: "{{sync}}"
+      KVROCKS_RSID: "{{rsid}}"
+    user: "root"
+    port: 6666
+    addr: 10.89.0.12
+    depends_on: [kv1]
+    start_after: started   # Compose's service_started: no wait for readiness
+    ready: "timeout 5 /bin/kvc ready 10.89.0.12"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/kv2, size_mib: 160}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-kvrocks.conf, dst: /etc/kvc/kvrocks.conf}
+      - {src: /etc/hydo/compose/bind/1-start.sh, dst: /etc/kvc/start.sh}
+      - {src: /data/vol/kv2, dst: /var/lib/kvrocks}
+  # Compose service kv3, a replica of kv1 at the first start
+  - name: kv3
+    image: {x86_64: images/apache-kvrocks-2.17.0-amd64.docker.tar, arm64: images/apache-kvrocks-2.17.0-arm64-oci}
+    image_ref: "apache/kvrocks:2.17.0"
+    entrypoint: [sh, /etc/kvc/start.sh, kv1]
+    env:
+      KVROCKS_SYNC: "{{sync}}"
+      KVROCKS_RSID: "{{rsid}}"
+    user: "root"
+    port: 6666
+    addr: 10.89.0.13
+    depends_on: [kv1]
+    start_after: started
+    ready: "timeout 5 /bin/kvc ready 10.89.0.13"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/kv3, size_mib: 160}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-kvrocks.conf, dst: /etc/kvc/kvrocks.conf}
+      - {src: /etc/hydo/compose/bind/1-start.sh, dst: /etc/kvc/start.sh}
+      - {src: /data/vol/kv3, dst: /var/lib/kvrocks}
+
+# 40 rounds of 500 ms with up to 3 writes each: about 100 writes and a few failovers.
+workload:
+  steps: 40
+  timeout: 300    # also the read-back's limit
+
+test:
+  parallel: 4
+  per_round: 3
+  round_ms: 500
+  command_timeout: 60
+  drain_timeout: 60
+
+checks:
+  # hydo's ready-made claim (hydo guide messages, "Read back the final states"): every write that
+  # Kvrocks acknowledged is there at the end, unless a later write of the same register replaced
+  # it or its PXAT deadline passed, and no write that Kvrocks refused took effect. The client
+  # records each write as a send of its id, and `kvc readback` reads every register and member
+  # back from the master and writes each write's effect (f=1 or f=0).
+  - id: writes
+    type: messages
+    history: writes
+    msg: every write that Kvrocks acknowledged ends as Kvrocks acknowledged it
+    final: /bin/kvc readback
+    claims:
+      acked_outcome:
+        client_errors: [refused]   # READONLY, LOADING, EXECABORT, a CAS or DEL that found another value: Kvrocks applied nothing
+        effect: recorded
+
+# The test client's mode, not a setting of Kvrocks. wait: a write is acknowledged when WAIT 2
+# answers 2, and the failover runs. master: the master's reply alone acknowledges it, and the
+# failover does nothing, so every write must survive kills, restarts and, with sync yes, power
+# cuts. M=master is how finding 2's regression runs (RESULTS.md).
+knobs:
+  - token: M
+    name: what acknowledges a write (the test client's mode)
+    default: wait
+    values: [wait, master]
+    set: mkdir -p /data/kvc && printf '%s\n' "$HYDO_VALUE" > /data/kvc/ack && sync /data/kvc/ack
+
+faults: [kill, pause, network, oneway, cut, clock, corrupt, powerloss]
