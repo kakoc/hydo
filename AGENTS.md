@@ -326,10 +326,9 @@ give `e153f376096a072c` and `6a5c2fe208174af3` on hvx and `66da20bdbfafd6d2` and
 `96b8fd4017db3274` and `87d6319a26da08c7` on KVM (AMD). Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
 `ba0aa0612502a1df` under this hydo, because an image keeps the defaults of its own epoch
 (`hydo_image::defaults`). `hydo/onboard/examples/stack/build-reproducers.sh` rebuilds both
-images. The quickstart's Redis example gives `cce52f9e8565f6e2` (OK) and `8bee301c59ad1b12`
-(`C=12 R=everysec`, `k:1` lost) on hvx, `cc6abeb1ec4e4f29` and `b9a2d62ab3eaf0cb` (`k:0` lost)
-on the Mac, and `d2e4da56c54ce2a1` and `af9a168ee9d9071c` (`k:1` lost) on KVM (AMD), at epoch 5.
-At epoch 6 its image gives `2f5a6dc34e0c8ba6` and `f2715295eae4d5a2` (`k:1` lost) on hvx, and
+images. The quickstart's Redis example (its epoch-5 values are in docs/REBASELINE.md section 29)
+gives at epoch 6 `2f5a6dc34e0c8ba6` (OK) and `f2715295eae4d5a2` (`C=12 R=everysec`, `k:1` lost)
+on hvx, and
 `b222402de473ea1b` on KVM (AMD), where `C=11 R=everysec` loses `k:1` (`3e8260560d47b5b0`). On the
 Mac it gives `f7d1de1935d77df4` and `6a3d1a0456e48e01` (`k:0` lost). Every recorded example value is
 in `hydo/onboard/recorded.json`, and

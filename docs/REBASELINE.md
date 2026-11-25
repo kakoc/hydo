@@ -4031,3 +4031,32 @@ images keep their values: the epoch-2 images in `~/hydo/build/m204` give `a76d7f
 in full mode on the bare-metal machine, and so do the controller's corpora. hydo-explore's `it`
 passed 59 of 60 tests and `fake_engine` 31 of 31, and hydo-control's `it` 120 of 120. The one failure,
 `identity::local_outputs_are_no_inputs`, needs a git checkout, and the tree there is an archive.
+
+## 32. hydo 0.6.0 (2026-11-25)
+
+Made with `hydo-bench rebaseline --write --thorough --changed-only` on the bare-metal machine and
+on a Mac, with the quick 0.6.0 candidates as `--release` (docs/HISTORY.md "The 0.6.0 release"),
+on top of section 31's pass. The values are in `hydo/onboard/recorded.json`, and this section
+records only the decisions.
+
+**The fingerprint epoch stays 6.** As at 0.3.1 to 0.4.1, only hydo's own guest programs moved
+image bytes: `guest/hydo-world`, `guest/hydo-world-tls` and `guest/hydo-grpc` have new pins
+(docs/BUILD-PINS.md), and the SDK versions are in rust-kv's program, node-kv's `package.json` and
+python-kv's `__init__.py`. Every image was built twice; the schedules of each image whose bytes
+moved ran twice from fresh boots.
+
+**What moved.** hvx (the bare-metal machine, a tree unpacked under umask 022, the module
+`91D86B693F4D4035C368F9B`, 3,571 s): 9 of 43 images have new bytes and 30 of 141 runs new values
+(redis-proxy, redis-bridge, rust-kv, the shop's two images, the three gRPC stack images and the
+generated-driver stack). The Mac (`hvm`, one image at a time, 674 s): 9 of 21 images and 36 of 76
+runs (redis-bridge, node-kv, python-kv, python-kv-hist, rust-kv, the shop's two images, the gRPC
+demo's two images). These are the images and runs that moved at 0.3.1 to 0.4.1. Every verdict is
+unchanged, every image built twice with the same bytes, and every moved run gave the same values
+twice.
+
+**KVM.** The KVM list's images carry none of these programs, so no KVM value moves. The one-off
+workflow `tmp-rel060b-kvm` (run 45644567681) confirmed it on six of GitHub's runners (three Xeon
+6975P-C, two EPYC 7763, one EPYC 9V74). Each runner built this commit's three re-pinned guest
+programs with the pinned bytes, put them into the published 0.5.0 release, built the 6 images of
+the list twice with the recorded bytes, and ran nothing, because no image moved. The quickstart's
+KVM section gave the list's values on the AMD hosts.

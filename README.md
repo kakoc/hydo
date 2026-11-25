@@ -4,7 +4,7 @@
 
 <h1 align="center">hydo</h1>
 
-> What if the bug that shows up once in a thousand CI runs showed up every time?<br>
+> What if the bug that shows up once in a thousand runs of your tests showed up every time?<br>
 > What if the bugs that nobody wrote a test for turned up on their own?<br>
 > What if "never charge a customer twice" were checked while your database crashes?
 
@@ -47,8 +47,8 @@ each file. hydo needs an Apple Silicon Mac, or an x86_64 Linux machine where you
 KVM, the support for virtual machines that Linux has built in. Then `hydo doctor` checks the
 machine.
 [docs/INSTALL.md](docs/INSTALL.md) has the release archives and their checksums, and hydo's own
-kernel module for Intel machines. Since 0.4.1, `hydo update` updates hydo
-the way you installed it, and its onboarding skill with it.
+kernel module for Intel machines. `hydo update` updates hydo the way you installed it, and the
+onboarding skill (below) with it.
 
 ## What hydo found in real projects
 
