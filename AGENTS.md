@@ -301,8 +301,8 @@ dry-runs the packages on every pull request that changes one. The details are in
 **Fingerprints.** The fingerprint epoch is 6 (M353; 5 from M317, 4 from M269, 3 from M234, 2
 from M204, 1 from M155). An image built at epoch 6 carries the first boot's outcomes into a
 recovery boot and gives the controller's commands a `PATH` (M353, below). The 0.6.0 pass
-re-recorded the list's hvx and KVM values at epoch 6 (docs/REBASELINE.md section 31). Its Mac
-values are still those of epoch 5 (open item 105). An
+re-recorded every value of the list at epoch 6 on hvx, the Mac and KVM (docs/REBASELINE.md
+section 31). An
 image built at epoch 5 has the image services' launchers of M317, which mount the
 system folders once per boot. Since M331 they also give each image service a `/tmp` of its own. On hvx an x86_64 image built at epoch 5 keeps time with its TSC
 (M323, `guest.exact_tick`). The 0.5.0 release's pass re-recorded every value of the list at
@@ -330,7 +330,9 @@ images. The quickstart's Redis example gives `cce52f9e8565f6e2` (OK) and `8bee30
 (`C=12 R=everysec`, `k:1` lost) on hvx, `cc6abeb1ec4e4f29` and `b9a2d62ab3eaf0cb` (`k:0` lost)
 on the Mac, and `d2e4da56c54ce2a1` and `af9a168ee9d9071c` (`k:1` lost) on KVM (AMD), at epoch 5.
 At epoch 6 its image gives `2f5a6dc34e0c8ba6` and `f2715295eae4d5a2` (`k:1` lost) on hvx, and
-`b222402de473ea1b` on KVM (AMD), where `C=11 R=everysec` loses `k:1` (`3e8260560d47b5b0`). Every recorded example value is in `hydo/onboard/recorded.json`, and
+`b222402de473ea1b` on KVM (AMD), where `C=11 R=everysec` loses `k:1` (`3e8260560d47b5b0`). On the
+Mac it gives `f7d1de1935d77df4` and `6a3d1a0456e48e01` (`k:0` lost). Every recorded example value is
+in `hydo/onboard/recorded.json`, and
 `hydo-bench rebaseline` checks or re-records them (`docs/REBASELINE.md` "How to re-baseline").
 
 **The hvx engine.** The module (`hv/hvx/hvx.c`, ABI `hvx_abi.h`) boots Linux 6.6.35
@@ -2401,17 +2403,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `skill-v1.0.0` to `skill-v2.4.0` wait for deletion after 0.5.0 is published.
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
-    milestone and the values it moves; the pass removes the lines.
-    - M353 (the fingerprint epoch 6): every image of the list gets new bytes when it is built
-      (its record says epoch 6): hvm 21, kvm 6, and hvx 43. Every run of an epoch-6 image moves,
-      because each command the controller starts has `PATH` in its environment (guest RAM and
-      `ctl`). The runs with a power cut also carry the first boot's outcomes into the recovery
-      boot: the controller reports them at the cut and writes them into the recovery boot's
-      `$HYDO_OUTCOMES`. A check that read an empty `$HYDO_OUTCOMES` there before can change its verdict. The
-      pass decides each verdict change (docs/REBASELINE.md section 30). The 0.6.0 pass
-      re-recorded the 43 hvx images and their 141 runs, and the 6 KVM images and their 19 runs
-      (docs/REBASELINE.md section 31). The Mac values (21 images, 76 runs) still wait: the Mac
-      had about 4 GB of free disk.
+    milestone and the values it moves; the pass removes the lines. Empty since the 0.6.0
+    re-recording pass (docs/REBASELINE.md section 31).
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -4710,13 +4703,13 @@ build machine, before 2026-10-13.
   renames and deletes reach the disk before it answers. On the Mac engine the new example
   `checkout/hydo-s3-cut.yaml` lost 10 to 13 acknowledged writes at four power cuts without the
   key, and none with it. Opt-in; nothing recorded moved
-- The 0.6.0 re-recording pass (no milestone number): the list's values at the fingerprint epoch 6
-  on hvx. All 43 images and 141 runs moved. Each image built twice the same, and each run gave
-  one result twice. Four verdict changes were decided: one accepted (the same class), and new
-  schedules for the nats turn boundary and both symptoms of etcd issue 14685. The pinned
-  reproducers' epoch-6 images are in `~/hydo/build/rel060`. On KVM (AMD) all 6 images and 19 runs moved;
-  the Redis power cut moves to `C=11 R=everysec` and Qdrant's pause to 179 ms. The Mac values
-  wait (open item 105)
+- The 0.6.0 re-recording pass (no milestone number): every value of the list at the fingerprint
+  epoch 6. It covered hvx (43 images, 141 runs), KVM (6 images, 19 runs, AMD values) and the Mac
+  (21 images, 76 runs). Every image built twice the same, and every run gave one result twice;
+  every value moved. Six verdict changes were decided. One was accepted (the same class). The
+  others got new schedules: the nats turn boundary, both symptoms of etcd issue 14685, the KVM
+  Redis power cut (`C=11 R=everysec`), and Qdrant's KVM pause (179 ms). No Mac verdict changed. The pinned
+  reproducers' epoch-6 images are in `~/hydo/build/rel060`. Open item 105 is empty
 
 ## Where to look
 

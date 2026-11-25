@@ -21946,7 +21946,7 @@ lists the known keys, which the recorded answers do not have.
 
 ## The 0.6.0 re-recording pass
 
-Status: the hvx and KVM parts done on 2026-11-25. The Mac part waits. No milestone number. The pass
+Status: done on 2026-11-25 on hvx, KVM, and the Mac. No milestone number. The pass
 re-records the values of `hydo/onboard/recorded.json` at the fingerprint epoch 6 of Milestone
 353, under the rule "Re-recording runs in batches" (AGENTS.md). It raises no version, builds no
 release, and publishes nothing. docs/REBASELINE.md section 31 has every value and decision.
@@ -21996,7 +21996,8 @@ corpus and identity goldens needed no new recording. The one failure,
 `identity::local_outputs_are_no_inputs`, needs a git checkout, and the tree there was an archive.
 `hydo`'s `docs::`, hydo-bench's `recorded::` and hydo-control's `silent::` pass with the new list.
 The quickstarts still cite the values of the published 0.5.0 release. So `tests/docs.rs` names
-the seven hvx values of epoch 5 that left the list in `CITED_ELSEWHERE`, with their source.
+the 17 values of epoch 5 that left the list in `CITED_ELSEWHERE`, with their source. Seven are
+of hvx, six of KVM and of the images, and four of the Mac.
 0.6.0's release step 6a moves the pages to the epoch-6 values and removes the entries.
 
 **KVM.** The bare-metal machine never runs KVM, so the one-off workflow
@@ -22023,5 +22024,15 @@ with one result, and changed no verdict; every job's log was read. The AMD value
 images are the list's now, and they equal the ones `pause-check.sh` gave. The quickstart's
 exploration on the AMD host of the first run gave 15 of 15 reproduced.
 
-**The Mac.** Not run. The Mac had about 4 GB of free disk, and its pass waits for at least 12 GB
-(open item 105).
+**The Mac.** The pass ran this tree's programs over the signed 0.5.0 Mac release (`44860817…`)
+on this Mac, built in a target folder of its own. It took one image at a time under the shared Mac
+VM lock and kept at least 12 GB of the disk free. It deleted each image after its values were
+written. `--write --thorough` built all 21 images twice with the same bytes. It ran all 76
+schedules twice from fresh boots with one result each, in 1,419 s (builds 668 s, runs 753 s). All
+21 images have new bytes and all 76 runs moved. No verdict changed, also not in the 22 runs with a
+power cut. Five images have verdict lines that differ in their numbers or ids and keep their class
+and property: `hvm/ledger` (two lines), `hvm/redis-composed-racy`, `hvm/redis-hist`,
+`hvm/python-kv-hist`, and `hvm/voting`. The release Redis image (`502d7540…`) gives the values of
+Milestone 353's proof: `f7d1de1935d77df4` without faults and `da264396142d8e52` at `C=12`. Its
+`C=12 R=everysec` loses `k:0` (`6a3d1a0456e48e01`). The list's `epoch` is 6, and open item 105 is
+empty.

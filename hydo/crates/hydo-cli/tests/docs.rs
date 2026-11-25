@@ -342,6 +342,24 @@ const CITED_ELSEWHERE: &[(&str, &str)] = &[
          (section 29)",
     ),
     (
+        "4f1e9207868ff352",
+        "the first 16 digits of the Mac release Redis image's sha256 at the fingerprint epoch 5 \
+         (section 29)",
+    ),
+    (
+        "cc6abeb1ec4e4f29",
+        "fp of hvm/release-redis `disk=none | run` at the fingerprint epoch 5 (section 29)",
+    ),
+    (
+        "b9a2d62ab3eaf0cb",
+        "fp of hvm/release-redis `disk=cut | run C=12 R=everysec` at the fingerprint epoch 5 \
+         (section 29)",
+    ),
+    (
+        "b46eb1de79e18bda",
+        "fp of hvm/release-redis `disk=cut | run C=12` at the fingerprint epoch 5 (section 29)",
+    ),
+    (
         "5f02bc6f56c1ca5c",
         "fp of kvm/release-redis-netem `disk=none | run N=redis@3-6:delay,300ms` on AMD at the \
          fingerprint epoch 5 (section 29)",

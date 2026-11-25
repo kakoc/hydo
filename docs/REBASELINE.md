@@ -3998,6 +3998,26 @@ The Qdrant values were `pause-check.sh`'s: `ac35b1539dfeb052` at 179 ms (VIOLATI
 The release Redis image's quickstart exploration on the AMD host gave 15 of 15 reproduced, as at
 epoch 5.
 
+**The Mac** (this Mac, the signed 0.5.0 Mac release `44860817…` as `--release`, a target folder
+of the pass's own). The pass took one image at a time under the shared Mac VM lock, with at least
+12 GB of the disk free. It deleted each image's build after its values were written. `--write
+--thorough` took 1,419 s (builds 668 s, runs 753 s). All 21 images were built twice with the same
+bytes and have new bytes. All 76 runs gave the same values twice from fresh boots, and every run
+moved. No verdict changed, also not in the 22 runs with a whole-guest power cut. Five images have
+verdict lines that differ in their numbers or ids and keep their class and property:
+
+- `hvm/ledger`: the entry stored twice is 19 instead of 11 (`O=front@0-30:resp:loss,50%`) and 14
+  instead of 6 (`N=front@0-30:loss,60%`);
+- `hvm/redis-composed-racy`: the balances sum to 509 instead of 495;
+- `hvm/redis-hist` and `hvm/python-kv-hist`: the times of the history's operations;
+- `hvm/voting` `C=12`: 60.66 s after the heal instead of 60.84 s.
+
+The release Redis image (`502d7540…`) gives `f7d1de1935d77df4` without faults and
+`da264396142d8e52` at `C=12`, the values of docs/HISTORY.md Milestone 353. Its `C=12 R=everysec`
+loses `k:0` (`6a3d1a0456e48e01`).
+
+With the three engines done the list's `epoch` is 6, and AGENTS.md open item 105 is empty.
+
 **The pinned reproducers.** Their epoch-6 images are the list's `stack-old` (`38f503b1…`) and
 `stack-fix` (`cd7d31c8…`), copied to `~/hydo/build/rel060`. They give `db33d71069816103`
 (VIOLATION, order 11) and `c421af1ccb714225` (OK) on hvx, and `96b8fd4017db3274` and
