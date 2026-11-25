@@ -384,8 +384,8 @@ record about 600 messages next to its other output, and a KVM or Mac run about 4
 
 Each declared claim is checked separately. "Acknowledged message" means a message with a send
 item whose outcome is `ok`. "A group that must receive m" means every group of m's channel whose
-first completed `sub` (with `from=now`) or `recv` precedes m's send invocation, and every group
-subscribed `from=start`.
+first completed `sub` (with `from=now`) or `recv` precedes m's send invocation, every group
+subscribed `from=start`, and since Milestone 360 every group that received m.
 
 ### no-loss (`delivery: at-least-once`, `exactly-once`; per group with `fan_out`)
 

@@ -267,16 +267,73 @@ fn loss_witness(ix: &Ix<'_>, m: &Msg, g: &Gk) -> (Witness, String) {
     (w, extra)
 }
 
+/// Why no acknowledged message could be judged: no drained record at all, drained records of
+/// other channels only, or drained groups that did not have to receive any acknowledged message
+/// (each one's first completed `sub` or `recv` came after the sends, and it received none of
+/// them). The trial of Milestone 359 got the first words for the third case, while its drain
+/// had written the record (Milestone 360).
+fn no_drained_group(ix: &Ix<'_>) -> String {
+    let chans: BTreeSet<&str> = ix
+        .msgs
+        .values()
+        .filter(|m| ix.acknowledged(m))
+        .map(|m| m.q.as_str())
+        .collect();
+    let list = |v: Vec<String>| v.join(", ");
+    let drained: Vec<&Gk> = ix
+        .groups
+        .iter()
+        .filter(|(_, g)| g.drained.is_some())
+        .map(|(k, _)| k)
+        .collect();
+    let chan_names = list(chans.iter().map(|q| format!("channel {q}")).collect());
+    if drained.is_empty() {
+        return format!(
+            "no group has a drained record, and the acknowledged messages of {chan_names} \
+             wait to be judged: the check's final: drain must write `drained <channel> \
+             <group>` when it has read everything"
+        );
+    }
+    let same: Vec<&&Gk> = drained
+        .iter()
+        .filter(|g| chans.contains(g.0.as_str()))
+        .collect();
+    if same.is_empty() {
+        return format!(
+            "the drain wrote drained records only for {}, and the acknowledged messages were \
+             sent to {chan_names}: the drain must write `drained <channel> <group>` with the \
+             channel the messages were sent to",
+            list(drained.iter().map(|g| gname(g)).collect())
+        );
+    }
+    format!(
+        "{} {} drained, but no acknowledged message had to reach {}: {} first completed `recv` \
+         or `sub` came after every acknowledged send of its channel, and {} received none of \
+         them. A named group receives the messages sent after it joined. When the group exists \
+         before the sends, record `sub <channel> <group> from=start` before them (hydo guide \
+         messages, \"Record the history\")",
+        list(same.iter().map(|g| gname(g)).collect()),
+        if same.len() == 1 { "was" } else { "were" },
+        if same.len() == 1 { "it" } else { "them" },
+        if same.len() == 1 { "its" } else { "each one's" },
+        if same.len() == 1 { "it" } else { "they" },
+    )
+}
+
 /// `every`: fan-out (every drained group that must receive it); else no-loss (at least one).
 pub fn no_loss(ix: &Ix<'_>, every: bool) -> Claim {
     let name = if every { "fan-out" } else { "no-loss" };
     let (mut judged, mut und) = (0u64, 0u64);
     let mut any_drained = false;
+    let mut no_group = 0u64;
     for m in ix.msgs.values() {
         if !ix.acknowledged(m) {
             continue;
         }
         let must = ix.must_groups(m);
+        if must.is_empty() {
+            no_group += 1;
+        }
         let drained: Vec<&Gk> = must
             .iter()
             .filter(|g| ix.groups[*g].drained.is_some())
@@ -322,26 +379,22 @@ pub fn no_loss(ix: &Ix<'_>, every: bool) -> Claim {
         }
     }
     if !any_drained && ix.msgs.values().any(|m| ix.acknowledged(m)) {
-        return undecided(
-            name,
-            judged,
-            und,
-            "no group that had to receive the acknowledged messages has a drained record: the \
-             check's final: drain must write `drained <channel> <group>` when it has read \
-             everything"
-                .into(),
-        );
+        return undecided(name, judged, und, no_drained_group(ix));
     }
-    held(
-        name,
-        judged,
-        und,
-        if every {
-            "every acknowledged message reached every drained group that had to receive it"
-        } else {
-            "every acknowledged message was delivered"
-        },
-    )
+    let mut what = if every {
+        "every acknowledged message reached every drained group that had to receive it"
+    } else {
+        "every acknowledged message was delivered"
+    }
+    .to_string();
+    if no_group > 0 {
+        // the trial of Milestone 359 read "20 judged, 0 undecided" for 24 sends without a reason
+        what.push_str(&format!(
+            "; {no_group} acknowledged message(s) not judged: sent before any group of the \
+             channel joined, and received by none"
+        ));
+    }
+    held(name, judged, und, &what)
 }
 
 // ------------------------------------------------------------------ at-most-once

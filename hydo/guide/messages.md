@@ -154,8 +154,10 @@ A send that the system answers with "this deduplication id already exists":
   `fail`. With `duplicates: {by: dedup-id}` that is the promise kept.
 
 The group `-` is the channel's one group, and it exists from the start. A named group must
-receive the messages sent after its first completed `sub` or `recv`, or all of them after
-`sub ... from=start`. A process has one operation in flight, so concurrent consumers use
+receive the messages sent after its first completed `sub` or `recv`, all of them after `sub ...
+from=start`, and every message it received. A consumer whose first `recv` waits for the first
+message joins after the messages sent before it. When the group exists before the sends, record
+`sub <channel> <group> from=start` before them, so that `no-loss` judges every message. A process has one operation in flight, so concurrent consumers use
 different process numbers.
 
 The Rust SDK writes these records with the cargo feature `messages` of `hydo-assert`, which is
