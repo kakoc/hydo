@@ -1977,7 +1977,10 @@ the details are in `docs/HISTORY.md` Milestone 237.
 
 **Continuous integration.** `.github/workflows/ci.yml` runs per push: formatting, clippy, and the
 `fast` tests of the affected packages. `ci-full.yml` runs every test nightly and before a
-release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`.
+release. `docs.yml` runs Vale on the documents (`docs/STYLE.md`). Details: `docs/CI.md`. The
+equivalence corpora of hydo-manifest and hydo-build answer from a copy of the repository's own
+files. They leave out the one `--check` line that depends on the host's files. So they pass on
+the Mac and on the bare-metal machine (M361).
 
 **hydo in a team's CI (stage 1 built, M197).** `docs/design/ci.md` designs hydo as part of a team's
 own continuous integration in stages 0 to 4; stage 1 is built. `hydo ci run` builds the image, or
@@ -2593,12 +2596,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The link-style `<NAME>_PORT` variables are not set.
 
     `docs/design/k8s-import.md` has the whole list.
-115. `hydo-manifest`'s `equivalence::` fails on 134 answers since M239: its `--check` warning
-    for missing `root.files` sources was never recorded. The warning's text depends on the
-    machine, on which Nix paths exist. Before the answers are recorded again, the test must
-    hide the host's `/nix/store` or leave the warning out of the digest (M243). The `hydo`
-    test's recorded answer of `hydo build <stack example> --check` differs on the bare-metal machine
-    for the same reason.
 116. Emulators (M242). They ran on hvx only, with loopback networking: not on the Mac or KVM
     engines, not with `network: bridge`. stripe-mock keeps no state and sends no webhooks, and the
     SMTP proxy records connections, not messages. An emulator's state is lost at a power cut.
@@ -3474,13 +3471,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       error, but no run used such a Docker.
     - `hydo build` compares no image file with the lock file, for any image. A changed file is
       caught by `hydo compose` and fetch-images.sh only.
-    - hydo-build's equivalence corpus has 39 mismatches. On 2026-11-23 one run of the merge of
-      M346 counted 57, and the next run of the same tree 39, the list of `main`; the cause was not
-      found. Six are from M306: two mutants with a
-      `contracts:` key the recorded answers do not list. Twelve are from M329: the known keys of
-      a fake's and a proxy's route. The others name the guest keys of later milestones. Since
-      M354 hydo-manifest's `equivalence::same_as_hydo_build` has four more: the known keys of an
-      emulator entry, which its recorded answers do not list.
 166. The three gaps of a user's onboarding with 0.4.0 (M324, tentative number). What is left:
     - Since M338 the estimate on the Mac counts the whole root and its compressed archive, and
       the build measures the staged root. The estimate takes 8 % for the files' whole pages and
@@ -3799,8 +3789,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `hydo ci run` reports a regression of other parameters as left out (counts, `report.md`,
       a skipped case of `junit.xml`), and builds no second image for it. `hydo explore` replays
       no saved regression, and `hydo-bench` reads no `# params:` line.
-    - `hydo-manifest`'s and `hydo-build`'s equivalence tests fail on 58 and 57 recorded answers
-      (open item 165 lists their causes); none of the mismatches names a regression's key.
 181. What the example `pulsar` left (M356, tentative number):
     - No finding is posted. Finding 1 is pulsar-client-go#1498, with the approved pull request
       1499 open. The example builds its client from that pull request's head, a fork 14 commits
@@ -5008,6 +4996,12 @@ build machine, before 2026-10-13.
   violation records. `hydo stats` refuses two folders. A target folder outside the checkout
   knows its checkout. `hydo ci run` names left-out regressions, and `--reactive` draws one
   service's power loss. Nothing recorded moved
+- M361 (tentative number): the equivalence corpora of hydo-manifest and hydo-build pass again,
+  on the Mac and on the bare-metal machine. Each mismatch was a list of known keys or a mutant
+  of the Meilisearch manifest that M346 changed. The tests answer from a copy of the
+  repository's own files and leave out the host-dependent `root.files` warning. Each file's
+  mutants have their own seed. Their goldens and three answers of `cli.jsonl` are recorded
+  again; no product code changed
 
 ## Where to look
 

@@ -22900,3 +22900,116 @@ service's power, and every other part of each schedule stayed as it was
 `data.dirs` and its placeholder against the first service, the clock scan's `<database>` for a
 known service, the Go SDK's missing call for `drained`, `hydo inspect diagnose --text` that prints
 JSON, and the title `Nsq` for NSQ. Open item 183 lists them with what else is left.
+
+## Milestone 361 (tentative number): the equivalence corpora pass on every machine
+
+The two equivalence tests compare the validator and the builder with recorded answers. They are
+`hydo-manifest`'s `equivalence::same_as_hydo_build` and `hydo-build`'s
+`equivalence::print_and_check_outputs_match_hydo_build`. Each answer comes from a repository
+manifest, a fixture case, or a mutant. A mutant is a repository manifest with one or two seeded
+edits. Since Milestone 239 the tests failed (open items 115 and 165). On `main` at `4f988c40`
+they failed on 58 and 57 answers on this Mac. Their answers also depended on the machine, on the
+checkout, and on where the test program was built. This milestone finds every cause, makes the
+tests independent of the host, and records the answers again. No product code changed: every
+change is in the three test programs and their goldens.
+
+**The 58 and 57 mismatches.** Each Rust message that lists known keys was checked against its
+recorded digest. The script took the keys out of the list one set at a time and hashed the
+message again. A message whose digest then matched the recording differs only in its list of
+known keys:
+
+- `hydo-build`: 39 answers lack `exact_tick` and `path` among the `guest:` keys (21), `if_header`
+  of a fake's route (6), `errors` and `if_header` of a proxy's route (6), and `error_paths` of a
+  `contracts:` entry (6).
+- `hydo-manifest`: 32 answers lack `path` (18), `if_header` (8), `durable` of an emulator entry
+  (4), and `errors` and `if_header` (2).
+
+The other 18 and 26 answers belong to mutants of `hydo/onboard/examples/meilisearch/hydo/hydo.yaml`,
+which Milestone 346 changed. The tests make the mutants from the files as they are now, so after
+an edit a mutant is another manifest than the recorded one, under the same name. With the folder
+`hydo/` of Meilisearch checked out from before Milestone 346, the counts were 39 and 32, every one
+a list of known keys. So no mismatch was a real difference between the two code paths, and no
+code was fixed.
+
+**Why the count changed between runs (open item 165).** On 2026-11-23 one run of the merge of
+Milestone 346 counted 57 and the next run 39. The test reads the checkout that its program was
+built from, and hydo-manifest's test also read `VERSION` from the checkout that holds the
+program. The count is 57 with the Meilisearch folder after Milestone 346. It is 39 with the
+folder before it. So the run that counted 39 read the Meilisearch folder of a checkout without the
+merge, for example through a test program built in that checkout. The record of that day does
+not name the program. Nothing inside the test varies: on this Mac each test passed three times
+in a row with the same answers. Three more things made the answers depend on the place:
+
+- A git-ignored file of the checkout. An image that `fetch-images.sh` saved turns the refusal
+  `image ... does not exist` into an acceptance, and a binary that a build left beside an example
+  removes a `root.files` warning. With an empty Dragonfly image file and two empty Blnk binaries
+  in the checkout, the old hydo-manifest test counted 61 mismatches instead of 58.
+- The host's own files. The `--check` warning about missing `root.files` sources counts the
+  sources that exist. A Nix store path such as `/nix/store/svzgg47md9362vjrq5x9k1djln2pkihj-redis-7.2.4`
+  exists on the bare-metal machine and not on the Mac. A `~/hydo/build/...` source exists in the
+  bare-metal machine's home (open item 115).
+- The pinned input digests of a folder plan covered the git-ignored files of its `hydo/` folder.
+  The recorded digests of Blnk's and Vikunja's folders matched no tracked state of them.
+
+**What changed.**
+
+- Each of the two tests copies the repository's own files into the temporary directory and
+  answers every request from that copy. The copy holds the files of `git ls-files --cached
+  --others --exclude-standard`, with their modes and symbolic links, about 41 MB in 3,893 files.
+  The copy is `<root>` in the answers, so a git-ignored file cannot reach an answer. The pinned
+  digests are taken from the copy too.
+- hydo-manifest's test passes the copy's `hydo/onboard` as `onboard_dir`, so the version comes
+  from the copy's `hydo/VERSION`, wherever the program was built.
+- The `root.files` warning is left out of the compared `--check` lines when a source of the
+  manifest lies outside the copy and the scratch folder. Such a source is an absolute path, a
+  `~/` path, or a relative path that leaves them. The warning of a manifest whose sources are
+  all in the copy stays, for example Blnk's `../bin/...`. The function is `host_neutral` in both
+  tests. The warning's own logic keeps its unit test,
+  `the_check_names_missing_sources_of_root_files`.
+- Each repository file's mutants have a seed of their own, from the digest of its pinned name,
+  and are named by its place in the pinned list: `m<place>.<k>.json` and
+  `mutant<place>.<k>.json`. An edit of one file now changes only its own mutants. A mismatch of a
+  mutant names its file, and says when that file changed since the recording.
+- The `hydo` program's `equivalence::cli_matches_golden` leaves the same warning out of some
+  `hydo build --check` cases. Such a case's manifest names an absolute source, or a relative
+  source that is no tracked file and lies outside the case's folder. A `~/` source stays,
+  because each case has its own HOME. This was the last part of open item 115.
+
+**The recorded answers that changed.** Both goldens were recorded again with `HYDO_BLESS=1`, and
+each diff was checked against the old golden by request:
+
+- `hydo-manifest/tests/golden/answers.txt`. Of the 1,798 requests that are no mutants and are in
+  both goldens, 1,731 kept their answers. 59 changed only in the digest of their `--check` lines:
+  the 30 manifests with sources outside the repository, on both architectures where they load.
+  8 changed in the list of known keys (the fixture cases `v-guest-15`, `v-guest-unknown`,
+  `w-fake-31` and `w-proxy-7`). 107 requests are new, from the 41 files tracked since the last
+  full recording (the Prometheus, GreptimeDB, Pulsar and other examples). 23 read-backs of the
+  image path kept their answers under a new name, because their name holds the request's
+  index. All 10,411 mutant lines are new, from the new seeds.
+- `hydo-build/tests/golden/answers.txt`. Of the 5,422 requests that are no mutants, 5,340 kept
+  their answers. 58 `--check` runs changed only in stdout: the warning of a manifest with
+  outside sources is left out. 24 changed in the list of known keys (fixture cases 299, 315, 367
+  and 378, each on both architectures and with three flags). 328 requests are new, from the
+  newly tracked files. All 7,440 mutant lines are new.
+- `hydo-cli/tests/golden/cli.jsonl`. Three answers lost the warning line: `build
+  examples/shop/hydo.yaml --check` (its source `../../../../build/shop-fixed` is a git-ignored
+  folder of the checkout), `build examples/stack/hydo.yaml --check` (a Nix store path), and the
+  Mac's `build examples-mac/redis/hydo.yaml --check` (29 Nix store paths).
+
+**Proofs.** On this Mac with a private target folder:
+
+- hydo-manifest's and hydo-build's tests passed twice in a row, and a third time with the empty
+  Dragonfly image, two empty Blnk binaries and `build/shop-fixed` placed in the checkout.
+- Before the change, the copy alone gave the same 58 and 57 mismatches as the plain test. The
+  filter alone changed only the answers that this section names.
+- `cargo test -p hydo --test it equivalence::cli_matches_golden` failed on exactly the three
+  answers of `cli.jsonl` in the list of changes before the new recording, and passed after it.
+
+On the bare-metal machine, in its own folder `~/hydo-m361` with its own target folder, the tree
+of this milestone ran without a VM. That machine's `/nix/store` holds 4 entries of
+`redis-7.2.4`. Both tests passed twice in a row (183 s and 165 s each), and
+`equivalence::cli_matches_golden` passed once, with the goldens recorded on the Mac.
+
+**What is left.** Open items 115 and 165 are closed; open item 165 keeps its other entries. The
+read-backs of the image path still carry the request's index in their name, so a new pinned file
+renames the later ones in the next recording. Their answers do not change.
