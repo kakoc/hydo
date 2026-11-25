@@ -218,7 +218,14 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.5.0 was published on 2026-11-22 from the release commit `4d43a6bd`. The
+**Releases.** hydo 0.6.0 is prepared, not published: the release commit `58d443a6`, with
+`hydo-linux-0.6.0.tar.gz` `12fe3299…`, `hydo-mac-0.6.0.tar.gz` (signed and notarized)
+`a303331f…` and `hydo-skill-0.6.0.tar.gz` `7d399d1b…`, each platform built twice to the same
+bytes, in `hydo/dist/out/0.6.0/` of the main checkout. It holds Milestones 340 to 361 at the
+fingerprint epoch 6. Publishing waits for the user's word; the record is the section "The 0.6.0
+release" of `docs/HISTORY.md`.
+
+hydo 0.5.0 was published on 2026-11-22 from the release commit `4d43a6bd`. The
 GitHub release `v0.5.0` holds both tarballs, their sources archives, the Mac signatures, the
 skill archive and `SHA256SUMS`: `hydo-linux-0.5.0.tar.gz` `2b5d45fd…`, `hydo-mac-0.5.0.tar.gz`
 (signed and notarized) `44860817…`, and `hydo-skill-0.5.0.tar.gz` `5eb0f84d…`. The tag's
@@ -5007,6 +5014,13 @@ build machine, before 2026-10-13.
   mutants have their own seed. Their goldens and three answers of `cli.jsonl` are recorded
   again; no product code changed
 
+- The 0.6.0 release (no milestone number): prepared, not published. The version is raised with
+  the skill's four version fields, `hydo-world`, `hydo-world-tls` and `hydo-grpc` are re-pinned,
+  and the released schemas are copied. The re-pins moved 9 hvx and 9 Mac images (docs/REBASELINE.md
+  section 32), and no KVM image. A fresh reader's review found `hydo guide strategies` empty since
+  the Pulsar merge; it is restored. The release commit drops the build tree's path from `bin/hydo`.
+  Both releases were built twice to the same bytes, the Mac one signed and notarized, and verified
+  on hvx and the Mac
 ## Where to look
 
 - `docs/HISTORY.md`: every milestone with its evidence, and the superseded values.

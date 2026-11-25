@@ -22447,6 +22447,187 @@ Milestone 353's proof: `f7d1de1935d77df4` without faults and `da264396142d8e52` 
 `C=12 R=everysec` loses `k:0` (`6a3d1a0456e48e01`). The list's `epoch` is 6, and open item 105 is
 empty.
 
+### The 0.6.0 release, prepared for publication (2026-11-25)
+
+The user chose "Prepare 0.6.0" on 2026-11-24, and publishing waits for the user's word. 0.6.0
+holds everything on `main` after 0.5.0's release commit `4d43a6bd`: Milestones 340 to 361, the
+fingerprint epoch 6 (Milestone 353), and the 0.6.0 re-recording pass. A release with features
+raises the middle number (docs/RELEASING.md step 1). Plans keep `hydo_version: "0.3"`. The kernel
+module did not change since 0.3.1, so no reload was needed, and the guest kernels and every pinned
+asset are 0.5.0's. Nothing was published: no tag, no GitHub release, no registry upload, no tap
+push, no `git push`.
+
+**The commits**, on a branch from `main` at `a0e2fe39`:
+
+| Commit | What |
+|---|---|
+| `f9087c0f` | the version 0.6.0, the skill's four version fields, the re-pins, the released schemas |
+| `a0dc4716` | the goldens that hold the version |
+| `8e63e970` | `hydo guide strategies`: the topic's text again, which the Pulsar merge emptied |
+| `cb02494b` | the values the version moves, docs/REBASELINE.md section 32, release step 6a's fixes |
+| `58d443a6` | a release's `hydo` names no folder of the machine that built it: the release commit |
+
+**The version** (`f9087c0f`). The same files as at 0.5.0. The guest programs that carry the
+version were re-pinned, built on this Mac: `hydo-world` x86_64 `aa351601…`, arm64 `2c750a7b…`;
+`hydo-world-tls` `6e0e0087…`, `0bfc5c8e…`; `hydo-grpc` `976f1aa0…`, arm64 `d2f62365…`. The
+Linux release builds the x86_64 ones on the bare-metal machine, and GitHub's runners built them
+too; both matched the pins. docs/INSTALL.md "Upgrading" says what 0.6.0 changes for images.
+
+**The released schemas.** `project-v1` and `results-v1` differed from their released copies and
+were copied; `hydo-schema-compat` passes.
+
+**The goldens** (`a0dc4716`, recorded again in `cb02494b` with the pages). The CLI goldens, the
+explorer's fake-engine goldens, and the equivalence corpora of hydo-build and hydo-manifest were
+recorded with `HYDO_BLESS=1`. Since Milestone 361 the corpora answer from the repository's own
+files, so they were recorded whole; each answer differs only in the version and the hashes of the
+files that changed. The explorer's corpus and identity goldens and the controller's corpora held
+unchanged.
+
+**The values the version moves** (`cb02494b`; docs/REBASELINE.md section 32). `hydo-bench
+rebaseline --write --thorough --changed-only` with the quick candidates as `--release`:
+
+| Engine | Images moved | Runs moved | Verdicts changed |
+|---|---|---|---|
+| hvx (the bare-metal machine, 3,571 s) | 9 of 43 | 30 of 141 | none |
+| Mac (one image at a time, 674 s) | 9 of 21 | 36 of 76 | none |
+| KVM (run 45644567681, six runners) | 0 of 6 | 0 of 19 | none |
+
+These are the images that moved at 0.3.1 to 0.4.1: those with `hydo-world` or `hydo-grpc`, and
+the SDK examples. Every image built twice with the same bytes, and every moved run gave one result
+twice.
+
+**Release step 6a.** The quickstarts, README.md and docs/ONBOARD.md cited the published 0.5.0's
+values at the fingerprint epoch 5. The quick candidates' runs gave the epoch-6 values: hvx on the
+bare-metal machine, the Mac, the messages tutorial on the Mac, and KVM in the run above. On KVM
+the Redis power cut that loses a key is `C=11 R=everysec` (section 31), and the page says why.
+`tests/docs.rs` dropped the 17 `CITED_ELSEWHERE` entries of epoch-5 values and names the epoch-6
+`wfp` values and the tutorial's fingerprint `45fda597d42cc65f`. The tutorial's exploration no
+longer prints the warning about two passing runs that checked nothing, so the page does not
+quote it.
+
+A fresh reader (a coding agent with the prompt of `skills/hydo-docs/SKILL.md` and only the pages
+and the candidates) read README.md and both quickstarts and ran the Mac quickstart in a folder of
+its own. Every Mac value matched the page. Its findings:
+
+- `hydo guide strategies` printed nothing. The merge of Milestone 356 (`3bac22f8`) had left
+  `hydo/guide/strategies.md` empty, although both parents had it. `8e63e970` is the three-way
+  merge of the parents over their base `e1b47cef`; both sides' entries are kept.
+- Fixed in the pages: where `~/.hydo` is after `cargo install hydo`; `hydo setup`'s check of the
+  Mac engine's signature; the fingerprints of the `O=` and `tj=` runs; why the exploration draws
+  no pause or clock step (`--new-faults`) and what `violations=` counts; "sections 2 and 3"; the
+  order of the report's problems; the CPU of the Linux fingerprints named before the first
+  values; `--no-module` for the KVM doctor; Nix and network are not needed; two README sentences.
+- The candidates carried the pages before these fixes and an engine signed ad hoc; the final
+  builds carry the fixed pages, and the Mac one is signed and notarized.
+- Deferred, with the reasons in the release notes: the README's animation (since 0.4.0), the old
+  paths in the Redis example's comment (inside the image's bytes, open item 28), and two
+  explanations that stay for readers with older images.
+
+**The release commit `58d443a6`.** The first final builds, of `cb02494b`, gave two Linux tarballs
+that differed in `bin/hydo`. Milestone 360 (`c019a297`) had compiled the crate's source path,
+`option_env!("CARGO_MANIFEST_DIR")`, into every `hydo`, so a hydo in a target folder outside its
+checkout knows the checkout. `--remap-path-prefix` does not reach that string, so each build named
+its own tree, and the Mac build named its folder under the temporary directory. Both release
+scripts now compile the host programs with `--cfg hydo_release`, and such a build has no source
+path. A build of a checkout keeps it, and the two tests of the outside target folder pass. The
+first builds and their notarized signatures were thrown away. The release commit is
+`58d443a68ab2232bb640ab3a76c465b2a108a052`.
+
+**The release files**, each platform built twice from clean targets with the same bytes:
+
+- Linux on the bare-metal machine (`~/hydo-rel060r/f1` and `f2`, unpacked under umask 022,
+  `/var/tmp/hydo-QUIET` while building, assets `~/hydo-rel040-assets`, sources
+  `~/hydo-m159-sources`; 495 s and 492 s).
+- Mac on this Mac (one fixed tree path, the sources cache from 0.5.0's Mac sources archive, the
+  kernels with cgroups and for containers from 0.5.0's Mac tarball; 328 s and 327 s): unsigned
+  `hydo-mac-0.6.0.tar.gz` `4f6f0dbf7e02d8bef5612417b01694b36b92b873ea3b2747d0990efa55607e7a` (not
+  published). `sign-release.sh` on the first build: notarization
+  `cd8bd89b-56af-45eb-b0bd-9ca26d0ca604` Accepted; `attach-signatures.sh` with the asset on the
+  second build gave the signed tarball byte for byte.
+- The skill's archive came out of all four builds with the same bytes, and of both quick
+  candidates too.
+
+  | File | Bytes | sha256 |
+  | --- | --- | --- |
+  | `hydo-linux-0.6.0.tar.gz` | 90,988,269 | `12fe329969b52e5d355ff1cdb44f3f0155acac7c96c122973f76b0d609ec8094` |
+  | `hydo-linux-0.6.0-sources.tar.gz` | 482,569,377 | `ee9d6451865f7f4994083b05fbcc6b80fc58cff7d4fa08cc013fcb5bbc629ff4` |
+  | `hydo-mac-0.6.0.tar.gz` (signed) | 48,495,374 | `a303331f600d9b8c1d0dac76f2b0221bda8fe4c8fbe7ffcec7c05b2c22bcf9eb` |
+  | `hydo-mac-0.6.0-sources.tar.gz` | 690,063,385 | `854d089e3f70bf3ae954cc49890c883693d36bac6971a9cbcdea1d0d09adc7ea` |
+  | `hydo-mac-0.6.0-signatures.tar.gz` | 101,586 | `387d53dbfa022d91a9d1307936885724ce469521d93974d36596fe170ec66ed7` |
+  | `hydo-skill-0.6.0.tar.gz` | 12,263 | `7d399d1be2200e3857f73764bff71a6935835f609a9f80c2c4a374878adc46ff` |
+
+- All six and `SHA256SUMS` are in `hydo/dist/out/0.6.0/` of the main checkout; the release
+  notes, the Homebrew formula, the release-index lines and the notary answer and log are in
+  `prepared/`.
+- Against 0.5.0's tarballs: no file added or removed (508 and 462 files). Both differ in the
+  programs, `guest/hydo-world`, `guest/hydo-world-tls`, the quickstart or release README,
+  `THIRD-PARTY.md`, the two `VERSION` files, MANIFEST.md and three files of the skill; Linux also
+  in `guest/hydo-grpc` and `libexec/hydo-grpc-gen`. No guest kernel, pinned asset or other guest
+  program changed.
+
+**Verified from clean prefixes.**
+
+- Mac (the signed tarball with the quarantine attribute on `bin/*`, stubs for Python, pip, Go,
+  cargo, rustc, rustup, Nix, the compilers, make, xcrun and Docker, none called): `hydo setup
+  --check` exits 0; `hydo doctor` all checks passed, naming the Developer ID; the four programs
+  `codesign --verify --strict` valid, `flags=0x10000(runtime)`, `spctl` "accepted,
+  source=Notarized Developer ID"; the image `502d7540…` built twice the same, and every Mac value
+  twice (`f7d1de1935d77df4`, `6a3d1a0456e48e01`, `da264396142d8e52`, `53c4fe14fd016a0c`,
+  `e77ede27f3996aa6`, the lying disk `0f7168f3aaa07755`, `3dfd6c20fa7667e8`, ledger-spin
+  `da61021ce293277c` and `c3659d6233d6e14b`); the exploration 11 failures in 3 problems, 15 of 15
+  reproduced; `hydo report --html`, `hydo init`, `hydo onboard`, and `hydo guide strategies`
+  (77,723 bytes). `hydo --version` prints `hydo 0.6.0
+  (58d443a68ab2232bb640ab3a76c465b2a108a052)`. `hydo update --check` against GitHub's real
+  release list: "0.6.0, newer than the newest release 0.5.0; kept".
+- hvx (the bare-metal machine, a PATH whose Python, Go, Rust, Nix, compilers and make are traps;
+  none was called): `install.sh --no-module`; `hydo --version` names the release commit; `hydo
+  doctor` 0 failed, 1 warning (it names `hydo module build`); the Redis image `8fae6946…` built
+  three times the same; `2f5a6dc34e0c8ba6` OK, `f2715295eae4d5a2` VIOLATION k:1,
+  `47ae607ed0a15c48` OK and the lying disk `ac9baef50ca34043`, each twice as the user and twice as
+  root; `hydo repro` of a run reproduced; the exploration 9 failures in 3 problems, `hydo repro
+  hydo-out/explore` 13 of 13; `hydo report` and `hydo report --html`; netem `15a88e79…`
+  `95b9691f0b29d173` twice; `hydo init` with `hydo_version: "0.3"` and the two placeholder
+  warnings; `hydo onboard` with a Compose file prints `First:` and `Next:`; `hydo module build`
+  from a second prefix: srcversion `91D86B693F4D4035C368F9B`, "same source as this release"
+  (built only); `hydo update --check` as on the Mac.
+- KVM: the one-off workflow `tmp-rel060c-kvm` (`05d9ae0f`: the release commit plus its workflow)
+  takes the final Linux tarball from a draft release `candidate-0.6.0`, installs it into a clean
+  prefix, runs the quickstart with `--backend kvm`, the exploration and its repro, `hydo-bench
+  rebaseline --platform kvm --check --thorough`, `kvm-check.sh` and `smp-check.sh` on six
+  runners. The draft and the push wait for the lead; the run is still to come. The quick
+  candidate's programs gave the list's KVM values in run 45644567681.
+
+**Checks on the release commit**, on this Mac: `cargo fmt --all --check`, `cargo clippy --locked
+--workspace --all-targets -- -D warnings`, `ci/consolidate-tests.sh --check`, and `sh ci/vale.sh`
+with no findings; `git grep -i` of the competitor names finds only research notes. `cargo test
+--locked --release --workspace --no-fail-fast` with a target folder outside the checkout: 61 test
+results, 1,355 passed, 0 failed, 2 ignored (649 s). The two tests that failed with such a target
+folder at 0.5.0, and the equivalence corpora, pass.
+
+**Re-baseline checks on the release files** (`--check --thorough`): this Mac, 21 images each
+built twice with the same bytes and 76 schedules each run twice from fresh boots, every value as
+recorded (973 s, the signed tarball installed). The bare-metal machine: 43 images and 141 schedules with
+  the second Linux build's tree and tarball, running at the hand-back (job `after` in
+  `~/hydo-rel060r`); its result is still to be recorded.
+
+**Content scans** (as 0.5.0's): the Linux tarball: the GitHub owner only in the project's public
+names, the hosting company's letters as accidental bytes of binary third-party files (the
+kernels, the initramfs, glibc, an iproute2 manual page and the public suffix list) and of the
+compressed archives, the time-zone name in libstdc++, and loopback, guest and example addresses;
+no home path, no remote-shell command, no competitor name. The signed Mac tarball: the owner in
+the public names, the hosting company's letters as bytes of the compressed archive, and the
+time-zone name in libstdc++. The skill's archive: the owner in the public names. The signatures
+asset: nothing. Both sources archives' own files: the owner in RELEASING.md's tap name and a
+GitHub Actions run link of BUILD-PINS.md; the dotted quads are loopback, guest and version
+numbers.
+
+**What is left before publishing.** Release step 7 onward, the user's: the GitHub release
+`v0.6.0` on `58d443a6` with the six files and `SHA256SUMS` (the release notes are
+`prepared/release-notes-0.6.0.md`), the release workflow, the Homebrew tap
+(`prepared/hydo.rb`), and the release index's lines (`prepared/releases-0.6.0.lines`). The
+branch with the release commit comes to `main` with step 7, because Claude Code's marketplace
+reads the skill's version from `main`.
+
 ## Milestone 358 (tentative number): the features of `main` since 0.5.0 on hvx and KVM
 
 Status: done on 2026-11-25 on hvx and KVM. One fix, of the hvx engine that a checkout's hydo
