@@ -84,9 +84,25 @@ pub fn explore_config(ctx: &Ctx) -> hydo_config::Config {
 }
 
 /// The run engine's program (`bin/hydo-hvx`; `HYDO_HVX_EXPLORE` overrides it), started when the
-/// engine cannot run in this process (see `hydo_engine::hvx`).
+/// engine cannot run in this process (see `hydo_engine::hvx`). A hydo built in a checkout takes
+/// the `hydo-hvx` built next to it: its root is the install cache or `HYDO_RELEASE_DIR`'s
+/// release tree, whose engine is another version's (Milestone 358).
 pub fn engine(ctx: &Ctx) -> PathBuf {
+    if ctx.config.engine.program.is_none() && ctx.checkout.is_some() {
+        let exe = std::env::current_exe().and_then(|p| p.canonicalize());
+        if let Some(p) = exe.ok().as_deref().and_then(sibling_engine) {
+            return p;
+        }
+    }
     hydo_engine::hvx::program(&ctx.root, &ctx.config.engine)
+}
+
+/// The `hydo-hvx` program in the folder of the `hydo` program `exe`, when it is there.
+fn sibling_engine(exe: &Path) -> Option<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+    let p = exe.parent()?.join("hydo-hvx");
+    let m = std::fs::metadata(&p).ok()?;
+    (m.is_file() && m.permissions().mode() & 0o111 != 0).then_some(p)
 }
 
 pub fn bzimage(ctx: &Ctx) -> PathBuf {
@@ -95,4 +111,29 @@ pub fn bzimage(ctx: &Ctx) -> PathBuf {
 
 pub fn initrd(ctx: &Ctx) -> PathBuf {
     ctx.guest().join("initramfs-kafka.cpio.gz")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sibling_engine;
+
+    /// Milestone 358: a checkout's hydo takes the hydo-hvx built next to it, and nothing when
+    /// that folder has none, or only a file that cannot run.
+    #[test]
+    fn a_checkout_build_takes_the_engine_built_next_to_it() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = std::env::temp_dir().join(format!("hydo-hvxenv-sibling-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let exe = d.join("hydo");
+        std::fs::write(&exe, "").unwrap();
+        assert_eq!(sibling_engine(&exe), None);
+        let eng = d.join("hydo-hvx");
+        std::fs::write(&eng, "").unwrap();
+        std::fs::set_permissions(&eng, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(sibling_engine(&exe), None);
+        std::fs::set_permissions(&eng, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(sibling_engine(&exe), Some(eng));
+        let _ = std::fs::remove_dir_all(&d);
+    }
 }
