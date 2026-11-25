@@ -2406,6 +2406,15 @@
           "format": "uint64",
           "minimum": 0
         },
+        "unfired_reactions": {
+          "description": "First runs whose schedule has a reaction (`A=`) that never fired: its event did not come\nafter it was armed, so the run did not test it (added in Milestone 355). Absent when\nevery reaction fired or no schedule had one.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
         "refused": {
           "description": "First runs the engine refused before running them (a combination of host tokens it\ncannot arm, a host token it cannot apply): their run records have the class `refused`,\nand they are not failures (added in Milestone 208).",
           "type": [

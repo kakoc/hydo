@@ -399,7 +399,7 @@
           "format": "int64"
         },
         "outcomes_after_cut": {
-          "description": "After a power cut the recovery boot's $HYDO_OUTCOMES starts with the first boot's last\noutcome of every id (without it the file starts empty there).",
+          "description": "After a power cut the recovery boot's $HYDO_OUTCOMES starts with the first boot's last\noutcome of every id (without it the file starts empty there). On by default for images\nbuilt at fingerprint epoch 6 and later; an image built earlier keeps it off (the schema's\ndefault is that of the released format). false: the file starts empty there.",
           "type": [
             "boolean",
             "null"
@@ -495,6 +495,14 @@
             "null"
           ],
           "default": true
+        },
+        "path": {
+          "description": "Every command that hydo starts in the guest (the workload's, the checks', a service's\nown) gets PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin in its\nenvironment, so a program that such a command starts finds the guest's programs, hydo-oci\namong them, by name. Without it the commands have no PATH: busybox's shell finds the\nprograms, but Go's exec.Command(\"hydo-oci\") does not. Off by default for images built at\nfingerprint epoch 5 and earlier, because the variable is in guest RAM and so in every\nfingerprint (Milestone 348); on for images built at epoch 6 and later.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
         },
         "description": {
           "anyOf": [
@@ -2224,6 +2232,17 @@
             }
           ],
           "default": "none"
+        },
+        "acked_outcome": {
+          "description": "Every acknowledged send ends in the final state that the check's `final:` reads back\n(`status` records): succeeded, or failed with an error the client causes.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgAckedOutcomeClaim"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false
@@ -2580,6 +2599,75 @@
         "none",
         "fifo",
         "unordered"
+      ]
+    },
+    "MsgAckedOutcomeClaim": {
+      "description": "none, success, or a mapping with client_errors: and effect:.",
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MsgAckedOutcome"
+            },
+            {
+              "$ref": "#/$defs/ParamRef"
+            }
+          ]
+        },
+        {
+          "$ref": "#/$defs/MsgAckedOutcomeSpec"
+        }
+      ]
+    },
+    "MsgAckedOutcome": {
+      "description": "type: messages: whether every acknowledged send ends as acknowledged.",
+      "type": "string",
+      "enum": [
+        "none",
+        "success"
+      ]
+    },
+    "MsgAckedOutcomeSpec": {
+      "type": "object",
+      "properties": {
+        "client_errors": {
+          "description": "The errors (`e=` of a status item) that the client causes, each a code or a pattern with\n`*`: a failed final state with one of them keeps the claim.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/Text"
+          }
+        },
+        "effect": {
+          "description": "recorded: the read-back records whether each operation's effect is there (`f=1` or\n`f=0`), and a final state that contradicts it breaks the claim.",
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MsgEffect"
+                },
+                {
+                  "$ref": "#/$defs/ParamRef"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "none"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MsgEffect": {
+      "description": "type: messages: whether the read-back records each operation's effect.",
+      "type": "string",
+      "enum": [
+        "none",
+        "recorded"
       ]
     },
     "MessageMeasures": {
@@ -3454,6 +3542,14 @@
           "items": {
             "$ref": "#/$defs/Text"
           }
+        },
+        "durable": {
+          "description": "s3: true makes every write that the emulator acknowledged survive a power cut of the guest\n(Milestone 354; default false). The data folder and its buckets get ext4's attribute S\n(chattr +S), so each write and each change of a folder reaches the disk before rclone\nanswers.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": false
         },
         "addr": {
           "description": "The emulator's service's address (Milestone 316). With network: bridge the default is\nthe first free one of 10.89.1.1, 10.89.1.2, ...",
@@ -4695,6 +4791,16 @@
               "type": "null"
             }
           ]
+        },
+        "params": {
+          "description": "The build parameters the regression needs, name -> value (a file's `# params: k=v`;\nadded in Milestone 355). `hydo repro --regressions` runs it only on an image built with\nthese values, and says which image to build otherwise.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "$ref": "#/$defs/Text"
+          }
         }
       },
       "additionalProperties": false,
