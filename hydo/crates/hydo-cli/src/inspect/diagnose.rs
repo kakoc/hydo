@@ -50,8 +50,25 @@ pub fn verdict_service(v: &str) -> Option<String> {
         if let Some(s) = r.strip_suffix(" restart failed") {
             return Some(s.to_string());
         }
+        // Milestone 355: a storage fault's restart says why it was restarted (`ERROR S restart
+        // failed (after its power loss)`, `(its files were corrupted)`)
+        if let Some((s, why)) = r.split_once(" restart failed (") {
+            if why.ends_with(')') && !s.is_empty() && !s.contains(' ') {
+                return Some(s.to_string());
+            }
+        }
     }
     None
+}
+
+/// Milestone 355: why a storage fault restarted the service a verdict names: the words in the
+/// parentheses of `ERROR S restart failed (after its power loss)`.
+fn restart_reason(v: &str) -> Option<&str> {
+    let r = v
+        .trim_start_matches("HYDO-ORACLE: ")
+        .strip_prefix("ERROR ")?;
+    let (_, why) = r.split_once(" restart failed (")?;
+    why.strip_suffix(')')
 }
 
 fn ram_mib(rec: &Recorded) -> u64 {
@@ -224,8 +241,14 @@ fn host_from(rec: &Recorded, evs: Vec<AgentEv>) -> Option<Diagnosis> {
             }
         });
         let _ = last_spawn;
+        let restarted_after = restart_reason(&v).map(|why| match why {
+            "after its power loss" => "while it was restarted after its power loss".to_string(),
+            w => format!("while it was restarted ({w})"),
+        });
         let what = if conv == Conv::Recovery {
             "while it started in the recovery boot after the power cut"
+        } else if let Some(w) = &restarted_after {
+            w.as_str()
         } else if core.contains("restart")
             || core.contains("after the faults")
             || core.contains("without faults")
@@ -1572,6 +1595,19 @@ mod tests {
             .as_deref(),
             Some("tigerbeetle_0")
         );
+        // Milestone 355: a storage fault's restart names its reason
+        let lost = "HYDO-ORACLE: ERROR kv2 restart failed (after its power loss)";
+        assert_eq!(verdict_service(lost).as_deref(), Some("kv2"));
+        assert_eq!(restart_reason(lost), Some("after its power loss"));
+        assert_eq!(
+            verdict_service("HYDO-ORACLE: ERROR n1 restart failed (its files were corrupted)")
+                .as_deref(),
+            Some("n1")
+        );
+        assert_eq!(
+            restart_reason("HYDO-ORACLE: ERROR tigerbeetle_0 restart failed"),
+            None
+        );
         assert_eq!(verdict_service("HYDO-ORACLE: ERROR provision failed"), None);
         assert_eq!(verdict_service("HYDO-ORACLE: VIOLATION [x] y"), None);
     }
@@ -1772,6 +1808,57 @@ mod fixtures {
             .collect();
         v.sort();
         v
+    }
+
+    /// Milestone 355: after one service's power loss (`L=`) whose restart failed, the diagnosis
+    /// names the service and quotes its log, as after a whole-guest cut. Before, the verdict's
+    /// `(after its power loss)` hid the service, and the line quoted nothing.
+    #[test]
+    fn a_failed_restart_after_a_power_loss_quotes_the_service_log() {
+        let dir = std::env::temp_dir().join(format!("hydo-diag-lossy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, bytes) in files(&fixture("badconf")) {
+            let bytes = match String::from_utf8(bytes) {
+                Ok(text) => text
+                    .replace(
+                        "ERROR service start (redis)",
+                        "ERROR redis restart failed (after its power loss)",
+                    )
+                    .into_bytes(),
+                Err(e) => e.into_bytes(),
+            };
+            std::fs::write(dir.join(name), bytes).unwrap();
+        }
+        let rec = Recorded::load(&dir).unwrap();
+        let mut g = host(&rec).unwrap();
+        assert_eq!(g.service.as_deref(), Some("redis"), "{}", g.summary);
+        assert_eq!(g.failure, "service-exited");
+        assert!(
+            g.summary
+                .starts_with("redis exited while it was restarted after its power loss"),
+            "{}",
+            g.summary
+        );
+        // the evidence reads the named service's log first, and the summary quotes its end
+        let log = "Failed to open the database: Corruption: Sst file size mismatch\n";
+        g.evidence.push(Evidence {
+            what: "the log of redis".into(),
+            source: "/tmp/hydo/redis.log".into(),
+            text: log.into(),
+            bytes: log.len() as u64,
+            truncated: false,
+            status: None,
+        });
+        refine(&mut g);
+        assert!(
+            g.summary.contains(
+                "; its log ends: Failed to open the database: Corruption: Sst file size mismatch"
+            ),
+            "{}",
+            g.summary
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
