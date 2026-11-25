@@ -2607,7 +2607,8 @@ A regression that needs other build parameters than the project's defaults names
 the build has other values it warns and names the `hydo build --set` that makes the
 regression's image. `hydo repro --regressions` replays such a regression only on an image built
 with its values (the image's `/etc/hydo/params`). On another image it prints `SKIP` with that
-build command, and the summary counts it apart. For example, a finding that needs the client's
+build command, and the summary counts it apart. `hydo save` writes the line itself when the
+exploration's image was built with values other than the defaults (Milestone 360). For example, a finding that needs the client's
 other mode keeps its own build:
 
 ```

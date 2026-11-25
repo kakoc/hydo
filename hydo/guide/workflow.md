@@ -236,7 +236,10 @@ hydo save <explore dir>                       # the minimal schedules -> hydo/re
 ```
 
 A saved regression that needs other build parameters names them on a line of its file, for
-example `# params: mode=master`. `hydo build` warns when its own `--set` values differ and names
+example `# params: mode=master`. `hydo save` writes the line when the exploration's image was
+built with values other than the defaults of `params:` (`hydo build --set`). It gives a finding
+whose file name is taken by another finding the next free name, `<name>-2.schedule`, and keeps a
+finding that it saved before. `hydo build` warns when its own `--set` values differ and names
 the build that makes that regression's image. `hydo repro --regressions` replays the regression
 only on an image built with those values, and on another image prints `SKIP` with the build
 command.
