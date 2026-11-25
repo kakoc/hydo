@@ -579,6 +579,11 @@ pub fn faults_of(schedule: &str) -> Vec<(String, Option<String>, Option<u64>)> {
                     ("cut", None, step)
                 } else if let Some(s) = svc("kill-now-").or_else(|| svc("kill-")) {
                     ("kill", Some(s), step)
+                } else if let Some(s) = svc("powerloss-") {
+                    // Milestone 360: a power loss of one service, as `L=` (the trial of
+                    // Milestone 359 read it as a reaction not in faults: beside "power losses of
+                    // one service were never drawn")
+                    ("powerloss", Some(s), step)
                 } else if action.starts_with("kill") {
                     ("kill", None, step)
                 } else if action.starts_with("stop") {
@@ -1459,6 +1464,11 @@ mod tests {
             ]
         );
         assert!(faults_of("disk=none dseed=4 | run").is_empty());
+        // Milestone 360: a reaction's power loss of one service is a power loss of one service
+        assert_eq!(
+            faults_of("disk=none dseed=0 | run A=nsq.msg_received@2+500:powerloss-nsqd"),
+            vec![("powerloss".to_string(), Some("nsqd".to_string()), Some(2))]
+        );
     }
 
     #[test]

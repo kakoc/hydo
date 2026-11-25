@@ -198,3 +198,20 @@ fn an_aimed_exploration_runs_its_grid() {
         assert!(events.contains(want), "{want}: {events}");
     }
 }
+
+/// Milestone 360: `hydo stats` of two folders printed the second alone (the trial of Milestone
+/// 359); it refuses them with one line that names both.
+#[test]
+fn stats_of_two_folders_is_refused() {
+    let o = Command::new(env!("CARGO_BIN_EXE_hydo"))
+        .args(["stats", "hydo-out/blind", "hydo-out/aimed"])
+        .current_dir(std::env::temp_dir())
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(!o.status.success());
+    assert!(
+        err.contains("one exploration at a time, and hydo-out/blind and hydo-out/aimed are two"),
+        "{err}"
+    );
+}

@@ -385,8 +385,10 @@ record of the host, so it changes no run, no fingerprint, and no verdict. It has
   clock (VM exits on the Mac and KVM engines), the host CPU, and the largest resident memory.
   Each worker's time is split into busy, starting its engine, waiting for a quiet window, and
   idle.
-- The faults drawn. Each fault kind has its runs, its targets, and its workload steps. The kinds
-  that `faults:` allows and no schedule drew are listed, each with the option that draws it.
+- The faults drawn. Each fault kind has its runs, its targets, and its workload steps. A
+  reaction (`A=`) counts under the kind of its action: `kill-<svc>` as a crash, `cut` as a power
+  cut, and `powerloss-<svc>` as a power loss of one service. The kinds that `faults:` allows and
+  no schedule drew are listed, each with the option that draws it.
 - An estimate. It says how many first runs fit in a time budget with N workers, or on N machines
   with `--shard I/N`.
 
@@ -395,6 +397,9 @@ hydo stats                                    # hydo-out/explore
 hydo stats <explore dir> --budget 2h --workers 4 --shards 8
 hydo stats <explore dir> --json               # the document, with the asked estimate
 ```
+
+`hydo stats` reads one exploration. It refuses two folders: run it on each, or make one
+exploration of the shards of one with `hydo explore --merge`.
 
 On the Mac engine the Redis quickstart's `hydo explore --seeds 1-60 --strategy swarm --workers 4`
 took 62 s, and `hydo stats` began with this:
