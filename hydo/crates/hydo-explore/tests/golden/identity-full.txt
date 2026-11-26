@@ -49,6 +49,7 @@ input	hydo/onboard/examples/redis/hydo-proxy.yaml	7a3da7d13479918d735f09797cabca
 input	hydo/onboard/examples/redis/hydo.yaml	c34c172a137dd89e266d8e4e73288f9d9dc73dadf952d5b9c4a03f3547d5e443
 input	hydo/onboard/examples/restate-oci/hydo.yaml	e538bbdc96d793f567287dd0dd8c2d26c35ba669a2d7631653fa6c6afd9e6509
 input	hydo/onboard/examples/rust-kv/hydo.yaml	417a6848bf266242b33f2191e4eb173ad8e3187d53c444c03dcc7c7b68615bea
+input	hydo/onboard/examples/service-clocks/hydo.yaml	c69afc21d3128e7d67de9de2fbe3e421c9040a825cbb4cd12f0d0ad2f1ff40da
 input	hydo/onboard/examples/shop/hydo.yaml	eaacf3830712aae4e796373238760925ec2a4eb282f51c21002d3da8a58d31f8
 input	hydo/onboard/examples/stack-grpc/hydo.yaml	9bb05f0cbaf593b685f2ff6d6dff6f362c76f31595397f30825567c78a0afa6d
 input	hydo/onboard/examples/stack/hydo-errors.yaml	e72c82ce5173231f6f7cc425e23b8a6247b22b0db020a8a983aac4968dc302ba
@@ -646,7 +647,7 @@ input	hydo/onboard/examples/typesense/hydo/fetch-images.sh	abd43c56c069e3b69d836
 input	hydo/onboard/examples/typesense/hydo/hydo-compose.lock.json	6692ccce3b9a3b71bdfd7c1704043fca78fa88888a04cfbcf538c9a084ea2990
 input	hydo/onboard/examples/typesense/hydo/regressions/README.md	12626dbf5d05271968e602d2f27283b99d4e2df749d5cc83d8e4678a5ddf7664
 input	hydo/onboard/examples/typesense/hydo/regressions/export-and-batched-delete-stop-after-a-backward-clock-step.schedule	1facf4b42922787422c72edd639a1e9bcb9289f0021b2add68fd3a640bd18ae3
-input	hydo/onboard/examples/typesense/hydo/regressions/follower-lacks-documents-after-a-restart.schedule	ec9a5cde3b014aab4681143b419f094710174c1977bab4be86a290458b0d49b8
+input	hydo/onboard/examples/typesense/hydo/regressions/follower-lacks-documents-after-a-restart.schedule	3fe48e80ca36eda400d3370028218868c7fdc61d0a194cd52edb75a3e06ba9b2
 input	hydo/onboard/examples/typesense/hydo/regressions/no-election-after-a-backward-clock-step.schedule	3757aa70fe140e13714094251d9238aa5017ad8f2967787fdd8af97f892713b1
 input	hydo/onboard/examples/typesense/hydo/workload/anytime_leader	c27a58d4ff8fc781fd90a85de490ebd28fa59f563e378f0b15d73eb1ebbad031
 input	hydo/onboard/examples/typesense/hydo/workload/anytime_read	1de65065f5d143fb78e232729fb64d5be8649c0abbc40b8c238f87056b0f1a03
@@ -2224,6 +2225,31 @@ chunk	hydo/onboard/examples/rust-kv/hydo.yaml/hvm/FalseFalse	7	256	585b076d20861
 chunk	hydo/onboard/examples/rust-kv/hydo.yaml/hvm/FalseFalse	8	256	453a775bb311e0cdb03111a0fa12d871491eda5e863ff6b0adf50d30ed160593
 chunk	hydo/onboard/examples/rust-kv/hydo.yaml/hvm/FalseFalse	9	256	954a935bdcf0ed8306a3f1ac392e9171ecb3d943a5e1210801328b6c7df99f50
 chunk	hydo/onboard/examples/rust-kv/hydo.yaml/hvm/FalseFalse	10	159	e8df8fea7eb40c12906374258f114f701f081befadd83c76aca6e99ff333ed9a
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvx	0	256	857a26865e49777c110d15a48546cd9dfd667173a407685740694fc893f5ce90
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvx	1	256	7489b66cab9d10cc3df277552e7b21dbf3bc8b8c119ae373b8165fef11de8b7b
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvx	2	256	8fddd12d7822295435ad304d7e51c45492806d0e97cdb585b839fa763daf919b
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvx	3	256	648a42dcfe8d067394195e237ab17ff6eb2359de12b07e821008aa8123bcf0f2
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvx	4	256	79962915da14b8e8e5f540b5b5f88c2d0a77dd26e5f1b30412364b53a0933451
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvx	5	256	013f7ac892eb43ca517bdaa91a307de6160bc2d38321e482c41e205c93e0c67b
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvx	6	256	3d35977b9936718a3021b3a061675f3174f0502bcf9a7543cb5baa4d8ef1c48d
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvx	7	256	5679a0298f63a5295040a8ecafcdb060d1c9128645dab320f90859929ad5beff
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/TrueTrue	0	256	b25bf4a296ca137702f27b4af56de8c596c07737b60dbbebe1e0c141165e24a8
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/TrueTrue	1	256	d4b8a0a97e669d8b8ebecdfb2b31af45f1ab6c08f1166e4223e6437534df5c1c
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/TrueTrue	2	256	ccb3851b0d4dedfb98d1e043bd3d49122cfa6dd270ea56108c5bc66959a5ba27
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/TrueTrue	3	256	5a36c32a8db883e77dbe1041fae62cba97b5f581651e00f5f323c241616d6e95
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/TrueTrue	4	256	868eb603a9b6d764e39ab3a222cc09924db34fda31ebedbc8e0f62fe0bb26a1d
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/TrueTrue	5	256	44a90f89724228d3318b3e76a7552a9d968177d83c84ed3081ac936a5fd0401e
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/TrueTrue	6	256	b74a27a1d60e0caa240eb15406e2daea38e22d7e4e90aa4460ad6b959268b037
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/TrueTrue	7	251	4c1d8f19467edf52aebf056a17a0a5eab9d8eef96455131466f72eff8001ff2a
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/FalseFalse	0	256	d926e9016bcd4e1461e4097bfcb0bcfbfbd5e791214b9b367e0ec0ca2cb4269d
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/FalseFalse	1	256	405a44fce629ed96e33f5b5527e09332de4b059f845732629a213302faa29899
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/FalseFalse	2	256	eb20df8668a5a6deb87617f079451647b91d07e802e68e32173cc7392fd3f5dc
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/FalseFalse	3	256	216383fcbede7c9a2258f9d04b63672c911ee4625fc490867db91d5a53182d1c
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/FalseFalse	4	256	14290b07a1c236c13a42cfd06ba8ef77ef76b7b063f7bed8632f8524f9ba5faa
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/FalseFalse	5	256	5ab69c23cabf0342e473fdd937be29213446936f16fe8ab34de35ed4f9221ee4
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/FalseFalse	6	256	969927c963db53978b71a9338ea9b26679c984a335c6796b5a99b82e002c27db
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/FalseFalse	7	256	d1ca0f0e9084e3fe06480d51035dba9d64ada73429a61ca9395214ec490a1a0a
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvm/FalseFalse	8	10	31a77e3f139e8874fc6a0b24d2a82bc67ed42403c5b50034c0952b13af8153f8
 chunk	hydo/onboard/examples/shop/hydo.yaml/hvx	0	256	3f0b53e808db7f21ea489bc776659c5f94bbd17c87c69e8cffa6ebb2cb27f720
 chunk	hydo/onboard/examples/shop/hydo.yaml/hvx	1	256	6d077212a180bc54d8666fe3e4dec19efd97bbd65c2b627da3dfbeed4e026dc4
 chunk	hydo/onboard/examples/shop/hydo.yaml/hvx	2	256	6c77686ddff261ec77659c661004a1e36b85c58003fb2d4202ba8f26638178fe
