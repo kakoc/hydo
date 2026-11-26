@@ -1207,7 +1207,7 @@ fn the_system_keeps_its_own_spelling() {
     assert_eq!(pr.label, "nsq");
     let own = |text: &str, name: &str| {
         std::fs::write(d.join("README.md"), text).unwrap();
-        story::own_spelling(&[d.clone()], name)
+        story::own_spelling(std::slice::from_ref(&d), name)
     };
     // a name the README writes in lower case only gets no spelling: the page capitalises it
     assert_eq!(own("etcd is a key-value store. Run etcd.\n", "etcd"), None);
