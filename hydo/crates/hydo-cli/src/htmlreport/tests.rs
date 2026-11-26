@@ -1184,3 +1184,45 @@ fn an_exploration_with_its_statistics() {
         assert!(l.chars().count() <= 80, "a line over 80 columns: {l}");
     }
 }
+
+/// Milestone 363: the page keeps the project's own spelling of its name, from its README
+/// (`NSQ` for the manifest's `nsq`, where the trial's page said `Nsq`).
+#[test]
+fn the_system_keeps_its_own_spelling() {
+    let d = std::env::temp_dir().join(format!("hydo-htmlreport-own-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join("hydo")).unwrap();
+    std::fs::create_dir_all(d.join("hydo-out/explore")).unwrap();
+    let _rm = Rm(d.clone());
+    std::fs::write(
+        d.join("README.md"),
+        "<p align=\"center\"><img src=\"https://example.com/nsqio/nsq/raw/master/logo.png\"/></p>\n\n\
+         **NSQ** is a realtime distributed messaging platform. Run `nsqd` and nsq.io's docs.\n\n\
+         NSQ promotes distributed topologies; see nsq-docs and example.com/nsqio/nsq.\n",
+    )
+    .unwrap();
+    std::fs::write(d.join("hydo/hydo.yaml"), "format: 1\nname: nsq\n").unwrap();
+    let pr = story::project(&d.join("hydo-out/explore"), None, &[]);
+    assert_eq!(pr.system, "NSQ");
+    assert_eq!(pr.label, "nsq");
+    let own = |text: &str, name: &str| {
+        std::fs::write(d.join("README.md"), text).unwrap();
+        story::own_spelling(&[d.clone()], name)
+    };
+    // a name the README writes in lower case only gets no spelling: the page capitalises it
+    assert_eq!(own("etcd is a key-value store. Run etcd.\n", "etcd"), None);
+    assert_eq!(
+        own("Redis is fast. redis-server runs Redis.\n", "redis").as_deref(),
+        Some("Redis")
+    );
+    // the spelling in a path, an address or a file name does not count
+    assert_eq!(
+        own(
+            "Use TiKV. tikv/pd, tikv.org, tikv-server, tikv_x, TIKV\n",
+            "tikv"
+        )
+        .as_deref(),
+        Some("TiKV")
+    );
+    assert_eq!(own("nothing here\n", "nsq"), None);
+}

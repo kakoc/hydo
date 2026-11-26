@@ -162,7 +162,10 @@ pub fn project(results: &Path, image: Option<&str>, notes: &[&str]) -> Project {
     let from_image = image.and_then(super::system_of);
     p.named = name.is_some() || from_image.is_some();
     p.label = name.or(from_image).unwrap_or_else(|| "your system".into());
-    p.system = capitalize(&p.label);
+    p.system = (p.named)
+        .then(|| own_spelling(&readme_dirs(results, image), &p.label))
+        .flatten()
+        .unwrap_or_else(|| capitalize(&p.label));
     p.folder = match image {
         Some(i) => project_dir_above(Path::new(i)),
         None => project_dir_above(&std::fs::canonicalize(results).unwrap_or_default()),
@@ -175,6 +178,77 @@ pub fn project(results: &Path, image: Option<&str>, notes: &[&str]) -> Project {
             .map(|r| r.to_string_lossy().into_owned())
     });
     p
+}
+
+/// The folders whose README may spell the project's name: the project's folder above the
+/// results or the image, and the folder above it when that one is the project's `hydo/`.
+fn readme_dirs(results: &Path, image: Option<&str>) -> Vec<PathBuf> {
+    let abs = |p: &Path| std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let mut v: Vec<PathBuf> = Vec::new();
+    for d in [
+        project_dir_above(&abs(results)),
+        image.and_then(|i| project_dir_above(&abs(Path::new(i)))),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if d.file_name().and_then(|n| n.to_str()) == Some("hydo") {
+            if let Some(up) = d.parent() {
+                v.push(up.to_path_buf());
+            }
+        }
+        v.push(d);
+    }
+    v
+}
+
+/// The project's own spelling of its name (Milestone 363: `NSQ`, where the page said `Nsq`): the
+/// most frequent spelling of `name` as a whole word in the first README of `dirs`, when it has a
+/// capital letter. A word inside a path, an address or a file name (next to `/`, `.`, `-`, `_`
+/// or `@`) does not count, and neither does one that ends a word with a `.` before a letter.
+pub fn own_spelling(dirs: &[PathBuf], name: &str) -> Option<String> {
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return None;
+    }
+    let text = dirs.iter().find_map(|d| {
+        ["README.md", "README.rst", "README.txt", "README"]
+            .iter()
+            .find_map(|f| std::fs::read(d.join(f)).ok())
+    })?;
+    let text = String::from_utf8_lossy(&text[..text.len().min(1 << 16)]).into_owned();
+    let b = text.as_bytes();
+    let n = name.len();
+    let glue = |c: u8| c.is_ascii_alphanumeric() || b"/-_@".contains(&c);
+    let mut counts: Vec<(String, usize)> = Vec::new();
+    let lower = text.to_ascii_lowercase();
+    let want = name.to_ascii_lowercase();
+    let mut from = 0;
+    while let Some(i) = lower[from..].find(&want).map(|i| i + from) {
+        from = i + 1;
+        let before = (i > 0).then(|| b[i - 1]);
+        let after = b.get(i + n).copied();
+        let after2 = b.get(i + n + 1).copied();
+        if before.is_some_and(|c| glue(c) || c == b'.')
+            || after.is_some_and(glue)
+            || (after == Some(b'.') && after2.is_some_and(|c| c.is_ascii_alphanumeric()))
+        {
+            continue;
+        }
+        let w = text[i..i + n].to_string();
+        match counts.iter_mut().find(|(x, _)| *x == w) {
+            Some(e) => e.1 += 1,
+            None => counts.push((w, 1)),
+        }
+    }
+    // the most frequent, the first seen on a tie
+    let mut best: Option<&(String, usize)> = None;
+    for c in &counts {
+        if best.is_none_or(|b| c.1 > b.1) {
+            best = Some(c);
+        }
+    }
+    best.map(|(w, _)| w.clone())
+        .filter(|w| w.chars().any(|c| c.is_ascii_uppercase()))
 }
 
 pub fn capitalize(s: &str) -> String {
