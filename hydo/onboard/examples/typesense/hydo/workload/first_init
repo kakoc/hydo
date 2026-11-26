@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=180
+# wait until the three nodes are healthy with one leader, and create the collection docs
+exec /bin/tsc init

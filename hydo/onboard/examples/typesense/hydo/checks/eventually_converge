@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: within 120 s of the heal every node is healthy and holds the leader's documents, each with the leader's version
+exec /bin/tsc check converge

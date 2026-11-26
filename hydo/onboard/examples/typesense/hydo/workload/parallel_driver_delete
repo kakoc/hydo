@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# DELETE of an existing document
+exec /bin/tsc op delete

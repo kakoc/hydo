@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# reads of up to five known documents through any node: each must hold a version that a write sent
+exec /bin/tsc read

@@ -1,0 +1,155 @@
+# Typesense 30.2 (the newest release, 2026-04-19), the search engine, as a cluster of three Raft
+# nodes, as ../docker-compose.yaml runs it. Each node keeps its data on a file system of its own.
+# RESULTS.md has the promises under test and what was found.
+#
+#   sh ../build.sh            # bin/tsc-<arch>, the test client (../client)
+#   sh fetch-images.sh        # the image by digest
+#   hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --new-faults --cluster-faults --storage-faults
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The services below are the importer's,
+# with these changes:
+# - each node's /var/lib/typesense is a file system of its own (storage:), the target of L= and
+#   G=, instead of the importer's folder on the shared data disk;
+# - the readiness check asks /health with the test client and takes any answer: a node alone has
+#   no quorum and is never healthy, so "healthy" would keep a restarted node from being ready;
+# - the nodes start together (start_after: started), as Compose starts them;
+# - the snapshot interval is a build parameter, 30 s instead of the default hour, so that a run of
+#   a few minutes takes snapshots;
+# - the test client tsc is in the image (../build.sh).
+format: 1
+name: typesense
+description: "Typesense 30.2, a cluster of three Raft nodes: acknowledged creates, upserts, partial updates, deletes and imports stay as acknowledged, a search finds each stored document with its stored version on every node, acknowledged schema changes stay, the nodes converge, and the cluster serves writes through every node after the heal, under kills, pauses, partitions, one node's power loss or damaged files, power cuts and clock steps"
+hydo_version: "0.6"
+
+params:
+  arch: amd64     # amd64 | arm64: the client's architecture, the same as the image's
+  snap: "30"      # --snapshot-interval-seconds of every node (Typesense's default is 3600); a node
+                  #   checks it once a minute, so a run takes about one snapshot per node
+  batch: "2"      # batch_size of the client's deletes by a filter (parallel_driver_bdelete)
+
+configs:
+  batch:
+    values: ["2", "1000000000"]
+    doc: "https://typesense.org/docs/30.1/api/documents.html (Delete by query, batch_size; the default is 1000000000, and Typesense deletes at most 1000 documents a batch)"
+
+env:
+  TSC_BATCH: "{{batch}}"   # the client reads it
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 2048
+  clock_start: 1795651200   # 2026-11-26 00:00 UTC, the day of the import
+  clock_after_cut: 60       # a real machine's clock runs on across a power cut
+
+data:
+  size_mib: 1024  # the data disk: the three nodes' own file systems of 256 MiB each, and the rest
+  dirs: [vol/ts1, vol/ts2, vol/ts3]
+
+root:
+  share_images: true   # the three nodes share one tree of the typesense image
+  files:                 # bind-mount sources, copied into the read-only root
+    - {src: ../config/nodes, dst: /etc/hydo/compose/bind/0-nodes}
+    - {src: "../bin/tsc-{{arch}}", dst: /bin/tsc, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 ts1
+      10.89.0.12 ts2
+      10.89.0.13 ts3
+
+groups:
+  - name: nodes
+    services: [ts1, ts2, ts3]
+    primary: /bin/tsc primary   # the Raft leader, from each node's /debug
+
+services:
+  # Compose service ts1
+  # image typesense/typesense:30.2 = docker.io/typesense/typesense@sha256:610f2d34b1f93d00762869da2c67736775e5798d19a2c8b91b014b8a0cc1e110
+  #   linux/amd64: sha256:b405d4443bdb9254fab4792b7fd9ee95d969f3b5485975917a3a3f84274eba27
+  #   linux/arm64: sha256:1c5fbc20774aa0edf8d3bec6e5dd9bd6fe7d02f72897d5c1d2253305ba086d4b
+  - name: ts1
+    image: {x86_64: images/typesense-typesense-30.2-amd64.docker.tar, arm64: images/typesense-typesense-30.2-arm64-oci}
+    image_ref: "typesense/typesense:30.2"
+    cmd: ["--data-dir", /var/lib/typesense, "--api-key", hydo-key, "--nodes", /etc/typesense/nodes, "--peering-address", 10.89.0.11, "--peering-port", "8107", "--api-port", "8108", "--snapshot-interval-seconds", "{{snap}}"]
+    port: 8108
+    addr: 10.89.0.11
+    ready: "timeout 5 /bin/tsc ready 10.89.0.11"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/ts1, size_mib: 256}   # Raft's log, meta and snapshots, and the document store
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-nodes, dst: /etc/typesense/nodes}
+      - {src: /data/vol/ts1, dst: /var/lib/typesense}
+  # Compose service ts2
+  - name: ts2
+    image: {x86_64: images/typesense-typesense-30.2-amd64.docker.tar, arm64: images/typesense-typesense-30.2-arm64-oci}
+    image_ref: "typesense/typesense:30.2"
+    cmd: ["--data-dir", /var/lib/typesense, "--api-key", hydo-key, "--nodes", /etc/typesense/nodes, "--peering-address", 10.89.0.12, "--peering-port", "8107", "--api-port", "8108", "--snapshot-interval-seconds", "{{snap}}"]
+    port: 8108
+    addr: 10.89.0.12
+    start_after: started   # Compose starts the three nodes together
+    ready: "timeout 5 /bin/tsc ready 10.89.0.12"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/ts2, size_mib: 256}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-nodes, dst: /etc/typesense/nodes}
+      - {src: /data/vol/ts2, dst: /var/lib/typesense}
+  # Compose service ts3
+  - name: ts3
+    image: {x86_64: images/typesense-typesense-30.2-amd64.docker.tar, arm64: images/typesense-typesense-30.2-arm64-oci}
+    image_ref: "typesense/typesense:30.2"
+    cmd: ["--data-dir", /var/lib/typesense, "--api-key", hydo-key, "--nodes", /etc/typesense/nodes, "--peering-address", 10.89.0.13, "--peering-port", "8107", "--api-port", "8108", "--snapshot-interval-seconds", "{{snap}}"]
+    port: 8108
+    addr: 10.89.0.13
+    start_after: started
+    ready: "timeout 5 /bin/tsc ready 10.89.0.13"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/ts3, size_mib: 256}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-nodes, dst: /etc/typesense/nodes}
+      - {src: /data/vol/ts3, dst: /var/lib/typesense}
+
+# 60 rounds of 1 s with up to 3 writes each: about 150 writes, and two snapshots of every node.
+workload:
+  steps: 60
+  timeout: 300    # also the read-back's limit
+
+test:
+  parallel: 6
+  per_round: 3
+  round_ms: 1000
+  command_timeout: 60
+  drain_timeout: 60
+
+checks:
+  # hydo's ready-made claim (hydo guide messages, "Read back the final states"): every write that
+  # Typesense acknowledged is there at the end, unless a later write of the same document replaced
+  # it, and no write that Typesense refused took effect. The client records each write as a send
+  # of its id, and `tsc readback` reads every document back from the leader after a barrier write
+  # and writes each write's effect (f=1 or f=0).
+  - id: writes
+    type: messages
+    history: writes
+    msg: every write that Typesense acknowledged ends as Typesense acknowledged it
+    final: /bin/tsc readback
+    claims:
+      acked_outcome:
+        client_errors: [refused]   # 400, 404, 409, 422 or 503 "Not Ready or Lagging": Typesense applied nothing
+        effect: recorded
+
+faults: [kill, pause, network, oneway, cut, clock, corrupt, powerloss]

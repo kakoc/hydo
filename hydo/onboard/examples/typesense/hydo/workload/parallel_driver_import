@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# an import of 2 to 12 new documents, or of 160 documents of 1.5 KB; one write per line
+exec /bin/tsc op import

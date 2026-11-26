@@ -1,0 +1,9 @@
+# A new candidate in Typesense 30.2, a clock effect (RESULTS.md, finding 3). After a backward
+# step of the wall clock by 120 s before step 20, a pause of the leader at step 30 leaves the two
+# other nodes without a leader for 68 s, until the leader goes on: no node starts an election.
+# braft's election timer is a repeating bthread timer, and its next run is a wall-clock time
+# (src/braft/repeated_timer_task.cpp, schedule; brpc's TimerThread reads gettimeofday). The run
+# that was due when the clock went back comes 120 s late. Without T= the same pause gets a new
+# leader, and final_available holds.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run T=20:-120 P=nodes.primary@30+25

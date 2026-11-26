@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: within 120 s of the heal an export with the default batch size, the documented way to back a collection up, ends on every node with every stored document
+exec /bin/tsc check export

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# DELETE by a filter on the document's id and its last acknowledged version: a delete that applies only to that version
+exec /bin/tsc op fdelete

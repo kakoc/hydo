@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: every field that an acknowledged schema change added is in every node's schema
+exec /bin/tsc check schema

@@ -1,0 +1,48 @@
+# Typesense 30.2 (the newest release, 2026-04-19) as a cluster of three nodes, the shape of
+# Typesense's high-availability setup (https://typesense.org/docs/guide/high-availability.html).
+# Each node is a Raft member at a fixed address, and each keeps its data in a volume of its own.
+# The nodes file names the three peers as <address>:<peering port>:<API port>.
+services:
+  ts1:
+    image: typesense/typesense:30.2
+    command: ["--data-dir", "/var/lib/typesense", "--api-key", "hydo-key", "--nodes", "/etc/typesense/nodes",
+              "--peering-address", "10.89.0.11", "--peering-port", "8107", "--api-port", "8108",
+              "--snapshot-interval-seconds", "3600"]
+    volumes:
+      - ./config/nodes:/etc/typesense/nodes:ro
+      - ts1:/var/lib/typesense
+    networks:
+      ts: {ipv4_address: 10.89.0.11}
+    ports: ["8108:8108"]
+    restart: unless-stopped
+  ts2:
+    image: typesense/typesense:30.2
+    command: ["--data-dir", "/var/lib/typesense", "--api-key", "hydo-key", "--nodes", "/etc/typesense/nodes",
+              "--peering-address", "10.89.0.12", "--peering-port", "8107", "--api-port", "8108",
+              "--snapshot-interval-seconds", "3600"]
+    volumes:
+      - ./config/nodes:/etc/typesense/nodes:ro
+      - ts2:/var/lib/typesense
+    networks:
+      ts: {ipv4_address: 10.89.0.12}
+    restart: unless-stopped
+  ts3:
+    image: typesense/typesense:30.2
+    command: ["--data-dir", "/var/lib/typesense", "--api-key", "hydo-key", "--nodes", "/etc/typesense/nodes",
+              "--peering-address", "10.89.0.13", "--peering-port", "8107", "--api-port", "8108",
+              "--snapshot-interval-seconds", "3600"]
+    volumes:
+      - ./config/nodes:/etc/typesense/nodes:ro
+      - ts3:/var/lib/typesense
+    networks:
+      ts: {ipv4_address: 10.89.0.13}
+    restart: unless-stopped
+networks:
+  ts:
+    ipam:
+      config:
+        - subnet: 10.89.0.0/24
+volumes:
+  ts1: {}
+  ts2: {}
+  ts3: {}
