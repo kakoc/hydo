@@ -1977,6 +1977,36 @@ fn save_path(to: &str, name: &str, text: &str) -> (String, bool) {
     }
 }
 
+/// What makes two shrinks of an exploration one regression for `hydo save` (Milestone 367):
+/// the class, the finding's statement and key as `hydo ci` and the configurations table name it
+/// (a violation by its check, so `put x7f was lost` and `put a3c was lost` are one), and the
+/// fault kinds of `--shrink-causes`, which keep the shrinks of other causes apart. None for a
+/// shrink whose verdict names no finding.
+fn save_key(
+    doc: &hydo_results::Exploration,
+    s: &hydo_results::Shrink,
+) -> Option<(String, String, String, Option<String>)> {
+    let verdict = s
+        .confirmations
+        .first()
+        .and_then(|c| c.verdict.clone())
+        .or_else(|| s.min_verdict.clone())
+        .unwrap_or_else(|| s.verdict.clone());
+    let fails: Vec<hydo_results::Finding> = doc
+        .failures
+        .iter()
+        .find(|f| f.signature == s.signature)
+        .map(|f| f.run.findings.clone())
+        .unwrap_or_default();
+    let (kind, title, k) = crate::ci::key::of_verdict(&verdict, &fails)?;
+    Some((
+        s.class.clone(),
+        crate::ci::key::statement(&kind, &title),
+        k,
+        s.fault_kinds.clone(),
+    ))
+}
+
 pub fn cmd_save(ctx: &Ctx, argv: &[String]) -> i32 {
     let mut args = argv.to_vec();
     let to = take(&mut args, "--to").unwrap_or_else(|| default_regressions_dir(Path::new(".")));
@@ -2006,8 +2036,28 @@ pub fn cmd_save(ctx: &Ctx, argv: &[String]) -> i32 {
         let kv: Vec<String> = params.iter().map(|(k, v)| format!("{k}={v}")).collect();
         format!("# params: {}", kv.join(" "))
     });
-    let (mut n, mut kept) = (0, 0);
+    let (mut n, mut kept, mut same) = (0, 0, 0);
+    // Milestone 367: one regression per class and finding. The SeaweedFS configurations
+    // exploration shrank five power cuts of one class whose verdicts named other objects, and
+    // `hydo save` wrote five files of one finding; the configurations table showed one
     for s in &doc.shrinks {
+        if let Some(k) = save_key(&doc, s) {
+            if let Some(seed) = doc
+                .shrinks
+                .iter()
+                .take_while(|x| !std::ptr::eq(*x, s))
+                .find(|x| save_key(&doc, x).as_ref() == Some(&k))
+                .map(|x| x.from_seed)
+            {
+                println!(
+                    "hydo: the shrink of seed {} is another failure of the finding of seed {seed} \
+                     ({} {}), left out",
+                    s.from_seed, k.0, k.1
+                );
+                same += 1;
+                continue;
+            }
+        }
         // the shrink as the composer reads it (the results format keeps the field names)
         let mut x = serde_json::to_value(s).unwrap_or(Value::Null);
         if let Some(o) = x.as_object_mut() {
@@ -2050,6 +2100,11 @@ pub fn cmd_save(ctx: &Ctx, argv: &[String]) -> i32 {
         format!(", {kept} kept: they were saved before")
     } else {
         String::new()
+    };
+    let kept = if same > 0 {
+        format!("{kept}, {same} left out: another failure of a finding saved above")
+    } else {
+        kept
     };
     let with = match &params_line {
         Some(l) => format!(" with `{l}` (the image's build parameters)"),
@@ -2138,6 +2193,58 @@ mod tests {
         let (p3, new) = super::save_path(&to, "process-v", &a10);
         assert!(new && p3.ends_with("process-v-3.schedule"), "{p3}");
         let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// Milestone 367: the shrinks of one class whose verdicts name other objects of one check
+    /// are one regression; another check, another class, or another cause is another.
+    #[test]
+    fn save_takes_one_shrink_per_class_and_finding() {
+        let shrink = |class: &str, verdict: &str, kinds: Option<&str>| hydo_results::Shrink {
+            class: class.into(),
+            signature: verdict.into(),
+            verdict: verdict.into(),
+            fault_kinds: kinds.map(String::from),
+            ..Default::default()
+        };
+        let doc = hydo_results::Exploration::default();
+        let a = shrink(
+            "durable-defaults",
+            "VIOLATION [objects.acked-outcome] put fa3c was acknowledged and has no final state",
+            None,
+        );
+        let b = shrink(
+            "durable-defaults",
+            "VIOLATION [objects.acked-outcome] put be7d was acknowledged and has no final state",
+            None,
+        );
+        let ka = super::save_key(&doc, &a).unwrap();
+        assert_eq!(ka.1, "VIOLATION [objects.acked-outcome]");
+        assert_eq!(Some(&ka), super::save_key(&doc, &b).as_ref());
+        let other_check = shrink(
+            "durable-defaults",
+            "VIOLATION [objects.no-loss] m3 lost",
+            None,
+        );
+        assert_ne!(Some(&ka), super::save_key(&doc, &other_check).as_ref());
+        let other_class = shrink(
+            "process",
+            "VIOLATION [objects.acked-outcome] put fa3c was acknowledged and has no final state",
+            None,
+        );
+        assert_ne!(Some(&ka), super::save_key(&doc, &other_class).as_ref());
+        let other_cause = shrink(
+            "durable-defaults",
+            "VIOLATION [objects.acked-outcome] put fa3c was acknowledged and has no final state",
+            Some("C disk=cut"),
+        );
+        assert_ne!(Some(&ka), super::save_key(&doc, &other_cause).as_ref());
+        assert_eq!(
+            super::save_key(
+                &doc,
+                &shrink("x", "HYDO-ORACLE: OK invariants=1 held (x: y)", None)
+            ),
+            None
+        );
     }
 
     /// `hydo save` from inside the `hydo/` folder writes into its `regressions/`, not into a
