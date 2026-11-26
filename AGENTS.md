@@ -730,6 +730,21 @@ M359 ranked, each its own commit; none moves a recorded value:
 
 The proofs ran on the Mac engine with the trial's NSQ project and in the tests; the details are
 in `docs/HISTORY.md` Milestone 360 (open item 183).
+**The guide's topics and the trial's smaller frictions (M363, tentative number).** Each its own
+commit; none moves a recorded value:
+- The test `hydo-agents::guide_topics` fails when a topic of `hydo guide --list` prints nothing
+  or less than three quarters of its size in `tests/guide-sizes.txt` (`HYDO_BLESS=1` records it).
+- `hydo compose` gives a volume its `data.dirs` folder only when its mount was added. The
+  workload's placeholder names a service with a port that depends on the first one, if any,
+  so NSQ's import names `nsqd`, not `nsqlookupd`.
+- The clock audit names the one service that runs a place when hydo.yaml has no database.
+- The Go SDK's `hydohist` has `Drained`, in files of the public module only.
+- `hydo inspect diagnose --text` prints lines, and `acked-outcome` names no `(no error code)`.
+- The report keeps a project's own spelling of its name from its README (`NSQ`).
+- A problem names the faults written after a long `W=` word in its command.
+- `hydo save` writes `# params:` with the defaults too when the manifest has `params:`.
+
+The details are in `docs/HISTORY.md` Milestone 363 (open item 183).
 
 **Each image service's own `/tmp` (M331, tentative number; fingerprint epoch 5).** An image
 service of an image built at epoch 5 has a `/tmp` of its own, as a container has. It is the
@@ -3850,7 +3865,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - On hvx the s3 emulator without `durable: true` made no disk flush during the workload, so
       a `cf=` cut there comes after the last step. A cut between two of its writes needs `C=` or
       `A=s3.acked`.
-183. The frictions of the 0.6.0 trial (M360, tentative number). What is left:
+183. The frictions of the 0.6.0 trial (M360 and M363, tentative numbers). What is left:
     - A group still starts at the first `sub` or `recv` that it completed, and a delivery of a
       message also makes the group judge that message. A message sent before that receive and
       received by none is not judged. The summary counts it, and a `sub ... from=start` record
@@ -3861,16 +3876,20 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       break this way; the tests do.
     - `hydo save`'s `# params:` line was shown on a real image with an `exploration.json` given
       that image's sha256. No VM exploration of the `--set` image ran, because the Mac had 10 GB
-      of free disk. A regression found on the default build still names no parameter, so it runs on
-      every build.
+      of free disk. Since M363 a regression found on the default build names the defaults when
+      the manifest has `params:`; that ran in a unit test only. `hydo save` run again on an
+      exploration it saved before writes such findings again, as `<name>-2`, because their
+      `# params:` line is new.
     - `hydo explore --reactive` with power losses ran in the generator's tests on the Meilisearch
       example's space, not in a VM.
-    - The trial's smaller frictions are not fixed. They are the import's unused `data.dirs` and
-      its placeholder against the first service, and the clock scan's `<database>` for a known
-      service. The Go SDK has no call for `drained`, and `hydo inspect diagnose --text` prints
-      JSON. A message with no final state reads `(no error code)`, and NSQ's title reads `Nsq`.
-    - A long composition word (`W=`) hides the tokens after it in a problem's command; the trial's
-      tester missed an `L=` there.
+    - Since M363 the trial's smaller frictions are fixed, in the tests only; no VM ran. The
+      placeholder's rule moved the target of 35 of 185 recorded imports, whose new targets were
+      read, not run. The project's own spelling comes from its README, so a CI run's page, which
+      finds no project folder, still capitalises the name. The Go SDK's `Drained` is in the
+      public module only, not in the frozen copy in `hydo/stack`.
+    - Since M363 a problem names the faults written after a long `W=` word; the command itself
+      still puts them after the word. The unexplained 20 of 24 judged sends of the trial's
+      smaller frictions was M360's fix 1.
 
 ## Milestone index
 
@@ -5017,6 +5036,12 @@ build machine, before 2026-10-13.
   repository's own files and leave out the host-dependent `root.files` warning. Each file's
   mutants have their own seed. Their goldens and three answers of `cli.jsonl` are recorded
   again; no product code changed
+- M363 (tentative number): a test that every topic of `hydo guide --list` prints text of its
+  recorded size, and the 0.6.0 trial's smaller frictions, each its own commit. The import's
+  placeholder names the service that takes the writes, and the clock audit a known service. The
+  Go SDK has `Drained`, and `hydo inspect diagnose --text` prints lines. A problem names the
+  faults after a long `W=` word, and `hydo save` names the default build parameters. Nothing
+  recorded moved
 
 - The 0.6.0 release (no milestone number): prepared, not published. The version is raised with
   the skill's four version fields, `hydo-world`, `hydo-world-tls` and `hydo-grpc` are re-pinned,

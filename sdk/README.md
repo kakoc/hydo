@@ -217,9 +217,9 @@ operator, as in the other SDKs.
 `hydo/stack/hydoassert/hydo_assert.sh` (the shell SDK) is not part of the public module.
 `sdk/go/hydoassert/example_test.go` and `sdk/go/hydohist/example_test.go` (the package examples
 and the README's test) are not part of the frozen copy, because test files are compiled into no
-program. Neither is `sdk/go/hydohist/messages.go` with its test (Milestone 363): `Drained`
-writes the `drained` record of a messages check, which the order service does not write, and a
-new file in the frozen copy would change that service's bytes. Make every other change to the Go
+program. Neither is `sdk/go/hydohist/messages.go` with its test (Milestone 363). `Drained`
+writes the `drained` record of a messages check, which the order service does not write. A new
+file in the frozen copy would change that service's bytes. Make every other change to the Go
 SDK in both places in one commit. A change to the frozen copy
 changes the order service's bytes, so it needs a re-baseline of the images that contain it
 (docs/REBASELINE.md).

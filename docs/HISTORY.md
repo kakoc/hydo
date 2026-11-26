@@ -23224,3 +23224,96 @@ of this milestone ran without a VM. That machine's `/nix/store` holds 4 entries 
 **What is left.** Open items 115 and 165 are closed; open item 165 keeps its other entries. The
 read-backs of the image path still carry the request's index in their name, so a new pinned file
 renames the later ones in the next recording. Their answers do not change.
+
+## Milestone 363 (tentative number): a test of the guide's topics, and the trial's smaller frictions
+
+Status: done on 2026-11-26, in the tests on this Mac; no VM ran. Each fix below is its own
+commit. Nothing recorded moved: every change is in the host's import, scans, reports and
+commands, in the public Go module, and in a test. The fingerprint epoch stays 6.
+
+**1. A test that every guide topic prints text.** On 2026-11-25 a scripted merge emptied
+`hydo/guide/strategies.md`. `hydo guide strategies` printed nothing on `main`, and every check
+passed, because the CLI's golden answers were recorded again with the empty topic. The new test
+`hydo-agents::guide_topics` runs `hydo guide <topic>` for each of the 29 topics of `hydo guide
+--list`. A topic fails when it prints nothing, or less than three quarters of its size in
+`hydo/crates/hydo-agents/tests/guide-sizes.txt`. A topic without a recorded size fails too.
+`HYDO_BLESS=1 cargo test -p hydo-agents --test it guide_topics::` records the sizes again. The
+test is in the fast tier. With `strategies.md` emptied in the checkout, it failed with
+`` `hydo guide strategies` prints nothing ``, and it passed with the file restored.
+
+**2. The trial's smaller frictions** (open item 183, the trial's section "The frictions, ranked",
+item 9):
+
+- The import's unused `data.dirs` folder. NSQ's import wrote `data: dirs: [vol/nsqd-data]` for
+  a volume on `/data` whose mount its own warning left out. A volume, an image's `VOLUME` and a
+  missing bind source now get their folder only when the mount was added.
+- The workload placeholder against the wrong service. The placeholder named the first service
+  with a port, NSQ's `nsqlookupd`, which only tells the clients where `nsqd` is. It now starts
+  from that service. When other services with a port depend on it, it names the first of them
+  that keeps data (a named or anonymous volume, or an image's `VOLUME`), else the first of them.
+  So NSQ's import names `nsqd` (port 4150), and an application listed after its database is
+  named instead of the database. The test `hydo-compose::placeholder` imports the trial's
+  Compose file.
+- The clock scan's `<database>` for a known service. A place of `nsqlookupd` whose words name a
+  connection got `K=<database>@2+3` under `Run by nsqlookupd`, because hydo.yaml has no database.
+  Such a place now names the one service that runs it, with that service's words. With a
+  database in hydo.yaml the schedules name it as before. The test
+  `rules::the_clock_audit_names_the_service_when_there_is_no_database` failed before the change.
+- The Go SDK's call for `drained`. `(*History).Drained(proc, channel, group)` writes `ok
+  drained <channel> <group>` with the Rust SDK's item encoding. Its test runs the test program
+  again with `HYDO_HIST_OUT` set and compares the line with the shared case
+  `sdk/cases/history/messages`. The call and its test are files of the public module only
+  (`hydohist/messages.go`, `hydohist/messages_test.go`). A new file in the frozen copy in
+  `hydo/stack` would change the order service's bytes inside recorded images, so hydo-release's
+  `sdks::` lists the two files as public-only, and `sdk/README.md` says why. The shared case's
+  description names both checks. The Go page and `hydo guide messages` show the call.
+- `hydo inspect diagnose --text` printed JSON. The view now prints lines: the run, the verdict,
+  why it failed, what failed and where, how the process ended with its output, the readiness
+  check, the other processes, the likely causes, the kernel's lines, the evidence, and the next
+  commands. The plain report's line names it: `Why it failed: hydo inspect diagnose <dir>
+  --problem N --text`.
+- `(no error code)` for a lost message. Without an error code in the read-back, `acked-outcome`
+  now says `m0 was acknowledged and has no final state: the read-back found it still pending or
+  not at all`. With an error code the words keep it, as before.
+- The title `Nsq` for NSQ. The report reads the project's README, in the folder above `hydo-out`
+  or above the project's `hydo/` folder. It takes the most frequent spelling of the manifest's
+  name as a whole word there, when that spelling has a capital letter. A word inside a path, an
+  address or a file name does not count. A README in the form of NSQ's gives `NSQ failed your
+  check`. Without a README, or with a lower-case spelling only (`etcd`), the name is capitalised
+  as before.
+
+**3. A long `W=` word hides the faults after it.** When a command's schedule has a `W=` word
+longer than 40 characters and a fault after it, the problem now says under the command: `After
+its long composition word W=, the command has the fault L=nsqd@6+2.` The command stays exact.
+The terminal's report of an exploration and of a run and the web page's problem cards show the
+sentence. A fault before the word stays in sight and is not named again: the recorded
+exploration of redis-composed has such faults, and its report gained no sentence.
+
+**4. A regression found on the default build names its parameters.** When the exploration
+image's manifest has `params:`, `hydo save` now writes `# params:` with every value the image was
+built with, the defaults too: `# params: memq=0` for the trial's default build. `hydo repro
+--regressions` on the `--set memq=10000` build then prints `SKIP` with the build command, as for
+any `# params:` line (Milestone 355). A manifest without `params:` gives no line, so the
+examples' regressions keep their form. A value with white space cannot be a word of the line and
+is left out. The unit test `save_keeps_every_finding_and_names_the_build_parameters` checks the
+line of a default build and that the build check holds such a regression back on the other
+build.
+
+**The recorded answers that changed**, each recorded again with `HYDO_BLESS=1` for the reason
+named:
+
+- `hydo-compose/tests/golden.json`: 46 of 185 cases, the placeholder's service in 35 and the
+  `data.dirs` line in 14. The new targets are applications and proxies instead of their
+  databases: Mastodon's `web`, n8n's `n8n`, Temporal's `temporal`, Sentry's `web`.
+- `hydo-compose/tests/golden/k8s-cluster.yaml`: the placeholder names `api`, which depends on
+  `kv-0`.
+- `hydo-cli/tests/golden/report/exploration.txt`: two "Why it failed" lines with `--text`.
+- `hydo-cli/tests/golden/cli.jsonl`: `hydo report` of the recorded exploration (5,213 to 5,241
+  bytes) and `hydo guide manifest` (258,397 to 258,449 bytes), on Linux and on the Mac.
+- `sdk/cases/history/messages.json`: its `about` text only.
+
+**What is left.** No VM ran: the import, the scan and the report were checked in the tests, and
+`hydo save`'s line on a unit test, not on the trial's NSQ image. `hydo save` run again on an
+exploration it saved before writes the findings of the default build again, as `<name>-2`,
+because their `# params:` line is new. The README spelling is read only where the report finds
+the project's folder, not for a CI run's page. Open item 183 has the rest.
