@@ -1,0 +1,53 @@
+{
+  "v": 1,
+  "type": "ci-ledger",
+  "project": "redis",
+  "branches": {
+    "local": {
+      "findings": {
+        "f1:invariant:5ef675c8c9": {
+          "key": "f1:invariant:5ef675c8c9",
+          "kind": "invariant",
+          "title": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+          "state": "open",
+          "accepted": false,
+          "minimal": "disk=cut | run C=12 R=everysec",
+          "schedules": [
+            "disk=cut | run C=12 R=everysec",
+            "disk=cut dseed=0 | run C=10 R=no"
+          ],
+          "seen": 3
+        }
+      },
+      "last_run": "local:4665667d9d6b098a",
+      "runs": 5,
+      "recorded": [
+        {
+          "id": "local:c4bc61380bd51f0f",
+          "file": "runs/local_c4bc61380bd51f0f.json",
+          "recorded": "2026-11-26T07:48:35Z"
+        },
+        {
+          "id": "local:367c8544757dedf1",
+          "file": "runs/local_367c8544757dedf1.json",
+          "recorded": "2026-11-26T07:48:47Z"
+        },
+        {
+          "id": "local:5c7f55e9891d36c6",
+          "file": "runs/local_5c7f55e9891d36c6.json",
+          "recorded": "2026-11-26T07:48:53Z"
+        },
+        {
+          "id": "local:9eeb7cdf4f472c85",
+          "file": "runs/local_9eeb7cdf4f472c85.json",
+          "recorded": "2026-11-26T07:48:57Z"
+        },
+        {
+          "id": "local:4665667d9d6b098a",
+          "file": "runs/local_4665667d9d6b098a.json",
+          "recorded": "2026-11-26T07:49:01Z"
+        }
+      ]
+    }
+  }
+}

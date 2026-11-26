@@ -28,6 +28,7 @@ mod diff;
 mod doctor;
 mod explain;
 mod fetch;
+mod findings;
 mod help;
 mod htmlreport;
 mod hvxenv;
@@ -107,6 +108,9 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
     hydo stats   [DIR] [--json] [--budget 2h] [--workers N] [--shards N]
                                                    how much an exploration explored, what it cost, which
                                                    faults it drew, and how many runs fit in a budget
+    hydo findings record [DIR] | list | show KEY | history [KEY] [--store DIR] [--json]
+                                                   keep the findings of runs and explorations in one
+                                                   store, and read each finding's history
     hydo errors  list [DIR] | accept SIG... --reason TEXT [--with F] [--during F] | check
                                                    error logs as findings: list new error kinds, accept
                                                    expected ones into hydo/known-errors.yaml (MANIFEST.md)
@@ -183,6 +187,9 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
     hydo stats   [DIR] [--json] [--budget 2h] [--workers N] [--shards N]
                                                    how much an exploration explored, what it cost, which
                                                    faults it drew, and how many runs fit in a budget
+    hydo findings record [DIR] | list | show KEY | history [KEY] [--store DIR] [--json]
+                                                   keep the findings of runs and explorations in one
+                                                   store, and read each finding's history
     hydo errors  list [DIR] | accept SIG... --reason TEXT [--with F] [--during F] | check
                                                    error logs as findings: list new error kinds, accept
                                                    expected ones into hydo/known-errors.yaml (MANIFEST.md)
@@ -350,6 +357,8 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         "perf" => perf::cmd_perf(ctx, rest),
         // Milestone 336: how much an exploration explored and what it cost (`hydo stats --help`)
         "stats" => stats::cmd_stats(rest),
+        // Milestone 365: the findings store for every run (`hydo findings --help`)
+        "findings" => findings::cmd_findings(ctx, rest),
         // ready-made SQL workloads and checks for the hydo/ folder (`hydo sql-gen --help`; the
         // main help is a recorded answer)
         "sql-gen" => sqlgen::cmd_sql_gen(rest),

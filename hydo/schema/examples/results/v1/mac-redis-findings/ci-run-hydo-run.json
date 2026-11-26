@@ -1,0 +1,93 @@
+{
+  "v": 1,
+  "type": "ci-run",
+  "id": "local:c4bc61380bd51f0f",
+  "started": "2026-11-26T07:48:35Z",
+  "ci": {
+    "name": "local"
+  },
+  "project": {
+    "name": "redis",
+    "dir": ".",
+    "manifest": "",
+    "manifest_sha256": "09b5618390947740755abf009c7e0e8d9b1590d5caf08ea282dfd3f577161630"
+  },
+  "trigger": "manual",
+  "branch": "local",
+  "hydo": {
+    "version": "0.6.0",
+    "epoch": 6
+  },
+  "engine": {
+    "backend": "hvm",
+    "host_cpu": {
+      "vendor": "Apple",
+      "model": "Apple M2 Pro"
+    }
+  },
+  "image": {
+    "sha256": "df2bb1f559b42b4f2c0b465f4a6130207dddbecada7d03682fb47f4c727512d9",
+    "reused": false,
+    "given": false,
+    "path": "explore-ob-redis-arm64.cpio.gz"
+  },
+  "budget": {
+    "mode": "run",
+    "seeds": "-",
+    "strategy": "one schedule",
+    "options": [],
+    "partial": false
+  },
+  "summary": {
+    "runs": 1,
+    "failures": 1,
+    "findings": 1,
+    "states": {
+      "new": 1
+    },
+    "replays": 0,
+    "vacuous_passes": 0,
+    "regressions": {
+      "replayed": 0,
+      "as_expected": 0
+    },
+    "wall_s": 0.0
+  },
+  "coverage": {
+    "faults": {},
+    "services": {}
+  },
+  "findings": [
+    {
+      "key": "f1:invariant:5ef675c8c9",
+      "kind": "invariant",
+      "title": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "state": "new",
+      "proof": "no-base",
+      "minimal": "disk=cut | run C=12 R=everysec",
+      "schedules": [
+        "disk=cut | run C=12 R=everysec"
+      ],
+      "fp": "275a3d143726e6ad",
+      "classes": [],
+      "repro": "hydo run explore-ob-redis-arm64.cpio.gz 'disk=cut | run C=12 R=everysec'",
+      "replays": [],
+      "source": "run",
+      "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+    }
+  ],
+  "regressions": [],
+  "nondeterminism": [],
+  "outcome": {
+    "exit": 1,
+    "fail_on": [],
+    "failed_by": [
+      "new VIOLATION [redis.acked_writes_survive] key k:# lost"
+    ]
+  },
+  "artifacts": {
+    "report": "",
+    "junit": ""
+  },
+  "recorded_from": "hydo run"
+}

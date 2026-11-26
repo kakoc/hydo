@@ -60,7 +60,7 @@ fn take_flag(args: &mut Vec<String>, flag: &str) -> bool {
 }
 
 /// `git -C dir <args>`'s trimmed output, when it succeeds.
-fn git(dir: &Path, args: &[&str]) -> Option<String> {
+pub(crate) fn git(dir: &Path, args: &[&str]) -> Option<String> {
     let o = std::process::Command::new("git")
         .arg("-C")
         .arg(dir)
@@ -81,7 +81,7 @@ pub fn git_branch_name(dir: &Path) -> Option<String> {
 
 /// A finding accepted by an entry of `hydo/known-findings.yaml`: reported as accepted, with the
 /// state it would have had.
-fn accept(f: &mut CiFinding, a: &hydo_manifest::known_findings::Accepted) {
+pub(crate) fn accept(f: &mut CiFinding, a: &hydo_manifest::known_findings::Accepted) {
     f.accepted = Some(hydo_results::CiAccepted {
         reason: a.reason.clone(),
         who: a.who.clone().unwrap_or_default(),
@@ -438,11 +438,13 @@ fn run_keys(run: &hydo_results::Run) -> Vec<String> {
 }
 
 /// The fault class of each route (minimal schedule) of an exploration's findings.
-type RouteClasses = BTreeMap<String, String>;
+pub(crate) type RouteClasses = BTreeMap<String, String>;
 
 /// One finding (by key) of an exploration, the failures that were not deterministic, and the
 /// fault class of each route.
-fn findings_of(doc: &Exploration) -> (Vec<CiFinding>, Vec<CiNondeterminism>, RouteClasses) {
+pub(crate) fn findings_of(
+    doc: &Exploration,
+) -> (Vec<CiFinding>, Vec<CiNondeterminism>, RouteClasses) {
     let mut by: BTreeMap<String, CiFinding> = BTreeMap::new();
     let mut order: Vec<String> = Vec::new();
     let mut nondet = Vec::new();
@@ -705,7 +707,7 @@ pub fn decide(r: &mut CiRun) {
 }
 
 /// What the first runs drew, and the property table's reach.
-fn coverage(doc: &Exploration, dir: &Path) -> (CiCoverage, u64) {
+pub(crate) fn coverage(doc: &Exploration, dir: &Path) -> (CiCoverage, u64) {
     let mut c = CiCoverage::default();
     let mut runs = 0;
     if let Ok(hydo_results::Results::Exploration {

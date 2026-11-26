@@ -434,6 +434,71 @@ runs on a machine like this one. `seeds_from: history` of `hydo ci run` uses the
 the statistics of the whole range from the parts' files, with the curve that one exploration of
 the range gives.
 
+## Keep the findings of your runs
+
+A finding is one failure of a check, named by its key: `f1:<kind>:<10 hex>`, made from the
+check's normalized statement. `hydo findings record` keeps the findings of a `hydo run` or a
+`hydo explore` folder in one store. A store is a folder of small JSON files. It has the format of
+the history store of `hydo ci record` (`hydo guide ci`, section 12), so a person, a CI job, or
+another tool reads the same records:
+
+```sh
+hydo run "disk=cut | run C=12 R=everysec" --record-findings
+hydo explore --seeds 1-20 --record-findings
+hydo findings record hydo-out/explore           # a folder made before
+hydo findings list                              # the open findings
+hydo findings show f1:invariant:5ef675c8c9      # one finding; a unique part of its key is enough
+hydo findings history 5ef675c8c9                # its line of recorded runs
+```
+
+The store is `--store DIR`, else the folder in `HYDO_FINDINGS_STORE`, else `~/.hydo/findings`.
+Set `HYDO_FINDINGS_STORE` once, for example to a checkout of a team's history branch. The
+project is the `name` of the manifest that the image was built from, and `--project` names
+another. The commit and the branch are this folder's git `HEAD` and branch, or the branch `local`
+outside a repository; `--commit` and `--branch` name others.
+
+What a record does to a finding:
+
+- A finding that a run or an exploration shows is `new` the first time on its branch. After that
+  each record adds one sighting to the same entry.
+- A `hydo run` of one of the finding's recorded schedules that passes is a replay, and it proves
+  the finding fixed. A run of any other schedule proves nothing.
+- A finding that a later run or exploration shows again is `back again`.
+- A run that does not show a finding keeps it open: absence after a bounded search proves
+  nothing.
+- Recording one folder twice changes nothing.
+
+A key names the check, not the cause. Two causes that break one check share one key. A replay
+of one schedule can then prove the key fixed while another schedule still fails it, and the next
+exploration that shows it marks it `back again`.
+
+A record holds the key, the kind, the normalized title and the whole verdict line, the minimal
+schedules, the fingerprint, and the image's sha256. It also holds hydo's version and fingerprint
+epoch, the engine, the host's CPU model, and the time. It holds no path of this machine: the
+image and the run folder appear by their file names, and the engine's arguments are left out.
+The verdict line is the guest's own text.
+
+On the Mac engine the Redis quickstart example, with `faults: [kill, pause, cut, clock]`, gave
+this history. Image B is the same example with its setting `R` changed to sync every write:
+
+```text
+$ hydo findings history 5ef675c8c9
+  f1:invariant:5ef675c8c9  VIOLATION [redis.acked_writes_survive] key k:# lost
+    back again; first seen 2026-11-26 07:48:35 UTC, last seen 2026-11-26 07:49:01 UTC; 3 sightings
+    class unsafe-knob
+    minimal schedule: disk=cut | run C=12 R=everysec
+    2026-11-26 07:48:35 UTC  hydo run      first seen  fp=275a3d143726e6ad  image df2bb1f559b4
+    2026-11-26 07:48:47 UTC  hydo explore  seen failing again  fp=18b18bd983b8a4a0  image df2bb1f559b4
+    2026-11-26 07:48:53 UTC  hydo explore  not found (still open)  image 12360f0ff79e
+    2026-11-26 07:48:57 UTC  hydo run      fixed: its schedule passed  fp=eb1d238c59246a8f  image 12360f0ff79e
+    2026-11-26 07:49:01 UTC  hydo run      back again after a fix  fp=275a3d143726e6ad  image df2bb1f559b4
+```
+
+`--json` prints one results document of the type `findings`, which `hydo/schema/results-v1.json`
+describes. `list` takes `--state open|fixed|accepted|all`, `--kind`, `--class`, `--branch`, and
+`--since 2026-11-26`. `hydo ci page --store DIR` shows these records beside the CI runs, each with
+the command that made it.
+
 ## Which versions have a finding
 
 `hydo versions` says in which versions of the system a finding is present. It replays the

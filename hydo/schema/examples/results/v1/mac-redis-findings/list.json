@@ -1,0 +1,46 @@
+{
+  "v": 1,
+  "type": "findings",
+  "hydo_version": "0.6.0",
+  "view": "list",
+  "store": "store",
+  "filter": {
+    "state": "all"
+  },
+  "findings": [
+    {
+      "key": "f1:invariant:5ef675c8c9",
+      "kind": "invariant",
+      "title": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "project": "redis",
+      "branch": "local",
+      "state": "open",
+      "accepted": false,
+      "reappeared": true,
+      "minimal": "disk=cut | run C=12 R=everysec",
+      "schedules": [
+        "disk=cut | run C=12 R=everysec",
+        "disk=cut dseed=0 | run C=10 R=no"
+      ],
+      "classes": [
+        "unsafe-knob"
+      ],
+      "first_seen": {
+        "run": "local:c4bc61380bd51f0f",
+        "time": "2026-11-26T07:48:35Z"
+      },
+      "last_seen": {
+        "run": "local:4665667d9d6b098a",
+        "time": "2026-11-26T07:49:01Z"
+      },
+      "seen": 3,
+      "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+      "fp": "275a3d143726e6ad",
+      "image_sha256": "df2bb1f559b42b4f2c0b465f4a6130207dddbecada7d03682fb47f4c727512d9",
+      "hydo": "0.6.0",
+      "epoch": 6,
+      "engine": "hvm/Apple",
+      "repro": "hydo run explore-ob-redis-arm64.cpio.gz 'disk=cut | run C=12 R=everysec'"
+    }
+  ]
+}

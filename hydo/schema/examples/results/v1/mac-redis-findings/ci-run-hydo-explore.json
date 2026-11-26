@@ -1,0 +1,118 @@
+{
+  "v": 1,
+  "type": "ci-run",
+  "id": "local:367c8544757dedf1",
+  "started": "2026-11-26T07:48:47Z",
+  "ci": {
+    "name": "local"
+  },
+  "project": {
+    "name": "redis",
+    "dir": ".",
+    "manifest": "",
+    "manifest_sha256": "09b5618390947740755abf009c7e0e8d9b1590d5caf08ea282dfd3f577161630"
+  },
+  "trigger": "manual",
+  "branch": "local",
+  "hydo": {
+    "version": "0.6.0",
+    "epoch": 6
+  },
+  "engine": {
+    "backend": "hvm",
+    "ram_mib": 1024,
+    "vcpus": 1,
+    "cpu": "v2",
+    "workers": 4,
+    "host_cpu": {
+      "vendor": "Apple",
+      "model": "Apple M2 Pro"
+    }
+  },
+  "image": {
+    "sha256": "df2bb1f559b42b4f2c0b465f4a6130207dddbecada7d03682fb47f4c727512d9",
+    "reused": false,
+    "given": false,
+    "path": "explore-ob-redis-arm64.cpio.gz"
+  },
+  "budget": {
+    "mode": "explore",
+    "seeds": "1-20",
+    "strategy": "random",
+    "options": [],
+    "partial": false
+  },
+  "summary": {
+    "runs": 25,
+    "failures": 1,
+    "findings": 1,
+    "states": {
+      "present": 1
+    },
+    "replays": 0,
+    "vacuous_passes": 0,
+    "regressions": {
+      "replayed": 0,
+      "as_expected": 0
+    },
+    "wall_s": 0.0
+  },
+  "coverage": {
+    "faults": {
+      "C": 5,
+      "K": 12,
+      "disk": 5
+    },
+    "services": {
+      "redis": 12
+    },
+    "properties": {
+      "declared": 6,
+      "reached": 1,
+      "not_exercised": [
+        "fault.paused",
+        "fault.pause_mid_request",
+        "fault.clock_back",
+        "fault.clock_fwd",
+        "fault.oneway_req",
+        "fault.oneway_resp"
+      ]
+    }
+  },
+  "findings": [
+    {
+      "key": "f1:invariant:5ef675c8c9",
+      "kind": "invariant",
+      "title": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "state": "present",
+      "proof": "no-base",
+      "minimal": "disk=cut dseed=0 | run C=10 R=no",
+      "schedules": [
+        "disk=cut dseed=0 | run C=10 R=no"
+      ],
+      "fp": "18b18bd983b8a4a0",
+      "classes": [
+        "unsafe-knob"
+      ],
+      "repro": "hydo run explore-ob-redis-arm64.cpio.gz 'disk=cut dseed=0 | run C=10 R=no'",
+      "replays": [],
+      "source": "explored",
+      "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost"
+    }
+  ],
+  "regressions": [],
+  "nondeterminism": [],
+  "outcome": {
+    "exit": 1,
+    "fail_on": [],
+    "failed_by": [
+      "present VIOLATION [redis.acked_writes_survive] key k:# lost"
+    ]
+  },
+  "artifacts": {
+    "exploration": "ex1",
+    "report": "",
+    "junit": ""
+  },
+  "recorded_from": "hydo explore"
+}

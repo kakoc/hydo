@@ -650,9 +650,11 @@ fn project_section(
                         .as_deref()
                         .map(|c| code(&short(c)))
                         .unwrap_or_else(|| "-".into()),
-                    esc(&match &run.change {
-                        Some(c) => format!("{} #{c}", run.trigger),
-                        None => run.trigger.clone(),
+                    // Milestone 365: a record of `hydo findings record` names its command
+                    esc(&match (&run.recorded_from, &run.change) {
+                        (Some(by), _) => by.clone(),
+                        (None, Some(c)) => format!("{} #{c}", run.trigger),
+                        (None, None) => run.trigger.clone(),
                     }),
                     esc(&seeds_words(run)),
                     esc(&budget_words(run)),

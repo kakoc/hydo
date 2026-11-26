@@ -64,6 +64,10 @@
     {
       "description": "`stats.json` of an exploration (added in Milestone 336).",
       "$ref": "#/$defs/StatsDoc"
+    },
+    {
+      "description": "`hydo findings list|show|history --json` (added in Milestone 365).",
+      "$ref": "#/$defs/FindingsDoc"
     }
   ],
   "$defs": {
@@ -4814,6 +4818,13 @@
               "type": "null"
             }
           ]
+        },
+        "recorded_from": {
+          "description": "The command whose results `hydo findings record` made this record of: `hydo run` or\n`hydo explore` (added in Milestone 365). Absent for a run of `hydo ci run`. Such a record\nhas `ci.name` `local` and `trigger` `manual`, and no base.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -5376,6 +5387,13 @@
         },
         "fixed_at": {
           "description": "The commit where the history store last recorded it fixed (a `reappeared` finding; added\nin stage 2).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "description": "The whole verdict line of the run that showed it, as the guest printed it (`hydo findings\nrecord`; added in Milestone 365). `title` is its normalized form.",
           "type": [
             "string",
             "null"
@@ -6033,6 +6051,34 @@
           ]
         },
         "image_input_key": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_sha256": {
+          "description": "The image's SHA-256, the fingerprint epoch, and the fingerprint of the finding's minimal\nschedule in that run (added in Milestone 365).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epoch": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "fp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "time": {
+          "description": "When the run that recorded it started, in UTC (`2026-11-26T10:04:00Z`; added in Milestone\n365).",
           "type": [
             "string",
             "null"
@@ -8053,6 +8099,394 @@
       "required": [
         "seed",
         "vm_s"
+      ]
+    },
+    "FindingsDoc": {
+      "description": "`hydo findings list|show|history --json`: the findings of a history store (the store of `hydo\nci record` and `hydo findings record`; added in Milestone 365). One entry per finding and\nbranch, in the order of the store's projects, then branches, then first sightings.",
+      "type": "object",
+      "properties": {
+        "v": {
+          "type": "integer",
+          "const": 1
+        },
+        "type": {
+          "$ref": "#/$defs/FindingsType"
+        },
+        "hydo_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "view": {
+          "description": "`list`, `show` or `history`.",
+          "type": "string"
+        },
+        "store": {
+          "description": "The store's directory as the command was given it (`--store`, `HYDO_FINDINGS_STORE`, or\n`~/.hydo/findings`).",
+          "type": "string"
+        },
+        "filter": {
+          "$ref": "#/$defs/FindingsFilter",
+          "default": {}
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StoredFinding"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "v",
+        "type",
+        "view",
+        "store"
+      ]
+    },
+    "FindingsType": {
+      "description": "The `type` of this record: always `\"findings\"`.",
+      "type": "string",
+      "enum": [
+        "findings"
+      ]
+    },
+    "FindingsFilter": {
+      "description": "What `hydo findings list`, `show` and `history` were asked for (added in Milestone 365).",
+      "type": "object",
+      "properties": {
+        "project": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "branch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "`open`, `fixed`, `accepted` or `all`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "A finding kind (`invariant`, `error-log`, ...).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "class": {
+          "description": "A fault class (`power-cut`, `durable-defaults`, ...).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "since": {
+          "description": "Only findings last seen at this time or later (UTC, `2026-11-26` or\n`2026-11-26T10:04:00Z`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "description": "A finding key or a unique part of it (`show`, `history`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "StoredFinding": {
+      "description": "One finding of one branch of a history store, as `hydo findings` reads it (added in\nMilestone 365).",
+      "type": "object",
+      "properties": {
+        "key": {
+          "description": "`f1:<kind>:<10 hex>` (docs/design/ci.md section 4.2).",
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "title": {
+          "description": "The normalized statement (numbers as `#`).",
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "state": {
+          "description": "`open` or `fixed` (the ledger's state).",
+          "type": "string"
+        },
+        "accepted": {
+          "description": "Accepted in `hydo/known-findings.yaml` when it was last seen.",
+          "type": "boolean",
+          "default": false
+        },
+        "reappeared": {
+          "description": "Seen failing again after a replay had proven it fixed.",
+          "type": "boolean",
+          "default": false
+        },
+        "minimal": {
+          "description": "The minimal schedule of its last sighting, and every schedule recorded under its key.",
+          "type": "string"
+        },
+        "schedules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "classes": {
+          "description": "The fault classes of the explorations that showed it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "first_seen": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FindingPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "last_seen": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FindingPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fixed_at": {
+          "description": "The run whose replay proved it fixed, while it is fixed.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FindingPoint"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "seen": {
+          "description": "The recorded runs that saw it failing.",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "verdict": {
+          "description": "The last sighting's verdict line, fingerprint, image, hydo, epoch and engine.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hydo": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epoch": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "engine": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "repro": {
+          "description": "The command that replays its minimal schedule.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sightings": {
+          "description": "Every recorded run of the branch from its first sighting on, oldest first (`show` and\n`history` only).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FindingSighting"
+          }
+        }
+      },
+      "required": [
+        "key",
+        "kind",
+        "title",
+        "project",
+        "branch",
+        "state",
+        "minimal",
+        "seen"
+      ]
+    },
+    "FindingPoint": {
+      "description": "Where a finding was at one point of its line (added in Milestone 365): the recorded run, its\ncommit, and when it started.",
+      "type": "object",
+      "properties": {
+        "run": {
+          "description": "The recorded run's `id`.",
+          "type": "string"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "time": {
+          "description": "UTC, `2026-11-26T10:04:00Z`: the run's start, else when it was recorded.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "run"
+      ]
+    },
+    "FindingSighting": {
+      "description": "One recorded run of a finding's branch from the finding's first sighting on (added in\nMilestone 365).",
+      "type": "object",
+      "properties": {
+        "run": {
+          "description": "The recorded run's `id`.",
+          "type": "string"
+        },
+        "commit": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "time": {
+          "description": "UTC: the run's start, else when it was recorded.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "by": {
+          "description": "The command that made the run: `hydo ci run`, `hydo explore` or `hydo run`.",
+          "type": "string"
+        },
+        "event": {
+          "description": "What the run did to the finding: `new` (first seen on the branch), `failing` (seen failing\nagain), `back` (seen failing after it was fixed), `fixed` (its schedule passed on replay),\nor `not-found` (the run did not find it, and it stays open: absence proves nothing).",
+          "type": "string"
+        },
+        "state": {
+          "description": "The finding's state in that run (`ci_state`), absent for `not-found`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "acceptance": {
+          "description": "Accepted in that run, or the acceptance taken back: `accepted`, `unaccepted`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "proof": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "schedule": {
+          "description": "The schedule that showed it there, and that run's fingerprint and verdict line.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fp": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "image_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hydo": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epoch": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "engine": {
+          "description": "`<backend>/<host CPU vendor>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "run",
+        "by",
+        "event"
       ]
     }
   }

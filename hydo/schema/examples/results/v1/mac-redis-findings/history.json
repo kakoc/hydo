@@ -1,0 +1,118 @@
+{
+  "v": 1,
+  "type": "findings",
+  "hydo_version": "0.6.0",
+  "view": "history",
+  "store": "store",
+  "filter": {
+    "key": "5ef675c8c9"
+  },
+  "findings": [
+    {
+      "key": "f1:invariant:5ef675c8c9",
+      "kind": "invariant",
+      "title": "VIOLATION [redis.acked_writes_survive] key k:# lost",
+      "project": "redis",
+      "branch": "local",
+      "state": "open",
+      "accepted": false,
+      "reappeared": true,
+      "minimal": "disk=cut | run C=12 R=everysec",
+      "schedules": [
+        "disk=cut | run C=12 R=everysec",
+        "disk=cut dseed=0 | run C=10 R=no"
+      ],
+      "classes": [
+        "unsafe-knob"
+      ],
+      "first_seen": {
+        "run": "local:c4bc61380bd51f0f",
+        "time": "2026-11-26T07:48:35Z"
+      },
+      "last_seen": {
+        "run": "local:4665667d9d6b098a",
+        "time": "2026-11-26T07:49:01Z"
+      },
+      "seen": 3,
+      "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+      "fp": "275a3d143726e6ad",
+      "image_sha256": "df2bb1f559b42b4f2c0b465f4a6130207dddbecada7d03682fb47f4c727512d9",
+      "hydo": "0.6.0",
+      "epoch": 6,
+      "engine": "hvm/Apple",
+      "repro": "hydo run explore-ob-redis-arm64.cpio.gz 'disk=cut | run C=12 R=everysec'",
+      "sightings": [
+        {
+          "run": "local:c4bc61380bd51f0f",
+          "time": "2026-11-26T07:48:35Z",
+          "by": "hydo run",
+          "event": "new",
+          "state": "new",
+          "proof": "no-base",
+          "schedule": "disk=cut | run C=12 R=everysec",
+          "fp": "275a3d143726e6ad",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+          "image_sha256": "df2bb1f559b42b4f2c0b465f4a6130207dddbecada7d03682fb47f4c727512d9",
+          "hydo": "0.6.0",
+          "epoch": 6,
+          "engine": "hvm/Apple"
+        },
+        {
+          "run": "local:367c8544757dedf1",
+          "time": "2026-11-26T07:48:47Z",
+          "by": "hydo explore",
+          "event": "failing",
+          "state": "present",
+          "proof": "no-base",
+          "schedule": "disk=cut dseed=0 | run C=10 R=no",
+          "fp": "18b18bd983b8a4a0",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+          "image_sha256": "df2bb1f559b42b4f2c0b465f4a6130207dddbecada7d03682fb47f4c727512d9",
+          "hydo": "0.6.0",
+          "epoch": 6,
+          "engine": "hvm/Apple"
+        },
+        {
+          "run": "local:5c7f55e9891d36c6",
+          "time": "2026-11-26T07:48:53Z",
+          "by": "hydo explore",
+          "event": "not-found",
+          "image_sha256": "12360f0ff79eed5d18c33c75cb87be3e108f7ac6f54dc862d77e7363aa1df1de",
+          "hydo": "0.6.0",
+          "epoch": 6,
+          "engine": "hvm/Apple"
+        },
+        {
+          "run": "local:9eeb7cdf4f472c85",
+          "time": "2026-11-26T07:48:57Z",
+          "by": "hydo run",
+          "event": "fixed",
+          "state": "fixed",
+          "proof": "head-replay-ok",
+          "schedule": "disk=cut | run C=12 R=everysec",
+          "fp": "eb1d238c59246a8f",
+          "verdict": "HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=12 all present)",
+          "image_sha256": "12360f0ff79eed5d18c33c75cb87be3e108f7ac6f54dc862d77e7363aa1df1de",
+          "hydo": "0.6.0",
+          "epoch": 6,
+          "engine": "hvm/Apple"
+        },
+        {
+          "run": "local:4665667d9d6b098a",
+          "time": "2026-11-26T07:49:01Z",
+          "by": "hydo run",
+          "event": "back",
+          "state": "reappeared",
+          "proof": "no-base",
+          "schedule": "disk=cut | run C=12 R=everysec",
+          "fp": "275a3d143726e6ad",
+          "verdict": "HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:0 lost",
+          "image_sha256": "df2bb1f559b42b4f2c0b465f4a6130207dddbecada7d03682fb47f4c727512d9",
+          "hydo": "0.6.0",
+          "epoch": 6,
+          "engine": "hvm/Apple"
+        }
+      ]
+    }
+  ]
+}
