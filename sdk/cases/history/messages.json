@@ -1,5 +1,5 @@
 {
-  "about": "messaging records (docs/design/messaging.md): send, recv, ack, nack, extend, commit, sub, status and drained, with items m;k=;x=;d=;o=;n=;h=;v=;s=;r=;e=;f= in one fixed order and their values encoded with enc plus ; and = (the tokens are the Rust Item's; tests/history.rs checks that the Messages recorder writes exactly these lines)",
+  "about": "messaging records (docs/design/messaging.md): send, recv, ack, nack, extend, commit, sub, status and drained, with items m;k=;x=;d=;o=;n=;h=;v=;s=;r=;e=;f= in one fixed order and their values encoded with enc plus ; and = (the tokens are the Rust Item's; tests/messages.rs checks that the Messages recorder writes exactly these lines, and the Go SDK's hydohist/messages_test.go that Drained writes the drained line)",
   "needs": [],
   "steps": [
     {"do":"history","name":"q"},

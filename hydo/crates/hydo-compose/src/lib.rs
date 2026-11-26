@@ -277,6 +277,23 @@ fn named_volume(v: &Y) -> Option<(String, String)> {
 }
 
 /// `re.sub(r"[^A-Za-z0-9._-]", "_", s)`.
+/// Whether a Compose service keeps data (Milestone 363): a named or anonymous volume among its
+/// `volumes:`, or a `VOLUME` of its image. A bind mount of the host's file or folder and a tmpfs
+/// keep none.
+fn keeps_data(s: &Y, cfg: &Y) -> bool {
+    let volume = |v: &Y| {
+        if v.is_map() {
+            return pstr(v.get("type").unwrap_or(&Y::s("volume"))) == "volume";
+        }
+        let vs = pstr(v);
+        match vs.split_once(':') {
+            None => true,
+            Some((src, _)) => !src.starts_with(['.', '/', '~']),
+        }
+    };
+    as_list(s.get("volumes")).iter().any(volume) || !cfg.getn("Volumes").iter_keys().is_empty()
+}
+
 fn safe_name(s: &str) -> String {
     s.chars()
         .map(|c| {
@@ -802,6 +819,10 @@ struct Svc {
     /// Saved from the local Docker (`--from-docker`, a lock entry with `from_docker: true`):
     /// fetch-images.sh saves it again where its file is missing (Milestone 320).
     from_docker: bool,
+    /// A named or anonymous volume of the Compose file, or a `VOLUME` of the image, holds its
+    /// data, also when the mount was not added (Milestone 363: the workload's placeholder aims at
+    /// such a service).
+    keeps_data: bool,
 }
 
 /// The options of one import.
@@ -2036,6 +2057,7 @@ impl<'a> Importer<'a> {
             job_kind: None,
             build: local_build.clone(),
             from_docker,
+            keeps_data: false,
         };
         if self.o.origin.is_some() {
             // the x-hydo-* keys of a converted document (M243)
@@ -2718,11 +2740,11 @@ impl<'a> Importer<'a> {
         mut m: Mount,
         what: &str,
         wh: &str,
-    ) {
+    ) -> bool {
         let d = hydo_manifest::py::normpath(&m.dst);
         if !match_dollar(path_ok_re(), &d) {
             self.w.warn("volumes", format!("{wh}: {what} target {} has characters hydo cannot mount (spaces, quotes); skipped", hydo_manifest::py::repr_str(&d)));
-            return;
+            return false;
         }
         let own_volume = self.own_data
             && what.starts_with("volume ")
@@ -2741,7 +2763,7 @@ impl<'a> Importer<'a> {
             m.copy_up = false;
             seen.push(d);
             mts.push(m);
-            return;
+            return true;
         }
         if matches!(
             d.as_str(),
@@ -2759,7 +2781,7 @@ impl<'a> Importer<'a> {
                     format!("{wh}: {what} on {d} cannot be mounted; skipped"),
                 );
             }
-            return;
+            return false;
         }
         if seen.contains(&d) {
             mts.retain(|x| x.dst != d);
@@ -2767,6 +2789,7 @@ impl<'a> Importer<'a> {
         seen.push(d.clone());
         m.dst = d;
         mts.push(m);
+        true
     }
 
     fn mounts(&mut self, svc: &mut Svc, s: &Y, cfg: &Y, n: &str, wh: &str) -> R<()> {
@@ -2781,6 +2804,7 @@ impl<'a> Importer<'a> {
             Mount::tmpfs("/dev/shm", Some("64m".into())),
         ];
         let mut seen: Vec<String> = vec!["/etc/hosts".into(), "/run".into(), "/dev/shm".into()];
+        svc.keeps_data = keeps_data(s, cfg);
         for v in as_list(s.get("volumes")) {
             self.volume(&v, &mut mts, &mut seen, n, wh)?;
         }
@@ -2846,14 +2870,15 @@ impl<'a> Importer<'a> {
                 continue; // the image's /data is the data disk anyway
             }
             let k = format!("anon-{n}-{}", vv.trim_matches('/').replace('/', "-"));
-            self.data_dirs.push(format!("vol/{k}"));
-            self.add_mount(
+            if self.add_mount(
                 &mut mts,
                 &mut seen,
                 Mount::src(&format!("/data/vol/{k}"), &vv, true),
                 "image VOLUME",
                 wh,
-            );
+            ) {
+                self.data_dirs.push(format!("vol/{k}"));
+            }
             svc.comments.push(format!(
                 "the image declares VOLUME {vv}: an anonymous volume on the data disk"
             ));
@@ -2964,7 +2989,6 @@ impl<'a> Importer<'a> {
             } else {
                 format!("anon-{n}-{}", tgt_s.trim_matches('/').replace('/', "-"))
             };
-            self.data_dirs.push(format!("vol/{k}"));
             if ro {
                 self.notes.push(format!(
                     "{wh}: volume {} is mounted read-write in the guest (:ro is not enforced)",
@@ -2979,13 +3003,17 @@ impl<'a> Importer<'a> {
                     "(anonymous)".into()
                 }
             );
-            self.add_mount(
+            // Milestone 363: a volume whose mount was not added (on /data, the data disk's root)
+            // gets no folder of `data.dirs`, which no service would use
+            if self.add_mount(
                 mts,
                 seen,
                 Mount::src(&format!("/data/vol/{k}"), &tgt_s, copy_up),
                 &what,
                 wh,
-            );
+            ) {
+                self.data_dirs.push(format!("vol/{k}"));
+            }
             return Ok(());
         }
         let Y::Str(srcs) = &src else {
@@ -3012,15 +3040,16 @@ impl<'a> Importer<'a> {
             let r = relpath(&p, &self.cdir);
             let r = r.trim_matches(['.', '/']);
             let k = format!("bind-{}", safe_name(if r.is_empty() { n } else { r }));
-            self.data_dirs.push(format!("vol/{k}"));
             self.w.warn("volumes", format!("{wh}: bind mount source {srcs} does not exist (Docker would create an empty directory): it is an empty directory on the data disk, /data/vol/{k}"));
-            self.add_mount(
+            if self.add_mount(
                 mts,
                 seen,
                 Mount::src(&format!("/data/vol/{k}"), &tgt_s, false),
                 &format!("bind {srcs}"),
                 wh,
-            );
+            ) {
+                self.data_dirs.push(format!("vol/{k}"));
+            }
             return Ok(());
         }
         if Path::new(&p).is_dir() && !ro {
@@ -3414,11 +3443,7 @@ impl<'a> Importer<'a> {
             l.push_str("provision: ");
             l.push_str(&block(&provision.join("\n"), 2));
         }
-        let ex = self
-            .svcs
-            .iter()
-            .find(|s| s.port.is_some_and(|p| p != 0))
-            .unwrap_or(&self.svcs[0]);
+        let ex = self.write_target();
         let ex_port = match ex.port {
             Some(p) => p.to_string(),
             None => "80".into(),
@@ -3443,6 +3468,31 @@ impl<'a> Importer<'a> {
         ));
         l.push_str("\nfaults: [kill, pause, network, oneway, cut, clock, disk]\n");
         l
+    }
+
+    /// The service the workload's placeholder names (Milestone 363): the one that takes the
+    /// writes. It starts from the first service with a port. When other services with a port
+    /// depend on that one, it is a database or a directory of the others, and the placeholder
+    /// names the first of them that keeps data, else the first of them. Before, it named the
+    /// first service with a port: NSQ's `nsqlookupd`, which only tells the clients where `nsqd`
+    /// is (the 0.6.0 trial), and the database of an application that the Compose file lists
+    /// first.
+    fn write_target(&self) -> &Svc {
+        let port = |s: &Svc| s.port.is_some_and(|p| p != 0);
+        let Some(first) = self.svcs.iter().find(|s| port(s)) else {
+            return &self.svcs[0];
+        };
+        let users: Vec<&Svc> = self
+            .svcs
+            .iter()
+            .filter(|s| s.job.is_none() && port(s) && s.depends_on.contains(&first.name))
+            .collect();
+        users
+            .iter()
+            .find(|s| s.keeps_data)
+            .or(users.first())
+            .copied()
+            .unwrap_or(first)
     }
 
     /// fetch-images.sh: copy the images by digest into the images directory with

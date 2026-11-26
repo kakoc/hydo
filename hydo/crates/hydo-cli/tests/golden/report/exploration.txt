@@ -13,7 +13,7 @@ cuts. Each failing run failed again the same way when hydo replayed it.
    ✘ The run stopped with harness: guest did not finish (I/O error)
    Is it a bug? Decide whether your system must survive a failing disk.
    See it again: hydo run --image scripted-disk.img "disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms"
-   Why it failed: hydo inspect diagnose hydo-out/explore --problem 1
+   Why it failed: hydo inspect diagnose hydo-out/explore --problem 1 --text
    A run directory of it: hydo run --backend hvx --image scripted-disk.img "disk=ioerr:2 dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms" --out hydo-out/explore/runs/seed-8
    If it is expected: hydo ci accept f1:run-error:b90a956980 --reason "…"
    This line is for hydo ci run (hydo guide ci).
@@ -27,7 +27,7 @@ cuts. Each failing run failed again the same way when hydo replayed it.
      3. After the restart, your check finds lost acknowledged write.
    Is it a bug? No, not in your system: it lost what the disk threw away.
    See it again: hydo run --image scripted-disk.img "disk=lying:1 dseed=63cbe1e459320dd7 | run C=11"
-   Why it failed: hydo inspect diagnose hydo-out/explore --problem 2
+   Why it failed: hydo inspect diagnose hydo-out/explore --problem 2 --text
    A run directory of it: hydo run --backend hvx --image scripted-disk.img "disk=lying:1 dseed=63cbe1e459320dd7 | run C=11" --out hydo-out/explore/runs/seed-7
    If it is expected: hydo ci accept f1:invariant:b85cf53e33 --reason "…"
    This line is for hydo ci run (hydo guide ci).

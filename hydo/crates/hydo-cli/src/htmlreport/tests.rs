@@ -683,11 +683,11 @@ fn the_terminal_says_what_the_page_says() {
         "   ✘ The run stopped with harness: guest did not finish (I/O error)\n",
         "   If it is expected: hydo ci accept f1:invariant:",
         // Milestone 324: how to diagnose a problem, and the run directory that it needs
-        "   Why it failed: hydo inspect diagnose hydo-out/explore --problem 1\n",
+        "   Why it failed: hydo inspect diagnose hydo-out/explore --problem 1 --text\n",
         "   A run directory of it: hydo run --backend hvx --image scripted-disk.img \"disk=ioerr:2 \
          dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms\" --out \
          hydo-out/explore/runs/seed-8\n",
-        "   Why it failed: hydo inspect diagnose hydo-out/explore --problem 2\n",
+        "   Why it failed: hydo inspect diagnose hydo-out/explore --problem 2 --text\n",
     ] {
         assert!(text.contains(want), "the terminal lacks {want:?}");
     }
@@ -1183,4 +1183,77 @@ fn an_exploration_with_its_statistics() {
     for l in words.lines() {
         assert!(l.chars().count() <= 80, "a line over 80 columns: {l}");
     }
+}
+
+/// Milestone 363: the page keeps the project's own spelling of its name, from its README
+/// (`NSQ` for the manifest's `nsq`, where the trial's page said `Nsq`).
+#[test]
+fn the_system_keeps_its_own_spelling() {
+    let d = std::env::temp_dir().join(format!("hydo-htmlreport-own-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(d.join("hydo")).unwrap();
+    std::fs::create_dir_all(d.join("hydo-out/explore")).unwrap();
+    let _rm = Rm(d.clone());
+    std::fs::write(
+        d.join("README.md"),
+        "<p align=\"center\"><img src=\"https://example.com/nsqio/nsq/raw/master/logo.png\"/></p>\n\n\
+         **NSQ** is a realtime distributed messaging platform. Run `nsqd` and nsq.io's docs.\n\n\
+         NSQ promotes distributed topologies; see nsq-docs and example.com/nsqio/nsq.\n",
+    )
+    .unwrap();
+    std::fs::write(d.join("hydo/hydo.yaml"), "format: 1\nname: nsq\n").unwrap();
+    let pr = story::project(&d.join("hydo-out/explore"), None, &[]);
+    assert_eq!(pr.system, "NSQ");
+    assert_eq!(pr.label, "nsq");
+    let own = |text: &str, name: &str| {
+        std::fs::write(d.join("README.md"), text).unwrap();
+        story::own_spelling(std::slice::from_ref(&d), name)
+    };
+    // a name the README writes in lower case only gets no spelling: the page capitalises it
+    assert_eq!(own("etcd is a key-value store. Run etcd.\n", "etcd"), None);
+    assert_eq!(
+        own("Redis is fast. redis-server runs Redis.\n", "redis").as_deref(),
+        Some("Redis")
+    );
+    // the spelling in a path, an address or a file name does not count
+    assert_eq!(
+        own(
+            "Use TiKV. tikv/pd, tikv.org, tikv-server, tikv_x, TIKV\n",
+            "tikv"
+        )
+        .as_deref(),
+        Some("TiKV")
+    );
+    assert_eq!(own("nothing here\n", "nsq"), None);
+}
+
+/// Milestone 363: a long composition word (`W=`) hid the `L=` after it in the trial's command,
+/// so the problem names the command's faults apart, and the command stays exact.
+#[test]
+fn a_long_composition_word_does_not_hide_the_faults() {
+    let w = "W=:p1,r200,cparallel_driver_pub,0.0.0.503389004,1.0.0.1894126023,2.1.0.662703717,\
+             3.2.0.938279500";
+    let sched = format!("disk=none dseed=0 | run K=nsqd@4+1 {w} L=nsqd@6+2");
+    assert_eq!(
+        story::faults_beside_long_word(&sched).as_deref(),
+        Some("After its long composition word `W=`, the command has the fault `L=nsqd@6+2`.")
+    );
+    // every fault after the word, in the order the steps tell them
+    let two = format!("disk=none | run {w} L=nsqd@6+2 K=nsqd@4+1");
+    assert_eq!(
+        story::faults_beside_long_word(&two).as_deref(),
+        Some(
+            "After its long composition word `W=`, the command has the faults `K=nsqd@4+1` and \
+             `L=nsqd@6+2`."
+        )
+    );
+    // a short W= word hides nothing, and a schedule without faults after it has nothing to name
+    assert_eq!(
+        story::faults_beside_long_word("disk=none | run K=nsqd@4+1 W=5764a73c,p3,q2,r200"),
+        None
+    );
+    assert_eq!(
+        story::faults_beside_long_word(&format!("disk=none | run {w}")),
+        None
+    );
 }

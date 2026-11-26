@@ -2050,10 +2050,16 @@ pub fn acked_outcome(ix: &Ix<'_>) -> Claim {
                 "{}{sysid} was acknowledged and ended failed with {err}, not an error the client causes",
                 m.m
             )),
-            (Out::Info, _) if is_acked => Some(format!(
-                "{}{sysid} was acknowledged and has no final state ({err})",
-                m.m
-            )),
+            // Milestone 363: the error code only when the read-back gave one; `(no error code)`
+            // said nothing to the reader of a lost message (the 0.6.0 trial)
+            (Out::Info, _) if is_acked => Some(match it.e.as_deref() {
+                Some(e) => format!("{}{sysid} was acknowledged and has no final state ({e})", m.m),
+                None => format!(
+                    "{}{sysid} was acknowledged and has no final state: the read-back found it still \
+                     pending or not at all",
+                    m.m
+                ),
+            }),
             _ => None,
         };
         if !is_acked {

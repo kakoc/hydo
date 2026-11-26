@@ -1063,7 +1063,8 @@ pub fn print_doc(v: &Value, text: bool) -> i32 {
     }
 }
 
-/// The `--text` view: an exec's output as the command printed it, anything else indented.
+/// The `--text` view: an exec's output as the command printed it, a diagnosis and the values in
+/// lines, anything else indented.
 fn view(v: &Value) -> String {
     if let Some(e) = v.get("exec") {
         let mut s = String::new();
@@ -1084,6 +1085,11 @@ fn view(v: &Value) -> String {
     }
     if let Some(t) = v.pointer("/file/text").and_then(Value::as_str) {
         return t.to_string();
+    }
+    if v.get("type").and_then(Value::as_str) == Some("diagnosis") {
+        if let Ok(d) = serde_json::from_value::<hydo_results::DiagnosisDoc>(v.clone()) {
+            return diagnose::text(&d);
+        }
     }
     if v.get("type").and_then(Value::as_str) == Some("values") {
         if let Ok(d) = serde_json::from_value::<hydo_results::ValueHistory>(v.clone()) {

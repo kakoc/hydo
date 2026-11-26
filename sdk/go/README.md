@@ -192,6 +192,14 @@ checks:
 
 `hydo guide checks` describes the checks and their options.
 
+A messages check (`hydo guide messages`) reads the same records. Its drain ends each group with
+the record `drained`:
+
+```go
+q := hydohist.New("orders")
+q.Drained(9, "orders", "-") // "-": a queue without groups
+```
+
 ### Choose where the records go
 
 Under hydo the records go to the guest's console (`/dev/ttyS0` for properties, `/dev/console`

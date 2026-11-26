@@ -197,10 +197,13 @@ pub(super) fn item(n: usize, it: &super::Item, label: &str, shown: &str, own: us
             "See it again"
         };
         o.push_str(&format!("{INDENT}{again}: {}\n", it.command));
+        if let Some(f) = story::faults_beside_long_word(&it.schedule) {
+            o.push_str(&wrap(&f, INDENT));
+        }
         // Milestone 324: an exploration keeps no run directory of a problem; say how to get one
         if let Some(c) = &it.run_command {
             o.push_str(&format!(
-                "{INDENT}Why it failed: hydo inspect diagnose {} --problem {own}\n",
+                "{INDENT}Why it failed: hydo inspect diagnose {} --problem {own} --text\n",
                 crate::inspect::work::quote(shown),
             ));
             o.push_str(&format!("{INDENT}A run directory of it: {c}\n"));
@@ -352,6 +355,9 @@ pub fn run(dir: &Path, run: &Run, shown: &str) -> String {
         "{INDENT}{}\n",
         story::replay_command(&pr, image, run.engine.as_ref(), &run.schedule)
     ));
+    if let Some(f) = story::faults_beside_long_word(&run.schedule) {
+        o.push_str(&wrap(&f, INDENT));
+    }
     o.push_str("\nNext:\n");
     o.push_str(&format!(
         "{INDENT}As one web page: hydo report --html {}\n",

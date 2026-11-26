@@ -98,8 +98,15 @@ const GO_FROZEN_ONLY: &[&str] = &["hydoassert/hydo_assert.sh"];
 
 /// Files that only the public module has: the examples of its package documentation and the
 /// test of its README. They are test files, so no program is compiled from them, and the frozen
-/// copy needs no documentation.
-const GO_PUBLIC_ONLY: &[&str] = &["hydoassert/example_test.go", "hydohist/example_test.go"];
+/// copy needs no documentation. Milestone 363: also `hydohist/messages.go`, the `Drained` call of
+/// the messaging records, and its test. The frozen copy's order service records no messages,
+/// and a new file there would change that service's bytes.
+const GO_PUBLIC_ONLY: &[&str] = &[
+    "hydoassert/example_test.go",
+    "hydohist/example_test.go",
+    "hydohist/messages.go",
+    "hydohist/messages_test.go",
+];
 
 /// The Go packages of the module.
 const GO_PACKAGES: &[&str] = &["hydoassert", "hydohist"];

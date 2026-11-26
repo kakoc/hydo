@@ -47,6 +47,10 @@ hydo inspect diagnose <run dir> --evidence   # plus the evidence (one replay of 
 hydo inspect diagnose <explore dir> [--problem N] [--run]   # problem N of `hydo report`
 ```
 
+Each prints the diagnosis as one JSON document. With `--text` it prints lines for people: the
+verdict, why it failed, how each process ended, the likely causes, the evidence, and the next
+commands.
+
 An exploration keeps no run directory of its own. `hydo report <explore dir>` and `report.md`
 print, for each problem, the command that makes one:
 `hydo run [--backend kvm|hvx] --image <image> "<schedule>" --out <explore dir>/runs/seed-<n>`,
