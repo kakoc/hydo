@@ -112,11 +112,14 @@ Everything is a pure function of the consoles, and the consoles are part of a ru
 a reproduced run gets the same history and the same verdict.
 
 The console is 64 KiB per VM on hvx (since the snapshot the run starts from; the kernel module's
-buffer, `HVX_CONSOLE_SZ`) and 4 MiB on the KVM engine and the Mac. A record is 40–60 bytes, so an
-hvx run can record roughly 500 operations next to its other output, a KVM or Mac run about 60,000;
-a range read of many keys is one long line. Record short keys and values. When an hvx run writes
-more, the rest of its console is not kept: its engine.log says `hvx: console full` and `hydo run`
-warns, and the history check then sees only the first operations.
+buffer, `HVX_CONSOLE_SZ`) and 32 MiB on the KVM engine and the Mac. A record is 40–60 bytes, so an
+hvx run can record roughly 500 operations next to its other output; a range read of many keys is
+one long line. Record short keys and values. When an hvx run fills the buffer, the rest of its
+console is not kept. Since Milestone 368 its engine.log says `hvx: console full`, the run's
+console ends with a `HYDO-CONSOLE-CUT` line, `hydo run`, `result.json` and `hydo report` warn,
+and a `messages` claim that the missing records break is an ERROR that names the cut, not a
+loss. (Before, the engine waited for a count above the buffer that the module never gives, and
+no run warned.)
 
 ## The checkers
 

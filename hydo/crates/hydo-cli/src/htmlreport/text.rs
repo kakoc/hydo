@@ -335,12 +335,12 @@ pub fn run(dir: &Path, run: &Run, shown: &str) -> String {
     }
     o.push_str("\nWhat hydo saw:\n");
     o.push_str(&seen(&story::seen(run, &evs, &what, &pr), INDENT));
-    // Milestone 355: a reaction that never fired, which the run did not test
-    for w in run
-        .warnings
-        .iter()
-        .filter(|w| hydo_explore::results::is_unfired_warning(w))
-    {
+    // Milestone 355: a reaction that never fired, which the run did not test; Milestone 368: a
+    // console that the engine cut, whose later records no check saw
+    for w in run.warnings.iter().filter(|w| {
+        hydo_explore::results::is_unfired_warning(w)
+            || hydo_explore::results::is_console_cut_warning(w)
+    }) {
         o.push_str(&hang(&format!("{INDENT}! "), w, &format!("{INDENT}  ")));
     }
     o.push('\n');

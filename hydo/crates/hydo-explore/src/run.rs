@@ -3138,6 +3138,8 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
     // Milestone 355: first runs with a reaction that never fired, counted apart
     let mut unfired: Vec<String> = Vec::new();
     let mut nunfired = 0u64;
+    // Milestone 368: first runs whose console the engine cut, counted apart
+    let mut ncut = 0u64;
     let vacuous = seeds
         .iter()
         .filter(|sd| {
@@ -3165,9 +3167,17 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                         unfired.push(nf[0].clone());
                     }
                 }
-                r.warnings
+                if r.warnings
                     .iter()
-                    .any(|w| !u.contains(w) && !results::is_unfired_warning(w))
+                    .any(|w| results::is_console_cut_warning(w))
+                {
+                    ncut += 1;
+                }
+                r.warnings.iter().any(|w| {
+                    !u.contains(w)
+                        && !results::is_unfired_warning(w)
+                        && !results::is_console_cut_warning(w)
+                })
             })
         })
         .count() as u64;
@@ -3185,6 +3195,14 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
             "hydo: warning: in {nunmatched} of {} first runs {}",
             seeds.len(),
             unmatched.first().map(String::as_str).unwrap_or("")
+        );
+    }
+    if ncut > 0 {
+        eprintln!(
+            "hydo: warning: the engine cut the console of {ncut} of {} first runs at 64 KiB, so \
+             their checks judged only the records before the cut (the run records in events.jsonl \
+             have the warning); print less, or explore on the KVM engine",
+            seeds.len()
         );
     }
     if vacuous > 0 {

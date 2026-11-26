@@ -1120,12 +1120,22 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         println!("{l}");
     }
     // hvx keeps 64 KiB of a VM's console (the kernel module's buffer); hydo-hvx says in
-    // engine.log when a VM wrote more (hydo_hvx::engine::CONSOLE_FULL_MARK)
+    // engine.log when a VM filled it (hydo_hvx::engine::CONSOLE_FULL_MARK). Since Milestone 368
+    // the run's console carries the note too, and the run's warnings say it; engine.log speaks
+    // only for a console without the note.
     let elog = std::fs::read_to_string(outdir.join("engine.log")).unwrap_or_default();
-    if let Some(l) = elog.lines().find(|l| l.contains("hvx: console full")) {
+    let noted = run
+        .warnings
+        .iter()
+        .any(|w| hydo_explore::results::is_console_cut_warning(w));
+    if let Some(l) = elog
+        .lines()
+        .find(|l| l.contains("hvx: console full"))
+        .filter(|_| !noted)
+    {
         println!(
             "hydo: warning: {}. Print less (short history records, no per-id lines), or run on \
-             the KVM engine (--backend kvm), which keeps 4 MiB.",
+             the KVM engine (--backend kvm), which keeps 32 MiB.",
             l.trim()
         );
     }

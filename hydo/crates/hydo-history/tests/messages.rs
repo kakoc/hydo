@@ -2120,3 +2120,47 @@ fn acked_outcome_names_its_witness() {
         c.explanation
     );
 }
+
+/// Milestone 368 (the Typesense and Pulsar onboardings): hvx keeps 64 KiB of a VM's console, and
+/// the host ends a cut console with a `HYDO-CONSOLE-CUT` note. A messages claim that the missing
+/// records break is then an ERROR that names the cut, not a loss.
+#[test]
+fn a_cut_console_makes_a_loss_an_error() {
+    let decl = r#"HYDO-CHECK {"id":"c","type":"messages","history":"q","claims":{"delivery":"at-least-once"}}"#;
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m1", "ok");
+    sent(&mut h, 1, 2, "m2", "ok");
+    recv(&mut h, 2, 4, &["m1"]);
+    h.rec(9, "ok", 10, "drained", &["c", "-"]);
+    let text = format!("{decl}\n{}", h.text());
+    let whole = hydo_history::run_checks(
+        &[("one", text.clone())],
+        None,
+        hydo_history::DEFAULT_BUDGET,
+        None,
+    )
+    .unwrap();
+    let nl = whole.checks.iter().find(|c| c.id == "c.no-loss").unwrap();
+    assert_eq!(nl.status, hydo_history::Outcome::Violation);
+    assert!(hydo_history::console_cut(&[("one", text.as_str())]).is_none());
+    let cut = format!("{text}HYDO-CONSOLE-CUT hvx: console full: ...\n");
+    assert!(hydo_history::console_cut(&[("one", cut.as_str())]).is_some());
+    let r = hydo_history::run_checks(&[("one", cut)], None, hydo_history::DEFAULT_BUDGET, None)
+        .unwrap();
+    let nl = r.checks.iter().find(|c| c.id == "c.no-loss").unwrap();
+    assert_eq!(nl.status, hydo_history::Outcome::Error);
+    assert!(
+        nl.summary.starts_with("the console one was cut at 64 KiB"),
+        "{}",
+        nl.summary
+    );
+    assert!(nl.summary.contains("m2 was acknowledged"), "{}", nl.summary);
+    let v = r.verdict.unwrap();
+    assert!(
+        v.starts_with("HYDO-ORACLE: ERROR check c.no-loss could not be evaluated"),
+        "{v}"
+    );
+    // a claim that held stays held
+    let held = r.checks.iter().find(|c| c.id == "c.no-phantom").unwrap();
+    assert_eq!(held.status, hydo_history::Outcome::Ok);
+}

@@ -87,7 +87,7 @@ struct Boot {
     tgt: Option<Tgt>,
     /// M138: the VM comes from the reuse pool; the next restore resets it in place first.
     reused: bool,
-    /// The guest wrote more console than the module keeps (`HVX_CONSOLE_SZ`), and engine.log
+    /// The guest's console filled what the module keeps (`HVX_CONSOLE_SZ`), and engine.log
     /// said so (once per VM).
     console_full: bool,
     /// Milestone 264: the agent's lines filled [`PBUF_CAP`], and engine.log said so (once).
@@ -318,18 +318,27 @@ pub struct Io {
     pub diag: Box<dyn Write + std::marker::Send>,
 }
 
-/// The engine.log line when a VM's console outgrew the module's buffer. `hydo run` looks for
-/// [`CONSOLE_FULL_MARK`] in engine.log and repeats the warning.
-pub fn console_full_note(written: usize) -> String {
+/// The engine.log line when a VM's console filled the module's buffer. The module keeps the
+/// first [`HVX_CONSOLE_SZ`] bytes and counts no more, so a full buffer is the only sign that the
+/// guest wrote past it (Milestone 368: before, the engine looked for a count above the size,
+/// which the module never gives, and no run warned). `hydo run` looks for
+/// [`CONSOLE_FULL_MARK`] in engine.log; the console's note file ([`CONSOLE_CUT_SUFFIX`]) carries
+/// the same words into the run's console.
+pub fn console_full_note(kept: usize) -> String {
     format!(
-        "{CONSOLE_FULL_MARK}: the guest wrote {written} bytes of console; the hvx module keeps the \
-         first {HVX_CONSOLE_SZ} of a VM's (HVX_CONSOLE_SZ in hvx_abi.h), so later lines, \
-         HYDO-HIST and HYDO-ASSERT records included, are not in this run's console"
+        "{CONSOLE_FULL_MARK}: the guest's console reached the {kept} bytes that the hvx module \
+         keeps of a VM's (the first {HVX_CONSOLE_SZ}, HVX_CONSOLE_SZ in hvx_abi.h), so later \
+         lines, HYDO-HIST and HYDO-ASSERT records included, are not in this run's console"
     )
 }
 
 /// The start of [`console_full_note`].
 pub const CONSOLE_FULL_MARK: &str = "hvx: console full";
+
+/// Milestone 368: the file beside a saved console (`<tag><suffix>.log`) whose VM filled the
+/// module's console buffer, `<tag><suffix>.console-cut`, with [`console_full_note`]. The host
+/// adds it to the run's console as a `HYDO-CONSOLE-CUT` note; nothing hashes it.
+pub const CONSOLE_CUT_SUFFIX: &str = ".console-cut";
 
 /// Truncate to at most `cap - 1` bytes (a C buffer of `cap` bytes), on a char boundary.
 fn ccap(s: &mut String, cap: usize) {
@@ -1022,11 +1031,12 @@ impl Core {
             );
             return Err(());
         }
-        if self.con.len as usize > HVX_CONSOLE_SZ && !b.console_full {
-            // the module keeps the first HVX_CONSOLE_SZ bytes of a VM's console and counts the
-            // rest: say once that later lines (history and assertion records too) are lost
+        if self.con.len as usize >= HVX_CONSOLE_SZ && !b.console_full {
+            // the module keeps the first HVX_CONSOLE_SZ bytes of a VM's console and counts no
+            // more (hvx.c stops at the size): a full buffer says that later lines (history and
+            // assertion records too) are lost, once
             b.console_full = true;
-            diag!(self, "{}", console_full_note(self.con.len as usize));
+            diag!(self, "{}", console_full_note(HVX_CONSOLE_SZ));
         }
         let modlen = (self.con.len as usize).min(HVX_CONSOLE_SZ);
         if modlen <= b.drained {
@@ -1099,6 +1109,14 @@ impl Core {
             if b.ulen() > from {
                 let _ = f.write_all(&b.ubuf[from..]);
             }
+        }
+        if b.console_full {
+            // Milestone 368: the host's note that this console was cut (no hash covers it)
+            let _ = std::fs::write(
+                self.outdir
+                    .join(format!("{tag}{suffix}{CONSOLE_CUT_SUFFIX}")),
+                console_full_note(HVX_CONSOLE_SZ),
+            );
         }
     }
 
@@ -4009,11 +4027,12 @@ mod tests {
     /// `hydo run` finds the note by its mark, and the note names the module's limit.
     #[test]
     fn console_full_note_starts_with_its_mark() {
-        let n = super::console_full_note(70000);
+        let n = super::console_full_note(65536);
         assert!(n.starts_with(super::CONSOLE_FULL_MARK));
         assert_eq!(super::CONSOLE_FULL_MARK, "hvx: console full");
-        assert!(n.contains("wrote 70000 bytes"));
+        assert!(n.contains("reached the 65536 bytes"));
         assert!(n.contains("first 65536"));
+        assert_eq!(super::CONSOLE_CUT_SUFFIX, ".console-cut");
     }
 
     /// M205: with several vCPUs and the host-call port, a run call ends at HC_SMP_CAP exits
