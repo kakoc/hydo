@@ -683,11 +683,11 @@ fn the_terminal_says_what_the_page_says() {
         "   ✘ The run stopped with harness: guest did not finish (I/O error)\n",
         "   If it is expected: hydo ci accept f1:invariant:",
         // Milestone 324: how to diagnose a problem, and the run directory that it needs
-        "   Why it failed: hydo inspect diagnose hydo-out/explore --problem 1\n",
+        "   Why it failed: hydo inspect diagnose hydo-out/explore --problem 1 --text\n",
         "   A run directory of it: hydo run --backend hvx --image scripted-disk.img \"disk=ioerr:2 \
          dseed=9e5651b0ef953636 | run K=kafka@13+3 N=redis@23-27:delay,79ms\" --out \
          hydo-out/explore/runs/seed-8\n",
-        "   Why it failed: hydo inspect diagnose hydo-out/explore --problem 2\n",
+        "   Why it failed: hydo inspect diagnose hydo-out/explore --problem 2 --text\n",
     ] {
         assert!(text.contains(want), "the terminal lacks {want:?}");
     }

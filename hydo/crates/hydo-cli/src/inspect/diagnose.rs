@@ -1544,9 +1544,195 @@ pub fn for_run(ctx: &Ctx, dir: &Path, evidence_on: bool) -> Option<Diagnosis> {
     Some(d)
 }
 
+/// `hydo inspect diagnose --text` (Milestone 363): the diagnosis in lines for people. Before, the
+/// view was the JSON document with line breaks (the 0.6.0 trial).
+pub fn text(d: &DiagnosisDoc) -> String {
+    let g = &d.diagnosis;
+    let mut o = String::new();
+    let mut line = |k: &str, v: &str| {
+        if !v.is_empty() {
+            o.push_str(&format!("{k}: {v}\n"));
+        }
+    };
+    line("Run", &d.run_dir);
+    line("Verdict", &d.verdict.text);
+    line("Why it failed", &g.summary);
+    let failure = match &g.service {
+        Some(s) => format!("{} ({s})", g.failure),
+        None => g.failure.clone(),
+    };
+    line("What failed", &failure);
+    if let Some(p) = &g.verdict_at {
+        line(
+            "Where",
+            &format!(
+                "{} (hydo inspect start {} --at {})",
+                p.point, d.run_dir, p.point
+            ),
+        );
+    }
+    if let Some(p) = &g.process {
+        line("The process", &process_words(p));
+        if let Some(out) = p.output.as_deref().filter(|t| !t.trim().is_empty()) {
+            for l in out.lines() {
+                o.push_str(&format!("  | {l}\n"));
+            }
+        }
+    }
+    if let Some(p) = &g.probe {
+        let mut w = format!(
+            "{}: `{}` ended `{}` after {} tr{}",
+            p.service,
+            p.command,
+            p.why,
+            p.tries,
+            if p.tries == 1 { "y" } else { "ies" }
+        );
+        if let Some(st) = p.last_status {
+            w.push_str(&format!(", the last with status {st}"));
+        }
+        if let Some(s) = p.deadline_s {
+            w.push_str(&format!(", within {s} s"));
+        }
+        o.push_str(&format!("The readiness check: {w}\n"));
+    }
+    let others: Vec<&ProcessEnd> = g
+        .exits
+        .iter()
+        .filter(|e| g.process.as_ref().is_none_or(|p| p.handle != e.handle))
+        .collect();
+    if !others.is_empty() {
+        o.push_str("Other processes that ended with an error:\n");
+        for e in others {
+            o.push_str(&format!("  - {}\n", process_words(e)));
+        }
+    }
+    if !g.likely.is_empty() {
+        o.push_str("Likely:\n");
+        for l in &g.likely {
+            o.push_str(&format!("  - {l}\n"));
+        }
+    }
+    if !g.kernel.is_empty() {
+        o.push_str("The kernel's messages:\n");
+        for l in &g.kernel {
+            o.push_str(&format!("  | {l}\n"));
+        }
+    }
+    let ev = match &g.evidence_note {
+        Some(n) => format!("{} ({n})", g.evidence_status),
+        None => g.evidence_status.clone(),
+    };
+    o.push_str(&format!("Evidence from the guest: {ev}\n"));
+    for e in &g.evidence {
+        o.push_str(&format!(
+            "  {} ({}, {} bytes{}{}):\n",
+            e.what,
+            e.source,
+            e.bytes,
+            if e.truncated { ", only a part" } else { "" },
+            e.status
+                .map(|s| format!(", status {s}"))
+                .unwrap_or_default()
+        ));
+        for l in e.text.lines() {
+            o.push_str(&format!("  | {l}\n"));
+        }
+    }
+    if !g.next.is_empty() {
+        o.push_str("Next:\n");
+        for n in &g.next {
+            o.push_str(&format!("  {n}\n"));
+        }
+    }
+    o
+}
+
+/// How a process ended, in one line: `nsqd ended with status 137 (SIGKILL, sent by hydo) at
+/// run:41: /nsqd --data-path=/data`.
+fn process_words(p: &ProcessEnd) -> String {
+    let mut w = format!("{} ended with status {}", p.handle, p.status);
+    let mut why: Vec<String> = Vec::new();
+    if let Some(n) = p.signal_name.clone().or(p.signal.map(|s| s.to_string())) {
+        why.push(match p.signal_by_hydo {
+            Some(true) => format!("SIG{n}, sent by hydo"),
+            Some(false) => format!("SIG{n}, not sent by hydo"),
+            None => format!("SIG{n}"),
+        });
+    }
+    if p.timed_out == Some(true) {
+        why.push("its time limit ended it".into());
+    }
+    if !why.is_empty() {
+        w.push_str(&format!(" ({})", why.join(", ")));
+    }
+    if let Some(at) = &p.at {
+        w.push_str(&format!(" at {}", at.point));
+    }
+    if let Some(c) = p.command.as_deref().filter(|c| !c.is_empty()) {
+        w.push_str(&format!(": {c}"));
+    }
+    w
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Milestone 363: `--text` prints the diagnosis in lines, not its JSON.
+    #[test]
+    fn the_text_view_is_lines_for_people() {
+        let d = DiagnosisDoc {
+            run_dir: "hydo-out/explore/runs/seed-3".into(),
+            verdict: hydo_results::Verdict {
+                kind: "violation".into(),
+                text: "VIOLATION [jobs.acked-outcome] m0 was acknowledged and has no final state"
+                    .into(),
+                ..Default::default()
+            },
+            diagnosis: Diagnosis {
+                summary: "A check failed; no process failed.".into(),
+                failure: "violation".into(),
+                verdict_at: Some(RunPoint {
+                    point: "run:41".into(),
+                    conversation: "run".into(),
+                    stop: 41,
+                    at: None,
+                }),
+                exits: vec![ProcessEnd {
+                    handle: "nsqd".into(),
+                    command: Some("/nsqd --data-path=/data".into()),
+                    status: 137,
+                    signal: Some(9),
+                    signal_name: Some("KILL".into()),
+                    signal_by_hydo: Some(true),
+                    ..Default::default()
+                }],
+                likely: vec!["hydo killed nsqd (the schedule's kill).".into()],
+                evidence_status: "not-collected".into(),
+                evidence_note: Some("--evidence replays the run".into()),
+                next: vec!["hydo inspect start hydo-out/explore/runs/seed-3 --at end".into()],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let t = text(&d);
+        assert!(!t.contains('{'), "{t}");
+        for want in [
+            "Verdict: VIOLATION [jobs.acked-outcome] m0 was acknowledged",
+            "Why it failed: A check failed; no process failed.\n",
+            "Where: run:41 (hydo inspect start hydo-out/explore/runs/seed-3 --at run:41)\n",
+            "  - nsqd ended with status 137 (SIGKILL, sent by hydo): /nsqd --data-path=/data\n",
+            "Likely:\n  - hydo killed nsqd (the schedule's kill).\n",
+            "Evidence from the guest: not-collected (--evidence replays the run)\n",
+            "Next:\n  hydo inspect start hydo-out/explore/runs/seed-3 --at end\n",
+        ] {
+            assert!(t.contains(want), "{want:?}\n{t}");
+        }
+        // the view of `hydo inspect diagnose --text` is this text
+        let v = serde_json::to_value(&d).unwrap();
+        assert_eq!(super::super::view(&v), t);
+    }
 
     #[test]
     fn services_in_verdicts() {

@@ -200,7 +200,7 @@ pub(super) fn item(n: usize, it: &super::Item, label: &str, shown: &str, own: us
         // Milestone 324: an exploration keeps no run directory of a problem; say how to get one
         if let Some(c) = &it.run_command {
             o.push_str(&format!(
-                "{INDENT}Why it failed: hydo inspect diagnose {} --problem {own}\n",
+                "{INDENT}Why it failed: hydo inspect diagnose {} --problem {own} --text\n",
                 crate::inspect::work::quote(shown),
             ));
             o.push_str(&format!("{INDENT}A run directory of it: {c}\n"));
