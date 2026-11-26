@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: on every node a search for everything finds exactly the stored documents with their stored versions, and a search for a document's tag finds it
+exec /bin/tsc check search

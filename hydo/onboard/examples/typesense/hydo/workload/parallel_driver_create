@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# POST of a new document through a node that the seed picks
+exec /bin/tsc op create

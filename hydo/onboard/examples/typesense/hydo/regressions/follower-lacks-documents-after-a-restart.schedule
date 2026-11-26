@@ -1,0 +1,10 @@
+# A new candidate in Typesense 30.2 and on `v31` (RESULTS.md, finding 1). The composition has
+# deletes by a filter of earlier imports in batches of 2 (the build parameter batch), and after
+# them upserts and updates of the deleted documents. The follower ts3 is killed before step 40
+# and starts again before step 60, and replays its Raft log. It lacks acknowledged documents for
+# good: eventually_converge fails with "ts3 lacks ..., which the leader ts1 holds as ...". A delete
+# by a filter runs its later batches from a timer on the HTTP thread (src/core_api.cpp,
+# defer_processing), and the replay applies the next writes without waiting for them, so a later
+# batch deletes the new version. Built with --set batch=1000000000 the same schedule passes.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run K=ts3@40+20 W=5479b87f,p6,q1,r500

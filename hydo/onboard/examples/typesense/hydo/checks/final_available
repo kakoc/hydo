@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: while two or more nodes answered, the cluster was never without a leader for more than 30 s
+exec /bin/tsc check available

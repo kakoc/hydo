@@ -1,0 +1,61 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "typesense/typesense:30.2": {
+   "index_digest": "sha256:610f2d34b1f93d00762869da2c67736775e5798d19a2c8b91b014b8a0cc1e110",
+   "name": "typesense/typesense",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/opt/typesense-server"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "8108/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": null
+     },
+     "digest": "sha256:b405d4443bdb9254fab4792b7fd9ee95d969f3b5485975917a3a3f84274eba27",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/opt/typesense-server"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "8108/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": null
+     },
+     "digest": "sha256:1c5fbc20774aa0edf8d3bec6e5dd9bd6fe7d02f72897d5c1d2253305ba086d4b",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "typesense/typesense:30.2",
+   "registry": "docker.io",
+   "repo": "typesense/typesense",
+   "tag": "30.2"
+  }
+ }
+}

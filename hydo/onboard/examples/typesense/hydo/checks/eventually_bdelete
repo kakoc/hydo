@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: within 120 s of the heal every delete by a filter whose answer the client did not get has deleted all of its documents or none
+exec /bin/tsc check bdelete

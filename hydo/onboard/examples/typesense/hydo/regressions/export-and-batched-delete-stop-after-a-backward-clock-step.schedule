@@ -1,0 +1,10 @@
+# A new candidate in Typesense 30.2, a clock effect (RESULTS.md, finding 2). After a backward
+# step of the wall clock by an hour before step 20, every answer that Typesense makes in more than
+# one part stops after its first part, on every node, for the step's length. An export with the
+# default batch size of 100 ends after its first batch, and a delete by a filter with
+# batch_size=2 deletes 2 documents and then nothing more. Typesense makes each later part from a
+# timer of its HTTP event loop (src/http_server.cpp, defer_processing), and the event loop's timers
+# read the wall clock and fire no timer while the clock is behind their last run (h2o,
+# lib/common/timerwheel.c, "detected rewind"). Without T= the run passes, and so does T=20:3600.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run T=20:-3600

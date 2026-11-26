@@ -1257,6 +1257,28 @@ checks judge the listing, the aborted uploads, and both copies of every chunk. N
 The image's entrypoint turns Go's FIPS mode on, whose entropy source cannot start in the guest;
 the servers run `/usr/bin/weed` itself (open item 186).
 
+**Typesense (M366, tentative number).** Typesense 30.2 runs as a cluster of three Raft nodes from
+the official image in one hvx guest of 2,048 MiB, in `hydo/onboard/examples/typesense`
+(RESULTS.md), imported with `hydo compose`. Each node's data is on a file system of its own. A Go
+client sends creates, upserts, partial updates, deletes, deletes and updates by a filter,
+imports and schema changes through any node, which forwards them to the leader. A messages check
+with `acked_outcome` judges the writes. Other checks judge the followers against the leader, the
+search index, the exports, the deletes in batches, and the leader itself. Every acknowledged
+write stayed on the leader under kills, pauses, partitions, one node's power loss or damaged
+files, power cuts, and clock steps. Three new candidates, not posted:
+- A node that replays its Raft log after a kill or a power cut applies a delete by a filter in
+  several batches out of order with the writes after it. The later batches run from a timer on
+  the HTTP thread and delete the new versions. So the node lacks acknowledged documents for
+  good (`K=ts3@40+20 W=5479b87f,p6,q1,r500`). The same schedules with one batch per delete pass.
+- A clock effect: after a backward clock step, an export of more than one batch stops after
+  its first part on every node, for the step's length. So does a delete by a filter of more than
+  one batch. h2o's event loop fires no timer while the wall clock is behind (h2o/h2o#2321).
+- A clock effect: after a backward clock step, a pause of the leader is followed by no election
+  for the step's length. braft's election timer runs at wall-clock times (`T=20:-120
+  P=nodes.primary@30+25`: 68 s without a leader).
+
+Open item 188 has what is left.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -4046,6 +4068,29 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - `hydo ci run --history` did not read a store with such records, and nothing ran with a
       history branch on GitHub (open item 67).
     - A store has no lock, so two records into one store at once can lose a ledger update.
+188. What the example `typesense` left (M366, tentative number):
+    - The three candidates are not reported upstream. h2o/h2o#2321, the event loop's clock, is
+      open in h2o, and Typesense's issue #3181 (per-node drift under deletes by a filter and
+      restarts, with `async_reference` fields) names no cause.
+    - hvx keeps 64 KiB of the guest's console per boot, and a run that wrote more printed no
+      warning. The first client's history records stopped at 15 s of a 60 s workload. The
+      messages check then reported every write unread. The client now writes short ids and one record
+      per import (as open item 181).
+    - `hydo rules scan --kind writes` found none of the 57 routes that Typesense registers in
+      C++ with `server->post(...)` and its kin (`src/main/typesense_server.cpp`).
+    - The clock audit named 14 functions and none of the findings' places, which are in h2o and
+      braft.
+    - A group's `primary:` command is asked 10 times a second apart. An election after a kill
+      of the leader took longer, and the run ended `ERROR nodes.primary: ... named no member`;
+      the example's command waits 15 s itself.
+    - The shrinker kept a `G=` damage that the failure did not need, and the class of the
+      minimal schedule named it (`corrupted-files`).
+    - The second exploration was stopped after its 60 first runs, during its
+      shrinks: no `exploration.json` or report. A node whose `raft_meta` `G=` zeroed stayed up
+      and unhealthy; its log was not read.
+    - Not run: the Mac engine and KVM, and five nodes. A live race of a delete by a filter with
+      another client's writes of its documents did not run. Aliases, synonyms, curations, API
+      keys, and the embedding models have no command.
 
 ## Milestone index
 
@@ -5215,13 +5260,11 @@ build machine, before 2026-10-13.
   `hydo findings list|show|history [--json]` read each finding's line of runs, and
   `--record-findings` records at the end. On the Mac a run, two explorations and two replays gave the line new,
   failing, not found, fixed, back again. Nothing recorded moved
-- M367 (tentative number): the gaps of the NSQ and SeaweedFS onboardings, each its own commit.
-  `--check` counts the services' own file systems. A stopped `hydo explore` stops its engines and
-  names their pids. `hydo save` keeps one regression per finding, and the write scan reads
-  gorilla/mux chains and a switch on the method. The verdict names a check that judged, `hydo
-  stats` counts `disk=cut` with the cut, and a failed check keeps the services' logs. `inspect
-  exec --service` enters an image service's root, and the guide names the FIPS limit. Nothing
-  recorded moved
+- M366 (tentative number): the onboarding of Typesense 30.2 on hvx, three Raft nodes. Three new
+  candidates, not posted. A node that replays its log after a kill applies a delete by a filter
+  in batches out of order. It then lacks acknowledged documents for good. After a backward clock step
+  an export of more than one batch stops after its first part, for the step's length. A failure
+  of the leader then brings no election. Nothing recorded moved
 
 - The 0.6.0 release (no milestone number): prepared, not published. The version is raised with
   the skill's four version fields, `hydo-world`, `hydo-world-tls` and `hydo-grpc` are re-pinned,
@@ -5230,6 +5273,13 @@ build machine, before 2026-10-13.
   the Pulsar merge; it is restored. The release commit drops the build tree's path from `bin/hydo`.
   Both releases were built twice to the same bytes, the Mac one signed and notarized, and verified
   on hvx and the Mac
+- M367 (tentative number): the gaps of the NSQ and SeaweedFS onboardings, each its own commit.
+  `--check` counts the services' own file systems. A stopped `hydo explore` stops its engines and
+  names their pids. `hydo save` keeps one regression per finding, and the write scan reads
+  gorilla/mux chains and a switch on the method. The verdict names a check that judged, `hydo
+  stats` counts `disk=cut` with the cut, and a failed check keeps the services' logs. `inspect
+  exec --service` enters an image service's root, and the guide names the FIPS limit. Nothing
+  recorded moved
 
 ## Where to look
 

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# PATCH of an existing document: a partial update of its tag, title and v
+exec /bin/tsc op update

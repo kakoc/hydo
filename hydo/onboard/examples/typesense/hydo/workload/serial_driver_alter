@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=70
+# PATCH of the collection's schema: a new optional field
+exec /bin/tsc op alter
