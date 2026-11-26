@@ -23547,3 +23547,100 @@ changed in the 11 answers of the main help, which names `hydo findings`.
 - `hydo ci run --history` did not read a store with such records, and the page read only the
   scripted test's store and the Mac proof's store, not a history branch on GitHub (open item 67).
 - A store has no lock. Two records into one store at once can lose one ledger update.
+
+## Milestone 366 (tentative number): Typesense, a replay that applies a delete by a filter out of order
+
+Typesense 30.2 became the example `hydo/onboard/examples/typesense` (RESULTS.md), by
+`docs/ONBOARDING-PLAYBOOK.md`, with hydo of `main` at `8a60fcb2` on hvx on the bare-metal
+machine. Three new candidates; nothing was posted, and nothing recorded moved.
+
+**The example.** Three Raft nodes of Typesense 30.2 from the official image, as a cluster at
+fixed addresses with a nodes file, imported with `hydo compose`. Each node's data is on a file
+system of its own; the snapshot interval is the build parameter `snap` (30 s), and the batch size
+of the client's deletes by a filter is the build parameter `batch` (2). The Go client `tsc` sends
+each write once, through a node that the seed picks, so most writes take the forwarding path to
+the leader. It writes creates, upserts, partial updates, deletes, deletes and updates by a
+filter, deletes by a filter in batches, imports of 2 to 100 documents and of 240 KB bodies, and
+schema changes. A messages check with `acked_outcome` and `effect: recorded` reads every document
+back from the leader after a barrier write. Seven checks judge the rest: every follower holds the
+leader's documents, a write through each node is readable everywhere within 15 s, an export
+with the default batch size ends, a delete by a filter ends whole or not at all, a search finds
+each stored version, each acknowledged schema change is everywhere, and the cluster has a leader
+while two nodes answer. The last one reads a probe of every node's `/debug` once a second.
+
+**Finding 1, new.** A node that replays its Raft log applies a delete by a filter in several
+batches out of order with the writes after it, and then lacks acknowledged documents for good.
+`del_remove_documents` deletes one batch (`src/core_api.cpp` line 2166) and posts the rest with
+`defer_processing(req, res, 0)` (line 2196): a timer of the HTTP event loop, whose callback runs
+the next batch on a thread pool (`src/http_server.cpp` lines 867 and 892). The batched indexer
+called the handler once (`src/batched_indexer.cpp` line 299) and goes on to the next write
+(lines 338 to 343). A replay applies the next writes at once, so an upsert that creates a deleted
+document again updates the old one in place, and a later batch deletes it. Typesense deletes at
+most 1,000 documents a batch (`src/core_api_utils.cpp` line 6), so a delete of more than 1,000
+matches runs in batches with the default `batch_size` too. `K=ts3@40+20 W=5479b87f,p6,q1,r500`
+left `ts3` without three documents, with `eventually_converge` failing for 120 s. The kill alone
+was enough, and so was `K=ts3@50+3`; the composition without a fault passed. Four failing
+schedules, the kill above, `K=ts3@50+3`, and the blind seeds 49 and 53, passed on an image built
+with `--set batch=1000000000`. In seed 53 a node's search index named an older version of a
+document than its store. Typesense's #3181 reports `num_documents` that differs between nodes
+under deletes by a filter and restarts, with `async_reference` fields, and names no cause.
+
+**Finding 2, new, a clock effect.** After a backward step of the wall clock, every answer that
+Typesense makes in several parts stops after its first part, for the step's length. h2o's event
+loop reads `gettimeofday` (`lib/common/socket/evloop.c.h` line 792) and its timer wheel returns
+no timer while the time is before its last run (`lib/common/timerwheel.c` lines 304 to 308,
+`detected rewind`). Typesense makes each later batch of an export from a 1 ms timer
+(`response_proceed`, `src/http_server.cpp` line 945) and each later batch of a delete by a filter
+from a 0 ms timer. So after `T=20:-3600` an export with its default batch of 100 ends after the
+first batch, and each delete by a filter of the run deleted 2 documents and answered nothing.
+h2o/h2o#2321 (open since 2020) and the open pull requests #2339 and #2822 propose a monotonic
+clock for h2o.
+
+**Finding 3, new, a clock effect.** After a backward step, a failure of the leader is followed
+by no election for the step's length. braft's `RepeatedTimerTask` schedules the next run of the
+election timer at `butil::milliseconds_from_now` (`src/braft/repeated_timer_task.cpp` lines 128
+to 130), and brpc's timer thread compares with `gettimeofday_us` (`src/bthread/timer_thread.cpp`
+lines 372 and 427). `T=20:-120 P=nodes.primary@30+25` left the two other nodes followers without
+a leader for 68 s, until the pause ended; the same pause without `T=` got a new leader.
+
+**The runs.** The final image `explore-ob-typesense-disk.img` (`02024a5f…`) gives
+`097b8fcffac8545b` on two clean runs. Each regression gave one fingerprint over two fresh runs:
+finding 1 `2d653b8a28652520`, finding 2 `c3653bc7d18e8f42`, finding 3 `8675611411642625`. `hydo repro --regressions` gave 3 of 3 as expected with the same values. RESULTS.md has the runs that separate the causes, with their fingerprints.
+
+**The explorations.** e1, `--seeds 1-30 --strategy process --new-faults --cluster-faults
+--storage-faults` on 3 workers of an earlier image, failed 10 of 30: finding 2's export in 5,
+each shrunk to one step back, detected damage in 4, and the group's primary during an election
+in 1. e2, seeds 31 to 90 of the final checks, failed 22 of 60: finding 1 in 3 without a step
+back (seeds 43, 53 and 61), finding 2 with the nodes it leaves apart in 8, detected damage in 10,
+and one not judged. e2 was stopped during its shrinks; the directed runs separated its failures.
+
+**Tests.** The new example enters the explorer's and the controller's corpora. Re-recorded with
+`HYDO_BLESS=1`: the explorer's corpus goldens (full and quick), its identity goldens (quick and
+full), and the controller's quick corpus golden, which adds the example's entries only. With a
+target folder of this task's own on the bare-metal machine, in a copy of the worktree with an
+index of its tracked files: `cargo test -p hydo-explore --test it` (61 passed), the controller's
+corpus tests, `-p hydo --test it -- equivalence:: agents_equivalence::` (9 passed) and `-p
+hydo-agents --test it` (16 passed). The copy has no `AGENTS.local.md`, so `public_content::`
+checked the generic patterns, and a `grep` of the listed values found none in the new text. `sh
+ci/vale.sh` finds nothing. No Rust code changed.
+
+Retro: Typesense 30.2, hvx, 2026-11-26
+- Time to the first clean run: 1 hour 10 minutes of wall time, about 20 minutes of it waiting for
+  builds and runs.
+- Schedules run before the first finding: 3 (e1's seed 3, finding 2); finding 1 at e2's seed 43,
+  the 43rd blind schedule. No failure was a mistake of the rules, but the first client's history
+  records overflowed hvx's console (64 KiB) and made the messages check undecided.
+- The findings: 3 new (the replay out of order, the parts of an answer after a step back, no
+  election after a step back), 14 schedules of detected damage, none known or documented.
+- What took the most time: separating finding 1 from the clock effects (about 1 hour: the
+  probes, the A/B image, and the faults one by one); the console's limit and the history's one
+  operation per process (about 40 minutes); the leader probe dense enough to see an election
+  (about 30 minutes).
+- What hydo lacked: no warning when hvx's console is full; one record per process for a batch;
+  `primary:` tried 10 times a second apart; a shrink that kept an unneeded `G=`; no write routes
+  of a C++ route table; two images of one manifest in one folder (open item 188).
+- Strategies: a new entry "Every replica compared with the leader after a restart", and the
+  Typesense evidence in "Clock steps and the clock audit" of `hydo guide strategies`; the first
+  table names Typesense.
+
+**What is left.** Open item 188.

@@ -14,7 +14,7 @@ results page: new as far as the search found, known, by design, or a deployment 
 
 | system | its promise | the techniques that found most | where they found bugs |
 |---|---|---|---|
-| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults; failovers by the client with a late write | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus, Kvrocks |
+| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults; failovers by the client with a late write; replicas compared after a restart | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus, Kvrocks, Typesense |
 | object store | an acknowledged object stays as written; a listing shows what exists | a listing compared with a read of each key; kills and pauses of one node; clock steps | Garage |
 | log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults; a client that leaves transactions open, and power cuts and clock steps | Redpanda, NATS, Pulsar |
 | job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate, NSQ |
@@ -402,6 +402,28 @@ These findings hold for every type of system:
   the repair came within 10 minutes, after the run's end, so the check saw it.
 - **Cost.** One listing and one read per key at the end. It runs on every engine.
 
+### Every replica compared with the leader after a restart
+
+- **What it is.** After the heal, an `eventually_` check reads every document of every node and
+  compares each follower with the leader. The generic rule reads the leader alone, so a follower
+  that applied the log otherwise passes it. A kill of one follower makes it replay its log at
+  the next start.
+- **What to write.** An `eventually_` check that waits for a healthy leader and writes a barrier
+  through it. It then compares the id and version of each node's documents with the leader's. Give
+  the workload the operations that the system runs in several steps, and writes of the same
+  documents after them. A delete by a filter with a small batch size is one. The Typesense
+  example's `tsc check converge` is one to copy.
+- **When it fits.** A replicated store whose nodes apply a log, a Raft or a primary-backup
+  cluster, and whose clients read from any node.
+- **What it found.** Typesense (finding 1): a kill of one follower, `K=ts3@40+20`, left that
+  follower without three acknowledged documents for good. The replay applied the writes after a
+  delete by a filter before the delete's later batches, which then deleted the new versions.
+  Blind in 3 of 60 schedules without a step back of the clock. The failing schedules passed
+  on an image whose deletes run in one batch.
+- **What it misses.** A difference that the system repairs before the check runs, and one that
+  needs a node to become the leader.
+- **Cost.** One export of every node at the end. It runs on every engine.
+
 ## Faults
 
 ### Power cuts of the whole guest (`C=`)
@@ -644,11 +666,20 @@ These findings hold for every type of system:
     waits until the clock passes the last message id's time. `NewGUID` returns
     `ErrTimeBackwards`, and `GenerateID` tries again every millisecond. The audit ranked that
     place second, and a blind exploration found it at seed 4.
+  - Typesense (findings 2 and 3): the clocks are in two libraries that the server builds in.
+    h2o's event loop fires no timer while the wall clock is behind its last run. So after a step
+    back of an hour an export of more than 100 documents ends after its first batch on every
+    node (`T=20:-3600`). A delete by a filter of more than one batch stops part way.
+    braft's election timer runs at wall-clock times. A pause of the leader 10 s after a step
+    back of 120 s left the cluster without a leader for 68 s (`T=20:-120
+    P=nodes.primary@30+25`). Blind in 5 of the first 30 schedules for the export, each shrunk to
+    one step back of 150 s or more. A check that the client samples every node's Raft state once
+    a second (`final_available`) showed the missing election; no check of the data did.
 - **What it misses.** Many clock effects are by design. Examples are Temporal's delayed timers,
   and River's runs of every periodic job that a forward step skipped. The audit reads text. It
   found no place in Redpanda's 2,694 C++ files, whose transaction expiry uses Seastar's wall
-  clock. In Meilisearch's 574 Rust files it found one, a metric, and steps of
-  30 s to a year broke nothing in 50 blind schedules. In VictoriaMetrics it named 21 functions
+  clock. In Meilisearch's 574 Rust files it found one place, a metric. Steps of
+  30 s to a year broke nothing there in 50 blind schedules. In VictoriaMetrics it named 21 functions
   and none of the three findings' places, which read a cached clock (`fasttime`) or
   `time.Now().UnixMilli()`. In Restate it found 8 places that read
   `SystemTime::now`, and none was the finding's: the scheduler reads the wall clock through the
@@ -665,7 +696,9 @@ These findings hold for every type of system:
   timestamps, a last-writer-wins order, and the audit named only the request signatures' date
   checks there, not the copy of Garage's finding 1. In Kvrocks's 255 C++ files it named
   none: the server reads the wall clock through its own `util::GetTimeStamp`, and finding 2's
-  place was found by reading the replication code.
+  place was found by reading the replication code. In Typesense it named 14 functions, search
+  cutoffs and rate limits, and none of the two findings' places. Those are in h2o and braft,
+  whose sources are not in the project.
 - **Cost.** The shrinker spends hours on clock steps; stop an exploration once its failures are
   understood. It runs on every engine.
 
