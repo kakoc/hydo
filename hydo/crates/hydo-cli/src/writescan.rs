@@ -3767,6 +3767,38 @@ fn c_definition(
     None
 }
 
+/// Milestone 368: the write routes that a C or C++ server registers with a call named for the
+/// method on its server object, `<server>->post("<path>", <handler>, ...)` and its kin `put`,
+/// `patch`, `del` and `delete` (Typesense's `src/main/typesense_server.cpp`), also `.`
+/// instead of `->`. The path is a string literal that starts with `/`, and the handler a name;
+/// an HTTP client's call (`client->post(...)`) is no route. Each is (line from 0, method, path,
+/// handler).
+fn cpp_routes(code: &[String]) -> Vec<(usize, &'static str, String, String)> {
+    static R: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = R.get_or_init(|| {
+        regex::Regex::new(
+            r#"\b([A-Za-z_]\w*)\s*(?:->|\.)\s*(post|put|patch|del|delete)\s*\(\s*"(/[^"]*)"\s*,\s*&?\s*([A-Za-z_][\w:]*)\s*[,)]"#,
+        )
+        .expect("pattern")
+    });
+    let mut out = Vec::new();
+    for (ln, l) in code.iter().enumerate() {
+        for c in re.captures_iter(l) {
+            if is_client(&c[1]) {
+                continue;
+            }
+            let method = match &c[2] {
+                "post" => "POST",
+                "put" => "PUT",
+                "patch" => "PATCH",
+                _ => "DELETE",
+            };
+            out.push((ln, method, c[3].to_string(), c[4].to_string()));
+        }
+    }
+    out
+}
+
 /// Reads every route of the project in `root` that writes.
 pub fn scan_writes(root: &Path) -> Writes {
     let mut paths = Vec::new();
@@ -3862,7 +3894,15 @@ pub fn scan_writes(root: &Path) -> Writes {
             head,
         });
     }
-    let read = files.len() + protos.len() + specs.len() + ctables.len();
+    // Milestone 368: a C or C++ file that registers routes counts as read too (a file of a
+    // command table already does)
+    let cpp_read = c_files
+        .iter()
+        .filter(|(rel, code)| {
+            !ctables.iter().any(|(t, _)| t == rel) && !cpp_routes(code).is_empty()
+        })
+        .count();
+    let read = files.len() + protos.len() + specs.len() + ctables.len() + cpp_read;
 
     // the routes of the code
     let mut cands: Vec<Cand> = Vec::new();
@@ -4211,6 +4251,33 @@ pub fn scan_writes(root: &Path) -> Writes {
             );
             r.resource = command_resource(rel, e);
             add(r, &mut routes, &mut reads, false);
+        }
+    }
+
+    // Milestone 368: the routes that C and C++ servers register by a method's name
+    // (Typesense's `server->post("/collections/:collection/documents", post_add_document)`)
+    for (rel, code) in &c_files {
+        for (ln, method, path, handler) in cpp_routes(code) {
+            let handler_at = c_definition(&c_files, &handler, rel);
+            // Typesense names each handler after its method (`post_multi_search`): the name's
+            // own words follow it
+            let named = ["post_", "put_", "patch_", "del_", "delete_"]
+                .iter()
+                .find_map(|p| handler.strip_prefix(p))
+                .unwrap_or(&handler);
+            let read = method == "POST" && reads_by_name(&path, named);
+            let r = make_route(
+                method,
+                normalize_path(&path),
+                Vec::new(),
+                handler,
+                handler_at,
+                rel.clone(),
+                ln + 1,
+                "C++ route registrations",
+                "a route registration",
+            );
+            add(r, &mut routes, &mut reads, read);
         }
     }
 
@@ -4571,6 +4638,61 @@ mod tests {
     fn has_route(w: &Writes, s: &str) {
         let f = found(w);
         assert!(f.iter().any(|x| x == s), "{s} not in {f:#?}");
+    }
+
+    /// Milestone 368: the routes that a C++ server registers by the method's name, in the shape
+    /// of Typesense's `src/main/typesense_server.cpp`, with each handler's definition in another
+    /// file. Reads (`get`), a POST that reads by its name, an HTTP client's call, and a line in a
+    /// comment are left out.
+    #[test]
+    fn cpp_route_registrations() {
+        let server = "void master_server_routes() {\n\
+            \x20   server->get(\"/collections\", get_collections);\n\
+            \x20   server->post(\"/collections\", post_create_collection);\n\
+            \x20   server->patch(\"/collections/:collection\", patch_update_collection);\n\
+            \x20   server->del(\"/collections/:collection\", del_drop_collection);\n\
+            \x20   server->post(\"/collections/:collection/documents/import\", post_import_documents, true, true);\n\
+            \x20   server->put(\"/aliases/:alias\", put_upsert_alias);\n\
+            \x20   server->post(\"/multi_search\", post_multi_search, false, true);\n\
+            \x20   // server->post(\"/old\", post_old);\n\
+            \x20   http_client->post(\"/health\", body);\n\
+            }\n";
+        let api = "bool post_create_collection(const std::shared_ptr<http_req>& req, const std::shared_ptr<http_res>& res) {\n\
+            \x20   return true;\n}\n\
+            bool post_import_documents(const std::shared_ptr<http_req>& req, const std::shared_ptr<http_res>& res) {\n\
+            \x20   return true;\n}\n";
+        let w = scan_texts(&[
+            ("src/main/typesense_server.cpp", server),
+            ("src/core_api.cpp", api),
+        ]);
+        let mut f = found(&w);
+        f.sort();
+        assert_eq!(
+            f,
+            [
+                "DELETE /collections/:collection -> del_drop_collection",
+                "PATCH /collections/:collection -> patch_update_collection",
+                "POST /collections -> post_create_collection",
+                "POST /collections/:collection/documents/import -> post_import_documents",
+                "PUT /aliases/:alias -> put_upsert_alias",
+            ],
+            "{f:#?}"
+        );
+        let imp = w
+            .routes
+            .iter()
+            .find(|r| r.handler == "post_import_documents")
+            .unwrap();
+        assert_eq!(imp.handler_at, Some(("src/core_api.cpp".to_string(), 4)));
+        assert_eq!(imp.file, "src/main/typesense_server.cpp");
+        assert_eq!(imp.line, 6);
+        assert!(
+            imp.why.starts_with("POST in a route registration"),
+            "{}",
+            imp.why
+        );
+        // the server's file counts as read; the handlers' file has no route
+        assert_eq!(w.read, 1);
     }
 
     /// Milestone 355: the command tables of Redis-compatible servers in C and C++, by their

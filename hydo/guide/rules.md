@@ -55,6 +55,7 @@ It reads the project's own sources and description files, as text:
 | | Go (net/http, gorilla/mux, chi, gin, labstack's router, and httprouter) |
 | | JavaScript and TypeScript (express, fastify, koa, hapi, and NestJS) |
 | | Python (FastAPI, Flask, and Django), Java and Kotlin (Spring and JAX-RS) |
+| | C and C++ servers that register a route with a call named for its method, such as Typesense's `server->post("/collections/:collection/documents", post_add_document)` and its kin `put`, `patch`, and `del` |
 | RPC methods whose names do not say that they read | `.proto` files with their `google.api.http` mappings |
 | | a Go type that embeds `Unimplemented<Service>Server`, a Rust `impl` of a tonic service |
 | operations | OpenAPI 3 and Swagger 2 files, also through `$ref` files |
