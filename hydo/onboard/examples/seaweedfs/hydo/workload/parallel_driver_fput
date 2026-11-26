@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# a filer PUT of a new file /buckets/hydo/<key>, then a read through S3 or the filer
+exec /bin/swc op fput

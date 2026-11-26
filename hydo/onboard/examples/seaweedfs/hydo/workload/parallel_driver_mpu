@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=60
+# an S3 multipart upload of 2 or 3 parts (5 MiB each but the last) to a new or a known key and its completion, then a read
+exec /bin/swc op mpu

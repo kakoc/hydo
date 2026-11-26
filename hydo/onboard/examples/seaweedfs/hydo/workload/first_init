@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=300
+# wait for the Raft leader and the three volume servers, set the filer's path rule fsync for /buckets/, make the bucket hydo, and write once through S3 and once through the filer (../../client/main.go, cmdInit)
+exec /bin/swc init

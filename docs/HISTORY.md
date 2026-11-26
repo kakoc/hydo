@@ -23418,6 +23418,90 @@ exploration it saved before writes the findings of the default build again, as `
 because their `# params:` line is new. The README spelling is read only where the report finds
 the project's folder, not for a CI run's page. Open item 183 has the rest.
 
+## Milestone 364 (tentative number): SeaweedFS, three masters, three volume servers and a filer
+
+The onboarding of SeaweedFS 4.55 (2026-11-23, the newest release) on hvx, 2026-11-26, by
+`docs/ONBOARDING-PLAYBOOK.md`, with the released hydo 0.6.0 installed into a prefix of its own on
+the bare-metal machine. The example is `hydo/onboard/examples/seaweedfs`; its RESULTS.md has the
+evidence. No new bug of SeaweedFS: every failure was a server that refused its own damaged files,
+on purpose or within a documented limit. Nothing was posted. Nothing recorded moved.
+
+**The example.** `hydo/onboard/examples/seaweedfs` (RESULTS.md) runs the shape of the wiki pages
+"Failover Master Server" and "Replication" on one host, imported with `hydo compose`: three
+masters with Raft, three volume servers with the replication `001` (two copies of every volume),
+one filer on its default store, leveldb2, and the S3 gateway, in one hvx guest of 2,048 MiB. Each
+server's `/data` is a file system of its own. The first command writes the filer's path rule
+`fsync` for `/buckets/` (the build parameter `fsync`, `true` by default) and makes the bucket. The
+client `swc` (`client/main.go`, the AWS SDK for Go v2 and Go's standard library) writes every key
+through S3 (PutObject, overwrite, DeleteObject, DeleteObjects, multipart uploads of 5 MiB parts
+and their aborts, CopyObject) or through the filer's HTTP API (PUT, overwrite, DELETE), reads
+each acknowledged write back through the other API, and orders compactions of the volumes during
+the workload (`anytime_vacuum`). A `type: messages` check with the claim `acked_outcome` and
+`effect: recorded` judges every write after a compaction of every volume; final checks compare
+the listing with the keys, the multipart uploads with the aborts, and both copies of every chunk,
+read from each volume server directly. Two clean runs on the final image (`f6e18b43…`) give one
+fingerprint, `353f5b2b1913660a`.
+
+**By design and the environment.** A volume server stops at every start when a volume's
+superblock names an unknown version, here after hydo zeroed bytes of its file (pull request
+#8047 made it stop on purpose). A master stops at every start after hydo damaged its Raft state,
+with a message about `/data` being writable. The rule over both copies of each chunk found a copy
+that answers 404 after hydo damaged a volume server's files; SeaweedFS documents that it repairs
+no copy by itself, and every read took the other copy. Without the fsync rule, SeaweedFS's
+default, 5 of 20 power cuts lost acknowledged writes, and `hydo explore --configs` labeled it the
+documented trade-off; with the rule none of 20 did. The saved regression
+`acknowledged-write-lost-at-a-power-cut-without-fsync.schedule` carries `# params: fsync=false`,
+and `hydo repro --regressions` reproduced it on that build.
+
+**What held.** With the fsync rule no acknowledged write was lost or read wrong, no deleted key
+came back, and every listing and upload list agreed with the keys. That held through kills,
+pauses past the masters' election timeout and the volume servers' heartbeats, partitions and
+one-way loss, clock steps both ways, one server's power loss, power cuts of the guest at steps
+and at disk flushes, and compactions concurrent with all of them. It also held through 60
+reactions 0 to 40 ms after acknowledgements and compactions (power cuts and power losses of the
+filer and of a volume server), 65 kills of each master, a volume server and the filer 0 to 3 s
+into writes of 4 MiB or more, and volumes of 8 MB that filled during the runs. SeaweedFS issue
+#4557, a write left empty by a failover of the master leader, did not reproduce.
+
+**Explorations.** 342 schedules in eight explorations on two workers or one: e1 and e2
+(process strategy with cluster, storage and more faults, seeds 1-37), e3 (seeds 101-160 with
+fault reactions at the acknowledgements and the compactions), e4 (the aimed grid of power cuts
+and power losses), e5 (`--configs` over `fsync`), e6 (the kills inside large writes), e7 (volumes
+of 8 MB, seeds 201-240) and e8 (swarm with new faults, seeds 301-340). Eleven directed runs
+checked the clean run, pauses of the Raft leader and of volume servers, the filer's power loss,
+power cuts inside the workload, clock steps, and an isolated master.
+
+**hydo.** No code of hydo changed. The guide's strategies have the SeaweedFS evidence in two
+entries. The new example enters the explorer's and the controller's corpora: their goldens are
+re-recorded with `HYDO_BLESS=1` in a copy of the tree without git on the bare-metal machine, in
+the default modes and with `HYDO_CORPUS_QUICK=1` and `HYDO_IDENT_FULL=1`, and checked there. In
+that copy `identity::local_outputs_are_no_inputs` fails, because it needs git's list of ignored
+files. It passed, and so did `public_content::` over 3,921 files, after the copy was made a git
+repository of its own (`git init`, `git add -A`).
+
+Retro: SeaweedFS 4.55, hvx, 2026-11-26
+- Time to the first clean run: 1 hour 5 minutes of wall time (scouting 30 minutes, the import,
+  the client and two blockers 35 minutes).
+- Schedules run before the first finding: no finding of SeaweedFS in 342 schedules and 11
+  directed runs. The first failure, at e1's seed 3, was a damaged file; no failure was a mistake
+  of the rules after the multipart parts were made 5 MiB.
+- The findings: none new, none known; by design or documented: the fail-fast on a damaged
+  superblock, the copies that nothing repairs, and the default without fsync; the environment:
+  a master's damaged Raft state.
+- What took the most time: the shrinks of power-cut losses in the configurations exploration
+  (40 minutes on one worker); the FIPS entropy panic of every server (20 minutes); a shrink of a
+  violation with damaged files that had to be stopped (10 minutes).
+- What hydo lacked: a Go program in FIPS mode cannot start in the guest, whose clock has no
+  jitter; `--check` does not count the services' own file systems against hvx's 4,096 MiB; the
+  import takes the image's first `EXPOSE`; a stopped exploration leaves its engine under sudo;
+  a violation with damaged files is shrunk; the write-route scan sees no gorilla/mux route with
+  a variable path; the verdict line names a claim that judged nothing. Open item 186.
+- Strategies: "Settings that trade durability" (the fsync rule, labeled by design) and "A scan
+  of a reaction's delay" (the grid after acknowledgements and compactions found nothing) are
+  updated.
+
+**What is left.** Open item 186.
+
 ## Milestone 365 (tentative number): one findings store for every run
 
 The user's idea (2026-11-26): the findings of hydo's runs should be kept in one light store that

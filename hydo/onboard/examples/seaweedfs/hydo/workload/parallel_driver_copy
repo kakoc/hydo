@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# S3 CopyObject of a known key to a new or a known key, then a read
+exec /bin/swc op copy

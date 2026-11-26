@@ -1,0 +1,22 @@
+# Documented trade-off (RESULTS.md, "Settings that trade durability"), from seed 7 of the
+# exploration e5/02-fsync_false. Without the filer's path rule fsync (SeaweedFS's default),
+# neither the filer's leveldb2 nor the volume servers sync an acknowledged write, and a power
+# cut of the guest before step 1 loses an acknowledged filer PUT. It needs the build
+# --set fsync=false; on the default build (fsync=true) hydo repro --regressions skips it.
+# found by `hydo explore` (seed 7): durable-defaults
+# params: fsync=false
+# verdict: HYDO-ORACLE: VIOLATION [objects.acked-outcome] 1 of 1 judged operations did not end as the system answered them: fover.k0.0.v0x0 was acknowledged and ended succeeded, but its effect is not there
+# composition: r0: parallel_driver_fover | r1: parallel_driver_mpu, parallel_driver_fover | r2: parallel_driver_fput, parallel_driver_mpu, parallel_driver_put | r3: parallel_driver_mdel, parallel_driver_fover | r4: parallel_driver_fover | r5: parallel_driver_fput | r6: parallel_driver_fover, parallel_driver_copy, parallel_driver_over | r7: parallel_driver_mpu | r8: parallel_driver_fput | r9: parallel_driver_copy
+# commands: anytime_read anytime_vacuum first_init parallel_driver_abort parallel_driver_copy parallel_driver_del parallel_driver_fdel parallel_driver_fover parallel_driver_fput parallel_driver_mdel parallel_driver_mpu parallel_driver_over parallel_driver_put
+# command-sha: parallel_driver_copy 943329ff2b87d35e
+# command-sha: parallel_driver_del c867fe00c084cd58
+# command-sha: parallel_driver_fdel 1fbedcb426b22b21
+# command-sha: parallel_driver_fover f8c1fb38d1e12ddb
+# command-sha: parallel_driver_fput e7a7417af2db82bb
+# command-sha: parallel_driver_mdel 8a0a44fd2e3df7a6
+# command-sha: parallel_driver_mpu 6b770cfe14b85e4c
+# command-sha: parallel_driver_over d8a52d6a8b33f176
+# command-sha: parallel_driver_put 0acb637082b61e92
+# note: the resolved composition is too long for a schedule line; a saved regression carries it as W=@803bb2166c73 (unconfirmed: the explorer reproduced this failure with the composition's seed form and has not run this form; `hydo build` and then `hydo repro --regressions` run it and say whether it fails the same way)
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut dseed=0 | run C=1 W=740c6cfa,p1,q3,r1000,oanytime_read+anytime_vacuum+parallel_driver_abort

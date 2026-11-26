@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "hydo",
+      "credentials": [
+        {
+          "accessKey": "hydoaccesskey0000001",
+          "secretKey": "hydosecretkey000000000000000000000000001"
+        }
+      ],
+      "actions": ["Admin", "Read", "List", "Tagging", "Write"]
+    }
+  ]
+}

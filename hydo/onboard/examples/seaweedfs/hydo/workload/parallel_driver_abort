@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# an S3 multipart upload of one part to a new key and its abort, then a read: the key stays absent
+exec /bin/swc op abort

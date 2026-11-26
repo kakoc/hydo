@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# S3 DeleteObjects of two known keys in one request, then a read of each
+exec /bin/swc op mdel
