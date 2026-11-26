@@ -166,7 +166,9 @@ Limits:
 - Output is cut at `--max-bytes` (default 16 KiB; `truncated: true`).
 - A command runs for at most `--timeout` ms of guest time (default 10,000).
 - `--service` runs in the service's own network namespace (`network: bridge`).
-- A program inside an image service's root runs with `hydo-oci <svc> <program>`.
+- `--service` of a service from a Docker/OCI image also runs inside the service's own root,
+  through `hydo-oci <svc>`, where its files are. `--sh` runs the line with the image's `/bin/sh`.
+  `--guest-root` runs in the guest's root instead, with the guest's tools.
 
 ## 4. Try several things from one state (branches)
 
