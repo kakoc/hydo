@@ -23631,3 +23631,187 @@ changed in the 11 answers of the main help, which names `hydo findings`.
 - `hydo ci run --history` did not read a store with such records, and the page read only the
   scripted test's store and the Mac proof's store, not a history branch on GitHub (open item 67).
 - A store has no lock. Two records into one store at once can lose one ledger update.
+
+## Milestone 367 (tentative number): the gaps of the NSQ and SeaweedFS onboardings
+
+Status: done on 2026-11-26, on the bare-metal machine (hvx and the tests) from this Mac. Each fix
+below is its own commit. Nothing recorded moved: every change is in the host's build check,
+explorer, commands, scans and reports, and in the guide. No engine's guest behaviour, agent,
+image or fingerprint changed, and the fingerprint epoch stays 6. The gaps are the "What hydo
+lacked" sections of the NSQ and SeaweedFS examples' RESULTS.md (open items 184 and 186).
+
+**1. `--check` counts the services' own file systems.** The SeaweedFS onboarding gave the data
+disk 1,792 MiB beside eight file systems of `storage.size_mib`. `hydo build --check` printed `OK`,
+and the build stopped only after it had unpacked the images: `the disk with the services' own
+file systems is 4488 MiB, more than the 4096 MiB an engine maps`. The disk holds the root
+partition, the data partition of `data.size_mib`, and each own file system with 1 MiB before it.
+Two changes:
+
+- The known parts of the disk are 1 MiB, a root of at least 1 MiB, `data.size_mib`, and the
+  file systems. When they already pass the 4,096 MiB, `--check` and the build stop before
+  anything is unpacked, with the words of the disk's assembly
+  (`hydo_build::image::disk_refusal`). The
+  message adds that the file systems come on top of `data.size_mib`, which needs only the run's
+  own files.
+- The estimate of the image services' roots (Milestone 324) adds the file systems on top of the
+  data disk, and its advice names smaller `storage.size_mib` values.
+
+The test `root_fit::the_services_own_file_systems_count_against_the_disk` checks three cases.
+Data of 2,048 MiB beside three file systems of 512 fits (3,779 MiB). Data of 2,400 passes only
+with the roots' estimate (4,131 MiB: a warning). Data of 1,792 beside three of 768 passes with
+the known parts alone (4,101 MiB: the refusal).
+
+**2. A stop of `hydo explore` stops its engines.** The SeaweedFS onboarding stopped an
+exploration by its process group, and its engine `hydo-hvx`, which runs under `sudo`, kept 14
+GB of the host; nothing named its pid. The chain of an hvx worker is `flock` (the module lock),
+`sudo`, and `hydo-hvx` as root. This user cannot signal the root engine. It can signal its
+`sudo`, whose real user is this one, and `sudo` passes SIGTERM on to its command (tried on the
+bare-metal machine with `sudo sleep`). On the bare-metal machine, SIGTERM and SIGINT to the
+process group ended a healthy engine with 0.6.0 too. `sudo` passed the signal on, and an engine
+also ends when its input closes. What stays is an engine that neither the signal nor its input
+reaches, such as one in a long call. A stand-in engine that ignores SIGTERM, SIGINT, and the
+end of its input showed it: with 0.6.0, SIGTERM to the exploration's process group left both
+stand-in engines and their `sudo` processes as root.
+
+The new module `hydo_engine::children` keeps every engine program this process starts:
+
+- `hydo explore` (and `hydo explore --configs`) installs handlers for SIGINT and SIGTERM. A
+  signal that the process inherited as ignored stays ignored. On the signal, hydo sends SIGTERM
+  to each engine child and every process under it that this user may signal, and waits up to
+  10 s. Then it sends SIGKILL to what is left, and a root engine that its `sudo` did not end
+  gets `sudo -n kill -KILL`. It says on stderr how many engines it stops and names any that
+  stayed. Then it ends by the same signal (status 143 for SIGTERM).
+- The processes under each engine child are remembered every 2 s. So the stop also reaches an
+  engine whose `flock` the process group's own signal ended first.
+- While the stop runs, no engine starts, and a worker that sees its engine end waits for the end
+  of the process. Before that wait, an exploration stopped in its workers' boot wrote 40
+  failures of 40 seeds.
+- While engines run, the exploration's folder has `engines.txt`. It is rewritten when an engine
+  starts, becomes ready, or ends, and every 2 s. Each line names the engine program's pid, the
+  processes it runs under, and the command that stops it. The first engine's start prints the
+  file's path. `hydo guide workflow` has the section "Stop an exploration and its engines."
+
+```text
+hydo-hvx 367456 (under sudo 367454, flock 367451; stop it with: sudo kill 367456)
+```
+
+The proof ran in this tree on hvx, with the pinned stack image of epoch 6
+(`explore-ob-stack-fix-disk.img` of `~/hydo/build/rel060`, read only) and two workers:
+
+| run | stopped by | left after 30 s |
+|---|---|---|
+| 0.6.0, stand-in engine | SIGTERM to the process group | both `hydo-hvx` and both `sudo`, as root |
+| this tree, stand-in engine | SIGTERM to the process group | none; the explorer ended with status 143 |
+| this tree, `hydo-hvx` | SIGTERM to the process group | none |
+| this tree, `hydo-hvx` | SIGINT to the process group | none |
+| this tree, `hydo-hvx` | SIGTERM to `hydo explore` alone | none |
+
+Each run matched the processes by the pids that `pstree` showed under the explorer before the
+signal, and `engines.txt` named the same pids. The stand-in engine was a shell loop that ignores
+the signals, given to the explorer by `HYDO_HVX_EXPLORE`.
+
+**3. `hydo save` keeps one regression per class and finding.** The SeaweedFS configurations
+exploration shrank five power cuts of one class, whose verdicts named other objects of one
+check. `hydo save` wrote five files, named after each verdict's first words, while the
+configurations table showed one finding. A save now takes the shrinks of one class, one finding
+key (the check, as `hydo ci` names it) and one cause (`--shrink-causes`) as one regression. It
+writes the first, and names each other one as `the shrink of seed N is another failure of the
+finding of seed M ... left out`; the summary line counts them. The unit test
+`save_takes_one_shrink_per_class_and_finding` checks that another check, class, or cause stays
+apart.
+
+**4. The write scan reads gorilla/mux chains and a switch on the method.** `hydo rules scan
+--kind writes` found no S3 route and no filer write of SeaweedFS. Three shapes are read now:
+
+- A route whose matchers come before its handler, as a chain of calls:
+  `bucket.Methods(http.MethodPut).Path(objectPath).HandlerFunc(...)`, also over line ends. The
+  path comes from `Path` or `PathPrefix`, a constant or a variable (`{name}`). The keys of
+  `Queries` follow after `?` and the header of `Headers` or `HeadersRegexp` in brackets, so the
+  routes of one path stay apart (`PUT /{object:(?s).+}?partNumber&uploadId` and
+  `PUT /{object:(?s).+}[X-Amz-Copy-Source]`). Of a wrapped handler
+  (`track(s3a.iam.Auth(s3a.cb.Limit(s3a.PutObjectHandler, ACTION_WRITE)), "PUT")`) the name that
+  ends with `Handler` is taken.
+- A registration without a method (`mux.HandleFunc("/", fs.filerHandler)` of net/http, or a
+  gorilla/mux route without `Methods`). Its handler's body decides: each write method of a
+  `case` of `switch r.Method` is a route, with the `...Handler` call that the case makes most,
+  the last of a tie. SeaweedFS's filer gives `POST /` and `PUT /` to `PostHandler` and `DELETE
+  /` to `DeleteHandler`. A handler without such a switch, and a case of reads, give no write.
+- A route of the older form with a variable or a concatenated path
+  (`r.HandleFunc(prefix+"/items", h).Methods("POST")`) was read before; the test checks it too.
+
+Three more pieces make the real case right:
+
+- A loop over a list of groups gives its variable the group's prefix. SeaweedFS writes
+  `routers = append(routers, apiRouter.PathPrefix("/{bucket}").Subrouter())` and then `for _,
+  bucket := range routers {`, so its S3 routes read `/{bucket}/{object:(?s).+}`.
+- A path that starts with a variable (`{handlePath}`) keeps the variable's name in the key that
+  joins the routes of one path. Before, two such paths were one route with a parameter.
+- Of handlers of one name, the one of the switching function's receiver type is taken. Both
+  SeaweedFS's filer and its volume server have a `PostHandler`.
+
+On SeaweedFS 4.55's sources 0.6.0 listed 231 write routes, none of `s3api_server.go` and none of
+the HTTP servers of `weed/server`. This tree lists 290, 40 of them in `s3api_server.go`.
+The filer's `PUT /` and `DELETE /` go to `PostHandler` and `DeleteHandler` of
+`filer_server_handlers_write.go`, and its upload protocol's `PATCH` and `DELETE` to
+`tusHandler`. Routes of one method and path in several servers stay one route, with the others
+under `elsewhere`. So the filer's `POST /` is listed under the IAM API's `POST /`, and the
+volume server's writes on `/` under the filer's.
+
+The test `gorilla_chains_variable_paths_and_handlers_that_switch_on_the_method` holds the shapes
+of SeaweedFS's `s3api_server.go`, `filer_server.go` and the filer's and volume server's handler
+files. The earlier projects' scans keep their tests.
+
+**5. The verdict names a check that judged.** Every passing SeaweedFS run ended `checks=2 held
+(objects.no-phantom: ... (0 judged, 0 undecided))`, while `objects.acked-outcome` judged 81 to
+95 writes. The verdict now names the first check whose summary does not say `(0 judged`. It
+names the first check only when every check judged nothing. No recorded verdict has such a
+summary.
+
+**6. `hydo stats` counts `disk=cut` with the cut.** Every power cut needs `disk=cut`, and the
+statistics counted it as a disk fault that `faults:` did not list. With `cut` in `faults:`, the
+`disk=cut` of a schedule is now no fault of its own; `disk=ioerr` and the others count as
+before.
+
+**7. A failed check keeps the services' logs.** A run whose check failed while every service ran
+had no `logs/` folder. The NSQ onboarding needed a `hydo inspect` session for `nsqd`'s log and
+its log before the restart (`/tmp/hydo/nsqd.log.old`). The diagnosis replay of `hydo run` and of
+the explorer's problem replays now runs for every violation. Before, it ran only for an error, a
+recovery boot without agent lines, and a violation that names a service. It also reads each
+service's log before its last restart, kept as `logs/<service>.before-restart.log`. The cost is
+one more replay of a failed run; `hydo run --no-diagnose` leaves it out.
+
+**8. `hydo inspect exec --service` enters an image service's root.** It ran in the service's
+network namespace only, where NSQ's data path was the empty mount point. For a service from a
+Docker/OCI image it now runs the program through `hydo-oci <service>`, and a `--sh` line through
+the image's `/bin/sh -c`. `--guest-root` keeps the guest's root and its tools. The help, `hydo
+guide inspect`, and a unit test say so.
+
+**9. Words.** `hydo guide hazards` names the limit of a Go program with `GODEBUG=fips140=on`. The
+FIPS entropy source keeps the low byte of timed memory accesses, and hvx's clock moves by the
+same 2 µs at every read, so the repetition test fails at start. `hydo guide messages` says that a
+`sub ... from=start` record from a `first_` command has no effect, because the command runs in
+provisioning, and that the workload, a driver, or the drain writes it. `hydo compose` warns when
+services of one image without `ports:` that run other commands get the image's first `EXPOSE`
+as their port and readiness check. It comments each such service (as open item 121), and it
+still writes the port. Services that run one command of the image, as a Redis cluster's nodes
+do, listen where the image says, and get no warning.
+
+**The recorded answers that changed**, each recorded again with `HYDO_BLESS=1`:
+
+- `hydo-compose/tests/golden.json`: 6 of 185 cases, Sentry's self-hosted import in its six
+  variants. Its services of the `sentry` and `snuba` images run other commands with the image's
+  `EXPOSE` port, and the import now warns and comments them.
+- `hydo-agents/tests/guide-sizes.txt`: the topics `hazards`, `inspect`, `messages` and
+  `workflow` grew.
+
+The command's golden answers (`equivalence::`, `agents_equivalence::`) and every other test of the changed
+crates passed unchanged on the bare-metal machine, with `cargo clippy --workspace
+--all-targets` clean.
+
+**10. Not built: a guard for a shrunk reaction delay.** A shrink moves a reaction's delay towards
+`+0`, and the NSQ trial's in-flight losses shrank into the window of finding 1. A guard would
+keep a smaller delay only when its run gives the same finding key and the same first lines of
+the failing check's output (`HYDO-CHECK-OUT`), and else keep the original delay. The shrink
+compares verdicts by their signature. The check's output is in the controller's records, not in
+the results the shrinker reads, so the guard needs that output carried into each candidate's
+result. That was more than this round's time (open item 184).

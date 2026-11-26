@@ -274,6 +274,12 @@ In the order of the time each cost.
    (0 judged, 0 undecided))`. The claim that judged the run, `objects.acked-outcome` (81 to 95
    writes a run), is only in `result.json`.
 
+Milestone 367 changed hydo for items 1 to 4, 6 and 7. `hydo guide hazards` names the FIPS limit.
+`hydo build --check` counts the services' own file systems. The import warns when services of
+one image share its first `EXPOSE`. A stop of `hydo explore` stops its engines and
+`engines.txt` names them. The write scan reads the S3 router's chains and the filer's switch on
+the method. The verdict names a claim that judged something. Item 5 is left (open item 186).
+
 ## What held, and why
 
 - **A write waits for every copy.** The volume server that takes a write asks a master for the
