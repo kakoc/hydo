@@ -697,7 +697,7 @@ These findings hold for every type of system:
   checks there, not the copy of Garage's finding 1. In Kvrocks's 255 C++ files it named
   none: the server reads the wall clock through its own `util::GetTimeStamp`, and finding 2's
   place was found by reading the replication code. In Typesense it named 14 functions, search
-  cutoffs and rate limits, and none of the two findings' places. Those are in h2o and braft,
+  cutoffs and rate limits, and neither place of its two findings. Those are in h2o and braft,
   whose sources are not in the project.
 - **Cost.** The shrinker spends hours on clock steps; stop an exploration once its failures are
   understood. It runs on every engine.
