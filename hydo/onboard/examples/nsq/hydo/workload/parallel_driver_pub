@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo: timeout=20
+exec /bin/nsqc pub m$HYDO_CMD_ID

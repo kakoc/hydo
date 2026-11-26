@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=90
+# a publish to the existing topic works again after the faults
+exec /bin/nsqc probe

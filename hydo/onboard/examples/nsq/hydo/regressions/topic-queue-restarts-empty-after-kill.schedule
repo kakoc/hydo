@@ -1,0 +1,11 @@
+# A new candidate in go-diskqueue v1.1.0, which NSQ v1.3.0 and master use (RESULTS.md, finding 1).
+# Six messages that nsqd answered OK in the topic's first second are lost after one kill of nsqd
+# before step 4. The data file jobs.diskqueue.000000.dat still holds them after the kill, but no
+# jobs.diskqueue.meta.dat exists yet: a disk queue writes its metadata only at its first sync,
+# up to 2 s after its first message. New() ignores the missing file and starts the queue empty at
+# file 0, position 0, and the next publish overwrites the first message. Without K= the run
+# passes, and so do the kill before step 14, after the first sync, and the kill with
+# --sync-every=1. Found by `hydo explore` in the 0.6.0 trial (seed 2), shrunk by the explorer.
+# commands: parallel_driver_pub
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=0 | run K=nsqd@4+1 W=:p1,r200,cparallel_driver_pub,0.0.0.503389004,1.0.0.1894126023,2.1.0.662703717,3.2.0.938279500,4.3.0.533815299,5.3.0.567436972,9.6.0.750492478

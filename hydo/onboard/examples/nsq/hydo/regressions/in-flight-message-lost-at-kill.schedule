@@ -1,0 +1,7 @@
+# Known, nsqio/nsq#1386 (RESULTS.md, finding 2): a message that a consumer holds in flight is only
+# in nsqd's memory. This kill comes 2.2 s after the consumer took m0, before its FIN, and after
+# the channel queue's sync. That sync's metadata names the read position past m0 (0,32), so m0
+# never comes back. A clean exit writes the in-flight messages back to the queue
+# (Channel.flush); a kill does not. --sync-every=1 does not change it.
+# expect: violation      (documented: delivery at least once assumes that nsqd does not fail)
+disk=none dseed=0 | run A=nsq.msg_received+2200:kill-nsqd
