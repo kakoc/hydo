@@ -17,7 +17,7 @@ results page: new as far as the search found, known, by design, or a deployment 
 | database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults; failovers by the client with a late write | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus, Kvrocks |
 | object store | an acknowledged object stays as written; a listing shows what exists | a listing compared with a read of each key; kills and pauses of one node; clock steps | Garage |
 | log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults; a client that leaves transactions open, and power cuts and clock steps | Redpanda, NATS, Pulsar |
-| job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate |
+| job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate, NSQ |
 | distributed query or compute engine with schedulers and workers | an accepted query ends; a completed query's result stays readable | production's topology and features; checks of how each unknown outcome ends; pauses of a worker past its failure detector; kills of the worker that holds the results | a user's query engine |
 | ledger or billing system | the books match the acknowledged operations; a limit holds | the generic rule beside domain rules; concurrent clients without faults; value properties | Blnk, Lago, Formance Ledger |
 | service that calls outside APIs | a payment or a mail takes effect once | protocol faults on fakes and emulators; a kill while an answer is late | web-shop, checkout, openapi-payouts, Saleor |
@@ -275,6 +275,10 @@ These findings hold for every type of system:
     client's documentation says that a receipt does not keep a message from coming again. A
     failover subscription served by one consumer process at a time kept `order: {kind: fifo,
     scope: key}` judgeable; a shared one with prefetching consumers does not keep it.
+  - NSQ (finding 1 and the known nsqio/nsq#1386): `acked_outcome` with `effect: recorded`, where
+    the effect is a consumer's `FIN`, broke for messages that a consumer had received once and
+    that a kill of `nsqd` lost. `no-loss` counted them as delivered. NSQ reports no state per
+    message, so the drain wrote the final state from the consumers' own record of each `FIN`.
 - **What it misses.** The drain's output stays in the guest, also when it fails. A drain that
   stops before the leases end and the recovery finishes reports false losses. Three of four
   failed explorations of a user's queue came from the plan.
@@ -536,6 +540,13 @@ These findings hold for every type of system:
     a pause of one scheduler. The query stayed completed, and every read of its results failed.
     Only the check that a completed result stays readable saw it (the entry "How each unknown outcome
     ends").
+  - NSQ (finding 1, new): a kill of the broker itself lost 6 messages that it had answered `OK`.
+    The broker was `nsqd` with every message on disk, killed about 0.8 s after a topic's first
+    message. A disk
+    queue writes its metadata only at its first sync, up to 2 s after its first message. Without
+    that file the restarted queue starts empty. Blind in the trial at seed 2, shrunk to
+    `K=nsqd@4+1`. The same kill 2.8 s after the first message lost nothing. So aim a kill at a
+    new topic, a new channel, or a queue just emptied, as well as at a busy one.
 - **What it misses.** A kill comes through the guest agent, so the service's threads run on
   until the agent runs. Meilisearch's index swap that runs twice (finding 1) needs
   the server stopped between two LMDB commits. Reactions that killed it at 18 delays after a
@@ -629,6 +640,10 @@ These findings hold for every type of system:
     partitions hold back every later message, so 18 acknowledged messages were not delivered by
     the drain (`T=32:-600`). The audit named the new coordinator's deadline scan
     (`TxnMetadataStore`) as its place 26, not the timeout tracker of the coordinator that runs.
+  - NSQ (known nsqio/nsq#1124): after a step back of 1,265 s every publish to an existing topic
+    waits until the clock passes the last message id's time. `NewGUID` returns
+    `ErrTimeBackwards`, and `GenerateID` tries again every millisecond. The audit ranked that
+    place second, and a blind exploration found it at seed 4.
 - **What it misses.** Many clock effects are by design. Examples are Temporal's delayed timers,
   and River's runs of every periodic job that a forward step skipped. The audit reads text. It
   found no place in Redpanda's 2,694 C++ files, whose transaction expiry uses Seastar's wall
@@ -765,7 +780,14 @@ These findings hold for every type of system:
     to 23 s after a failover, and 14 of 30 schedules left a node that did not start again. A
     grid with `--seeds` runs one point per seed, so the whole grid three times needs as many
     seeds as three grids have points.
-- **What it misses.** The window moves with the program's bytes. A second build of
+  - NSQ (findings 1 and 2): a kill of `nsqd` 0 or 1,000 ms after a consumer took a message lost
+    every message of the topic. At 2,200 ms it lost only the message in flight. The first two
+    delays fall before the channel queue's first metadata sync, finding 1, which is new. The third
+    falls after it, finding 2, the known nsqio/nsq#1386. The trial's grid shrank its failures to
+    `+0` and took them for the in-flight loss. Separate the causes with delays on both sides of
+    the system's sync interval, and read the files after the restart.
+- **What it misses.** The window moves with the program's bytes. A shrink moves a delay towards
+  0, which can be the window of another cause. A second build of
   `mender-update` moved it to 65, 70, and 75 ms.
 - **Cost.** One run per delay and action: 153 runs for one service and the 51 default delays.
 

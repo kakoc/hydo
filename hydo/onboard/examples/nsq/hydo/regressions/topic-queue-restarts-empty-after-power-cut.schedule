@@ -1,0 +1,10 @@
+# Finding 1 after a power cut (RESULTS.md). One message, m13, is published in round 10 and nsqd
+# answers OK. The topic queue's first sync then fsyncs the data file and writes the metadata to a
+# synced temporary file, which persistMetaData renames into place without a sync of the
+# directory. Before the cut the data path holds jobs.diskqueue.meta.dat ("1", "0,0", "0,33"); in
+# the recovery boot it holds the data file with m13 and jobs.diskqueue.meta.dat.<n>.tmp, but no
+# jobs.diskqueue.meta.dat. So the queue starts empty, and m13 never reaches a consumer. Found by
+# `hydo explore --seeds 1-20 --strategy process` (seed 1, 6 of 20 schedules), shrunk to the cut.
+# commands: parallel_driver_pub
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut dseed=0 | run C=20 W=:p1,r400,cparallel_driver_pub,13.10.0.2011514702

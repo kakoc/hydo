@@ -1,0 +1,71 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "nsqio/nsq:v1.3.0": {
+   "index_digest": "sha256:1a369c146af71bc95c25d54b375a2b98452478c1eaf4e85f8fcb01da20f2c78a",
+   "name": "nsqio/nsq",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "/bin/sh"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "4150/tcp": {},
+       "4151/tcp": {},
+       "4160/tcp": {},
+       "4161/tcp": {},
+       "4170/tcp": {},
+       "4171/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:1ceea517773270f5dd75f92777d4f7a49d8728b3884e28c749524ad6b031ca18",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "/bin/sh"
+      ],
+      "Entrypoint": null,
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "4150/tcp": {},
+       "4151/tcp": {},
+       "4160/tcp": {},
+       "4161/tcp": {},
+       "4170/tcp": {},
+       "4171/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:7d09dcaf9f942d3c7440d75d8c84a6a4fc1289278c7bf2b6af7f8780c20e3ae6",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "nsqio/nsq:v1.3.0",
+   "registry": "docker.io",
+   "repo": "nsqio/nsq",
+   "tag": "v1.3.0"
+  }
+ }
+}

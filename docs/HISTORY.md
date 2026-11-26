@@ -23225,6 +23225,106 @@ of this milestone ran without a VM. That machine's `/nix/store` holds 4 entries 
 read-backs of the image path still carry the request's index in their name, so a new pinned file
 renames the later ones in the next recording. Their answers do not change.
 
+## Milestone 362 (tentative number): NSQ, a kill of `nsqd` in a new queue's first seconds
+
+The NSQ project of the 0.6.0 user trial (Milestone 359) became the example
+`hydo/onboard/examples/nsq` (RESULTS.md), by `docs/ONBOARDING-PLAYBOOK.md`, with the published
+hydo 0.6.0 on the Mac engine. Of the trial's three candidates, one is new and two are known.
+Nothing was posted, and nothing recorded moved.
+
+**The example.** One `nsqd` and one `nsqlookupd` of NSQ v1.3.0 from the official image, as nsq.io's
+Docker page runs them, with `--mem-queue-size=0`, the setting that NSQ's guarantees page names
+for writing every incoming message to disk. `nsqd`'s data path is a file system of its own;
+`--mem-queue-size` and `--sync-every` are the build parameters `memq` and `sync_every`. The trial's
+Go client `nsqc` speaks the HTTP API and the TCP protocol itself and records each publish,
+receipt and `FIN` with the Go SDK's `hydohist`. Its drain records the channel's group as
+`sub jobs work from=start`, because `nsqd` hands a topic's earlier messages to its first channel.
+Without it, `no-loss` judged none of the messages that finding 1 lost, since they were sent before
+any receive (open item 183). A `first_` command's records did not do it: they stay in
+provisioning, before the snapshot that each run starts from. The check is the trial's messages check: `delivery: at-least-once`, a
+`lease` of 60 s, and `acked_outcome` with `effect: recorded`, where the effect is a consumer's
+`FIN`. `eventually_publish` checks that a publish works after the faults.
+
+**Finding 1, new.** A kill of `nsqd` in the first seconds of a new topic or channel loses every
+message of it. go-diskqueue v1.1.0 writes a queue's `.diskqueue.meta.dat` only at its first
+sync, after 2,500 messages or at a tick of 2 s once there was activity (`diskqueue.go` lines 433,
+503, 656 and 697 to 702). `New` ignores the missing file (lines 131 and 132), so the restarted
+queue starts empty at file 0, position 0, although the data file holds the messages, and
+`writeOne` writes the next message over the first one (lines 388 to 405). The check of
+out-of-sync metadata from go-diskqueue#31 runs only when the file exists. `hydo inspect` right
+after the restart showed `jobs.diskqueue.000000.dat` with `m0` to `m5` and no metadata file. The
+regressions are the trial's blind `K=nsqd@4+1 W=...` and the aimed `A=nsq.msg_received:kill-nsqd`,
+where neither the topic's nor the channel's queue had its metadata. A kill 2.8 s after the first
+publish and the same kill with `--sync-every=1` lost nothing. A power cut can lose the first
+metadata file after its sync too: `persistMetaData` renames a synced temporary file into place
+and syncs no directory (lines 524 to 528). The blind `disk=cut dseed=0 | run C=20 W=...` published
+one message about 3 s before the cut; the last stop before the cut had the metadata file, and the
+recovery boot had only the data file and `jobs.diskqueue.meta.dat.<n>.tmp`, so the message was
+lost although its data file had been synced. NSQ's `master` (`85cf10c0`) still
+requires go-diskqueue v1.1.0, and go-diskqueue's `master` (`ff2a02e5`) has the same code. No issue
+names a missing metadata file at a start. The draft report waits for the lead.
+
+**Finding 2, known (nsqio/nsq#1386).** A kill 2.2 s after a consumer took a message, before its
+`FIN`, loses that message: it is in flight only in memory, and the channel queue's sync has
+written the read position past it (`3`, `0,32`, `0,128`). A clean exit writes in-flight messages
+back (`Channel.flush`, `nsqd/channel.go` lines 214 to 250). A maintainer confirmed it in #1386 and
+#1142, and the guarantees page says that delivery at least once assumes that `nsqd` does not fail.
+The trial took its aimed schedule `A=nsq.msg_received:kill-nsqd` for this finding. That kill comes
+before either queue's first sync, so it shows finding 1: 4 of 4 messages lost at `+0` and at
+`+1000`, and only the one in flight at `+2200`.
+
+**Finding 3, known (nsqio/nsq#1124), a clock effect.** After a backward step of the wall clock
+every publish to a topic that had a message waits until the clock passes the last id's time:
+`NewGUID` returns `ErrTimeBackwards` (`nsqd/guid.go` line 57), and `Topic.GenerateID`
+(`nsqd/topic.go` lines 491 to 503) tries again every millisecond. #1124 is open with the label
+`bug`; #1249, a change to ids without the clock, was closed unmerged.
+
+**The runs.** The final image `explore-ob-nsq-arm64.cpio.gz` (`4fe61962…`) gives
+`d29eb914ebcefac1` on two clean runs. Each regression gave one fingerprint over two fresh runs,
+and `hydo repro --regressions` gave 5 of 5 as expected with the same values: finding 1
+`d39f53f08499f0e1`, `2b20291d317536f9` and, after the power cut, `501a3f509a3aca0f`, finding 2
+`cc4f5ae54b811cdc`, and finding 3 `b5b2092116480f0d`. RESULTS.md has the separating runs and their fingerprints.
+
+**The exploration.** `hydo explore --seeds 1-20 --strategy process` of the final image ran on 3
+workers in 713 s. 14 of 20 schedules failed: 6 power cuts (finding 1, seed 1 shrunk to `C=20`
+alone), 3 kills of `nsqd` (finding 1), and 5 backward clock steps (finding 3, shrunk to
+`T=7:-1265`). Kills of `nsqd` after the queues' first syncs, pauses, network faults and steps
+back before the topic's first message passed. A first version of the client recorded a `FIN`
+without an answer within 5 s as no final state, and a pause of `nsqd` then failed
+`acked-outcome` although `nsqd` took the `FIN` after the pause (seed 13): a mistake of the rules.
+The client now leaves such a message out of the read-back unless a consumer finished it later,
+and the pause passes.
+
+**Tests.** The new example enters the explorer's and the controller's corpora. Re-recorded with
+`HYDO_BLESS=1`: the explorer's corpus goldens (full and quick), its identity goldens (quick and
+full), and the controller's quick corpus golden, which adds the example's entries only. With a
+target folder of this task's own: `cargo fmt --all --check`, `cargo test -p hydo-explore --test
+it` (61 passed), `-p hydo-agents --test it public_content::`, `-p hydo --test it -- docs::
+equivalence::cli_matches_golden` (15 passed), the controller's corpus tests, `sh ci/vale.sh`
+and the voice lint of the draft pass. No Rust code changed.
+
+Retro: NSQ v1.3.0, the Mac engine, 2026-11-25 (the trial) and 2026-11-26 (the example)
+- Time to the first clean run: about 1 hour in the trial, from the first guide page; 20 minutes
+  for the example from the trial's files.
+- Schedules run before the first finding: the trial's blind round found finding 1 at seed 2. One
+  failure of the trial was a mistake of its client (a receipt taken as the final state, fixed in
+  the trial).
+- The findings: 1 new (a new queue without its metadata file starts empty), 2 known (#1386, the
+  in-flight loss, documented; #1124, the clock effect), and the documented loss of a power cut.
+- What took the most time: telling finding 1 from finding 2 in the aimed schedule (about 40
+  minutes: directed delays and the files after the restart); two mistakes of the client's
+  records and every run again after each (about 1 hour 30 minutes); the duplicate search (about
+  30 minutes).
+- What hydo lacked: the shrink of a reaction's delay moved it to `+0`, the window of another
+  cause; `no-loss` did not judge messages sent before the first receive; a failed check's run
+  has no service logs; `hydo inspect exec --service` does not enter the service's root (open
+  item 184).
+- Strategies: the entries "Kills of the process that holds acknowledged work", "A scan of a
+  reaction's delay", "The messages check's claims" and "Clock steps and the clock audit" of
+  `hydo guide strategies` have the NSQ evidence, and the first table names NSQ.
+
+**What is left.** Open item 184.
+
 ## Milestone 363 (tentative number): a test of the guide's topics, and the trial's smaller frictions
 
 Status: done on 2026-11-26, in the tests on this Mac; no VM ran. Each fix below is its own

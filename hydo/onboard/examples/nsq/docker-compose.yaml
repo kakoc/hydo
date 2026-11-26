@@ -1,0 +1,20 @@
+# From nsq.io's "Docker" deployment page, with nsqd's data on a volume.
+services:
+  nsqlookupd:
+    image: nsqio/nsq:v1.3.0
+    command: /nsqlookupd
+    ports:
+      - "4160"
+      - "4161"
+  nsqd:
+    image: nsqio/nsq:v1.3.0
+    command: /nsqd --lookupd-tcp-address=nsqlookupd:4160 --broadcast-address=nsqd --data-path=/data --mem-queue-size=0
+    depends_on:
+      - nsqlookupd
+    volumes:
+      - nsqd-data:/data
+    ports:
+      - "4150"
+      - "4151"
+volumes:
+  nsqd-data:

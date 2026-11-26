@@ -1,0 +1,8 @@
+# Known, nsqio/nsq#1124 (RESULTS.md, finding 3), a clock effect. After a backward step of the
+# wall clock by 1,265 s before step 7, every publish to the topic waits until the clock passes the
+# last message id's time. NewGUID (nsqd/guid.go line 57) returns ErrTimeBackwards, and
+# Topic.GenerateID (nsqd/topic.go lines 491 to 503) tries again every millisecond. No publish
+# succeeds in the probe's 60 s after the faults. Without T= the run passes.
+# commands: parallel_driver_pub serial_driver_consume
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=0 | run T=7:-1265 W=:p1,r100,cparallel_driver_pub+serial_driver_consume,0.0.0.730187883,1.1.0.1860885221,2.2.0.829719321,3.3.0.882322836,4.4.1.342851704,5.5.0.1397762533,6.6.0.206460982,7.7.0.1776487001,8.8.0.1437280216,9.9.0.1938808136,10.10.1.1705545515,11.11.0.1587432797,12.12.0.868422688,13.13.1.2030564053,14.14.0.1027643985,15.15.0.1813773090,16.16.0.214145303,17.17.0.187921562,18.18.0.1900105993,19.19.0.2141400831

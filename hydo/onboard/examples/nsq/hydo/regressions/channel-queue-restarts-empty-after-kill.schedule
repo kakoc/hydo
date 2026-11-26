@@ -1,0 +1,8 @@
+# Finding 1 on the channel's queue (RESULTS.md). A kill of nsqd at the moment a consumer takes its
+# first message loses every message of the topic and of the channel. Neither
+# jobs.diskqueue.meta.dat nor jobs:work.diskqueue.meta.dat exists yet, so both queues start empty
+# after the restart, although both data files hold m0 to m3. The same kill 2.2 s later loses only
+# the message in flight (in-flight-message-lost-at-kill.schedule). Found by `--reactive-at
+# nsq.msg_received` in the 0.6.0 trial and shrunk to the one reaction.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=0 | run A=nsq.msg_received:kill-nsqd
