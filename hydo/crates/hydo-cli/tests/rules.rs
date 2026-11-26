@@ -534,3 +534,37 @@ fn the_clock_audit_names_versions_taken_from_the_wall_clock() {
         "{text}"
     );
 }
+
+/// Milestone 363: a place whose words name a connection, in a project whose hydo.yaml has no
+/// database, names the one service that runs the place, not `<database>` (NSQ's nsqlookupd in
+/// the 0.6.0 trial: `K=<database>@2+3` under `Run by nsqlookupd`).
+#[test]
+fn the_clock_audit_names_the_service_when_there_is_no_database() {
+    let t = T::new("clocknodb");
+    let w = |rel: &str, text: &str| {
+        let p = t.dir.join("proj").join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, text).unwrap();
+    };
+    w("go.mod", "module example.com/l\n\ngo 1.22\n");
+    w(
+        "cmd/lookupd/main.go",
+        "package main\n\nimport \"example.com/l/peers\"\n\nfunc main() { peers.Run() }\n",
+    );
+    w(
+        "peers/conn.go",
+        "package peers\n\nfunc (p *Peer) reconnectIdle() {\n\tif time.Now().UTC().Sub(p.lastConnection) > p.connectionTimeout {\n\t}\n}\n",
+    );
+    w(
+        "hydo/hydo.yaml",
+        "format: 1\nname: l\nservices:\n  - name: lookupd\n    cmd: \"/bin/lookupd\"\nworkload:\n  steps: 12\n",
+    );
+    let (rc, text) = t.hydo(&["rules", "scan", "proj", "--kind", "clock"]);
+    assert_eq!(rc, 0, "{text}");
+    assert!(text.contains("\n   Run by lookupd (lookupd).\n"), "{text}");
+    assert!(
+        text.contains("disk=none | run T=1:-300 K=lookupd@2+3"),
+        "{text}"
+    );
+    assert!(!text.contains("<database>"), "{text}");
+}

@@ -3899,7 +3899,13 @@ fn fault_for(m: &ClockMatch, svcs: &Services) -> (&'static str, String, &'static
         "replica" => ("replica", one(&svcs.replicas).unwrap_or_else(|| "<replica>".into()), "a replica is killed and comes back, so that it connects again and asks for its data"),
         "database" => {
             let db = (svcs.databases.len() == 1).then(|| svcs.databases[0].clone());
-            ("database", db.unwrap_or_else(|| "<database>".into()), "the database is killed and comes back, so that its clients connect again")
+            match (db, only) {
+                (Some(db), _) => ("database", db, "the database is killed and comes back, so that its clients connect again"),
+                // Milestone 363: hydo.yaml has no database, but names the one service that runs
+                // the place (NSQ's nsqlookupd in the 0.6.0 trial), so the schedule names it
+                (None, Some(svc)) => ("service", svc, "the service is killed and comes back, so that its connections are made again"),
+                (None, None) => ("database", "<database>".into(), "the database is killed and comes back, so that its clients connect again"),
+            }
         }
         "answer" => ("answer", only.unwrap_or_else(|| "<service>".into()), "answers from the service are lost for a while, so that requests time out and are retried"),
         _ => ("service", only.unwrap_or_else(|| "<service>".into()), "the service is killed and comes back, so that this code runs again"),
