@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=120
+# in one call of two: CLUSTER FAILOVER on the replica of one shard, then one late write to the old primary
+exec /bin/gnc failover

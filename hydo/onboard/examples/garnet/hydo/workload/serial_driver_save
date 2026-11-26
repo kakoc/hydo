@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# BGSAVE on one primary: a checkpoint, which its replica follows with its own
+exec /bin/gnc save

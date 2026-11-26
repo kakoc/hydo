@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# INCR of one of 16 counters, sent to the primary that owns its slot
+exec /bin/gnc op incr

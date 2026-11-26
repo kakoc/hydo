@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# EVAL of a script that SETs and SADDs two new keys of one slot, sent to the primary that owns its slot
+exec /bin/gnc op lua

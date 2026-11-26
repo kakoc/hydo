@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# RPUSH of a new element to one of 16 lists, sent to the primary that owns its slot
+exec /bin/gnc op rpush

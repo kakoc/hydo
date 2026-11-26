@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# ZADD of a new member to one of 16 sorted sets, sent to the primary that owns its slot
+exec /bin/gnc op zadd

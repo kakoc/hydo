@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# SET ... PXAT of a new key, with a deadline 3 s to an hour ahead, sent to the primary that owns its slot
+exec /bin/gnc op setex
