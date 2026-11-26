@@ -23283,7 +23283,8 @@ entries. The new example enters the explorer's and the controller's corpora: the
 re-recorded with `HYDO_BLESS=1` in a copy of the tree without git on the bare-metal machine, in
 the default modes and with `HYDO_CORPUS_QUICK=1` and `HYDO_IDENT_FULL=1`, and checked there. In
 that copy `identity::local_outputs_are_no_inputs` fails, because it needs git's list of ignored
-files; it has no input of the example.
+files. It passed, and so did `public_content::` over 3,921 files, after the copy was made a git
+repository of its own (`git init`, `git add -A`).
 
 Retro: SeaweedFS 4.55, hvx, 2026-11-26
 - Time to the first clean run: 1 hour 5 minutes of wall time (scouting 30 minutes, the import,
