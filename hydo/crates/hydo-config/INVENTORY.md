@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-66 user-facing and 97 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 38 test switches are read by test code; 32 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+67 user-facing and 97 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 38 test switches are read by test code; 32 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
