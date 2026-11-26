@@ -320,6 +320,11 @@ In the order of the time each cost:
 5. **The verdict's words for a lost message.** `m0 was acknowledged and has no final state (no
    error code)` (open item 183).
 
+Milestone 367 changed hydo for items 2 to 4. `hydo inspect exec --service` of an image service
+runs inside the service's root. A failed check's run keeps every service's log, and the log
+before its last restart, in `logs/`. `hydo guide messages` says that a `sub` record from a
+`first_` command has no effect. Item 1 is left (open item 184). Milestone 363 changed item 5.
+
 ## Time
 
 | phase | wall time |

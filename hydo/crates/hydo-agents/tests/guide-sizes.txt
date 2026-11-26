@@ -9,12 +9,12 @@ error-paths 4772
 faults 40219
 flaky-tests 17277
 fuzz 34671
-hazards 7512
+hazards 8137
 hydo_assert.sh 3539
-inspect 16018
+inspect 16401
 invariant-patterns 5240
 manifest 258397
-messages 18238
+messages 18669
 minimum-path 4254
 numbered-steps 2031
 outside-services 14264
@@ -27,5 +27,5 @@ strategies 77723
 update 8550
 values 8665
 web-apps 19285
-workflow 36742
+workflow 42013
 workloads 7295

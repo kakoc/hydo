@@ -399,7 +399,13 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
             py::head(s, 300)
         )
     } else {
-        let (id, s) = &oks[0];
+        // Milestone 367: the first check that judged something names the run; a claim of a
+        // messages check that judged nothing (`objects.no-phantom (0 judged, ...)` beside
+        // `objects.acked-outcome` with 81 writes, the SeaweedFS onboarding) only when all did
+        let (id, s) = oks
+            .iter()
+            .find(|(_, s)| !judged_nothing(s))
+            .unwrap_or(&oks[0]);
         let tail = format!("checks={} held ({}: {})", oks.len(), id.str_of(), s);
         if gv.is_empty() || py::strip(gv) == "HYDO-ORACLE: OK invariants=0 held ()" {
             format!("HYDO-ORACLE: OK {tail}")
@@ -419,6 +425,11 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
 }
 
 /// Whether a spec is a `type: messages` check.
+/// Whether a check's summary says that it judged nothing (`... (0 judged, 0 undecided)`).
+fn judged_nothing(summary: &str) -> bool {
+    summary.contains("(0 judged,") || summary.contains("(0 judged)")
+}
+
 fn is_messages(sp: &PyVal) -> bool {
     sp.get("type")
         .is_some_and(|t| t.eq_str(messages::decl::TYPE))
@@ -580,4 +591,20 @@ pub fn has_checks<S: AsRef<str>, T: AsRef<str>>(sources: &[(S, T)]) -> bool {
     sources
         .iter()
         .any(|(_, t)| t.as_ref().contains(events::CHECK_TAG))
+}
+
+#[cfg(test)]
+mod verdict_tests {
+    /// Milestone 367: a passing run's verdict names a claim that judged something.
+    #[test]
+    fn the_verdict_names_a_check_that_judged() {
+        assert!(super::judged_nothing(
+            "every delivered message was sent before it was delivered (0 judged, 0 undecided)"
+        ));
+        assert!(!super::judged_nothing(
+            "every acknowledged send ended as acknowledged (81 judged, 0 undecided)"
+        ));
+        assert!(!super::judged_nothing("acked=20 all present"));
+        assert!(!super::judged_nothing("(10 judged, 0 undecided)"));
+    }
 }

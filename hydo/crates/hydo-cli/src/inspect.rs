@@ -92,6 +92,9 @@ pub enum Req {
         argv: Vec<String>,
         sh: Option<String>,
         service: Option<String>,
+        /// Milestone 367: with `--service` of an image service, run inside the service's own
+        /// root (through `hydo-oci`), where its files are; `--guest-root` keeps the guest's
+        guest_root: bool,
         timeout_ms: u64,
         max_bytes: u64,
         /// Opt-in (docs/design/agent-environments.md): run on a named branch of the session's
@@ -150,12 +153,16 @@ impl Req {
                 argv,
                 sh,
                 service,
+                guest_root,
                 timeout_ms,
                 max_bytes,
                 branch,
             } => {
                 let mut v = json!({"op": "exec", "argv": argv, "sh": sh, "service": service,
                          "timeout_ms": timeout_ms, "max_bytes": max_bytes});
+                if *guest_root {
+                    v["guest_root"] = json!(true);
+                }
                 if let Some(b) = branch {
                     v["branch"] = json!(b.name);
                     v["from"] = json!(b.from);
@@ -205,6 +212,7 @@ impl Req {
                     .unwrap_or_default(),
                 sh: s("sh"),
                 service: s("service"),
+                guest_root: v.get("guest_root").and_then(Value::as_bool) == Some(true),
                 timeout_ms: u("timeout_ms", TIMEOUT_MS),
                 max_bytes: u("max_bytes", MAX_BYTES),
                 branch: s("branch").map(|name| Branch {
@@ -266,6 +274,7 @@ impl Req {
             "exec" => {
                 let sh = a.val("--sh")?;
                 let service = a.val("--service")?;
+                let guest_root = a.flag("--guest-root");
                 let branch = a.val("--branch")?;
                 let from = a.val("--from")?;
                 if from.is_some() && branch.is_none() {
@@ -295,6 +304,7 @@ impl Req {
                     argv,
                     sh,
                     service,
+                    guest_root,
                     timeout_ms,
                     max_bytes,
                     branch,
@@ -451,6 +461,13 @@ pub fn env(plan: &Plan) -> Vec<String> {
     ]
 }
 
+/// Whether a service runs from a Docker/OCI image: its command is the launcher that hydo-build
+/// writes, and `hydo-oci <service>` runs a program inside its root.
+pub fn image_service(plan: &Plan, service: &str) -> bool {
+    plan.service(service)
+        .is_some_and(|s| s.cmd == format!("/etc/hydo/oci/{service}/run"))
+}
+
 /// The network namespace of a service's commands (`network: bridge`), checked against the plan.
 pub fn netns_of(plan: &Plan, service: Option<&str>) -> Result<Option<String>, Problem> {
     let Some(s) = service else { return Ok(None) };
@@ -512,17 +529,22 @@ pub fn work_for(req: &Req, plan: &Plan) -> Result<Work, Problem> {
             argv,
             sh,
             service,
+            guest_root,
             timeout_ms,
             max_bytes,
             ..
         } => {
             let ns = netns_of(plan, service.as_deref())?;
-            ex(
-                work::shell(prelude, argv, sh.as_deref()),
-                ns,
-                *timeout_ms,
-                *max_bytes,
-            )
+            // Milestone 367: an image service's files are in its own root (the NSQ onboarding
+            // found the empty mount point in the guest's root instead)
+            let own = service
+                .as_deref()
+                .filter(|s| !*guest_root && image_service(plan, s));
+            let script = match own {
+                Some(s) => work::shell_in_root(prelude, s, argv, sh.as_deref()),
+                None => work::shell(prelude, argv, sh.as_deref()),
+            };
+            ex(script, ns, *timeout_ms, *max_bytes)
         }
         Req::Read {
             path,
@@ -1025,8 +1047,8 @@ Hold a stop (one replay of the run up to it: about as long as the run took to ge
 
 Look (each call restores the stop's snapshot, so every call sees the same state; a fraction of a
 second to a few seconds each):
-  hydo inspect exec    <id> [--service S] [--timeout MS] [--max-bytes N] -- <program> <args...>
-  hydo inspect exec    <id> [--service S] --sh '<shell command line>'
+  hydo inspect exec    <id> [--service S [--guest-root]] [--timeout MS] [--max-bytes N] -- <program> <args...>
+  hydo inspect exec    <id> [--service S [--guest-root]] --sh '<shell command line>'
   hydo inspect read    <id> <path> [--offset N | --tail N] [--max-bytes N]
   hydo inspect ls      <id> [<path>] [--limit N]
   hydo inspect logs    <id> <service> [--lines N]
@@ -1043,7 +1065,8 @@ Branches (a snapshot session only; docs/design/agent-environments.md):
 
 <id> may also be a run directory: then the call replays to --at (default end), does the one
 thing and ends (no session; each such call costs a replay). --service runs in that service's
-network namespace (network: bridge). Stops after the workload's end, in a recovery boot or under
+network namespace (network: bridge), and for a service from a Docker/OCI image inside its own root
+(through hydo-oci), where its files are; --guest-root keeps the guest's root. Stops after the workload's end, in a recovery boot or under
 timing tokens cannot be snapshotted: there the session is "live" and calls run one after another
 on one branch. The recorded run's directory is never written. Details: hydo guide inspect.
 "#;
@@ -1198,6 +1221,16 @@ mod tests {
                 argv: vec!["ls".into(), "-l".into()],
                 sh: None,
                 service: Some("db".into()),
+                guest_root: false,
+                timeout_ms: 5,
+                max_bytes: 9,
+                branch: None,
+            },
+            Req::Exec {
+                argv: vec!["ls".into()],
+                sh: None,
+                service: Some("db".into()),
+                guest_root: true,
                 timeout_ms: 5,
                 max_bytes: 9,
                 branch: None,
@@ -1206,6 +1239,7 @@ mod tests {
                 argv: vec!["true".into()],
                 sh: None,
                 service: None,
+                guest_root: false,
                 timeout_ms: 5,
                 max_bytes: 9,
                 branch: Some(Branch {
@@ -1253,6 +1287,7 @@ mod tests {
                 argv: w("psql -c select 1"),
                 sh: None,
                 service: Some("db".into()),
+                guest_root: false,
                 timeout_ms: 500,
                 max_bytes: MAX_BYTES,
                 branch: None,
@@ -1368,6 +1403,58 @@ mod calls_tests {
             .expect("a run command")
     }
 
+    /// Milestone 367: `exec --service` of an image service runs inside its root through
+    /// `hydo-oci`, `--sh` with the image's shell; `--guest-root` and a service of the guest's
+    /// own programs run in the guest's root.
+    #[test]
+    fn exec_of_an_image_service_runs_inside_its_root() {
+        let req = |sh: Option<&str>, guest_root: bool| Req::Exec {
+            argv: if sh.is_some() {
+                Vec::new()
+            } else {
+                vec!["ls".into(), "/data/vol x".into()]
+            },
+            sh: sh.map(String::from),
+            service: Some("db".into()),
+            guest_root,
+            timeout_ms: 5000,
+            max_bytes: 100,
+            branch: None,
+        };
+        let plain = plan("");
+        let s = script(&mut work_for(&req(None, false), &plain).unwrap());
+        assert!(s.contains("; ls '/data/vol x'"), "{s}");
+        assert!(!s.contains("hydo-oci"), "{s}");
+        let mut img = plan("");
+        img.services[0].cmd = "/etc/hydo/oci/db/run".into();
+        assert!(image_service(&img, "db"));
+        let s = script(&mut work_for(&req(None, false), &img).unwrap());
+        assert!(s.contains("; hydo-oci db ls '/data/vol x'"), "{s}");
+        let s = script(&mut work_for(&req(Some("ls /data | wc -l"), false), &img).unwrap());
+        assert!(
+            s.contains("; hydo-oci db /bin/sh -c 'ls /data | wc -l'"),
+            "{s}"
+        );
+        let s = script(&mut work_for(&req(None, true), &img).unwrap());
+        assert!(!s.contains("hydo-oci"), "{s}");
+        assert_eq!(
+            Req::from_args(
+                "exec",
+                &["--service", "db", "--guest-root", "--", "ls"].map(String::from)
+            )
+            .unwrap(),
+            Req::Exec {
+                argv: vec!["ls".into()],
+                sh: None,
+                service: Some("db".into()),
+                guest_root: true,
+                timeout_ms: TIMEOUT_MS,
+                max_bytes: MAX_BYTES,
+                branch: None,
+            }
+        );
+    }
+
     #[test]
     fn repeated_calls_do_the_same_guest_work() {
         // Milestone 202: the output files had the call's number in their names, so from the 10th
@@ -1377,6 +1464,7 @@ mod calls_tests {
             argv: vec!["redis-cli".into(), "GET".into(), "k".into()],
             sh: None,
             service: None,
+            guest_root: false,
             timeout_ms: 5000,
             max_bytes: 100,
             branch: None,

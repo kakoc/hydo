@@ -472,6 +472,11 @@ pub fn main_with(ctx: &Ctx, argv: &[String], io: &mut Io) -> i32 {
     // the image services' roots against the guest's RAM (the Mac) or the engine's disk (hvx),
     // before anything is unpacked (Milestone 324)
     let fit = oci::root_fit_warnings(&p.oci, m, &a.arch);
+    // the disk that its assembly would refuse, before anything is unpacked (Milestone 367)
+    if let Some(r) = image::disk_refusal(m) {
+        errln(io, &r);
+        return 1;
+    }
     if has("--check") {
         for line in hydo_manifest::check_summary(&a.path, &p.loaded) {
             outln(io, &line);

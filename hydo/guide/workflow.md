@@ -372,6 +372,27 @@ explored one image: two images are refused, because a problem of one is not a pr
 other. `hydo explore --merge` is for the shards of one exploration, which share one command
 line; this list is for rounds with different options.
 
+### Stop an exploration and its engines
+
+Each worker of an exploration runs a guest in an engine program. On hvx that program is
+`hydo-hvx`, which hydo starts under `sudo` when you cannot open `/dev/hvx`. Your user cannot
+signal a root process, so stop the exploration, not its engines:
+
+- Ctrl-C, or `kill <pid>` and `kill -- -<pgid>` with SIGINT or SIGTERM, stop `hydo explore` and
+  its engines. hydo sends SIGTERM to each engine, which `sudo` passes on, waits up to 10 s, and
+  then kills what is left, a root engine with `sudo -n kill`. It says on stderr which engines it
+  stopped, and names any that stayed. Then it ends by the same signal. No run counts as failed
+  because the stop ended its engine.
+- While the engines run, the exploration's folder has `engines.txt`, with one line for each
+  engine program: its pid, the processes it runs under, and the command that stops it. The first
+  engine's start prints the file's path. After `kill -9` of `hydo explore`, which no program can
+  catch, the file still names the engines. An engine also ends by itself when its input closes,
+  unless it is stuck in a long call.
+
+```text
+hydo-hvx 336735 (under sudo 336733, flock 336723; stop it with: sudo kill 336735)
+```
+
 ## How much was explored, and whether to run more
 
 `hydo explore` writes `stats.json` beside `exploration.json`. `hydo stats` prints it in words,
@@ -388,8 +409,9 @@ record of the host, so it changes no run, no fingerprint, and no verdict. It has
   idle.
 - The faults drawn. Each fault kind has its runs, its targets, and its workload steps. A
   reaction (`A=`) counts as the fault that its action makes: `kill-<svc>` as a crash, `cut` as a power
-  cut, and `powerloss-<svc>` as a power loss of one service. The kinds that `faults:` allows and
-  no schedule drew are listed, each with the option that draws it.
+  cut, and `powerloss-<svc>` as a power loss of one service. With `cut` in `faults:`, the
+  `disk=cut` that a power cut needs counts as part of the cut, not as a disk fault. The kinds
+  that `faults:` allows and no schedule drew are listed, each with the option that draws it.
 - An estimate. It says how many first runs fit in a time budget with N workers, or on N machines
   with `--shard I/N`.
 

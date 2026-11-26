@@ -746,6 +746,30 @@ commit; none moves a recorded value:
 
 The details are in `docs/HISTORY.md` Milestone 363 (open item 183).
 
+**The gaps of the NSQ and SeaweedFS onboardings (M367, tentative number).** Each fix its own
+commit; none moves a recorded value:
+- `hydo build` and `--check` count the services' own file systems (`storage.size_mib`) on the
+  disk beside `data.size_mib`, and refuse before any image is unpacked when the known parts pass
+  the 4,096 MiB an engine maps.
+- A stop of `hydo explore` by SIGINT or SIGTERM stops its engines. Each gets SIGTERM through
+  `sudo`, then a kill, a root engine with `sudo -n kill`. No run counts as failed by the stop. While engines
+  run, the exploration's folder has `engines.txt` with each engine's pid (`hydo guide workflow`,
+  "Stop an exploration and its engines").
+- `hydo save` keeps one regression per class and finding, as the configurations table counts.
+- `hydo rules scan --kind writes` reads gorilla/mux chains with the matchers first, their
+  queries and headers, and a handler that switches on the request's method (SeaweedFS's S3
+  router and filer).
+- A passing run's verdict names the first check that judged something.
+- `hydo stats` counts the `disk=cut` of a power cut as part of the cut when `faults:` has `cut`.
+- A failed check's run keeps every service's log, and the log before its last restart, in
+  `logs/` (the diagnosis replay).
+- `hydo inspect exec --service` of an image service runs inside its root (`--guest-root` keeps
+  the guest's).
+- The guide names the FIPS limit of Go and where a `sub ... from=start` record has no effect,
+  and `hydo compose` warns when services of one image share its first `EXPOSE`.
+
+The details are in `docs/HISTORY.md` Milestone 367 (open items 184 and 186).
+
 **Each image service's own `/tmp` (M331, tentative number; fingerprint epoch 5).** An image
 service of an image built at epoch 5 has a `/tmp` of its own, as a container has. It is the
 guest's folder `/tmp/oci/<service>` (`hydo_image::defaults`, `oci_own_tmp`). The guest's
@@ -3962,14 +3986,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       its draft waits for the lead. It belongs to go-diskqueue, which nsqio/nsq requires.
     - A shrink of a reaction's delay moves it towards `+0`. The trial's aimed grid shrank its
       in-flight losses to `+0`, where finding 1 hides the in-flight loss, and the report named the
-      wrong cause. Only directed delays on both sides of NSQ's 2 s sync told them apart.
+      wrong cause. Only directed delays on both sides of NSQ's 2 s sync told them apart. The
+      guard of Milestone 367 is not built (`docs/HISTORY.md` Milestone 367). It keeps a smaller
+      delay only when its run gives the same finding key and the same failing check's output.
     - The messages check's `no-loss` judged none of the messages that finding 1 lost until the
       drain recorded `sub jobs work from=start`: they were sent before any receive (open item
-      183). The same record from a `first_` command did nothing, because its records stay in
-      provisioning; `hydo guide messages` says to record it "before them" and does not say so.
-    - A run whose check failed and whose services did not exit has no `logs/` folder, so `nsqd`'s
-      log and its log before the restart needed a `hydo inspect` session. `hydo inspect exec
-      --service` runs in the service's network namespace, not in its root, where the files are.
+      183). Since M367 `hydo guide messages` says that such a record from a `first_` command has
+      no effect.
+    - Since M367 a failed check's run keeps every service's log, and its log before the last
+      restart, in `logs/`, by the diagnosis replay; `hydo run --no-diagnose` leaves them out.
+      Since M367 `hydo inspect exec --service` of an image service runs inside its root. Neither
+      ran in a VM.
     - `nsqlookupd` announces the guest's host name `hvm`, so `nsqd`'s query for a topic's channels
       fails with a warning; nothing in the workload needs it.
     - Of e1's 6 failures with a power cut, only seed 1's shrink was traced to the missing
@@ -3988,29 +4015,23 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       Mac engine, and the Rust volume server; the image has an arm64 build.
     - A Go program with `GODEBUG=fips140=on` cannot start in the guest, whose clock has no
       jitter for the FIPS entropy source (item 1 of "What hydo lacked" in RESULTS.md). The image
-      turns the mode on, so the example replaces its entrypoint. The hazards of the guide do not
-      name the limit, and the Mac and KVM engines were not tried.
-    - `hydo build --check` printed `OK` for a manifest whose data disk and the services' own file
-      systems passed hvx's 4,096 MiB; the build stopped after the images were unpacked. The
-      Garage example's comment says that `data.size_mib` holds the services' file systems, and
-      they come on top of it.
+      turns the mode on, so the example replaces its entrypoint. Since M367 `hydo guide hazards`
+      names the limit; the Mac and KVM engines were not tried.
     - The import took the image's first `EXPOSE`, 7333, as every service's port and readiness
-      check (as open item 121).
-    - Stopping `hydo explore` by its process group left the engine `hydo-hvx`, which runs under
-      `sudo`, with 14 GB of the host; nothing names its pid.
+      check (as open item 121). Since M367 it warns and names the services; it still writes the
+      one port for each.
     - A violation in a run with damaged files (class `corrupted-files`) is shrunk, at a minute or
       more a candidate; only the errors of detected damage wait for `--shrink-detected-damage`.
-    - `hydo save` of the configurations exploration wrote one file per failure of one class,
-      five files named after the verdict's first words. Each names a `W=@<hash>` form in a note
-      and keeps the seed form on its schedule line. `# params: fsync=false` and the `SKIP` of
-      `hydo repro --regressions` on the default build worked on hvx (open item 183's point).
-    - `hydo rules scan --kind writes` found no route of a gorilla/mux router whose path is a
-      variable, and no filer write behind one handler that switches on the method.
-    - The verdict line of a passing run names `objects.no-phantom (0 judged)`, not the claim
-      `acked-outcome` that judged 81 to 95 writes.
-    - The statistics of `hydo stats` count the `disk=cut` that every power cut needs among the
-      disk faults that `faults:` does not list. The process strategy placed its blind `C=` cuts
-      only at the end of the workload.
+    - Each `hydo save` file names a `W=@<hash>` form in a note and keeps the seed form on its
+      schedule line. Since M367 a save keeps one regression per class and finding; the
+      configurations exploration's five files were not saved again.
+    - The process strategy placed its blind `C=` cuts only at the end of the workload.
+    - Since M367 the write scan lists the S3 router's routes and the filer's writes. Routes of
+      one method and path in several servers stay one route, the others under `elsewhere`: the
+      filer's `POST /` is under the IAM API's.
+    - Since M367 a stop of `hydo explore` by SIGINT or SIGTERM stops its engines, also a root
+      engine stuck in a call, and `engines.txt` names them. A stop by SIGKILL cannot: then
+      `engines.txt` names them. Only hvx ran it; the Mac engine's and KVM's own runs did not.
     - SeaweedFS issue #4557 (a large write left empty by a master failover, 3.52) did not
       reproduce with writes of 4 to 10 MiB. A write of hundreds of MB did not run.
     - The rule over both copies of each chunk fails after any damaged volume file, by the
@@ -5194,6 +5215,13 @@ build machine, before 2026-10-13.
   `hydo findings list|show|history [--json]` read each finding's line of runs, and
   `--record-findings` records at the end. On the Mac a run, two explorations and two replays gave the line new,
   failing, not found, fixed, back again. Nothing recorded moved
+- M367 (tentative number): the gaps of the NSQ and SeaweedFS onboardings, each its own commit.
+  `--check` counts the services' own file systems. A stopped `hydo explore` stops its engines and
+  names their pids. `hydo save` keeps one regression per finding, and the write scan reads
+  gorilla/mux chains and a switch on the method. The verdict names a check that judged, `hydo
+  stats` counts `disk=cut` with the cut, and a failed check keeps the services' logs. `inspect
+  exec --service` enters an image service's root, and the guide names the FIPS limit. Nothing
+  recorded moved
 
 - The 0.6.0 release (no milestone number): prepared, not published. The version is raised with
   the skill's four version fields, `hydo-world`, `hydo-world-tls` and `hydo-grpc` are re-pinned,

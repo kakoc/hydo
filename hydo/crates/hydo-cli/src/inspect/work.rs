@@ -300,6 +300,23 @@ pub fn shell(prelude: &str, argv: &[String], sh: Option<&str>) -> String {
     format!(". {prelude} 2>/dev/null; {cmd}")
 }
 
+/// [`shell`] inside an image service's own root (Milestone 367): the program through
+/// `hydo-oci <service>`, a shell command line through the image's `/bin/sh -c` (hydo puts a
+/// static busybox there in an image without a shell).
+pub fn shell_in_root(prelude: &str, service: &str, argv: &[String], sh: Option<&str>) -> String {
+    let words: Vec<String> = match sh {
+        Some(t) => vec!["/bin/sh".into(), "-c".into(), t.to_string()],
+        None => argv.to_vec(),
+    };
+    let cmd = std::iter::once("hydo-oci".to_string())
+        .chain(std::iter::once(service.to_string()))
+        .chain(words)
+        .map(|w| quote(&w))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!(". {prelude} 2>/dev/null; {cmd}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

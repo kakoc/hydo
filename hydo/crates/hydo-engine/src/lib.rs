@@ -77,6 +77,7 @@
 //!   this machine can run for a spec: min(hardware threads, (free memory less what the workers
 //!   share) / memory per worker, [`Engine::worker_memory`]), not a fixed number.
 
+pub mod children;
 pub mod hvm;
 pub mod hvm_inproc;
 pub mod hvx;

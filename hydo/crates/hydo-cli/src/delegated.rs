@@ -28,6 +28,10 @@ pub fn known_errors_default() -> Option<String> {
 /// In a terminal it ends with the problems counted in words and the command that shows them
 /// (Milestone 230). When stdout is not a terminal, or with `--json`, it ends as before: the
 /// explorer's summary as one JSON line and the report's path, which scripts and tests read.
+/// The file of an exploration's folder that names the pid of each engine program while it runs
+/// (Milestone 367; [`hydo_engine::children`]).
+pub const ENGINES_LIST: &str = "engines.txt";
+
 pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
     use std::io::IsTerminal;
     // Milestone 299: one exploration per combination of the manifest's configs: (src/configs.rs)
@@ -171,7 +175,16 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
         // Milestone 328: a refusal for memory names the sessions that hold guests
         memory_hint: crate::inspect::session::memory_hint(&crate::inspect::session::running(ctx)),
     };
+    // Milestone 367: a stop by SIGINT or SIGTERM stops the engines too, and their pids are in
+    // the folder's engines.txt while they run (hydo guide workflow)
+    hydo_engine::children::stop_on_signals();
+    if let Some(i) = args.iter().position(|a| a == "--out") {
+        if let Some(o) = args.get(i + 1) {
+            hydo_engine::children::set_list(Some(Path::new(o).join(ENGINES_LIST)));
+        }
+    }
     let rc = hydo_explore::main_with(&full, &env);
+    hydo_engine::children::set_list(None);
     if refusing {
         crate::ctx::DIE_CODE.store(1, Relaxed);
     }

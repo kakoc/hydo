@@ -602,6 +602,22 @@ pub fn faults_of(schedule: &str) -> Vec<(String, Option<String>, Option<u64>)> {
     out
 }
 
+/// [`faults_of`] as the statistics count them: with `cut` in `faults:` (`cut_listed`), the
+/// `disk=cut` of a schedule is the mode of its power cuts, not a disk fault.
+pub fn drawn_faults(
+    schedule: &str,
+    cut_listed: bool,
+) -> Vec<(String, Option<String>, Option<u64>)> {
+    let mut fs = faults_of(schedule);
+    let host = schedule.split_once('|').map_or(schedule, |x| x.0);
+    if cut_listed && host.split_whitespace().any(|w| w == "disk=cut") {
+        if let Some(i) = fs.iter().position(|(k, _, _)| k == "disk") {
+            fs.remove(i);
+        }
+    }
+    fs
+}
+
 /// The `hydo explore` option that draws an allowed kind the seeds did not draw; None when the
 /// explorer's options already draw it.
 fn option_for(k: &str, d: &Drawn) -> Option<&'static str> {
@@ -622,8 +638,12 @@ pub fn coverage(schedules: &[&str], space: Option<&Space>, d: &Drawn) -> StatsCo
     let mut kinds: BTreeMap<String, StatsKind> = BTreeMap::new();
     let mut steps: BTreeMap<String, BTreeSet<u64>> = BTreeMap::new();
     let mut without = 0;
+    // Milestone 367: `disk=cut` is how a power cut treats the disk's unwritten data, which every
+    // cut needs; with `cut` in `faults:` it is the cut's part, not a disk fault that `faults:`
+    // leaves out (the SeaweedFS onboarding's statistics counted it so)
+    let cut_listed = allowed.iter().any(|k| k == "cut");
     for s in schedules {
-        let fs = faults_of(s);
+        let fs = drawn_faults(s, cut_listed);
         if fs.is_empty() {
             without += 1;
         }
@@ -1469,6 +1489,17 @@ mod tests {
             faults_of("disk=none dseed=0 | run A=nsq.msg_received@2+500:powerloss-nsqd"),
             vec![("powerloss".to_string(), Some("nsqd".to_string()), Some(2))]
         );
+        // Milestone 367: with `cut` in faults:, the disk=cut of a cut is no disk fault
+        let kinds = |s: &str, listed: bool| -> Vec<String> {
+            drawn_faults(s, listed).into_iter().map(|x| x.0).collect()
+        };
+        assert_eq!(kinds("disk=cut dseed=1 | run C=24", true), ["cut"]);
+        assert_eq!(kinds("disk=cut dseed=1 | run C=24", false), ["disk", "cut"]);
+        assert_eq!(
+            kinds("disk=ioerr:3 dseed=1 | run C=24", true),
+            ["disk", "cut"]
+        );
+        assert!(kinds("disk=cut dseed=1 | run", true).is_empty());
     }
 
     #[test]

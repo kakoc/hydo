@@ -29,7 +29,11 @@ impl Proc {
 
     fn wait(&mut self) -> std::io::Result<Option<i32>> {
         match self {
-            Proc::Child(c) => Ok(c.wait()?.code()),
+            Proc::Child(c) => {
+                let r = c.wait();
+                crate::children::remove(c.id());
+                Ok(r?.code())
+            }
             Proc::Thread(h) => Ok(h.take().and_then(|h| h.join().ok())),
         }
     }
@@ -55,7 +59,10 @@ fn spawn_piped(mut cmd: Command, stderr_log: &Path) -> Result<Started, EngineErr
         .append(true)
         .open(stderr_log)?;
     cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(err);
+    // Milestone 367: no engine starts while this process stops its engines
+    crate::children::park_if_stopping();
     let mut child = cmd.spawn()?;
+    crate::children::add(child.id());
     let stdin: Box<dyn Write + Send> = Box::new(child.stdin.take().expect("piped stdin"));
     let out: Box<dyn Read + Send> = Box::new(child.stdout.take().expect("piped stdout"));
     Ok(Started {
@@ -69,6 +76,8 @@ fn read_ready(proc: &mut Proc, link: Box<dyn Link>) -> Result<(f64, Box<dyn Link
     let mut link = link;
     let got = link.recv();
     if let Ok(EngineMsg::Ready(r)) = got {
+        // the engine program under its wrappers is there now: name its pid (Milestone 367)
+        crate::children::refresh();
         return Ok((r.boot_secs, link));
     }
     let line = match (&got, link.last_text()) {

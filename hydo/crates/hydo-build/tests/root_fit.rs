@@ -191,3 +191,71 @@ fn a_staged_root_counts_each_file_once_in_pages() {
     // 3 MiB once, and 512 files of one byte in a page each: 2 MiB
     assert_eq!(hydo_build::oci::tmpfs_mib(&r).unwrap(), 5);
 }
+
+/// Milestone 367: the services' own file systems come on top of the data disk. The SeaweedFS
+/// onboarding gave the data disk 1,792 MiB beside eight file systems; `--check` printed `OK`, and
+/// the build stopped after it had unpacked the images.
+#[test]
+fn the_services_own_file_systems_count_against_the_disk() {
+    let tmp = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-build-root-fit-vols-{}", std::process::id())),
+    );
+    big_image(&tmp, 48);
+    let with_vols = |data: u64, mib: u64| -> Value {
+        let mut m = json!({
+            "name": "fit",
+            "data": {"size_mib": data},
+            "services": [service("scheduler"), service("executor_1"), service("executor_2")]
+        });
+        for (k, s) in m["services"].as_array_mut().unwrap().iter_mut().enumerate() {
+            s["storage"] = json!({"dir": format!("v{k}"), "size_mib": mib});
+        }
+        m
+    };
+    let fit = |mut m: Value| -> Vec<String> {
+        let mpath = tmp.join("vols.json");
+        std::fs::write(&mpath, m.to_string()).unwrap();
+        let (mut o, mut e) = (Vec::new(), Vec::new());
+        let mut io = hydo_build::Io {
+            out: &mut o,
+            err: &mut e,
+        };
+        let svcs =
+            hydo_build::oci::prepare(&mut m, &mpath.to_string_lossy(), "x86_64", &mut io).unwrap();
+        hydo_build::oci::root_fit_warnings(&svcs, &m, "x86_64")
+    };
+    // three file systems of 512 MiB, each with 1 MiB before it
+    assert_eq!(
+        hydo_build::image::volumes_mib(&with_vols(2048, 512)),
+        3 * 513
+    );
+    // the roots (192 MiB at 1.3 times), data 2048 and the file systems fit: 3779 MiB
+    assert_eq!(fit(with_vols(2048, 512)), Vec::<String>::new());
+    assert_eq!(hydo_build::image::disk_refusal(&with_vols(2048, 512)), None);
+    // data 2400: the known parts fit (3941 MiB), the estimate with the roots does not (4131)
+    let m = with_vols(2400, 512);
+    assert_eq!(hydo_build::image::disk_refusal(&m), None);
+    let w = fit(m);
+    assert_eq!(w.len(), 1, "{w:?}");
+    for part in [
+        "so the disk would be about 4131 MiB",
+        "and the services' own file systems of 1539 MiB on top of it",
+        "smaller storage size_mib values",
+    ] {
+        assert!(w[0].contains(part), "{part}\n{}", w[0]);
+    }
+    // without the file systems the same data disk gives no warning
+    assert_eq!(
+        warnings(&tmp, "x86_64", json!({"data": {"size_mib": 2400}})),
+        Vec::<String>::new()
+    );
+    // the known parts alone pass the disk: the build refuses before it unpacks anything
+    let r = hydo_build::image::disk_refusal(&with_vols(1792, 768)).unwrap();
+    for part in [
+        "is at least 4101 MiB (data.size_mib 1792 and the storage file systems 2307 MiB",
+        "more than the 4096 MiB an engine maps",
+        "come on top of data.size_mib",
+    ] {
+        assert!(r.contains(part), "{part}\n{r}");
+    }
+}

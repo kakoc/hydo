@@ -570,6 +570,45 @@ pub fn assemble_disk(
 /// The largest disk an engine maps (hvx's page-array disk; the other engines follow it).
 pub const DISK_MAX_BYTES: u64 = 4 << 30;
 
+/// The services' own file systems (`services[].storage.size_mib`) on the disk, in MiB, as
+/// [`assemble_disk_volumes`] lays them out: each one and the 1 MiB before it. 0 without any.
+pub fn volumes_mib(m: &serde_json::Value) -> u64 {
+    hydo_manifest::storage::volumes(m)
+        .iter()
+        .map(|(_, st, _)| st.size_mib.unwrap_or(0) + 1)
+        .sum()
+}
+
+/// Milestone 367: the disk that [`assemble_disk_volumes`] refuses, known from the manifest
+/// alone. Its smallest size is the 1 MiB before the root partition, a root of at least 1 MiB,
+/// `data.size_mib`, and the services' own file systems ([`volumes_mib`]). When that already
+/// passes [`DISK_MAX_BYTES`], `--check` and the build stop before any image is unpacked, with
+/// the words the disk's assembly would use. The SeaweedFS onboarding's manifest gave the data
+/// disk 1,792 MiB beside eight file systems: `--check` printed `OK`, and the build stopped only
+/// after it had unpacked the images.
+pub fn disk_refusal(m: &serde_json::Value) -> Option<String> {
+    let vols = volumes_mib(m);
+    if vols == 0 {
+        return None;
+    }
+    let data = m
+        .get("data")
+        .and_then(|d| d.get("size_mib"))
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(512);
+    let least = 2 + data + vols;
+    let max = DISK_MAX_BYTES >> 20;
+    (least > max).then(|| {
+        format!(
+            "hydo-build: the disk with the services' own file systems is at least {least} MiB \
+             (data.size_mib {data} and the storage file systems {vols} MiB, each with 1 MiB \
+             before it, besides the root), more than the {max} MiB an engine maps; make \
+             data.size_mib or the storage size_mib values smaller. The services' own file \
+             systems come on top of data.size_mib, which needs only the run's own files"
+        )
+    })
+}
+
 /// The services' own file systems (services[].storage.size_mib; docs/design/storage-faults.md):
 /// the disk of [`assemble_disk`] with the root partition p1 as before, the data file system at
 /// the start of p2, and an extended partition p3 after it that holds one logical partition per
