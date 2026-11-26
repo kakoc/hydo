@@ -1226,3 +1226,28 @@ fn the_system_keeps_its_own_spelling() {
     );
     assert_eq!(own("nothing here\n", "nsq"), None);
 }
+
+/// Milestone 363: a long composition word (`W=`) hid the `L=` after it in the trial's command,
+/// so the problem names the command's faults apart, and the command stays exact.
+#[test]
+fn a_long_composition_word_does_not_hide_the_faults() {
+    let w = "W=:p1,r200,cparallel_driver_pub,0.0.0.503389004,1.0.0.1894126023,2.1.0.662703717,\
+             3.2.0.938279500";
+    let sched = format!("disk=none dseed=0 | run K=nsqd@4+1 {w} L=nsqd@6+2");
+    assert_eq!(
+        story::faults_beside_long_word(&sched).as_deref(),
+        Some(
+            "The command's faults, which its long composition word `W=` can hide: \
+             `K=nsqd@4+1` and `L=nsqd@6+2`."
+        )
+    );
+    // a short W= word hides nothing, and a schedule without faults has nothing to name
+    assert_eq!(
+        story::faults_beside_long_word("disk=none | run K=nsqd@4+1 W=5764a73c,p3,q2,r200"),
+        None
+    );
+    assert_eq!(
+        story::faults_beside_long_word(&format!("disk=none | run {w}")),
+        None
+    );
+}

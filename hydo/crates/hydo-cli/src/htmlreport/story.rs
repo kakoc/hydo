@@ -356,6 +356,35 @@ pub fn short_steps(schedule: &str, pr: &Project, outcome: Option<String>) -> Vec
     items
 }
 
+/// A composition word (`W=`) longer than this hides the words after it in a command line.
+const LONG_WORD: usize = 40;
+
+/// The faults of a command whose composition word (`W=`) is long (Milestone 363: the 0.6.0
+/// trial's tester missed an `L=` after a `W=` of 120 characters). The command stays exact; this
+/// sentence names its fault words apart. None when the schedule has no long `W=` word or no
+/// fault.
+pub fn faults_beside_long_word(schedule: &str) -> Option<String> {
+    let long = schedule
+        .split_whitespace()
+        .any(|w| w.starts_with("W=") && w.len() > LONG_WORD);
+    if !long {
+        return None;
+    }
+    let faults: Vec<String> = describe::describe_text(schedule, &[])
+        .into_iter()
+        .filter(|s| s.part == Part::Fault && !s.token.starts_with("W="))
+        .map(|s| format!("`{}`", s.token))
+        .collect();
+    if faults.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "The command's fault{}, which its long composition word `W=` can hide: {}.",
+        if faults.len() == 1 { "" } else { "s" },
+        describe::and_list(&faults)
+    ))
+}
+
 /// How many of a schedule's words change the run (its faults and settings).
 pub fn fault_count(schedule: &str, pr: &Project) -> usize {
     describe::describe_text(schedule, &pr.knobs)

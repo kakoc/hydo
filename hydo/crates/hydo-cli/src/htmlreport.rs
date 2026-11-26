@@ -3109,19 +3109,22 @@ fn item_card(
             happens: it.happens.clone(),
             more,
             command: it.command.clone(),
-            after: if it.accept.is_empty() {
-                String::new()
-            } else {
-                format!(
-                    "<p class=\"small\">If it is expected: {}<br>{}</p>\n",
-                    it.accept
-                        .iter()
-                        .map(|k| code(&format!("hydo ci accept {k} --reason \"…\"")))
-                        .collect::<Vec<_>>()
-                        .join("<br>"),
-                    md(&it.accept_note)
-                )
-            },
+            after: story::faults_beside_long_word(&it.schedule)
+                .map(|f| format!("<p class=\"small\">{}</p>\n", md(&f)))
+                .unwrap_or_default()
+                + &if it.accept.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "<p class=\"small\">If it is expected: {}<br>{}</p>\n",
+                        it.accept
+                            .iter()
+                            .map(|k| code(&format!("hydo ci accept {k} --reason \"…\"")))
+                            .collect::<Vec<_>>()
+                            .join("<br>"),
+                        md(&it.accept_note)
+                    )
+                },
             link,
         })
     }
