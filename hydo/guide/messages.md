@@ -161,7 +161,12 @@ message joins after the messages sent before it. When the group exists before th
 the record in the run itself: from the workload, a driver, or the drain (the NSQ example's drain
 writes it). A `first_` command runs in provisioning, and its records are not part of the run, so
 a `sub` record from it has no effect. A process has one operation in flight, so concurrent consumers use
-different process numbers.
+different process numbers. Some clients have several operations in flight at once, such as an
+import that records one `send` per document before the answers come. Such a client writes each
+with its own operation id after `#` in the process token: `3#d17`, `3#d18`. Each completion pairs with
+its own invocation, and the claims that compare processes (`members`) take the part before `#`.
+The Rust SDK's `op_proc(3, "d17")` writes the token. A batch that one request sends is one `send`
+with several items, also when the system answers each item apart.
 
 The Rust SDK writes these records with the cargo feature `messages` of `hydo-assert`, which is
 new in 0.3.1 (`features = ["messages"]` on the dependency):

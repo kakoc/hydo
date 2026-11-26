@@ -307,3 +307,23 @@ impl Messages {
         self.h.record_raw(proc_, "ok", "drained", &[&item_enc(channel), &item_enc(group)]);
     }
 }
+
+/// The process token of one operation of process `proc_`: `<proc_>#<op>`. A process has one
+/// operation in flight; a client that has several at once (an import that records one `send`
+/// per document, a consumer that acknowledges while it receives) gives each its own `op`, and the
+/// checker pairs each completion with the open invocation of the same token. The claims that
+/// compare processes (`members`) take the part before `#`, so the operations stay the one
+/// process's.
+///
+/// ```
+/// use hydo_assert::history::messages::{op_proc, Item, Messages};
+/// let q = Messages::new("q");
+/// let a = q.send(op_proc(3, "m1"), "orders", &[Item::new("m1")]);
+/// let b = q.send(op_proc(3, "m2"), "orders", &[Item::new("m2")]);
+/// b.ok_same();
+/// a.ok_same();
+/// assert_eq!(op_proc(3, "m 1"), "3#m%201");
+/// ```
+pub fn op_proc(proc_: impl std::fmt::Display, op: impl std::fmt::Display) -> String {
+    format!("{proc_}#{}", enc(&op.to_string()))
+}

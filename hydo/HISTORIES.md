@@ -34,7 +34,12 @@ HYDO-HIST <history> <process> <type> <time> <f> <arg>...
 - `<history>`: `[A-Za-z0-9_.-]+`, the name a check refers to (`history:`).
 - `<process>`: a token (a number in practice). **A process has at most one operation in
   flight**, as in Jepsen: concurrent clients use different process ids. A completion is paired
-  with the open invocation of the same process in the same history.
+  with the open invocation of the same process in the same history. A token
+  `<process>#<op>` (Milestone 368) names one operation of the process: a client with several
+  operations in flight at once gives each its own `<op>`, and each completion pairs with the
+  open invocation of its whole token. The `messages` checker's claims that compare processes
+  (`members`) take the part before `#`; for the other checkers each token is a process of its
+  own, as before.
 - `<type>`: `invoke` (the request is about to be sent), `ok` (it succeeded), `fail` (it
   definitely had no effect), `info` (the outcome is unknown: a timeout, a lost connection, a
   crash). An invocation that is still open when the same process invokes again, or when the

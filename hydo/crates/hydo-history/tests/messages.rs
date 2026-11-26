@@ -2121,6 +2121,61 @@ fn acked_outcome_names_its_witness() {
     );
 }
 
+/// Milestone 368 (the Typesense onboarding): an import recorded one `send` per document from one
+/// process, so each invocation closed the one before as unknown. A token `<process>#<op>` gives
+/// each operation its own completion; the claims that compare processes take the part before `#`.
+#[test]
+fn a_process_with_several_operations_in_flight() {
+    let import = |tok: &dyn Fn(&str) -> String| {
+        let mut h = H::default();
+        for (i, m) in ["m1", "m2", "m3"].iter().enumerate() {
+            h.rec(tok(m), "invoke", i as i64, "send", &["c", m]);
+        }
+        for (i, m) in ["m1", "m2", "m3"].iter().enumerate() {
+            h.rec(tok(m), "ok", 5 + i as i64, "send", &["c", m]);
+        }
+        recv(&mut h, 2, 10, &["m1", "m2"]);
+        h.rec(9, "ok", 20, "drained", &["c", "-"]);
+        h
+    };
+    let unknown = |h: &H| {
+        let (ev, _, _) = parse_sources(&[("w", h.text())]).unwrap();
+        let hist = messages::hist::read(&ev, "q", &[]);
+        hist.ops
+            .iter()
+            .filter(|o| o.out == messages::hist::Out::Info)
+            .count()
+    };
+    // one process token: each invocation closes the one before, so two sends are unknown and
+    // their completions are ignored
+    let one = import(&|_| "1".to_string());
+    assert_eq!(unknown(&one), 2);
+    // a token per operation: every send is acknowledged, and m3's loss is judged
+    let h = import(&|m| format!("1#{m}"));
+    assert_eq!(unknown(&h), 0);
+    let (ev, _, _) = parse_sources(&[("w", h.text())]).unwrap();
+    let hist = messages::hist::read(&ev, "q", &[]);
+    assert!(hist.ops.iter().all(|o| o.proc_ == "1" || o.proc_ == "2"));
+    let r = run(&h.text(), ALO);
+    assert_eq!(st(&r, "no-loss"), Status::Violated, "{r:?}");
+    assert!(r["no-loss"].1.starts_with("m3 was acknowledged"), "{r:?}");
+    assert_eq!(messages::hist::process_of("7#a#b"), "7");
+    assert_eq!(messages::hist::process_of("7"), "7");
+
+    // two receives of one member in flight are one member, not two
+    let mem = r#"{"id":"c","type":"messages","history":"q","claims":{"members":"exclusive"}}"#;
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m1", "ok");
+    h.rec("2#a", "invoke", 2, "recv", &["c", "-"]);
+    h.rec("2#b", "invoke", 2, "recv", &["c", "-"]);
+    h.rec("2#a", "ok", 3, "recv", &["c", "-", "m1;h=a"]);
+    h.rec("2#b", "ok", 3, "recv", &["c", "-", "m1;h=b"]);
+    ack(&mut h, 2, 6, "m1;h=a", "ok");
+    ack(&mut h, 2, 8, "m1;h=b", "ok");
+    let r = run(&h.text(), mem);
+    assert_eq!(st(&r, "members"), Status::Held, "{r:?}");
+}
+
 /// Milestone 368 (the Typesense and Pulsar onboardings): hvx keeps 64 KiB of a VM's console, and
 /// the host ends a cut console with a `HYDO-CONSOLE-CUT` note. A messages claim that the missing
 /// records break is then an ERROR that names the cut, not a loss.

@@ -304,6 +304,15 @@ fn group_of(args: &[String], w: &str) -> Result<(String, String), String> {
     }
 }
 
+/// Milestone 368: the process of a record's process token. A token `<process>#<op>` names one
+/// operation of the process, so that a process may have several operations in flight (an
+/// import that records one `send` per document): a completion pairs with the open invocation of
+/// the whole token, and the claims that compare processes (`members`, the members' leases) take
+/// the part before the first `#`. A token without `#` is its own process, as before.
+pub fn process_of(tok: &str) -> &str {
+    tok.split_once('#').map(|(p, _)| p).unwrap_or(tok)
+}
+
 /// Reads the events of history `name`; `clock` holds the positions of the clock-step records
 /// (see [`clock_steps`]).
 pub fn read(ev: &Events, name: &str, clock: &[usize]) -> MHist {
@@ -328,7 +337,7 @@ pub fn read(ev: &Events, name: &str, clock: &[usize]) -> MHist {
             }
             match group_of(&e.args, &wh) {
                 Ok((q, g)) => h.drained.push(Drained {
-                    proc_: e.proc_.clone(),
+                    proc_: process_of(&e.proc_).to_string(),
                     q,
                     g,
                     at: at_of(ev, i, false),
@@ -357,7 +366,7 @@ pub fn read(ev: &Events, name: &str, clock: &[usize]) -> MHist {
             let n = h.ops.len();
             h.ops.push(MOp {
                 i: n,
-                proc_: e.proc_.clone(),
+                proc_: process_of(&e.proc_).to_string(),
                 kind,
                 q,
                 g,
