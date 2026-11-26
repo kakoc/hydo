@@ -146,6 +146,5 @@ image that 0.5.0 builds gets new bytes and new fingerprints, and on hvx its gues
 the virtual TSC. From 0.5.0 to 0.6.0 the same holds. An image you built keeps its fingerprints,
 and an image that 0.6.0 builds gets new bytes and new fingerprints. After a power cut, the recovery
 boot of such an image gets the first boot's outcomes, and every command that hydo starts in its
-guest has a `PATH`. From 0.6.0 to 0.7.0, an image you built keeps its fingerprints, as from 0.4.0
-to 0.4.1. Only an image with fakes, proxies or generated gRPC drivers gets new bytes when you
-build it again.
+guest has a `PATH`. From 0.6.0 to 0.7.0 an image you built keeps its fingerprints. Only an
+image with fakes, proxies or generated gRPC drivers gets new bytes when you build it again.
