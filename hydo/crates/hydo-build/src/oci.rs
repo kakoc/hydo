@@ -1985,7 +1985,9 @@ pub fn initramfs_warning(unpacked: u64, zipped: u64, ram: u64, what: &str) -> Op
 ///   more for their files' whole pages, and hydo's own files ([`ROOT_BASE_MIB`]); the archive
 ///   is the layers as stored and hydo's own files compressed ([`ROOT_BASE_GZ_MIB`]).
 /// - x86_64, and arm64 with `guest.root: disk`: the root partition (1.3 times its content, as
-///   the build sizes it) and the data disk must fit in [`crate::image::DISK_MAX_BYTES`].
+///   the build sizes it) and the data disk must fit in [`crate::image::DISK_MAX_BYTES`]. Since
+///   Milestone 367 the services' own file systems (`storage.size_mib`) count too: the build
+///   puts them on the disk after the data partition.
 ///
 /// One warning, or none when the roots fit or an image cannot be read (the build says why).
 pub fn root_fit_warnings(oci: &[OciService], m: &Value, arch: &str) -> Vec<String> {
@@ -2113,8 +2115,10 @@ pub fn root_fit_warnings(oci: &[OciService], m: &Value, arch: &str) -> Vec<Strin
         )];
     }
     let data = get("data", "size_mib").unwrap_or(512);
+    // the services' own file systems come on top of the data disk (Milestone 367)
+    let vols = crate::image::volumes_mib(m);
     let disk_of = |root: u64| {
-        (root * 13 / 10).div_ceil(64) * 64 + data + (layers * 13 / 10).div_ceil(64) * 64
+        (root * 13 / 10).div_ceil(64) * 64 + data + (layers * 13 / 10).div_ceil(64) * 64 + vols
     };
     let max = crate::image::DISK_MAX_BYTES >> 20;
     let disk = disk_of(root_now);
@@ -2130,19 +2134,29 @@ pub fn root_fit_warnings(oci: &[OciService], m: &Value, arch: &str) -> Vec<Strin
         ));
     }
     fix.push(format!(
-        "a smaller data.size_mib (now {data}) or fewer image services; guest.ram_mib does not \
-         help, because the root is on the disk"
+        "a smaller data.size_mib (now {data}){} or fewer image services; guest.ram_mib does not \
+         help, because the root is on the disk",
+        if vols > 0 {
+            ", smaller storage size_mib values (data.size_mib needs only the run's own files)"
+        } else {
+            ""
+        }
     ));
     vec![format!(
         "the image services' roots need about {root_now} MiB unpacked ({}), so the disk would be \
          about {disk} MiB (the root partition at 1.3 times its content, and the data disk of \
-         {data} MiB{}), more than the {max} MiB of root and data disk together that the hvx \
+         {data} MiB{}{}), more than the {max} MiB of root and data disk together that the hvx \
          engine takes (it refuses the image). To fix it: {}",
         detail.join("; "),
         if layers > 0 {
             " with the writable services' layers"
         } else {
             ""
+        },
+        if vols > 0 {
+            format!(", and the services' own file systems of {vols} MiB on top of it")
+        } else {
+            String::new()
         },
         fix.join("; ")
     )]
