@@ -218,7 +218,15 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.5.0 was published on 2026-11-22 from the release commit `4d43a6bd`. The
+**Releases.** hydo 0.6.0 is prepared, not published: the release commit `58d443a6`, with
+`hydo-linux-0.6.0.tar.gz` `12fe3299…`, `hydo-mac-0.6.0.tar.gz` (signed and notarized)
+`a303331f…` and `hydo-skill-0.6.0.tar.gz` `7d399d1b…`, each platform built twice to the same
+bytes, in `hydo/dist/out/0.6.0/` of the main checkout. It holds Milestones 340 to 361 at the
+fingerprint epoch 6. The final files reproduce every recorded value on hvx, the Mac and KVM (AMD
+hosts). Publishing waits for the user's word; the record is the section "The 0.6.0 release" of
+`docs/HISTORY.md`.
+
+hydo 0.5.0 was published on 2026-11-22 from the release commit `4d43a6bd`. The
 GitHub release `v0.5.0` holds both tarballs, their sources archives, the Mac signatures, the
 skill archive and `SHA256SUMS`: `hydo-linux-0.5.0.tar.gz` `2b5d45fd…`, `hydo-mac-0.5.0.tar.gz`
 (signed and notarized) `44860817…`, and `hydo-skill-0.5.0.tar.gz` `5eb0f84d…`. The tag's
@@ -326,10 +334,9 @@ give `e153f376096a072c` and `6a5c2fe208174af3` on hvx and `66da20bdbfafd6d2` and
 `96b8fd4017db3274` and `87d6319a26da08c7` on KVM (AMD). Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
 `ba0aa0612502a1df` under this hydo, because an image keeps the defaults of its own epoch
 (`hydo_image::defaults`). `hydo/onboard/examples/stack/build-reproducers.sh` rebuilds both
-images. The quickstart's Redis example gives `cce52f9e8565f6e2` (OK) and `8bee301c59ad1b12`
-(`C=12 R=everysec`, `k:1` lost) on hvx, `cc6abeb1ec4e4f29` and `b9a2d62ab3eaf0cb` (`k:0` lost)
-on the Mac, and `d2e4da56c54ce2a1` and `af9a168ee9d9071c` (`k:1` lost) on KVM (AMD), at epoch 5.
-At epoch 6 its image gives `2f5a6dc34e0c8ba6` and `f2715295eae4d5a2` (`k:1` lost) on hvx, and
+images. The quickstart's Redis example (its epoch-5 values are in docs/REBASELINE.md section 29)
+gives at epoch 6 `2f5a6dc34e0c8ba6` (OK) and `f2715295eae4d5a2` (`C=12 R=everysec`, `k:1` lost)
+on hvx, and
 `b222402de473ea1b` on KVM (AMD), where `C=11 R=everysec` loses `k:1` (`3e8260560d47b5b0`). On the
 Mac it gives `f7d1de1935d77df4` and `6a3d1a0456e48e01` (`k:0` lost). Every recorded example value is
 in `hydo/onboard/recorded.json`, and
@@ -5008,6 +5015,13 @@ build machine, before 2026-10-13.
   mutants have their own seed. Their goldens and three answers of `cli.jsonl` are recorded
   again; no product code changed
 
+- The 0.6.0 release (no milestone number): prepared, not published. The version is raised with
+  the skill's four version fields, `hydo-world`, `hydo-world-tls` and `hydo-grpc` are re-pinned,
+  and the released schemas are copied. The re-pins moved 9 hvx and 9 Mac images (docs/REBASELINE.md
+  section 32), and no KVM image. A fresh reader's review found `hydo guide strategies` empty since
+  the Pulsar merge; it is restored. The release commit drops the build tree's path from `bin/hydo`.
+  Both releases were built twice to the same bytes, the Mac one signed and notarized, and verified
+  on hvx and the Mac
 ## Where to look
 
 - `docs/HISTORY.md`: every milestone with its evidence, and the superseded values.

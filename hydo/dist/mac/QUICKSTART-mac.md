@@ -45,27 +45,35 @@ Homebrew, `~/.hydo` in the rest of this guide is that `libexec` directory:
 `cp -R "$(brew --prefix hydo)/libexec/examples/redis" ~/hydo-redis` copies the first example.
 `brew uninstall hydo` removes it again.
 
+With `cargo install hydo` (the README), `hydo setup` puts the release into
+`~/.hydo/versions/0.6.0`, and `~/.hydo` in the rest of this guide is that folder:
+`cp -R ~/.hydo/versions/0.6.0/examples/redis ~/hydo-redis` copies the first example.
+
 Without Homebrew, download the release and its checksums, check the tarball, unpack it, and run
 its installer. The installer copies hydo into `~/.hydo` and runs `hydo setup` there, then
 `hydo doctor`.
 
 ```sh
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.5.0/hydo-mac-0.5.0.tar.gz
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.5.0/SHA256SUMS
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.6.0/hydo-mac-0.6.0.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.6.0/SHA256SUMS
 shasum -a 256 -c --ignore-missing SHA256SUMS
-tar xzf hydo-mac-0.5.0.tar.gz
-./hydo-mac-0.5.0/install.sh
+tar xzf hydo-mac-0.6.0.tar.gz
+./hydo-mac-0.6.0/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
-`hydo setup` does three things:
+`hydo setup` does four things:
 
 - It checks that this Mac can run hydo: Apple Silicon, macOS 13 or later, and
-  Hypervisor.framework.
+  Hypervisor.framework, the part of macOS that runs virtual machines.
 - It checks every file against the release's `SHA256SUMS`, and against the sha256 pins built into
   `hydo`. The pins are the sha256 values that `hydo` itself expects for the guest kernels, the
   guest tools, and the guest programs.
 - It removes the quarantine attribute that a download leaves on the files.
+- It checks the signature of the engine `bin/hydo-hvm`, which needs Apple's hypervisor
+  entitlement. The release's engine is signed with hydo's Developer ID and notarized by Apple. An
+  engine without a signature, for example from a build of your own, is signed on this Mac, and
+  `hydo doctor` then names the signature `ad hoc`.
 
 A damaged or incomplete download is refused with the name of each file that does not match. Running
 `hydo setup` again does nothing on a complete installation; `hydo setup --check` only reports
@@ -102,7 +110,7 @@ twice, so the example's `hydo-out/` holds about 160 MB after the build. The 512 
 the `hydo init` skeleton (section 5) takes about 1 GB.
 
 Building the same `hydo.yaml` again gives the same bytes:
-`shasum -a 256 hydo-out/explore-ob-redis-arm64.cpio.gz` prints `4f1e9207868ff352…` before and after
+`shasum -a 256 hydo-out/explore-ob-redis-arm64.cpio.gz` prints `502d75403a6eebb4…` before and after
 a second `hydo build hydo.yaml`. `appendfsync` is the Redis setting that
 decides when Redis writes its log to the disk: `always` (the example's default) after every
 write, `everysec` once a second.
@@ -121,12 +129,12 @@ is such a setting of the system that a guest token changes; the example's `hydo.
 knobs under `knobs:`. Each command prints a `RESULT` line. Its `verdict=` field is the outcome,
 and `HYDO-ORACLE:` marks the verdict of the invariants. `fp=` is the fingerprint; the other
 fields are hydo's own counters and hashes. The first ends `verdict=HYDO-ORACLE: OK invariants=1
-held (redis.acked_writes_survive: acked=20 all present)` (fingerprint `cc6abeb1ec4e4f29`). The second prints a violation: an acknowledged key is gone after the power
-cut (`key k:0 lost`, fingerprint `b9a2d62ab3eaf0cb`; the check stops at the first lost key).
+held (redis.acked_writes_survive: acked=20 all present)` (fingerprint `f7d1de1935d77df4`). The second prints a violation: an acknowledged key is gone after the power
+cut (`key k:0 lost`, fingerprint `6a3d1a0456e48e01`; the check stops at the first lost key).
 That is Redis's documented `everysec` window, and the run reproduces it every time. Run either command again and the fingerprint
 (`fp=`) is the same. With the default `appendfsync always`, the same cut loses nothing:
 `hydo run "disk=cut | run C=12"` ends `OK` with `acked=12 all present` (fingerprint
-`b46eb1de79e18bda`).
+`da264396142d8e52`).
 
 `hydo run` exits with status 0 whenever the run finishes, whatever its verdict. A script tells a
 pass from a failure by `verdict.kind` in the run's `result.json` (in the folder under
@@ -142,7 +150,7 @@ hydo run "disk=none | run O=redis@5-10:resp:loss,100%"
 ```
 
 It ends `OK ... acked=15 all present`: the 15 writes the client saw acknowledged are all there.
-Again, a second run gives the same fingerprint.
+Again, a second run gives the same fingerprint (`53c4fe14fd016a0c`).
 
 hydo can also vary thread timing. The host part of a schedule can delay the guest's timer
 interrupts by a seeded number of VM exits. That changes where the guest switches threads. In the
@@ -156,7 +164,8 @@ hydo run "disk=none tj=7 tjpm=500 tjmax=500 | run"
 
 The `RESULT` line gains `tjk=` (the first and last tick period touched) and `tjn=` (how many
 ticks were delayed). The fingerprint differs from the untimed run, because the timing changed
-the guest's state, and it is the same on every run of this schedule. `hydo explore --timing`
+the guest's state, and it is the same on every run of this schedule (`e77ede27f3996aa6`, with
+`tjk=8-17 tjn=5`). `hydo explore --timing`
 adds such timing to the schedules it generates.
 
 ### A program that busy-waits
@@ -226,16 +235,19 @@ terminal (a log file, CI) it ends with one JSON summary line instead.
 `hydo report --details` prints the technical report. It gives each failure's class (the cause),
 the minimal schedules and their fingerprints, and a table of properties.
 
-In this example every problem comes from a fault that the example asks for:
+In this example every problem comes from a fault that the example asks for. `hydo report`
+lists them in this order:
 
-- Redis lost data it had confirmed, with a faulty disk that loses acknowledged writes (the class
-  `lying-disk`);
-- redis did not start again after disk errors (`io-errors`). The report labels it `Worth a look`,
-  because a service that does not start is worth reading about in your own system. Here Redis's
-  log says why: Redis refuses by design to start from an append-only file that the disk errors
-  damaged;
+- redis did not start again after disk errors (the class `io-errors`). The report labels it
+  `Worth a look`, because a service that does not start is worth reading about in your own
+  system. Here Redis's log says why: Redis refuses by design to start from an append-only file
+  that the disk errors damaged;
 - Redis lost data it had confirmed after a power cut, with `appendfsync` set to a relaxed value
-  (`unsafe-knob`: a knob such as `R=` set to a relaxed value).
+  (`unsafe-knob`: a knob such as `R=` set to a relaxed value);
+- Redis lost data it had confirmed, with a faulty disk that loses acknowledged writes
+  (`lying-disk`).
+
+After the problems, the report says what held, how much was explored, and what to run next.
 
 With the default settings and an honest disk Redis loses nothing (the `disk=cut | run C=12` run
 of section 2). The exploration finds 11 failures. The table of properties in `hydo report
@@ -245,7 +257,9 @@ assertion libraries for Rust, Go, Python and JavaScript (the SDKs, `hydo guide s
 example has none. Its invariant is marked `[the project's own check]`, as every invariant
 and check of a `hydo.yaml` is. `fault.*` properties are hydo's own: one for each fault that the guest reports when it happens
 (a pause, a clock step, a one-way network fault). `NOT EXERCISED` means that no run reached it; in
-this exploration no run paused Redis or stepped its clock, so all six show it. The last line
+this exploration no run paused Redis or stepped its clock, so all six show it. The explorer draws
+pauses, clock jumps and one-way network faults only with `--new-faults`, as its first line says.
+`violations=` counts the properties that failed in at least one run. The last line
 counts the runs (`runs=`). `setup-complete seen in` counts the runs whose program said through
 an SDK that its setup was done: 0 here, because the example uses no SDK. A run that stopped with an error before the
 invariants ran counts in neither the passed nor the failed column. So for this example's
@@ -323,7 +337,7 @@ by the Mac build yet.
 `hydo build hydo/hydo.yaml --check` checks the folder's format without building. It warns while
 the two placeholder files of `hydo init` are still there; with them, every run fails, and `hydo
 explore` would report those failures as problems. When it warns about no placeholder any more,
-run the same three commands as in section 2: `hydo build hydo/hydo.yaml` (or `hydo build
+run the same three commands as in sections 2 and 3: `hydo build hydo/hydo.yaml` (or `hydo build
 hydo.yaml` for a single file), `hydo run "disk=none | run"`, `hydo explore`. The image of a
 `hydo/` folder goes to `.hydo/` instead of `hydo-out/`; the runs and explorations still go to
 `hydo-out/`.
@@ -361,7 +375,7 @@ third-party software:
 `THIRD-PARTY.md` lists each one with its version, its license, the files it is in, and where its
 source is. `licenses/` holds the full text of every license.
 
-The archive `hydo-mac-0.5.0-sources.tar.gz` accompanies this release; it is published next to
+The archive `hydo-mac-0.6.0-sources.tar.gz` accompanies this release; it is published next to
 the tarball, with the same `SHA256SUMS`. It contains the corresponding source:
 
 - the exact upstream source archives of every third-party component, including every GPL- and

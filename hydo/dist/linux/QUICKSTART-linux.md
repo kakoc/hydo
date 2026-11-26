@@ -22,7 +22,7 @@ Words this page uses:
 - Verdict: the run's outcome: `OK`, `VIOLATION` (an invariant, a property that must always hold,
   failed), or `ERROR` (the run could not finish its workload).
 - Fingerprint epoch: the generation of hydo's fingerprints. A change that moves recorded
-  fingerprints raises it; this release's is 5. Runs of different epochs compare only verdicts.
+  fingerprints raises it; this release's is 6. Runs of different epochs compare only verdicts.
 - Recovery: after a power cut, hydo boots the guest again on what the disk kept and runs the
   invariants there.
 - Engine: the program that runs the virtual machine: hvx (hydo's kernel module) or KVM.
@@ -60,8 +60,8 @@ For the kernel module:
 - KVM must not be running virtual machines: hvx takes VT-x over from KVM. Without root, or on a
   machine where KVM must stay, use hydo's KVM engine instead (section 6): it needs only
   `/dev/kvm`.
-- No Nix and no internet access: the release carries the guest kernel, the guest tools, and the
-  disk-image tools, pinned by sha256.
+- Nix and internet access are not needed: the release carries the guest kernel, the guest tools,
+  and the disk-image tools, pinned by sha256.
 
 ## 1. Install
 
@@ -69,13 +69,14 @@ Download the tarball and check it as [docs/INSTALL.md](https://github.com/kakoc/
 shows (`curl` and `sha256sum -c`), then:
 
 ```sh
-tar xzf hydo-linux-0.5.0.tar.gz
-./hydo-linux-0.5.0/install.sh                 # or: --prefix DIR (default ~/.hydo), --add-to-path
+tar xzf hydo-linux-0.6.0.tar.gz
+./hydo-linux-0.6.0/install.sh                 # or: --prefix DIR (default ~/.hydo), --add-to-path
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
 The installer copies the release into `~/.hydo` (with `--prefix DIR`, read `DIR` wherever this
-page says `~/.hydo`) and runs the steps below; you do not run them yourself after it. They are
+page says `~/.hydo`; after `cargo install hydo` and `hydo setup`, read `~/.hydo/versions/0.6.0`)
+and runs the steps below; you do not run them yourself after it. They are
 the `hydo` program's own commands, so you can run them again:
 
 - `hydo setup` checks every file against the release's `SHA256SUMS`, and against the sha256 pins
@@ -88,15 +89,15 @@ the `hydo` program's own commands, so you can run them again:
   the module lock (see below). Loading asks for `sudo` and unloads `kvm_intel` and `kvm` if they
   are loaded. Run again, it does nothing while this release's module is loaded; after a kernel
   update it builds the module again. `hydo module uninstall` unloads it and deletes the build.
-- `hydo doctor` checks this machine and the installation. On a machine without `/dev/hvx` where
-  your user can open `/dev/kvm`, the installer runs `hydo doctor --backend kvm` instead (section 6),
-  which ends `doctor: all checks passed`.
+- `hydo doctor` checks this machine and the installation. With `--no-module`, on a machine
+  without `/dev/hvx` where your user can open `/dev/kvm`, the installer runs `hydo doctor
+  --backend kvm` instead (section 6), which ends `doctor: all checks passed`.
 
 The run engine needs no compiling: it runs inside `hydo` itself when you can open
 `/dev/hvx` (as root, or after `hydo module udev install`), or as the program `bin/hydo-hvx` under
 `sudo` when you cannot. The installer writes nothing outside `~/.hydo` except your shell startup
 file (only with `--add-to-path`) and the udev rule (only with `--udev`). If the module is already
-loaded (a machine where someone else manages it), `./hydo-linux-0.5.0/install.sh --no-module`
+loaded (a machine where someone else manages it), `./hydo-linux-0.6.0/install.sh --no-module`
 skips `hydo module install`; `hydo doctor` then warns that `hvx.ko` was not built by this
 release. In that case run `hydo module build`, not `hydo module install`: it builds this
 release's module without loading it, and `hydo module status` then says whether the loaded module
@@ -165,7 +166,7 @@ This writes `hydo-out/explore-ob-redis-disk.img`, and next to it the steps of th
 and `hydo-agent`, plus a data partition. `hydo-agent` is a small program that is the guest's first
 process and only carries out what the host tells it. Every decision (when to start Redis, when to
 inject a fault, when to check the invariant) is made by `hydo` on the host, which also records it.
-Building the same `hydo.yaml` again gives the same bytes (sha256 `23c3b28038b26115…`).
+Building the same `hydo.yaml` again gives the same bytes (sha256 `8fae694627b8ba31…`).
 
 Run one schedule with no faults. Then run one with a power cut before step 12, while Redis is set
 to sync its log only once a second. The workload's 20 steps count from 0, and step 5, for
@@ -178,11 +179,13 @@ hydo run "disk=none | run"
 hydo run "disk=cut | run C=12 R=everysec"
 ```
 
-Each prints the engine's `RESULT` line (shortened here; `…` stands for fields left out):
+Each prints the engine's `RESULT` line (shortened here; `…` stands for fields left out). The
+fingerprints of this page were recorded on a Xeon E3-1270 v6 with the PMU branch clock. Another
+CPU, or the exit-count clock, gives other fingerprints with the same verdicts.
 
 ```
-RESULT one fp=cce52f9e8565f6e2 wfp=87738d589202f285 secs=0.4 stops=183367 typed=22 … inh=… ctl=09116271ef7d92f0 verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)
-RESULT one fp=8bee301c59ad1b12 wfp=ec8dfde036b545ee secs=0.9 stops=183488 typed=31 … inh=… ctl=ed29619ccdd76831 verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
+RESULT one fp=2f5a6dc34e0c8ba6 wfp=c3b0362c14338574 secs=0.4 stops=183342 typed=22 … inh=… ctl=21f6fe353462b188 verdict=HYDO-ORACLE: OK invariants=1 held (redis.acked_writes_survive: acked=20 all present)
+RESULT one fp=f2715295eae4d5a2 wfp=415bc84678f62b33 secs=0.8 stops=183514 typed=32 … inh=… ctl=9a88590b31b6ce53 verdict=HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
 ```
 
 - `verdict=` is the outcome. `HYDO-ORACLE: OK` means every invariant held; `VIOLATION` names the
@@ -209,8 +212,8 @@ With this example's default setting, `appendfsync always`, the same cut loses no
 hydo run "disk=cut | run C=12"
 ```
 
-It ends `OK` with `acked=12 all present` (`8966aa3944388f9d`; with `--backend kvm`
-`2c486eb24aedfd7f`).
+It ends `OK` with `acked=12 all present` (`47ae607ed0a15c48`; with `--backend kvm`
+`03ff0b2cb2ea75a0`).
 
 `hydo run` exits with status 0 whenever the run finishes, whatever its verdict. A script tells a
 pass from a failure by `verdict.kind` in the run's `result.json`: `ok`, `violation`, or `error`.
@@ -232,13 +235,11 @@ Run either command again: the fingerprint is the same. Each run leaves a directo
 
 ```
 $ hydo repro hydo-out/runs/run-…
-REPRODUCED   run  fp=8bee301c59ad1b12 (recorded 8bee301c59ad1b12)  disk=cut | run C=12 R=everysec
+REPRODUCED   run  fp=f2715295eae4d5a2 (recorded f2715295eae4d5a2)  disk=cut | run C=12 R=everysec
              HYDO-ORACLE: VIOLATION [redis.acked_writes_survive] key k:1 lost
 hydo: 1 of 1 reproduced with the recorded fingerprint (consoles under hydo-out/runs/run-…/repro-…)
 ```
 
-These fingerprints were recorded on a Xeon E3-1270 v6 with the PMU branch clock. The exit-count
-clock gives other fingerprints with the same verdicts.
 
 ## 3. Explore
 
@@ -307,7 +308,7 @@ unsafe-knob 2), and all of them reproduced. `hydo report` names 3 problems. The 
 schedules were these:
 
 - `disk=cut dseed=0 | run C=9 R=no` (`unsafe-knob`);
-- `disk=lying:2 dseed=17144527b62d669c | run C=17` (`lying-disk`, `b7d0027938426fb9`);
+- `disk=lying:2 dseed=17144527b62d669c | run C=17` (`lying-disk`, `ac9baef50ca34043`);
 - `disk=ioerr:1 dseed=fd403ef8d08fa636 | run K=redis@16+1` (`io-errors`: Redis did not start
   again after a kill);
 - `disk=ioerr:1 dseed=ce2af709f01aac0 | run` (`io-errors`: Redis did not start again after the
@@ -336,8 +337,8 @@ hydo build hydo-netem.yaml
 hydo run --image hydo-out/explore-ob-redis-netem-disk.img "disk=none | run N=redis@3-6:delay,300ms"
 ```
 
-It ends `OK` with `retrans=0` (`2124171a52edf77e`; on the KVM engine `5f02bc6f56c1ca5c`; image
-sha256 `a9374bd83addf933…`): no packet was sent twice. With two images in `hydo-out`, `hydo
+It ends `OK` with `retrans=0` (`95b9691f0b29d173`; on the KVM engine `dbfed47d20867cbf`; image
+sha256 `15a88e799b1e5b9a…`): no packet was sent twice. With two images in `hydo-out`, `hydo
 run` and `hydo explore` need `--image` to know which one you mean.
 
 ## 5. Onboard your own project
@@ -391,13 +392,13 @@ and AMD CPUs. Its fingerprints differ between Intel and AMD CPUs; its
 verdicts do not.
 
 ```sh
-./hydo-linux-0.5.0/install.sh --no-module     # nothing to build or load
+./hydo-linux-0.6.0/install.sh --no-module     # nothing to build or load
 export PATH="$HOME/.hydo/bin:$PATH"
 hydo doctor --backend kvm
 cp -R ~/.hydo/examples/redis ~/hydo-redis && cd ~/hydo-redis
 hydo build hydo.yaml                           # the same image as in section 2
 hydo run --backend kvm --image hydo-out/explore-ob-redis-disk.img "disk=none | run"
-hydo run --backend kvm --image hydo-out/explore-ob-redis-disk.img "disk=cut | run C=12 R=everysec"
+hydo run --backend kvm --image hydo-out/explore-ob-redis-disk.img "disk=cut | run C=11 R=everysec"
 hydo explore --backend kvm --image hydo-out/explore-ob-redis-disk.img --seeds 1-20 --strategy swarm --workers 2
 hydo repro hydo-out/explore
 ```
@@ -427,9 +428,11 @@ the same verdicts as with hvx, but they are counted differently:
 
 A host power cut at the k-th disk flush (`cf=`) and inserted ticks (`pp=`, `xt…`) are hvx's
 alone; the explorer draws the faults both engines apply. With the image of section 2, the two
-schedules end `OK` (`d2e4da56c54ce2a1`) and `VIOLATION … key k:1 lost` (`af9a168ee9d9071c`).
-The values come from AMD EPYC CPUs (the 7763, 9V45 and 9V74 give the same values). Intel CPUs give the
-same verdicts with fingerprints of their own.
+schedules end `OK` (`b222402de473ea1b`) and `VIOLATION … key k:1 lost` (`3e8260560d47b5b0`).
+On KVM the power cut is before step 11, not step 12. Where a cut falls against Redis's
+one-second sync differs between the engines, and on KVM the cut before step 12 loses nothing.
+The values come from AMD EPYC CPUs (the 7763 and the 9V74 give the same values). Intel CPUs
+give the same verdicts with fingerprints of their own.
 
 The exploration finds 10 failures, and its report gives five minimal schedules:
 
@@ -471,7 +474,7 @@ this third-party software:
 `THIRD-PARTY.md` lists each one with its version, its license, the files it is in, and where its
 source is. `licenses/` holds the full text of every license.
 
-The archive `hydo-linux-0.5.0-sources.tar.gz` accompanies this release; it is published next to
+The archive `hydo-linux-0.6.0-sources.tar.gz` accompanies this release; it is published next to
 the tarball, with the same `SHA256SUMS`. It contains the corresponding source:
 
 - the exact upstream source archives of every third-party component, including every GPL- and

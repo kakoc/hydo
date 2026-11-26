@@ -4,8 +4,8 @@ description: Set up deterministic fault testing with hydo for a software project
 license: Apache-2.0
 compatibility: Needs the hydo command line tool, 0.1.0 or later (x86_64 Linux, or an Apple Silicon Mac); the skill offers to install it. Every hydo fact comes from the installed hydo (hydo guide); the skill itself needs no network.
 metadata:
-  version: "0.5.0"
-  hydo-min: "0.5.0"
+  version: "0.6.0"
+  hydo-min: "0.6.0"
 ---
 
 # Onboard a project into hydo

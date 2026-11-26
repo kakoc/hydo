@@ -261,108 +261,25 @@ const USER_PAGES: &[&str] = &[
 /// where it is recorded. Add a value here only with its source.
 const CITED_ELSEWHERE: &[(&str, &str)] = &[
     (
-        "87738d589202f285",
-        "wfp of the Redis example's clean run on hvx at the fingerprint epoch 5, recorded with fp \
-         cce52f9e8565f6e2 (docs/HISTORY.md, the 0.5.0 release)",
+        "c3b0362c14338574",
+        "wfp of the Redis example's clean run on hvx at the fingerprint epoch 6, recorded with fp \
+         2f5a6dc34e0c8ba6 (docs/HISTORY.md, the 0.6.0 release)",
     ),
     (
-        "ec8dfde036b545ee",
-        "wfp of the Redis power cut on hvx at the fingerprint epoch 5, recorded with fp \
-         8bee301c59ad1b12 (the 0.5.0 release)",
+        "415bc84678f62b33",
+        "wfp of the Redis power cut on hvx at the fingerprint epoch 6, recorded with fp \
+         f2715295eae4d5a2 (the 0.6.0 release)",
     ),
     (
         "fd403ef8d08fa636",
         "dseed of the Redis quickstart exploration's minimal schedule for a restart after disk \
-         errors (seed 12 of 1-20, swarm, on hvx and KVM at the fingerprint epoch 5; docs/HISTORY.md, \
-         the 0.5.0 release)",
+         errors (seed 12 of 1-20, swarm, on hvx and KVM at the fingerprint epochs 5 and 6; \
+         docs/HISTORY.md, the 0.5.0 and 0.6.0 releases)",
     ),
     (
-        "ba29f78daa80a520",
+        "45fda597d42cc65f",
         "fp of the messages tutorial's clean run on the Mac engine, twice, at the fingerprint \
-         epoch 5 (docs/ONBOARD.md; docs/HISTORY.md, the 0.5.0 release)",
-    ),
-    // The quickstarts describe the published 0.5.0 release, whose values are of the fingerprint
-    // epoch 5. The 0.6.0 pass re-recorded the list at epoch 6 (docs/REBASELINE.md section 31),
-    // and 0.6.0's release step 6a moves the pages to its values. Until then these epoch-5 values
-    // of the list (docs/REBASELINE.md section 29) stay cited.
-    (
-        "cce52f9e8565f6e2",
-        "fp of hvx/release-redis `disk=none | run` at the fingerprint epoch 5 (section 29)",
-    ),
-    (
-        "09116271ef7d92f0",
-        "ctl of hvx/release-redis `disk=none | run` at the fingerprint epoch 5 (section 29)",
-    ),
-    (
-        "8bee301c59ad1b12",
-        "fp of hvx/release-redis `disk=cut | run C=12 R=everysec` at the fingerprint epoch 5 \
-         (section 29)",
-    ),
-    (
-        "ed29619ccdd76831",
-        "ctl of hvx/release-redis `disk=cut | run C=12 R=everysec` at the fingerprint epoch 5 \
-         (section 29)",
-    ),
-    (
-        "8966aa3944388f9d",
-        "fp of hvx/release-redis `disk=cut | run C=12` at the fingerprint epoch 5 (section 29)",
-    ),
-    (
-        "b7d0027938426fb9",
-        "fp of hvx/release-redis `disk=lying:2 dseed=17144527b62d669c | run C=17` at the \
-         fingerprint epoch 5 (section 29)",
-    ),
-    (
-        "2124171a52edf77e",
-        "fp of hvx/release-redis-netem `disk=none | run N=redis@3-6:delay,300ms` at the \
-         fingerprint epoch 5 (section 29)",
-    ),
-    (
-        "23c3b28038b26115",
-        "the first 16 digits of the release Redis image's sha256 at the fingerprint epoch 5 \
-         (section 29)",
-    ),
-    (
-        "a9374bd83addf933",
-        "the first 16 digits of the release Redis netem image's sha256 at the fingerprint \
-         epoch 5 (section 29)",
-    ),
-    (
-        "d2e4da56c54ce2a1",
-        "fp of kvm/release-redis `disk=none | run` on AMD at the fingerprint epoch 5 (section 29)",
-    ),
-    (
-        "af9a168ee9d9071c",
-        "fp of kvm/release-redis `disk=cut | run C=12 R=everysec` on AMD at the fingerprint \
-         epoch 5 (section 29)",
-    ),
-    (
-        "2c486eb24aedfd7f",
-        "fp of kvm/release-redis `disk=cut | run C=12` on AMD at the fingerprint epoch 5 \
-         (section 29)",
-    ),
-    (
-        "4f1e9207868ff352",
-        "the first 16 digits of the Mac release Redis image's sha256 at the fingerprint epoch 5 \
-         (section 29)",
-    ),
-    (
-        "cc6abeb1ec4e4f29",
-        "fp of hvm/release-redis `disk=none | run` at the fingerprint epoch 5 (section 29)",
-    ),
-    (
-        "b9a2d62ab3eaf0cb",
-        "fp of hvm/release-redis `disk=cut | run C=12 R=everysec` at the fingerprint epoch 5 \
-         (section 29)",
-    ),
-    (
-        "b46eb1de79e18bda",
-        "fp of hvm/release-redis `disk=cut | run C=12` at the fingerprint epoch 5 (section 29)",
-    ),
-    (
-        "5f02bc6f56c1ca5c",
-        "fp of kvm/release-redis-netem `disk=none | run N=redis@3-6:delay,300ms` on AMD at the \
-         fingerprint epoch 5 (section 29)",
+         epoch 6 (docs/ONBOARD.md; docs/HISTORY.md, the 0.6.0 release)",
     ),
 ];
 

@@ -178,12 +178,12 @@ history is the list of what the client asked and what the system confirmed. Thes
 records of one send:
 
 ```text
-HYDO-HIST queue 7 invoke 503901333 send orders m7;k=g1
-HYDO-HIST queue 7 ok 506915291 send orders m7;k=g1;o=8
+HYDO-HIST queue 7 invoke 500253333 send orders m7;k=g1
+HYDO-HIST queue 7 ok 502312000 send orders m7;k=g1;o=7
 ```
 
 `queue` is the history, `7` the client process, the number after `invoke` or `ok` the guest time in
-nanoseconds, `m7` the message, `k=g1` its ordering key, and `o=8` the position the queue gave
+nanoseconds, `m7` the message, `k=g1` its ordering key, and `o=7` the position the queue gave
 it. These two lines come from the first run below. `hydo guide messages` lists every record.
 
 **The rules.** A `type: messages` check states what the queue promises. hydo knows no queue and
@@ -221,7 +221,7 @@ hydo run "disk=none | run"
 hydo run "disk=none | run"
 ```
 
-On the Mac engine both runs printed `fp=ba29f78daa80a520` and the verdict `OK`. `hydo report
+On the Mac engine both runs printed `fp=45fda597d42cc65f` and the verdict `OK`. `hydo report
 --details` with the run directory shows each claim and how many cases it judged:
 
 ```text
@@ -250,16 +250,13 @@ hydo report --details
 The exploration ran 20 schedules on the Mac engine and found one failure, which reproduced. It
 shrank the failure (cut it down to the fewest faults that still cause it) to one producer and a
 power cut, and named its class `unsafe-knob`. A class is hydo's name for the cause of a failure.
-It also prints `hydo: warning: 2 passing first runs may have checked nothing`: in those two runs
-the client recorded no acknowledged message, so their checks had nothing to judge. The warning
-says nothing about the failure.
 `hydo report` says the same in words; `--details` shows the minimal schedule and the verdict.
 `dseed=` is the seed of the disk's faults; `dseed=0` means that it decides nothing in this schedule. The schedule's last word, `W=...`, is written by hydo: it records which client commands ran and in
 which order, so that a replay runs the same ones. Copy it as it is.
 
 ```text
 - minimal schedule: `disk=cut dseed=0 | run C=10 S=never W=:p1,r50,cparallel_driver_produce,1.1.0.1802048978`
-- verdict: `HYDO-ORACLE: VIOLATION [queue.no-loss] m1 was acknowledged to process 1 at 0.111 s and never delivered in channel orders, which was drained`
+- verdict: `HYDO-ORACLE: VIOLATION [queue.no-loss] m1 was acknowledged to process 1 at 0.116 s and never delivered in channel orders, which was drained`
 ```
 
 ### Reading the result
