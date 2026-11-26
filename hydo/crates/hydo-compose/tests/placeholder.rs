@@ -94,3 +94,41 @@ volumes:
     // the database's volume is mounted, so its folder stays
     assert!(m.contains("vol/pg"), "{m}");
 }
+
+/// Milestone 368 (the Typesense onboarding): a fixed `ipv4_address` that hydo's own order of
+/// `addr:` gives the service too is kept without a word; another address is still named as
+/// ignored, with the address the service gets.
+#[test]
+fn a_fixed_address_that_is_kept_says_nothing() {
+    let d = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-compose-ipv4-{}", std::process::id())),
+    );
+    let compose = "services:
+  ts1:
+    image: typesense/typesense:30.1
+    networks:
+      tsnet:
+        ipv4_address: 10.89.0.11
+  ts2:
+    image: typesense/typesense:30.1
+    networks:
+      tsnet:
+        ipv4_address: 10.89.0.99
+networks:
+  tsnet: {}
+";
+    std::fs::write(d.join("docker-compose.yml"), compose).unwrap();
+    let o = std::process::Command::new(env!("CARGO_BIN_EXE_hydo-compose"))
+        .arg(d.join("docker-compose.yml"))
+        .arg("--no-resolve")
+        .env("HYDO_INIT_CLOCK_START", "2026-11-26")
+        .output()
+        .unwrap();
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(o.status.success(), "{err}");
+    assert!(!err.contains("ipv4_address 10.89.0.11"), "{err}");
+    assert!(
+        err.contains("service ts2: ipv4_address 10.89.0.99 ignored; the service is at 10.89.0.12"),
+        "{err}"
+    );
+}
