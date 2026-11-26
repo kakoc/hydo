@@ -138,6 +138,27 @@ The directed runs that separate the causes, one run each:
 | `A=nsq.msg_received+2200:kill-nsqd` | `--set sync_every=1` | 1 of 4 lost, the message in flight: finding 2, `cc492d67978cc258` |
 | finding 3's composition without `T=` | default | OK, `b98ae2a76ab45b67` |
 
+**On the KVM engine (Milestone 373).** GitHub's runners built the x86_64 image with `hydo build
+--set arch=amd64` and the 0.6.0 release's guest files: `d6f8de9a…`, with the client
+`nsqc-amd64` `25adf549…`. It was the example's first run on x86_64. Each schedule ran twice from
+fresh boots with one fingerprint per host, and each verdict is the Mac engine's. `hydo repro
+--regressions` gave 5 of 5 as expected on each host. The fingerprints are the KVM engine's own:
+
+| schedule | verdict | AMD EPYC 9V45, 9V74, and two 7763 | two Xeon 6975P-C |
+|---|---|---|---|
+| `disk=none \| run` | OK, `no-phantom` judged 24 deliveries | `ac7ebf20a1d9588e` | `488679fb6b91528e` |
+| `topic-queue-restarts-empty-after-kill` | `VIOLATION [jobs.no-loss]` | `4afbbef778eed026` | `3e2e59c7802f597c` |
+| `channel-queue-restarts-empty-after-kill` | `VIOLATION [jobs.no-loss]` | `70ba4f0f0e2960ad` | `2acf18f6433087b3` |
+| `in-flight-message-lost-at-kill` | `VIOLATION [jobs.acked-outcome]`, 1 of 4 | `2a0834d1bbed8d50` | `7e4814758448a48f` |
+| `publish-waits-after-backward-clock-step` | `VIOLATION [eventually_publish]` | `42d2ad65fc452352` | `3fd1a6f3d2c3fcfe` |
+| `topic-queue-restarts-empty-after-power-cut` | `VIOLATION [jobs.no-loss]` | `4f0cf10a9072cd5c` | `292a26f1d32d656f` |
+
+In `topic-queue-restarts-empty-after-kill` on KVM, `acked-outcome` reads `5 of 6 judged
+operations`, against `6 of 7` on the Mac engine. `m0` to `m4` were answered `OK` and are lost.
+The sixth publish, `m5`, overlapped the kill, so `nsqd` did not answer it, and the client
+recorded it as failed. The six lost messages of the regression's comment are the Mac engine's
+run.
+
 ## What was found
 
 ### 1. New: a kill of `nsqd` in the first seconds of a new topic or channel, or a power cut soon after, loses every message of it

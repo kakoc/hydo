@@ -198,6 +198,25 @@ in one batch. The image "earlier" is the one before the parameter, whose client 
 | `P=nodes.primary@30+25` | final | OK | `4ca5a7a3bc371ef9` |
 | `T=20:-120 K=nodes.primary@30+25` | final | `bdelete`, `available` (no leader for 36 s), `converge`, `export` | `f15de817eee56880` |
 
+**On the KVM engine (Milestone 373).** The image of the fresh clone (`de22e524…`) does not run
+on KVM. Every run ends `ERROR service start (ts1)`: `ts1` stops with SIGSEGV (status 139) before
+its readiness check, as each node does. The KVM guest kernels have no
+`CONFIG_TASK_IO_ACCOUNTING`, so `/proc/self/io` does not exist in the guest. Typesense's bundled
+brpc reads the file in a static initializer (`bvar::read_proc_io`) and logs the failure with
+glog before glog is set up. glog then reads a null pointer in `google::LogMessage::Init`. On a
+runner, `typesense-server` stopped the same way with status 139 when every open of
+`/proc/<pid>/io` failed. Typesense's commit `b708744220` (#3093, after v30.2) logs the failure
+with `fprintf`; no release has it yet. The section "No `/proc/<pid>/io` in the guest" of
+`docs/design/kvm-engine.md` has the cause and the proposal. The Mac engine's kernels are built without the option too; the Mac
+engine did not run the example.
+
+| image | hosts | verdict | fingerprint |
+|---|---|---|---|
+| `de22e524…` | three Xeon 6975P-C, each schedule twice | `ERROR service start (ts1)` for the clean run and every regression | `d7f5d6359ab95efb` |
+| `de22e524…` | an EPYC 7763 and two EPYC 9V74 | `ERROR service start (ts1)` | `ce4ff2694a847f79` |
+| `guest.cpu: v3` (`93dc08be…`) | a Xeon 6975P-C | `ERROR service start (ts1)` | `aeb47edf1016f135` |
+| `guest.cpu: v3` (`93dc08be…`) | an EPYC 7763 | `ERROR service start (ts1)` | `15302d9d3b1eb9b9` |
+
 ## What was found
 
 ### 1. New: a node that replays its Raft log applies a delete by a filter in batches out of order, and lacks documents for good

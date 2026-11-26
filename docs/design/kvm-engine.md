@@ -231,6 +231,49 @@ kernel (it has every driver built in), and it goes on to mount `/dev/vda1` and s
 was written to do (its errors are ignored by design). The host controller's own `insmod`s of
 network modules are ignored the same way.
 
+## No `/proc/<pid>/io` in the guest (Milestone 373, a proposal)
+
+The KVM guest kernels are allnoconfig with the fragments of `hv/kvm/linux/`, and no fragment
+sets `CONFIG_TASKSTATS`, `CONFIG_TASK_XACCT` or `CONFIG_TASK_IO_ACCOUNTING`. So the guest has no
+`/proc/<pid>/io`: in a guest of the Typesense example, `cat /proc/self/io` answered `No such
+file or directory`. The Mac guest kernels are made the same way (`hv/hvm/linux/hvm.config` on
+allnoconfig). hvx's `bzImage` is nixpkgs's `linux_6_6`, which has the file.
+
+Typesense 30.2 stops with SIGSEGV at every start without the file, also for `--version`. The
+backtrace from a run on a runner, with an open of `/proc/self/io` made to fail with ENOENT:
+
+```text
+#0  std::__cxx11::basic_string<...>::empty() const
+#1  google::LogMessage::Init(char const*, int, int, void (google::LogMessage::*)())
+#3  google::ErrnoLogMessage::ErrnoLogMessage(...)
+#4  bvar::read_proc_io(bvar::ProcIO*)
+#14 __static_initialization_and_destruction_0(int, int)
+#15 _GLOBAL__sub_I_default_variables.cpp
+```
+
+brpc's `bvar` reads the file in a static initializer and logs its failure with glog before glog
+is set up. Typesense's commit `b708744220` (#3093, 2026-10-28, for WSL) patches the log line to
+`fprintf`, and apache/brpc's `default_variables.cpp` has the same `fprintf`; no Typesense release
+has the patch yet. Other programs read the file too. VictoriaMetrics' `metrics` package
+(`process_metrics_linux.go`) logs an `ERROR` line once, which a manifest's `errors:` scan would
+report. psutil's `Process.io_counters()`, Apache Doris's and Apache Impala's process counters,
+and Dovecot's and cyrus-imapd's statistics read it as well. The JDK's sources and the Prometheus
+Go client's process collector do not.
+
+The proposal, built only when the user agrees:
+
+- Add `CONFIG_TASKSTATS=y`, `CONFIG_TASK_XACCT=y` and `CONFIG_TASK_IO_ACCOUNTING=y` to the KVM
+  and Mac guest kernels, as new builds beside the current ones, in the way of Milestone 234's
+  builds with cgroups.
+- Key them on a new fingerprint epoch: `hydo_kvm::kernel` gives the current builds the epochs 3
+  to 6 and the new builds the new epoch and later. A new kernel moves every fingerprint of the
+  engine, so the epoch rule of AGENTS.md applies, with its section in `docs/REBASELINE.md`.
+- Give an image a key that boots the current builds at the new epoch
+  (`hydo_image::defaults`), as `guest.cgroup2: false` does. An image built before keeps its
+  kernel and its values.
+- The counters count the guest's own reads and writes, so they are the same in every run of
+  one schedule and add no nondeterminism.
+
 ## Devices and layout
 
 | what | where |

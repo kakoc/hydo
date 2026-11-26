@@ -23920,3 +23920,90 @@ the failing check's output (`HYDO-CHECK-OUT`), and else keep the original delay.
 compares verdicts by their signature. The check's output is in the controller's records, not in
 the results the shrinker reads, so the guard needs that output carried into each candidate's
 result. That was more than this round's time (open item 184).
+
+## Milestone 373 (tentative number): the NSQ, SeaweedFS and Typesense examples on KVM
+
+The examples of Milestones 362, 364 and 366 ran on the KVM engine for the first time, on GitHub's
+runners. NSQ and SeaweedFS gave the verdicts of the Mac engine and of hvx. Typesense does not
+start on KVM, because the KVM guest kernels have no `/proc/<pid>/io`. Nothing recorded moved.
+
+**How it ran.** A one-off workflow on the branch `tmp-m373-kvm` (deleted after the runs), made
+from `e2058be0`, built this tree's `hydo` and `hydo-fetch-image`. It took the 0.6.0 release's
+guest files (`hydo-linux-0.6.0.tar.gz` `12fe3299…`) through `hydo setup`. Each job ran the
+example's `build.sh` (Go 1.27.3), its fetch script for x86_64, and `hydo build`: NSQ with `--set
+arch=amd64`, and SeaweedFS also a second image with `--set fsync=false`. Each schedule ran twice
+from fresh boots with `--backend kvm`, and `hydo repro --regressions` ran once per image. The
+main run is 45890568477 (9 jobs). Run 45894112875 added three NSQ jobs and three SeaweedFS jobs,
+and two jobs of the Typesense diagnosis. Runs 45891967817 and 45893037519 were the diagnosis.
+
+**NSQ, the first time on x86_64.** The image is `d6f8de9a…` at the fingerprint epoch 6, and the
+client `nsqc-amd64` is `25adf549…`. Every schedule gave one fingerprint over its two runs on every
+host, and the same fingerprint on every host of one vendor. `hydo repro --regressions` gave 5 of
+5 as expected on each host. Every verdict is the Mac engine's:
+
+| schedule | verdict | AMD EPYC 9V45, 9V74, and two 7763 | two Xeon 6975P-C |
+|---|---|---|---|
+| `disk=none \| run` | OK, `no-phantom` judged 24 deliveries | `ac7ebf20a1d9588e` | `488679fb6b91528e` |
+| `topic-queue-restarts-empty-after-kill` | `VIOLATION [jobs.no-loss]` | `4afbbef778eed026` | `3e2e59c7802f597c` |
+| `channel-queue-restarts-empty-after-kill` | `VIOLATION [jobs.no-loss]` | `70ba4f0f0e2960ad` | `2acf18f6433087b3` |
+| `in-flight-message-lost-at-kill` | `VIOLATION [jobs.acked-outcome]`, 1 of 4 | `2a0834d1bbed8d50` | `7e4814758448a48f` |
+| `publish-waits-after-backward-clock-step` | `VIOLATION [eventually_publish]` | `42d2ad65fc452352` | `3fd1a6f3d2c3fcfe` |
+| `topic-queue-restarts-empty-after-power-cut` | `VIOLATION [jobs.no-loss]` | `4f0cf10a9072cd5c` | `292a26f1d32d656f` |
+
+The regression `topic-queue-restarts-empty-after-kill` says that six acknowledged messages are
+lost, and RESULTS.md finding 1 gives `6 of 7 judged operations` on the Mac engine. On KVM, on
+both vendors, its `acked-outcome` reads `5 of 6`: `m0` to `m4` were answered `OK` and are lost.
+The sixth publish, `m5`, overlapped the kill, so `nsqd` did not answer it, and the client recorded
+it as failed. The publish after the restart (`m9`) reached a consumer. The comment's six lost
+messages are the Mac engine's run.
+
+**SeaweedFS.** The default image is `f6e18b43…`, hvx's bytes, and the image with `--set
+fsync=false` is `c56d8263…`. The client is `37dcd648…`. Each schedule gave one fingerprint over
+its two runs, and both verdicts are hvx's. `hydo repro --regressions` left the regression out on
+the default image by its `# params:` line (`0 of 0 regressions as expected, 1 left out`), and
+passed it on the `fsync=false` image:
+
+| schedule | image | verdict | AMD EPYC 9V74 and three 7763 | two Xeon 6975P-C |
+|---|---|---|---|---|
+| `disk=none \| run` | default | OK, 92 acknowledged writes judged | `bbf6243b4dc5d2b1` | `611bba1f54237e68` |
+| `acknowledged-write-lost-at-a-power-cut-without-fsync` | `fsync=false` | `VIOLATION [objects.acked-outcome]` for `fover.k0.0.v0x0` | `909e6e48aa11058c` | `08fdc426d9c908e2` |
+
+**Typesense does not start.** The image `de22e524…` (the client `tsc-amd64` `5109fe4d…`) is the
+one that the fresh clone built on hvx in Milestone 366. On KVM every run ends `ERROR service
+start (ts1)`: `ts1` exits with SIGSEGV (status 139) before its readiness check passes. The clean
+run and the three regressions gave `d7f5d6359ab95efb` on three Xeon 6975P-C hosts, twice each.
+The clean run gave `ce4ff2694a847f79` on an EPYC 7763 and on two EPYC 9V74. An image with `guest.cpu:
+v3` (`93dc08be…`) gave the same ERROR, `aeb47edf1016f135` on a Xeon 6975P-C and
+`15302d9d3b1eb9b9` on an EPYC 7763.
+
+**The cause.** The diagnosis runs found it in three steps:
+
+1. In the guest, at the stop after the failed start, `ls /proc/self/` lists no `io`, and `cat
+   /proc/self/io` answers `No such file or directory`. The KVM guest kernels are allnoconfig with
+   the fragments of `hv/kvm/linux/`, and no fragment sets `CONFIG_TASKSTATS`, `CONFIG_TASK_XACCT`
+   or `CONFIG_TASK_IO_ACCOUNTING`.
+2. On a runner, `typesense-server` from the image's root prints its usage and exits 1. With a
+   preloaded library that makes every open of `/proc/<pid>/io` fail with ENOENT, it exits 139.
+3. The backtrace of that run under gdb is `bvar::read_proc_io` in a static initializer of brpc,
+   then `google::ErrnoLogMessage`, then `google::LogMessage::Init`, which calls
+   `std::string::empty()` on a null pointer (`0x5e30064` in the program). brpc logs the failed
+   read with glog's `PLOG_ONCE` before Typesense has set glog up.
+
+Typesense's commit `b708744220` (#3093, 2026-10-28, after v30.2) replaces that log line with
+`fprintf`; no Typesense release has it yet. apache/brpc's own `default_variables.cpp` has the
+`fprintf` too. The Mac engine's kernels are built the same way (`hv/hvm/linux/hvm.config` on
+allnoconfig) without the options; the Mac engine did not run the example. hvx's kernel is nixpkgs's `linux_6_6`, which has the file. The section "No
+`/proc/<pid>/io` in the guest" of `docs/design/kvm-engine.md` names the other programs that read
+the file and proposes new kernel builds at a new fingerprint epoch. No kernel was built.
+
+**Records.** An engines note in each example's RESULTS.md, and open items 184, 186, and 188.
+`hydo guide hazards` names the missing file. `HYDO_BLESS=1` re-recorded
+`hydo-agents/tests/guide-sizes.txt`: `hazards` grew, and `ci`, `manifest` and `strategies` had
+grown in earlier milestones without a new record. On the bare-metal machine, in a copy of the
+worktree with an index of its tracked files, `cargo test -p hydo-agents --test it` (16 passed)
+and `-p hydo --test it -- equivalence:: agents_equivalence:: docs::` (23 passed) passed. The copy
+has no `AGENTS.local.md`, so `public_content::` checked the generic patterns, and a `grep` of the
+listed values found none in the new text. `sh ci/vale.sh` finds nothing.
+
+**What is left.** The kernels of the proposal, which wait for the user (open item 188). No
+exploration ran on KVM for any of the three examples.

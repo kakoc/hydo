@@ -4029,12 +4029,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       an acknowledgement whose effect is unknown; the example leaves such a message out of the
       read-back by hand.
     - One `nsqd`: several `nsqd` nodes behind one `nsqlookupd`, deferred publishes (`DPUB`),
-      requeues (`REQ`), ephemeral channels, `/channel/empty`, TLS, hvx, and KVM did not run. The
+      requeues (`REQ`), ephemeral channels, `/channel/empty`, TLS, and hvx did not run. The
       explorer's shrink spent most of an exploration on the losses of finding 1.
+    - KVM ran the clean run and the five regressions (M373), the example's first runs on
+      x86_64. Four AMD EPYC hosts (9V45, 9V74, and two 7763) and two Xeon 6975P-C hosts gave the
+      Mac engine's verdicts. No exploration ran on KVM.
 186. What the example `seaweedfs` left (M364, tentative number):
     - The example runs one filer on its default store, and several filers did not run.
-      `weed mount`, versioned buckets, and erasure coding did not run either. Nor did KVM, the
-      Mac engine, and the Rust volume server; the image has an arm64 build.
+      `weed mount`, versioned buckets, and erasure coding did not run either. Nor did the Mac
+      engine and the Rust volume server; the image has an arm64 build. KVM ran the clean run and
+      the `fsync=false` regression on four AMD EPYC hosts and two Xeon 6975P-C hosts (M373). It
+      gave hvx's verdicts, and the default image had hvx's bytes; no exploration ran there.
     - A Go program with `GODEBUG=fips140=on` cannot start in the guest, whose clock has no
       jitter for the FIPS entropy source (item 1 of "What hydo lacked" in RESULTS.md). The image
       turns the mode on, so the example replaces its entrypoint. Since M367 `hydo guide hazards`
@@ -4088,9 +4093,17 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The second exploration was stopped after its 60 first runs, during its
       shrinks: no `exploration.json` or report. A node whose `raft_meta` `G=` zeroed stayed up
       and unhealthy; its log was not read.
-    - Not run: the Mac engine and KVM, and five nodes. A live race of a delete by a filter with
-      another client's writes of its documents did not run. Aliases, synonyms, curations, API
-      keys, and the embedding models have no command.
+    - On KVM (M373, three Xeon 6975P-C and three AMD EPYC hosts) every node stops with SIGSEGV
+      at its start, so every run ends `ERROR service start (ts1)`. The KVM guest kernels have no
+      `CONFIG_TASK_IO_ACCOUNTING`, so `/proc/self/io` is missing. Typesense's bundled brpc reads
+      it in a static initializer and logs the failure with glog before glog is set up.
+      Typesense's commit `b708744220` (#3093) fixes it, and no release has it yet. The proposal
+      of new kernels at a new fingerprint epoch is the section "No `/proc/<pid>/io` in the guest"
+      of `docs/design/kvm-engine.md`; it waits for the user. The Mac engine's kernels are built
+      without the option too, and the Mac engine did not run the example.
+    - Not run: five nodes. A live race of a delete by a filter with another client's writes of
+      its documents did not run. Aliases, synonyms, curations, API keys, and the embedding models
+      have no command.
 
 ## Milestone index
 
@@ -5280,6 +5293,12 @@ build machine, before 2026-10-13.
   stats` counts `disk=cut` with the cut, and a failed check keeps the services' logs. `inspect
   exec --service` enters an image service's root, and the guide names the FIPS limit. Nothing
   recorded moved
+- M373 (tentative number): the NSQ, SeaweedFS and Typesense examples on KVM, on GitHub's AMD
+  and Intel runners. NSQ (its first x86_64 run) and SeaweedFS gave the verdicts of the Mac
+  engine and of hvx. Each schedule gave one fingerprint per CPU vendor. Typesense stops with SIGSEGV
+  at every start: the KVM guest kernels have no `/proc/<pid>/io`, and its bundled brpc reads the
+  file in a static initializer. The design page proposes kernels with I/O accounting at a new
+  epoch. Nothing recorded moved
 
 ## Where to look
 
