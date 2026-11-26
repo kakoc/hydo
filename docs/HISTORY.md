@@ -23999,6 +23999,19 @@ outside a VM they took 0.12 µs and 21.9 µs.
 recorded values. The release's Redis example built by the 0.6.0 release and by this tree gave one
 image, `8fae6946…`.
 
+**The tests.** On the bare-metal machine: the tests of hydo-schedule, hydo-manifest, hydo-config,
+hydo-build, hydo-control and hydo-explore, `cargo test -p hydo --test it -- equivalence::
+agents_equivalence::`, `cargo test -p hydo-agents --test it`, clippy with `-D warnings`, and
+`cargo fmt --check` passed. Re-recorded with `HYDO_BLESS=1`:
+
+- the project schema, with the key `clock`;
+- the answers of the hydo-build and hydo-manifest equivalence corpora, whose messages list the
+  known service keys;
+- the corpus and identity goldens of the explorer and the controller's corpus golden, with the
+  new example;
+- the CLI golden (the length of `hydo guide manifest`), the agents recording's hash of the skill
+  folder, and the inventory of environment variables (`HYDO_CLOCKBIN`).
+
 **What is left** (open item 189): the explorer does not draw the token, and the clock audit does
 not propose it. The KVM and Mac engines did not run it: their guest kernels have seccomp only in
 the `containers` variants, and the Mac needs an arm64 build of hydo-clock. The design page names
