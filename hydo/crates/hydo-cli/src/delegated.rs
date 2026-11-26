@@ -35,8 +35,26 @@ pub fn cmd_explore(ctx: &Ctx, argv: &[String]) -> i32 {
         return crate::configs::cmd(ctx, argv);
     }
     let json = argv.iter().any(|a| a == "--json");
-    let args: Vec<String> = argv.iter().filter(|a| *a != "--json").cloned().collect();
-    explore_with(ctx, &args, !json && std::io::stdout().is_terminal())
+    // Milestone 365: record the exploration's findings in the findings store at its end
+    let record = argv.iter().any(|a| a == "--record-findings");
+    let args: Vec<String> = argv
+        .iter()
+        .filter(|a| *a != "--json" && *a != "--record-findings")
+        .cloned()
+        .collect();
+    let plain = !json && std::io::stdout().is_terminal();
+    let rc = explore_with(ctx, &args, plain);
+    if record && rc != hydo_explore::REFUSED {
+        let out = args
+            .iter()
+            .position(|a| a == "--out")
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+            .unwrap_or_else(|| pjoin(OUT, "explore"));
+        // a program reads the summary line last on stdout: the record's line goes to stderr
+        crate::findings::record_after(ctx, Path::new(&out), !plain);
+    }
+    rc
 }
 
 /// `hydo explore` with the end for a person (`plain`) or for a program (the summary line).

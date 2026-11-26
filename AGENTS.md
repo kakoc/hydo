@@ -2073,6 +2073,29 @@ is the recipe for other systems.
 The comment, the page, and the budget ran on this Mac with the Mac engine; nothing ran on GitHub
 (open item 67). The details are in `docs/HISTORY.md` Milestone 286.
 
+**One findings store for every run (M365, tentative number).** `hydo findings record [RUN_DIR |
+EXPLORE_DIR]` records the findings of a plain `hydo run` or `hydo explore` in the history store of
+`hydo ci record`, in the same format (additions only). A record is a `ci-run` document with
+`ci.name` `local`, `trigger` `manual` and `recorded_from` (`hydo run` or `hydo explore`), folded
+into `findings.jsonl` and `state.json` as a CI run is:
+
+- A finding seen again adds a sighting, never a second entry, and one folder recorded twice
+  changes nothing (the id is the sha256 of its `result.json` or `exploration.json`).
+- A `hydo run` of one of an open finding's recorded schedules that passes proves it fixed. A
+  later sighting brings it back; absence keeps it open.
+- The store is `--store`, else `HYDO_FINDINGS_STORE`, else `~/.hydo/findings`. The project is
+  the `name` of the image's manifest, and the branch and commit come from git, else `local`.
+- A record holds no path of this machine: file names only, no engine arguments, and a replay
+  line that hydo makes.
+- `hydo findings list|show|history [--json]` read each finding's line of recorded runs, with
+  filters. `--json` is the results document `findings` (`hydo/schema/results-v1.json`).
+- `hydo run --record-findings` and `hydo explore --record-findings` record at the end, and `hydo
+  ci page` shows the records with their command.
+
+It ran on the scripted engine and on the Mac engine with the Redis quickstart example. The
+reference is `hydo guide workflow`, "Keep the findings of your runs"; the details are in
+`docs/HISTORY.md` Milestone 365 (open item 187).
+
 **The fixes of the 0.4.0 trial (M301, tentative number).** What hydo tells a user is true again
 where M297's trial found it false (`docs/design/0.4.0-user-trial.md`, "After the fixes of M301"):
 
@@ -3936,6 +3959,16 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - One `nsqd`: several `nsqd` nodes behind one `nsqlookupd`, deferred publishes (`DPUB`),
       requeues (`REQ`), ephemeral channels, `/channel/empty`, TLS, hvx, and KVM did not run. The
       explorer's shrink spent most of an exploration on the losses of finding 1.
+187. One findings store for every run (M365, tentative number). What is left:
+    - A key names the check, not the cause. A passing replay of one schedule proves the key fixed
+      while another schedule can still fail it; the next sighting marks it `back again`.
+    - `hydo findings record` replays nothing. A command that replays every open finding of a
+      store on an image is not built.
+    - A laptop's record goes to the branch that git names, also `main`, which `hydo ci run
+      --history` reads. `--branch` keeps it apart; nothing refuses it.
+    - `hydo ci run --history` did not read a store with such records, and nothing ran with a
+      history branch on GitHub (open item 67).
+    - A store has no lock, so two records into one store at once can lose a ledger update.
 
 ## Milestone index
 
@@ -5094,6 +5127,11 @@ build machine, before 2026-10-13.
   Go SDK has `Drained`, and `hydo inspect diagnose --text` prints lines. A problem names the
   faults after a long `W=` word, and `hydo save` names the default build parameters. Nothing
   recorded moved
+- M365 (tentative number): one findings store for every run. `hydo findings record` records a
+  plain `hydo run` or `hydo explore` into the history store of `hydo ci record`, in its format.
+  `hydo findings list|show|history [--json]` read each finding's line of runs, and
+  `--record-findings` records at the end. On the Mac a run, two explorations and two replays gave the line new,
+  failing, not found, fixed, back again. Nothing recorded moved
 
 - The 0.6.0 release (no milestone number): prepared, not published. The version is raised with
   the skill's four version fields, `hydo-world`, `hydo-world-tls` and `hydo-grpc` are re-pinned,

@@ -1019,9 +1019,11 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     if argv.iter().any(|a| a == "-h" || a == "--help") {
         println!(
             "usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR] [--known-errors FILE] \
-             [--no-diagnose] [--memory] [--json] [--vcpus N] [--turn-margin N]{}\n{RUN_OPTS_HELP}\n  \
+             [--no-diagnose] [--memory] [--json] [--record-findings] [--vcpus N] [--turn-margin N]{}\n{RUN_OPTS_HELP}\n  \
              --memory         after the run, print each service's peak memory (one more replay\n                   \
              to the run's end; the run itself is unchanged)\n  \
+             --record-findings  record the run's finding in the findings store at its end\n                   \
+             ($HYDO_FINDINGS_STORE or ~/.hydo/findings; `hydo findings --help`)\n  \
              --json           a refusal is also one JSON line on stdout, {{\"refused\": \"<reason>\", \"status\": 5}}\n  \
              runs one schedule from a fresh boot, e.g. hydo run \"disk=cut | run C=12 \
              R=everysec\".\n  IMG defaults to the one image `hydo build` wrote in ./hydo-out (or ./.hydo). \
@@ -1056,6 +1058,14 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         None => false,
     };
     let json = match args.iter().position(|a| a == "--json") {
+        Some(i) => {
+            args.remove(i);
+            true
+        }
+        None => false,
+    };
+    // Milestone 365: record the run's findings in the findings store at its end
+    let record = match args.iter().position(|a| a == "--record-findings") {
         Some(i) => {
             args.remove(i);
             true
@@ -1140,6 +1150,9 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     }
     if memory {
         print_memory(ctx, &outdir);
+    }
+    if record {
+        crate::findings::record_after(ctx, &outdir, false);
     }
     println!(
         "hydo: run directory {}   (hydo repro {}  runs it again and compares fp=)",

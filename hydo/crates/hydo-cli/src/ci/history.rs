@@ -182,6 +182,11 @@ pub fn fold(ledger: &mut CiLedger, run: &CiRun, branch: &str) -> Vec<CiFindingEv
         engine: engine.clone(),
         hydo: Some(run.hydo.version.clone()),
         image_input_key: run.image.input_key.clone(),
+        // Milestone 365: what a sighting needs without reading the run's file
+        image_sha256: run.image.sha256.clone(),
+        epoch: Some(run.hydo.epoch),
+        fp: f.fp.clone(),
+        time: run.started.clone(),
         ..CiFindingEvent::default()
     };
     for f in &run.findings {

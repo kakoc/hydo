@@ -128,6 +128,9 @@ pub struct Cli {
     /// `HYDO_INIT_CLOCK_START`: the `guest.clock_start` a new project gets from `hydo init` and
     /// `hydo compose`; None (unset, empty or not a whole number): today at 00:00 UTC.
     pub init_clock_start: Option<i64>,
+    /// `HYDO_FINDINGS_STORE`: the findings store (Milestone 365). Default (unset or empty): the
+    /// folder `findings` of the install cache's root (`~/.hydo/findings`).
+    pub findings_store: PathBuf,
 }
 
 /// The default of `HYDO_RELEASE_URL`: the project's GitHub releases.
@@ -219,6 +222,9 @@ impl Cli {
             },
             host_root: e.path_nonempty(HYDO_CLI_HOST_ROOT),
             release_dir: e.path_nonempty(HYDO_RELEASE_DIR),
+            findings_store: e
+                .path_nonempty(HYDO_FINDINGS_STORE)
+                .unwrap_or_else(|| Cache::from_env(e).home.join("findings")),
             cache: Cache::from_env(e),
             init_clock_start: e
                 .nonempty(HYDO_INIT_CLOCK_START)

@@ -227,6 +227,9 @@ fn note(s: &mut Seen, r: &Record) {
         Record::Stats(_) => {
             s.types.insert("stats".into());
         }
+        Record::Findings(_) => {
+            s.types.insert("findings".into());
+        }
     }
 }
 
@@ -300,6 +303,7 @@ fn every_example_parses_and_is_valid() {
         "compare",
         "configs",
         "stats",
+        "findings",
     ] {
         assert!(seen.types.contains(t), "no example has a {t} record");
     }

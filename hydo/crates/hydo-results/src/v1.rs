@@ -2456,6 +2456,10 @@ pub struct CiFinding {
     /// in stage 2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fixed_at: Option<String>,
+    /// The whole verdict line of the run that showed it, as the guest printed it (`hydo findings
+    /// record`; added in Milestone 365). `title` is its normalized form.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<String>,
 }
 
 /// An accepted finding's entry (`hydo/known-findings.yaml`; added in stage 2).
@@ -2618,6 +2622,11 @@ pub struct CiRun {
     /// What the run took from the history store (added in stage 2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history: Option<CiHistory>,
+    /// The command whose results `hydo findings record` made this record of: `hydo run` or
+    /// `hydo explore` (added in Milestone 365). Absent for a run of `hydo ci run`. Such a record
+    /// has `ci.name` `local` and `trigger` `manual`, and no base.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recorded_from: Option<String>,
 }
 
 tag!(CiFindingEventType, "finding-event");
@@ -2654,6 +2663,18 @@ pub struct CiFindingEvent {
     pub hydo: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_input_key: Option<String>,
+    /// The image's SHA-256, the fingerprint epoch, and the fingerprint of the finding's minimal
+    /// schedule in that run (added in Milestone 365).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fp: Option<String>,
+    /// When the run that recorded it started, in UTC (`2026-11-26T10:04:00Z`; added in Milestone
+    /// 365).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time: Option<String>,
 }
 
 /// One finding of a branch in the ledger (added in stage 2).
@@ -2731,6 +2752,167 @@ pub struct CiLedger {
     /// By branch name.
     #[serde(default)]
     pub branches: std::collections::BTreeMap<String, CiLedgerBranch>,
+}
+
+tag!(FindingsType, "findings");
+
+/// What `hydo findings list`, `show` and `history` were asked for (added in Milestone 365).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct FindingsFilter {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    /// `open`, `fixed`, `accepted` or `all`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    /// A finding kind (`invariant`, `error-log`, ...).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// A fault class (`power-cut`, `durable-defaults`, ...).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub class: Option<String>,
+    /// Only findings last seen at this time or later (UTC, `2026-11-26` or
+    /// `2026-11-26T10:04:00Z`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since: Option<String>,
+    /// A finding key or a unique part of it (`show`, `history`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+}
+
+/// Where a finding was at one point of its line (added in Milestone 365): the recorded run, its
+/// commit, and when it started.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct FindingPoint {
+    /// The recorded run's `id`.
+    pub run: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    /// UTC, `2026-11-26T10:04:00Z`: the run's start, else when it was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time: Option<String>,
+}
+
+/// One recorded run of a finding's branch from the finding's first sighting on (added in
+/// Milestone 365).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct FindingSighting {
+    /// The recorded run's `id`.
+    pub run: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<String>,
+    /// UTC: the run's start, else when it was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub time: Option<String>,
+    /// The command that made the run: `hydo ci run`, `hydo explore` or `hydo run`.
+    pub by: String,
+    /// What the run did to the finding: `new` (first seen on the branch), `failing` (seen failing
+    /// again), `back` (seen failing after it was fixed), `fixed` (its schedule passed on replay),
+    /// or `not-found` (the run did not find it, and it stays open: absence proves nothing).
+    pub event: String,
+    /// The finding's state in that run (`ci_state`), absent for `not-found`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    /// Accepted in that run, or the acceptance taken back: `accepted`, `unaccepted`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acceptance: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof: Option<String>,
+    /// The schedule that showed it there, and that run's fingerprint and verdict line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub schedule: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fp: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hydo: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<u64>,
+    /// `<backend>/<host CPU vendor>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<String>,
+}
+
+/// One finding of one branch of a history store, as `hydo findings` reads it (added in
+/// Milestone 365).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StoredFinding {
+    /// `f1:<kind>:<10 hex>` (docs/design/ci.md section 4.2).
+    pub key: String,
+    pub kind: String,
+    /// The normalized statement (numbers as `#`).
+    pub title: String,
+    pub project: String,
+    pub branch: String,
+    /// `open` or `fixed` (the ledger's state).
+    pub state: String,
+    /// Accepted in `hydo/known-findings.yaml` when it was last seen.
+    #[serde(default)]
+    pub accepted: bool,
+    /// Seen failing again after a replay had proven it fixed.
+    #[serde(default)]
+    pub reappeared: bool,
+    /// The minimal schedule of its last sighting, and every schedule recorded under its key.
+    pub minimal: String,
+    #[serde(default)]
+    pub schedules: Vec<String>,
+    /// The fault classes of the explorations that showed it.
+    #[serde(default)]
+    pub classes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_seen: Option<FindingPoint>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_seen: Option<FindingPoint>,
+    /// The run whose replay proved it fixed, while it is fixed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fixed_at: Option<FindingPoint>,
+    /// The recorded runs that saw it failing.
+    pub seen: u64,
+    /// The last sighting's verdict line, fingerprint, image, hydo, epoch and engine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fp: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_sha256: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hydo: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub epoch: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine: Option<String>,
+    /// The command that replays its minimal schedule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repro: Option<String>,
+    /// Every recorded run of the branch from its first sighting on, oldest first (`show` and
+    /// `history` only).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sightings: Vec<FindingSighting>,
+}
+
+/// `hydo findings list|show|history --json`: the findings of a history store (the store of `hydo
+/// ci record` and `hydo findings record`; added in Milestone 365). One entry per finding and
+/// branch, in the order of the store's projects, then branches, then first sightings.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct FindingsDoc {
+    pub v: V1,
+    #[serde(rename = "type")]
+    pub ty: FindingsType,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hydo_version: Option<String>,
+    /// `list`, `show` or `history`.
+    pub view: String,
+    /// The store's directory as the command was given it (`--store`, `HYDO_FINDINGS_STORE`, or
+    /// `~/.hydo/findings`).
+    pub store: String,
+    #[serde(default)]
+    pub filter: FindingsFilter,
+    #[serde(default)]
+    pub findings: Vec<StoredFinding>,
 }
 
 // ------------------------------------------------------------------ versions
@@ -3533,6 +3715,8 @@ pub enum AnyV1 {
     Configs(Box<ConfigsDoc>),
     /// `stats.json` of an exploration (added in Milestone 336).
     Stats(Box<StatsDoc>),
+    /// `hydo findings list|show|history --json` (added in Milestone 365).
+    Findings(Box<FindingsDoc>),
 }
 
 impl Run {

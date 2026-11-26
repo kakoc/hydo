@@ -366,6 +366,12 @@ hydo ci run --base main --history ../hydo-history       # in a pull request
 Record only from trusted runs: a pull request from a fork must not get a token that can push to
 the history branch. Section 13 does this with a second workflow.
 
+`hydo findings record` writes the same records from a plain `hydo run` or `hydo explore` on a
+laptop (`hydo guide workflow`, "Keep the findings of your runs"). Such a record has the trigger
+`manual` and names its command, and `hydo ci page` shows it among the runs. It goes to the line
+of the branch that git names in that folder. Give `--branch` another name to keep laptop records
+out of the line that `hydo ci run --history` reads.
+
 ## 13. History, the page, and comments from forks
 
 Two workflows keep the history in the branch `hydo-history` of the team's repository. hydo's

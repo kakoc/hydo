@@ -449,6 +449,13 @@ variables! {
     /// archives and guest kernels by sha256), `versions/<version>/` (releases `hydo setup --get`
     /// installed), `bin/hydo` (the current one). An empty value means the default.
     HYDO_HOME: Cli, User, "path", "~/.hydo", "hydo-cli";
+    /// The findings store of `hydo findings record`, `list`, `show` and `history`, and of `hydo
+    /// run` and `hydo explore` with `--record-findings` (Milestone 365): a directory in the
+    /// format of the history store of `hydo ci record` (`v1/<project>/runs/`, `findings.jsonl`,
+    /// `state.json`). `--store` wins. Name it once, for example a checkout of a team's history
+    /// branch, so that every run on this machine records into it. An empty value means the
+    /// default, the folder `findings` of `HYDO_HOME`.
+    HYDO_FINDINGS_STORE: Cli, User, "path", "~/.hydo/findings", "hydo-cli";
     /// Where releases are fetched from: `<value>/v<version>/<file>` (hydo, also `hydo update`,
     /// and since Milestone 332 the onboarding skill's `hydo-skill-<version>.tar.gz` of the same
     /// release for `hydo skill update`). HTTPS only (plain `http://` only to a loopback host). An

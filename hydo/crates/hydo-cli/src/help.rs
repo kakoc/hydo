@@ -44,7 +44,8 @@ pub fn of(cmd: &str, linux: bool) -> Option<String> {
   terminal, or with --json, it ends with the summary as one JSON line and the report's path
   instead. `hydo report` prints the problems it found, `hydo repro hydo-out/explore` runs every failure again, and
   `hydo save hydo-out/explore` keeps the minimal schedules as regressions. `hydo guide faults`
-  lists the fault kinds.
+  lists the fault kinds. --record-findings records the findings in the findings store at the
+  end ($HYDO_FINDINGS_STORE or ~/.hydo/findings; `hydo findings --help`).
   With --reactive-at a seed is one cell of its grid: seed k runs cell k, and without --seeds the
   seeds are the grid's. --seeds 1-3 runs the grid's first three cells; seeds past the grid run it
   again with each seed's composition, so a grid of G cells runs R times with --seeds 1-<R*G>.
@@ -75,6 +76,7 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
         "rules" => crate::rules::HELP.to_string(),
         "perf" => crate::perf::HELP.to_string(),
         "stats" => crate::stats::HELP.to_string(),
+        "findings" => crate::findings::HELP.trim_end().to_string(),
         "save" => "usage: hydo save <explore dir> [--to hydo/regressions]
   saves the minimal schedules of an exploration as regressions, one file each in the --to
   directory (default hydo/regressions, or regressions inside the hydo/ folder). `hydo build`

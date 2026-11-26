@@ -182,6 +182,7 @@ hydo::configs                            fast
 hydo::docs                               fast
 hydo::equivalence                        fast
 hydo::explore_refusal                    fast
+hydo::findings                           fast
 hydo::inspect_explore                    fast
 hydo::inspect_sessions                   fast
 hydo::migrate                            fast

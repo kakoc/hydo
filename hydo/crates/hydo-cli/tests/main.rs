@@ -11,6 +11,7 @@ mod configs;
 mod docs;
 mod equivalence;
 mod explore_refusal;
+mod findings;
 mod inspect_explore;
 mod inspect_sessions;
 mod migrate;
