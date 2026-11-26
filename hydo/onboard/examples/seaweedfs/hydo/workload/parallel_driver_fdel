@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# a filer DELETE of a known key, then a read through S3 or the filer
+exec /bin/swc op fdel

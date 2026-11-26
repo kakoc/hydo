@@ -1,0 +1,263 @@
+# SeaweedFS 4.55 (the newest release, 2026-11-23), the distributed file and object store, as
+# ../docker-compose.yaml runs it: three masters with Raft, three volume servers with the
+# replication 001 (two copies of every volume, on two servers of the same rack), one filer on its
+# default store (leveldb2), and the S3 gateway. Each server keeps its data on a file system of its
+# own. The filer's path rule /buckets/ has fsync on (the build parameter fsync). RESULTS.md has
+# the promises under test and what was found.
+#
+#   sh ../build.sh            # bin/swc-<arch>, the test client (../client)
+#   sh fetch-images.sh        # the image by digest
+#   hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --cluster-faults --storage-faults
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The services below are the importer's,
+# with these changes:
+# - each server's /data is a file system of its own (storage:), the target of L= and G=, instead
+#   of a folder on the shared data disk;
+# - the ports and the readiness checks are each server's own: the importer took the image's first
+#   EXPOSE, 7333 (WebDAV), for every server;
+# - the masters start together (a Raft quorum needs two), and so do the volume servers;
+# - the masters' group names the Raft leader as its primary;
+# - the test client swc is in the image (../build.sh), and first_init sets the filer's path rule.
+format: 1
+name: seaweedfs
+description: "SeaweedFS 4.55, three Raft masters, three volume servers with replication 001, one filer on leveldb2 and the S3 gateway, with fsync on under /buckets/: acknowledged S3 and filer writes, deletions, multipart uploads and copies stay as acknowledged, both APIs read them after the acknowledgement, every chunk keeps its two copies, and the listing agrees with the objects, under kills, pauses past the heartbeat timeouts, partitions, one server's power loss or damaged files, power cuts and clock steps"
+hydo_version: "0.6"
+
+params:
+  arch: amd64     # amd64 | arm64: the client's architecture, the same as the image's
+  fsync: "true"   # the filer's path rule fsync for /buckets/: true | false (SeaweedFS's default)
+  vacuum: "yes"   # yes: the read-back compacts every volume first (swc readback); no: it reads at once
+  vlimit: "64"    # the masters' -volumeSizeLimitMB: 64, or 8 so that volumes fill and new ones grow during a run
+  vmax: "16"      # each volume server's -max: 16, or 48 with vlimit 8
+
+configs:
+  fsync:
+    values: ["true", "false"]
+    service: [filer, volume1, volume2, volume3]
+    doc: "https://github.com/seaweedfs/seaweedfs/wiki/Path-Specific-Configuration"
+    tradeoff:
+      "false": "without the fsync rule neither the filer's metadata nor the volume servers' needles are synced before the answer (Filer Server API: fsync, \"if true, the file content write will incur an fsync operation\", default false): a power failure can lose acknowledged writes"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 2048   # eight weed processes; see RESULTS.md for their peaks
+  clock_start: 1795651200   # 2026-11-26 00:00 UTC, the day of the import
+  clock_after_cut: 60       # the recovery boot continues the clock: the masters' Raft log and the entries keep timestamps
+  outcomes_after_cut: true  # the read-back in a recovery boot reads the unknown outcomes too
+
+data:
+  size_mib: 256   # the shared data disk: the run's own files; the servers' data are on their own file systems (storage:)
+  dirs: [vol/m1, vol/m2, vol/m3, vol/v1, vol/v2, vol/v3, vol/f]
+
+root:
+  files:                 # bind-mount sources, copied into the read-only root
+    - {src: ../config/s3.json, dst: /etc/hydo/compose/bind/0-s3.json}
+    - {src: "../bin/swc-{{arch}}", dst: /bin/swc, mode: "0755"}
+  text:
+    /etc/swc/fsync: "{{fsync}}"
+    /etc/swc/vacuum: "{{vacuum}}"
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 master1
+      10.89.0.12 master2
+      10.89.0.13 master3
+      10.89.0.14 volume1
+      10.89.0.15 volume2
+      10.89.0.16 volume3
+      10.89.0.17 filer
+      10.89.0.18 s3
+  # the eight services run one image, chrislusf/seaweedfs:4.55: one unpacked copy in the root,
+  # each service with its own /tmp and mounts
+  share_images: true
+
+# K=masters.primary and the like: the Raft leader of the masters
+groups:
+  - name: masters
+    services: [master1, master2, master3]
+    primary: |
+      for m in master1 master2 master3; do
+        l=$(timeout 4 wget -q -T 3 -O - "http://$m:9333/cluster/status" 2>/dev/null | sed -n 's/.*"Leader":"\([a-z0-9]*\):.*/\1/p')
+        case $l in master1|master2|master3) echo "$l"; exit 0 ;; esac
+      done
+      exit 1
+  - name: volumes
+    services: [volume1, volume2, volume3]
+
+services:
+  # Compose service master1
+  # image chrislusf/seaweedfs:4.55 = docker.io/chrislusf/seaweedfs@sha256:7ca46aeae2f223b37e5d91593c17ab37738eec6df6ab69b48a0487f7643342b9
+  #   linux/amd64: sha256:340bc0cbb1eb0da6472bd45a7225dd9a48bae6d72771c98ead52200b5abd4352
+  #   linux/arm64: sha256:1d857dc0ff7f0829e5f0228c7dd8d6907b4d1e7b01b553eb5c05c17c9a9a7b49
+  - name: master1
+    image: {x86_64: images/chrislusf-seaweedfs-4.55-amd64.docker.tar, arm64: images/chrislusf-seaweedfs-4.55-arm64-oci}
+    image_ref: "chrislusf/seaweedfs:4.55"
+    entrypoint: [/usr/bin/weed, -logtostderr=true]   # the image's /entrypoint.sh without GODEBUG=fips140=on (RESULTS.md, "What hydo lacked")
+    cmd: [master, "-ip=master1", "-ip.bind=0.0.0.0", "-port=9333", "-mdir=/data", "-peers=master1:9333,master2:9333,master3:9333", "-defaultReplication=001", "-volumeSizeLimitMB={{vlimit}}"]
+    port: 9333
+    addr: 10.89.0.11
+    ready: "tcp:9333"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/m1, size_mib: 64}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/m1, dst: /data}
+  - name: master2
+    image: {x86_64: images/chrislusf-seaweedfs-4.55-amd64.docker.tar, arm64: images/chrislusf-seaweedfs-4.55-arm64-oci}
+    image_ref: "chrislusf/seaweedfs:4.55"
+    entrypoint: [/usr/bin/weed, -logtostderr=true]   # the image's /entrypoint.sh without GODEBUG=fips140=on (RESULTS.md, "What hydo lacked")
+    cmd: [master, "-ip=master2", "-ip.bind=0.0.0.0", "-port=9333", "-mdir=/data", "-peers=master1:9333,master2:9333,master3:9333", "-defaultReplication=001", "-volumeSizeLimitMB={{vlimit}}"]
+    port: 9333
+    addr: 10.89.0.12
+    start_after: started   # the three masters start together: a Raft quorum needs two
+    ready: "tcp:9333"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/m2, size_mib: 64}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/m2, dst: /data}
+  - name: master3
+    image: {x86_64: images/chrislusf-seaweedfs-4.55-amd64.docker.tar, arm64: images/chrislusf-seaweedfs-4.55-arm64-oci}
+    image_ref: "chrislusf/seaweedfs:4.55"
+    entrypoint: [/usr/bin/weed, -logtostderr=true]   # the image's /entrypoint.sh without GODEBUG=fips140=on (RESULTS.md, "What hydo lacked")
+    cmd: [master, "-ip=master3", "-ip.bind=0.0.0.0", "-port=9333", "-mdir=/data", "-peers=master1:9333,master2:9333,master3:9333", "-defaultReplication=001", "-volumeSizeLimitMB={{vlimit}}"]
+    port: 9333
+    addr: 10.89.0.13
+    start_after: started
+    ready: "tcp:9333"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/m3, size_mib: 64}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/m3, dst: /data}
+  - name: volume1
+    image: {x86_64: images/chrislusf-seaweedfs-4.55-amd64.docker.tar, arm64: images/chrislusf-seaweedfs-4.55-arm64-oci}
+    image_ref: "chrislusf/seaweedfs:4.55"
+    entrypoint: [/usr/bin/weed, -logtostderr=true]   # the image's /entrypoint.sh without GODEBUG=fips140=on (RESULTS.md, "What hydo lacked")
+    cmd: [volume, "-ip=volume1", "-ip.bind=0.0.0.0", "-port=8080", "-dir=/data", "-max={{vmax}}", "-master=master1:9333,master2:9333,master3:9333"]
+    port: 8080
+    addr: 10.89.0.14
+    depends_on: [master1, master2, master3]
+    start_after: started   # Compose's service_started: no wait for readiness
+    ready: "tcp:8080"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/v1, size_mib: 512}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/v1, dst: /data}
+  - name: volume2
+    image: {x86_64: images/chrislusf-seaweedfs-4.55-amd64.docker.tar, arm64: images/chrislusf-seaweedfs-4.55-arm64-oci}
+    image_ref: "chrislusf/seaweedfs:4.55"
+    entrypoint: [/usr/bin/weed, -logtostderr=true]   # the image's /entrypoint.sh without GODEBUG=fips140=on (RESULTS.md, "What hydo lacked")
+    cmd: [volume, "-ip=volume2", "-ip.bind=0.0.0.0", "-port=8080", "-dir=/data", "-max={{vmax}}", "-master=master1:9333,master2:9333,master3:9333"]
+    port: 8080
+    addr: 10.89.0.15
+    depends_on: [master1, master2, master3]
+    start_after: started
+    ready: "tcp:8080"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/v2, size_mib: 512}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/v2, dst: /data}
+  - name: volume3
+    image: {x86_64: images/chrislusf-seaweedfs-4.55-amd64.docker.tar, arm64: images/chrislusf-seaweedfs-4.55-arm64-oci}
+    image_ref: "chrislusf/seaweedfs:4.55"
+    entrypoint: [/usr/bin/weed, -logtostderr=true]   # the image's /entrypoint.sh without GODEBUG=fips140=on (RESULTS.md, "What hydo lacked")
+    cmd: [volume, "-ip=volume3", "-ip.bind=0.0.0.0", "-port=8080", "-dir=/data", "-max={{vmax}}", "-master=master1:9333,master2:9333,master3:9333"]
+    port: 8080
+    addr: 10.89.0.16
+    depends_on: [master1, master2, master3]
+    start_after: started
+    ready: "tcp:8080"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/v3, size_mib: 512}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/v3, dst: /data}
+  - name: filer
+    image: {x86_64: images/chrislusf-seaweedfs-4.55-amd64.docker.tar, arm64: images/chrislusf-seaweedfs-4.55-arm64-oci}
+    image_ref: "chrislusf/seaweedfs:4.55"
+    entrypoint: [/usr/bin/weed, -logtostderr=true]   # the image's /entrypoint.sh without GODEBUG=fips140=on (RESULTS.md, "What hydo lacked")
+    cmd: [filer, "-ip=filer", "-ip.bind=0.0.0.0", "-port=8888", "-defaultStoreDir=/data", "-master=master1:9333,master2:9333,master3:9333"]
+    port: 8888
+    addr: 10.89.0.17
+    depends_on: [master1, master2, master3, volume1, volume2, volume3]
+    ready: "tcp:8888"
+    ready_timeout: 180
+    restart: "on-failure"
+    storage: {dir: vol/f, size_mib: 192}   # the image's /etc/seaweedfs/filer.toml puts leveldb2 in /data/filerldb2
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/f, dst: /data}
+  - name: s3
+    image: {x86_64: images/chrislusf-seaweedfs-4.55-amd64.docker.tar, arm64: images/chrislusf-seaweedfs-4.55-arm64-oci}
+    image_ref: "chrislusf/seaweedfs:4.55"
+    entrypoint: [/usr/bin/weed, -logtostderr=true]   # the image's /entrypoint.sh without GODEBUG=fips140=on (RESULTS.md, "What hydo lacked")
+    cmd: [s3, "-filer=filer:8888", "-ip.bind=0.0.0.0", "-port=8333", "-config=/etc/seaweedfs/s3.json"]
+    port: 8333
+    addr: 10.89.0.18
+    depends_on: [filer]
+    ready: "tcp:8333"
+    ready_timeout: 180
+    restart: "on-failure"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-s3.json, dst: /etc/seaweedfs/s3.json}
+
+# 40 rounds of 1 s with up to 3 operations each: about 80 operations. A pause past the volume
+# servers' heartbeats to the master (5 s) or the masters' election timeout (10 s) needs a few
+# steps of the workload.
+workload:
+  steps: 40
+  timeout: 300    # also the read-back's limit: it gives up after 150 s
+
+test:
+  parallel: 4
+  per_round: 3
+  round_ms: 1000
+  command_timeout: 60
+  drain_timeout: 60
+
+checks:
+  # hydo's ready-made claim (hydo guide messages, "Read back the final states"): every write that
+  # SeaweedFS acknowledged is the key's value at the end, unless a later write of the same key
+  # replaced it, and no write that SeaweedFS refused took effect. The client records each
+  # operation as a send of its id, and `swc readback` reads every key back through S3 and writes
+  # each operation's effect (f=1 or f=0).
+  - id: objects
+    type: messages
+    history: objects
+    msg: every write that SeaweedFS acknowledged ends as SeaweedFS acknowledged it
+    final: /bin/swc readback
+    claims:
+      acked_outcome:
+        client_errors: [refused]   # a 4xx answer: SeaweedFS applied nothing
+        effect: recorded
+
+faults: [kill, pause, network, oneway, cut, clock, corrupt, powerloss]

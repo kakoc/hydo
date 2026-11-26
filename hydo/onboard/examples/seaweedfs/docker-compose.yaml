@@ -1,0 +1,44 @@
+# SeaweedFS 4.55 in the shape that its documentation deploys for one host with high
+# availability: three masters with Raft (wiki "Failover Master Server"), three volume servers
+# with the replication 001 (one more copy on another server of the same rack, wiki
+# "Replication"), one filer on its default store (leveldb2), and the S3 gateway. Each server
+# keeps its data in a volume of its own. The filer's path rule fsync=true (wiki "Path Specific
+# Configuration") is set by the hydo folder's first_init command, through the filer.
+services:
+  master1: &master
+    image: chrislusf/seaweedfs:4.55
+    command: "master -ip=master1 -ip.bind=0.0.0.0 -port=9333 -mdir=/data -peers=master1:9333,master2:9333,master3:9333 -defaultReplication=001 -volumeSizeLimitMB=64"
+    volumes: ["m1:/data"]
+  master2:
+    <<: *master
+    command: "master -ip=master2 -ip.bind=0.0.0.0 -port=9333 -mdir=/data -peers=master1:9333,master2:9333,master3:9333 -defaultReplication=001 -volumeSizeLimitMB=64"
+    volumes: ["m2:/data"]
+  master3:
+    <<: *master
+    command: "master -ip=master3 -ip.bind=0.0.0.0 -port=9333 -mdir=/data -peers=master1:9333,master2:9333,master3:9333 -defaultReplication=001 -volumeSizeLimitMB=64"
+    volumes: ["m3:/data"]
+  volume1: &volume
+    image: chrislusf/seaweedfs:4.55
+    command: 'volume -ip=volume1 -ip.bind=0.0.0.0 -port=8080 -dir=/data -max=16 -master=master1:9333,master2:9333,master3:9333'
+    volumes: ["v1:/data"]
+    depends_on: [master1, master2, master3]
+  volume2:
+    <<: *volume
+    command: 'volume -ip=volume2 -ip.bind=0.0.0.0 -port=8080 -dir=/data -max=16 -master=master1:9333,master2:9333,master3:9333'
+    volumes: ["v2:/data"]
+  volume3:
+    <<: *volume
+    command: 'volume -ip=volume3 -ip.bind=0.0.0.0 -port=8080 -dir=/data -max=16 -master=master1:9333,master2:9333,master3:9333'
+    volumes: ["v3:/data"]
+  filer:
+    image: chrislusf/seaweedfs:4.55
+    command: 'filer -ip=filer -ip.bind=0.0.0.0 -port=8888 -defaultStoreDir=/data -master=master1:9333,master2:9333,master3:9333'
+    volumes: ["f:/data"]
+    depends_on: [master1, master2, master3, volume1, volume2, volume3]
+  s3:
+    image: chrislusf/seaweedfs:4.55
+    command: 's3 -filer=filer:8888 -ip.bind=0.0.0.0 -port=8333 -config=/etc/seaweedfs/s3.json'
+    volumes: ["./config/s3.json:/etc/seaweedfs/s3.json"]
+    ports: ["8333:8333"]
+    depends_on: [filer]
+volumes: {m1: {}, m2: {}, m3: {}, v1: {}, v2: {}, v3: {}, f: {}}

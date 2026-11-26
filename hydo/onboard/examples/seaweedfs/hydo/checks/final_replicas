@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: every chunk of every object that S3 reads has its two copies (replication 001), and both hold the same bytes
+exec /bin/swc check replicas

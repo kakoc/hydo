@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# S3 PutObject of a new key, then a read through the filer or S3
+exec /bin/swc op put

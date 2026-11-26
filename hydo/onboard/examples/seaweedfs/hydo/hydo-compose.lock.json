@@ -1,0 +1,85 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "chrislusf/seaweedfs:4.55": {
+   "index_digest": "sha256:7ca46aeae2f223b37e5d91593c17ab37738eec6df6ab69b48a0487f7643342b9",
+   "name": "chrislusf/seaweedfs",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "mini",
+       "-dir=/data"
+      ],
+      "Entrypoint": [
+       "/entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "18080/tcp": {},
+       "18888/tcp": {},
+       "19333/tcp": {},
+       "7333/tcp": {},
+       "8080/tcp": {},
+       "8333/tcp": {},
+       "8888/tcp": {},
+       "9333/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:340bc0cbb1eb0da6472bd45a7225dd9a48bae6d72771c98ead52200b5abd4352",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "mini",
+       "-dir=/data"
+      ],
+      "Entrypoint": [
+       "/entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "18080/tcp": {},
+       "18888/tcp": {},
+       "19333/tcp": {},
+       "7333/tcp": {},
+       "8080/tcp": {},
+       "8333/tcp": {},
+       "8888/tcp": {},
+       "9333/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/data"
+     },
+     "digest": "sha256:1d857dc0ff7f0829e5f0228c7dd8d6907b4d1e7b01b553eb5c05c17c9a9a7b49",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "chrislusf/seaweedfs:4.55",
+   "registry": "docker.io",
+   "repo": "chrislusf/seaweedfs",
+   "tag": "4.55"
+  }
+ }
+}

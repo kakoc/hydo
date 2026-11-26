@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=100
+# a vacuum of every volume with a deleted needle (the masters' /vol/vacuum, which they run every 14 to 16 minutes with garbageThreshold 0.3), concurrent with the writes
+exec /bin/swc vacuum

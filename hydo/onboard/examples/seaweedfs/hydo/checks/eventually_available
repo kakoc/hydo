@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: S3, the filer and every volume server answer within 120 s of the heal and of the recovery boot's start
+exec /bin/swc check available
