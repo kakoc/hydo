@@ -1856,11 +1856,12 @@ fn exploration_image(ctx: &Ctx, doc: &hydo_results::Exploration) -> Option<PathB
     c.into_iter().find(|p| p.is_file())
 }
 
-/// Milestone 360: the build parameters of an exploration's image that differ from the defaults
-/// of its manifest's `params:`, for the `# params:` line of the regressions `hydo save` writes.
-/// Before, the trial of Milestone 359 added the line by hand, and a regression found with `--set
-/// memq=10000` ran on every build. `Err`: the image has `params:` and was built again since the
-/// exploration. An image that is gone gives no line.
+/// Milestone 360: the build parameters of an exploration's image, for the `# params:` line of the
+/// regressions `hydo save` writes. Before, the trial of Milestone 359 added the line by hand, and
+/// a regression found with `--set memq=10000` ran on every build. Milestone 363: also the
+/// defaults, so that a regression found on the default build is left out on another build.
+/// `Err`: the image has `params:` and was built again since the exploration. An image that is
+/// gone, or a manifest without `params:`, gives no line.
 fn exploration_params(
     ctx: &Ctx,
     doc: &hydo_results::Exploration,
@@ -1904,14 +1905,21 @@ fn exploration_params(
     Ok(params_line_values(&defaults, &built))
 }
 
-/// The values of `built` that differ from `defaults` (and those `defaults` lacks), sorted.
+/// The values of a `# params:` line: every value the image was built with, sorted, when the
+/// manifest declares `params:` (`defaults`), also the defaults (Milestone 363: the trial's 5
+/// regressions of `memq=0` ran on the `memq=10000` build without a word). A value with white
+/// space cannot be one word of the line and is left out; the build's check then does not hold
+/// the regression back for it.
 fn params_line_values(
     defaults: &[(String, String)],
     built: &[(String, String)],
 ) -> Vec<(String, String)> {
+    if defaults.is_empty() {
+        return Vec::new();
+    }
     let mut v: Vec<(String, String)> = built
         .iter()
-        .filter(|(k, val)| !defaults.iter().any(|(d, dv)| d == k && dv == val))
+        .filter(|(_, val)| !val.chars().any(char::is_whitespace))
         .cloned()
         .collect();
     v.sort();
@@ -2067,7 +2075,8 @@ mod tests {
     }
 
     /// Milestone 360: `hydo save` names the values of `--set` on a `# params:` line, and gives a
-    /// second finding of one name a file of its own instead of dropping it.
+    /// second finding of one name a file of its own instead of dropping it. Milestone 363: the
+    /// line names the defaults too, when the manifest has `params:`.
     #[test]
     fn save_keeps_every_finding_and_names_the_build_parameters() {
         let kv = |a: &[(&str, &str)]| -> Vec<(String, String)> {
@@ -2076,10 +2085,25 @@ mod tests {
                 .collect()
         };
         let defaults = kv(&[("memq", "0"), ("sync", "yes")]);
-        assert!(super::params_line_values(&defaults, &defaults).is_empty());
+        // the default build: its values, so that another build leaves the regression out
+        assert_eq!(super::params_line_values(&defaults, &defaults), defaults);
         assert_eq!(
             super::params_line_values(&defaults, &kv(&[("sync", "yes"), ("memq", "10000")])),
-            kv(&[("memq", "10000")])
+            kv(&[("memq", "10000"), ("sync", "yes")])
+        );
+        // a regression saved from the default build is left out on the `--set memq=10000` build
+        let saved = serde_json::json!({"params": {"memq": "0", "sync": "yes"}});
+        let other = kv(&[("memq", "10000"), ("sync", "yes")]);
+        assert!(super::regression_params_differ(&saved, &other)
+            .unwrap()
+            .contains("memq=0 (this image: memq=10000)"));
+        assert_eq!(super::regression_params_differ(&saved, &defaults), None);
+        // a manifest without params: gives no line
+        assert!(super::params_line_values(&[], &[]).is_empty());
+        // a value with white space cannot be a word of the line
+        assert_eq!(
+            super::params_line_values(&defaults, &kv(&[("memq", "0"), ("sync", "a b")])),
+            kv(&[("memq", "0")])
         );
         let d = std::env::temp_dir().join(format!("hydo-save-names-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
