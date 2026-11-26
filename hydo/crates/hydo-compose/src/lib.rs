@@ -823,6 +823,8 @@ struct Svc {
     /// data, also when the mount was not added (Milestone 363: the workload's placeholder aims at
     /// such a service).
     keeps_data: bool,
+    /// The port came from the image's first `EXPOSE` (no `ports:`), Milestone 367.
+    port_expose: bool,
 }
 
 /// The options of one import.
@@ -1247,6 +1249,57 @@ impl<'a> Importer<'a> {
         }
         groups.retain(|g| g.1.len() > 1);
         groups
+    }
+
+    /// Milestone 367: services of one image whose port and readiness check both came from the
+    /// image's first `EXPOSE`. The SeaweedFS import gave eight servers of one image 7333 (WebDAV,
+    /// which none of them ran); a service that runs another command of the image listens
+    /// elsewhere. One warning per image and port, and a comment on each such service.
+    fn warn_one_expose(&mut self) {
+        let mut groups: Vec<(String, i128, Vec<String>)> = Vec::new();
+        for s in self
+            .svcs
+            .iter()
+            .filter(|s| s.port_expose && s.job.is_none())
+        {
+            let Some(p) = s.port else { continue };
+            match groups.iter_mut().find(|g| g.0 == s.image_ref && g.1 == p) {
+                Some(g) => g.2.push(s.name.clone()),
+                None => groups.push((s.image_ref.clone(), p, vec![s.name.clone()])),
+            }
+        }
+        // services that run one command of the image listen where the image says: only a group
+        // whose services run other commands is named
+        let runs = |n: &str| {
+            self.svcs
+                .iter()
+                .find(|s| s.name == n)
+                .map(|s| (s.entrypoint.clone(), s.cmd.clone()))
+        };
+        let groups: Vec<(String, i128, Vec<String>)> = groups
+            .into_iter()
+            .filter(|g| g.2.len() > 1 && g.2.iter().any(|n| runs(n) != runs(&g.2[0])))
+            .collect();
+        for (image, port, names) in groups {
+            let note = format!(
+                "the port {port} and its readiness check come from the first EXPOSE of {image}, \
+                 which {} share: a service that runs another command of the image listens on \
+                 its own port; give each its ports: in the Compose file, or write its port: \
+                 and ready: here",
+                and_words(&names)
+            );
+            for s in self.svcs.iter_mut().filter(|s| names.contains(&s.name)) {
+                s.comments.push(note.clone());
+            }
+            self.w.warn(
+                "ports",
+                format!(
+                    "{}: one port, {port}, from the image's first EXPOSE ({image}) for every \
+                     service of the image; check each service's port: and ready:",
+                    and_words(&names)
+                ),
+            );
+        }
     }
 
     /// `root.share_images: true`, with a comment that names the services of each image and says
@@ -1684,6 +1737,7 @@ impl<'a> Importer<'a> {
             let svc = self.service(ns, &s, &jobs)?;
             self.svcs.push(svc);
         }
+        self.warn_one_expose();
         let vt = self.doc.getn("volumes").clone();
         for (v, d) in vt.map_items() {
             if d.is_map() && d.getn("external").truthy() {
@@ -2058,6 +2112,7 @@ impl<'a> Importer<'a> {
             build: local_build.clone(),
             from_docker,
             keeps_data: false,
+            port_expose: false,
         };
         if self.o.origin.is_some() {
             // the x-hydo-* keys of a converted document (M243)
@@ -2162,6 +2217,7 @@ impl<'a> Importer<'a> {
             }
         } else if let Some(&e0) = exposed.first() {
             svc.port = Some(e0);
+            svc.port_expose = true;
             svc.comments.push(format!(
                 "port from the image's EXPOSE {}",
                 int_list(&exposed)

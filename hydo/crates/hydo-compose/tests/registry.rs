@@ -232,3 +232,38 @@ fn an_arm64_only_image_is_imported() {
     );
     assert!(!fetch.contains("NOT pinned"), "{fetch}");
 }
+
+/// Milestone 367: two services of one image without `ports:` each get the image's first
+/// `EXPOSE`, and the import says so (the SeaweedFS import gave eight servers of one image the
+/// port 7333, which none of them ran). One service of the image gets no such note.
+#[test]
+fn services_of_one_image_that_share_its_first_expose_are_named() {
+    let d = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-compose-expose-{}", std::process::id())),
+    );
+    std::fs::create_dir_all(d.join("proj")).unwrap();
+    let p = |x: &str| d.join(x).display().to_string();
+    let import = |compose: &str| -> String {
+        std::fs::write(d.join("proj/docker-compose.yml"), compose).unwrap();
+        let rc = hydo_compose::main_with(
+            &[
+                p("proj/docker-compose.yml"),
+                "--out".into(),
+                p("proj/hydo.yaml"),
+            ],
+            &mut ArmOnly,
+        );
+        assert_eq!(rc, 0);
+        std::fs::read_to_string(d.join("proj/hydo.yaml")).unwrap()
+    };
+    let yaml = import(
+        "services:\n  master:\n    image: registry.example.test/me/app:1\n    command: master\n  volume:\n    image: registry.example.test/me/app:1\n    command: volume\n",
+    );
+    assert!(
+        yaml.contains("the port 8080 and its readiness check come from the first EXPOSE"),
+        "{yaml}"
+    );
+    assert!(yaml.contains("master and volume share"), "{yaml}");
+    let one = import("services:\n  app:\n    image: registry.example.test/me/app:1\n");
+    assert!(!one.contains("come from the first EXPOSE"), "{one}");
+}

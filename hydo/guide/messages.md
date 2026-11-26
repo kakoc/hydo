@@ -157,7 +157,10 @@ The group `-` is the channel's one group, and it exists from the start. A named 
 receive the messages sent after its first completed `sub` or `recv`, all of them after `sub ...
 from=start`, and every message it received. A consumer whose first `recv` waits for the first
 message joins after the messages sent before it. When the group exists before the sends, record
-`sub <channel> <group> from=start` before them, so that `no-loss` judges every message. A process has one operation in flight, so concurrent consumers use
+`sub <channel> <group> from=start` before them, so that `no-loss` judges every message. Write
+the record in the run itself: from the workload, a driver, or the drain (the NSQ example's drain
+writes it). A `first_` command runs in provisioning, and its records are not part of the run, so
+a `sub` record from it has no effect. A process has one operation in flight, so concurrent consumers use
 different process numbers.
 
 The Rust SDK writes these records with the cargo feature `messages` of `hydo-assert`, which is

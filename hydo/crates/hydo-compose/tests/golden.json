@@ -1570,13 +1570,13 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "a2be7c8b9860b8f1739a11e6f23db5c9495becb7252d0889ca6d7fcd6f5c6277",
+    "9ffd503184aaca3b83efb29275b8328d9e8b7da8882aeb39a338ac17757ffd7a",
     "0o644"
    ]
   },
   "rc": 0,
   "stderr": "hydo-compose: smtp: starts first; restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: memcached: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: redis: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: postgres: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: pgbouncer: starts when the services before it are ready (start_after: ready): depends_on postgres (service_healthy) waits until it is ready; restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: kafka: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a",
-  "stderr_sha256": "a645cb157f2830eed7d80faa99cbfa11d75ef35be7a87e3c30c8d2e734e07c08",
+  "stderr_sha256": "23049c989b84ed65930fc094f8bcc9a43d17b1af8c41a4cc54a8c17903c1f40d",
   "stdlib_same": false,
   "stdout": ""
  },
@@ -1587,13 +1587,13 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "17d8e19addcad8c09ab42f965a290bfb2da999f62ac8488bf46f236f6cbd5dde",
+    "cca42856bdfa03148a81f922a7a4d740d11e4a163e5102db3eeef25f32b46072",
     "0o644"
    ]
   },
   "rc": 0,
   "stderr": "hydo-compose: smtp: starts first; restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: memcached: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: redis: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: postgres: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: pgbouncer: starts when the services before it are ready (start_after: ready): depends_on postgres (service_healthy) waits until it is ready; restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: kafka: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a",
-  "stderr_sha256": "a645cb157f2830eed7d80faa99cbfa11d75ef35be7a87e3c30c8d2e734e07c08",
+  "stderr_sha256": "23049c989b84ed65930fc094f8bcc9a43d17b1af8c41a4cc54a8c17903c1f40d",
   "stdlib_same": false,
   "stdout": ""
  },
@@ -1604,13 +1604,13 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "d131f2fe4cba960717daaebc90ba258fc28244ae38444deac03cda8f224d6736",
+    "d337056aa9b2f87b39c5e023bed23d220b4e44826893b244e25080acdaab8e3b",
     "0o644"
    ]
   },
   "rc": 0,
   "stderr": "hydo-compose: smtp: starts first; restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: memcached: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: redis: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: postgres: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: pgbouncer: starts when the services before it are ready (start_after: ready): depends_on postgres (service_healthy) waits until it is ready; restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: kafka: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a",
-  "stderr_sha256": "6ba26e6936f62ed9d9a112565c34c10489ba22ecab62ad0a7cedbd23994415eb",
+  "stderr_sha256": "6e56af34bcde8c4f2f9a94d4da04a4eebbe9a5eb41b4e7ea46868ac2a0c83ffb",
   "stdlib_same": false,
   "stdout": ""
  },
@@ -1621,13 +1621,13 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "ceae90d3b1a9a80a1094c2adeb74b66521096764413cbf092980624e8dc578de",
+    "e1458cfe2d32d121abb94d4c31d3dc4e2de485838b49abcb225cd440088136cd",
     "0o644"
    ]
   },
   "rc": 0,
   "stderr": "hydo-compose: smtp: starts first; restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: memcached: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: redis: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: postgres: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: pgbouncer: starts when the services before it are ready (start_after: ready): depends_on postgres (service_healthy) waits until it is ready; restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: kafka: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a",
-  "stderr_sha256": "c6bcc2c85eb4f1deecf9504e906dac81d1ae0d354f572da8ea6ec9b6ffc2d49c",
+  "stderr_sha256": "7aa925c75deda84f0baa651e0473afebaf882a284c84ca2051971a3229902b9d",
   "stdlib_same": false,
   "stdout": ""
  },
@@ -1655,13 +1655,13 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "319dd616155694e8ad7c09a5efaf2b054b4cbf9da7c7a84ed8d5b4055d348d92",
+    "7ffc49a6fe82b3bbfed177e3a7dfb1cd28b84a9424ff33871f7bf4de528b4461",
     "0o644"
    ]
   },
   "rc": 0,
   "stderr": "hydo-compose: smtp: starts first; restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: memcached: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: redis: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: postgres: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: pgbouncer: starts when the services before it are ready (start_after: ready): depends_on postgres (service_healthy) waits until it is ready; restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: kafka: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a",
-  "stderr_sha256": "6ba26e6936f62ed9d9a112565c34c10489ba22ecab62ad0a7cedbd23994415eb",
+  "stderr_sha256": "6e56af34bcde8c4f2f9a94d4da04a4eebbe9a5eb41b4e7ea46868ac2a0c83ffb",
   "stdlib_same": false,
   "stdout": ""
  },
@@ -1672,13 +1672,13 @@
     "0o755"
    ],
    "proj/hydo.yaml": [
-    "013c1c0e2b082113abd6b6cd65be63e952e398f3341f4011f1576f2a5167f964",
+    "1e7aaccac3fc7da99f1ead4bfd0468ae2dc25ed896579d75dbb14e8b06b800dc",
     "0o644"
    ]
   },
   "rc": 0,
   "stderr": "hydo-compose: smtp: starts first; restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: memcached: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: redis: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: postgres: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: pgbouncer: starts when the services before it are ready (start_after: ready): depends_on postgres (service_healthy) waits until it is ready; restart: unless-stopped also while it starts (a crash before it is ready, for example because a dependency is not ready yet, restarts it as Docker does)\nhydo-compose: kafka: starts when the services before it are ready (start_after: ready, the default; it has no depends_on); restart: unless-stopped also while it starts (a",
-  "stderr_sha256": "c6bcc2c85eb4f1deecf9504e906dac81d1ae0d354f572da8ea6ec9b6ffc2d49c",
+  "stderr_sha256": "7aa925c75deda84f0baa651e0473afebaf882a284c84ca2051971a3229902b9d",
   "stdlib_same": false,
   "stdout": ""
  },

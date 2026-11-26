@@ -77,6 +77,13 @@ Check each item and report what you found.
   check compares times from before and after a power cut, set `guest.clock_after_cut`. Set it
   too when the system stores times and checks them when it starts (hybrid clocks, leases).
   Without it the recovery boot's clock starts at `clock_start` again (`hydo guide faults`).
+- **Go programs in FIPS mode.** A Go program with `GODEBUG=fips140=on` (Go 1.24 and later)
+  cannot start in the guest. It stops with `panic: fips140/drbg: failed to obtain initial
+  entropy`. Go's FIPS entropy source times memory accesses with the clock and keeps the low byte
+  of each difference. On hvx a clock read moves the guest's clock by the same 2 µs every time, so
+  the low bytes repeat and the source's repetition test fails. The Mac and KVM engines were not
+  tried. Turn the mode off. When an image's entrypoint sets the variable itself, run the program
+  directly with `entrypoint:` (the SeaweedFS example).
 - **Background timers.** Periodic timers of 100 ms or less (a server `hz` of 10 or more) cost
   guest time; lower them where the project allows (`hz 1` for Redis).
 - **Services that refuse to run as root** (PostgreSQL and others). Everything in the guest runs
