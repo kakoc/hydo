@@ -52,10 +52,16 @@ impl<R: BufRead, W: Write> TextLink<R, W> {
 
     /// Write one raw line (a transcript replay; normal callers send values).
     pub fn send_line(&mut self, line: &str) -> Result<(), EngineError> {
-        self.w.write_all(line.as_bytes())?;
-        self.w.write_all(b"\n")?;
-        self.w.flush()?;
-        Ok(())
+        let r = (|| -> std::io::Result<()> {
+            self.w.write_all(line.as_bytes())?;
+            self.w.write_all(b"\n")?;
+            self.w.flush()
+        })();
+        if r.is_err() {
+            // an engine that a stop ended is no failure of the run (Milestone 367)
+            crate::children::park_if_stopping();
+        }
+        Ok(r?)
     }
 }
 
@@ -66,7 +72,12 @@ impl<R: BufRead + Send, W: Write + Send> Link for TextLink<R, W> {
 
     fn recv(&mut self) -> Result<EngineMsg, EngineError> {
         let mut buf = Vec::new();
-        if self.r.read_until(b'\n', &mut buf)? == 0 {
+        let n = self.r.read_until(b'\n', &mut buf);
+        if !matches!(n, Ok(k) if k > 0) {
+            // an engine that a stop ended is no failure of the run (Milestone 367)
+            crate::children::park_if_stopping();
+        }
+        if n? == 0 {
             return Err(EngineError::Protocol("the engine exited".into()));
         }
         self.raw = String::from_utf8_lossy(&buf).into_owned();
