@@ -1236,12 +1236,18 @@ fn a_long_composition_word_does_not_hide_the_faults() {
     let sched = format!("disk=none dseed=0 | run K=nsqd@4+1 {w} L=nsqd@6+2");
     assert_eq!(
         story::faults_beside_long_word(&sched).as_deref(),
+        Some("After its long composition word `W=`, the command has the fault `L=nsqd@6+2`.")
+    );
+    // every fault after the word, in the order the steps tell them
+    let two = format!("disk=none | run {w} L=nsqd@6+2 K=nsqd@4+1");
+    assert_eq!(
+        story::faults_beside_long_word(&two).as_deref(),
         Some(
-            "The command's faults, which its long composition word `W=` can hide: \
-             `K=nsqd@4+1` and `L=nsqd@6+2`."
+            "After its long composition word `W=`, the command has the faults `K=nsqd@4+1` and \
+             `L=nsqd@6+2`."
         )
     );
-    // a short W= word hides nothing, and a schedule without faults has nothing to name
+    // a short W= word hides nothing, and a schedule without faults after it has nothing to name
     assert_eq!(
         story::faults_beside_long_word("disk=none | run K=nsqd@4+1 W=5764a73c,p3,q2,r200"),
         None

@@ -359,27 +359,26 @@ pub fn short_steps(schedule: &str, pr: &Project, outcome: Option<String>) -> Vec
 /// A composition word (`W=`) longer than this hides the words after it in a command line.
 const LONG_WORD: usize = 40;
 
-/// The faults of a command whose composition word (`W=`) is long (Milestone 363: the 0.6.0
-/// trial's tester missed an `L=` after a `W=` of 120 characters). The command stays exact; this
-/// sentence names its fault words apart. None when the schedule has no long `W=` word or no
-/// fault.
+/// The faults that a command's long composition word (`W=`) can hide: those written after it
+/// (Milestone 363: the 0.6.0 trial's tester missed an `L=` after a `W=` of 120 characters). The
+/// command stays exact; this sentence names those fault words apart. None when the schedule has
+/// no long `W=` word or no fault after it.
 pub fn faults_beside_long_word(schedule: &str) -> Option<String> {
-    let long = schedule
-        .split_whitespace()
-        .any(|w| w.starts_with("W=") && w.len() > LONG_WORD);
-    if !long {
-        return None;
-    }
+    let words: Vec<&str> = schedule.split_whitespace().collect();
+    let at = words
+        .iter()
+        .position(|w| w.starts_with("W=") && w.len() > LONG_WORD)?;
+    let after = &words[at + 1..];
     let faults: Vec<String> = describe::describe_text(schedule, &[])
         .into_iter()
-        .filter(|s| s.part == Part::Fault && !s.token.starts_with("W="))
+        .filter(|s| s.part == Part::Fault && after.contains(&s.token.as_str()))
         .map(|s| format!("`{}`", s.token))
         .collect();
     if faults.is_empty() {
         return None;
     }
     Some(format!(
-        "The command's fault{}, which its long composition word `W=` can hide: {}.",
+        "After its long composition word `W=`, the command has the fault{} {}.",
         if faults.len() == 1 { "" } else { "s" },
         describe::and_list(&faults)
     ))
