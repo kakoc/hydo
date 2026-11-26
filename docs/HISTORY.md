@@ -23912,3 +23912,189 @@ the failing check's output (`HYDO-CHECK-OUT`), and else keep the original delay.
 compares verdicts by their signature. The check's output is in the controller's records, not in
 the results the shrinker reads, so the guard needs that output carried into each candidate's
 result. That was more than this round's time (open item 184).
+
+## The 0.7.0 release, prepared for publication (2026-11-26)
+
+The lead chose "Prepare 0.7.0" on 2026-11-26, and publishing waits for the user's word. 0.7.0
+holds everything on `main` after 0.6.0's release commit `58d443a6`: Milestones 362 to 367 (the
+NSQ, SeaweedFS and Typesense examples, the findings store `hydo findings`, the test of the guide's
+topics and the trial's frictions, and the fixes of the NSQ and SeaweedFS onboardings). A release
+with features raises the middle number (docs/RELEASING.md step 1). Plans keep `hydo_version:
+"0.3"`. Each of Milestones 362 to 367 moved no recorded value, so the fingerprint epoch stays 6.
+The kernel module did not change since 0.3.1, and the guest kernels and every pinned asset are
+0.6.0's. Nothing was published: no tag, no GitHub release, no registry upload, no tap push, and
+no push of `main`. The one-off branch `tmp-rel070-kvm` (the release commit plus its workflow
+file) is the only push.
+
+**The commits**, on a branch from `main` at `0fe1e269`:
+
+| Commit | What |
+|---|---|
+| `3144b475` | the version 0.7.0, the skill's four version fields, the re-pins, the released results schema |
+| `cbdddb20` | the goldens that hold the version |
+| `8b209f35` | release step 6a: a sentence of `hydo guide strategies` |
+| `e78f9683` | release step 6a: docs/INSTALL.md's upgrade note in two sentences (Vale) |
+| `7d1b66e2` | the values the version moves, docs/REBASELINE.md section 33: the release commit |
+
+**The version** (`3144b475`). The same files as at 0.6.0. The guest programs that carry the
+version were re-pinned, built on the bare-metal machine: `hydo-world` x86_64 `9087b282…`, arm64
+`50d971c4…`; `hydo-world-tls` `0d7a3a68…`, `62f4d0ce…`; `hydo-grpc` `4dcaa481…`, arm64
+`b8ff7c7c…`. The Mac builds of the arm64 ones gave the same bytes. docs/INSTALL.md "Upgrading"
+says what 0.7.0 changes for images.
+
+**The released schemas.** `results-v1` differed from its released copy (Milestone 365's findings
+documents) and was copied; the other five equal theirs.
+
+**The goldens** (`cbdddb20`). Recorded with `HYDO_BLESS=1` on the bare-metal machine in a git
+checkout of the version commit, then checked without it: the CLI goldens, the explorer's 31
+fake-engine goldens, and the equivalence corpora of hydo-build and hydo-manifest. The corpora
+answer from the repository's own files since Milestone 361, so they also took in the files of the
+NSQ, SeaweedFS and Typesense examples, which `main` had not recorded into them. The explorer's
+corpus and identity goldens and the controller's corpora held unchanged.
+
+**The values the version moves** (`7d1b66e2`; docs/REBASELINE.md section 33). `hydo-bench
+rebaseline --write --thorough --changed-only` with the quick candidates as `--release`:
+
+| Engine | Images moved | Runs moved | Verdicts changed |
+|---|---|---|---|
+| hvx (the bare-metal machine, 3,592 s) | 9 of 43 | 30 of 141 | none |
+| Mac (one image at a time, about 720 s) | 9 of 21 | 36 of 76 | none |
+| KVM (run 45890231174, the final tarball, six runners) | 0 of 6 | 0 of 19 | none |
+
+These are the images that moved at 0.6.0: those with `hydo-world` or `hydo-grpc`, and the SDK
+examples. Every moved image built twice with the same bytes, and every moved run gave one result
+twice. The Mac pass ran while this Mac's free disk was low. It paused twice to keep 12 GB free,
+and its watchdog stopped the first try of `hvm/voting`, whose two builds take about 7 GB; that
+image was checked with one build and its bytes are the recorded ones.
+
+**Release step 6a.** README.md and both quickstarts did not change since 0.6.0's review but for
+the version, and every value they cite is unchanged: the quickstart images carry no re-pinned
+program. So the review read the pages that changed since 0.6.0, the guide topics `ci`, `hazards`,
+`inspect`, `messages`, `strategies` and `workflow`, and docs/INSTALL.md, with the quick candidates
+at hand. Two fixes, each its own commit: one sentence of the strategies topic, and the new upgrade
+note, which Vale found too long. `sh ci/vale.sh` reports no findings, and `cargo test -p hydo
+--test it` (with `docs::`) passes. No finding was deferred.
+
+**The release commit `7d1b66e2`.** A release's programs still name no folder of the machine that
+built them: neither quick candidate's `bin/` nor the final ones hold a home path or the build
+tree's path (`--cfg hydo_release`, 0.6.0). The release commit is
+`7d1b66e24b3d6d12b71259ed3a8846815dee454e`.
+
+**The release files**, each platform built twice from clean targets with the same bytes:
+
+- Linux on the bare-metal machine (`~/hydo-rel070f1` and `f2`, unpacked under umask 022,
+  `/var/tmp/hydo-QUIET` while building, assets `~/hydo-rel040-assets`, sources
+  `~/hydo-m159-sources`).
+- Mac on this Mac (one fixed tree path, the sources cache from 0.6.0's Mac sources archive, the
+  kernels with cgroups and for containers from 0.6.0's Mac tarball; 332 s each): unsigned
+  `hydo-mac-0.7.0.tar.gz` `bfa08c1d985bf068f2345c184717067ac14ad1ee4a99e0fb043b25b692fef246` (not
+  published). `sign-release.sh` on the first build: notarization
+  `26bb20ce-c98c-4b84-8dbb-3dedad07bbb8` Accepted; `attach-signatures.sh` with the asset on the
+  second build gave the signed tarball byte for byte.
+- The skill's archive came out of all four builds with the same bytes, and of both quick
+  candidates too.
+
+  | File | Bytes | sha256 |
+  | --- | --- | --- |
+  | `hydo-linux-0.7.0.tar.gz` | 91,145,420 | `132c35ab2816feef0c6c6af1f68d6560bf52223c081719b7661da7ff5047e13b` |
+  | `hydo-linux-0.7.0-sources.tar.gz` | 482,570,388 | `298e92a9505db8d2141eda947a77848e04d36c3efbf2b4787c4db28ebdc361fc` |
+  | `hydo-mac-0.7.0.tar.gz` (signed) | 48,651,479 | `9c84e0119034d128e10332c57b634669f60ec6236b9075e81f86f3e69ac0898f` |
+  | `hydo-mac-0.7.0-sources.tar.gz` | 690,063,547 | `9c1f0add1d6e7e68c23c47efa7c4e2604904a0e7a21420cfa7f10c6ec80a1293` |
+  | `hydo-mac-0.7.0-signatures.tar.gz` | 102,105 | `70ab066c24d8cd8d04e741c23cbe1f8e2e165e8e459407e6816801fad82bdec6` |
+  | `hydo-skill-0.7.0.tar.gz` | 12,263 | `4b0416553ce46318d08d6a34176adcd4d2077149db3040f67858bdc1c52097de` |
+
+- All six and `SHA256SUMS` are in `hydo/dist/out/0.7.0/` of the main checkout; the release
+  notes, the Homebrew formula, the release-index lines and the notary answer and log are in
+  `prepared/`.
+- Against 0.6.0's tarballs: no file added or removed (507 and 461 files). Linux differs in the
+  programs, `guest/hydo-world`, `guest/hydo-world-tls`, `guest/hydo-grpc`,
+  `libexec/hydo-grpc-gen`, README.md, `THIRD-PARTY.md`, the two `VERSION` files, MANIFEST.md and
+  two files of the skill. The Mac differs in the same kinds of files, without `hydo-grpc`. No
+  guest kernel, pinned asset or other guest program changed.
+
+**Verified from clean prefixes.**
+
+- Mac (the signed tarball with the quarantine attribute on `bin/*`, a HOME of its own, stubs for
+  Python, pip, Go, cargo, rustc, rustup, Nix, the compilers, make, xcrun and Docker, none called):
+  `install.sh --prefix --add-to-path`; `hydo setup --check` exits 0; `hydo doctor` all checks
+  passed, naming the Developer ID; the four programs `codesign --verify --strict` valid,
+  `flags=0x10000(runtime)`, a timestamp, `spctl` "accepted, source=Notarized Developer ID"; the
+  Redis image built twice the same, and every Mac value twice (`f7d1de1935d77df4`,
+  `6a3d1a0456e48e01`, `da264396142d8e52`, `53c4fe14fd016a0c`, `e77ede27f3996aa6` with `tjk=8-17
+  tjn=5`, the lying disk `0f7168f3aaa07755`, ledger-spin `da61021ce293277c` and
+  `c3659d6233d6e14b`); the exploration 11 failures in 3 problems, 15 of 15 reproduced; `hydo
+  report`, `hydo report --html`, `hydo findings record` of the exploration (three new findings)
+  and `hydo findings list`, `hydo init`, `hydo onboard`, and `hydo guide strategies` (83,418
+  bytes). `hydo --version` prints `hydo 0.7.0 (7d1b66e24b3d6d12b71259ed3a8846815dee454e)`. `hydo
+  update --check` against GitHub's real release list: "0.7.0, newer than the newest release
+  0.6.0; kept".
+- hvx (the bare-metal machine, a PATH whose Python, Go, Rust, Nix, compilers and make are traps;
+  none was called): `install.sh --no-module`; `hydo --version` names the release commit; `hydo
+  doctor` 0 failed, 1 warning (it names `hydo module build`); the Redis image `8fae6946…` built
+  three times the same; `2f5a6dc34e0c8ba6` OK, `f2715295eae4d5a2` VIOLATION k:1,
+  `47ae607ed0a15c48` OK and the lying disk `ac9baef50ca34043`, each twice as the user and twice as
+  root; `hydo repro` of a run reproduced; the exploration 9 failures in 3 problems, `hydo repro
+  hydo-out/explore` 13 of 13; `hydo report`, `hydo report --html`, `hydo findings record` and
+  `list`; netem `15a88e79…` `95b9691f0b29d173` twice; `hydo init` with `hydo_version: "0.3"` and
+  the two placeholder warnings; `hydo onboard` with a Compose file prints `First:` and `Next:`;
+  `hydo module build` from a second prefix: srcversion `91D86B693F4D4035C368F9B`, "same source as
+  this release" (built only); `hydo update --check` as on the Mac.
+- KVM: the one-off workflow `tmp-rel070-kvm` (the release commit plus its workflow file). The
+  permission system refused a draft release to hand the runners the tarball, so a job `release`
+  builds it on a runner from the release commit with `build-release.sh`. It takes the assets of
+  `assets.sha256` by sha256 from the published 0.6.0 tarball and the sources cache from 0.6.0's
+  sources archive, and it fails unless the tarball's sha256 is the final one. Its first run
+  (45888888384) gave every file's bytes (the tarball's `SHA256SUMS`, the sources archive and the
+  skill's archive equal the final ones) but another tarball: the extraction under umask 022 had
+  dropped the group-writable modes of nine entries under `guest/modules/`, which the release
+  records. With the modes kept, run 45890231174 rebuilt `hydo-linux-0.7.0.tar.gz` byte for byte
+  (`132c35ab…`; the bare-metal machine and the runners build with Ubuntu 24.04's gcc 13.3.0). Six
+  jobs installed it into a clean prefix and ran `hydo doctor --backend kvm`, the quickstart with
+  `--backend kvm`, the exploration and its repro, `hydo findings record` and `list`, `hydo-bench
+  rebaseline --platform kvm --check --thorough` with the tarball's own `hydo`, `hydo-hvx`,
+  `hydo-build` and `hydo-fetch-image`, `kvm-check.sh` and `smp-check.sh`. Every job's report and
+  log was read. On the four AMD hosts (EPYC 9V45 three times, 7763 once) the quickstart gave the
+  list's `b222402de473ea1b`, `3e8260560d47b5b0` (`C=11 R=everysec`, `k:1` lost) and
+  `03ff0b2cb2ea75a0`, and netem `dbfed47d20867cbf`, each twice. The exploration reproduced 15 of
+  15. Every image built twice with the same bytes, and all 19 schedules gave the list's values
+  twice: exit 0. On the two Intel hosts (Xeon 6975P-C) the verdicts are unchanged and the
+  fingerprints are Intel's own (exit 3), as every KVM value of the list is AMD's. `kvm-check.sh`
+  passed 15 of 15 and `smp-check.sh` 13 of 13 on all six.
+
+**Checks on the release commit's tree**, on the bare-metal machine in a git checkout (the values
+commit changed only `recorded.json` and docs/REBASELINE.md after them): `cargo clippy --locked
+--workspace --all-targets -- -D warnings`; `cargo test --locked --test it` of `hydo` (78 of 78,
+with `docs::`), `hydo-agents` (16 of 16, with `skill_check::` and `guide_topics`), `hydo-explore`
+(61 of 61) and `hydo-control` (121 of 121); `hydo-bench`'s `recorded::`. On the records commit
+`hydo-agents` (with `public_content::`) and `recorded::` passed again. `hydo`'s target failed three
+`update::` tests once with `Text file busy`: a fake program that a test writes was executed while
+another test thread forked, on a machine loaded by other sessions. Run again, `update::` passed 16
+of 16 twice and the target 78 of 78. On this Mac `cargo fmt
+--all --check` and `sh ci/vale.sh` with no findings; `git grep -i` of the competitor names finds
+only research notes.
+
+**Re-baseline checks on the release files** (`--check --thorough`): this Mac, all 21 images each
+built twice with the same bytes and all 76 schedules each run twice from fresh boots, every value
+as recorded (1,134 s, one image at a time, the signed tarball's own programs). The bare-metal
+machine: the same check with the second Linux build's tree and tarball started after the
+clean-prefix verification. Other sessions loaded the machine (load 10 to 15), and at the
+hand-off it had built 38 of 43 images twice with the same bytes and run no schedule yet. Its
+result is not recorded here. The hvx values of the moved images come from the write pass above,
+and the clean-prefix verification gave every quickstart value on hvx.
+
+**Content scans** (as 0.6.0's): the Linux tarball: the GitHub owner only in the project's public
+names (the skill, README.md, ASSERTIONS.md and the programs' release URLs), the hosting company's
+letters as accidental bytes of binary third-party files (the kernels, the initramfs, glibc, an
+iproute2 manual page and the public suffix list) and of the compressed archive, the time-zone name
+in libstdc++, and loopback, guest, example (openssl's `openssl.cnf`) and object-identifier
+numbers; no home path, no remote-shell command, no competitor name. The signed Mac tarball: the
+owner in the public names and the time-zone name in libstdc++. The skill's archive: the owner in
+the public names. The signatures asset: nothing. Both sources archives' own files: the owner in
+RELEASING.md's tap name and a GitHub Actions run link of BUILD-PINS.md.
+
+**What is left before publishing.** Release step 7 onward, the user's: the GitHub release
+`v0.7.0` on `7d1b66e2` with the six files and `SHA256SUMS` (the release notes are
+`prepared/release-notes-0.7.0.md`), the release workflow, the Homebrew tap (`prepared/hydo.rb`),
+and the release index's lines (`prepared/releases-0.7.0.lines`). The branch with the release
+commit comes to `main` with step 7, because Claude Code's marketplace reads the skill's version
+from `main`. The one-off branch `tmp-rel070-kvm` is to be deleted.

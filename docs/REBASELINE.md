@@ -4083,3 +4083,9 @@ unchanged, every image whose bytes moved built twice with the same bytes, and ev
 gave the same values twice. On the Mac, `hvm/voting` was checked with one build
 (`--check --changed-only`), because two builds of it need about 7 GB of free disk; its bytes are
 the recorded ones, as its inputs hold no re-pinned program.
+
+**KVM.** The KVM list's images carry none of these programs, so no KVM value moves. The one-off
+workflow `tmp-rel070-kvm` (run 45890231174) confirmed it with the final Linux tarball, which a
+runner rebuilt byte for byte. On four AMD hosts (EPYC 9V45 three times, 7763 once) `--check
+--thorough` built the 6 images twice with the recorded bytes and gave all 19 schedules the
+list's values twice. Two Xeon 6975P-C hosts gave their own fingerprints with the same verdicts.
