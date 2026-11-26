@@ -699,6 +699,9 @@ pub fn evidence(ctx: &Ctx, rec: &Recorded, d: &mut Diagnosis) -> Replayed {
                     if let Some(svc) = what.strip_prefix("the log of ") {
                         keep_log(&rec.dir, svc, &mut e);
                     }
+                    if let Some(svc) = what.strip_prefix(EARLIER_LOG) {
+                        keep_log(&rec.dir, &format!("{svc}.before-restart"), &mut e);
+                    }
                     // Milestone 348: a workload command's output, beside the services' logs
                     if let Some(id) = what.strip_prefix(COMMAND_OUTPUT) {
                         keep_log(&rec.dir, &format!("command.{id}"), &mut e);
@@ -721,6 +724,10 @@ pub fn evidence(ctx: &Ctx, rec: &Recorded, d: &mut Diagnosis) -> Replayed {
         }
     }
 }
+
+/// The evidence of a service's log before its last restart (`<log>.old`, Milestone 367), before
+/// the service's name; kept as `logs/<service>.before-restart.log`.
+const EARLIER_LOG: &str = "the log before the last restart of ";
 
 /// How many failed composed commands the evidence reads the output of (Milestone 348).
 const COMMANDS_MAX: usize = 4;
@@ -800,7 +807,14 @@ fn plan_works(
     };
     for s in &names {
         let p = l.log_of(s);
+        // Milestone 367: its log before its last restart, which a kill or a restart keeps
+        let old = format!("{p}.old");
         v.push((format!("the log of {s}"), p.clone(), tail_of(p, LOG_KEEP)));
+        v.push((
+            format!("{EARLIER_LOG}{s}"),
+            old.clone(),
+            tail_of(old, LOG_KEEP),
+        ));
         // the service's own log files (`logs:`, `errors.files`): databases write theirs into
         // their data directories, not to their output (Milestone 202)
         if let Some(sv) = plan.service(s).filter(|sv| !sv.logs.is_empty()) {
@@ -1523,7 +1537,11 @@ pub fn for_run(ctx: &Ctx, dir: &Path, evidence_on: bool) -> Option<Diagnosis> {
     // (S)`): its log says why, and only the replay reads it
     let named =
         rec.doc.verdict.kind == "violation" && verdict_service(&rec.doc.verdict.text).is_some();
-    if evidence_on && (rec.doc.verdict.kind == "error" || blind_recovery || named) {
+    // Milestone 367: every violation, so that a check that failed while every service ran keeps
+    // the services' logs in `logs/` too (the NSQ onboarding needed a `hydo inspect` session for
+    // nsqd's log and its log before the restart)
+    let violation = rec.doc.verdict.kind == "violation";
+    if evidence_on && (rec.doc.verdict.kind == "error" || blind_recovery || named || violation) {
         let (d2, ev) = with_evidence(ctx, &rec, d);
         d = d2;
         d.next.retain(|n| !n.contains("--evidence"));
