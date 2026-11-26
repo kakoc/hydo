@@ -575,6 +575,12 @@ choice!(
     StartAfter { Ready = "ready", Started = "started" }
 );
 choice!(
+    /// Whose wall clock a service reads (Milestone 372): `own` starts it under hydo-clock, so that
+    /// `T=<svc>@<at>:<change>` steps it or makes it drift while the other services keep the
+    /// guest's clock.
+    ServiceClock { Own = "own" }
+);
+choice!(
     /// Which log lines are error lines.
     ErrorLevel { Error = "error", Warning = "warning" }
 );
@@ -1002,6 +1008,13 @@ pub struct Service {
     /// comparisons").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compare: Option<Text>,
+    /// `own`: the service gets a wall clock of its own (Milestone 372). It starts under
+    /// `/bin/hydo-clock`, and `T=<svc>@<at>:<change>` steps its clock (`T=n2@5:-30`,
+    /// `T=n2@5:1500ms`) or makes it drift (`T=n2@0:200ppm`), while the other services and the
+    /// checks keep the guest's clock (MANIFEST.md "One service's own clock"). x86_64 images
+    /// only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock: Option<ServiceClock>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
     /// This service's error-log settings (needs the top-level errors:).

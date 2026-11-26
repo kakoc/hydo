@@ -128,6 +128,9 @@ pub struct PlanService {
     /// `compare:` (Milestone 298): the command that prints the state the service stored, run
     /// after the verdict for `hydo compare-versions` (`schedule/dump.rs`); "" = none.
     pub compare: String,
+    /// `clock: own` (Milestone 372): the service runs under `/bin/hydo-clock`, so that
+    /// `T=<svc>@<at>:<change>` moves its wall clock alone (`docs/design/service-clocks.md`).
+    pub own_clock: bool,
 }
 
 /// Another version of a service (`services[].versions`, Milestone 238), its commands resolved.
@@ -606,6 +609,7 @@ impl Plan {
                 },
                 version: get(s, "version").map(py::str_of).unwrap_or_default(),
                 compare: truthy_str(s, "compare"),
+                own_clock: get(s, "clock").map(py::str_of).as_deref() == Some("own"),
                 versions: get(s, "versions")
                     .and_then(Value::as_array)
                     .into_iter()

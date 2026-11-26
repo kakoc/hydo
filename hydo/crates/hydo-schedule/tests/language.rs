@@ -1280,3 +1280,57 @@ fn clock_point_text() {
     no("@month+10w", "not s, m, h or d");
     no("@month+4000d", "ten years");
 }
+
+/// One service's own clock (`T=<svc>@<at>:<change>`, Milestone 372): a step in seconds or
+/// milliseconds, or a drift in millionths, each with one spelling; the other forms of `T=` keep
+/// their meaning, and the letter is `T` for all of them.
+#[test]
+fn service_clocks() {
+    for s in [
+        "disk=none | run T=n2@5:-30",
+        "disk=none | run T=n2@5:30",
+        "disk=none | run T=n2@0:1500ms",
+        "disk=none | run T=n2@0:-250ms",
+        "disk=none | run T=n2@3:200ppm",
+        "disk=none | run T=n2@3:-50ppm",
+        "disk=none | run T=n2@7:0ppm",
+        "disk=none | run T=n1@0:2 T=n2@0:-2 T=4:-300",
+    ] {
+        round_trip(s);
+    }
+    let t = Schedule::parse("disk=none | run T=lease_b@1:1500ms").unwrap();
+    match &t.guest[0] {
+        GuestToken::ServiceClock { svc, at, change } => {
+            assert_eq!(svc, "lease_b");
+            assert_eq!(*at, 1);
+            assert_eq!(*change, ServiceClockChange::Step(1500));
+            assert_eq!(t.guest[0].letter(), 'T');
+        }
+        g => panic!("{g:?}"),
+    }
+    let t = Schedule::parse("disk=none | run T=n2@1:-3").unwrap();
+    assert!(matches!(
+        &t.guest[0],
+        GuestToken::ServiceClock {
+            change: ServiceClockChange::Step(-3000),
+            ..
+        }
+    ));
+    refused(
+        "disk=none | run T=n2@5:2000ms",
+        "write whole seconds without ms: 2",
+    );
+    refused("disk=none | run T=n2@5:0ms", "write 0, not 0ms");
+    refused(
+        "disk=none | run T=n2@5:+3",
+        "a service's clock takes a step",
+    );
+    refused("disk=none | run T=n2@5:1000000ppm", "at most 999999 ppm");
+    refused("disk=none | run T=n2@5:@hour", "not a point");
+    refused("disk=none | run T=N2@5:3", "is not a service name");
+    refused("disk=none | run T=n2@05:3", "leading zero");
+    refused(
+        "disk=none | run T=n2@5:1.5",
+        "a service's clock takes a step",
+    );
+}
