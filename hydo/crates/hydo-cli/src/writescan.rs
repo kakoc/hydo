@@ -544,18 +544,30 @@ fn resource_of(method: &str, path: &str) -> String {
 
 /// The path with each parameter as `{}`, for matching one route declared in two places.
 fn path_key(method: &str, path: &str) -> String {
+    // Milestone 367: a gorilla/mux route's queries and header after its path tell two routes of
+    // one path apart (`/{object}?uploads`, `/{object}[X-Amz-Copy-Source]`)
+    let (path, tail) = match path.find(['?', '[']) {
+        Some(i) => path.split_at(i),
+        None => (path, ""),
+    };
+    // a path that starts with a variable (`{handlePath}`, a Go router's path in a variable) keeps
+    // the variable's name: two such paths are two routes, not one route with a parameter
+    let lead = !path.starts_with('/');
     let p: Vec<String> = path
         .trim_end_matches('/')
         .split('/')
-        .map(|s| {
-            if is_param(s) || s.starts_with(':') {
+        .enumerate()
+        .map(|(i, s)| {
+            if i == 0 && lead {
+                s.to_string()
+            } else if is_param(s) || s.starts_with(':') {
                 "{}".to_string()
             } else {
                 s.to_string()
             }
         })
         .collect();
-    format!("{method} {}", p.join("/"))
+    format!("{method} {}{tail}", p.join("/"))
 }
 
 fn normalize_path(p: &str) -> String {
@@ -2051,6 +2063,185 @@ fn endpoint_handler(files: &[Src], op: &EnumOp) -> Option<(String, usize, Option
     best.map(|b| b.1)
 }
 
+/// The method of a registration that names none (Milestone 367): its handler's body says which
+/// write methods it takes ([`method_switch`]); one that switches on no method is left out.
+const ANY: &str = "ANY";
+
+/// Milestone 367: the calls chained with the call `k`, in their order and `k` among them:
+/// `a.Methods(..).Path(..).HandlerFunc(..).Queries(..)`, also over line ends after a dot.
+fn chain_of(fl: &Flat, k: usize) -> Vec<usize> {
+    let calls = &fl.calls;
+    let mut out = vec![k];
+    let mut cur = k;
+    // back: the call whose ')' stands before the '.' in front of the name
+    loop {
+        let before = fl.s[..calls[cur].at].trim_end();
+        let Some(b) = before.strip_suffix('.') else {
+            break;
+        };
+        let b = b.trim_end();
+        if !b.ends_with(')') {
+            break;
+        }
+        let close = b.len() - 1;
+        let Some(j) = calls.iter().position(|c| c.close == close) else {
+            break;
+        };
+        out.insert(0, j);
+        cur = j;
+    }
+    // on: the next call after the ')' when only a '.' stands between
+    let mut cur = k;
+    loop {
+        let close = calls[cur].close;
+        let Some(j) = (cur + 1..calls.len()).find(|&j| calls[j].at > close) else {
+            break;
+        };
+        if fl.s.get(close + 1..calls[j].at).map(str::trim) != Some(".") {
+            break;
+        }
+        out.push(j);
+        cur = j;
+    }
+    out
+}
+
+/// Milestone 367: a gorilla/mux route whose matchers come before its handler, as a chain
+/// ([`chain_of`]): its write methods (`Methods`), and its path from `Path`, or `PathPrefix`, with
+/// the keys of `Queries` after a `?` and the header of `Headers` or `HeadersRegexp` in brackets,
+/// which tell apart the routes of one path (SeaweedFS's `PUT /{object}?partNumber&uploadId` and
+/// `PUT /{object}[X-Amz-Copy-Source]`). None without a write method.
+fn mux_chain(
+    fl: &Flat,
+    chain: &[usize],
+    consts: &dyn Fn(&str) -> Option<String>,
+) -> Option<(Vec<&'static str>, String)> {
+    let mut methods: Vec<&'static str> = Vec::new();
+    let mut path: Option<String> = None;
+    let mut query: Vec<String> = Vec::new();
+    let mut header: Option<String> = None;
+    for &j in chain {
+        let n = &fl.calls[j];
+        match n.name.as_str() {
+            "Methods" => methods.extend(methods_in(&fl.s[n.open..n.close])),
+            "Path" | "PathPrefix" => {
+                path = n.args.first().and_then(|a| fl.path_arg(*a, consts));
+            }
+            "Queries" => {
+                for (i, a) in n.args.iter().enumerate() {
+                    if i % 2 == 0 {
+                        if let Some(v) = fl.path_arg(*a, consts) {
+                            query.push(v);
+                        }
+                    }
+                }
+            }
+            "Headers" | "HeadersRegexp" => {
+                header = n.args.first().and_then(|a| fl.path_arg(*a, consts));
+            }
+            _ => {}
+        }
+    }
+    let p = path.unwrap_or_default();
+    if methods.is_empty() || !path_like(&p) {
+        return None;
+    }
+    let mut p = p;
+    if !query.is_empty() {
+        p.push('?');
+        p.push_str(&query.join("&"));
+    }
+    if let Some(h) = header {
+        p.push_str(&format!("[{h}]"));
+    }
+    Some((methods, p))
+}
+
+/// The handler of a wrapped registration: the name that ends with `Handler` when one does
+/// (`track(s3a.iam.Auth(s3a.cb.Limit(s3a.PutObjectHandler, ACTION_WRITE)), "PUT")`), else the
+/// expression for [`handler_name`].
+fn handler_word(expr: &str) -> String {
+    let mut best: Option<&str> = None;
+    for w in expr.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '.')) {
+        let last = w.rsplit('.').next().unwrap_or(w);
+        if last.len() > "Handler".len() && last.ends_with("Handler") {
+            best = Some(w);
+        }
+    }
+    best.unwrap_or(expr).to_string()
+}
+
+/// Milestone 367: the write methods of a Go handler that switches on the request's method
+/// (`switch r.Method { case http.MethodPost, http.MethodPut: ... }`, SeaweedFS's filer), each
+/// with the call that handles it: the one named `...Handler` that the case calls most (the last
+/// of a tie, an `else` branch's), else the function itself (`None`). `body` is the function's
+/// lines.
+fn method_switch(body: &[String]) -> Vec<(&'static str, Option<String>)> {
+    let Some(si) = body.iter().position(|l| {
+        let t = l.trim();
+        t.starts_with("switch ")
+            && t.ends_with('{')
+            && t.trim_end_matches('{').trim_end().ends_with(".Method")
+    }) else {
+        return Vec::new();
+    };
+    let mut depth = 0i32;
+    let mut cases: Vec<(Vec<&'static str>, Vec<&str>)> = Vec::new();
+    for (i, l) in body[si..].iter().enumerate() {
+        let t = l.trim();
+        if i > 0 && depth == 1 && (t.starts_with("case ") || t.starts_with("default:")) {
+            let ms = if t.starts_with("case ") {
+                methods_in(t)
+            } else {
+                Vec::new()
+            };
+            cases.push((ms, Vec::new()));
+        } else if i > 0 && depth >= 1 {
+            if let Some(c) = cases.last_mut() {
+                c.1.push(l.as_str());
+            }
+        }
+        depth += l.matches('{').count() as i32 - l.matches('}').count() as i32;
+        if i > 0 && depth <= 0 {
+            break;
+        }
+    }
+    let mut out: Vec<(&'static str, Option<String>)> = Vec::new();
+    for (ms, lines) in cases {
+        if ms.is_empty() {
+            continue;
+        }
+        // the calls named ...Handler, in their order
+        let mut calls: Vec<String> = Vec::new();
+        for l in &lines {
+            let b = l.as_bytes();
+            for (i, _) in l.match_indices('(') {
+                let mut a = i;
+                while a > 0 && is_ident_char(b[a - 1]) {
+                    a -= 1;
+                }
+                let name = &l[a..i];
+                if name.len() > "Handler".len() && name.ends_with("Handler") {
+                    calls.push(name.to_string());
+                }
+            }
+        }
+        let mut pick: Option<(usize, String)> = None;
+        for c in &calls {
+            let n = calls.iter().filter(|x| *x == c).count();
+            if pick.as_ref().is_none_or(|(m, _)| n >= *m) {
+                pick = Some((n, c.clone()));
+            }
+        }
+        for m in ms {
+            if !out.iter().any(|(x, _)| *x == m) {
+                out.push((m, pick.as_ref().map(|p| p.1.clone())));
+            }
+        }
+    }
+    out
+}
+
 fn go_routes(cx: &mut Ctx) {
     let f = cx.f;
     let fl = &f.flat;
@@ -2112,6 +2303,28 @@ fn go_routes(cx: &mut Ctx) {
             }
             continue;
         }
+        // gorilla/mux with the matchers first (Milestone 367): SeaweedFS's S3 router writes
+        // bucket.Methods(http.MethodPut).Path(objectPath).HandlerFunc(h).Queries("uploads", "")
+        if router && matches!(c.name.as_str(), "HandlerFunc" | "Handler") && c.args.len() == 1 {
+            let chain = chain_of(fl, k);
+            if let Some((methods, p)) = mux_chain(fl, &chain, &consts) {
+                let h = handler_word(fl.text(c.args[0]));
+                let first = &fl.calls[chain[0]];
+                for m in methods {
+                    found.push((
+                        m.into(),
+                        p.clone(),
+                        h.clone(),
+                        None,
+                        first.at,
+                        "gorilla/mux",
+                        "a router call",
+                        owner_of(&first.recv, fl.line(first.at)),
+                    ));
+                }
+            }
+            continue;
+        }
         // net/http 1.22: mux.HandleFunc("POST /p", h)
         if matches!(c.name.as_str(), "HandleFunc" | "Handle") && c.args.len() >= 2 {
             if let Some(p0) = fl.path_arg(c.args[0], &consts) {
@@ -2155,6 +2368,23 @@ fn go_routes(cx: &mut Ctx) {
                         }
                         continue;
                     }
+                }
+                // no method: one handler for every method, which may switch on it (Milestone
+                // 367: SeaweedFS's filer serves `/` with one handler); the handler's body
+                // decides which writes it takes (`method_switch`)
+                if path_like(&p0) && (nethttp || router) && c.args.len() == 2 {
+                    let h = fl.text(c.args[1]).to_string();
+                    found.push((
+                        ANY.into(),
+                        p0.clone(),
+                        h,
+                        None,
+                        c.at,
+                        if router { "gorilla/mux" } else { "net/http" },
+                        "a handler that switches on the method",
+                        owner_of(&c.recv, line),
+                    ));
+                    continue;
                 }
             }
             // gin, labstack's router, httprouter: r.Handle("POST", "/p", h)
@@ -2210,6 +2440,28 @@ fn go_routes(cx: &mut Ctx) {
     for (m, p, h, hl, at, src, shape, owner) in found {
         cx.push(&m, p, h, hl, at, src, shape, owner);
     }
+    // Milestone 367: a loop over a list of groups (`routers = append(routers,
+    // r.PathPrefix("/{bucket}").Subrouter())`, then `for _, bucket := range routers {`, SeaweedFS's
+    // S3 router): the loop's variable is that group
+    let mut aliases: Vec<(String, String, String)> = Vec::new();
+    for l in &f.code {
+        let t = l.trim();
+        let Some(rest) = t.strip_prefix("for ") else {
+            continue;
+        };
+        let Some((vars, list)) = rest.split_once(":= range ") else {
+            continue;
+        };
+        let var = vars.rsplit(',').next().unwrap_or("").trim();
+        let list = list.trim_end_matches('{').trim();
+        if var.is_empty() || !var.bytes().all(is_ident_char) {
+            continue;
+        }
+        if let Some((_, p, parent)) = groups.iter().rev().find(|g| g.0 == list) {
+            aliases.push((var.to_string(), p.clone(), parent.clone()));
+        }
+    }
+    groups.extend(aliases);
     for (v, p, parent) in groups {
         let parent = if parent.is_empty() {
             String::new()
@@ -3827,6 +4079,70 @@ pub fn scan_writes(root: &Path) -> Writes {
                 qualifier(&c.handler, &handler).as_deref(),
             ),
         };
+        // Milestone 367: a registration without a method is a write route for each write method
+        // that its handler's body switches on
+        if c.method == ANY {
+            let Some((hrel, hline)) = handler_at else {
+                continue;
+            };
+            let Some(hfi) = files.iter().position(|x| x.rel == hrel) else {
+                continue;
+            };
+            let hf = &files[hfi];
+            let Some(&(_, st, en)) = hf.funcs.iter().find(|x| x.1 + 1 == hline) else {
+                continue;
+            };
+            let body = &hf.code[st..=en.min(hf.code.len().saturating_sub(1))];
+            // the switching function's receiver type (`(fs *FilerServer)`): a handler of that
+            // type first, as SeaweedFS's filer and volume server both have a `PostHandler`
+            let recv = body.first().and_then(|l| {
+                let r = l.trim().strip_prefix("func (")?.split(')').next()?;
+                r.split_whitespace().last().map(str::to_string)
+            });
+            let of_type = |name: &str| -> Option<(String, usize)> {
+                let r = recv.as_deref()?;
+                let defs = index.get(&fn_key(name))?;
+                let mine: Vec<&(usize, usize)> = defs
+                    .iter()
+                    .filter(|(fi, line)| {
+                        files[*fi].code.get(*line).is_some_and(|l| {
+                            l.trim()
+                                .strip_prefix("func (")
+                                .and_then(|x| x.split(')').next())
+                                .and_then(|x| x.split_whitespace().last())
+                                == Some(r)
+                        })
+                    })
+                    .collect();
+                match mine.as_slice() {
+                    [(fi, line)] => Some((files[*fi].rel.clone(), line + 1)),
+                    _ => None,
+                }
+            };
+            for (m, call) in method_switch(body) {
+                let (h, at) = match call {
+                    Some(name) => {
+                        let at = of_type(&name).or_else(|| find_fn(&name, Some(hfi), None));
+                        (name, at)
+                    }
+                    None => (handler.clone(), Some((hrel.clone(), hline))),
+                };
+                let read = m == "POST" && reads_by_name(&path, &h);
+                let r = make_route(
+                    m,
+                    path.clone(),
+                    Vec::new(),
+                    h,
+                    at,
+                    f.rel.clone(),
+                    c.line + 1,
+                    c.source,
+                    c.shape,
+                );
+                add(r, &mut routes, &mut reads, read);
+            }
+            continue;
+        }
         // a Django view names its write methods itself (`def post`, a REST framework base class)
         let read = c.method == "POST" && c.source != "Django" && reads_by_name(&path, &handler);
         let r = make_route(
@@ -4683,6 +4999,76 @@ func createOrder(c *gin.Context) {}
             !found(&w).iter().any(|x| x.contains("listCarts")),
             "{:#?}",
             found(&w)
+        );
+    }
+
+    /// Milestone 367: SeaweedFS's shapes. A gorilla/mux route whose path is a variable or a
+    /// concatenation; one whose matchers come before its handler, told apart by its queries and
+    /// headers; and one handler on `/` that switches on the method (the filer), whose cases
+    /// name the handlers. A handler without a switch, and a case of reads, give no write.
+    #[test]
+    fn gorilla_chains_variable_paths_and_handlers_that_switch_on_the_method() {
+        let w = scan_texts(&[
+            (
+                "weed/s3api/s3api_server.go",
+                "package s3api\nimport (\n\t\"net/http\"\n\t\"github.com/gorilla/mux\"\n)\nfunc (s3a *S3ApiServer) registerRouter(router *mux.Router) {\n\tconst objectPath = \"/{object:(?s).+}\"\n\tvar routers []*mux.Router\n\trouters = append(routers, router.PathPrefix(\"/{bucket}\").Subrouter())\n\tfor _, bucket := range routers {\n\t\tbucket.Methods(http.MethodPut).Path(objectPath).HeadersRegexp(\"X-Amz-Copy-Source\", `(?i).*`).HandlerFunc(track(s3a.iam.Auth(s3a.cb.Limit(s3a.CopyObjectHandler, ACTION_WRITE)), \"COPY\"))\n\t\tbucket.Methods(http.MethodPut).Path(objectPath).HandlerFunc(track(s3a.iam.Auth(s3a.cb.Limit(s3a.PutObjectPartHandler, ACTION_WRITE)), \"PUT\")).Queries(\"partNumber\", \"{partNumber:[0-9]+}\", \"uploadId\", \"{uploadId:.*}\")\n\t\tbucket.Methods(http.MethodPut).Path(objectPath).HandlerFunc(track(s3a.iam.Auth(s3a.cb.Limit(s3a.PutObjectHandler, ACTION_WRITE)), \"PUT\"))\n\t\tbucket.Methods(http.MethodGet).Path(objectPath).HandlerFunc(track(s3a.GetObjectHandler, \"GET\"))\n\t\tbucket.Methods(http.MethodDelete).HandlerFunc(track(s3a.iam.Auth(s3a.cb.Limit(s3a.DeleteBucketHandler, ACTION_DELETE_BUCKET)), \"DELETE\"))\n\t}\n}\n",
+            ),
+            (
+                "srv/routes.go",
+                "package srv\nimport \"github.com/gorilla/mux\"\nfunc routes(r *mux.Router, path string, prefix string) {\n\tr.HandleFunc(path, h.putItem).Methods(\"PUT\")\n\tr.HandleFunc(prefix+\"/items\", h.addItem).Methods(\"POST\")\n}\n",
+            ),
+            (
+                "weed/server/filer_server.go",
+                "package weed_server\nimport \"net/http\"\nfunc NewFilerServer(defaultMux, readonlyMux *http.ServeMux) {\n\tdefaultMux.HandleFunc(\"/healthz\", requestIDMiddleware(fs.filerHealthzHandler))\n\tdefaultMux.HandleFunc(\"/\", fs.filerGuard.WhiteList(requestIDMiddleware(fs.filerHandler)))\n\treadonlyMux.HandleFunc(\"/\", fs.filerGuard.WhiteList(requestIDMiddleware(fs.readonlyFilerHandler)))\n}\n",
+            ),
+            (
+                "weed/server/filer_server_handlers.go",
+                "package weed_server\nimport \"net/http\"\nfunc (fs *FilerServer) filerHandler(w http.ResponseWriter, r *http.Request) {\n\tswitch r.Method {\n\tcase http.MethodGet, http.MethodHead:\n\t\tfs.GetOrHeadHandler(w, r)\n\tcase http.MethodDelete:\n\t\tif _, ok := r.URL.Query()[\"tagging\"]; ok {\n\t\t\tfs.DeleteTaggingHandler(w, r)\n\t\t} else {\n\t\t\tfs.DeleteHandler(w, r)\n\t\t}\n\tcase http.MethodPost, http.MethodPut:\n\t\tif r.Method == http.MethodPut {\n\t\t\tif _, ok := r.URL.Query()[\"tagging\"]; ok {\n\t\t\t\tfs.PutTaggingHandler(w, r)\n\t\t\t} else {\n\t\t\t\tfs.PostHandler(w, r, contentLength)\n\t\t\t}\n\t\t} else {\n\t\t\tfs.PostHandler(w, r, contentLength)\n\t\t}\n\tdefault:\n\t\tw.WriteHeader(http.StatusMethodNotAllowed)\n\t}\n}\nfunc (fs *FilerServer) readonlyFilerHandler(w http.ResponseWriter, r *http.Request) {\n\tswitch r.Method {\n\tcase http.MethodGet, http.MethodHead:\n\t\tfs.GetOrHeadHandler(w, r)\n\t}\n}\nfunc (fs *FilerServer) filerHealthzHandler(w http.ResponseWriter, r *http.Request) {\n\tw.WriteHeader(http.StatusOK)\n}\nfunc (fs *FilerServer) DeleteHandler(w http.ResponseWriter, r *http.Request) {\n}\n",
+            ),
+            (
+                "weed/server/filer_server_handlers_write.go",
+                "package weed_server\nfunc (fs *FilerServer) PostHandler(w http.ResponseWriter, r *http.Request, n int64) {\n}\n",
+            ),
+            // the volume server's handler of the same name, in the same folder
+            (
+                "weed/server/volume_server_handlers_write.go",
+                "package weed_server\nfunc (vs *VolumeServer) PostHandler(w http.ResponseWriter, r *http.Request) {\n}\n",
+            ),
+        ]);
+        has_route(
+            &w,
+            "PUT /{bucket}/{object:(?s).+}[X-Amz-Copy-Source] -> CopyObjectHandler",
+        );
+        has_route(
+            &w,
+            "PUT /{bucket}/{object:(?s).+}?partNumber&uploadId -> PutObjectPartHandler",
+        );
+        has_route(&w, "PUT /{bucket}/{object:(?s).+} -> PutObjectHandler");
+        has_route(&w, "DELETE /{bucket} -> DeleteBucketHandler");
+        has_route(&w, "PUT {path} -> putItem");
+        has_route(&w, "POST {prefix}/items -> addItem");
+        has_route(&w, "POST / -> PostHandler");
+        has_route(&w, "PUT / -> PostHandler");
+        has_route(&w, "DELETE / -> DeleteHandler");
+        let f = found(&w);
+        assert!(!f.iter().any(|x| x.contains("GetObjectHandler")), "{f:#?}");
+        assert!(!f.iter().any(|x| x.contains("healthz")), "{f:#?}");
+        assert!(!f.iter().any(|x| x.contains("readonly")), "{f:#?}");
+        // the filer's post handler has its place
+        let post = w
+            .routes
+            .iter()
+            .find(|r| r.method == "POST" && r.path == "/")
+            .unwrap();
+        assert_eq!(
+            post.handler_at,
+            Some(("weed/server/filer_server_handlers_write.go".to_string(), 2))
+        );
+        assert_eq!(post.source, "net/http");
+        assert!(
+            post.why.contains("a handler that switches on the method"),
+            "{}",
+            post.why
         );
     }
 
