@@ -2,18 +2,18 @@
 # (tests/guide_topics.rs). Written by HYDO_BLESS=1 cargo test -p hydo-agents --test it guide_topics::
 capabilities 6914
 checks 9636
-ci 22846
+ci 23282
 composer 9743
 error-logs 4032
 error-paths 4772
 faults 40219
 flaky-tests 17277
 fuzz 34671
-hazards 8137
+hazards 8711
 hydo_assert.sh 3539
 inspect 16401
 invariant-patterns 5240
-manifest 258397
+manifest 258449
 messages 18669
 minimum-path 4254
 numbered-steps 2031
@@ -23,7 +23,7 @@ schema 130576
 sdks 5438
 services 8451
 skill 14376
-strategies 77723
+strategies 83446
 update 8550
 values 8665
 web-apps 19285

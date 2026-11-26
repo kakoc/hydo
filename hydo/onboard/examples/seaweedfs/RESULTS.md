@@ -188,6 +188,18 @@ section "Settings that trade durability":
 |---|---|---|
 | `acknowledged-write-lost-at-a-power-cut-without-fsync.schedule` (`disk=cut \| run C=1`) | `--set fsync=false` (its `# params:` line) | `VIOLATION [objects.acked-outcome]`: an acknowledged filer PUT is not there after the power cut |
 
+**On the KVM engine (Milestone 373).** GitHub's runners built the default image with the
+example's steps and the 0.6.0 release's guest files, and got hvx's bytes (`f6e18b43…`). The image
+with `--set fsync=false` is `c56d8263…`. Each schedule ran twice from fresh boots with one
+fingerprint per host, and each verdict is hvx's. `hydo repro --regressions` left the regression out
+on the default image by its `# params:` line, and passed it on the `fsync=false` image. The
+fingerprints are the KVM engine's own, one for the AMD hosts and one for the Intel hosts:
+
+| schedule | image | verdict | AMD EPYC 9V74 and three 7763 | two Xeon 6975P-C |
+|---|---|---|---|---|
+| `disk=none \| run` | default | OK, 92 acknowledged writes judged | `bbf6243b4dc5d2b1` | `611bba1f54237e68` |
+| the regression | `fsync=false` | `VIOLATION [objects.acked-outcome]`: `fover.k0.0.v0x0` is not there | `909e6e48aa11058c` | `08fdc426d9c908e2` |
+
 ## What was found
 
 No new bug of SeaweedFS. Every failure of the explorations was a server that refused its own
