@@ -22449,6 +22449,17 @@ empty.
 
 ### The 0.6.0 release, prepared for publication (2026-11-25)
 
+**Published on 2026-11-26.** The user said "go". The release branch was merged into `main`
+(`373c43a8`, with the CLI goldens re-recorded after `main`'s fix of `hydo guide strategies`), so
+the release commit `58d443a6` is on GitHub. `gh release create v0.6.0 --target 58d443a6` uploaded
+the six files and `SHA256SUMS` (`8c340870…`, the local file byte for byte). The tag's workflow,
+run 45764772501, passed every job: the check, the packages, crates.io, npm, PyPI and the Go module;
+from outside, crates.io's `hydo`, PyPI's and npm's `hydo-assert` say 0.6.0, and the tags
+`v0.6.0` and `sdk/go/v0.6.0` exist. The Homebrew tap's formula names the 0.6.0 Mac tarball
+(`ec40849`, `brew style` clean; `update-homebrew.sh` checked the published tarball against
+`SHA256SUMS`; the tap is not tapped on this Mac, so `brew audit` and `brew test` did not run).
+`hydo/dist/releases.txt` has the 0.6.0 lines (`7f39da17`).
+
 The user chose "Prepare 0.6.0" on 2026-11-24, and publishing waits for the user's word. 0.6.0
 holds everything on `main` after 0.5.0's release commit `4d43a6bd`: Milestones 340 to 361, the
 fingerprint epoch 6 (Milestone 353), and the 0.6.0 re-recording pass. A release with features

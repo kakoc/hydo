@@ -218,13 +218,16 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.6.0 is prepared, not published: the release commit `58d443a6`, with
-`hydo-linux-0.6.0.tar.gz` `12fe3299…`, `hydo-mac-0.6.0.tar.gz` (signed and notarized)
-`a303331f…` and `hydo-skill-0.6.0.tar.gz` `7d399d1b…`, each platform built twice to the same
-bytes, in `hydo/dist/out/0.6.0/` of the main checkout. It holds Milestones 340 to 361 at the
-fingerprint epoch 6. The final files reproduce every recorded value on hvx, the Mac and KVM (AMD
-hosts). Publishing waits for the user's word; the record is the section "The 0.6.0 release" of
-`docs/HISTORY.md`.
+**Releases.** hydo 0.6.0 was published on 2026-11-26 from the release commit `58d443a6`. The
+GitHub release `v0.6.0` holds both tarballs, their sources archives, the Mac signatures, the
+skill archive and `SHA256SUMS`: `hydo-linux-0.6.0.tar.gz` `12fe3299…`, `hydo-mac-0.6.0.tar.gz`
+(signed and notarized) `a303331f…` and `hydo-skill-0.6.0.tar.gz` `7d399d1b…`, each platform built
+twice to the same bytes. The tag's workflow (run 45764772501) published the crates of `cargo
+install hydo`, `hydo-assert` on crates.io, PyPI and npm, and the Go tag `sdk/go/v0.6.0`; the
+Homebrew tap names 0.6.0, and `hydo/dist/releases.txt` has its lines. The files and the prepared
+material are in `hydo/dist/out/0.6.0/` of the main checkout. 0.6.0 holds Milestones 340 to 361
+at the fingerprint epoch 6, and the final files reproduce every recorded value on hvx, the Mac
+and KVM (AMD hosts). The record is the section "The 0.6.0 release" of `docs/HISTORY.md`.
 
 hydo 0.5.0 was published on 2026-11-22 from the release commit `4d43a6bd`. The
 GitHub release `v0.5.0` holds both tarballs, their sources archives, the Mac signatures, the
