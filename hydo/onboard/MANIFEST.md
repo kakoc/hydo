@@ -788,6 +788,7 @@ verdict rules are in `hydo/HISTORIES.md`.
 | `C=<at>` | power cut before step `at` |
 | `T=<at>:<delta>` | step the realtime clock by `delta` seconds |
 | `T=<at>:@<point>` | set the realtime clock to the next instant of a time of day or a calendar boundary, in UTC (`@00:10`, `@:10-2s`, `@month+10m`); see "Clock steps to a time" |
+| `T=<svc>@<at>:<change>` | step one service's own wall clock (`-30` seconds, `1500ms`) or make it drift (`200ppm`, `0ppm` stops it), while the other services keep the guest's clock (Milestone 372); the service needs `clock: own`; see "One service's own clock" |
 | `N=<a>-<b>@...`, `N=<a>-*@...` | netem on the link between two services with `addr:` (or between `a` and every other one); see "Link faults" |
 | `O=<a>-<b>@<from>-<to>:req\|resp:<netem>` | one direction of a link: `req` = packets from `a` to `b`, `resp` = from `b` to `a` |
 | `N=<a>,<b>/<c>@...`, `N=<group>.<shape>@...` | a partition: netem on every link between two components, or the links that a shape over a group cuts (`halves`, `isolate`, `ring`, `bridge`, `primary`); see "Groups of services and partitions" |
@@ -1198,6 +1199,50 @@ clock_points: ["@:10-2s", "@month+10m"]   # Lago bills at minute 10 of the hour;
 
 Without the key the explorer draws exactly the schedules it drew before. The shrinker removes a
 step to a time as a whole; it does not halve it.
+
+### One service's own clock (`clock: own`, `T=<svc>@<at>:<change>`)
+
+Every service of a guest reads one wall clock, so `T=<at>:<delta>` moves it for all of them. A
+lease, a lock's time to live, or a timestamp order breaks when one node's clock differs from the
+others'. `clock: own` on a service gives it a wall clock of its own (Milestone 372, a format-1
+addition, x86_64 images):
+
+```yaml
+services:
+  - name: n2
+    cmd: /bin/lease.sh n2
+    ready: test -s /tmp/clock.n2
+    clock: own
+```
+
+The service then starts under `/bin/hydo-clock`, which `hydo build` stages from `HYDO_CLOCKBIN`
+(`hydo/crates/hydo-clock/build.sh`). Its processes read the guest's clock plus an offset of their
+own. The service's setup, its readiness check, the workload and the checks keep the guest's
+clock. The token `T=<svc>@<at>:<change>` changes the offset before step `at`:
+
+| Change | Meaning |
+|---|---|
+| `<n>` | the service's clock jumps by `n` seconds (`-30`, `5`) |
+| `<n>ms` | the same in milliseconds (`1500ms`, `-250ms`); whole seconds are written without `ms` |
+| `<n>ppm` | from then on the clock runs fast (or slow, below 0) by `n` millionths; `0ppm` stops the drift |
+
+Every such token applies, in token order, and a guest's `T=<at>:<delta>` moves every clock
+together. The controller logs `CLOCK of n2 5 before step 3 (offset 0 ms -> 5000 ms, drift 0 ppm ->
+0 ppm)`. The example `hydo/onboard/examples/service-clocks` holds a lease by each node's own
+clock: `T=n2@3:5` gives two leaders at once, and `T=3:5` and `T=n2@3:-5` pass.
+
+What it covers and what it costs (`docs/design/service-clocks.md`):
+
+- Programs that read the clock through glibc, musl or Go's runtime, static or dynamic: hydo-clock
+  hides the kernel's vDSO from them, so their reads are system calls, which it answers. Waits
+  until a wall-clock time (`clock_nanosleep` with `TIMER_ABSTIME`, `pthread_cond_timedwait`)
+  are moved by the offset; `timerfd` and POSIX timers are not.
+- A read costs about 40 µs of guest time on hvx, against about 4 µs without it.
+- The kernel's own times stay the guest's: file modification times, socket time stamps and
+  `/proc/uptime`. A recovery boot and a reboot start every own clock at the guest's clock.
+- On the KVM and Mac engines the guest kernel needs seccomp, which only `guest.kernel: containers`
+  has, and the Mac needs an arm64 build of hydo-clock; neither ran. `hydo explore` does not draw
+  the token yet.
 
 ### Clock after a power cut (`guest.clock_after_cut`)
 

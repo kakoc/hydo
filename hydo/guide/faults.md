@@ -17,7 +17,7 @@ call`, `Clock steps to a time`, `Clock after a power cut`, `Link faults`, `One-s
 | `network` | netem delay, loss, duplication, and reordering on traffic to a service's `port:`, or on a link between two services with `addr:`. With `network: bridge` the link carries their real traffic, and the explorer draws only links between services that list each other in `depends_on`. | `N=<svc>@<from>-<to>:<netem>`, `N=a-b@...` |
 | `oneway` | the same in one direction only | `O=<svc>@<from>-<to>:req\|resp:<netem>` |
 | `cut` | power cut: only data that reached the disk survives; a fresh boot recovers and runs the final checks | `C=<step>`, host `cf=<k>` (at the k-th disk flush) |
-| `clock` | step the realtime clock (like an NTP step), or set it to the next instant of a time of day or a calendar boundary (section "Clock steps to a time") | `T=<step>:<seconds>`, `T=<step>:@<point>` |
+| `clock` | step the realtime clock (like an NTP step), or set it to the next instant of a time of day or a calendar boundary (section "Clock steps to a time"). One service's own clock can step alone (section "One service's clock ahead of the others") | `T=<step>:<seconds>`, `T=<step>:@<point>`, `T=<svc>@<step>:<change>` |
 | `disk` | I/O errors, a lying disk that drops acknowledged writes | host `disk=ioerr:<p>`, `disk=lying:<p>` |
 | `freeze` | stop a service at the n-th packet it sends to or receives from a peer (on a Mac: a release with the second guest kernel) | `F=<svc>><peer>@<step>#<n>:<ms>` |
 | `protocol` | faults on fakes and proxies (`hydo guide outside-services`) | `H=...` |
@@ -288,6 +288,22 @@ clock_points: ["@:10-2s", "@month+10m"]
 
 Without `clock_points:` the explorer draws only steps by fixed amounts (30 s, 5 minutes, 1 hour,
 1 day, 30 days and a year, forward or back).
+
+## One service's clock ahead of the others
+
+`T=<step>:<seconds>` moves the clock of every service at once. A lease, a lock's time to live, or
+an order of timestamps breaks when one node's clock differs from the others'. Give that service
+`clock: own` in `hydo.yaml` (x86_64 images), then step its clock alone:
+
+```sh
+hydo run "disk=none | run T=n2@3:5"         # before step 3, n2's clock jumps 5 s ahead
+hydo run "disk=none | run T=n2@3:-1500ms"   # 1.5 s behind
+hydo run "disk=none | run T=n2@0:200ppm"    # from step 0, n2's clock runs fast by 200 millionths
+```
+
+The other services, the workload and the checks keep the guest's clock. A read of the clock costs
+the service about 40 µs of guest time on hvx. The explorer does not draw these steps yet.
+The section "One service's own clock" of MANIFEST.md says which programs it covers.
 
 ## Clock steps and durations on the wall clock
 
