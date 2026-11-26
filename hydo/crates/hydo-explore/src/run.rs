@@ -2445,66 +2445,123 @@ fn shrink(
     // candidates (the steps after the failure), so counting whole rounds ended its shrink after
     // three rounds and nine runs (Milestone 264). Every other schedule counts as explore.py did.
     let walk = cur.i.is_some();
+    // Milestone 368: every candidate decided, so that the storage pass after the rounds runs
+    // none twice
+    let mut decided: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut st = RoundState {
+        cur: &mut cur,
+        cur_v: &mut cur_v,
+        tjk: &mut tjk,
+        decided: &mut decided,
+        log,
+    };
     while tries < budget {
-        let cands = cx.ex.candidates(&cur, tjk);
+        let cands = cx.ex.candidates(st.cur, *st.tjk);
         if cands.is_empty() {
             break;
         }
         rnd += 1;
-        let items: Vec<(String, String)> = cands
-            .iter()
-            .enumerate()
-            .map(|(i, c)| (format!("{prefix}-{rnd}-{i}"), cx.render(c)))
-            .collect();
+        let n = cands.len() as i64;
         if !walk {
-            tries += items.len() as i64;
+            tries += n;
         }
-        // run the round's candidates side by side, but decide in candidate order and stop as soon
-        // as the first one that keeps the failure is known (explore.py ran the whole round and then
-        // took the first one that kept it: the same candidate)
-        let mut b = pool.batch(&items, true);
-        let mut got: HashMap<String, Res> = HashMap::new();
-        let mut next = 0;
-        let mut progressed = false;
-        'round: while let Some((tag, _, r)) = b.next_done() {
-            got.insert(tag, r);
-            while next < items.len() {
-                let Some(r) = got.get(&items[next].0) else {
-                    break;
-                };
-                let v = py_str(&r["verdict"]);
-                let kept = match keep {
-                    Some(k) => k(&v, r),
-                    None => same_outcome(&cur_v, &v),
-                };
-                let mut run = cx.chain_run(ch, &items[next].0, &items[next].1, r, ch.role);
-                run.shrink = Some(ShrinkStep {
-                    of: ch.of.clone(),
-                    round: rnd as u64,
-                    kept,
-                });
-                log.push(run);
-                if walk {
-                    tries += 1;
-                }
-                if kept {
-                    cur = cands[next].clone();
-                    cur_v = v;
-                    if let Some(Value::Array(t)) = r.get("tjk") {
-                        tjk = Some((t[0].as_i64().unwrap_or(0), t[1].as_i64().unwrap_or(0)));
-                    }
-                    progressed = true;
-                    b.cancel();
-                    break 'round;
-                }
-                next += 1;
-            }
+        let (progressed, ran) = shrink_round(cx, pool, cands, keep, prefix, ch, rnd, &mut st);
+        if walk {
+            tries += ran;
         }
         if !progressed {
             break;
         }
     }
+    // Milestone 368: a storage fault that the rounds did not leave out, because the budget ended
+    // them before its turn (the Typesense onboarding: seven rounds that halved a clock step), is
+    // tried alone; it names the class, so one that the failure does not need misleads
+    loop {
+        let cands: Vec<S> = cx
+            .ex
+            .storage_removals(st.cur)
+            .into_iter()
+            .filter(|c| !st.decided.contains(&cx.render(c)))
+            .collect();
+        if cands.is_empty() {
+            break;
+        }
+        rnd += 1;
+        tries += cands.len() as i64;
+        if !shrink_round(cx, pool, cands, keep, prefix, ch, rnd, &mut st).0 {
+            break;
+        }
+    }
     (cur, cur_v, tries)
+}
+
+/// What a shrink's rounds change: the schedule kept so far, its verdict, its tick-jitter pair,
+/// the candidates decided, and the runs used.
+struct RoundState<'a> {
+    cur: &'a mut S,
+    cur_v: &'a mut String,
+    tjk: &'a mut Option<(i64, i64)>,
+    decided: &'a mut std::collections::HashSet<String>,
+    log: &'a mut Vec<Run>,
+}
+
+/// One round of a shrink: run the candidates side by side, but decide in candidate order and
+/// stop as soon as the first one that keeps the failure is known (explore.py ran the whole round
+/// and then took the first one that kept it: the same candidate). Returns whether one was kept,
+/// and how many were decided.
+#[allow(clippy::too_many_arguments)]
+fn shrink_round(
+    cx: &Cx,
+    pool: &Pool,
+    cands: Vec<S>,
+    keep: Option<Keep<'_>>,
+    prefix: &str,
+    ch: &Chain,
+    rnd: i32,
+    st: &mut RoundState<'_>,
+) -> (bool, i64) {
+    let items: Vec<(String, String)> = cands
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (format!("{prefix}-{rnd}-{i}"), cx.render(c)))
+        .collect();
+    let mut b = pool.batch(&items, true);
+    let mut got: HashMap<String, Res> = HashMap::new();
+    let mut next = 0;
+    let mut ran = 0i64;
+    while let Some((tag, _, r)) = b.next_done() {
+        got.insert(tag, r);
+        while next < items.len() {
+            let Some(r) = got.get(&items[next].0) else {
+                break;
+            };
+            let v = py_str(&r["verdict"]);
+            let kept = match keep {
+                Some(k) => k(&v, r),
+                None => same_outcome(st.cur_v, &v),
+            };
+            let mut run = cx.chain_run(ch, &items[next].0, &items[next].1, r, ch.role);
+            run.shrink = Some(ShrinkStep {
+                of: ch.of.clone(),
+                round: rnd as u64,
+                kept,
+            });
+            st.log.push(run);
+            st.decided.insert(items[next].1.clone());
+            ran += 1;
+            if kept {
+                *st.cur = cands[next].clone();
+                *st.cur_v = v;
+                if let Some(Value::Array(t)) = r.get("tjk") {
+                    *st.tjk = Some((t[0].as_i64().unwrap_or(0), t[1].as_i64().unwrap_or(0)));
+                }
+                b.cancel();
+                return (true, ran);
+            }
+            next += 1;
+        }
+    }
+    (false, ran)
 }
 
 /// The fault kinds of a schedule, for `--shrink-causes` (Milestone 225): the host part's keys

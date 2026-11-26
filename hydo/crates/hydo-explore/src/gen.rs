@@ -2241,6 +2241,31 @@ impl Ex {
     }
 
     // ------------------------------------------------------------ shrinking
+    /// Milestone 368: the variants of `s` without one of its storage faults each (`G=`, `L=`, and
+    /// each block fault). The shrinker tries them after its rounds, also when its budget ended
+    /// the rounds before their turn came: a storage fault names the failure's class
+    /// (`corrupted-files`, `damaged-disk`), so one that the failure does not need gives the
+    /// problem a wrong class.
+    pub fn storage_removals(&self, s: &S) -> Vec<S> {
+        let mut out = Vec::new();
+        if s.g.is_some() {
+            let mut t = s.clone();
+            t.g = None;
+            out.push(t);
+        }
+        if s.l.is_some() {
+            let mut t = s.clone();
+            t.l = None;
+            out.push(t);
+        }
+        for i in 0..s.blk.len() {
+            let mut t = s.clone();
+            t.blk.remove(i);
+            out.push(t);
+        }
+        out
+    }
+
     /// explore.py `candidates(s, tjk)`: simpler variants of s, most aggressive first.
     pub fn candidates(&self, s: &S, tjk: Option<(i64, i64)>) -> Vec<S> {
         let mut out: Vec<S> = Vec::new();
