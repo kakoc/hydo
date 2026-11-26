@@ -619,6 +619,20 @@ that a milestone builds moves into the tables of this page with its new status.
 - **Where it came from.** Milestone 337 (tentative number), `hydo/explore/RESEARCH-shared-prefix.md`;
   open item 167.
 
+### A graceful stop as a fault
+
+- **What it is.** A fault token that stops a service with SIGTERM, waits for it to end, and
+  starts it again, as `docker stop`, a rolling restart, or an upgrade does. `K=` kills with
+  SIGKILL, and `U=` stops with SIGTERM only to switch to another version.
+- **Why it matters.** A system that answers before its writes are durable may keep them at a
+  crash and lose them at a clean stop, or the reverse. rqlite's queued writes were lost at a
+  graceful stop in a run without any fault (Milestone 369, finding 2). The client sent the
+  signal itself, by the process's command line in `/proc`, so the explorer could not draw it
+  and the shrinker could not move it.
+- **What it needs.** A token such as `S=<svc>@<at>+<down>`, the restart through the service's
+  own start, an explorer option that draws it, and a reaction action `stop-<svc>`.
+- **Where it came from.** Milestone 369 (tentative number); open item 189.
+
 ## How to keep this page current
 
 Every milestone that builds or changes a capability updates its rows here: the status, the

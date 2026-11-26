@@ -23920,3 +23920,105 @@ the failing check's output (`HYDO-CHECK-OUT`), and else keep the original delay.
 compares verdicts by their signature. The check's output is in the controller's records, not in
 the results the shrinker reads, so the guard needs that output carried into each candidate's
 result. That was more than this round's time (open item 184).
+
+## Milestone 369 (tentative number): rqlite, queued writes answered and then lost, and a removed node that never joins again
+
+rqlite 10.8.0 became the example `hydo/onboard/examples/rqlite` (RESULTS.md), by
+`docs/ONBOARDING-PLAYBOOK.md`, with hydo of `main` at `e2058be0` on hvx on the bare-metal
+machine. One known bug was reached and two new candidates were found; nothing was posted, and
+nothing recorded moved.
+
+**The example.** Three Raft nodes of rqlite 10.8.0 from the official image, at fixed addresses,
+each with `-bootstrap-expect 3` and the three Raft addresses, imported with `hydo compose`. Each
+node's data is on a file system of its own, which `setup:` gives to the image's user; the
+snapshot threshold is the build parameter `snap` (64 log entries). The Go client `rqc` sends each
+request once, through a node that the seed picks. It writes inserts, upserts, updates, deletes,
+transactions of 2 or 3 writes, and queued writes with `wait`, all recorded in a messages check
+with `acked_outcome` and `effect: recorded`. Transactions of list appends and of reads at level
+`linearizable` or `strong` go into a list-append history checked at strict serializability.
+Other checks judge every node's lists against the leader's (at level `none`, during the run), a
+backup in SQL against the acknowledged appends, a removal of a follower and its join after a
+restart, every node against the leader after the heal, the writes through each node, and the
+leader itself. A serial driver behind the build parameter `qstop` sends queued writes without
+`wait` and stops that node with SIGTERM.
+
+**Finding 1, known (pull request rqlite#3027, open).** A queued write with `wait` is answered 200
+although it was never committed. `runQueue` (`http/service.go` lines 1949 to 2019) retries a
+batch once after a second and then runs its success path, whose `req.Close()` releases every
+waiting caller. `K=nodes.primary@35+3` kills the leader at the step of a queued write through a
+follower: the follower logs `execute queue write retry limit (1) limit reached`, and the client
+got 200 after 1.05 s. Blind at seed 28 of e1, and in seeds 46, 62 and 77 of e2b. Seed 46 shrank to
+a 500 ms delay of the leader's links without a kill
+(`N=nodes.primary@17-20:delay,500ms W=2da25f11,p3,q1,r2000,oanytime_backup`).
+
+**Finding 2, new.** A graceful stop of a node loses the queued writes that it has acknowledged.
+At SIGTERM `rqlited` closes its HTTP service first (`cmd/rqlited/main.go` line 284).
+`Service.Close` closes the queue, whose goroutine returns at `case <-q.done` (`queue/queue.go`
+line 236) without writing the batch it holds, and then stops `runQueue`. With `--set
+qstop=yes`, 3 queued writes and SIGTERM to that node lost all three in a run without any fault.
+The node's log shows a clean stop with a snapshot on close. rqlite's page "Queued Writes" names
+only a crash as the risk.
+
+**Finding 3, new.** A node removed while it was down never joins again after its restart. The
+aimed grid e3 (`--reactive-at rq.write_acked@20 --react-delays 0..40/10 --react-actions
+cut,powerloss,kill-now`) failed at one cell of 35, `A=rq.write_acked@20+10:powerloss-rq2`. The
+follower `rq2` lost its power and stayed down, and the removal driver removed it (200). At the
+heal `rq2` started with `-bootstrap-expect 3` and `-join`. hashicorp/raft's leader keeps
+replicating to a removed server until it holds the entry that removes it, so `rq2` heard the
+leader at once. The bootstrapper's done check is a known leader (`cmd/rqlited/main.go` lines 643
+to 646), checked before every join (`cluster/bootstrap.go` lines 151 to 156): `boot operation
+marked done`, no join, then `not part of stable configuration, aborting election`, and a failed
+snapshot every few seconds to the end. rqlite#1290 (fixed in 7.20.1) was a removed node that did
+not join for another reason.
+
+**The runs.** The final image `explore-ob-rqlite-disk.img` (`c4d29886…`) gives
+`943d6c299867d55d` on two clean runs. Each regression gave one fingerprint over two fresh runs:
+finding 1 by a kill `b99061a1e2c70785`, finding 1 by a delay `11279983f35ccb8b`, finding 2 on the
+image built with `--set qstop=yes` (`a3078a27…`) `7d26ebb2631121b3`, finding 3
+`c6b10c11a878e130`. `hydo repro --regressions` gave 3 of 3 as expected on the default image, with finding 2's
+regression left out for its `# params: qstop=yes`, and 3 of 3 on the `qstop` image before finding
+3's file existed.
+
+**The explorations.** e1, `--seeds 1-40 --strategy process --new-faults --cluster-faults
+--storage-faults` on an image whose list-append check hydo had dropped, failed 3 of 40: finding 1
+and detected damage (2). e2 on an image with a removal driver that waited was stopped after 19
+runs; its one failure was that driver. e2b, `--seeds 41-100 --strategy process --more-faults
+--cluster-faults --storage-faults`, failed 9 of 60: finding 1 (3), detected damage (3), an
+undetected damage of one node's Raft log (seed 51), and a removal of unknown outcome that the
+driver did not follow with a restart (2, a mistake of the rules, fixed). e3, the aimed grid of 35
+cells, failed once, with finding 3. The list-append check held in all 95 schedules of e2b and
+e3.
+
+**Tests.** The new example enters the explorer's and the controller's corpora. Re-recorded with
+`HYDO_BLESS=1`, in a copy of the worktree with an index of its tracked files and a target folder
+of its own on the bare-metal machine: the explorer's corpus goldens (full and quick), its
+identity goldens (quick and full), and the controller's quick corpus golden, which adds the
+example's entries only. Then `cargo test -p hydo-explore --test it` (61 passed), the controller's corpus
+tests, `-p hydo --test it -- equivalence:: agents_equivalence::` (9 passed) and `-p hydo-agents
+--test it` (16 passed). The copy has no `AGENTS.local.md`, so `public_content::`
+checked the generic patterns, and a `grep` of the listed values found none in the new text. `sh
+ci/vale.sh` finds nothing. No Rust code changed.
+
+Retro: rqlite 10.8.0, hvx, 2026-11-26
+- Time to the first clean run: 30 minutes of wall time, with the client written while the first
+  builds ran beside two other onboardings.
+- Schedules run before the first finding: 28 (e1's seed 28, finding 1); finding 2 at the first
+  run of its driver; finding 3 at cell 10 of the aimed grid. Three failures were mistakes of the
+  rules: the client's transactions sent a `DELETE` for every write, the removal driver waited 90
+  s inside a serial driver, which stretched a pause of one step to 90 s, and it did not restart a
+  node after a removal of unknown outcome.
+- The findings: 1 known (pull request #3027), 2 new (the queued writes at a graceful stop, and
+  a node removed while it was down that never joins again), and one undetected damage of a Raft
+  log by hydo's `G=`, the environment.
+- What took the most time: the slow builds, runs and tests on the shared machine (about 2
+  hours of the 5); the client and its checks (about 1 hour); the list-append check that hydo
+  dropped and the three mistakes of the rules (about 1 hour, with two rebuilt images).
+- What hydo lacked: a `checks/list_append_*` file dropped without a word when hydo.yaml has a
+  `checks:` section; no write routes of a `switch` on the path; no clock place found; a pause by
+  steps stretched by a serial driver; two images in one folder; no fault that stops a service
+  gracefully; no fault that changes a cluster's members (open item 189).
+- Strategies: a new entry "A graceful stop after answers that are not durable yet", and the
+  rqlite evidence in "Kills of the process that holds acknowledged work", "Reactions at console
+  events" and "History checks"; the first table names rqlite.
+
+**What is left.** Open item 189.

@@ -1279,6 +1279,29 @@ files, power cuts, and clock steps. Three new candidates, not posted:
 
 Open item 188 has what is left.
 
+**rqlite (M369, tentative number).** rqlite 10.8.0 runs as a cluster of three Raft nodes from the
+official image in one hvx guest of 1,024 MiB, in `hydo/onboard/examples/rqlite` (RESULTS.md),
+imported with `hydo compose`. Each node's data is on a file system of its own. A Go client sends
+writes, transactions, queued writes with `wait`, and list appends with reads at level
+`linearizable` or `strong` through any node. A messages check with `acked_outcome` judges the
+writes, and a list-append check at strict serializability the transactions. Other checks judge
+every node's lists against the leader's, a backup, a removal and rejoin of a follower, the nodes
+after the heal, and the leader. Every plain write and transaction that rqlite acknowledged
+stayed under kills, pauses, partitions, one node's power loss or damaged files, power cuts, and
+clock steps. No history of 95 schedules broke strict serializability. Nothing was posted:
+- Known (the open pull request rqlite#3027): a queued write with `wait` is answered 200 after
+  the queue dropped it. A kill of the leader (`K=nodes.primary@35+3`) or a 500 ms delay of its
+  links makes a follower's two tries fail, and `runQueue` then runs its success path.
+- New: a graceful stop (SIGTERM) of a node loses the queued writes that it has answered. The
+  queue's goroutine returns at its close without writing the batch it holds, in a run without
+  any fault (`--set qstop=yes`). The documentation names only a crash.
+- New: a follower removed while it was down never joins again after its restart. At its start it
+  hears the leader, which still replicates the removal entry to it, and the bootstrapper marks
+  its boot done before any join (`A=rq.write_acked@20+10:powerloss-rq2` with the client's
+  removal). rqlite#1290, fixed in 7.20.1, was another cause of the same symptom.
+
+Open item 189 has what is left.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -4091,6 +4114,33 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Not run: the Mac engine and KVM, and five nodes. A live race of a delete by a filter with
       another client's writes of its documents did not run. Aliases, synonyms, curations, API
       keys, and the embedding models have no command.
+189. What the example `rqlite` left (M369, tentative number):
+    - Nothing is posted. Finding 1 is the open pull request rqlite#3027. Findings 2 and 3 are new
+      as far as the search found. In finding 2 a graceful stop loses the queued writes that the
+      node answered. In finding 3 a node removed while it was down never joins again.
+    - With a `checks:` section in hydo.yaml, a `checks/list_append_*` or `linearizable_*` file is
+      dropped without a word. The host controller reads `manifest.sh` only when hydo.yaml has no
+      history check (`hydo-control/src/agent.rs`, lines 245 to 262). The example declares its
+      list-append check in hydo.yaml.
+    - No fault stops a service gracefully: `K=` sends SIGKILL. The client sends SIGTERM itself,
+      so the explorer cannot draw the stop and the shrinker cannot drop it (the idea "A
+      graceful stop as a fault" of `docs/USE-CASES.md`).
+    - A pause by steps lasts as long as a serial driver holds the round: `P=rq3@10+1` lasted 90
+      s behind a driver that waited, and `hydo guide faults` does not say so.
+    - A file system of `storage:` belongs to root, so an image that runs as another user cannot
+      write to it; neither `hydo compose` nor `--check` says so (the example's `setup:` runs
+      `chown`).
+    - `hydo rules scan --kind writes` found none of rqlite's routes, a `switch` on `r.URL.Path`
+      with `strings.HasPrefix`. The clock audit listed no wall-clock reading kept as an order:
+      the staged WAL files of an incremental snapshot are named by `time.Now().UnixNano()`.
+    - Two images in one folder stop `hydo run` without `--image` (as open item 188).
+    - No fault removes or adds a member of a cluster; finding 3's removal is the client's serial
+      driver, which the explorer cannot place and the shrinker cannot drop.
+    - Not run: KVM and the Mac engine, five nodes, read replicas, `/db/load` and `/boot` (a
+      restore), automatic backups, CDC, and a clock step between two staged WAL files of one
+      snapshot. A damaged Raft log of one node (`G=` on `raft.db`) left that node without an
+      acknowledged delete for good, without an error. rqlite checks no checksum of its Raft log,
+      and its page "Data Integrity" says that it checks "every on-disk data file" at a start.
 
 ## Milestone index
 
@@ -5280,6 +5330,13 @@ build machine, before 2026-10-13.
   stats` counts `disk=cut` with the cut, and a failed check keeps the services' logs. `inspect
   exec --service` enters an image service's root, and the guide names the FIPS limit. Nothing
   recorded moved
+- M369 (tentative number): the onboarding of rqlite 10.8.0 on hvx, three Raft nodes, with a
+  list-append check at strict serializability beside the messages check. One known bug was
+  reached: a queued write with `wait` is answered 200 after the queue dropped it, at a kill or a
+  slow link of the leader (rqlite#3027, open). Two new candidates, not posted. A graceful stop of
+  a node loses the queued writes that it has answered. A follower removed while it was down
+  never joins again after its restart. A list-append check in a file is dropped when hydo.yaml
+  has `checks:`. Nothing recorded moved
 
 ## Where to look
 

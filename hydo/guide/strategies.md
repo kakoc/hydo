@@ -14,7 +14,7 @@ results page: new as far as the search found, known, by design, or a deployment 
 
 | system | its promise | the techniques that found most | where they found bugs |
 |---|---|---|---|
-| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults; failovers by the client with a late write; replicas compared after a restart | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus, Kvrocks, Typesense |
+| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults; failovers by the client with a late write; replicas compared after a restart | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus, Kvrocks, Typesense, rqlite |
 | object store | an acknowledged object stays as written; a listing shows what exists | a listing compared with a read of each key; kills and pauses of one node; clock steps | Garage |
 | log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults; a client that leaves transactions open, and power cuts and clock steps | Redpanda, NATS, Pulsar |
 | job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate, NSQ |
@@ -319,7 +319,10 @@ These findings hold for every type of system:
   - YugabyteDB: its default WAL setting lost acknowledged writes at a power cut.
     Each loss was found by another generated check.
 - **What it misses.** A level without real time, such as `serializable`, cannot see a lost write.
-  In SurrealDB, 167 schedules showed no anomaly at strong snapshot isolation.
+  In SurrealDB, 167 schedules showed no anomaly at strong snapshot isolation. In rqlite, 95
+  schedules of transactions with list appends and reads at level `linearizable` or `strong`
+  showed none at strict serializability, under kills, partitions, power cuts, and clock steps.
+  Its two findings were in the queued writes, which the messages check judged.
 - **Cost.** `hydo sql-gen` writes it for the three SQL dialects. The check runs on the host.
 
 ### Error logs as findings
@@ -569,6 +572,11 @@ These findings hold for every type of system:
     that file the restarted queue starts empty. Blind in the trial at seed 2, shrunk to
     `K=nsqd@4+1`. The same kill 2.8 s after the first message lost nothing. So aim a kill at a
     new topic, a new channel, or a queue just emptied, as well as at a busy one.
+  - rqlite (finding 1, known as the open pull request rqlite#3027): a kill of the leader while a
+    follower forwarded a queued write with `wait`. The follower tried twice, a second apart, then
+    dropped the batch and answered 200. Blind at seed 28 of 40, and on the final image with
+    `K=nodes.primary@35+3`, the step of a queued write. Aim the kill at the process that a write is
+    forwarded to, not only the one that holds the work.
 - **What it misses.** A kill comes through the guest agent, so the service's threads run on
   until the agent runs. Meilisearch's index swap that runs twice (finding 1) needs
   the server stopped between two LMDB commits. Reactions that killed it at 18 delays after a
@@ -579,6 +587,28 @@ These findings hold for every type of system:
   keeps by a worker's identity (the entry "Pauses of a service past its failure detector"). The
   restart of a `K=` fault ignores the service's restart policy (River, seed 17).
 - **Cost.** It runs on every engine.
+
+### A graceful stop after answers that are not durable yet
+
+- **What it is.** The workload sends writes that the system answers before they are durable: a
+  queued write, a batched write, or a write that a buffer holds. Then the workload stops that
+  service with SIGTERM, as `docker stop`, a rolling restart, or an upgrade does, and the
+  restart policy starts it again. The generic rule reads every acknowledged write back. A
+  graceful stop must keep what the service has answered, or the documentation must name the
+  stop beside the crash.
+- **What to write.** A serial driver that sends the writes, records each one's answer, and
+  sends SIGTERM to the service's process by its command line in `/proc` (busybox `kill`, or the
+  client's own call). Put it behind a build parameter when every run with it fails. The rqlite
+  example's `rqc qstop` is one to copy.
+- **When it fits.** A system with an asynchronous mode whose documentation names only a crash
+  as the risk: queued or batched writes, write-behind caches, group commit.
+- **What it found.** rqlite (finding 2, new): 3 queued writes without `wait`, each answered 200,
+  and SIGTERM to that node lost all three, in a run without any fault. At the stop the node
+  closes its write queue, and the queue's goroutine returns without writing the batch it holds.
+  The page "Queued Writes" names only a crash.
+- **What it misses.** A stop through hydo's own faults: `K=` kills with SIGKILL, so a loss there
+  is the documented crash. A graceful stop of a node whose batch the timer has already sent.
+- **Cost.** One driver. It runs on every engine.
 
 ### Pauses of a service past its failure detector
 
@@ -771,6 +801,12 @@ These findings hold for every type of system:
     The shrink left one reaction, `A=meili.edit_acked:kill-now-meilisearch`.
   - SWUpdate: two of the five minimal schedules of its hvx exploration carry a
     reaction.
+  - rqlite (finding 3, new): the grid `--reactive-at rq.write_acked@20 --react-delays 0..40/10
+    --react-actions cut,powerloss,kill-now` failed at 1 of 35 cells,
+    `A=rq.write_acked@20+10:powerloss-rq2`. The power loss kept a follower down until the heal,
+    and the workload's removal driver removed it meanwhile. At its restart the node heard the
+    leader, marked its boot done, and never joined again. A reaction that keeps a node down can
+    meet the workload's own membership commands.
 - **What it misses.** Restate held under cuts and kills at six events of the client and the
   service. Prometheus held under `kill-now-prometheus` 5 to 40 ms after the client saw a new
   block, when the WAL checkpoint follows, and under cuts at the same delays. One of them is a cut at the start of a step's closure, just after the step before it
