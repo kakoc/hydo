@@ -1923,6 +1923,20 @@ fn acked_outcome_breaks_on_a_failure_the_client_did_not_cause() {
             ),
         "{s}"
     );
+    // Milestone 363: without an error code the words say what the read-back found, not
+    // `(no error code)` (the 0.6.0 trial's lost message)
+    let mut h = H::default();
+    sent(&mut h, 1, 0, "m0", "ok");
+    status(&mut h, 100, "m0", "m0;s=info", "ok");
+    let r = run(&h.text(), OUTCOME);
+    let s = &r["acked-outcome"].1;
+    assert!(
+        s.contains(
+            "m0 was acknowledged and has no final state: the read-back found it still pending \
+             or not at all"
+        ) && !s.contains("no error code"),
+        "{s}"
+    );
     // without the client's errors, every failure breaks it
     let mut h = H::default();
     sent(&mut h, 1, 0, "m1", "ok");
