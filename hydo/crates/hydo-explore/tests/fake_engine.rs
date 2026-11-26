@@ -700,8 +700,12 @@ const SCENARIOS: &[(&str, &[&str])] = &[
 
 const GUARD_SCENARIO: &str = "guard_shrinks_keep_the_cause";
 
-/// Milestone 368. A shrink on the scripted engine's guard rules (HYDO_FAKE_GUARD):
+/// Milestone 368. Two shrinks on the scripted engine's guard rules (HYDO_FAKE_GUARD):
 ///
+/// - A reaction's delay is shrunk towards `+0` only while the violated check says the same. A
+///   kill of redis 30 ms after the event loses the message in flight; earlier than 20 ms it
+///   fails the same check with another cause (the NSQ trial's two windows, open item 184), so
+///   its shrink keeps `+30`. A kill of mysql fails alike at every delay and shrinks to `+0`.
 /// - A storage fault that the failure does not need is left out after the shrink's rounds, also
 ///   when halving a clock step used up their budget (the Typesense onboarding's seed 3), and the
 ///   minimal schedule's class is not `corrupted-files`.
@@ -732,6 +736,51 @@ fn guard_scenario() {
             })
             .collect()
     };
+    let a_of = |s: &str| -> String {
+        s.split_whitespace()
+            .find(|t| t.starts_with("A="))
+            .unwrap_or("")
+            .to_string()
+    };
+    let d = explore(
+        "delays",
+        &[
+            "--reactive-at",
+            "jobs.recv",
+            "--react-delays",
+            "30",
+            "--react-actions",
+            "kill-redis,kill-mysql",
+            "--seeds",
+            "1-2",
+        ],
+    );
+    let s = shrinks(&d);
+    let redis = s
+        .iter()
+        .find(|x| x.0.contains("[jobs.no-loss]"))
+        .unwrap_or_else(|| panic!("no shrink of the kill of redis: {s:?}"));
+    assert_eq!(a_of(&redis.1), "A=jobs.recv+30:kill-redis", "{redis:?}");
+    let mysql = s
+        .iter()
+        .find(|x| x.0.contains("[jobs.at-most-once]"))
+        .unwrap_or_else(|| panic!("no shrink of the kill of mysql: {s:?}"));
+    assert_eq!(a_of(&mysql.1), "A=jobs.recv:kill-mysql", "{mysql:?}");
+    // the shorter delays of the kill of redis ran and failed, and were not kept
+    let ev = std::fs::read_to_string(dir.join("delays/events.jsonl")).unwrap();
+    let refused = ev
+        .lines()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .filter(|r| {
+            r["schedule"]
+                .as_str()
+                .is_some_and(|x| x.contains("A=jobs.recv:kill-redis"))
+                && r["shrink"]["kept"] == serde_json::json!(false)
+                && r["verdict"]["kind"] == serde_json::json!("violation")
+        })
+        .count();
+    assert!(refused >= 1, "{ev}");
+
     let d = explore(
         "storage",
         &[

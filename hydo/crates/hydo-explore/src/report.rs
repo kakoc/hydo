@@ -41,6 +41,46 @@ pub fn assert_failures(outdir: &Path, tag: &str, r: &Res) -> Vec<Value> {
         .collect()
 }
 
+/// Milestone 368: the first line of what the violated check said, with its numbers blanked as in
+/// a [`signature`]: the first non-empty line of the check's `HYDO-CHECK-OUT` note in the run's
+/// consoles, else the first line of a host check's explanation (`r`'s history checks), else the
+/// verdict's own text. None for a verdict that is no violation. The shrinker compares it before
+/// it keeps a shorter reaction delay: a delay that moves into another cause's window fails the
+/// same check with other words (the NSQ trial, open item 184).
+pub fn first_violation_text(
+    verdict: &str,
+    consoles: &[(String, String)],
+    r: &Res,
+) -> Option<String> {
+    if verdict_kind(verdict) != "violation" {
+        return None;
+    }
+    let id = verdict.split_once("VIOLATION [")?.1.split_once(']')?.0;
+    let text: String = consoles.iter().map(|c| c.1.as_str()).collect();
+    let first = |s: &str| {
+        s.lines()
+            .map(str::trim)
+            .find(|l| !l.is_empty())
+            .map(|l| signature(l))
+    };
+    if let Some((lines, _)) = crate::results::check_outputs(&text).get(id) {
+        let joined: Vec<&str> = lines.iter().filter_map(Value::as_str).collect();
+        if let Some(l) = first(&joined.join("\n")) {
+            return Some(l);
+        }
+    }
+    let explained = r
+        .get(crate::results::CHECKS)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .find(|f| f.get("id").and_then(Value::as_str) == Some(id))
+        .and_then(|f| f.pointer("/details/explanation"))
+        .and_then(Value::as_str)
+        .and_then(first);
+    explained.or_else(|| Some(signature(verdict)))
+}
+
 /// explore.py `verdict_kind`.
 pub fn verdict_kind(v: &str) -> &'static str {
     hydo_engine::protocol::verdict_kind(v)
