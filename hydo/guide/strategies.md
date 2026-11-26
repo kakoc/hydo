@@ -415,8 +415,8 @@ These findings hold for every type of system:
   example's `tsc check converge` is one to copy.
 - **When it fits.** A replicated store whose nodes apply a log, a Raft or a primary-backup
   cluster, and whose clients read from any node.
-- **What it found.** Typesense (finding 1): a kill of one follower, `K=ts3@40+20`, left that
-  follower without three acknowledged documents for good. The replay applied the writes after a
+- **What it found.** Typesense (finding 1): a kill of one node, the leader (`K=ts3@40+20`) or a
+  follower (`K=ts1@40+20`), left that node without acknowledged documents for good. The replay applied the writes after a
   delete by a filter before the delete's later batches, which then deleted the new versions.
   Blind in 3 of 60 schedules without a step back of the clock. The failing schedules passed
   on an image whose deletes run in one batch.

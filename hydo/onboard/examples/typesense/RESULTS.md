@@ -17,8 +17,9 @@ nobody reported.
      another thread. A node that replays its log after a kill or a power cut does not wait for
      them, applies the next writes, and the later batches then delete the new versions. The node
      answers searches and reads without those acknowledged documents, while the other nodes have
-     them. A kill of one follower is enough
-     (`regressions/follower-lacks-documents-after-a-restart.schedule`).
+     them. A kill of one node is enough, the leader or a follower
+     (`regressions/follower-lacks-documents-after-a-restart.schedule`, whose `ts3` is the leader
+     when it is killed; the section below has the follower kills).
   2. **New, a clock effect: after a backward step of the wall clock, every answer that Typesense
      makes in several parts stops after its first part, for the step's length.** An export with
      its default batch of 100 documents ends after the first batch, and a delete by a filter with
@@ -154,6 +155,27 @@ and `hydo repro --regressions` gave 3 of 3 as expected, with the same values:
 | `follower-lacks-documents-after-a-restart.schedule` | 1 | `2d653b8a28652520` |
 | `export-and-batched-delete-stop-after-a-backward-clock-step.schedule` | 2 | `c3653bc7d18e8f42` |
 | `no-election-after-a-backward-clock-step.schedule` | 3 | `8675611411642625` |
+
+**With the released hydo 0.6.0, from a fresh clone.** On hvx, a clone of this repository at
+`0fe1e269` and the published 0.6.0 Linux release (`12fe3299…`, checked by `SHA256SUMS`) built the
+image `de22e524…` with the example's own steps. Its client, built from the committed
+`client/main.go` (`tsc-amd64` `5109fe4d…`), differs from the onboarding's (`3dc4d230…`) in the
+line numbers stored in the program, so its fingerprints differ from the table above:
+
+| schedule | image | verdict | fingerprint |
+|---|---|---|---|
+| `K=ts3@40+20 W=5479b87f,p6,q1,r500` | default | `converge`: `ts3` lacks `i4x15` and `i4x39` | `881d375553ca3742` (two runs) |
+| the same | batch 1e9 | OK | `6853dac15089c3f5` (two runs) |
+| `W=5479b87f,p6,q1,r500` without `K=` | default | OK | `7dd9c5fa34b400d5` (two runs) |
+| `K=ts1@40+20 W=5479b87f,p6,q1,r500` | default | `converge`: `ts1` lacks `i4x15` and `i4x39` | `f7e81ca6d9185872` (two runs) |
+| `K=ts2@40+20 W=5479b87f,p6,q1,r500` | default | `converge`: `ts2` lacks the same two | `fadaff36e14c4c9d` |
+| `K=ts1@40+20 W=5479b87f,p6,q1,r500` | batch 1e9 | OK | `754d4b64dd9c7592` |
+
+The client's probes show `ts3` as the leader (braft state 1) and `ts1` and `ts2` as followers
+until `ts3` goes down, so the saved regression kills the leader, and the `ts1` and `ts2` rows
+kill a follower. At the run's end the restarted node answers `/health` with `{"ok":true}` and a
+read of either document with 404, while the other two nodes answer 200 with the acknowledged
+version.
 
 The runs that separate the causes, one run each unless two are named. The image "batch 1e9" is
 a copy of `hydo.yaml` built with `--set batch=1000000000`, so that every delete by a filter runs

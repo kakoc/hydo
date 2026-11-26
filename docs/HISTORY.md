@@ -23691,6 +23691,14 @@ a leader for 68 s, until the pause ended; the same pause without `T=` got a new 
 `097b8fcffac8545b` on two clean runs. Each regression gave one fingerprint over two fresh runs:
 finding 1 `2d653b8a28652520`, finding 2 `c3653bc7d18e8f42`, finding 3 `8675611411642625`. `hydo repro --regressions` gave 3 of 3 as expected with the same values. RESULTS.md has the runs that separate the causes, with their fingerprints.
 
+**Finding 1 with the released hydo 0.6.0.** From a fresh clone at `0fe1e269`, the published 0.6.0
+Linux release built the image `de22e524…` on hvx with the example's steps. The regression gave
+`converge` with `ts3` lacking the same two documents, `881d375553ca3742` on two runs; the client
+built from the committed sources differs from the onboarding's in its line numbers. In that
+schedule `ts3` is the leader when it is killed. A kill of the follower `ts1` or `ts2` with the
+same composition gives the same violation (`f7e81ca6d9185872` twice), and passes on the image
+whose deletes run in one batch. The table is in RESULTS.md.
+
 **The explorations.** e1, `--seeds 1-30 --strategy process --new-faults --cluster-faults
 --storage-faults` on 3 workers of an earlier image, failed 10 of 30: finding 2's export in 5,
 each shrunk to one step back, detected damage in 4, and the group's primary during an election
