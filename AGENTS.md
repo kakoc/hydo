@@ -1174,6 +1174,29 @@ judge it. Nothing was posted:
 An acknowledgement with the broker's receipt can come back after a broker crashes, by design and
 as the client's documentation says (open item 181).
 
+**SeaweedFS (M364, tentative number).** SeaweedFS 4.55 runs in one hvx guest of 2,048 MiB in
+`hydo/onboard/examples/seaweedfs` (RESULTS.md). It ran on hydo 0.6.0, the released version,
+after an import with `hydo compose`. Three masters with Raft, three volume servers with the
+replication `001`, one filer on leveldb2, and the S3 gateway run. Each server's data is on a
+file system of its own. The filer's path rule `fsync` is on for `/buckets/` (the build parameter
+`fsync`). A Go client writes through S3 and through the filer's HTTP API, reads each write back
+through the other API, and orders compactions of the volumes during the workload. A messages
+check with `acked_outcome` and `effect: recorded` judges every write after a compaction. Other
+checks judge the listing, the aborted uploads, and both copies of every chunk. No new bug in
+342 schedules and 11 directed runs:
+- With the rule, no acknowledged write was lost and no deleted key came back. That held under
+  kills, pauses past the election and heartbeat timeouts, partitions, clock steps, one server's
+  power loss, and power cuts. It also held under 60 reactions right after acknowledgements and
+  compactions, 65 kills inside writes of 4 MiB or more, and volumes of 8 MB that filled.
+- Without it (SeaweedFS's default) 5 of 20 power cuts lost acknowledged writes, which `hydo
+  explore --configs` labeled the documented trade-off; the regression carries `# params:
+  fsync=false`.
+- A damaged superblock stops a volume server on purpose (pull request #8047). A damaged Raft
+  state stops a master, and no copy of a chunk is repaired by itself, as the wiki says.
+
+The image's entrypoint turns Go's FIPS mode on, whose entropy source cannot start in the guest;
+the servers run `/usr/bin/weed` itself (open item 186).
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -3871,6 +3894,39 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       JSON. A message with no final state reads `(no error code)`, and NSQ's title reads `Nsq`.
     - A long composition word (`W=`) hides the tokens after it in a problem's command; the trial's
       tester missed an `L=` there.
+186. What the example `seaweedfs` left (M364, tentative number):
+    - The example runs one filer on its default store, and several filers did not run.
+      `weed mount`, versioned buckets, and erasure coding did not run either. Nor did KVM, the
+      Mac engine, and the Rust volume server; the image has an arm64 build.
+    - A Go program with `GODEBUG=fips140=on` cannot start in the guest, whose clock has no
+      jitter for the FIPS entropy source (item 1 of "What hydo lacked" in RESULTS.md). The image
+      turns the mode on, so the example replaces its entrypoint. The hazards of the guide do not
+      name the limit, and the Mac and KVM engines were not tried.
+    - `hydo build --check` printed `OK` for a manifest whose data disk and the services' own file
+      systems passed hvx's 4,096 MiB; the build stopped after the images were unpacked. The
+      Garage example's comment says that `data.size_mib` holds the services' file systems, and
+      they come on top of it.
+    - The import took the image's first `EXPOSE`, 7333, as every service's port and readiness
+      check (as open item 121).
+    - Stopping `hydo explore` by its process group left the engine `hydo-hvx`, which runs under
+      `sudo`, with 14 GB of the host; nothing names its pid.
+    - A violation in a run with damaged files (class `corrupted-files`) is shrunk, at a minute or
+      more a candidate; only the errors of detected damage wait for `--shrink-detected-damage`.
+    - `hydo save` of the configurations exploration wrote one file per failure of one class,
+      five files named after the verdict's first words. Each names a `W=@<hash>` form in a note
+      and keeps the seed form on its schedule line. `# params: fsync=false` and the `SKIP` of
+      `hydo repro --regressions` on the default build worked on hvx (open item 183's point).
+    - `hydo rules scan --kind writes` found no route of a gorilla/mux router whose path is a
+      variable, and no filer write behind one handler that switches on the method.
+    - The verdict line of a passing run names `objects.no-phantom (0 judged)`, not the claim
+      `acked-outcome` that judged 81 to 95 writes.
+    - The statistics of `hydo stats` count the `disk=cut` that every power cut needs among the
+      disk faults that `faults:` does not list. The process strategy placed its blind `C=` cuts
+      only at the end of the workload.
+    - SeaweedFS issue #4557 (a large write left empty by a master failover, 3.52) did not
+      reproduce with writes of 4 to 10 MiB. A write of hundreds of MB did not run.
+    - The rule over both copies of each chunk fails after any damaged volume file, by the
+      documented absence of repair; its failures cover the other checks' verdicts in those runs.
 
 ## Milestone index
 
@@ -5025,6 +5081,13 @@ build machine, before 2026-10-13.
   the Pulsar merge; it is restored. The release commit drops the build tree's path from `bin/hydo`.
   Both releases were built twice to the same bytes, the Mac one signed and notarized, and verified
   on hvx and the Mac
+- M364 (tentative number): the onboarding of SeaweedFS 4.55 on hvx with the released hydo 0.6.0.
+  It runs three Raft masters, three volume servers with replication `001`, a filer, and S3.
+  With the filer's fsync rule no acknowledged write was lost in 342 schedules. That includes
+  power cuts aimed after acknowledgements and compactions. Without it power cuts lose writes, the
+  documented trade-off. Damaged files stop their server, by design. No new bug. Nothing
+  recorded moved
+
 ## Where to look
 
 - `docs/HISTORY.md`: every milestone with its evidence, and the superseded values.

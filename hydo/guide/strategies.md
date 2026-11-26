@@ -765,6 +765,12 @@ These findings hold for every type of system:
     to 23 s after a failover, and 14 of 30 schedules left a node that did not start again. A
     grid with `--seeds` runs one point per seed, so the whole grid three times needs as many
     seeds as three grids have points.
+  - SeaweedFS, nothing: 60 power cuts and power losses of the filer or of one volume server
+    lost no write with the fsync rule on. They came 0 to 40 ms after an acknowledged write, a
+    deletion, or a compaction of the volumes. 65 kills of each master, one volume server, and
+    the filer, 0 to 3 s into writes of 4 MiB or more, lost none either. The client wrote a
+    console event at the start of each large write, and before and after each compaction that
+    it ordered. So the grid has moments inside the work, not only after its answer.
 - **What it misses.** The window moves with the program's bytes. A second build of
   `mender-update` moved it to 65, 70, and 75 ms.
 - **Cost.** One run per delay and action: 153 runs for one service and the 51 default delays.
@@ -1019,6 +1025,13 @@ These findings hold for every type of system:
     acknowledged with `insert_quorum = 2`, and the shrink of one kept the cut and the quorum
     inserts alone. With `fsync_after_insert` alone, 3 of 4 reached finding 1, the replication
     that stops for good. That is a known bug, which a relaxed value only reaches.
+  - SeaweedFS 4.55's path rule `fsync` of the filer (hvx, seeds 1-20, `--durable-only`, three
+    masters and three volume servers with two copies of each volume): with the rule on
+    `/buckets/`, no schedule failed. Without it, SeaweedFS's default, 5 of 20 power cuts of the
+    guest lost acknowledged writes of the filer and of S3. The shrink gave `disk=cut | run C=1`,
+    and the table labeled it the documented trade-off. The two copies do not help when one power cut
+    takes both. `hydo save` wrote the regression with `# params: fsync=false`, and `hydo repro
+    --regressions` replays it on that build only.
   - Before it, each such finding came from one setting tried by hand. Examples are the write
     caching of Redpanda, the SQLite mode `synchronous=NORMAL` of Vikunja, and the durability
     default of libSQL.
