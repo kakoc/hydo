@@ -41,6 +41,7 @@ hydo-compose::fetch_arch                 fast
 hydo-compose::k8s                        fast
 hydo-compose::local_build                fast
 hydo-compose::openapi                    fast
+hydo-compose::placeholder                fast
 hydo-compose::private_registry           fast
 hydo-compose::pycheck                    fast
 hydo-compose::registry                   fast

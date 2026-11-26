@@ -11,6 +11,7 @@ mod fetch_arch;
 mod k8s;
 mod local_build;
 mod openapi;
+mod placeholder;
 mod private_registry;
 mod pycheck;
 mod registry;

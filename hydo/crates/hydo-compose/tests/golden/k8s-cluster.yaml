@@ -280,14 +280,14 @@ groups:
 
 # TODO(workload): one step = one client operation against the system (an HTTP request, a
 # query), appended to $HYDO_ACKED only when the system acknowledged it. Faults are placed
-# at step numbers. Each Kubernetes Service and pod name resolves (e.g. kv-0 -> 10.89.0.12); run tools inside
+# at step numbers. Each Kubernetes Service and pod name resolves (e.g. api -> 10.89.0.17); run tools inside
 # an image with `hydo-oci <service> <command>`. Ask the onboard skill (/hydo:onboard) to write it.
 workload:
   steps: 20
   run: |
     i=$HYDO_FROM
     while [ $i -lt $HYDO_TO ]; do
-      # TODO: one operation with item $i against kv-0 (port 7000), with a client the image has;
+      # TODO: one operation with item $i against api (port 8080), with a client the image has;
       #   only when the system confirmed it: echo $i >> $HYDO_ACKED
       echo "hydo-compose: TODO write the workload (hydo.yaml)" > /dev/console; exit 1
       i=$((i + 1))
