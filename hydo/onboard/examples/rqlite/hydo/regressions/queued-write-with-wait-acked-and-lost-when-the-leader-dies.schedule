@@ -1,0 +1,8 @@
+# A known bug of rqlite 10.8.0 (RESULTS.md, finding 1; the open pull request rqlite/rqlite#3027).
+# The leader is killed before step 35. A queued write with wait (/db/execute?queue&wait) through a
+# follower in that step cannot reach the leader: runQueue tries twice, one second apart
+# (-write-queue-retry 1), and then falls through to its success path (http/service.go, runQueue):
+# req.Close() closes the waiting caller's flush channel, so the caller gets 200 and the batch
+# was never committed. The messages check names the queued write q.k83 as acknowledged and absent.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run K=nodes.primary@35+3

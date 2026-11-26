@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# a backup in SQL through a node that the seed picks: it must hold every append acknowledged before it
+exec /bin/rqc backup

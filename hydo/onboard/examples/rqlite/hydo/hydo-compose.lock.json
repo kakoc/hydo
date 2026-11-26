@@ -1,0 +1,71 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "rqlite/rqlite:10.8.0": {
+   "index_digest": "sha256:71b122313e060f915918225d07f802825547d4fc9cc1f7be007d6aab0b34c9ca",
+   "name": "rqlite/rqlite",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "run"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "4001/tcp": {},
+       "4002/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "rqlite",
+      "Volumes": {
+       "/rqlite/file": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:ac2e29dda37f80063076d951867f689d987f3c5584b3cfb298626d268a0775d1",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "run"
+      ],
+      "Entrypoint": [
+       "docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+      ],
+      "ExposedPorts": {
+       "4001/tcp": {},
+       "4002/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "rqlite",
+      "Volumes": {
+       "/rqlite/file": {}
+      },
+      "WorkingDir": "/"
+     },
+     "digest": "sha256:e8396e5d0631d23df596feaede7b31fc20ac1b3dbcbbc450c2888b32c522f1c4",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "rqlite/rqlite:10.8.0",
+   "registry": "docker.io",
+   "repo": "rqlite/rqlite",
+   "tag": "10.8.0"
+  }
+ }
+}

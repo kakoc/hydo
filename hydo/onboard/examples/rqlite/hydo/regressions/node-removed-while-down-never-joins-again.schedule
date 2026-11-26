@@ -1,0 +1,11 @@
+# A new candidate in rqlite 10.8.0 (RESULTS.md, finding 3). 10 ms after an acknowledged write in
+# step 20, the follower rq2 loses its power and stays down. The removal driver then removes rq2
+# with DELETE /remove (200). At the heal rq2 starts again with its own -bootstrap-expect 3 and
+# -join flags. Its first contact is an AppendEntries of the leader rq3, which still replicates
+# the removal entry to it, so the bootstrapper's done check (a known leader) passes at its first
+# tick and the node never sends a join (cluster/bootstrap.go, Boot; cmd/rqlited/main.go,
+# bootDoneFn). rq2 then learns that it was removed ("not part of stable configuration, aborting
+# election"), never joins again, and fails a snapshot every few seconds. eventually_converge:
+# "the leader rq3 does not list rq2 as a reachable voter".
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run A=rq.write_acked@20+10:powerloss-rq2

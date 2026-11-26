@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# INSERT OR REPLACE of a known row of kv, a deleted one too: its new value
+exec /bin/rqc op upsert

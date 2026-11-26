@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# a queued write with wait (?queue&wait): an INSERT of a new row of kv, acknowledged when the queue committed it
+exec /bin/rqc op queue

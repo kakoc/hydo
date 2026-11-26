@@ -1,0 +1,45 @@
+# rqlite 10.8.0 (the newest release, 2026-11-26) as a cluster of three nodes, the shape of
+# rqlite's clustering guide (https://rqlite.io/docs/clustering/automatic-clustering/): each node
+# bootstraps with -bootstrap-expect 3 and the three Raft addresses, at a fixed address, and keeps
+# its data in a volume of its own. The API is on port 4001 and Raft on 4002.
+services:
+  rq1:
+    image: rqlite/rqlite:10.8.0
+    command: ["-node-id", "rq1", "-http-addr", "0.0.0.0:4001", "-http-adv-addr", "10.89.0.11:4001",
+              "-raft-addr", "0.0.0.0:4002", "-raft-adv-addr", "10.89.0.11:4002",
+              "-bootstrap-expect", "3", "-join", "10.89.0.11:4002,10.89.0.12:4002,10.89.0.13:4002"]
+    volumes:
+      - rq1:/rqlite/file
+    networks:
+      rq: {ipv4_address: 10.89.0.11}
+    ports: ["4001:4001"]
+    restart: unless-stopped
+  rq2:
+    image: rqlite/rqlite:10.8.0
+    command: ["-node-id", "rq2", "-http-addr", "0.0.0.0:4001", "-http-adv-addr", "10.89.0.12:4001",
+              "-raft-addr", "0.0.0.0:4002", "-raft-adv-addr", "10.89.0.12:4002",
+              "-bootstrap-expect", "3", "-join", "10.89.0.11:4002,10.89.0.12:4002,10.89.0.13:4002"]
+    volumes:
+      - rq2:/rqlite/file
+    networks:
+      rq: {ipv4_address: 10.89.0.12}
+    restart: unless-stopped
+  rq3:
+    image: rqlite/rqlite:10.8.0
+    command: ["-node-id", "rq3", "-http-addr", "0.0.0.0:4001", "-http-adv-addr", "10.89.0.13:4001",
+              "-raft-addr", "0.0.0.0:4002", "-raft-adv-addr", "10.89.0.13:4002",
+              "-bootstrap-expect", "3", "-join", "10.89.0.11:4002,10.89.0.12:4002,10.89.0.13:4002"]
+    volumes:
+      - rq3:/rqlite/file
+    networks:
+      rq: {ipv4_address: 10.89.0.13}
+    restart: unless-stopped
+networks:
+  rq:
+    ipam:
+      config:
+        - subnet: 10.89.0.0/24
+volumes:
+  rq1: {}
+  rq2: {}
+  rq3: {}

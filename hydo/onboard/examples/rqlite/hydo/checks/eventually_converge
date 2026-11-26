@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: within 120 s of the heal every node holds the leader's rows and lists
+exec /bin/rqc check converge

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: within 120 s of the heal a write through each node is acknowledged and then readable on every node within 15 s
+exec /bin/rqc check serves

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=180
+# wait until the three nodes are reachable with one leader, and create the tables kv, la and sv
+exec /bin/rqc init

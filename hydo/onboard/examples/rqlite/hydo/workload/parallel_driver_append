@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# a second command of transactions of la (as parallel_driver_txn), so that about one command in five is one
+exec /bin/rqc txn
