@@ -19,6 +19,7 @@ hydo-agent-proto                         fast
 hydo-agent-proto::examples               fast
 hydo-agent-proto::schema                 fast
 hydo-agents                              fast
+hydo-agents::guide_topics                fast
 hydo-agents::public_content              fast
 hydo-agents::skill_check                 fast
 hydo-bench                               fast

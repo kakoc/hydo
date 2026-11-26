@@ -1,0 +1,31 @@
+# The size in bytes of what `hydo guide <topic>` prints, per topic of `hydo guide --list`
+# (tests/guide_topics.rs). Written by HYDO_BLESS=1 cargo test -p hydo-agents --test it guide_topics::
+capabilities 6914
+checks 9636
+ci 22846
+composer 9743
+error-logs 4032
+error-paths 4772
+faults 40219
+flaky-tests 17277
+fuzz 34671
+hazards 7512
+hydo_assert.sh 3539
+inspect 16018
+invariant-patterns 5240
+manifest 258397
+messages 18238
+minimum-path 4254
+numbered-steps 2031
+outside-services 14264
+rules 14426
+schema 130576
+sdks 5438
+services 8451
+skill 14376
+strategies 77723
+update 8550
+values 8665
+web-apps 19285
+workflow 36742
+workloads 7295

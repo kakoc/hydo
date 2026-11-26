@@ -5,5 +5,6 @@
 
 mod tmpdir;
 
+mod guide_topics;
 mod public_content;
 mod skill_check;
