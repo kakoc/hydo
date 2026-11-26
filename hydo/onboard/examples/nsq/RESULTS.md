@@ -162,10 +162,11 @@ writeFileNum and resetting 0...`.
 **The cause** (go-diskqueue v1.1.0 `diskqueue.go`; on `master` the lines are 5 to 14 later):
 
 1. `nsqd` answers `OK` once `writeOne` has written the message into the current data file
-   (line 696, a plain `Write`). It opens `<name>.diskqueue.000000.dat` with
-   `os.O_RDWR|os.O_CREATE` (line 390).
+   with a plain `Write` (line 419; `ioLoop` returns its result at line 696). The file is
+   `<name>.diskqueue.000000.dat` (`fileName`, line 536), opened with `os.O_RDWR|os.O_CREATE`
+   (line 390).
 2. Only `sync()` (line 433) writes the metadata, through `persistMetaData()` (line 503).
-   `ioLoop` syncs after `syncEvery` messages (line 656) or at a tick of `syncTimeout` once there
+   `ioLoop` syncs after `syncEvery` reads and writes (line 656) or at a tick of `syncTimeout` once there
    was activity (lines 697 to 702). `New` writes nothing, so a new queue has no metadata file
    until its first sync.
 3. At a start, `New` calls `retrieveMetaData()` (line 131), which returns the error of

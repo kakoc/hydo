@@ -1200,8 +1200,8 @@ The messages check has `acked_outcome` with a consumer's `FIN` as the effect. Wi
   it. go-diskqueue v1.1.0 writes a queue's metadata file only at its first sync, up to 2 s after
   its first message. Without the file the restarted queue starts empty and writes over the old
   messages (`disk=none dseed=0 | run K=nsqd@4+1 W=...`). The file is renamed into place without
-  a sync of the directory, so a power cut seconds after the sync loses it too (`C=20`, blind in
-  6 of 20 schedules). NSQ's `master` still uses v1.1.0.
+  a sync of the directory, so a power cut seconds after the sync loses it too (`C=20`). One of
+  the 6 failures after a power cut in 20 blind schedules was traced to it. NSQ's `master` still uses v1.1.0.
 - Known (nsqio/nsq#1386, documented): a kill loses a message that a consumer holds in flight.
   The trial's aimed `A=nsq.msg_received:kill-nsqd` shows the first finding instead; the in-flight
   loss needs the kill after the channel queue's sync, `+2200`.
