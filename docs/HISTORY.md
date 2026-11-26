@@ -23224,3 +23224,133 @@ of this milestone ran without a VM. That machine's `/nix/store` holds 4 entries 
 **What is left.** Open items 115 and 165 are closed; open item 165 keeps its other entries. The
 read-backs of the image path still carry the request's index in their name, so a new pinned file
 renames the later ones in the next recording. Their answers do not change.
+
+## Milestone 365 (tentative number): one findings store for every run
+
+The user's idea (2026-11-26): the findings of hydo's runs should be kept in one light store that
+any tool can read, not only by CI. Before this milestone only `hydo ci record` wrote the history
+store, and only from the `ci-run.json` of a `hydo ci run`. A finding is one failure of a check,
+named by its key `f1:<kind>:<10 hex>` (docs/design/ci.md section 4.2).
+
+**The design.** The store keeps the format of the CI history store, with additions only:
+`v1/<project>/runs/<id>.json` (one `ci-run` document per recorded run), `findings.jsonl` (one
+`finding-event` per change of state) and `state.json` (the `ci-ledger`, their fold). A store
+written before reads as before.
+
+- `hydo findings record [RUN_DIR | EXPLORE_DIR]` makes a `ci-run` document from a plain `hydo
+  run` or `hydo explore` folder and records it with the fold of `hydo ci record`. The document
+  has `ci.name` `local`, `trigger` `manual`, no base, and the new field `recorded_from` (`hydo
+  run` or `hydo explore`). An exploration's findings come from the function that `hydo ci run`
+  uses (`ci::run::findings_of`), and a run's from its verdict and its new error kinds.
+- A finding seen failing is `new` on its branch the first time, `present` while it is open, and
+  `reappeared` after a fix. A finding of the branch adds a sighting, never a second entry.
+- A `hydo run` whose schedule is one of an open finding's recorded schedules is a replay. When
+  its verdict is `OK`, the finding is `fixed` (proof `head-replay-ok`). When it fails with
+  another key, the finding is `changed` and keeps its state. A run of any other schedule, and an
+  exploration that does not find a finding, change nothing: absence proves nothing.
+- A record's id is `local:<first 16 hex of the sha256 of result.json or exploration.json>`.
+  Recording one folder twice says `already in` and changes nothing.
+- The store is `--store DIR`, else `HYDO_FINDINGS_STORE` (new in `hydo-config`), else
+  `~/.hydo/findings`, the folder `findings` of `HYDO_HOME`. A per-user folder works without a
+  setting, and one variable points every run of the machine at a team's checkout.
+- The project is `--project`, else the `name` of the manifest in the image's build record, else
+  the `name` in `./hydo/hydo.yaml` or `./hydo.yaml`, else the image's file name. The commit and
+  the branch are the folder's git `HEAD` and branch, else the branch `local`.
+- `hydo findings list|show|history` fold the recorded runs of each branch again, as `hydo ci
+  page` does, and give each finding its line: `new`, `failing`, `not-found` (still open),
+  `fixed`, `back`. `--json` prints the new results document `findings` (`FindingsDoc`, with
+  `StoredFinding`, `FindingSighting`, `FindingPoint` and `FindingsFilter`), an addition to
+  `hydo/schema/results-v1.json` that `hydo-schema-compat` checks against the released schema.
+- `hydo run --record-findings` and `hydo explore --record-findings` record at the end. They are
+  off by default. With `--json`, or when stdout is no terminal, `hydo explore` prints the
+  record's line on stderr, so the summary stays on stdout.
+- `hydo ci page` reads the same runs, so it shows these records. Its column `Trigger` names the
+  command of a record that has `recorded_from`.
+
+Other additions: `CiFinding.verdict` (the whole verdict line), and `image_sha256`, `epoch`, `fp`
+and `time` on each `finding-event`, which `hydo ci record` now writes too.
+
+**What a record holds.** A record keeps small values only. It holds no path of this machine:
+
+- the image and the exploration's folder by their file names;
+- no engine arguments (they name the guest kernel's path), and the guest kernel by its file name;
+- no command line of the explorer;
+- a replay line `hydo run <image file name> '<schedule>'`, made by hydo, instead of the explorer's
+  `repro_command`, which names the image's full path.
+
+It holds the host's CPU model (`Apple M2 Pro`), as `ci-run.json` does. The verdict line is the
+guest's own text, so a check that prints a secret puts it there. The scripted test checks every
+file of the store, but the page, for the test folder's path and for the engine's arguments. The
+store of the Mac proof below has no `/Users` and no `/private` outside its `index.html`, which
+names the store as `--store` gave it.
+
+**The proof on the scripted engine.** `hydo/crates/hydo-cli/tests/findings.rs` runs the scripted
+engine (`HYDO_SCRIPTED_ENGINE`), which fails a power cut with `MODE=lazy`. In one test:
+
+- `hydo explore --record-findings` records `new VIOLATION [db.acked_writes_survive]`, and a second
+  record of the folder changes nothing;
+- a second exploration of the lazy image adds a sighting, and one of a changed image finds
+  nothing and keeps the finding open;
+- a `result.json` of the minimal schedule that passes proves it fixed, and a passing run of
+  another schedule does not;
+- a failing run brings it back. `hydo findings history <part of the key> --json` gives the line
+  `new, failing, not-found, fixed, back` and 3 sightings;
+- `--since`, `--class` and `--state` filter, `hydo ci page` shows the records, and the store
+  holds no path of the test folder.
+
+A second test reads an empty store and refuses a folder that does not exist.
+
+**The proof on the Mac engine.** The Redis quickstart example of the 0.6.0 release ran with this
+tree's `hydo` (`HYDO_RELEASE_DIR` named the unpacked release) under the shared Mac VM lock. Its
+manifest kept `faults: [kill, pause, cut, clock]`, so that the lying disk did not hide the
+replay. Image A is the example, and image B the same example whose setting `R` always sets
+`appendfsync always` (the fix):
+
+```text
+$ hydo run --image hydo-out/explore-ob-redis-arm64.cpio.gz "disk=cut | run C=12 R=everysec" --out runs/a1 --record-findings
+hydo findings: recorded local:c4bc61380bd51f0f of redis on local into .../store: new VIOLATION [redis.acked_writes_survive] key k:# lost
+$ hydo findings record runs/a1
+hydo findings: local:c4bc61380bd51f0f of redis is already in .../store; nothing changed
+$ hydo explore --image <A> --seeds 1-20 --out ex1 --no-diagnose --record-findings
+hydo findings: recorded local:367c8544757dedf1 of redis on local into .../store: seen again VIOLATION [redis.acked_writes_survive] key k:# lost
+$ hydo explore --image <B> --seeds 1-20 --out ex2 --no-diagnose --record-findings
+hydo findings: recorded local:5c7f55e9891d36c6 of redis on local into .../store: no finding
+$ hydo run --image <B> "disk=cut | run C=12 R=everysec" --out runs/b1 --record-findings
+hydo findings: recorded local:9eeb7cdf4f472c85 of redis on local into .../store: fixed by replay VIOLATION [redis.acked_writes_survive] key k:# lost
+$ hydo run --image <A> "disk=cut | run C=12 R=everysec" --out runs/a2 --record-findings
+hydo findings: recorded local:4665667d9d6b098a of redis on local into .../store: back again VIOLATION [redis.acked_writes_survive] key k:# lost
+$ hydo findings history 5ef675c8c9
+  f1:invariant:5ef675c8c9  VIOLATION [redis.acked_writes_survive] key k:# lost
+    back again; first seen 2026-11-26 07:48:35 UTC, last seen 2026-11-26 07:49:01 UTC; 3 sightings
+    class unsafe-knob
+    minimal schedule: disk=cut | run C=12 R=everysec
+    2026-11-26 07:48:35 UTC  hydo run      first seen  fp=275a3d143726e6ad  image df2bb1f559b4
+    2026-11-26 07:48:47 UTC  hydo explore  seen failing again  fp=18b18bd983b8a4a0  image df2bb1f559b4
+    2026-11-26 07:48:53 UTC  hydo explore  not found (still open)  image 12360f0ff79e
+    2026-11-26 07:48:57 UTC  hydo run      fixed: its schedule passed  fp=eb1d238c59246a8f  image 12360f0ff79e
+    2026-11-26 07:49:01 UTC  hydo run      back again after a fix  fp=275a3d143726e6ad  image df2bb1f559b4
+```
+
+The two runs of the schedule on image A gave one fingerprint, `275a3d143726e6ad`, and image B
+passed it (`acked=12 all present`). `hydo findings show` named
+the second schedule the exploration recorded (`disk=cut dseed=0 | run C=10 R=no`), the replay
+line, and the last sighting's hydo 0.6.0, epoch 6, engine `hvm/Apple`, image and fingerprint.
+`hydo ci page --store` wrote a page of 12 KiB with the five records. The whole proof took about
+40 s. `hydo/schema/examples/results/v1/mac-redis-findings/` keeps the store's ledger, two of its
+`ci-run` records, and the `list` and `history` documents.
+
+**Nothing recorded moved.** No engine, agent, image or fingerprint changed. The CLI goldens
+changed in the 11 answers of the main help, which names `hydo findings`.
+
+**What is left** (open item 187):
+
+- A key names the check, not the cause. A passing replay of one schedule proves the key fixed
+  while another schedule may still fail it; the next sighting marks it `back again`.
+- `hydo findings record` replays nothing itself. A finding found by an exploration is proven fixed
+  only by a `hydo run` of one of its schedules; a command that replays every open finding of a
+  store on an image is not built.
+- A record of a laptop goes to the branch that git names, also `main`, which `hydo ci run
+  --history` reads. `--branch` keeps it apart; nothing refuses it.
+- `hydo ci run --history` did not read a store with such records, and the page read only the
+  scripted test's store and the Mac proof's store, not a history branch on GitHub (open item 67).
+- A store has no lock. Two records into one store at once can lose one ledger update.
