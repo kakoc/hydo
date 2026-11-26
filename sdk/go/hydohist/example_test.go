@@ -45,3 +45,11 @@ func ExampleAppend() {
 	fmt.Println(hydohist.Append("x", "1"), hydohist.Read("y"), hydohist.ReadResult("y", "1", "2"), hydohist.List("1", "2"))
 	// Output: a:x:1 r:y r:y:[1,2] [1,2]
 }
+
+// The end of a drain: every message of a group was read (a messages check's `drained` record).
+func ExampleHistory_Drained() {
+	q := hydohist.New("orders")
+	q.Drained(9, "orders", "-") // "-": a queue without groups
+	fmt.Println("recorded")
+	// Output: recorded
+}
