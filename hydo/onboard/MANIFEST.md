@@ -36,7 +36,7 @@ directory, each with `model.json`, the model it reads into; `INDEX` lists them).
 - **A version in every document.** `format: 1`. A document without `format:` is read as format
   1 (every file written before it existed). A hydo that sees a newer format refuses the file
   before it reads any other key, and names the format it needs: `format: this file is written in
-  project format 2, and this hydo (0.6.0) reads project format 1 only; install a newer hydo, one
+  project format 2, and this hydo (0.7.0) reads project format 1 only; install a newer hydo, one
   that reads format 2`. `hydo_version:` is a different, optional pin: the hydo release the
   project was made for (what runs in the guest), checked against `hydo/VERSION`. A plan that
   says `"0.3"` builds on hydo 0.3 and on every newer release of the same major, such as 0.4 or

@@ -32,7 +32,8 @@ docs/PUBLISHING.md lists every place hydo is published.
    skipped copy lets a later change remove what this release shipped. 0.2.0 to 0.3.1 skipped it;
    0.3.2 copied `project-v1`, `results-v1` and `ci-v1`; 0.3.3 copied `project-v1`; 0.3.4
    copied `project-v1` and `results-v1`; 0.4.0 copied `ci-v1`, `image-v1`, `project-v1` and
-   `results-v1`; 0.4.1 copied `project-v1`; 0.5.0 and 0.6.0 copied `project-v1` and `results-v1`.
+   `results-v1`; 0.4.1 copied `project-v1`; 0.5.0 and 0.6.0 copied `project-v1` and `results-v1`;
+   0.7.0 copied `results-v1`.
 2. On the final commit: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`
    and `cargo test --locked --release --workspace` pass: the full test tier, every test of the
    workspace and not only the per-push tier's (docs/CI.md "Test tiers"); the `ci-full` workflow
