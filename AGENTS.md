@@ -1174,6 +1174,27 @@ judge it. Nothing was posted:
 An acknowledgement with the broker's receipt can come back after a broker crashes, by design and
 as the client's documentation says (open item 181).
 
+**NSQ (M362, tentative number).** NSQ v1.3.0 runs as one `nsqd` and one `nsqlookupd` from the
+official image in one guest of the Mac engine, in `hydo/onboard/examples/nsq` (RESULTS.md). It is
+the project of the 0.6.0 trial. `nsqd` has `--mem-queue-size=0`, the setting that NSQ's guarantees
+page names for writing every message to disk. Its data path is a file system of its own. A Go
+client publishes over HTTP, consumes over TCP with `FIN`, and records each step with `hydohist`.
+The messages check has `acked_outcome` with a consumer's `FIN` as the effect. Without a kill of
+`nsqd` every acknowledged message reached a consumer. Nothing was posted:
+- New: a kill of `nsqd` in the first seconds of a new topic or channel loses every message of
+  it. go-diskqueue v1.1.0 writes a queue's metadata file only at its first sync, up to 2 s after
+  its first message. Without the file the restarted queue starts empty and writes over the old
+  messages (`disk=none dseed=0 | run K=nsqd@4+1 W=...`). The file is renamed into place without
+  a sync of the directory, so a power cut seconds after the sync loses it too (`C=20`, blind in
+  6 of 20 schedules). NSQ's `master` still uses v1.1.0.
+- Known (nsqio/nsq#1386, documented): a kill loses a message that a consumer holds in flight.
+  The trial's aimed `A=nsq.msg_received:kill-nsqd` shows the first finding instead; the in-flight
+  loss needs the kill after the channel queue's sync, `+2200`.
+- Known (nsqio/nsq#1124), a clock effect: after a backward clock step every publish to a topic
+  waits until the clock passes the last message id's time.
+
+Open item 184 has what is left.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -3871,6 +3892,31 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       JSON. A message with no final state reads `(no error code)`, and NSQ's title reads `Nsq`.
     - A long composition word (`W=`) hides the tokens after it in a problem's command; the trial's
       tester missed an `L=` there.
+184. What the example `nsq` left (M362, tentative number):
+    - Finding 1 (a new queue without its metadata file starts empty after a kill) is not posted;
+      its draft waits for the lead. It belongs to go-diskqueue, which nsqio/nsq requires.
+    - A shrink of a reaction's delay moves it towards `+0`. The trial's aimed grid shrank its
+      in-flight losses to `+0`, where finding 1 hides the in-flight loss, and the report named the
+      wrong cause. Only directed delays on both sides of NSQ's 2 s sync told them apart.
+    - The messages check's `no-loss` judged none of the messages that finding 1 lost until the
+      drain recorded `sub jobs work from=start`: they were sent before any receive (open item
+      183). The same record from a `first_` command did nothing, because its records stay in
+      provisioning; `hydo guide messages` says to record it "before them" and does not say so.
+    - A run whose check failed and whose services did not exit has no `logs/` folder, so `nsqd`'s
+      log and its log before the restart needed a `hydo inspect` session. `hydo inspect exec
+      --service` runs in the service's network namespace, not in its root, where the files are.
+    - `nsqlookupd` announces the guest's host name `hvm`, so `nsqd`'s query for a topic's channels
+      fails with a warning; nothing in the workload needs it.
+    - Of e1's 6 failures with a power cut, only seed 1's shrink was traced to the missing
+      metadata file. The power-cut form rests on ext4's order of a rename and a file's sync in
+      the guest; a file system that keeps the rename was not tried.
+    - The client once recorded a `FIN` without an answer as no final state, and a pause of
+      `nsqd` failed `acked-outcome` falsely. A `type: messages` client has no recorder call for
+      an acknowledgement whose effect is unknown; the example leaves such a message out of the
+      read-back by hand.
+    - One `nsqd`: several `nsqd` nodes behind one `nsqlookupd`, deferred publishes (`DPUB`),
+      requeues (`REQ`), ephemeral channels, `/channel/empty`, TLS, hvx, and KVM did not run. The
+      explorer's shrink spent most of an exploration on the losses of finding 1.
 
 ## Milestone index
 
@@ -5025,6 +5071,12 @@ build machine, before 2026-10-13.
   the Pulsar merge; it is restored. The release commit drops the build tree's path from `bin/hydo`.
   Both releases were built twice to the same bytes, the Mac one signed and notarized, and verified
   on hvx and the Mac
+- M362 (tentative number): the NSQ project of the 0.6.0 trial as the example `nsq`, with hydo
+  0.6.0 on the Mac engine. New: a kill of `nsqd` in a new topic's or channel's first seconds, or
+  a power cut soon after, loses its messages. go-diskqueue starts a queue empty when its metadata
+  file is not on the disk yet. Known: a kill loses a message in flight (nsqio/nsq#1386,
+  documented), and a backward clock step holds every publish (#1124). The trial's aimed schedule
+  was the first finding, not the in-flight loss. Nothing recorded moved
 ## Where to look
 
 - `docs/HISTORY.md`: every milestone with its evidence, and the superseded values.
