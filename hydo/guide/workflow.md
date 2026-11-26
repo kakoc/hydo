@@ -409,8 +409,9 @@ record of the host, so it changes no run, no fingerprint, and no verdict. It has
   idle.
 - The faults drawn. Each fault kind has its runs, its targets, and its workload steps. A
   reaction (`A=`) counts as the fault that its action makes: `kill-<svc>` as a crash, `cut` as a power
-  cut, and `powerloss-<svc>` as a power loss of one service. The kinds that `faults:` allows and
-  no schedule drew are listed, each with the option that draws it.
+  cut, and `powerloss-<svc>` as a power loss of one service. With `cut` in `faults:`, the
+  `disk=cut` that a power cut needs counts as part of the cut, not as a disk fault. The kinds
+  that `faults:` allows and no schedule drew are listed, each with the option that draws it.
 - An estimate. It says how many first runs fit in a time budget with N workers, or on N machines
   with `--shard I/N`.
 
