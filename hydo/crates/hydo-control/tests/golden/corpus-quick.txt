@@ -87,6 +87,7 @@ input	hydo/onboard/examples/redpanda/hydo/hydo.yaml	a81d2ad14bf95e1eb2bb7766eb15
 input	hydo/onboard/examples/restate/hydo/hydo.yaml	57a2fd507cc21b4821451ba79273d33a93b7a62501c7763363ec84f65ca1a1c8
 input	hydo/onboard/examples/river/hydo/hydo.yaml	6df7b0553b4a38f9d9f3ab285c37bb1d659703f5177ffd9ffcbabe6a1826ba0e
 input	hydo/onboard/examples/saleor/hydo/hydo.yaml	f05fc0c26134482af2ea78fda7c2e9dee2a8f1f082b583b86830e45f9698be94
+input	hydo/onboard/examples/seaweedfs/hydo/hydo.yaml	5fd69f77470e49e2807e91d36920a1fb07193fbf9dedf5ae48ab2cb390080153
 input	hydo/onboard/examples/surrealdb/hydo/hydo.yaml	128e7b203e1970e642c1a4c496f775e3a261f05594223920ff0a1c5756208fe7
 input	hydo/onboard/examples/temporal/hydo/hydo.yaml	fbb24c008d046d836092b84e6616aa48de73fde24385d25182afd89948321c11
 input	hydo/onboard/examples/tigerbeetle/hydo/hydo.yaml	c10e8648abc8a3040ab99b14f7a4cd4dc35322777c0ade398f7bb7033b9ff423
@@ -7284,6 +7285,7 @@ manifest	hydo/onboard/examples/redpanda/hydo/hydo.yaml	not core: restart policie
 manifest	hydo/onboard/examples/restate/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/river/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/saleor/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
+manifest	hydo/onboard/examples/seaweedfs/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/surrealdb/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/temporal/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/tigerbeetle/hydo/hydo.yaml	core
