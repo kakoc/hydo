@@ -600,7 +600,7 @@ fn sync_prim(lang: L, code: &str, text: &str) -> bool {
             ]) || (code.contains("file:open(")
                 && (has_token(code, "sync") || has_token(code, "datasync")))
         }
-        L::Code(Lang::Sql) => false,
+        L::Code(Lang::Sql | Lang::Erlang | Lang::Elixir) => false,
     }
 }
 
@@ -644,7 +644,7 @@ fn rename_prim(f: &SFile, code: &str) -> bool {
         L::Code(Lang::Ruby) => any(&["File.rename(", "FileUtils.mv(", "FileUtils.move("]),
         L::Code(Lang::CSharp) => any(&["File.Move(", "File.Replace(", "Directory.Move("]),
         L::Erlang => any(&["file:rename(", "prim_file:rename("]),
-        L::Code(Lang::Sql) => false,
+        L::Code(Lang::Sql | Lang::Erlang | Lang::Elixir) => false,
     }
 }
 
@@ -705,7 +705,7 @@ fn whole_write(lang: L, code: &str) -> bool {
             "prim_file:pwrite(",
             "file:copy(",
         ]),
-        L::Code(Lang::C) | L::Code(Lang::Sql) => false,
+        L::Code(Lang::C | Lang::Sql | Lang::Erlang | Lang::Elixir) => false,
     }
 }
 
@@ -819,7 +819,7 @@ fn opener(lang: L, stmt: &str, stmt_text: &str) -> bool {
             any(&["file:open(", "prim_file:open("])
                 && (has_token(stmt, "write") || has_token(stmt, "append") || stmt.contains("WRITE"))
         }
-        L::Code(Lang::Sql) => false,
+        L::Code(Lang::Sql | Lang::Erlang | Lang::Elixir) => false,
     }
 }
 
@@ -1539,7 +1539,10 @@ fn lang_of(rel: &str) -> Option<L> {
     if low.ends_with(".erl") || low.ends_with(".hrl") {
         return Some(L::Erlang);
     }
-    clockscan::lang_of(rel).map(L::Code)
+    // Elixir is the clock audit's language only; this audit reads Erlang with its own `L::Erlang`.
+    clockscan::lang_of(rel)
+        .filter(|l| !matches!(l, Lang::Erlang | Lang::Elixir))
+        .map(L::Code)
 }
 
 /// The audit of files given as (path, text): the unit tests' entry, and the walk's.

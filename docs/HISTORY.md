@@ -26250,3 +26250,10 @@ hydo-results's schema test failed first: `StackThread.service`, added after the 
 was not in `hydo/schema/results-v1.json`. The schema was recorded again with `HYDO_BLESS=1`. The
 workspace's clippy, the `docs::`, `equivalence::` and `agents_equivalence::` tests of `hydo
 --test it`, and `hydo-agents --test it` did not run on this Mac: its disk had about 13 GB free.
+
+**At the merge into `main`.** Milestone 382 added Erlang and Elixir to the clock audit's
+languages, so the sync audit's matches did not cover them; they now answer `false` for both,
+and the sync audit keeps reading Erlang through its own type and leaves Elixir out. The
+explorer's corpus and identity goldens and hydo-control's identity corpus were recorded again
+with `HYDO_BLESS=1`. Each diff added only the example `deadlock` (its input line, and the
+controller's boot, counts and one more refused schedule).

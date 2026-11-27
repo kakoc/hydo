@@ -4572,10 +4572,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A live session's stacks call costs one stop. A dump writes the guest's whole RAM, so a
       reading of a guest of several GiB writes that much to the session's folder.
     - Several vCPUs on hvx were not run.
-    - Checks left before the merge (Milestone 383, "Tests"): hydo-control's identity corpus
-      failed on the bare-metal machine, and the tests of hydo-explore did not run with the new
-      example `deadlock`. On the Mac the workspace's clippy and the `docs::`, `equivalence::` and
-      `agents_equivalence::` tests did not run, for lack of disk.
 
 ## Milestone index
 
