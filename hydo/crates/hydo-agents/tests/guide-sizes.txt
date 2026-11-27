@@ -6,7 +6,7 @@ ci 23282
 composer 9743
 error-logs 4032
 error-paths 4772
-faults 40219
+faults 46657
 flaky-tests 17277
 fuzz 34671
 hazards 8711
@@ -18,12 +18,12 @@ messages 18669
 minimum-path 4254
 numbered-steps 2031
 outside-services 14264
-rules 14426
+rules 14931
 schema 130576
 sdks 5438
 services 8451
-skill 14376
-strategies 83446
+skill 14668
+strategies 92798
 update 8550
 values 8665
 web-apps 19285

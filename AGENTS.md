@@ -1902,6 +1902,33 @@ there, the index swap, the dump, and the snapshot among them. The skill's step t
 workload runs it (`hydo guide rules`, "List the routes that write"; the design and the numbers
 are the section "The write routes" of `docs/design/rule-suggestion.md`; open item 175).
 
+**The sync audit (M381, tentative number).** `hydo rules scan --kind sync [DIR] [--json] [--all]`
+lists the code that can answer a write before the write is on the disk, the cause of about a
+third of the findings up to M374. It reads text with the clock audit's rules for test code and
+its map of the code that hydo.yaml's services run, in the clock audit's languages and Erlang
+(`hydo_cli::syncscan`). A place is one of seven shapes:
+
+- a write without a sync of the file, or a rename without a sync of its folder, in a function
+  whose callers do not sync after the call either;
+- a stream synced before it is flushed (Mender's version file);
+- `O_DIRECT` in a file without `O_DSYNC` or a sync (Garnet's default device);
+- a setting that turns syncing off by default, or syncs on an interval (SQLite's WAL mode without
+  `synchronous=FULL`, ClickHouse's `fsync_after_insert`, NSQ's `SyncEvery`);
+- a loop that syncs or saves on a timer (Garage's peer list).
+
+Each place names what is missing and the answer that follows it, which the audit searches in the
+function and in its callers by name. Each place gets one service's power loss and a power cut
+right after that answer. At the workload's event of an answered write that is
+`A=<event>+10:powerloss-<svc>`; without one it is `L=` and `C=` before the middle step.
+
+The proof read the tagged sources of 12 known places of hydo's findings. They are in NSQ's disk
+queue, Kvrocks, osiris (RabbitMQ), Garnet, Meilisearch, Vikunja, SWUpdate, Mender, Garage,
+ClickHouse, goleveldb (TiKV's PD), and the fuzz-vm example. The audit listed every one as `high`,
+and in each project the first known place was among the first 5. 25 of 30 sampled `high` places
+were real. The guide is the section
+"Find the writes acknowledged before they are synced" of `hydo guide faults`, and the design and
+the numbers are the section "The sync audit" of `docs/design/rule-suggestion.md` (open item 193).
+
 **Web apps through their Playwright tests (M253).** `browser:` (a format-1 addition) runs a team's
 Playwright tests unchanged as the workload, in Microsoft's Playwright image 1.65.1, which `hydo
 build` fetches by digest into `browser/`. Each workload step runs one shard. A watcher loaded with
@@ -4432,6 +4459,22 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Not run: the Mac engine, and the settings exploration over the five parameters. Neither
       ran the parallel replication, diskless replication, a log on disk, or several replicas
       per shard. No slot moved back to its first shard after a failure.
+193. What the sync audit left (M381, tentative number):
+    - Its schedules did not run in a VM. The known places' findings ran before the audit, with
+      the examples' own schedules.
+    - It ran without the examples' `hydo.yaml`, so the ranking by the code that the services run
+      and the schedules aimed at a workload's event were tested on a small project only.
+    - It reads text. A write through an interface, a sync in another thread, and a library that
+      the project only links (RocksDB, rclone, a driver's build flags such as go-sqlite3's
+      `SQLITE_DEFAULT_WAL_SYNCHRONOUS`) are not followed. A default computed in code or set in a
+      configuration file is not read.
+    - The answer is found by words, so a condition that names `commit` counts as one.
+    - 5 of 30 sampled places were wrong: a sync behind a documented option, a diagnostic log, an
+      analytics id, a dump's temporary folder, and an offline tool's copy.
+    - The places that no finding had named were not run or reported. Examples are ClickHouse's
+      metadata exchange of `RENAME TABLE`, Kvrocks's backup, SWUpdate's delta handler and GRUB
+      environment, Vikunja's attachments, and Meilisearch's `VERSION` file.
+    - The scan without `--kind` does not list the sync audit's places.
 
 ## Milestone index
 
@@ -5685,6 +5728,13 @@ build machine, before 2026-10-13.
   kernels of epoch 6, and an image built before keeps its kernels and values. On KVM Typesense's
   clean run passes and its three regressions fail as on hvx; the Mac kernels have no run yet.
   Every value of the list waits for the 0.8.0 pass
+- M381 (tentative number): the sync audit, `hydo rules scan --kind sync`. It lists the writes and
+  renames that a system can answer before they are synced, and streams synced before their flush.
+  It also lists `O_DIRECT` without `O_DSYNC`, settings that turn syncing off, and syncs on a
+  timer. Each place has the answer that follows it and a power loss aimed right after that
+  answer. Every one of 12 known
+  places of hydo's findings was listed as `high`; 25 of 30 sampled places were real. Nothing
+  recorded moved
 
 ## Where to look
 

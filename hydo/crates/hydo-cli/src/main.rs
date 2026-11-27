@@ -46,6 +46,7 @@ mod setup;
 mod skillupdate;
 mod sqlgen;
 mod stats;
+mod syncscan;
 mod update;
 mod versions;
 mod writescan;

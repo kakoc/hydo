@@ -18,5 +18,6 @@ mod migrate;
 mod onboard;
 mod readme;
 mod rules;
+mod syncscan;
 mod update;
 mod versions;

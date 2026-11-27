@@ -166,7 +166,10 @@ hold, and write the confirmed ones as checks. Then run the clock audit, `hydo ru
 clock` (`hydo guide faults`, "Find the durations measured on the wall clock"), when the
 installed hydo has it. Show the owner its first three places in plain words, and offer only
 their schedules: `hydo explore --schedule`, after you fill in the placeholders and move the
-steps to where that code runs. Mention the rest with the report's last line. Keep `clock` in `faults:`. Then explore. A first
+steps to where that code runs. Mention the rest with the report's last line. Keep `clock` in `faults:`.
+Run the sync audit the same way, `hydo rules scan --kind sync` (`hydo guide faults`, "Find the
+writes acknowledged before they are synced"), when the installed hydo has it. Show its first
+three places and offer their power cuts. Keep `cut` and `powerloss` in `faults:`. Then explore. A first
 run that fails points at the folder or at a real bug. Before changing anything, read why: the
 `hydo: diagnosis:` lines `hydo run` prints and the `diagnosis` in the run directory's
 `result.json`; then, when your hydo has `hydo inspect` (`hydo inspect --help`), look inside the
@@ -190,7 +193,7 @@ Give the user: the folder you wrote; the inventory; **each check, for review** (
 the part that needs human judgment; say which ones you are unsure about and why); the proposed
 rules as `hydo rules check` reported them: the ones that hold, plain words first, with their
 evidence, and apart the ones that failed without faults, each a wrong rule or a bug; the places
-of the clock audit, with the schedules you ran and their verdicts; the knobs; the
+of the clock audit and of the sync audit, with the schedules you ran and their verdicts; the knobs; the
 pitfalls you found and what you did about them; each promise you derived without the owner,
 marked "unconfirmed by the owner"; each place where the folder differs from production's shape;
 the explorations of each round, with their seeds and options; what you could not determine
