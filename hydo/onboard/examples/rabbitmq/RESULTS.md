@@ -162,6 +162,9 @@ to the stream; every claim holds. Each saved regression gave one fingerprint ove
 | `stream-loses-confirmed-messages-at-power-cut.schedule` | 2 | `2d220bcd3276c1b7` |
 | `stream-keeps-no-leader-after-backward-clock-step.schedule` | 3 | `efcd83d18848454a` |
 
+`hydo repro --regressions` on the final image gave 3 of 3 as expected, with the same
+fingerprints.
+
 ## What was found
 
 ### 1. New: one node's power loss loses a confirmed message of the stream for good
@@ -322,7 +325,7 @@ shrink.
 | e3 | without power cuts, the final client, `--seeds 1-40 --strategy process --new-faults --cluster-faults --storage-faults` | 15, stopped | finding 3 (seed 10); seed 4, a drain that did not end within 250 s after `T=10:-2592000` and a kill of `rabbit1`, probably finding 3 (not separated) |
 | e4 | with power cuts and the stream check without `delivery` and `fan_out` (`explore-cutqq.yaml`), `--seeds 1-12 --strategy process` | 12 | probably finding 3 (seed 4: `eventually_probe` after `K=rabbit1@21+9 P=rabbit1@8+1 T=10:-2592000`, no damaged file, not separated); finding 2 at 3 of the 5 cuts: a new message at a lost one's offset (seeds 8, 12), and the reader's stored offset back before its acknowledgement (seed 5, `after_ack`) |
 | e5 | the final image, `--reactive-at rmq.pub_confirmed@10,rmq.stream_confirmed@10 --react-delays 0..200/200 --react-actions kill-now,powerloss` | 24 | none: a kill of each node at the moment of a quorum queue's or the stream's confirm, and one node's power loss then, lost nothing; every reaction fired |
-| cfg | `hydo explore --configs explore-nocut.yaml --seeds 1-6 --strategy process --storage-faults`, the setting `replicas` | 6 of `replicas=3` | finding 1 again, blind (seed 2, without `N=`: `K=rabbit2@1+3 P=rabbit1@16+11 ... G=rabbit3@20:flip,... L=rabbit3@21+3`), and the drain of seed 4 that did not end (`T=10:-2592000` and kills of `rabbit1`), as in e3's seed 4. The combination `replicas=1` was still reading the folder at the hand-off (section "What hydo lacked", item 11) |
+| cfg | `hydo explore --configs explore-nocut.yaml --seeds 1-6 --strategy process --storage-faults`, the setting `replicas` | 6 of `replicas=3`, 5 of `replicas=1` | finding 1 again, blind (seed 2, without `N=`: `K=rabbit2@1+3 P=rabbit1@16+11 ... G=rabbit3@20:flip,... L=rabbit3@21+3`), and the drain of seed 4 that did not end (`T=10:-2592000` and kills of `rabbit1`), as in e3's seed 4. With `replicas=1`, seed 1 lost `s1` at the power loss of `rabbit1` (`L=rabbit1@4+3`), the node of the stream's one replica: the setting's documented trade-off, as its `tradeoff:` note says; with three replicas seed 1 passed. Seed 4 lost `s16` the same way, and seed 5 failed `eventually_probe`, not separated. The exploration was stopped during its shrinks, so `configs.json` has no table |
 
 No failure of any exploration named a claim of the quorum queues.
 

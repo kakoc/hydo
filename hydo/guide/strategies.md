@@ -1104,6 +1104,10 @@ These findings hold for every type of system:
     and the table labeled it the documented trade-off. The two copies do not help when one power cut
     takes both. `hydo save` wrote the regression with `# params: fsync=false`, and `hydo repro
     --regressions` replays it on that build only.
+  - RabbitMQ's replica count of its queues and its stream (`replicas`, hvx, seeds 1-6 without
+    whole-guest cuts, `--storage-faults`). With one replica, seed 1 lost a confirmed stream
+    message at the power loss of that replica's node. With three, seed 1 passed. The default
+    combination also found the stream's finding 1 again, blind at seed 2.
   - Before it, each such finding came from one setting tried by hand. Examples are the write
     caching of Redpanda, the SQLite mode `synchronous=NORMAL` of Vikunja, and the durability
     default of libSQL.

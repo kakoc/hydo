@@ -23983,7 +23983,7 @@ on two clean runs. Each regression gave one fingerprint over two fresh runs: fin
 `46d06ab61b82f53e`, finding 2 `2d220bcd3276c1b7`, finding 3 `efcd83d18848454a`. Finding 1 on e2's
 image gave `83cc413c2d60d1ae` twice, and finding 3 on e3's image `33f9b1d69512cda5` twice. Both
 windows move with the image's bytes: finding 3's saved schedule kills the leader a step later than
-e3's seed did.
+e3's seed did. `hydo repro --regressions` gave 3 of 3 as expected with the same values.
 
 **The explorations.** All with one worker and `--no-shrink`, because the stream's documented loss at
 a cut would have taken every shrink; directed runs judged each failure. e2, 20 schedules without
@@ -23994,8 +23994,10 @@ that did not end (seed 4). e4, 12 schedules with power cuts and a stream check w
 `delivery` (`explore-cutqq.yaml`): probably finding 3 without a damaged file (seed 4) and finding
 2 at 3 of 5 cuts. e5, the grid `--reactive-at rmq.pub_confirmed@10,rmq.stream_confirmed@10
 --react-actions kill-now,powerloss`: 24 schedules, no failure. The configs exploration of `replicas` (3 and 1, seeds 1 to 6, `--storage-faults`)
-found finding 1 again blind in its default combination (seed 2, without `N=`); its combination of
-one replica was still running at the hand-off.
+found finding 1 again blind in its default combination (seed 2, without `N=`). With one replica,
+seed 1 lost a confirmed stream message at the power loss of that replica's node, the setting's
+documented trade-off; with three it passed. With one replica 3 of 5 seeds failed, with three 2 of
+6. The exploration was stopped during its shrinks, so `configs.json` has no table.
 
 **Tests.** The new example enters the explorer's and the controller's corpora. Re-recorded with
 `HYDO_BLESS=1` on the bare-metal machine, in a copy of the worktree with an index of its files and
