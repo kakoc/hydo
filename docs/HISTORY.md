@@ -24348,6 +24348,17 @@ listed values found none in the new text. `sh ci/vale.sh` finds nothing.
 exploration ran on KVM for any of the three examples.
 ## The 0.7.0 release, prepared for publication (2026-11-26)
 
+**Published on 2026-11-27.** The user said to publish. The release branch was pushed as
+`release-0.7.0`, and `gh release create v0.7.0 --target 7d1b66e2` uploaded the six files and
+`SHA256SUMS` (each checked against it first). The tag's workflow, run 45950230345, passed every
+job: the check, the packages, crates.io, npm, PyPI and the Go module; from outside, crates.io's
+`hydo`, PyPI's and npm's `hydo-assert` say 0.7.0, and the tag `sdk/go/v0.7.0` exists. The
+Homebrew tap's formula names the 0.7.0 Mac tarball (`1803447`, `brew style` clean,
+`update-homebrew.sh` checked the published tarball against `SHA256SUMS`). The release branch is
+merged into `main` with its goldens recorded again, and `hydo/dist/releases.txt` has the 0.7.0
+lines (`4c04b604`). `hydo update` on this Mac installed 0.7.0 from the release archive, and `hydo
+doctor` passed every check.
+
 The lead chose "Prepare 0.7.0" on 2026-11-26, and publishing waits for the user's word. 0.7.0
 holds everything on `main` after 0.6.0's release commit `58d443a6`: Milestones 362 to 367 (the
 NSQ, SeaweedFS and Typesense examples, the findings store `hydo findings`, the test of the guide's

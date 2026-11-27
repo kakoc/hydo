@@ -218,16 +218,18 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.7.0 is prepared for publication from the release commit `7d1b66e2`, on a
-branch that is not on `main` yet, and publishing waits for the user's word. Its six files and
-`SHA256SUMS` are in `hydo/dist/out/0.7.0/` of the main checkout. The release notes, the Homebrew
-formula and the release-index lines are in `prepared/` there. The files are
+**Releases.** hydo 0.7.0 was published on 2026-11-27 from the release commit `7d1b66e2` (the
+branch `release-0.7.0`, merged into `main`). The GitHub release `v0.7.0` holds both tarballs, their
+sources archives, the Mac signatures, the skill archive and `SHA256SUMS`:
 `hydo-linux-0.7.0.tar.gz` `132c35ab…`, `hydo-mac-0.7.0.tar.gz` (signed and notarized) `9c84e011…`
-and `hydo-skill-0.7.0.tar.gz` `4b041655…`, each platform built twice to the same bytes. 0.7.0 holds
-Milestones 362 to 367 at the fingerprint epoch 6. The final files reproduce every recorded value on
-the Mac, on hvx (43 images and 141 schedules, each twice) and on KVM (AMD hosts, the one-off
-workflow `tmp-rel070-kvm`). The record is the
-section "The 0.7.0 release, prepared for publication" of `docs/HISTORY.md`.
+and `hydo-skill-0.7.0.tar.gz` `4b041655…`, each platform built twice to the same bytes. The tag's
+workflow (run 45950230345) published the crates of `cargo install hydo`, `hydo-assert` on
+crates.io, PyPI and npm, and the Go tag `sdk/go/v0.7.0`; the Homebrew tap names 0.7.0, and
+`hydo/dist/releases.txt` has its lines. The files and the prepared material are in
+`hydo/dist/out/0.7.0/` of the main checkout. 0.7.0 holds Milestones 362 to 367 at the fingerprint
+epoch 6, and the final files reproduce every recorded value on the Mac, on hvx (43 images and 141
+schedules, each twice) and on KVM (AMD hosts). The record is the section "The 0.7.0 release" of
+`docs/HISTORY.md`.
 
 hydo 0.6.0 was published on 2026-11-26 from the release commit `58d443a6`. The
 GitHub release `v0.6.0` holds both tarballs, their sources archives, the Mac signatures, the
