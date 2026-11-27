@@ -24213,15 +24213,15 @@ and a new message can take a lost one's offset (`C=12`: "share offset 0"); a rea
 offset can go back too. The documentation's "Data Safety when using Streams" says that streams do
 not flush their data. The quorum queues lost nothing at any cut.
 
-**Finding 3, new, a clock effect.** After a backward step of the wall clock, a node's restart and a
-kill of the stream's leader, the stream gets no new leader: every publish answers `Leader not Ready
-yet` for the rest of the run, while every node runs. The coordinator logs `failed to stop member ...
-nodedown` and nothing more. Seed 10 of e3 (`K=nodes.primary@12+2 ... T=7:-86400 ...
-G=rabbit3@7+2:trunc`) needed the step, the kill and the restart that `G=` makes; seed 4 of e4 failed
-the same probe after `K=rabbit1@21+9 P=rabbit1@8+1 T=10:-2592000`, not separated. The likely cause,
-not traced: since 4.4.0 the coordinator parks a failed action until a `nodeup` or a retry time of
-the leader's clock, and a node that starts after a step back keeps a system time a day behind.
-4.4.0's release notes fixed a bug with the same symptom without a clock step (pull request 16515).
+**Finding 3, new, a clock effect.** After a backward step of the wall clock by a day, a kill of the
+stream's writer leaves the stream without a writer for the size of the step: every publish answers
+`Leader not Ready yet` for the rest of the run, while every node runs. The coordinator logs `failed
+to stop member ... nodedown` and nothing more. Seed 10 of e3 (`K=nodes.primary@12+2 ...
+T=7:-86400 ... G=rabbit3@7+2:trunc`) needed the step, the kill and the restart that `G=` makes;
+seed 4 of e4 failed the same probe after `K=rabbit1@21+9 P=rabbit1@8+1 T=10:-2592000`, not
+separated. The paragraph "Finding 3 checked again with hydo 0.7.0" below has the trace: the
+coordinator's leader parks failed restarts with a retry time from a system time that is still a
+day ahead, because every node runs with `multi_time_warp`.
 
 **What held.** The quorum queues kept every confirmed message under kills, pauses past the net
 tick time, partitions, one-way loss, one node's power loss, damaged files, power cuts and clock
@@ -24329,6 +24329,61 @@ rabbitmq-server issue 9457, osiris issue 145, osiris pull request 87 and issue 7
 18370 with osiris pull request 246, and rabbitmq-server issues 16822 and 9275. RESULTS.md, finding
 1, has the corrected text. The regression file's comment and the explorer's four corpus goldens,
 which hold that file's sha256, changed with it.
+
+**Finding 3 checked again with hydo 0.7.0.** The released hydo 0.7.0, from a fresh clone at
+`4eb78297`, on hvx, traced finding 3. The first version of this section and of RESULTS.md said two
+false things: that Erlang starts without a time warp, so that a node that starts after a step back
+keeps a system time a day behind, and that the wait needs the coordinator's leader to move between
+such nodes. It also named pull request 17450, which has no part in it.
+
+The saved regression gave `VIOLATION [eventually_probe] ... no publish was confirmed within 60 s
+after the faults` with `efcd83d18848454a` twice, on the final image (`0f93b104…`). Without
+`T=7:-86400` it passed with `5c593130087afccd`, without `K=nodes.primary@13+2` with
+`056c67d4bc69ded8`, and without `G=` (so without the restart of `rabbit3`) with
+`af49e5ec61e49f53`. Held runs read each node's clocks and the coordinator's state at four points.
+With the code of RabbitMQ 4.4.1 (`rabbit_stream_coordinator.erl`, the same on `main`) and Ra 3.2.0
+they give this order:
+
+- Every node runs with `multi_time_warp`. The runtime moves its time offset only at its next check
+  of the OS clock, every 15 s and later every 60 s (`erl_time_sup.c` lines 316 to 318 and 497 to
+  505). 19 s after the step, `rabbit1` and `rabbit2` had an `erlang:system_time` 86,400,543 ms
+  ahead of `os:system_time`; `rabbit3`, restarted after the step, matched. 23 s after the step
+  `rabbit2` matched too.
+- The kill came between those points. `rabbit2` led the coordinator in term 2. `rabbit1`'s member
+  was `{down,1}` and `{sleeping,nodeup}`. `rabbit2`'s replica was `{sleeping,1795651263161}`
+  with the target `stopped` (`writer_unavailable`), and `rabbit3`'s `{sleeping,1795651264168}`
+  (`noproc`).
+- Each retry time is the command's system time plus 5,000 ms and a jitter (`park_action/8`, lines
+  2392 to 2399; the `.hrl` lines 12 and 17). The system time is the Ra leader's
+  `erlang:system_time(millisecond)` at the command (`ra_server_proc.erl` lines 2524 to 2529,
+  `ra_server.erl` lines 3443 to 3447). `rabbit2` stamped it before its check, so after the check
+  each retry was a day away.
+- The relative timer of 5 to 10 s fired (`ra_server_proc.erl` lines 1812 to 1813 and 628 to 629).
+  Its `{timeout, retry_reconcile}` carried the corrected time, `expire_parked/4` found nothing due
+  (lines 2440 to 2442), and the timer was armed again for about 86,400 s (lines 2403 to 2430).
+- `rabbit1`'s `nodeup` woke its member (`{stopped,1,{1,1}}`), but one stopped member of three is no
+  quorum (lines 1412 to 1415 and 1744 to 1747). `wake_timed_sleep` (lines 2605 to 2615) wakes a
+  member parked on a time only when a writer goes down or fails to start, which cannot happen
+  without a writer.
+- The commit index stayed at 27 for the rest of the held run, about 7 minutes, and at its end
+  `rabbit2`'s retry was still 85,994,948 ms away. The wait would be about 86,406.6 s.
+
+Without the restart `rabbit3` led the coordinator, `rabbit2`'s replica stopped cleanly, and only
+`rabbit3`'s replica was parked. With `rabbit1` back two members were stopped, a quorum, and the run
+ends in epoch 2 with every member running. So the restart changes which node leads and how many
+replicas are parked, not the clock's part. The parked retries came with pull request 16515
+("Stream coordinator: v8 optimisations and bug fixes", merged on 2026-08-19, commits
+`c5a668ef1f`, `f712c3d228` and `fd80774359`) in 4.4.0 (2026-10-19): "Failed operations are now
+retried after a short randomised delay". No duplicate names it. The closest are issue 18475 (a
+member parked as `{sleeping, nodeup}` for a forgotten node, open), pull requests 18314 and 18315
+(the coordinator's determinism), and Ra pull request 54 (2019, the command's timestamp).
+RESULTS.md, finding 3, has the corrected text. The regression file's comment and the explorer's
+four corpus goldens, which hold that file's sha256, changed with it. They were re-recorded with
+`HYDO_BLESS=1` on the bare-metal machine in a copy of the worktree, in each golden's mode. Then
+`cargo test -p hydo-explore --test it` (62 passed), the controller's `corpus::` test, `-p
+hydo-agents --test it` (16 passed), `-p hydo --test it -- equivalence:: agents_equivalence::
+docs::` (23 passed) and hydo-build's equivalence test passed. The copy has no `AGENTS.local.md`,
+so a `grep` of the listed values checked the changed lines. `sh ci/vale.sh` finds nothing.
 
 **What is left.** Open item 191.
 

@@ -1372,8 +1372,11 @@ power cuts, and clock steps. Nothing was posted:
   copy. hydo 0.7.0 replayed it with one fingerprint twice, and traced it from the nodes' logs.
 - Documented: a power cut of the whole guest loses confirmed messages of the stream, and a new
   message can take a lost one's offset (Data Safety when using Streams).
-- New, a clock effect: a backward clock step, a node's restart, and a kill of the stream's leader
-  leave the stream without a leader for the rest of the run. Every node runs again.
+- New, a clock effect: the wall clock steps back by a day, and the stream's writer is killed.
+  The stream then has no writer for the size of the step, while every node runs again. Every node runs with `multi_time_warp`, so its system time stays a day ahead until its
+  next check of the OS clock. The coordinator's leader parked two replicas' failed restarts with
+  retry times from that system time, a day away after the check, and the one member left was no
+  quorum. hydo 0.7.0 replayed it with one fingerprint twice and traced it.
 
 Open item 191 has what is left.
 
@@ -4291,8 +4294,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The two candidates are not reported upstream. Finding 1's window is narrow: on the final
       image each run without one of its five faults passes, and why it needs the kill of
       `rabbit2` before step 1 was not traced. Its quorum and its deletion are traced (the
-      replay with hydo 0.7.0 in RESULTS.md). Finding 3's cause (a retry parked on a clock that a
-      node restarted after the step keeps a day behind) was not shown in a run.
+      replay with hydo 0.7.0 in RESULTS.md). Finding 3's cause is traced too: a retry time
+      from a system time that `multi_time_warp` keeps a day ahead until its next check. Which
+      moments of the kill fall in that window was not measured step by step.
     - After a kill of a group, hydo restarts its members one at a time and waits for each one's
       readiness (as open item 147). A RabbitMQ node that restarts with data opens AMQP only after
       its peers answer, so the example's readiness is the Erlang distribution port.
@@ -5544,8 +5548,9 @@ build machine, before 2026-10-13.
   queues and a stream. Two new candidates, not posted. A power loss of one node while a second
   node is paused loses a confirmed message of the stream for good. The election leaves out the
   third node, which holds it, and that node deletes its copy. After a
-  backward clock step, a kill of the stream's leader leaves the stream without a leader. A power
-  cut of the whole guest loses unsynced stream data, as documented. Nothing recorded moved
+  backward clock step, a kill of the stream's writer leaves the stream without a writer for the
+  size of the step. A power cut of the whole guest loses unsynced stream data, as documented.
+  Nothing recorded moved
 - M371 (tentative number): the onboarding of Microsoft Garnet 2.2.14 in cluster mode, three
   primaries with one replica each, on hvx, and on KVM. New: a failover right after a slot migration
   into the same shard leaves the slot without an owner on every node, for good. With Garnet's
