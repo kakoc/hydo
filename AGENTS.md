@@ -1845,7 +1845,14 @@ Since M350 (tentative number) a section of its own lists a reading of the clock 
 order or the version of data. Garage's CopyObject is one: it takes its version's timestamp from
 `now_msec()`. A place is `high` when the code compares two values of that name, and it gets
 three steps back of the clock. A limit is no type name, and a plain word such as `timeout` is
-read in the place's own file only.
+read in the place's own file only. Since M382 (tentative number) it reads Erlang and Elixir, and
+the bundled code of `vendor/`, `third_party/`, `deps/` and Bazel's `bazel-<name>/external/` in a
+section of its own, a library's timers first. It follows a project's own clock by data flow,
+cached clocks, Go's ticks and `time.Now().Add(d).UnixMilli()`, and a stored reading compared
+later (the shape `rewind`). Without a place in the project's own code it gives fallback
+schedules. It now names each clock finding's place that it missed in Typesense, VictoriaMetrics,
+Restate, GreptimeDB, RabbitMQ, and Prometheus. The reports of Kvrocks and Garage are the same
+byte for byte.
 The guide is the section "Find the durations measured on the
 wall clock" of `hydo guide faults`. The design and the precision numbers are in the section
 "The clock audit" of `docs/design/rule-suggestion.md`.
@@ -2922,10 +2929,13 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       structures with a field `timestamp` share it.
     - Every service of a guest shares one clock, so no schedule gives one node a clock behind
       the others' (the idea "Clocks per service" of `docs/USE-CASES.md`).
-    - Since M355 a C++ wrapper of the clock is followed (namespaces, template arguments,
-      `duration_cast`). A wrapper in another language is followed only when its name is about
-      time and its `return` starts with a reading. GreptimeDB's `current_time_millis()` and
-      Restate's `WallClock` (open items 152 and 171) did not run again.
+    - Since M382 a wrapper of the clock in any language is followed by data flow. So are
+      cached clocks, Go's ticks, functions that return now plus a duration, and Erlang's map
+      keys. A reading through a closure, a callback, a channel, or a function of more than 30
+      lines is not followed. Examples are GreptimeDB's `build_active_filter` and Restate's
+      `gardal` clock.
+      A field is still followed by its name in every file, but for one set from a converted Go
+      `time.Time`, which only its own file reads.
 118. Fakes from OpenAPI descriptions (M249). Response headers (`Location`), nested echoed fields
     and OpenAPI 3.1 `webhooks:` are not generated, and the business reference is not inferred
     (`--ref` names it). A `DELETE` does not remove the saved object, and a `PATCH` saves nothing.
@@ -3480,8 +3490,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `result.json`, so the example prints its long lines first.
     - One `K=` per schedule: a kill of the deployment and a kill of the server at other steps
       cannot be one schedule.
-    - The clock audit reads `SystemTime::now` and its kin, not a project's own clock. Restate's
-      scheduler reads `restate_clock::WallClock`, and the audit's 8 places missed it.
+    - Since M382 the clock audit follows `restate_clock::WallClock` and its cached
+      `RECENT_UNIX_TIMESTAMP_US`, and it names the scheduler's `run_at` check
+      (`vqueue_state.rs:357`) at rank 10 of 17 functions. Its first places are other timers, so a
+      user reaches the finding's only past them.
     - A kill or a stop reaction did not hold a plain send in flight across a restart, because a
       round's commands run in milliseconds; the explorer's pause of the deployment did.
     - Exploration B (swarm) was stopped before its shrink, and the KVM engine did not run the
@@ -3589,8 +3601,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `--shrink-detected-damage`. The swarm exploration ran without shrinks.
     - The last `T=` of a schedule wins (open item 65), so no schedule steps the clock back and
       forward again. That the deleted month stays deleted is read from the code and the files.
-    - The clock audit does not follow `fasttime.UnixTimestamp()` or `time.Now().UnixMilli()`
-      into a deadline, so it named none of the three places.
+    - Since M382 the clock audit names all three places among 73 functions. The flush
+      deadline is at rank 2, the cached clock's deadline check at rank 24, and the retention
+      watcher at rank 32. The watcher ranks low because its limit, a retention of months, has
+      no value in the code.
     - Only hvx ran the example; the Mac engine and KVM did not. vmagent, several vminsert or
       vmselect nodes, three vmstorage nodes (the documentation's `2*N-1`), and the rollup cache
       of `query_range` were not tested.
@@ -3891,9 +3905,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       run then waited for its wall limit, so the example turns `errors:` off. Since M348 such a
       boot ends at once with `ERROR agent lines full <phase>`, which names the scan. The scan
       itself is not bounded, so the example keeps `errors:` off.
-    - The clock audit found no place of the metasrv. GreptimeDB reads the wall clock through
-      its own `current_time_millis()` (as open item 152). The audit also maps no image service
-      to the Cargo binaries of its sources.
+    - Since M382 the clock audit follows `current_time_millis()` and names the region
+      migration's lease third and the failure detector's `phi` fourth of 9 functions. The
+      discovery filter is a closure, which it does not follow. It still maps no image service to
+      the Cargo binaries of its sources.
     - The frontend's write retries after a transport error (`[write_retry]`, new in v1.3.0) can
       apply a write twice in an append-mode table. So can rskafka's retry of a produce after its
       timeout. 19 directed runs and the explorations showed no duplicate. Whether a duplicated
@@ -4051,9 +4066,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 179. What the example `kvrocks` left (M351, tentative number):
     - The two candidates are not reported upstream.
     - `hydo rules scan --kind writes` found no route in Kvrocks: its commands are a C++ table of
-      `MakeCmdAttr` entries with a `write` flag (open item 175). The clock audit named no place
-      in 255 C++ files, because Kvrocks reads the wall clock through its own
-      `util::GetTimeStamp`.
+      `MakeCmdAttr` entries with a `write` flag (open item 175). Since M355 the clock audit
+      follows `util::GetTimeStamp` and names finding 2's place fourth of 22, also after M382.
     - A reaction whose event never came passes without a word: three aimed cuts after a failover
       passed in runs without a failover.
     - `hydo explore --reactive-at` with `--seeds A-B` runs one point of the grid per seed, not
@@ -4249,8 +4263,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Since M368 `hydo rules scan --kind writes` reads Typesense's C++ registrations
       (`server->post(...)` and its kin): 54 routes that write, and 3 that read by their names.
       A registration over several lines, or through a table, is not read.
-    - The clock audit named 14 functions and none of the findings' places, which are in h2o and
-      braft.
+    - Since M382 the clock audit reads the repositories that Bazel fetched into
+      `bazel-typesense/external/`. Its section of bundled code has 45 places. There braft's
+      election timer is at rank 2, h2o's timer at now plus its delay at rank 4, and brpc's
+      timer thread at rank 23. Typesense's own 14 functions stay first; nothing tells the audit
+      that the findings are in the bundled code.
     - Since M368 a group's `primary:` command is asked 30 times a second apart, and the ERROR
       names the likely cause; the example's command still waits 15 s itself. A system whose
       election takes longer than 30 s still needs its own wait.
@@ -4329,7 +4346,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       placeholders `final: "true"`.
     - An exploration cannot leave out one fault kind (as open items 140 and 141), and two images
       of one folder need `--image` on every run (as open item 188).
-    - The clock audit reads no Erlang.
+    - Since M382 the clock audit reads Erlang and Ra in `deps/ra`. It names finding 3's
+      `retry_reconcile_delay` second of 32 functions and `park_action` sixth, through Ra's
+      command timestamp.
     - `hydo compose` dropped Compose's `hostname:` without a warning. The 0.6.0 release's import
       also took epmd's port from the image's `EXPOSE`, which M367 now warns of.
     - Not run: the Mac engine and KVM, five nodes, AMQP 1.0, super streams, a stream's single
@@ -5611,6 +5630,11 @@ build machine, before 2026-10-13.
   (docs/REBASELINE.md section 33), and no KVM image. Release step 6a fixed two sentences. Both
   releases were built twice to the same bytes, and the Mac one is signed and notarized. They were
   verified on hvx, the Mac and KVM, where a runner rebuilt the Linux tarball byte for byte
+- M382 (tentative number): the clock audit's blind spots. It reads bundled code (`vendor/`,
+  `third_party/`, `deps/`, Bazel's external repositories) after the project's own, a library's
+  timers first, and Erlang and Elixir. It follows a project's clock by data flow, cached clocks,
+  Go's ticks and deadline chains, and stored readings compared later. Without a place it gives
+  fallback schedules. Every missed place of six projects is named now. Nothing recorded moved
 
 ## Where to look
 
