@@ -2408,6 +2408,12 @@ pub struct Item {
     pub link: String,
     /// The recording replay of its minimal schedule, for a walk through the pages.
     pub recording: Option<Recording>,
+    /// The seeds of its failing first runs (Milestone 387: `hydo shrink --problem N` shrinks
+    /// those that wait for their shrink).
+    pub seeds: Vec<i64>,
+    /// Its shrink has not ended (Milestone 387: the explorer reports before it shrinks), so it
+    /// shows its failing run.
+    pub not_shrunk_yet: bool,
 }
 
 /// The recording replay of a walk's minimal schedule (Milestone 258: `replays/rec-<k>/` of the
@@ -2837,7 +2843,16 @@ pub fn exploration_story<'a>(
             .then(|| story::outcome_line(&first.run, &what, power_cut));
         let steps = story::short_steps(&schedule, &pr, outcome);
         let error = first.run.verdict.kind == "error";
-        let whole_run = (!shrunk).then_some("the whole failing run");
+        // Milestone 387: a problem whose shrink has not ended shows its failing run
+        let not_shrunk_yet = !shrunk
+            && x.failures
+                .iter()
+                .any(|f| hydo_results::shrink_state::is_open(f.shrink_state.as_deref()));
+        let whole_run = (!shrunk).then_some(if not_shrunk_yet {
+            "the whole failing run, not shrunk yet"
+        } else {
+            "the whole failing run"
+        });
         // what hydo saw: the failing service's end with its last log lines, or the error
         let tag = first.run.tag.as_deref();
         let log = tag
@@ -2927,6 +2942,8 @@ pub fn exploration_story<'a>(
             } else {
                 None
             },
+            seeds: x.failures.iter().filter_map(|f| f.run.seed).collect(),
+            not_shrunk_yet,
         });
     }
     if !new_kinds.is_empty() {
@@ -2989,6 +3006,8 @@ pub fn exploration_story<'a>(
             replay: None,
             link: "errors".into(),
             recording: None,
+            seeds: Vec::new(),
+            not_shrunk_yet: false,
         });
     }
     accept_notes(&mut items);
@@ -3312,7 +3331,16 @@ fn exploration_details(
                 .iter()
                 .find(|x| advice::shrink_group(&x.class) == c.as_str() && &x.signature == sig)
                 .map(|x| x.minimal.clone())
-                .unwrap_or_else(|| "not shrunk".into());
+                .unwrap_or_else(|| {
+                    if fs
+                        .iter()
+                        .any(|f| hydo_results::shrink_state::is_open(f.shrink_state.as_deref()))
+                    {
+                        "not shrunk yet".into()
+                    } else {
+                        "not shrunk".into()
+                    }
+                });
             rows.push((
                 String::new(),
                 vec![
@@ -3586,9 +3614,16 @@ fn failure_card(
                 &first.run.schedule,
             )),
         ));
+        // Milestone 387: the report came before the shrink ended
+        let open = fs
+            .iter()
+            .any(|f| hydo_results::shrink_state::is_open(f.shrink_state.as_deref()));
         f.push((
             "Not shrunk".into(),
-            esc(if kind == "error" {
+            esc(if open {
+                "not yet: hydo wrote this report before its shrink ended; `hydo shrink` with the \
+                 exploration's folder and the problem's number shrinks it"
+            } else if kind == "error" {
                 "hydo shrinks failed checks, not runs that ended with an error"
             } else {
                 "the exploration did not shrink this one"

@@ -13,8 +13,11 @@
 //! end at the same place.
 //!
 //! What it writes is the results format (hydo-results): `events.jsonl` as it runs (a start
-//! record, every run, the shrinks, an end record), `exploration.json` when it is done, and
-//! report.md, a view of exploration.json for people ([`crate::md`]).
+//! record, every run, the shrinks, an end record), `exploration.json`, and report.md, a view of
+//! exploration.json for people ([`crate::md`]). Since Milestone 387 it writes `exploration.json`,
+//! report.md and stats.json once the first runs and the re-runs are done, before any shrink
+//! ends, and again as each shrink ends; the shrinks' runs wait in the pool's last queue
+//! ([`pool::Prio::Later`]), and [`shrinks`] keeps what an unended shrink starts from.
 
 use crate::args::{self, Args};
 use crate::compose;
@@ -60,7 +63,14 @@ pub struct Env {
     /// explore` names the running `hydo inspect` sessions, which each hold a guest's memory, and
     /// the line that stops them). None: nothing.
     pub memory_hint: Option<String>,
+    /// Called once the first report is written (Milestone 387: after the first runs and the
+    /// re-runs, before any shrink ends), with the exploration's folder: `hydo explore` in a
+    /// terminal prints the problems found so far. None: nothing.
+    pub first_report: Option<fn(&Path)>,
 }
+
+pub mod shrinks;
+pub use shrinks::shrink_main;
 
 fn die(msg: &str) -> ! {
     eprintln!("{msg}");
@@ -1529,7 +1539,7 @@ fn run(mut cx: Cx) -> i32 {
             summary: summary.clone(),
             ..End::default()
         });
-        let doc = cx.exploration(pool.workers(), summary, image_sha);
+        let doc = cx.exploration(pool.workers(), summary, join_sha(image_sha));
         let _ = hydo_results::write_document(&cx.out.join(hydo_results::EXPLORATION_DOC), &doc);
         pool.close();
         return 0;
@@ -2214,6 +2224,7 @@ fn turn_sweep(cx: &Cx, pool: &Pool, t0: Instant, image_sha: ShaThread) -> i32 {
                 reproductions: vec![rep.clone()],
                 timing_only: None,
                 run,
+                ..Failure::default()
             });
         }
         println!(
@@ -2278,7 +2289,7 @@ fn turn_sweep(cx: &Cx, pool: &Pool, t0: Instant, image_sha: ShaThread) -> i32 {
         summary: summary.clone(),
         ..End::default()
     });
-    let mut doc = cx.exploration(pool.workers(), summary, image_sha);
+    let mut doc = cx.exploration(pool.workers(), summary, join_sha(image_sha));
     doc.turn_sweep = Some(sweep);
     doc.failures = failures;
     let _ = hydo_results::write_document(&cx.out.join(hydo_results::EXPLORATION_DOC), &doc);
@@ -2554,7 +2565,7 @@ fn shrink_round(
         .enumerate()
         .map(|(i, c)| (format!("{prefix}-{rnd}-{i}"), cx.render(c)))
         .collect();
-    let mut b = pool.batch(&items, true);
+    let mut b = pool.batch_prio(&items, pool::Prio::Later);
     let mut got: HashMap<String, Res> = HashMap::new();
     let mut next = 0;
     let mut ran = 0i64;
@@ -2701,9 +2712,9 @@ fn shrink_violation(
     );
     let mut mt = cx.render(&m);
     let conf_pair = |t: &str, log: &mut Vec<Run>| {
-        let r = pool.run_all(
+        let r = pool.run_all_prio(
             &[(ma.clone(), t.to_string()), (mb.clone(), t.to_string())],
-            true,
+            pool::Prio::Later,
         );
         for tag in [&ma, &mb] {
             log.push(cx.chain_run(&ch, tag, t, &r[tag].1, role::MINIMAL));
@@ -2805,7 +2816,7 @@ fn shrink_violation(
 }
 
 /// explore.py `errlog_shrink` for one kind.
-fn shrink_errkind(cx: &Cx, pool: &Pool, x: &errlog::Aggregate) -> (String, ErrorShrink, Vec<Run>) {
+fn shrink_errkind(cx: &Cx, pool: &Pool, x: &shrinks::ErrChosen) -> (String, ErrorShrink, Vec<Run>) {
     let sig = x.sig.clone();
     let mut log = Vec::new();
     let keep = |_: &str, r: &Res| {
@@ -2816,14 +2827,9 @@ fn shrink_errkind(cx: &Cx, pool: &Pool, x: &errlog::Aggregate) -> (String, Error
     let ch = Chain {
         role: role::ERROR_SHRINK,
         of: sig.clone(),
-        seed: x.first_new.as_ref().and_then(|f| f.0.as_i64()).unwrap_or(0),
+        seed: x.seed,
     };
-    let s0 = cx.parse(
-        x.first_new
-            .as_ref()
-            .map(|f| f.1.as_str())
-            .unwrap_or_default(),
-    );
+    let s0 = cx.parse(&x.schedule);
     let (m, _, n) = shrink(
         cx,
         pool,
@@ -2838,7 +2844,10 @@ fn shrink_errkind(cx: &Cx, pool: &Pool, x: &errlog::Aggregate) -> (String, Error
     );
     let mt = cx.render(&m);
     let (ta, tb) = (format!("errmin-a-{sig}"), format!("errmin-b-{sig}"));
-    let conf = pool.run_all(&[(ta.clone(), mt.clone()), (tb.clone(), mt.clone())], true);
+    let conf = pool.run_all_prio(
+        &[(ta.clone(), mt.clone()), (tb.clone(), mt.clone())],
+        pool::Prio::Later,
+    );
     let mut confirmations = Vec::new();
     for t in [&ta, &tb] {
         let r = &conf[t].1;
@@ -2919,9 +2928,13 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
     let planned = seeds.len();
     let mut ndone = seeds.len();
     let mut cut = false;
-    let (shrunk, errors, res_all) = std::thread::scope(|sc| {
+    // Milestone 387: every failure chosen to shrink, in chain order, and every error kind
+    let mut chosen: Vec<shrinks::Chosen> = Vec::new();
+    let mut echosen: Vec<shrinks::ErrChosen> = Vec::new();
+    let mut first_report_s = 0.0;
+    let (done, errors, res_all, failures, sha) = std::thread::scope(|sc| {
         let pool = &pool;
-        let mut chains = Vec::new();
+        let (tx, rx) = std::sync::mpsc::channel::<shrinks::Ended>();
         let mut repro_batches = Vec::new();
         let ts = Instant::now();
         let mut next = 0;
@@ -2987,7 +3000,7 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                     // --shrink-causes N (M225): later failures of a key are shrunk too while
                     // their fault kinds differ from those already chosen, up to N per key
                     let cause = fault_kinds(&py_str(&rec["schedule"]));
-                    let chosen = match reps.iter_mut().find(|(k, _)| *k == group) {
+                    let pick = match reps.iter_mut().find(|(k, _)| *k == group) {
                         None => {
                             reps.push((group, vec![cause.clone()]));
                             true
@@ -3001,15 +3014,27 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                         }
                     };
                     // Milestone 339: an error of the system is shrunk too (report::shrinks)
-                    if chosen
-                        && !a.no_shrink
-                        && report::shrinks(&v, &key.0, a.shrink_detected_damage)
+                    if pick && !a.no_shrink && report::shrinks(&v, &key.0, a.shrink_detected_damage)
                     {
-                        let k = chains.len();
-                        let f = rec.clone();
+                        let k = chosen.len();
                         let cause = (a.shrink_causes > 1).then_some(cause);
-                        chains
-                            .push(sc.spawn(move || shrink_violation(cx, pool, k, key, &f, cause)));
+                        chosen.push(shrinks::Chosen {
+                            k,
+                            key: key.clone(),
+                            seed: sd,
+                            cause: cause.clone(),
+                            rec: rec.clone(),
+                        });
+                        // Milestone 387: the shrink's runs wait in the pool's last queue, so the
+                        // first runs and the re-runs come first; `--shrink-later` runs none
+                        if !a.shrink_later {
+                            let f = rec.clone();
+                            let tx = tx.clone();
+                            sc.spawn(move || {
+                                let s = shrink_violation(cx, pool, k, key, &f, cause);
+                                let _ = tx.send(shrinks::Ended::Chain(k, Box::new(s)));
+                            });
+                        }
                     }
                     fails.push((rec, run));
                 }
@@ -3055,7 +3080,7 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
             }
         }
         // error-log kinds: collected once every first run is in, shrunk side by side
-        let an_runs: Vec<(Value, String, Option<errlog::Analysis>)> = seeds
+        let an_runs: Vec<ErrRun> = seeds
             .iter()
             .map(|sd| {
                 let tag = format!("seed-{sd}");
@@ -3074,7 +3099,6 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
             .collect();
         let errors = if an_runs.iter().any(|x| x.2.is_some()) {
             let agg = hydo_errors::collect(&an_runs);
-            let mut handles = Vec::new();
             if !a.no_shrink && a.errors_shrink > 0 {
                 // Milestone 339: a kind first new in a run where the system detected hydo's
                 // damage is not shrunk without --shrink-detected-damage
@@ -3097,10 +3121,27 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                     })
                     .take(a.errors_shrink as usize)
                 {
-                    handles.push(sc.spawn(move || shrink_errkind(cx, pool, &x)));
+                    let x = shrinks::ErrChosen {
+                        i: echosen.len(),
+                        sig: x.sig.clone(),
+                        seed: x.first_new.as_ref().and_then(|f| f.0.as_i64()).unwrap_or(0),
+                        schedule: x
+                            .first_new
+                            .as_ref()
+                            .map(|f| f.1.clone())
+                            .unwrap_or_default(),
+                    };
+                    echosen.push(x.clone());
+                    if !a.shrink_later {
+                        let tx = tx.clone();
+                        sc.spawn(move || {
+                            let e = shrink_errkind(cx, pool, &x);
+                            let _ = tx.send(shrinks::Ended::Error(x.i, Box::new(e)));
+                        });
+                    }
                 }
             }
-            Some((agg, an_runs, handles))
+            Some((agg, an_runs))
         } else {
             None
         };
@@ -3109,380 +3150,566 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                 rep.insert(tag, r);
             }
         }
-        let shrunk: Vec<Shrunk> = chains
-            .into_iter()
-            .map(|h| h.join().expect("a shrink"))
-            .collect();
-        let errors = errors.map(|(agg, an_runs, hs)| {
-            let done: Vec<(String, ErrorShrink, Vec<Run>)> = hs
-                .into_iter()
-                .map(|h| h.join().expect("a shrink"))
-                .collect();
-            (agg, an_runs, done)
-        });
-        (shrunk, errors, all)
+        // the re-runs, in seed order
+        let failures = cx.failures_of(&fails, &rep, nrep);
+        // Milestone 387: the first report, before any shrink ends; then the report again as
+        // each shrink ends
+        let sha = image_sha.and_then(|h| h.join().ok()).flatten();
+        first_report_s = t0.elapsed().as_secs_f64();
+        let mut done: Vec<Option<Shrunk>> = (0..chosen.len()).map(|_| None).collect();
+        let mut edone: Vec<Option<ErrDone>> = (0..echosen.len()).map(|_| None).collect();
+        let fc_doc = fc_info.as_ref().map(|x| x.1.clone());
+        let steer_doc = steer.as_ref().map(|s| s.doc.clone());
+        let report_now = |done: &[Option<Shrunk>], edone: &[Option<ErrDone>], warn: bool| {
+            let shrunk: Vec<&Shrunk> = done.iter().flatten().collect();
+            let ed: Vec<&ErrDone> = edone.iter().flatten().collect();
+            let d = DocIn {
+                seeds,
+                res_all: &all,
+                rep: &rep,
+                failures: &failures,
+                states: shrinks::states(&failures, &chosen, done, a.shrink_later),
+                shrunk: &shrunk,
+                errors: errors.as_ref().map(|(g, r)| (g.as_slice(), r.as_slice())),
+                edone: &ed,
+                nrep,
+                nrefused,
+                t_sweep,
+                time_limit: time_limit_of(limit, planned, seeds, cut),
+                freeze_sweep: fc_doc.clone(),
+                steer: steer_doc.clone(),
+                sha: sha.clone(),
+                first_report_s,
+                warn,
+            };
+            let facts = PoolFacts::of(pool, seeds, &all);
+            let (doc, stats) = cx.assemble(&d, &facts, crate::stats::usage(), t0);
+            cx.write_reports(&doc, &stats);
+            shrinks::write_unshrunk(&cx.out, &chosen, done, &echosen, edone);
+        };
+        report_now(&done, &edone, true);
+        if let Some(f) = cx.env.first_report {
+            f(&cx.out);
+        }
+        drop(tx);
+        for e in rx {
+            match e {
+                shrinks::Ended::Chain(k, s) => done[k] = Some(*s),
+                shrinks::Ended::Error(i, e) => edone[i] = Some(*e),
+            }
+            report_now(&done, &edone, false);
+        }
+        (done, errors.map(|(g, r)| (g, r, edone)), all, failures, sha)
     });
     let seeds: Vec<i64> = seeds[..ndone].to_vec();
-    let time_limit = limit.map(|l| hydo_results::TimeLimit {
-        limit_s: l,
-        planned: planned as u64,
-        explored: ndone as u64,
-        explored_seeds: match (seeds.first(), seeds.last()) {
-            (Some(a), Some(b)) => Some(format!("{a}-{b}")),
-            _ => None,
-        },
-        cut,
-    });
-    // the re-runs, in seed order
-    let mut failures = Vec::new();
-    for (f, run) in &fails {
-        let sd = f["seed"].as_i64().unwrap_or(0);
-        let mut reproductions = Vec::new();
-        let mut ok = true;
-        for k in 0..nrep {
-            let tag = if k == 0 {
-                format!("repro-{sd}")
-            } else {
-                format!("repro{}-{sd}", k + 1)
-            };
-            let rr = rep.get(&tag);
-            // an agent image's re-run also types the same commands (ctl=, M126); None == None otherwise
-            ok = ok
-                && rr.and_then(|r| r.get("fp")) == f.get("fp")
-                && rr.and_then(|r| r.get("ctl")) == f.get("ctl");
-            if let Some(r) = rr {
-                let mut rr_run = cx.run_record(&tag, &run.schedule, r, role::RERUN);
-                rr_run.seed = Some(sd);
-                cx.ev.write(&rr_run);
-            }
-            reproductions.push(repro_of(&tag, rr));
-        }
-        failures.push(Failure {
-            signature: sig_key(&run.verdict.text),
-            reproduced: ok,
-            reproductions,
-            timing_only: None,
-            run: run.clone(),
-        });
-    }
+    let shrunk: Vec<&Shrunk> = done.iter().flatten().collect();
     // the shrinks' runs, chain by chain (representatives by first seed, then the error kinds)
     for s in &shrunk {
         for r in &s.log {
             cx.ev.write(r);
         }
     }
-    let mut eshr: HashMap<String, ErrorShrink> = HashMap::new();
-    if let Some((_, _, done)) = &errors {
-        for (sig, es, log) in done {
-            for r in log {
+    let mut ed: Vec<&ErrDone> = Vec::new();
+    if let Some((_, _, edone)) = &errors {
+        for x in edone.iter().flatten() {
+            for r in &x.2 {
                 cx.ev.write(r);
             }
-            eshr.insert(sig.clone(), es.clone());
+            ed.push(x);
         }
     }
-    let shrinks: Vec<hydo_results::Shrink> = shrunk.iter().map(|s| cx.shrink_model(s)).collect();
-    for s in &shrinks {
-        cx.ev.write(s);
+    for s in &shrunk {
+        cx.ev.write(&cx.shrink_model(s));
     }
-    let boot = pool.mean_boot();
-    let nworkers = pool.workers();
-    let cache_hits = *pool.cache_hits.lock().expect("lock");
-    let (repeats, repeats_s) = pool.repeat_stats();
     report_prefix(&cx.out, &pool.prefix_stats());
-    // the error paths of the first runs (Milestone 306)
-    let paths = pool
-        .host
-        .contracts
-        .as_ref()
-        .and_then(|plan| crate::paths::of_exploration(plan, &seeds, &res_all));
-    // Milestone 336: the workers' time, complete once the pool is closed
-    let ledger = pool.ledger.clone();
+    let facts = PoolFacts::of(&pool, &seeds, &res_all);
     pool.close();
     let usage = crate::stats::usage();
-    let total = t0.elapsed().as_secs_f64();
-    let secs: Vec<f64> = seeds
-        .iter()
-        .map(|sd| {
-            res_all
-                .get(&format!("seed-{sd}"))
-                .and_then(|x| x.1.get("secs"))
-                .and_then(Value::as_f64)
-                .unwrap_or(0.0)
-        })
-        .collect();
-    let mut summary = Summary {
-        schedules: seeds.len() as u64,
-        sweep_wall_s: Some(round1(t_sweep)),
-        runs_per_hour: Some(round1(seeds.len() as f64 / t_sweep.max(1e-9) * 3600.0)),
-        mean_run_s: Some(round1(secs.iter().sum::<f64>() / secs.len().max(1) as f64)),
-        worker_boot_s: Some(round1(boot)),
-        total_wall_s: Some(round1(total)),
-        failures: failures.len() as u64,
-        reproduced: Some(failures.iter().filter(|f| f.reproduced).count() as u64),
-        repro_runs: (nrep != 1).then_some(nrep as u64),
-        quiet_wait_s: {
-            let qw = pool::quiet_waited();
-            (qw > 0.0).then(|| round1(qw))
-        },
-        cache_hits: (cache_hits > 0).then_some(cache_hits as u64),
-        repeats: (repeats > 0).then_some(repeats),
-        repeats_saved_s: (repeats > 0).then(|| round1(repeats_s)),
-        time_limit,
-        ..Summary::default()
+    let d = DocIn {
+        seeds: &seeds,
+        res_all: &res_all,
+        rep: &rep,
+        failures: &failures,
+        states: shrinks::states(&failures, &chosen, &done, a.shrink_later),
+        shrunk: &shrunk,
+        errors: errors
+            .as_ref()
+            .map(|(g, r, _)| (g.as_slice(), r.as_slice())),
+        edone: &ed,
+        nrep,
+        nrefused,
+        t_sweep,
+        time_limit: time_limit_of(limit, planned, &seeds, cut),
+        freeze_sweep: fc_info.map(|x| x.1),
+        steer: steer.map(|s| s.doc),
+        sha,
+        first_report_s,
+        warn: false,
     };
-    if nrefused > 0 {
-        summary.refused = Some(nrefused);
-        eprintln!(
-            "hydo: warning: the engine refused {nrefused} schedules before running them \
-             (their run records in events.jsonl have the class refused); they are not failures"
-        );
-    }
-    // first runs that passed but may have checked nothing (results::vacuous), and (Milestone
-    // 264) first runs whose page check judged no failed request (results::failures_of_unmatched)
-    let mut unmatched: Vec<String> = Vec::new();
-    let mut nunmatched = 0u64;
-    // Milestone 355: first runs with a reaction that never fired, counted apart
-    let mut unfired: Vec<String> = Vec::new();
-    let mut nunfired = 0u64;
-    // Milestone 368: first runs whose console the engine cut, counted apart
-    let mut ncut = 0u64;
-    let vacuous = seeds
-        .iter()
-        .filter(|sd| {
-            let tag = format!("seed-{sd}");
-            res_all.get(&tag).is_some_and(|x| {
-                let consoles = results::explorer_consoles(&cx.out, &tag);
-                let r = results::run_of(&tag, "", &x.1, &consoles);
-                let u = results::failures_of_unmatched(&consoles);
-                if !u.is_empty() {
-                    nunmatched += 1;
-                    for w in &u {
-                        if !unmatched.contains(w) {
-                            unmatched.push(w.clone());
-                        }
-                    }
-                }
-                let nf: Vec<&String> = r
-                    .warnings
-                    .iter()
-                    .filter(|w| results::is_unfired_warning(w))
-                    .collect();
-                if !nf.is_empty() {
-                    nunfired += 1;
-                    if unfired.is_empty() {
-                        unfired.push(nf[0].clone());
-                    }
-                }
-                if r.warnings
-                    .iter()
-                    .any(|w| results::is_console_cut_warning(w))
-                {
-                    ncut += 1;
-                }
-                r.warnings.iter().any(|w| {
-                    !u.contains(w)
-                        && !results::is_unfired_warning(w)
-                        && !results::is_console_cut_warning(w)
-                })
-            })
-        })
-        .count() as u64;
-    if nunfired > 0 {
-        summary.unfired_reactions = Some(nunfired);
-        eprintln!(
-            "hydo: warning: in {nunfired} of {} first runs a reaction never fired, so those runs \
-             did not test it; for example {}",
-            seeds.len(),
-            unfired.first().map(String::as_str).unwrap_or("")
-        );
-    }
-    if nunmatched > 0 {
-        eprintln!(
-            "hydo: warning: in {nunmatched} of {} first runs {}",
-            seeds.len(),
-            unmatched.first().map(String::as_str).unwrap_or("")
-        );
-    }
-    if ncut > 0 {
-        eprintln!(
-            "hydo: warning: the engine cut the console of {ncut} of {} first runs at 64 KiB, so \
-             their checks judged only the records before the cut (the run records in events.jsonl \
-             have the warning); print less, or explore on the KVM engine",
-            seeds.len()
-        );
-    }
-    if vacuous > 0 {
-        summary.vacuous_passes = Some(vacuous);
-        eprintln!(
-            "hydo: warning: {vacuous} passing first runs may have checked nothing (the workload \
-             acknowledged nothing, or a history was empty): their run records in events.jsonl \
-             have warnings"
-        );
-    }
-    let mut error_kinds = None;
-    if let Some((agg, an_runs, _)) = &errors {
-        summary.error_kinds_new = Some(agg.iter().filter(|x| x.new_runs > 0).count() as u64);
-        summary.runs_with_new_error_kinds = Some(
-            an_runs
-                .iter()
-                .filter(|x| x.2.as_ref().is_some_and(|an| !an.new.is_empty()))
-                .count() as u64,
-        );
-        let known = cx.known.clone().expect("loaded");
-        error_kinds = Some(ErrorKinds {
-            known_file: known.path.clone(),
-            known_sha256: known.sha256.clone(),
-            unknown: known.unknown.clone(),
-            kinds: agg
-                .iter()
-                .map(|x| x.to_model(eshr.get(&x.sig).cloned()))
-                .collect(),
-        });
-    }
+    let (doc, stats) = cx.assemble(&d, &facts, usage, t0);
     cx.ev.write(&End {
-        summary: summary.clone(),
+        summary: doc.summary.clone(),
         ..End::default()
     });
-    let mut doc = cx.exploration(nworkers, summary, image_sha);
-    doc.freeze_sweep = fc_info.map(|x| x.1);
-    doc.steer = steer.map(|s| s.doc);
-    doc.failures = failures;
-    doc.shrinks = shrinks;
-    doc.error_kinds = error_kinds;
-    // the property table and the liveness summary over the first runs
-    let merged: Vec<(String, String)> = seeds
-        .iter()
-        .map(|sd| {
-            let tag = format!("seed-{sd}");
-            let r = res_all.get(&tag).map(|x| x.1.clone()).unwrap_or_default();
-            let m = merged_text(&cx.out, &tag, &r);
-            (tag, m)
-        })
-        .collect();
-    doc.properties =
-        results::property_table(&merged.iter().map(|x| x.1.clone()).collect::<Vec<_>>());
-    // Milestone 336: the statistics, from the first runs in seed order and the other runs
-    let outcomes: Vec<Vec<String>> = merged
-        .iter()
-        .map(|x| crate::stats::property_outcomes(&x.1))
-        .collect();
-    let stats = {
-        let ledger = ledger.lock().expect("lock");
-        let an: Vec<Option<&hydo_errors::Analysis>> = match &errors {
-            Some((_, an_runs, _)) => an_runs.iter().map(|x| x.2.as_ref()).collect(),
-            None => Vec::new(),
-        };
-        let mut watched = false;
-        let firsts: Vec<crate::stats::First> = seeds
-            .iter()
-            .enumerate()
-            .map(|(i, sd)| {
-                let tag = format!("seed-{sd}");
-                let (text, r) = res_all.get(&tag).cloned().unwrap_or_default();
-                let verdict = r.get("verdict").map(py_str).unwrap_or_default();
-                let cached = r.get("cached").and_then(Value::as_bool) == Some(true);
-                let error_paths = match crate::paths::of_res(&r).filter(|p| p.watched) {
-                    Some(p) => {
-                        watched = true;
-                        p.reached.iter().map(|x| x.place).collect()
-                    }
-                    None => Vec::new(),
-                };
-                let error_kinds = an
-                    .get(i)
-                    .copied()
-                    .flatten()
-                    .map(|a| {
-                        let mut v: Vec<String> = a
-                            .new
-                            .iter()
-                            .map(|k| k.sig.clone())
-                            .chain(a.known.iter().map(|k| k.kind.sig.clone()))
-                            .collect();
-                        v.sort();
-                        v.dedup();
-                        v
-                    })
-                    .unwrap_or_default();
-                crate::stats::First {
-                    seed: *sd,
-                    refused: hydo_engine::is_refused(&verdict),
-                    fp: r.get("fp").map(py_str).unwrap_or_default(),
-                    verdict,
-                    cached,
-                    vm_s: r.get("secs").and_then(Value::as_f64).unwrap_or(0.0),
-                    job_s: (!cached).then(|| ledger.jobs.get(&tag).copied()).flatten(),
-                    clock: crate::stats::clock_of(&cx.out.join("consoles"), &tag),
-                    properties: outcomes.get(i).cloned().unwrap_or_default(),
-                    error_kinds,
-                    error_paths,
-                    schedule: text,
-                }
-            })
-            .collect();
-        let mut other: std::collections::BTreeMap<String, (u64, f64)> = Default::default();
-        let mut add = |role: &str, secs: Option<f64>| {
-            let e = other.entry(role.to_string()).or_insert((0, 0.0));
-            e.0 += 1;
-            e.1 += secs.unwrap_or(0.0);
-        };
-        for r in rep.values() {
-            add(role::RERUN, r.get("secs").and_then(Value::as_f64));
-        }
-        for s in &shrunk {
-            for r in &s.log {
-                add("shrink", r.secs);
-            }
-        }
-        if let Some((_, _, done)) = &errors {
-            for (_, _, log) in done {
-                for r in log {
-                    add("error-shrink", r.secs);
-                }
-            }
-        }
-        let inp = crate::stats::Input {
-            hydo_version: doc.hydo_version.clone(),
-            epoch: doc.epoch,
-            image: doc.image.path.clone(),
-            engine: doc.engine.clone(),
-            strategy: doc.config.strategy.clone(),
-            seeds: doc.config.seeds.clone(),
-            errlog: errors.is_some(),
-            paths: watched,
-            other_runs: other,
-            wall_s: total,
-            sweep_wall_s: t_sweep,
-            clock_unit: Some(
-                if cx.arm() || cx.kvm {
-                    "exits"
-                } else {
-                    "hvx clock"
-                }
-                .into(),
-            ),
-            usage,
-            guest_ram_mib: u64::try_from(cx.ram_mib).ok(),
-            machine_workers: Some(
-                hydo_engine::machine_workers(cx.ram_mib.max(0) as u64 * 2 + 256) as u64,
-            ),
-        };
-        crate::stats::build(inp, &firsts, &ledger, cx.ex.space.as_ref(), &drawn(a))
-    };
-    let _ = hydo_results::write_document(&cx.out.join(hydo_results::STATS_DOC), &stats);
-    let mut with: Vec<(String, String)> = merged
-        .into_iter()
-        .filter(|x| x.1.contains("HYDO-ASSERT"))
-        .collect();
-    with.sort_by(|a, b| format!("{}.log", a.0).cmp(&format!("{}.log", b.0)));
-    doc.liveness = results::liveness(&with);
-    doc.paths = paths;
-    let _ = hydo_results::write_document(&cx.out.join(hydo_results::EXPLORATION_DOC), &doc);
-    let _ = std::fs::write(cx.out.join("report.md"), md::report(&doc));
+    cx.write_reports(&doc, &stats);
+    shrinks::write_unshrunk(
+        &cx.out,
+        &chosen,
+        &done,
+        &echosen,
+        errors.as_ref().map(|x| x.2.as_slice()).unwrap_or(&[]),
+    );
     if !cx.env.plain_end {
         println!("{}", md::summary_line(&doc));
     }
     0
+}
+
+/// An error kind's shrink: its signature, the shrink and the runs it used.
+type ErrDone = (String, ErrorShrink, Vec<Run>);
+
+/// One first run's error-log analysis: its seed, its schedule and the analysis.
+type ErrRun = (Value, String, Option<errlog::Analysis>);
+
+/// `--time-limit`'s record: how far the seed range got.
+fn time_limit_of(
+    limit: Option<f64>,
+    planned: usize,
+    seeds: &[i64],
+    cut: bool,
+) -> Option<hydo_results::TimeLimit> {
+    limit.map(|l| hydo_results::TimeLimit {
+        limit_s: l,
+        planned: planned as u64,
+        explored: seeds.len() as u64,
+        explored_seeds: match (seeds.first(), seeds.last()) {
+            (Some(a), Some(b)) => Some(format!("{a}-{b}")),
+            _ => None,
+        },
+        cut,
+    })
+}
+
+/// What the pool says of an exploration so far: its workers' boot, the result cache, the
+/// repeats, the error paths of the first runs and the workers' time.
+struct PoolFacts {
+    boot: f64,
+    workers: usize,
+    cache_hits: usize,
+    repeats: (u64, f64),
+    paths: Option<hydo_results::PathCoverage>,
+    ledger: Arc<std::sync::Mutex<pool::Ledger>>,
+}
+
+impl PoolFacts {
+    fn of(pool: &Pool, seeds: &[i64], res_all: &HashMap<String, (String, Res)>) -> PoolFacts {
+        PoolFacts {
+            boot: pool.mean_boot(),
+            workers: pool.workers(),
+            cache_hits: *pool.cache_hits.lock().expect("lock"),
+            repeats: pool.repeat_stats(),
+            // the error paths of the first runs (Milestone 306)
+            paths: pool
+                .host
+                .contracts
+                .as_ref()
+                .and_then(|plan| crate::paths::of_exploration(plan, seeds, res_all)),
+            // Milestone 336: the workers' time, complete once the pool is closed
+            ledger: pool.ledger.clone(),
+        }
+    }
+}
+
+/// What a report of the exploration is made of: the first runs, the failures with their
+/// re-runs and the state of each one's shrink, the shrinks that ended, and the error kinds.
+struct DocIn<'a> {
+    seeds: &'a [i64],
+    res_all: &'a HashMap<String, (String, Res)>,
+    rep: &'a HashMap<String, Res>,
+    failures: &'a [Failure],
+    /// Each failure's shrink state ([`hydo_results::shrink_state`]).
+    states: Vec<&'static str>,
+    shrunk: &'a [&'a Shrunk],
+    errors: Option<(&'a [errlog::Aggregate], &'a [ErrRun])>,
+    edone: &'a [&'a ErrDone],
+    nrep: i64,
+    nrefused: u64,
+    t_sweep: f64,
+    time_limit: Option<hydo_results::TimeLimit>,
+    freeze_sweep: Option<Map<String, Value>>,
+    steer: Option<hydo_results::SteerSearch>,
+    sha: Option<String>,
+    first_report_s: f64,
+    /// Print the warnings about the first runs (once, with the first report).
+    warn: bool,
+}
+
+impl Cx {
+    /// The failures in seed order, each with its re-runs (written to the event stream).
+    fn failures_of(
+        &self,
+        fails: &[(Rec, Run)],
+        rep: &HashMap<String, Res>,
+        nrep: i64,
+    ) -> Vec<Failure> {
+        let mut failures = Vec::new();
+        for (f, run) in fails {
+            let sd = f["seed"].as_i64().unwrap_or(0);
+            let mut reproductions = Vec::new();
+            let mut ok = true;
+            for k in 0..nrep {
+                let tag = if k == 0 {
+                    format!("repro-{sd}")
+                } else {
+                    format!("repro{}-{sd}", k + 1)
+                };
+                let rr = rep.get(&tag);
+                // an agent image's re-run also types the same commands (ctl=, M126); None ==
+                // None otherwise
+                ok = ok
+                    && rr.and_then(|r| r.get("fp")) == f.get("fp")
+                    && rr.and_then(|r| r.get("ctl")) == f.get("ctl");
+                if let Some(r) = rr {
+                    let mut rr_run = self.run_record(&tag, &run.schedule, r, role::RERUN);
+                    rr_run.seed = Some(sd);
+                    self.ev.write(&rr_run);
+                }
+                reproductions.push(repro_of(&tag, rr));
+            }
+            failures.push(Failure {
+                signature: sig_key(&run.verdict.text),
+                reproduced: ok,
+                reproductions,
+                timing_only: None,
+                run: run.clone(),
+                shrink_state: None,
+                repro_command: None,
+            });
+        }
+        failures
+    }
+
+    /// Write exploration.json, stats.json and report.md, each replaced at once (Milestone 387:
+    /// the explorer writes them after the first runs and again as each shrink ends).
+    fn write_reports(&self, doc: &Exploration, stats: &hydo_results::StatsDoc) {
+        let _ = hydo_results::write_document(&self.out.join(hydo_results::STATS_DOC), stats);
+        let _ = hydo_results::write_document(&self.out.join(hydo_results::EXPLORATION_DOC), doc);
+        let p = self.out.join("report.md");
+        let tmp = self.out.join("report.md.tmp");
+        if std::fs::write(&tmp, md::report(doc)).is_ok() {
+            let _ = std::fs::rename(&tmp, &p);
+        }
+    }
+
+    /// The exploration's document and its statistics from what is done so far.
+    fn assemble(
+        &self,
+        d: &DocIn,
+        facts: &PoolFacts,
+        usage: Option<crate::stats::Usage>,
+        t0: Instant,
+    ) -> (Exploration, hydo_results::StatsDoc) {
+        let cx = self;
+        let a = &cx.a;
+        let seeds = d.seeds;
+        let res_all = d.res_all;
+        let failures = d.failures;
+        let total = t0.elapsed().as_secs_f64();
+        let secs: Vec<f64> = seeds
+            .iter()
+            .map(|sd| {
+                res_all
+                    .get(&format!("seed-{sd}"))
+                    .and_then(|x| x.1.get("secs"))
+                    .and_then(Value::as_f64)
+                    .unwrap_or(0.0)
+            })
+            .collect();
+        let (repeats, repeats_s) = facts.repeats;
+        let mut summary = Summary {
+            schedules: seeds.len() as u64,
+            sweep_wall_s: Some(round1(d.t_sweep)),
+            runs_per_hour: Some(round1(seeds.len() as f64 / d.t_sweep.max(1e-9) * 3600.0)),
+            mean_run_s: Some(round1(secs.iter().sum::<f64>() / secs.len().max(1) as f64)),
+            worker_boot_s: Some(round1(facts.boot)),
+            total_wall_s: Some(round1(total)),
+            failures: failures.len() as u64,
+            reproduced: Some(failures.iter().filter(|f| f.reproduced).count() as u64),
+            repro_runs: (d.nrep != 1).then_some(d.nrep as u64),
+            quiet_wait_s: {
+                let qw = pool::quiet_waited();
+                (qw > 0.0).then(|| round1(qw))
+            },
+            cache_hits: (facts.cache_hits > 0).then_some(facts.cache_hits as u64),
+            repeats: (repeats > 0).then_some(repeats),
+            repeats_saved_s: (repeats > 0).then(|| round1(repeats_s)),
+            time_limit: d.time_limit.clone(),
+            first_report_s: Some(round1(d.first_report_s)),
+            ..Summary::default()
+        };
+        let nrefused = d.nrefused;
+        if nrefused > 0 {
+            summary.refused = Some(nrefused);
+            if d.warn {
+                eprintln!(
+                    "hydo: warning: the engine refused {nrefused} schedules before running them \
+                     (their run records in events.jsonl have the class refused); they are not failures"
+                );
+            }
+        }
+        // first runs that passed but may have checked nothing (results::vacuous), and (Milestone
+        // 264) first runs whose page check judged no failed request (results::failures_of_unmatched)
+        let mut unmatched: Vec<String> = Vec::new();
+        let mut nunmatched = 0u64;
+        // Milestone 355: first runs with a reaction that never fired, counted apart
+        let mut unfired: Vec<String> = Vec::new();
+        let mut nunfired = 0u64;
+        // Milestone 368: first runs whose console the engine cut, counted apart
+        let mut ncut = 0u64;
+        let vacuous = seeds
+            .iter()
+            .filter(|sd| {
+                let tag = format!("seed-{sd}");
+                res_all.get(&tag).is_some_and(|x| {
+                    let consoles = results::explorer_consoles(&cx.out, &tag);
+                    let r = results::run_of(&tag, "", &x.1, &consoles);
+                    let u = results::failures_of_unmatched(&consoles);
+                    if !u.is_empty() {
+                        nunmatched += 1;
+                        for w in &u {
+                            if !unmatched.contains(w) {
+                                unmatched.push(w.clone());
+                            }
+                        }
+                    }
+                    let nf: Vec<&String> = r
+                        .warnings
+                        .iter()
+                        .filter(|w| results::is_unfired_warning(w))
+                        .collect();
+                    if !nf.is_empty() {
+                        nunfired += 1;
+                        if unfired.is_empty() {
+                            unfired.push(nf[0].clone());
+                        }
+                    }
+                    if r.warnings
+                        .iter()
+                        .any(|w| results::is_console_cut_warning(w))
+                    {
+                        ncut += 1;
+                    }
+                    r.warnings.iter().any(|w| {
+                        !u.contains(w)
+                            && !results::is_unfired_warning(w)
+                            && !results::is_console_cut_warning(w)
+                    })
+                })
+            })
+            .count() as u64;
+        if nunfired > 0 {
+            summary.unfired_reactions = Some(nunfired);
+            if d.warn {
+                eprintln!(
+                    "hydo: warning: in {nunfired} of {} first runs a reaction never fired, so those runs \
+                     did not test it; for example {}",
+                    seeds.len(),
+                    unfired.first().map(String::as_str).unwrap_or("")
+                );
+            }
+        }
+        if nunmatched > 0 && d.warn {
+            eprintln!(
+                "hydo: warning: in {nunmatched} of {} first runs {}",
+                seeds.len(),
+                unmatched.first().map(String::as_str).unwrap_or("")
+            );
+        }
+        if ncut > 0 && d.warn {
+            eprintln!(
+                "hydo: warning: the engine cut the console of {ncut} of {} first runs at 64 KiB, so \
+                 their checks judged only the records before the cut (the run records in events.jsonl \
+                 have the warning); print less, or explore on the KVM engine",
+                seeds.len()
+            );
+        }
+        if vacuous > 0 {
+            summary.vacuous_passes = Some(vacuous);
+            if d.warn {
+                eprintln!(
+                    "hydo: warning: {vacuous} passing first runs may have checked nothing (the workload \
+                     acknowledged nothing, or a history was empty): their run records in events.jsonl \
+                     have warnings"
+                );
+            }
+        }
+        let mut eshr: HashMap<String, ErrorShrink> = HashMap::new();
+        for (sig, es, _) in d.edone {
+            eshr.insert(sig.clone(), es.clone());
+        }
+        let mut error_kinds = None;
+        if let Some((agg, an_runs)) = d.errors {
+            summary.error_kinds_new = Some(agg.iter().filter(|x| x.new_runs > 0).count() as u64);
+            summary.runs_with_new_error_kinds = Some(
+                an_runs
+                    .iter()
+                    .filter(|x| x.2.as_ref().is_some_and(|an| !an.new.is_empty()))
+                    .count() as u64,
+            );
+            let known = cx.known.clone().expect("loaded");
+            error_kinds = Some(ErrorKinds {
+                known_file: known.path.clone(),
+                known_sha256: known.sha256.clone(),
+                unknown: known.unknown.clone(),
+                kinds: agg
+                    .iter()
+                    .map(|x| x.to_model(eshr.get(&x.sig).cloned()))
+                    .collect(),
+            });
+        }
+        let mut doc = cx.exploration(facts.workers, summary, d.sha.clone());
+        doc.freeze_sweep = d.freeze_sweep.clone();
+        doc.steer = d.steer.clone();
+        doc.failures = failures
+            .iter()
+            .zip(&d.states)
+            .map(|(f, s)| Failure {
+                shrink_state: Some((*s).to_string()),
+                // Milestone 387: a problem without its minimal schedule replays its failing run
+                repro_command: (*s != hydo_results::shrink_state::DONE)
+                    .then(|| cx.by_hand(&f.run.schedule)),
+                ..f.clone()
+            })
+            .collect();
+        doc.shrinks = d.shrunk.iter().map(|s| cx.shrink_model(s)).collect();
+        doc.error_kinds = error_kinds;
+        // the property table and the liveness summary over the first runs
+        let merged: Vec<(String, String)> = seeds
+            .iter()
+            .map(|sd| {
+                let tag = format!("seed-{sd}");
+                let r = res_all.get(&tag).map(|x| x.1.clone()).unwrap_or_default();
+                let m = merged_text(&cx.out, &tag, &r);
+                (tag, m)
+            })
+            .collect();
+        doc.properties =
+            results::property_table(&merged.iter().map(|x| x.1.clone()).collect::<Vec<_>>());
+        // Milestone 336: the statistics, from the first runs in seed order and the other runs
+        let outcomes: Vec<Vec<String>> = merged
+            .iter()
+            .map(|x| crate::stats::property_outcomes(&x.1))
+            .collect();
+        let stats = {
+            let ledger = facts.ledger.lock().expect("lock");
+            let an: Vec<Option<&hydo_errors::Analysis>> = match d.errors {
+                Some((_, an_runs)) => an_runs.iter().map(|x| x.2.as_ref()).collect(),
+                None => Vec::new(),
+            };
+            let mut watched = false;
+            let firsts: Vec<crate::stats::First> = seeds
+                .iter()
+                .enumerate()
+                .map(|(i, sd)| {
+                    let tag = format!("seed-{sd}");
+                    let (text, r) = res_all.get(&tag).cloned().unwrap_or_default();
+                    let verdict = r.get("verdict").map(py_str).unwrap_or_default();
+                    let cached = r.get("cached").and_then(Value::as_bool) == Some(true);
+                    let error_paths = match crate::paths::of_res(&r).filter(|p| p.watched) {
+                        Some(p) => {
+                            watched = true;
+                            p.reached.iter().map(|x| x.place).collect()
+                        }
+                        None => Vec::new(),
+                    };
+                    let error_kinds = an
+                        .get(i)
+                        .copied()
+                        .flatten()
+                        .map(|a| {
+                            let mut v: Vec<String> = a
+                                .new
+                                .iter()
+                                .map(|k| k.sig.clone())
+                                .chain(a.known.iter().map(|k| k.kind.sig.clone()))
+                                .collect();
+                            v.sort();
+                            v.dedup();
+                            v
+                        })
+                        .unwrap_or_default();
+                    crate::stats::First {
+                        seed: *sd,
+                        refused: hydo_engine::is_refused(&verdict),
+                        fp: r.get("fp").map(py_str).unwrap_or_default(),
+                        verdict,
+                        cached,
+                        vm_s: r.get("secs").and_then(Value::as_f64).unwrap_or(0.0),
+                        job_s: (!cached).then(|| ledger.jobs.get(&tag).copied()).flatten(),
+                        clock: crate::stats::clock_of(&cx.out.join("consoles"), &tag),
+                        properties: outcomes.get(i).cloned().unwrap_or_default(),
+                        error_kinds,
+                        error_paths,
+                        schedule: text,
+                    }
+                })
+                .collect();
+            let mut other: std::collections::BTreeMap<String, (u64, f64)> = Default::default();
+            let mut add = |role: &str, secs: Option<f64>| {
+                let e = other.entry(role.to_string()).or_insert((0, 0.0));
+                e.0 += 1;
+                e.1 += secs.unwrap_or(0.0);
+            };
+            for r in d.rep.values() {
+                add(role::RERUN, r.get("secs").and_then(Value::as_f64));
+            }
+            for s in d.shrunk {
+                for r in &s.log {
+                    add("shrink", r.secs);
+                }
+            }
+            for (_, _, log) in d.edone.iter().copied() {
+                for r in log {
+                    add("error-shrink", r.secs);
+                }
+            }
+            let inp = crate::stats::Input {
+                hydo_version: doc.hydo_version.clone(),
+                epoch: doc.epoch,
+                image: doc.image.path.clone(),
+                engine: doc.engine.clone(),
+                strategy: doc.config.strategy.clone(),
+                seeds: doc.config.seeds.clone(),
+                errlog: d.errors.is_some(),
+                paths: watched,
+                other_runs: other,
+                wall_s: total,
+                sweep_wall_s: d.t_sweep,
+                clock_unit: Some(
+                    if cx.arm() || cx.kvm {
+                        "exits"
+                    } else {
+                        "hvx clock"
+                    }
+                    .into(),
+                ),
+                usage,
+                guest_ram_mib: u64::try_from(cx.ram_mib).ok(),
+                machine_workers: Some(hydo_engine::machine_workers(
+                    cx.ram_mib.max(0) as u64 * 2 + 256,
+                ) as u64),
+            };
+            crate::stats::build(inp, &firsts, &ledger, cx.ex.space.as_ref(), &drawn(a))
+        };
+        let mut with: Vec<(String, String)> = merged
+            .into_iter()
+            .filter(|x| x.1.contains("HYDO-ASSERT"))
+            .collect();
+        with.sort_by(|a, b| format!("{}.log", a.0).cmp(&format!("{}.log", b.0)));
+        doc.liveness = results::liveness(&with);
+        doc.paths = facts.paths.clone();
+        (doc, stats)
+    }
 }
 
 fn merged_text(out: &Path, tag: &str, r: &Res) -> String {
@@ -3491,6 +3718,10 @@ fn merged_text(out: &Path, tag: &str, r: &Res) -> String {
 
 /// The image's SHA-256, computed beside the runs (an image can be gigabytes).
 type ShaThread = Option<std::thread::JoinHandle<Option<String>>>;
+
+fn join_sha(sha: ShaThread) -> Option<String> {
+    sha.and_then(|h| h.join().ok()).flatten()
+}
 
 impl Cx {
     fn run_record(&self, tag: &str, text: &str, r: &Res, role: &str) -> Run {
@@ -3606,8 +3837,7 @@ impl Cx {
         }
     }
 
-    fn exploration(&self, workers: usize, summary: Summary, sha: ShaThread) -> Exploration {
-        let sha = sha.and_then(|h| h.join().ok()).flatten();
+    fn exploration(&self, workers: usize, summary: Summary, sha: Option<String>) -> Exploration {
         Exploration {
             hydo_version: Some(env!("CARGO_PKG_VERSION").into()),
             epoch: crate::results::this_epoch(),

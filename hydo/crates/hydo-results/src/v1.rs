@@ -1570,6 +1570,36 @@ pub struct Failure {
     pub timing_only: Option<bool>,
     /// The failing run.
     pub run: Run,
+    /// Where the shrink of this failure's problem (its class group and signature) stands, one
+    /// of [`shrink_state`] (added in Milestone 387). The explorer writes its report before it
+    /// shrinks, so a problem may be in a report without its minimal schedule. Absent: an
+    /// exploration made before Milestone 387, which wrote its report after its shrinks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shrink_state: Option<String>,
+    /// The command line that runs this failure's schedule once, while its problem has no
+    /// minimal schedule (its shrink state is not `done`; added in Milestone 387).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repro_command: Option<String>,
+}
+
+/// The values of [`Failure::shrink_state`] (added in Milestone 387).
+pub mod shrink_state {
+    /// The shrink has not started: `hydo explore --shrink-later`, or an exploration that was
+    /// stopped before it; `hydo shrink <explore dir> --problem N` runs it.
+    pub const PENDING: &str = "pending";
+    /// The explorer was shrinking it when it wrote the report. A report read after the
+    /// explorer stopped holds the failing run's schedule, as for `pending`.
+    pub const SHRINKING: &str = "shrinking";
+    /// The shrink ended: `shrinks` has its minimal schedule.
+    pub const DONE: &str = "done";
+    /// No shrink: `--no-shrink`, or a failure the explorer does not shrink (an error of
+    /// detected damage without `--shrink-detected-damage`, and a run that was refused).
+    pub const SKIPPED: &str = "skipped";
+
+    /// The state not shrunk yet: a minimal schedule may still come.
+    pub fn is_open(s: Option<&str>) -> bool {
+        matches!(s, Some(PENDING) | Some(SHRINKING))
+    }
 }
 
 /// Whether an engine's fingerprint names an end state. A run that passed its engine's limit (hvx's
@@ -1864,6 +1894,12 @@ pub struct Summary {
     /// far the seed range got. Absent when the option was not given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time_limit: Option<TimeLimit>,
+    /// Seconds from the explorer's start to its first report, written once the first runs and
+    /// the re-runs of each failure were done and before any shrink ended (added in Milestone
+    /// 387). A merge of parts has the latest of its parts' values. Absent: an exploration made
+    /// before Milestone 387, and a merge of a part made before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_report_s: Option<f64>,
 }
 
 /// How far an exploration with `--time-limit` got (added in stage 2 of docs/design/ci.md). The
@@ -2460,6 +2496,10 @@ pub struct CiFinding {
     /// record`; added in Milestone 365). `title` is its normalized form.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verdict: Option<String>,
+    /// `minimal` is a failing run's schedule, not a shrunk one: the exploration did not shrink
+    /// the failure, or had not shrunk it yet (added in Milestone 387).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub not_shrunk: Option<bool>,
 }
 
 /// An accepted finding's entry (`hydo/known-findings.yaml`; added in stage 2).

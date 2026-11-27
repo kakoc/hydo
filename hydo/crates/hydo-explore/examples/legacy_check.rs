@@ -1027,6 +1027,7 @@ fn convert(old: &Path, new: &Path) {
                 reproductions: reps,
                 timing_only: f["timing_only"].as_bool(),
                 run: conv_run(f),
+                ..hydo_results::Failure::default()
             });
         }
         for x in rep["shrunk"].as_array().into_iter().flatten() {

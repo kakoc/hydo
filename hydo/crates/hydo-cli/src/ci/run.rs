@@ -457,7 +457,8 @@ pub(crate) fn findings_of(
                    minimal: &str,
                    fp: Option<String>,
                    class: &str,
-                   repro: Option<String>| {
+                   repro: Option<String>,
+                   not_shrunk: bool| {
         let f = by.entry(k.clone()).or_insert_with(|| {
             order.push(k.clone());
             CiFinding {
@@ -467,6 +468,8 @@ pub(crate) fn findings_of(
                 minimal: minimal.to_string(),
                 fp,
                 repro,
+                // Milestone 387: the schedule is a failing run's, not a shrunk one
+                not_shrunk: not_shrunk.then_some(true),
                 ..CiFinding::default()
             }
         });
@@ -528,6 +531,7 @@ pub(crate) fn findings_of(
                 fp.first().cloned(),
                 &s.class,
                 s.repro_command.clone(),
+                false,
             );
         }
     }
@@ -545,6 +549,7 @@ pub(crate) fn findings_of(
                     Some(f.run.fingerprints.fp.clone()),
                     f.run.class.as_deref().unwrap_or(""),
                     None,
+                    true,
                 );
             }
         }
@@ -567,6 +572,7 @@ pub(crate) fn findings_of(
                 None,
                 "",
                 None,
+                k.shrink.is_none(),
             );
         }
     }

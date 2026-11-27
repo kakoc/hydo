@@ -46,8 +46,51 @@ struct Job {
 struct Queue {
     high: VecDeque<Job>,
     low: VecDeque<Job>,
+    /// The shrinks' runs (Milestone 387): they start only when no re-run and no first run
+    /// waits, so the first report comes after the first runs and their re-runs.
+    later: VecDeque<Job>,
     closed: bool,
     alive: usize,
+}
+
+/// Which queue a run waits in. A worker takes the first job of the first queue that has one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Prio {
+    /// Re-runs and the runs of sweeps and searches that a flow waits for.
+    High,
+    /// First runs.
+    Low,
+    /// The shrinks' candidates and confirmations (Milestone 387): before it, they went with
+    /// the re-runs and took the workers from later first runs, so the report waited for them.
+    Later,
+}
+
+impl Queue {
+    fn pop(&mut self) -> Option<Job> {
+        self.high
+            .pop_front()
+            .or_else(|| self.low.pop_front())
+            .or_else(|| self.later.pop_front())
+    }
+
+    fn is_empty(&self) -> bool {
+        self.high.is_empty() && self.low.is_empty() && self.later.is_empty()
+    }
+
+    /// The jobs in the order workers take them.
+    fn in_order(&self) -> impl Iterator<Item = &Job> {
+        self.high.iter().chain(&self.low).chain(&self.later)
+    }
+
+    /// Take the job of `tag` out of whichever queue holds it.
+    fn remove_tag(&mut self, tag: &str) -> Option<Job> {
+        for q in [&mut self.high, &mut self.low, &mut self.later] {
+            if let Some(i) = q.iter().position(|j| j.tag == tag) {
+                return q.remove(i);
+            }
+        }
+        None
+    }
 }
 
 /// Where the per-run host steps (history checks, error logs) find their inputs.
@@ -483,7 +526,7 @@ impl Pool {
     /// Submit one run: Some(its answer) when an earlier run of its schedule answers it, None
     /// when it runs in a VM or waits for the same schedule's run in flight (its answer then
     /// comes on the job's `reply`, and `pending` counts it).
-    fn submit(&self, job: Job, high: bool, pending: &mut usize) -> Option<Done> {
+    fn submit(&self, job: Job, prio: Prio, pending: &mut usize) -> Option<Done> {
         let ask = self.repeats.lock().expect("lock").ask(
             &self.host.outdir,
             &job.tag,
@@ -500,7 +543,7 @@ impl Pool {
             Ask::Run => {}
         }
         *pending += 1;
-        self.push(job, high);
+        self.push(job, prio);
         None
     }
 
@@ -508,7 +551,7 @@ impl Pool {
         self.threads.len()
     }
 
-    fn push(&self, job: Job, high: bool) {
+    fn push(&self, job: Job, prio: Prio) {
         // Milestone 328: a stop of the explorer from here on is no refusal (exit status 5)
         crate::mark_started();
         let (m, cv) = &*self.q;
@@ -520,10 +563,10 @@ impl Pool {
             deliver(&self.repeats, &self.host.outdir, job, res);
             return;
         }
-        if high {
-            q.high.push_back(job);
-        } else {
-            q.low.push_back(job);
+        match prio {
+            Prio::High => q.high.push_back(job),
+            Prio::Low => q.low.push_back(job),
+            Prio::Later => q.later.push_back(job),
         }
         cv.notify_one();
     }
@@ -657,6 +700,11 @@ impl Pool {
 
     /// Submit items; their results arrive on the batch in completion order (cached ones first).
     pub fn batch(&self, items: &[(String, String)], high: bool) -> Batch<'_> {
+        self.batch_prio(items, if high { Prio::High } else { Prio::Low })
+    }
+
+    /// [`Pool::batch`] in the queue `prio`.
+    pub fn batch_prio(&self, items: &[(String, String)], prio: Prio) -> Batch<'_> {
         self.cache_load();
         let (tx, rx) = channel();
         let cancel = Arc::new(AtomicBool::new(false));
@@ -674,7 +722,7 @@ impl Pool {
                 cancel: cancel.clone(),
                 search: None,
             };
-            if let Some(d) = self.submit(job, high, &mut pending) {
+            if let Some(d) = self.submit(job, prio, &mut pending) {
                 ready.push_back(d);
             }
         }
@@ -685,7 +733,7 @@ impl Pool {
             tx,
             pending,
             cancel,
-            high,
+            prio,
         }
     }
 
@@ -695,7 +743,16 @@ impl Pool {
         items: &[(String, String)],
         high: bool,
     ) -> HashMap<String, (String, Res)> {
-        let mut b = self.batch(items, high);
+        self.run_all_prio(items, if high { Prio::High } else { Prio::Low })
+    }
+
+    /// [`Pool::run_all`] in the queue `prio`.
+    pub fn run_all_prio(
+        &self,
+        items: &[(String, String)],
+        prio: Prio,
+    ) -> HashMap<String, (String, Res)> {
+        let mut b = self.batch_prio(items, prio);
         let mut out = HashMap::new();
         while let Some((tag, text, r)) = b.next_done() {
             out.insert(tag, (text, r));
@@ -722,7 +779,7 @@ impl Pool {
                     cancel: cancel.clone(),
                     search: Some(req.clone()),
                 },
-                false,
+                Prio::Low,
             );
         }
         let mut out = HashMap::new();
@@ -768,7 +825,7 @@ pub struct Batch<'a> {
     tx: Sender<Done>,
     pending: usize,
     cancel: Arc<AtomicBool>,
-    high: bool,
+    prio: Prio,
 }
 
 impl Batch<'_> {
@@ -794,7 +851,7 @@ impl Batch<'_> {
             cancel: self.cancel.clone(),
             search: None,
         };
-        if let Some(d) = self.pool.submit(job, self.high, &mut self.pending) {
+        if let Some(d) = self.pool.submit(job, self.prio, &mut self.pending) {
             self.ready.push_back(d);
         }
     }
@@ -823,7 +880,7 @@ fn take_for(q: &(Mutex<Queue>, Condvar), w: &mut dyn Worker, workers: usize) -> 
     let front: Vec<(usize, String, String)> = {
         let mut g = m.lock().expect("lock");
         loop {
-            if !g.high.is_empty() || !g.low.is_empty() {
+            if !g.is_empty() {
                 break;
             }
             if g.closed {
@@ -831,8 +888,7 @@ fn take_for(q: &(Mutex<Queue>, Condvar), w: &mut dyn Worker, workers: usize) -> 
             }
             g = cv.wait(g).expect("lock");
         }
-        g.high
-            .iter()
+        g.in_order()
             .take(workers.max(1))
             .enumerate()
             .filter(|(_, j)| j.search.is_none() && prefix_role(&j.tag).is_some_and(|r| r.continue_))
@@ -851,12 +907,12 @@ fn take_for(q: &(Mutex<Queue>, Condvar), w: &mut dyn Worker, workers: usize) -> 
     }
     let mut g = m.lock().expect("lock");
     if let Some((_, tag)) = best {
-        if let Some(i) = g.high.iter().position(|j| j.tag == tag) {
-            return g.high.remove(i);
+        if let Some(j) = g.remove_tag(&tag) {
+            return Some(j);
         }
     }
     loop {
-        if let Some(j) = g.high.pop_front().or_else(|| g.low.pop_front()) {
+        if let Some(j) = g.pop() {
             return Some(j);
         }
         if g.closed {
@@ -870,7 +926,7 @@ fn take(q: &(Mutex<Queue>, Condvar)) -> Option<Job> {
     let (m, cv) = q;
     let mut g = m.lock().expect("lock");
     loop {
-        if let Some(j) = g.high.pop_front().or_else(|| g.low.pop_front()) {
+        if let Some(j) = g.pop() {
             return Some(j);
         }
         if g.closed {
@@ -1124,6 +1180,7 @@ fn give_up(q: &(Mutex<Queue>, Condvar), reps: &Mutex<Repeats>, outdir: &Path) {
     }
     let mut jobs: Vec<Job> = g.high.drain(..).collect();
     jobs.extend(g.low.drain(..));
+    jobs.extend(g.later.drain(..));
     drop(g);
     for j in jobs {
         deliver(reps, outdir, j, error_result("", 0));

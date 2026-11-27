@@ -197,6 +197,13 @@ pub(super) fn item(n: usize, it: &super::Item, label: &str, shown: &str, own: us
             "See it again"
         };
         o.push_str(&format!("{INDENT}{again}: {}\n", it.command));
+        // Milestone 387: the report came before this problem's shrink ended
+        if it.not_shrunk_yet {
+            o.push_str(&format!(
+                "{INDENT}Not shrunk yet: hydo shrink {} --problem {own}\n",
+                crate::inspect::work::quote(shown),
+            ));
+        }
         if let Some(f) = story::faults_beside_long_word(&it.schedule) {
             o.push_str(&wrap(&f, INDENT));
         }

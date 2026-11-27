@@ -137,6 +137,26 @@ pub fn cmd_stats(argv: &[String]) -> i32 {
         return 0;
     }
     print!("{}", hydo_explore::stats::text(&doc, &asked));
+    // Milestone 387: the statistics of a report written before the shrinks ended count only the
+    // shrinks that ended
+    if let Ok(hydo_results::Results::Exploration { doc: Some(ex), .. }) =
+        hydo_results::read_dir(Path::new(&d))
+    {
+        let open = ex
+            .failures
+            .iter()
+            .filter(|f| hydo_results::shrink_state::is_open(f.shrink_state.as_deref()))
+            .count();
+        if open > 0 {
+            println!(
+                "\nNot shrunk yet: {open} failing run{} of this exploration had no ended shrink when \
+                 these statistics were written, so the cost of shrinks counts only the shrinks that \
+                 ended (`hydo shrink {} --problem N` shrinks one).",
+                if open == 1 { "" } else { "s" },
+                crate::inspect::work::quote(&d)
+            );
+        }
+    }
     0
 }
 
