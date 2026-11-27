@@ -4060,3 +4060,32 @@ workflow `tmp-rel060b-kvm` (run 45644567681) confirmed it on six of GitHub's run
 programs with the pinned bytes, put them into the published 0.5.0 release, built the 6 images of
 the list twice with the recorded bytes, and ran nothing, because no image moved. The quickstart's
 KVM section gave the list's values on the AMD hosts.
+
+## 33. hydo 0.7.0 (2026-11-26)
+
+Made with `hydo-bench rebaseline --write --thorough --changed-only` on the bare-metal machine and
+on a Mac, with the quick 0.7.0 candidates as `--release` (docs/HISTORY.md "The 0.7.0 release"),
+as in section 32. The values are in `hydo/onboard/recorded.json`, and this section records only
+the decisions.
+
+**The fingerprint epoch stays 6.** Milestones 362 to 367 moved no recorded value. As at 0.3.1 to
+0.6.0, only hydo's own guest programs moved image bytes: `guest/hydo-world`,
+`guest/hydo-world-tls` and `guest/hydo-grpc` have new pins (docs/BUILD-PINS.md), and the SDK
+versions are in rust-kv's program, node-kv's `package.json` and python-kv's `__init__.py`.
+
+**What moved.** hvx (the bare-metal machine, a tree unpacked under umask 022, the module
+`91D86B693F4D4035C368F9B`, 3,592 s): 9 of 43 images have new bytes and 30 of 141 runs new values
+(redis-proxy, redis-bridge, rust-kv, the shop's two images, the three gRPC stack images and the
+generated-driver stack). The Mac (`hvm`, one image at a time, about 720 s): 9 of 21 images and 36
+of 76 runs (redis-bridge, node-kv, python-kv, python-kv-hist, rust-kv, the shop's two images, the
+gRPC demo's two images). These are the images and runs that moved at 0.6.0. Every verdict is
+unchanged, every image whose bytes moved built twice with the same bytes, and every moved run
+gave the same values twice. On the Mac, `hvm/voting` was checked with one build
+(`--check --changed-only`), because two builds of it need about 7 GB of free disk; its bytes are
+the recorded ones, as its inputs hold no re-pinned program.
+
+**KVM.** The KVM list's images carry none of these programs, so no KVM value moves. The one-off
+workflow `tmp-rel070-kvm` (run 45890231174) confirmed it with the final Linux tarball, which a
+runner rebuilt byte for byte. On four AMD hosts (EPYC 9V45 three times, 7763 once) `--check
+--thorough` built the 6 images twice with the recorded bytes and gave all 19 schedules the
+list's values twice. Two Xeon 6975P-C hosts gave their own fingerprints with the same verdicts.
