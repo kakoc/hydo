@@ -25129,3 +25129,72 @@ schema. In two runs of `hydo --test it` four and six of the `update::` tests fai
   placeholders.
 - The warning for a `storage:` file system names the user as the image gives it; a name needs its
   number from the image's `/etc/passwd`, which hydo does not read for it.
+
+## Milestone 380 (tentative number): which techniques found the bugs, measured
+
+`hydo guide strategies` lists the techniques that found bugs, and an onboarding chooses among
+them by judgement. This milestone counts what every onboarding example found and how. The ledger
+is `docs/design/findings-ledger.csv`, and the page `docs/design/findings-ledger.md` explains its
+columns, holds the analysis, and proposes a first hour for every onboarding. No code, guide topic,
+playbook or skill changed; the lead decides on the proposal.
+
+**The ledger.** 189 rows hold 223 findings. They come from the `RESULTS.md` pages of the
+examples, their sections of this file, and the four evaluations of `hydo fuzz`. Each row gives
+these values:
+
+- the class, and how the finding came first;
+- the entries of the strategies page that it needs, and the faults of its minimal schedule;
+- the engine, the first failing schedule, and the cost;
+- the upstream report, its answer, and what a later run changed.
+
+The 47 examples of real systems hold 105 bugs: 49 new, 29 known, and 27 clock effects. They also
+hold 27 documented trade-offs, 27 failures of the environment, 30 mistakes of the checks, and 3
+errors of hydo.
+
+**The numbers.**
+
+- A blind exploration with the process strategy found 60 of the 105 bugs first. It found a first
+  bug in 30 of the 40 examples where it ran, 1.4 bugs per 100 of its 4,318 schedules.
+- Of the 43 blind first finds with a recorded position, 25 came within the first 10 schedules.
+  The median position was 7.
+- Schedules written from the code, the documentation, or an upstream report found 23 first. Aimed
+  reaction grids found 4 in 563 schedules on 8 examples, and the page walk 4 on 2 examples.
+- The swarm strategy found 2 first in 620 schedules. Explored settings, the clock audit, the scan
+  of write routes, and timing explorations of services found none first.
+- 26 onboardings with phase tables took 138 hours of wall time for 63 bugs.
+
+**The lead's five impressions.**
+
+1. Clock steps were needed in 13 of the 40 recent bugs (33 %, Milestones 311 to 371), and in 32
+   of all 105, not half. Blind explorations found 9 of the 13 first, and the clock audit found
+   none: it missed the clock bugs of six examples whose audit is recorded. Partly.
+2. An acknowledgement before a sync caused 6 of the 40 recent bugs, 2 of them with one node's
+   power loss. With the documented trade-offs the share is 15 of 54. Refuted.
+3. An operator's action was needed in 8 of the 40 recent bugs. The rest are mostly election and
+   replication logic and crash windows under plain faults. Refuted.
+4. Ten explorations ran a median of 6.9 re-runs and shrink candidates per first run. In 13
+   onboardings the explorations and the judging took a median of 58 % of the wall time.
+   Confirmed.
+5. Of 7 findings checked again from a fresh clone, 2 had a trigger described wrongly (RabbitMQ 1
+   and 3). Five saved schedules stopped failing when the image or the engine changed. Partly.
+
+**The proposal.** The first hour has four steps:
+
+1. production's shape with its durable settings;
+2. read-back checks that judge the run without faults;
+3. 20 seeds of `--strategy process --cluster-faults --no-shrink`, with clock steps, kills, and
+   power cuts;
+4. directed runs that judge each failure.
+
+The operator's actions in the workload and an aimed grid at the acknowledgement events come
+next. The clock audit and the scan of write routes stay as reading aids. `--configs` labels a
+documented loss. Damaged files, the swarm strategy, timing, contracts, and version pairs come
+later.
+
+**Checks.** `sh ci/vale.sh` and Vale on the new page found nothing. On the bare-metal machine,
+in a copy of the tracked files, `cargo test -p hydo-agents --test it` (16 passed) and `cargo test
+-p hydo --test it -- docs::` (14 passed) passed. The copy has no `AGENTS.local.md`, so a `grep` of
+the listed values checked the new files, and it found none.
+
+**What is left.** The lead decides on the proposal. The records give wall time and schedules, not
+machine hours per exploration, and most of them do not count their directed runs.

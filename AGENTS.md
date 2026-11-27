@@ -5611,6 +5611,12 @@ build machine, before 2026-10-13.
   (docs/REBASELINE.md section 33), and no KVM image. Release step 6a fixed two sentences. Both
   releases were built twice to the same bytes, and the Mac one is signed and notarized. They were
   verified on hvx, the Mac and KVM, where a runner rebuilt the Linux tarball byte for byte
+- M380 (tentative number): a ledger of the 223 findings of the onboarding examples
+  (`docs/design/findings-ledger.csv`). Each row says how its finding came first and what it
+  cost. A blind process
+  exploration found 60 of the 105 bugs first, most within 20 schedules; the clock audit, the
+  scan of write routes and explored settings found none. Clock steps were needed in a third of
+  the bugs. The page proposes a first hour for every onboarding. Nothing recorded moved
 
 ## Where to look
 
