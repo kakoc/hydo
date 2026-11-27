@@ -11,18 +11,24 @@ pub fn kernel_variant(m: &serde_json::Value) -> Option<String> {
     hydo_manifest::Guest::from_value(m).kernel
 }
 
-/// Write `/etc/hydo/image.json` into the staged root `r` (`variant`: [`kernel_variant`]).
-pub fn write_inside(
-    r: &Path,
-    arch: &str,
-    netns_kernel: bool,
-    variant: Option<&str>,
-) -> Result<(), Fail> {
-    let rec = hydo_image::kernels::record_with(arch, netns_kernel, variant);
+/// Whether the manifest `m` keeps the Mac and KVM guest kernels with `/proc/<pid>/io`
+/// (`guest.proc_io`, Milestone 376; true unless it says false).
+pub fn proc_io(m: &serde_json::Value) -> bool {
+    hydo_manifest::Guest::from_value(m).proc_io
+}
+
+/// The image record of the manifest `m` for `arch` (`netns_kernel`: an arm64 image that needs the
+/// second kernel): its kernel variant and `guest.proc_io` (`hydo_image::kernels::record_opts`).
+pub fn record_of(m: &serde_json::Value, arch: &str, netns_kernel: bool) -> hydo_image::ImageRecord {
+    hydo_image::kernels::record_opts(arch, netns_kernel, kernel_variant(m).as_deref(), proc_io(m))
+}
+
+/// Write `/etc/hydo/image.json` into the staged root `r` (the record [`record_of`] gives).
+pub fn write_inside(r: &Path, rec: &hydo_image::ImageRecord) -> Result<(), Fail> {
     fsx::makedirs(&r.join("etc/hydo"))?;
     fsx::write_text(
         &r.join(hydo_image::RECORD_PATH),
-        &hydo_image::canonical(&rec),
+        &hydo_image::canonical(rec),
     )
 }
 
@@ -34,7 +40,7 @@ fn file_ref(p: &Path) -> Result<hydo_image::FileRef, Fail> {
 }
 
 /// Write `<image>.json` next to the finished image (`disk`: arm64's data disk; `record`: the image
-/// record [`write_inside`] wrote, `hydo_image::kernels::record_with`).
+/// record [`write_inside`] wrote, [`record_of`]).
 pub fn write_sidecar(
     image: &Path,
     disk: Option<&Path>,

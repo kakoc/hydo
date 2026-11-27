@@ -3,13 +3,15 @@
 # Linux machine, without Nix (docs/design/k3s-in-guest.md, Milestone 256). An image asks for it
 # with `guest.kernel: containers`. Its list is Image-explore-netns-cg's (build-guest-cg.sh NETNS=1:
 # the service networks' options and hvm-cgroups.config) without the options that
-# hvm-containers.config names, then hvm-containers.config.
+# hvm-containers.config names, then hvm-containers.config. PROCIO=1 (Milestone 376, the
+# fingerprint epoch 7) appends hvm-procio.config too: Image-explore-containers-io, with
+# /proc/<pid>/io.
 # The source, the patches and the compiler are build-guest-cg.sh's: linux-6.6.35.tar.xz from
 # cdn.kernel.org and the Arm GNU Toolchain 13.3.Rel1, both checked by sha256 (docs/BUILD-PINS.md,
 # "Mac guest kernel for service networks").
 #
-#   WORK=<scratch dir> [JOBS=6] sh hv/hvm/explore/build-guest-containers.sh
-#     -> $OUT/Image-explore-containers and its .config
+#   WORK=<scratch dir> [PROCIO=1] [JOBS=6] sh hv/hvm/explore/build-guest-containers.sh
+#     -> $OUT/Image-explore-containers (with PROCIO=1 Image-explore-containers-io) and its .config
 #
 # Byte-reproducible as build-guest-cg.sh: two builds in different directories compare equal.
 set -e
@@ -27,6 +29,8 @@ TC_SHA=322f0b4482fc0d9fa0bb468134841f08d8c554c54ff5aa29a13a7a24bf7e1eb5
 TC_URL=https://developer.arm.com/-/media/Files/downloads/gnu/13.3.rel1/binrel/$TC_NAME.tar.xz
 NAME=Image-explore-containers
 LIST=$HERE/hvm-containers.config
+PROCIO=${PROCIO:-0}
+if [ "$PROCIO" = 1 ]; then NAME=$NAME-io; fi
 mkdir -p "$OUT" "$DL"
 get() {   # <url> <file> <sha256>
   if [ ! -f "$DL/$2" ]; then curl -sSLf -o "$DL/$2.part" "$1"; mv "$DL/$2.part" "$DL/$2"; fi
@@ -46,6 +50,7 @@ echo CONFIG_ARM64_HVM_IDLE_HVC=y >> "$B/base"        # as build-guest.sh's defau
 cat "$HERE/hvm-netns.config" "$HERE/hvm-cgroups.config" >> "$B/base"
 grep -v -F -w -f "$B/names" "$B/base" > "$B/allconfig"
 cat "$LIST" >> "$B/allconfig"
+if [ "$PROCIO" = 1 ]; then cat "$HERE/hvm-procio.config" >> "$B/allconfig"; fi
 python3 "$LX/apply-cntpct.py" "$B/linux-$KVER"
 python3 "$HERE/apply-hvcidle.py" "$B/linux-$KVER"
 cd "$B/linux-$KVER"
@@ -63,6 +68,10 @@ NEED="BLOCK BLK_DEV_LOOP EXT4_FS VIRTIO_MMIO VIRTIO_BLK MSDOS_PARTITION SYSVIPC 
 NOT="MODULES RANDOMIZE_BASE BRIDGE_IGMP_SNOOPING CGROUP_FREEZER BLK_CGROUP RT_GROUP_SCHED"
 NEED="$NEED $(sed -n 's/^CONFIG_\([A-Z0-9_]*\)=y$/\1/p' "$LIST")"
 NOT="$NOT $(sed -n 's/^CONFIG_\([A-Z0-9_]*\)=n$/\1/p' "$LIST")"
+if [ "$PROCIO" = 1 ]; then
+  NEED="$NEED $(sed -n 's/^CONFIG_\([A-Z0-9_]*\)=y$/\1/p' "$HERE/hvm-procio.config")"
+  NOT="$NOT $(sed -n 's/^CONFIG_\([A-Z0-9_]*\)=n$/\1/p' "$HERE/hvm-procio.config")"
+fi
 for c in $NEED; do
   grep -q "^CONFIG_$c=y" .config || { echo "missing CONFIG_$c" >&2; exit 1; }
 done

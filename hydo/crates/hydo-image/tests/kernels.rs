@@ -74,23 +74,58 @@ fn records() {
     let x = kernels::record_for("x86_64", false);
     assert_eq!(x.kernel.file, "bzImage");
     assert_eq!(x.initrd.as_ref().unwrap().file, "initramfs-kafka.cpio.gz");
-    // since the fingerprint epoch 3 (M234) the arm64 images get the kernels with cgroups; the
-    // x86_64 record still names hvx's kernel, which has always had them
+    // since the fingerprint epoch 3 (M234) the arm64 images get the kernels with cgroups, and
+    // since epoch 7 (M376) with /proc/<pid>/io too; the x86_64 record still names hvx's kernel,
+    // which has always had both
     let a = kernels::record_for("arm64", false);
-    assert_eq!(a.kernel.file, "Image-explore-cg");
-    assert_eq!(a.kernel.sha256, kernels::ARM64_KERNEL_CG.sha256);
+    assert_eq!(a.kernel.file, "Image-explore-io");
+    assert_eq!(a.kernel.sha256, kernels::ARM64_KERNEL_IO.sha256);
     let n = kernels::record_for("arm64", true);
-    assert_eq!(n.kernel.file, "Image-explore-netns-cg");
-    assert_eq!(n.kernel.sha256, kernels::ARM64_NETNS_KERNEL_CG.sha256);
+    assert_eq!(n.kernel.file, "Image-explore-netns-io");
+    assert_eq!(n.kernel.sha256, kernels::ARM64_NETNS_KERNEL_IO.sha256);
     assert!(n.initrd.is_none());
     assert_eq!(a.epoch, hydo_image::EPOCH);
     assert!(hydo_image::defaults(a.epoch, "arm64").cgroups);
-    // without guest.kernel the record has no variant, so its bytes are those of before M256
+    // without guest.kernel and guest.proc_io the record has no variant and no proc_io, so its
+    // fields are those of before M256
     for r in [&x, &a, &n] {
-        assert!(r.kernel_variant.is_none());
-        assert!(!hydo_image::canonical(r).contains("kernel_variant"));
+        assert!(r.kernel_variant.is_none() && r.proc_io.is_none());
+        let t = hydo_image::canonical(r);
+        assert!(
+            !t.contains("kernel_variant") && !t.contains("proc_io"),
+            "{t}"
+        );
+        assert!(r.proc_io());
     }
     assert_eq!(kernels::record_with("arm64", true, None), n);
+    assert_eq!(kernels::record_opts("arm64", true, None, true), n);
+}
+
+#[test]
+fn proc_io_false_keeps_the_kernels_of_epoch_6() {
+    // Milestone 376: guest.proc_io: false names the kernels with cgroups of epochs 3 to 6
+    let a = kernels::record_opts("arm64", false, None, false);
+    assert_eq!(a.kernel.sha256, kernels::ARM64_KERNEL_CG.sha256);
+    let n = kernels::record_opts("arm64", true, None, false);
+    assert_eq!(n.kernel.sha256, kernels::ARM64_NETNS_KERNEL_CG.sha256);
+    let c = kernels::record_opts("arm64", true, Some(kernels::CONTAINERS), false);
+    assert_eq!(c.kernel.sha256, kernels::ARM64_KERNEL_CONTAINERS.sha256);
+    let x = kernels::record_opts("x86_64", false, None, false);
+    assert_eq!(x.kernel, kernels::record_for("x86_64", false).kernel);
+    for r in [&a, &n, &c, &x] {
+        assert_eq!(r.epoch, hydo_image::EPOCH);
+        assert_eq!(r.proc_io, Some(false));
+        assert!(!r.proc_io());
+        let t = hydo_image::canonical(r);
+        assert!(t.contains("\"proc_io\":false"), "{t}");
+        assert_eq!(hydo_image::parse_record(&t).unwrap(), *r);
+    }
+    // an image built before epoch 7 never boots the new kernels, with or without the field
+    let mut old = kernels::record_for("x86_64", false);
+    old.epoch = 6;
+    assert!(!old.proc_io());
+    old.proc_io = Some(true);
+    assert!(!old.proc_io());
 }
 
 #[test]
@@ -98,8 +133,8 @@ fn the_containers_variant() {
     // arm64: the record names the variant's kernel, with or without service networks
     for netns in [false, true] {
         let c = kernels::record_with("arm64", netns, Some(kernels::CONTAINERS));
-        assert_eq!(c.kernel.file, "Image-explore-containers");
-        assert_eq!(c.kernel.sha256, kernels::ARM64_KERNEL_CONTAINERS.sha256);
+        assert_eq!(c.kernel.file, "Image-explore-containers-io");
+        assert_eq!(c.kernel.sha256, kernels::ARM64_KERNEL_CONTAINERS_IO.sha256);
         assert_eq!(c.kernel_variant.as_deref(), Some("containers"));
         assert_eq!(c.epoch, hydo_image::EPOCH);
         let t = hydo_image::canonical(&c);

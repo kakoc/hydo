@@ -765,6 +765,67 @@ the same store paths and the bytes of the pins (run 43698484545, the one-off wor
 (`ARM64_KERNEL_CONTAINERS`) and both releases' `assets.sha256`. In a tree, put the Mac kernel in
 `hv/hvm/explore/out/` and the KVM kernels in `hv/kvm/linux/out/` or `build/`.
 
+## The guest kernels with /proc/<pid>/io (Milestone 376, the fingerprint epoch 7)
+
+An image built at the fingerprint epoch 7 or later boots a guest kernel with per-process I/O
+accounting on the Mac and KVM engines, so the guest has `/proc/<pid>/io`
+(docs/design/kvm-engine.md, "`/proc/<pid>/io` in the guest"). Each new kernel is a kernel with
+cgroups above, or a kernel for containers, with the lines of `hv/kvm/linux/hydo-kvm-procio.config`
+(the same lines as `hv/hvm/explore/hvm-procio.config`) added to its list: `CONFIG_TASKSTATS`,
+`CONFIG_TASK_XACCT` and `CONFIG_TASK_IO_ACCOUNTING`. Each `.config` differs from its
+predecessor's in four lines: the three options and `# CONFIG_TASK_DELAY_ACCT is not set`. The
+kernels above stay pinned for the images built before, and for an image whose manifest says
+`guest.proc_io: false`. hvx's kernel does not change: its `.config` has the three options.
+
+The Mac kernels are built with `build-guest-cg.sh` and `build-guest-containers.sh` with
+`PROCIO=1`, from the inputs of "Mac guest kernel for service networks" above. `PROCIO=1 NETNS=0`
+gives `Image-explore-io`, `PROCIO=1 NETNS=1` gives `Image-explore-netns-io`, and
+`build-guest-containers.sh` with `PROCIO=1` gives `Image-explore-containers-io`. On the
+bare-metal machine each was built twice, in two directories, with the same bytes:
+
+| file | bytes | sha256 |
+|---|---|---|
+| `Image-explore-io` | 6,866,952 | `21928f712ca3a575cc9c0e8595ac6927b3ae1f173ce5f0be17ba4c7d7330cfb7` |
+| `Image-explore-io.config` | 51,540 | `d17da32dc2fd7a46f3c8f02a9b8a0ec8f1c54b3934bc389c0a4dea93bfc2a2ca` |
+| `Image-explore-netns-io` | 7,411,720 | `40b1a3e28c53052f94bf80fcde21033b0316cf2b23204f36e29ff0431bc21794` |
+| `Image-explore-netns-io.config` | 56,012 | `bad4d9890b9ea374d8480f2dd09b076cf540632d2269c8b03283544686422b21` |
+| `Image-explore-containers-io` | 9,105,416 | `81fb1b5c446c044a905ed6222e81094445c787b9d1311a29929703c0901bec8e` |
+| `Image-explore-containers-io.config` | 61,477 | `7e06a8d85715339f0903926b0ef9060a91f56d8dc0952d167969cf0e587692bb` |
+
+The sha256 values are in `hydo/crates/hydo-image/src/kernels.rs` (`ARM64_KERNEL_IO`,
+`ARM64_NETNS_KERNEL_IO`, `ARM64_KERNEL_CONTAINERS_IO`) and in `hydo/dist/mac/assets.sha256`. In a
+tree, put them in `hv/hvm/explore/out/`.
+
+The KVM kernels are built by `hv/kvm/linux/kernel-procio.nix` with the pinned nixpkgs: `PROCIO=1
+sh hv/kvm/linux/build-kernel.sh` gives `bzImage-kvm-io`, with `SMP=1` `bzImage-kvm-smp-io`, with
+`CONTAINERS=1` `bzImage-kvm-containers-io`, and with both `bzImage-kvm-smp-containers-io`. The
+recipe makes the list of `kernel-cg.nix` or `kernel-containers.nix` and appends the lines. No
+other recipe changes, so every other KVM kernel keeps its pin.
+
+| file | bytes | sha256 |
+|---|---|---|
+| `bzImage-kvm-io` | 3,163,136 | `4aef551c1aed38206dbc2aaa9a1e08e2fc65b60e7eb88dfde004ad1c68bb4fb4` |
+| `bzImage-kvm-io.config` | 51,634 | `360c27af0f6442505f38572792f7a64f669635d4a36cf32de1b9048f0d287f74` |
+| `bzImage-kvm-smp-io` | 3,417,088 | `e5b9cf4a5936e45a6211aa192b2f01593ab7a5fe52897419c3a6c5a0682168a5` |
+| `bzImage-kvm-smp-io.config` | 52,942 | `74664ca88ec9d24222abf6b670adb0a12e9e6e1b847c1913e3193527d0a207ce` |
+| `bzImage-kvm-containers-io` | 3,916,800 | `e61bdc8ec87166ba7f9618dc8ca961b23785c5026264275d3aff4555b72d7564` |
+| `bzImage-kvm-containers-io.config` | 57,102 | `3bf0ed94934ed65c9dce278904529bc02bb90561347e6438d231631a5da83dc5` |
+| `bzImage-kvm-smp-containers-io` | 4,203,520 | `51ea6c6e40c96519679ff1bac374f4bc2d02855545a1796e729ea541bebe0587` |
+| `bzImage-kvm-smp-containers-io.config` | 58,407 | `9d2cd5e1d57bd25fd0ea1209295b12055ae200b3efacd83fd0492198e4611bee` |
+
+Proof: the store paths are `7yxpz7r4…-hydo-kvm-guest-kernel-io-6.6.35`,
+`q8bcs2hi…-hydo-kvm-guest-kernel-smp-io-6.6.35`,
+`dqb2cha3…-hydo-kvm-guest-kernel-containers-io-6.6.35` and
+`vvyap1zp…-hydo-kvm-guest-kernel-smp-containers-io-6.6.35`. The bare-metal machine's single-user
+Nix, outside a sandbox, built them first; a `nix-build --check` of `bzImage-kvm-io` there gave
+another output, as Milestones 159, 234 and 256 saw. Four GitHub runners (two Xeon 6975P-C, two AMD EPYC 7763) with a
+multi-user Nix 2.18.9, which builds in a sandbox, built one kernel each with `nix-build` and then
+`nix-build --check`: the same store paths and the bytes of the pins (run 46004050833, the one-off
+workflow `tmp-m376-kvm`). The RDTSC audit of each
+`vmlinux` lists the same 10 sites as `bzImage-kvm-cg`'s. The sha256 values are in `hydo/crates/hydo-kvm/src/kernel.rs` (`KERNEL_IO`,
+`KERNEL_SMP_IO`, `KERNEL_CONTAINERS_IO`, `KERNEL_SMP_CONTAINERS_IO`) and in
+`hydo/dist/linux/assets.sha256`. In a tree, put them in `hv/kvm/linux/out/` or `build/`.
+
 ## Headless Chromium and the GUI driver (Milestone 166, an experiment)
 
 `hydo/onboard/examples/compose-voting-browser/` (docs/design/gui-testing.md) puts a real browser

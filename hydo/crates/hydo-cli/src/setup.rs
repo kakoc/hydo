@@ -143,7 +143,10 @@ pub fn asset_release_path(p: Platform, asset: &str) -> Option<String> {
                 | "Image-explore-netns"
                 | "Image-explore-cg"
                 | "Image-explore-netns-cg"
-                | "Image-explore-containers" => Some(format!("hv/hvm/explore/out/{a}")),
+                | "Image-explore-containers"
+                | "Image-explore-io"
+                | "Image-explore-netns-io"
+                | "Image-explore-containers-io" => Some(format!("hv/hvm/explore/out/{a}")),
                 "busybox"
                 | "mke2fs"
                 | "hydo_fc"

@@ -25129,3 +25129,179 @@ schema. In two runs of `hydo --test it` four and six of the `update::` tests fai
   placeholders.
 - The warning for a `storage:` file system names the user as the image gives it; a name needs its
   number from the image's `/etc/passwd`, which hydo does not read for it.
+
+## Milestone 376 (tentative number): the guest kernels with `/proc/<pid>/io`, the fingerprint epoch 7
+
+Status: done on 2026-11-27 for the KVM engine; the Mac kernels are built and pinned, and the Mac
+engine did not run them. The fingerprint epoch is 7. No value of an older epoch moved, and the
+epoch-7 values wait for the 0.8.0 pass.
+
+The Mac and KVM guest kernels are allnoconfig with hydo's fragments, and no fragment set
+`CONFIG_TASKSTATS`, `CONFIG_TASK_XACCT` or `CONFIG_TASK_IO_ACCOUNTING`. So the guest had no
+`/proc/<pid>/io`, and Typesense 30.2 stopped with SIGSEGV at every start on KVM: its bundled brpc
+reads `/proc/self/io` in a static initializer and logs the failure before glog is set up
+(Milestone 373, open item 188). VictoriaMetrics' `metrics` package, psutil's `io_counters()`, and
+the process statistics of Apache Doris, Apache Impala, Dovecot and cyrus-imapd read the file too.
+The user agreed to the proposal of Milestone 373, which this milestone builds.
+
+**The kernels.** docs/BUILD-PINS.md "The guest kernels with /proc/<pid>/io" has the pins.
+
+- `hv/kvm/linux/hydo-kvm-procio.config` and `hv/hvm/explore/hvm-procio.config` set the three
+  options and keep `CONFIG_TASK_DELAY_ACCT` and `CONFIG_BSD_PROCESS_ACCT` off: delay accounting
+  reads the clock at every wait, and process accounting writes a file. `CONFIG_TASKSTATS` needs
+  `CONFIG_NET` and `CONFIG_MULTIUSER`, which every list has.
+- The KVM kernels: `hv/kvm/linux/kernel-procio.nix` (`PROCIO=1 [CONTAINERS=1] [SMP=1] sh
+  hv/kvm/linux/build-kernel.sh`) makes the list of `kernel-cg.nix` or `kernel-containers.nix`
+  and appends the lines. No other recipe changed, so every older pin stays.
+- The Mac kernels: `build-guest-cg.sh` and `build-guest-containers.sh` take `PROCIO=1`, which
+  appends `hvm-procio.config` and checks each of its lines in the `.config`. Without it they
+  build what they built before.
+- Each new `.config` differs from its predecessor's in four lines: the three options and `#
+  CONFIG_TASK_DELAY_ACCT is not set`, which Kconfig writes once `CONFIG_TASKSTATS` is on.
+
+**How they were built.** On the bare-metal machine, in a directory of this milestone's own:
+
+- The Mac kernels twice each, in two directories, with the same bytes: `Image-explore-io`
+  `21928f71…` (6,866,952 bytes), `Image-explore-netns-io` `40b1a3e2…` (7,411,720 bytes) and
+  `Image-explore-containers-io` `81fb1b5c…` (9,105,416 bytes).
+- The KVM kernels with the single-user Nix, outside a sandbox: `bzImage-kvm-io` `4aef551c…`
+  (store path `7yxpz7r4…`), `bzImage-kvm-smp-io` `e5b9cf4a…` (`q8bcs2hi…`),
+  `bzImage-kvm-containers-io` `e61bdc8e…` (`dqb2cha3…`) and `bzImage-kvm-smp-containers-io`
+  `51ea6c6e…` (`vvyap1zp…`). A `nix-build --check` of `bzImage-kvm-io` there gave another
+  output, as Milestones 159, 234 and 256 saw outside the sandbox. So the pins are the sandboxed
+  builds of GitHub's runners below, which gave these bytes.
+- The RDTSC audit (`hv/kvm/linux/audit-rdtsc.sh`) of each new `vmlinux` lists the same 10 sites
+  as before.
+
+**Which kernels need the options.** An image built at epoch 7 boots one of the kernels with cgroups
+or one of the variant `containers`. So each of those has a build with the file: four on KVM
+(`bzImage-kvm-io`, `bzImage-kvm-smp-io`, `bzImage-kvm-containers-io`,
+`bzImage-kvm-smp-containers-io`) and three on the Mac (`Image-explore-io`,
+`Image-explore-netns-io`, `Image-explore-containers-io`). `bzImage-kvm`, `bzImage-kvm-smp`,
+`Image-explore` and `Image-explore-netns` boot only images built at epoch 2 or before, which keep
+their kernels, so they have no new build.
+
+**hvx.** hvx's kernel did not change. `extract-ikconfig` of `bzImage` (`0a9ede35…`) on the
+bare-metal machine shows `CONFIG_TASKSTATS=y`, `CONFIG_TASK_DELAY_ACCT=y`, `CONFIG_TASK_XACCT=y`
+and `CONFIG_TASK_IO_ACCOUNTING=y`, as nixpkgs's `linux_6_6` sets them. No hvx default changed.
+
+**The code.**
+
+- `hydo-image`: `EPOCH` 7; `EpochDefaults::proc_io` (from epoch 7); `ImageRecord::proc_io`, an
+  optional field that only `guest.proc_io: false` writes, and `ImageRecord::proc_io()`, which says
+  whether the engines boot a kernel with the file; `kernels::ARM64_KERNEL_IO`,
+  `ARM64_NETNS_KERNEL_IO` and `ARM64_KERNEL_CONTAINERS_IO`, `arm64_kernel_of(netns, proc_io)` and
+  `record_opts(arch, netns, variant, proc_io)`. `record_for` and `record_with` give the kernels
+  with the file. `KNOWN` has 10 files. The image schema gains the field (`HYDO_BLESS=1`).
+- `hydo-kvm`: each `Twin` says whether it has the file (`proc_io`); `KERNEL_IO`, `KERNEL_SMP_IO`,
+  `KERNEL_CONTAINERS_IO`, `KERNEL_SMP_CONTAINERS_IO`, and `CURRENT` and `CURRENT_SMP` for the
+  default of this epoch; `twin_for` takes the record's `proc_io()`. `Twin::build_vars` names the
+  variables of `build-kernel.sh` that build it, for the refusal and for `hydo doctor`.
+- `hydo-engine`: the KVM boot files take the record's `proc_io()`.
+- `hydo-manifest`: `guest.proc_io` (a format-1 addition, `true` by default), its validation and
+  its schema text; `Guest::proc_io`.
+- `hydo-build`: `record::record_of` makes the record from the manifest, and the x86_64 and arm64
+  builds write it inside and beside the image. An arm64 image that needs another kernel than the
+  default names it in `/etc/hydo/kernel` from the record. `guest.proc_io: false` prints a line.
+- `hydo` (`doctor`, `setup`) and `hydo-release`: the new kernels are release assets, and `hydo
+  doctor` checks the kernels of this epoch. Both releases' `build-release.sh`, `assets.sha256` and
+  `third-party.json` ship them; the Mac's script takes `HYDO_KERNEL_IO`, `HYDO_KERNEL_NETNS_IO`
+  and `HYDO_KERNEL_CONTAINERS_IO`. docs/RELEASING.md names them, and the release lines of
+  `hydo/dist/releases.txt` come with the first release that ships them.
+
+**The proof on KVM.** Neither this Mac nor the bare-metal machine may run KVM, so a one-off
+workflow on the branch `tmp-m376-kvm` ran on GitHub's runners; the branch is deleted. Each check
+printed a `PASS` or `FAIL` line, and each step counted its `PASS` lines against the number it
+expected, so a step that checked nothing failed (Milestone 373's lesson).
+
+- **The kernels, in a sandbox** (run 46004050833). Four runners (two Xeon 6975P-C, two AMD EPYC
+  7763) with a multi-user Nix 2.18.9 (`sandbox = true`) built one kernel each with `nix-build` and
+  then `nix-build --check`: the same bytes twice, the store paths of the bare-metal machine, and
+  the pins. Run 46006123647 built all four again with the same result.
+- **The checks** (run 46006123647, six runners: four Xeon 6975P-C, an AMD EPYC 7763 and an
+  EPYC 9V45). The runner took the published 0.7.0 Linux release, `hydo setup`, and the four new
+  kernels in its `guest/`. This tree's `hydo` ran beside the release's.
+- **`/proc/self/io` in the guest, 9 of 9 checks on every host.** The release's Redis example got a
+  first invariant that reads `/proc/self/io` and the `/proc/<pid>/io` of `redis-server`, and
+  prints the latter. Built by this hydo (epoch 7), it ended `OK` with 1 and with 2 vCPUs, twice
+  each with one fingerprint, and printed `rchar: 4285 wchar: 2173 syscr: 58 syscw: 54
+  read_bytes: 3239936 write_bytes: 90112 cancelled_write_bytes: 0` (one vCPU, AMD). With
+  `guest.kernel: containers` it ended `OK` with both kernels for containers. With `guest.proc_io:
+  false`, whose record says `"proc_io": false`, it ended `VIOLATION [procio.readable] no
+  /proc/self/io` with 1 and 2 vCPUs. Built by hydo 0.7.0 (epoch 6), it ended the same `VIOLATION`
+  under this hydo. Every schedule gave one fingerprint per CPU vendor: the AMD EPYC 7763 and 9V45
+  agree, and the four Xeon hosts agree.
+- **An epoch-6 image keeps its values, 13 of 13 checks on every host.** hydo 0.7.0 built the
+  release's Redis example with the recorded bytes (`8fae6946…`, epoch 6). This tree's hydo ran
+  the 12 schedules of `kvm/release-redis` of `hydo/onboard/recorded.json`. On both AMD hosts every
+  run gave the recorded `fp` and `ctl`, from `b222402de473ea1b` (`disk=none | run`) to
+  `d73115b82e1e7897` (`disk=cut dseed=1f16055b6d41c6d9 | run C=9 R=no`). On the four Intel hosts
+  every run gave hydo 0.7.0's own values on the same host, with the recorded verdicts.
+- **Epoch 7 gives one fingerprint per schedule, 8 of 8 checks on every host.** This hydo built the
+  Redis example at epoch 7 (`24592035…`). Seven schedules ran twice each with one fingerprint, and
+  `disk=none | run` with 2 vCPUs too. On AMD: `disk=none | run` `abe369f236f79c57` (OK, `ctl`
+  `e7a5fc5df59d5896`), `disk=cut | run C=11 R=everysec` `ab57b0e096f95548` (`k:1` lost, the
+  epoch-6 verdict), `C=12 R=everysec` `dda80cde5756f25b` (OK), `C=12` `55250382c9110637` (OK),
+  `K=redis@5+2` `2f0aefc15ab36e15`, `T=6:3600` `1ea974c3bfcd5253`, `pct=99 pctn=4`
+  `3bc69e5061885d81`, and 2 vCPUs `ecb514e7230240aa`. On Intel the verdicts are the same, with
+  other fingerprints (`disk=none | run` `4e1e56315b9bc02c`). These values are not recorded; the
+  pass records them.
+- **Typesense starts on KVM, 2 of 2 checks on every host** (run 46007828454, six runners: four Xeon
+  6975P-C, a Xeon Platinum 8573C and an AMD EPYC 9V74). Each built the example's client with Go
+  1.27.3, fetched the image by digest, and built the image with this hydo at epoch 7
+  (`3dc411ac…`, the same bytes on every host). `disk=none | run` ended `OK` twice with one
+  fingerprint, with 134 commands that all succeeded and every check held: `2cd3857e1b8161e1` on
+  the five Intel hosts and `41339a5ff05742cd` on the AMD host (`ctl` `ec73b340eb4d3fa6` on both).
+  `hydo repro --regressions` gave 3 of 3 as expected, each a `VIOLATION` as on hvx:
+  `export-and-batched-delete-stop-after-a-backward-clock-step` (`e3ece4ba9f590b99` Intel,
+  `b91950cc7954b382` AMD), `follower-lacks-documents-after-a-restart` (`ba9edaf46419365a`,
+  `dc94b0e3b7e2b06a`) and `no-election-after-a-backward-clock-step` (`35056153f14892c2`,
+  `1233fbd59723f8f5`). So the example's three findings also hold on KVM.
+- The first run's checks failed for a mistake of the workflow: its invariant looked the server
+  up with `pgrep`, which the image's busybox lacks, so it named no process. Run 46006123647 reads
+  `/proc/*/comm` instead. Its Typesense step looked for the image in `hydo-out/`, and the example
+  builds it into `.hydo/`; run 46007828454 ran that step alone with the path fixed.
+
+**The Mac engine.** The Mac kernels have no run yet. The Mac engine's VM lock belongs to the
+user's own work session in this round, so no run used the Mac engine. The kernels
+are built twice with the same bytes and pinned, the build checks each option in the `.config`,
+and the arm64 records name them (`hydo-image`'s tests).
+
+**What moves** (AGENTS.md open item 105, docs/REBASELINE.md section 34). Every image built at
+epoch 7 has new bytes, because its record says epoch 7, so every run of the list moves on all
+three engines: hvx 43 images and 141 runs, the Mac 21 and 76, KVM 6 and 19. On the Mac and KVM
+engines the guest also boots the new kernels, so a verdict that depends on where a fault falls
+can change there; the pass decides each. On hvx only the record's bytes move. The values are not
+re-recorded here (the batch rule). The pinned reproducers' images of every epoch keep their
+kernels and values.
+
+**Tests.** On the bare-metal machine, in a tree of this milestone's own with a target folder of
+its own: `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings`
+pass. The tests that pass are these:
+
+- `-p hydo-image`: 21 tests;
+- `-p hydo-kvm`: 80 tests;
+- `-p hydo-engine -p hydo-build -p hydo-manifest -p hydo-release`: 176 tests;
+- `-p hydo-agents --test it`: 16 tests;
+- `-p hydo-explore --test it`: 62 tests;
+- `-p hydo --test it`: 78 tests, in one of five runs (below);
+- `-p hydo-control --test it`: 121 tests.
+
+Three goldens are recorded again with `HYDO_BLESS=1`. The equivalence corpora of hydo-manifest
+and hydo-build moved because the list of known `guest:` keys in their refusals gained `proc_io`.
+They also moved because input files that they copy changed: the releases' `third-party.json`
+names the new kernels, and the RabbitMQ example's `hydo.yaml` changed in Milestone 370.
+`cli.jsonl` of `hydo` moved in its two answers of `hydo guide manifest`, because MANIFEST.md
+gained the section "I/O accounting".
+
+`-p hydo --test it` passed all 78 tests in one of five runs on the final tree's programs. In each of the other four runs one or two tests of `update::` failed with `Text file
+busy`: four different tests, each at the start of a hydo that the test copies with `fs::copy`
+(`copy_hydo` in `tests/update.rs`). Another test's child can hold the copy's descriptor while
+it starts. The 16 tests of `update::` alone passed three times. The checks of the 0.7.0 release
+met the same failure. This milestone did not change `tests/update.rs` or `hydo update`; a hard
+link instead of the copy, as `tests/equivalence.rs` makes, is left.
+
+**What is left.** The re-recording pass at epoch 7 before 0.8.0 (open item 105). A Mac engine run
+with the new kernels: `/proc/self/io` in the guest, one fingerprint per schedule, and an epoch-6
+image's recorded values. The release lines of the new kernels in `hydo/dist/releases.txt`, with
+the first release that ships them. Open item 188's other lines.

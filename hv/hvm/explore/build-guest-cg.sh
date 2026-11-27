@@ -4,13 +4,16 @@
 #   NETNS=0: Image-explore-cg, Image-explore's list (build-guest.sh) plus hvm-cgroups.config;
 #   NETNS=1: Image-explore-netns-cg, Image-explore-netns's list (build-guest-netns.sh) plus
 #            hvm-cgroups.config.
+# PROCIO=1 (Milestone 376, the fingerprint epoch 7) appends hvm-procio.config too, so the guest
+# has /proc/<pid>/io: Image-explore-io (NETNS=0) or Image-explore-netns-io (NETNS=1).
 # The source, the patches and the compiler are build-guest-netns.sh's: linux-6.6.35.tar.xz from
 # cdn.kernel.org and the Arm GNU Toolchain 13.3.Rel1, both checked by sha256 (docs/BUILD-PINS.md,
 # "Mac guest kernel for service networks"). build-guest.sh takes its compiler from the Nix flake
 # registry, which is not pinned, so the default kernel with cgroups is built here too.
 #
-#   WORK=<scratch dir> NETNS=0|1 [JOBS=6] sh hv/hvm/explore/build-guest-cg.sh
-#     -> $OUT/Image-explore-cg or $OUT/Image-explore-netns-cg, and its .config
+#   WORK=<scratch dir> NETNS=0|1 [PROCIO=1] [JOBS=6] sh hv/hvm/explore/build-guest-cg.sh
+#     -> $OUT/Image-explore-cg or $OUT/Image-explore-netns-cg (with PROCIO=1 Image-explore-io or
+#        Image-explore-netns-io), and its .config
 #
 # Byte-reproducible as build-guest-netns.sh: two builds in different directories compare equal.
 set -e
@@ -28,6 +31,8 @@ TC_NAME=arm-gnu-toolchain-13.3.rel1-x86_64-aarch64-none-linux-gnu
 TC_SHA=322f0b4482fc0d9fa0bb468134841f08d8c554c54ff5aa29a13a7a24bf7e1eb5
 TC_URL=https://developer.arm.com/-/media/Files/downloads/gnu/13.3.rel1/binrel/$TC_NAME.tar.xz
 if [ "$NETNS" = 1 ]; then NAME=Image-explore-netns-cg; else NAME=Image-explore-cg; fi
+PROCIO=${PROCIO:-0}
+if [ "$PROCIO" = 1 ]; then NAME=${NAME%-cg}-io; fi
 mkdir -p "$OUT" "$DL"
 get() {   # <url> <file> <sha256>
   if [ ! -f "$DL/$2" ]; then curl -sSLf -o "$DL/$2.part" "$1"; mv "$DL/$2.part" "$DL/$2"; fi
@@ -44,6 +49,7 @@ cat "$LX/hvm.config" "$LX/hvm-virtio.config" "$HERE/../services/svc.config" "$HE
 echo CONFIG_ARM64_HVM_IDLE_HVC=y >> "$B/allconfig"        # as build-guest.sh's default
 if [ "$NETNS" = 1 ]; then cat "$HERE/hvm-netns.config" >> "$B/allconfig"; fi
 cat "$HERE/hvm-cgroups.config" >> "$B/allconfig"
+if [ "$PROCIO" = 1 ]; then cat "$HERE/hvm-procio.config" >> "$B/allconfig"; fi
 python3 "$LX/apply-cntpct.py" "$B/linux-$KVER"
 python3 "$HERE/apply-hvcidle.py" "$B/linux-$KVER"
 cd "$B/linux-$KVER"
@@ -65,6 +71,10 @@ else
 fi
 NEED="$NEED $(sed -n 's/^CONFIG_\([A-Z0-9_]*\)=y$/\1/p' "$HERE/hvm-cgroups.config")"
 NOT="$NOT $(sed -n 's/^CONFIG_\([A-Z0-9_]*\)=n$/\1/p' "$HERE/hvm-cgroups.config")"
+if [ "$PROCIO" = 1 ]; then
+  NEED="$NEED $(sed -n 's/^CONFIG_\([A-Z0-9_]*\)=y$/\1/p' "$HERE/hvm-procio.config")"
+  NOT="$NOT $(sed -n 's/^CONFIG_\([A-Z0-9_]*\)=n$/\1/p' "$HERE/hvm-procio.config")"
+fi
 for c in $NEED; do
   grep -q "^CONFIG_$c=y" .config || { echo "missing CONFIG_$c" >&2; exit 1; }
 done

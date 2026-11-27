@@ -123,8 +123,8 @@ I	hydo/crates/hydo-manifest/tests/fixtures/folders/regressions-only/hydo/hydo.ya
 I	hydo/crates/hydo-manifest/tests/fixtures/folders/saved-key/hydo/hydo.yaml	c49532c1aabe4e123f31acd6a7d45821433658ccf428af04ddda353f4a3c2848
 I	hydo/crates/hydo-manifest/tests/fixtures/folders/two-schedules/hydo/hydo.yaml	2c3b77759f05c4420d6739d08778d52ecb8240bbfbfad3dbd5c4b74b9d1cf36c
 I	hydo/crates/hydo-manifest/tests/fixtures/yaml_cases.json	1bd685d8d18a6f8e195254a21c50ce058763fa33b7373bff3923051a8da663ed
-I	hydo/dist/linux/third-party.json	0e48cb7d6ab4b001e58bc33cc490fb1e2eff6084081b89e82e99634b72fdd46a
-I	hydo/dist/mac/third-party.json	73a2881f0f09de2cd1497f3e28c9da886fac2ae89fef08ae64ac7f4a29181f37
+I	hydo/dist/linux/third-party.json	8167aa61a14c048db107e054e8a82de6c043821615ecb81fef8094d3d8ce92c8
+I	hydo/dist/mac/third-party.json	3599a06ef2476995d855416fd0568d3e31f4abce37b76083bbb210458190cab7
 I	hydo/grpcgen/demo/hints.yaml	61f215d0658471d8dcecd611de222f8af6628583f4d2689b9064f9529c14c0f3
 I	hydo/grpcgen/demo/hydo-mac.yaml	8df424c6576e59769fc88a8c9dc6611980d33df4b273b9be7c6d43c6eba73403
 I	hydo/grpcgen/demo/hydo.yaml	2f7ec93857b9dbdb43bd901fb530463933b707e95d21bf2633132a9e056f4fb2
@@ -1058,8 +1058,8 @@ R	^	<tmp>/cases/v-data-int.json --arch x86_64 []	crash	"hydo-build stops here wi
 R	^	<tmp>/cases/v-data-int.json --arch arm64 []	crash	"hydo-build stops here with a Python exception: int object is not iterable"
 R	^	<tmp>/cases/v-root-unknown.json --arch x86_64 []	err	"root: unknown field(s) nope (known: description, dirs, files…#79bba22c7b1c1bea"
 R	^	<tmp>/cases/v-root-unknown.json --arch arm64 []	err	"root: unknown field(s) nope (known: description, dirs, files…#79bba22c7b1c1bea"
-R	^	<tmp>/cases/v-guest-unknown.json --arch x86_64 []	err	"guest: unknown field(s) ram (known: branch_tick, cgroup2, cl…#8eba8dc16c67be37"
-R	^	<tmp>/cases/v-guest-unknown.json --arch arm64 []	err	"guest: unknown field(s) ram (known: branch_tick, cgroup2, cl…#8eba8dc16c67be37"
+R	^	<tmp>/cases/v-guest-unknown.json --arch x86_64 []	err	"guest: unknown field(s) ram (known: branch_tick, cgroup2, cl…#5669638754c5de14"
+R	^	<tmp>/cases/v-guest-unknown.json --arch arm64 []	err	"guest: unknown field(s) ram (known: branch_tick, cgroup2, cl…#5669638754c5de14"
 R	^	<tmp>/cases/v-guest-0.json --arch x86_64 []	err	"guest.clock_after_cut: whole seconds in [1, 315360000] (got 0)"
 R	^	<tmp>/cases/v-guest-0.json --arch arm64 []	err	"guest.clock_after_cut: whole seconds in [1, 315360000] (got 0)"
 R	^	<tmp>/cases/v-guest-1.json --arch x86_64 []	ok	d:c879d842 w:4f53cda1 c:fa1f878c m:74234e98
@@ -1090,8 +1090,8 @@ R	^	<tmp>/cases/v-guest-13.json --arch x86_64 []	err	"guest.clock_start: invalid
 R	^	<tmp>/cases/v-guest-13.json --arch arm64 []	err	"guest.clock_start: invalid type: string \"2024-01-01\", expect…#9360a251e9555bb9"
 R	^	<tmp>/cases/v-guest-14.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: list object i…#dab5e50983647e36"
 R	^	<tmp>/cases/v-guest-14.json --arch arm64 []	crash	"hydo-build stops here with a Python exception: list object i…#dab5e50983647e36"
-R	^	<tmp>/cases/v-guest-15.json --arch x86_64 []	err	"guest: unknown field(s) x (known: branch_tick, cgroup2, cloc…#67609ebbd7266061"
-R	^	<tmp>/cases/v-guest-15.json --arch arm64 []	err	"guest: unknown field(s) x (known: branch_tick, cgroup2, cloc…#67609ebbd7266061"
+R	^	<tmp>/cases/v-guest-15.json --arch x86_64 []	err	"guest: unknown field(s) x (known: branch_tick, cgroup2, cloc…#3e165ab7fb898aa3"
+R	^	<tmp>/cases/v-guest-15.json --arch arm64 []	err	"guest: unknown field(s) x (known: branch_tick, cgroup2, cloc…#3e165ab7fb898aa3"
 R	^	<tmp>/cases/v-checks-empty.json --arch x86_64 []	err	"checks: a non-empty list of history checks (hydo/HISTORIES.md)"
 R	^	<tmp>/cases/v-checks-empty.json --arch arm64 []	err	"checks: a non-empty list of history checks (hydo/HISTORIES.md)"
 R	^	<tmp>/cases/v-checks-map.json --arch x86_64 []	err	"checks: a non-empty list of history checks (hydo/HISTORIES.md)"
@@ -1392,7 +1392,7 @@ R	^	<tmp>/mutants/m27.58.json --arch x86_64 []	err	"invariants[0].msg: {{p}} is 
 R	^	<tmp>/mutants/m27.59.json --arch x86_64 []	err	"services[0]: field 'ready' must be a str"
 R	^	<tmp>/mutants/m28.0.json --arch x86_64 []	err	"workload.steps: between 1 and 1000"
 R	^	<tmp>/mutants/m28.1.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: unhashable type in faults:"
-R	^	<tmp>/mutants/m28.2.json --arch x86_64 []	err	"guest: unknown field(s) a (known: branch_tick, cgroup2, cloc…#302812d487a573d7"
+R	^	<tmp>/mutants/m28.2.json --arch x86_64 []	err	"guest: unknown field(s) a (known: branch_tick, cgroup2, cloc…#dd963f0a4e845ac3"
 R	^	<tmp>/mutants/m28.3.json --arch x86_64 []	err	"invariants[1]: missing required field 'cmd'"
 R	^	<tmp>/mutants/m28.4.json --arch x86_64 []	ok	d:33273713 w:4f53cda1 c:73e133b8 m:74234e98
 R	^	<tmp>/mutants/m28.5.json --arch x86_64 []	ok	d:d584c51a w:4f53cda1 c:709199c4 m:74234e98
@@ -3731,7 +3731,7 @@ R	^	<tmp>/mutants/m137.57.json --arch x86_64 []	err	"root.files[0].dst: a string
 R	^	<tmp>/mutants/m137.58.json --arch x86_64 []	ok	d:7e90006e w:4f53cda1 c:00a6da1b m:74234e98
 R	^	<tmp>/mutants/m137.59.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m138.0.json --arch x86_64 []	err	"guest: invalid type: boolean `false`, expected a mapping (pr…#4e62c7845beb313d"
-R	^	<tmp>/mutants/m138.1.json --arch x86_64 []	err	"guest: unknown field(s) freeze, kill (known: branch_tick, cg…#14f38fbd76a4f96c"
+R	^	<tmp>/mutants/m138.1.json --arch x86_64 []	err	"guest: unknown field(s) freeze, kill (known: branch_tick, cg…#3ac029ac7cfa4253"
 R	^	<tmp>/mutants/m138.2.json --arch x86_64 []	err	"data.dirs: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m138.3.json --arch x86_64 []	ok	d:8df9ca03 w:4f53cda1 c:17866fa3 m:74234e98
 R	^	<tmp>/mutants/m138.4.json --arch x86_64 []	ok	d:8d6b8166 w:4f53cda1 c:aaff479f m:74234e98
@@ -3786,7 +3786,7 @@ R	^	<tmp>/mutants/m138.52.json --arch x86_64 []	err	"workload: unknown field(s) 
 R	^	<tmp>/mutants/m138.53.json --arch x86_64 []	ok	d:5a517bbf w:4f53cda1 c:53667577 m:74234e98
 R	^	<tmp>/mutants/m138.54.json --arch x86_64 []	ok	d:1ebce5fa w:4f53cda1 c:ea82700a m:74234e98
 R	^	<tmp>/mutants/m138.55.json --arch x86_64 []	ok	d:b7329be6 w:4f53cda1 c:0921ad9d m:74234e98
-R	^	<tmp>/mutants/m138.56.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#23ee91b16263c873"
+R	^	<tmp>/mutants/m138.56.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#50ad7ab659b489a4"
 R	^	<tmp>/mutants/m138.57.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m138.58.json --arch x86_64 []	ok	d:9db176d8 w:4f53cda1 c:974cb9c8 m:74234e98
 R	^	<tmp>/mutants/m138.59.json --arch x86_64 []	err	"workload: field 'run' must be a str"
@@ -4077,7 +4077,7 @@ R	^	<tmp>/mutants/m144.43.json --arch x86_64 []	err	"services[0] (s3_emulator): 
 R	^	<tmp>/mutants/m144.44.json --arch x86_64 []	err	"services[0] (s3_emulator): image <tmp>/mutants/emulators/rcl…#2c549a9c825d0e99"
 R	^	<tmp>/mutants/m144.45.json --arch x86_64 []	err	"invariants[0]: unknown field(s) 3, v (known: after, cmd, des…#393a0a90aaf89b40"
 R	^	<tmp>/mutants/m144.46.json --arch x86_64 []	err	"services[0] (s3_emulator): image <tmp>/mutants/emulators/rcl…#2c549a9c825d0e99"
-R	^	<tmp>/mutants/m144.47.json --arch x86_64 []	err	"guest: unknown field(s) ., 0, 1, 7, 8, 9 (known: branch_tick…#9e2483fb0fd9272e"
+R	^	<tmp>/mutants/m144.47.json --arch x86_64 []	err	"guest: unknown field(s) ., 0, 1, 7, 8, 9 (known: branch_tick…#966625386bd46365"
 R	^	<tmp>/mutants/m144.48.json --arch x86_64 []	err	"faults: unknown kind 5000 (known: clock, corrupt, cut, disk,…#8b6162af5a5a93b9"
 R	^	<tmp>/mutants/m144.49.json --arch x86_64 []	err	"services[0] (s3_emulator): image <tmp>/mutants/emulators/rcl…#2c549a9c825d0e99"
 R	^	<tmp>/mutants/m144.50.json --arch x86_64 []	err	"services[0] (s3_emulator): image <tmp>/mutants/emulators/rcl…#2c549a9c825d0e99"
@@ -4136,7 +4136,7 @@ R	^	<tmp>/mutants/m145.42.json --arch x86_64 []	err	"top level: unknown field(s)
 R	^	<tmp>/mutants/m145.43.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m145.44.json --arch x86_64 []	err	"services[0] (s3_emulator): image <tmp>/mutants/emulators/rcl…#2c549a9c825d0e99"
 R	^	<tmp>/mutants/m145.45.json --arch x86_64 []	err	"invariants[0]: missing required field 'id'"
-R	^	<tmp>/mutants/m145.46.json --arch x86_64 []	err	"guest: unknown field(s) freeze, kill (known: branch_tick, cg…#14f38fbd76a4f96c"
+R	^	<tmp>/mutants/m145.46.json --arch x86_64 []	err	"guest: unknown field(s) freeze, kill (known: branch_tick, cg…#3ac029ac7cfa4253"
 R	^	<tmp>/mutants/m145.47.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m145.48.json --arch x86_64 []	err	"name: use lowercase letters, digits and '-' (got '10.89.0.7')"
 R	^	<tmp>/mutants/m145.49.json --arch x86_64 []	err	"emulators[0]: use: one of stripe, smtp, s3 (got nothing)"
@@ -4445,7 +4445,7 @@ R	^	<tmp>/mutants/m152.51.json --arch x86_64 []	err	"services[0] (vote): image <
 R	^	<tmp>/mutants/m152.52.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m152.53.json --arch x86_64 []	err	"invariants[0]: unknown field(s) bogus (known: after, cmd, de…#cc796248e472a6a1"
 R	^	<tmp>/mutants/m152.54.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
-R	^	<tmp>/mutants/m152.55.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#23ee91b16263c873"
+R	^	<tmp>/mutants/m152.55.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#50ad7ab659b489a4"
 R	^	<tmp>/mutants/m152.56.json --arch x86_64 []	err	"invariants: at least one invariant (or one entry in checks:)…#2cc2f7924780106c"
 R	^	<tmp>/mutants/m152.57.json --arch x86_64 []	err	"services[6]: missing required field 'name'"
 R	^	<tmp>/mutants/m152.58.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
@@ -4494,7 +4494,7 @@ R	^	<tmp>/mutants/m155.40.json --arch x86_64 []	crash	"hydo-build stops here wit
 R	^	<tmp>/mutants/m155.41.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m155.42.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m155.43.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
-R	^	<tmp>/mutants/m155.44.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#23ee91b16263c873"
+R	^	<tmp>/mutants/m155.44.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#50ad7ab659b489a4"
 R	^	<tmp>/mutants/m155.45.json --arch x86_64 []	err	"services[0]: depends_on names unknown service 1"
 R	^	<tmp>/mutants/m155.46.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
 R	^	<tmp>/mutants/m155.47.json --arch x86_64 []	err	"services[0] (vote): image <tmp>/mutants/images/dockersamples…#b2e2d43669cc24c7"
@@ -5665,7 +5665,7 @@ R	^	<tmp>/mutants/m187.11.json --arch x86_64 []	err	"services[0] (alma): image <
 R	^	<tmp>/mutants/m187.12.json --arch x86_64 []	err	"workload: missing required field 'run'"
 R	^	<tmp>/mutants/m187.13.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m187.14.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m187.15.json --arch x86_64 []	err	"guest: unknown field(s) x (known: branch_tick, cgroup2, cloc…#67609ebbd7266061"
+R	^	<tmp>/mutants/m187.15.json --arch x86_64 []	err	"guest: unknown field(s) x (known: branch_tick, cgroup2, cloc…#3e165ab7fb898aa3"
 R	^	<tmp>/mutants/m187.16.json --arch x86_64 []	err	"invariants[0]: unknown field(s) bogus (known: after, cmd, de…#cc796248e472a6a1"
 R	^	<tmp>/mutants/m187.17.json --arch x86_64 []	err	"invariants[0]: unknown field(s) A (known: after, cmd, descri…#a5353e92d8c09df3"
 R	^	<tmp>/mutants/m187.18.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
@@ -5703,9 +5703,9 @@ R	^	<tmp>/mutants/m187.49.json --arch x86_64 []	err	"top level: unknown field(s)
 R	^	<tmp>/mutants/m187.50.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m187.51.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m187.52.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/eventually does not …#13b67895a917560a"
-R	^	<tmp>/mutants/m187.53.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#23ee91b16263c873"
+R	^	<tmp>/mutants/m187.53.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#50ad7ab659b489a4"
 R	^	<tmp>/mutants/m187.54.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m187.55.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#23ee91b16263c873"
+R	^	<tmp>/mutants/m187.55.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#50ad7ab659b489a4"
 R	^	<tmp>/mutants/m187.56.json --arch x86_64 []	err	"workload: missing required field 'steps'"
 R	^	<tmp>/mutants/m187.57.json --arch x86_64 []	err	"services: must be a list (it may be empty: a project that is only a workload)"
 R	^	<tmp>/mutants/m187.58.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
@@ -5715,7 +5715,7 @@ R	^	<tmp>/mutants/m188.1.json --arch x86_64 []	err	"faults: unknown kind 'x' (kn
 R	^	<tmp>/mutants/m188.2.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m188.3.json --arch x86_64 []	err	"workload: field 'steps' must be a int"
 R	^	<tmp>/mutants/m188.4.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m188.5.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#23ee91b16263c873"
+R	^	<tmp>/mutants/m188.5.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#50ad7ab659b489a4"
 R	^	<tmp>/mutants/m188.6.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: unhashable type in faults:"
 R	^	<tmp>/mutants/m188.7.json --arch x86_64 []	ok	d:cfccf324 w:4f53cda1 c:c975044c m:74234e98
 R	^	<tmp>/mutants/m188.8.json --arch x86_64 []	err	"invariants: at least one invariant (or one entry in checks:)…#2cc2f7924780106c"
@@ -5739,7 +5739,7 @@ R	^	<tmp>/mutants/m188.25.json --arch x86_64 []	err	"services[0]: missing requir
 R	^	<tmp>/mutants/m188.26.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m188.27.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m188.28.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m188.29.json --arch x86_64 []	err	"guest: unknown field(s) ., 0, 1, 7, 8, 9 (known: branch_tick…#9e2483fb0fd9272e"
+R	^	<tmp>/mutants/m188.29.json --arch x86_64 []	err	"guest: unknown field(s) ., 0, 1, 7, 8, 9 (known: branch_tick…#966625386bd46365"
 R	^	<tmp>/mutants/m188.30.json --arch x86_64 []	err	"format: the project format, a whole number; this hydo (0.7.0…#dd4d1a6add80621e"
 R	^	<tmp>/mutants/m188.31.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m188.32.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
@@ -5747,7 +5747,7 @@ R	^	<tmp>/mutants/m188.33.json --arch x86_64 []	err	"services[0] (alma): image <
 R	^	<tmp>/mutants/m188.34.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m188.35.json --arch x86_64 []	err	"workload: field 'steps' must be a int"
 R	^	<tmp>/mutants/m188.36.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
-R	^	<tmp>/mutants/m188.37.json --arch x86_64 []	err	"guest: unknown field(s) 3, v (known: branch_tick, cgroup2, c…#e50ec7e39d67120b"
+R	^	<tmp>/mutants/m188.37.json --arch x86_64 []	err	"guest: unknown field(s) 3, v (known: branch_tick, cgroup2, c…#9615d1b5adbb9e57"
 R	^	<tmp>/mutants/m188.38.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
 R	^	<tmp>/mutants/m188.39.json --arch x86_64 []	err	"services[0]: unknown field(s) bogus (known: addr, clock, cmd…#91146c06fd0b7846"
 R	^	<tmp>/mutants/m188.40.json --arch x86_64 []	err	"services[0] (alma): image <tmp>/mutants/images/almalinux-8.1…#812efcefad7f2b96"
@@ -7472,7 +7472,7 @@ R	^	<tmp>/mutants/m252.18.json --arch x86_64 []	err	"fakes[0].routes[2]: unknown
 R	^	<tmp>/mutants/m252.19.json --arch x86_64 []	err	"fakes[0]: field 'name' must be a str"
 R	^	<tmp>/mutants/m252.20.json --arch x86_64 []	ok	d:c80d10c7 w:4f53cda1 c:32b02a43 m:74234e98
 R	^	<tmp>/mutants/m252.21.json --arch x86_64 []	ok	d:491f715a w:4f53cda1 c:839a3fe4 m:74234e98
-R	^	<tmp>/mutants/m252.22.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#23ee91b16263c873"
+R	^	<tmp>/mutants/m252.22.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#50ad7ab659b489a4"
 R	^	<tmp>/mutants/m252.23.json --arch x86_64 []	err	"fakes[0].routes[0].errors.409: the answer body, a string (a template)"
 R	^	<tmp>/mutants/m252.24.json --arch x86_64 []	err	"root: unknown field(s) x (known: description, dirs, files, f…#5fcc74bc941c3acd"
 R	^	<tmp>/mutants/m252.25.json --arch x86_64 []	err	"invariants[1]: unknown field(s) bogus (known: after, cmd, de…#c22424a74973d803"
@@ -8559,7 +8559,7 @@ R	^	<tmp>/mutants/m281.25.json --arch x86_64 []	err	"invariants[0]: missing requ
 R	^	<tmp>/mutants/m281.26.json --arch x86_64 []	err	"services[0]: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m281.27.json --arch x86_64 []	ok	d:ead9e9c0 w:4f53cda1 c:d0134e56 m:74234e98
 R	^	<tmp>/mutants/m281.28.json --arch x86_64 []	err	"invariants: at least one invariant (or one entry in checks:)…#2cc2f7924780106c"
-R	^	<tmp>/mutants/m281.29.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#23ee91b16263c873"
+R	^	<tmp>/mutants/m281.29.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#50ad7ab659b489a4"
 R	^	<tmp>/mutants/m281.30.json --arch x86_64 []	err	"root.files[0].src: a string (or a whole number), not [] (pro…#b44e294460fc5021"
 R	^	<tmp>/mutants/m281.31.json --arch x86_64 []	err	"faults: unknown kind '10.89.0.7' (known: clock, corrupt, cut…#9d7311355e24eaaf"
 R	^	<tmp>/mutants/m281.32.json --arch x86_64 []	err	"top level: missing required field 'name'"
@@ -9106,7 +9106,7 @@ R	^	<tmp>/mutants/m296.32.json --arch x86_64 []	err	"services[0] (restate): imag
 R	^	<tmp>/mutants/m296.33.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m296.34.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
 R	^	<tmp>/mutants/m296.35.json --arch x86_64 []	err	"services[0].env.RESTATE_ROCKSDB_TOTAL_MEMORY_SIZE: {{p}} is …#396ce81dbe5c91fb"
-R	^	<tmp>/mutants/m296.36.json --arch x86_64 []	err	"guest: unknown field(s)  , A, b (known: branch_tick, cgroup2…#ee7e5fc183813e9a"
+R	^	<tmp>/mutants/m296.36.json --arch x86_64 []	err	"guest: unknown field(s)  , A, b (known: branch_tick, cgroup2…#65364cd9baf05f9f"
 R	^	<tmp>/mutants/m296.37.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
 R	^	<tmp>/mutants/m296.38.json --arch x86_64 []	err	"services[0] (restate): image <tmp>/mutants/restate-1.7.13-am…#67f163d9e03461fe"
 R	^	<tmp>/mutants/m296.39.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: unhashable type in faults:"
@@ -10158,7 +10158,7 @@ R	^	<tmp>/mutants/m332.4.json --arch x86_64 []	err	"invariants[2].msg: a string 
 R	^	<tmp>/mutants/m332.5.json --arch x86_64 []	err	"root.files[7].src: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m332.6.json --arch x86_64 []	err	"root.text./etc/ota/dio: {{dio}} is not a declared parameter"
 R	^	<tmp>/mutants/m332.7.json --arch x86_64 []	err	"invariants[3].msg: a string (or a whole number), not ['kill'…#127760ea3d291a5c"
-R	^	<tmp>/mutants/m332.8.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#23ee91b16263c873"
+R	^	<tmp>/mutants/m332.8.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#50ad7ab659b489a4"
 R	^	<tmp>/mutants/m332.9.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m332.10.json --arch x86_64 []	err	"root.files[4].src: a string (or a whole number), not ['x'] (…#3b4b292d0d93b187"
 R	^	<tmp>/mutants/m332.11.json --arch x86_64 []	err	"invariants[4].final: invalid type: string \"eventually\", expe…#b2eef32bdd7c8866"
@@ -10188,13 +10188,13 @@ R	^	<tmp>/mutants/m332.34.json --arch x86_64 []	err	"workload: required (steps +
 R	^	<tmp>/mutants/m332.35.json --arch x86_64 []	err	"root.dirs: invalid type: mapping, expected a list (project f…#aa7d69bb55cb8ea5"
 R	^	<tmp>/mutants/m332.36.json --arch x86_64 []	ok	d:617776d6 w:4f53cda1 c:50f55325 m:74234e98
 R	^	<tmp>/mutants/m332.37.json --arch x86_64 []	ok	d:b9036c72 w:4f53cda1 c:37bbab24 m:74234e98
-R	^	<tmp>/mutants/m332.38.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#23ee91b16263c873"
+R	^	<tmp>/mutants/m332.38.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#50ad7ab659b489a4"
 R	^	<tmp>/mutants/m332.39.json --arch x86_64 []	err	"data.dirs[0]: a string (or a whole number), not False (proje…#41d67747b2324268"
 R	^	<tmp>/mutants/m332.40.json --arch x86_64 []	ok	d:2435af60 w:4f53cda1 c:cae23e5d m:74234e98
 R	^	<tmp>/mutants/m332.41.json --arch x86_64 []	ok	d:5513309e w:4f53cda1 c:7a2d1f57 m:74234e98
 R	^	<tmp>/mutants/m332.42.json --arch x86_64 []	err	"invariants[4]: missing required field 'cmd'"
 R	^	<tmp>/mutants/m332.43.json --arch x86_64 []	err	"services[0]: must be a mapping"
-R	^	<tmp>/mutants/m332.44.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#23ee91b16263c873"
+R	^	<tmp>/mutants/m332.44.json --arch x86_64 []	err	"guest: unknown field(s) bogus (known: branch_tick, cgroup2, …#50ad7ab659b489a4"
 R	^	<tmp>/mutants/m332.45.json --arch x86_64 []	err	"services[0]: logs: a list of absolute paths of log files"
 R	^	<tmp>/mutants/m332.46.json --arch x86_64 []	err	"root.files[0]: missing field `dst` (project format 1; the sc…#b3b7d9292d1b6f48"
 R	^	<tmp>/mutants/m332.47.json --arch x86_64 []	err	"root.files[5].src: a string (or a whole number), not ['x'] (…#9413470607713e64"

@@ -128,8 +128,8 @@ I	hydo/crates/hydo-manifest/tests/fixtures/folders/regressions-only/hydo/hydo.ya
 I	hydo/crates/hydo-manifest/tests/fixtures/folders/saved-key/hydo/hydo.yaml	c49532c1aabe4e123f31acd6a7d45821433658ccf428af04ddda353f4a3c2848
 I	hydo/crates/hydo-manifest/tests/fixtures/folders/two-schedules/hydo/hydo.yaml	2c3b77759f05c4420d6739d08778d52ecb8240bbfbfad3dbd5c4b74b9d1cf36c
 I	hydo/crates/hydo-manifest/tests/fixtures/yaml_cases.json	1bd685d8d18a6f8e195254a21c50ce058763fa33b7373bff3923051a8da663ed
-I	hydo/dist/linux/third-party.json	0e48cb7d6ab4b001e58bc33cc490fb1e2eff6084081b89e82e99634b72fdd46a
-I	hydo/dist/mac/third-party.json	73a2881f0f09de2cd1497f3e28c9da886fac2ae89fef08ae64ac7f4a29181f37
+I	hydo/dist/linux/third-party.json	8167aa61a14c048db107e054e8a82de6c043821615ecb81fef8094d3d8ce92c8
+I	hydo/dist/mac/third-party.json	3599a06ef2476995d855416fd0568d3e31f4abce37b76083bbb210458190cab7
 I	hydo/grpcgen/demo/hints.yaml	61f215d0658471d8dcecd611de222f8af6628583f4d2689b9064f9529c14c0f3
 I	hydo/grpcgen/demo/hydo-mac.yaml	8df424c6576e59769fc88a8c9dc6611980d33df4b273b9be7c6d43c6eba73403
 I	hydo/grpcgen/demo/hydo.yaml	2f7ec93857b9dbdb43bd901fb530463933b707e95d21bf2633132a9e056f4fb2
@@ -3154,7 +3154,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case299.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) ram (known: branch_tick,…#b73fe10841530ed8"
+R	^	<tmp>/case299.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) ram (known: branch_tick,…#96ff0eef1d4daf61"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -3250,7 +3250,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/case315.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) x (known: branch_tick, c…#6e9096d905e5b146"
+R	^	<tmp>/case315.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) x (known: branch_tick, c…#ba92e6ad1b55b186"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
@@ -5944,7 +5944,7 @@ R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant145.1.json --arch x86_64 --check	run	1	""	"hydo-build: params: must be a mapping of name: default value\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant145.2.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: branch_tic…#9f54f70dc8af849e"
+R	^	<tmp>/mutant145.2.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: branch_tic…#fe2228c5e24dc40f"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant145.3.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
@@ -7978,7 +7978,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant230.7.json --arch x86_64 --check	run	1	""	"hydo-build: format: the project format, a whole number; this…#0922ba94c6d7895f"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant230.8.json --arch arm64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: branch_tic…#9f54f70dc8af849e"
+R	^	<tmp>/mutant230.8.json --arch arm64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: branch_tic…#fe2228c5e24dc40f"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant230.9.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) bogus (known: af…#0044df4d46759703"
@@ -9922,7 +9922,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant295.15.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant296.0.json --arch arm64 --check	run	1	""	"hydo-build: guest: unknown field(s)  , 7 (known: branch_tick…#07346a7254f61225"
+R	^	<tmp>/mutant296.0.json --arch arm64 --check	run	1	""	"hydo-build: guest: unknown field(s)  , 7 (known: branch_tick…#303f364171034fbc"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant296.1.json --arch x86_64 --check	run	1	""	"hydo-build: name: use lowercase letters, digits and '-' (got 'False')\n"
@@ -9940,7 +9940,7 @@ R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant296.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant296.6.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: branch_tic…#9f54f70dc8af849e"
+R	^	<tmp>/mutant296.6.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: branch_tic…#fe2228c5e24dc40f"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant296.7.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (restate): image <tmp>/restate-1.7.1…#63f64a86a74fdc92"
@@ -10459,7 +10459,7 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant322.2.json --arch x86_64 --check	run	0	#84fbea3f510f7146/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#3516109b769de65a/6106	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant322.3.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: branch_tic…#9f54f70dc8af849e"
+R	^	<tmp>/mutant322.3.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: branch_tic…#fe2228c5e24dc40f"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant322.4.json --arch arm64 --check	run	0	#e7ae58913f14dd6e/84	""

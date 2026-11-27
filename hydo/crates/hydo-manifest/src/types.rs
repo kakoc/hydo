@@ -68,6 +68,10 @@ pub struct Guest {
     /// `guest.kernel` (Milestone 256): a guest kernel variant (`containers`), recorded in the
     /// image's record (`hydo_image::ImageRecord::kernel_variant`). None: the engine's usual kernel.
     pub kernel: Option<String>,
+    /// `guest.proc_io` (Milestone 376): false boots the Mac and KVM guest kernels of the
+    /// fingerprint epoch 6, without `/proc/<pid>/io` (`hydo_image::ImageRecord::proc_io`). True
+    /// when the manifest does not say.
+    pub proc_io: bool,
 }
 
 impl Guest {
@@ -84,6 +88,7 @@ impl Guest {
             clock_start: get("clock_start").cloned(),
             clock_after_cut: i_of(get("clock_after_cut")),
             kernel: get("kernel").and_then(Value::as_str).map(str::to_string),
+            proc_io: get("proc_io").and_then(Value::as_bool).unwrap_or(true),
         }
     }
 }

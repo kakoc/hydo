@@ -171,7 +171,7 @@ These rules are in force. Do not break them.
 - Keep existing fingerprints stable. A new module feature must be opt-in and inert when off, so
   that every recorded baseline stays the same. Check this with `deploy-metal.sh` and the pinned
   reproducers before and after the change.
-- The fingerprint epoch rule. `hydo_image::EPOCH` (now 6, since M353; 5 from M317, 4 from M269, 3 from M234, 2 from M204, 1 from M155) names the
+- The fingerprint epoch rule. `hydo_image::EPOCH` (now 7, since M376; 6 from M353, 5 from M317, 4 from M269, 3 from M234, 2 from M204, 1 from M155) names the
   generation of fingerprints. Raise it by one in the same commit as any change that moves a
   recorded fingerprint. Such changes are changes of an engine, the host controller, the agent pin
   or the guest kernels, or of a default that an image's run depends on. Add a section of
@@ -322,8 +322,11 @@ this way. Other tags, such as the action's moving tag `v1`, do not start it. `pa
 dry-runs the packages on every pull request that changes one. The details are in
 `docs/PUBLISHING.md`, section "Publishing from GitHub Actions" (M186).
 
-**Fingerprints.** The fingerprint epoch is 6 (M353; 5 from M317, 4 from M269, 3 from M234, 2
-from M204, 1 from M155). An image built at epoch 6 carries the first boot's outcomes into a
+**Fingerprints.** The fingerprint epoch is 7 (M376; 6 from M353, 5 from M317, 4 from M269, 3
+from M234, 2 from M204, 1 from M155). An image built at epoch 7 boots the Mac and KVM guest
+kernels with `/proc/<pid>/io` (M376, below). The list's values are still those of epoch 6, and
+every one of them waits for the 0.8.0 pass (open item 105, docs/REBASELINE.md section 34). An
+image built at epoch 6 carries the first boot's outcomes into a
 recovery boot and gives the controller's commands a `PATH` (M353, below). The 0.6.0 pass
 re-recorded every value of the list at epoch 6 on hvx, the Mac and KVM (docs/REBASELINE.md
 section 31). An
@@ -372,7 +375,9 @@ crate `hydo-hvx`, which runs inside `hydo` when the process can open `/dev/hvx`.
 **The Mac engine.** `hydo/crates/hydo-hvm` runs arm64 Linux 6.6.35 through Hypervisor.framework,
 with two guest kernels: `Image-explore`, and `Image-explore-netns` for `network: bridge`. An image
 built at the fingerprint epoch 3 or later boots their builds with cgroups, `Image-explore-cg` and
-`Image-explore-netns-cg` (M234, `docs/design/guest-cgroups.md`). Its clock counts VM exits. The program is signed with `hv/hvm/hv.entitlements` before it runs.
+`Image-explore-netns-cg` (M234, `docs/design/guest-cgroups.md`). An image built at epoch 7 or
+later boots their builds with `/proc/<pid>/io` too, `Image-explore-io`, `Image-explore-netns-io`
+and `Image-explore-containers-io` (M376). Its clock counts VM exits. The program is signed with `hv/hvm/hv.entitlements` before it runs.
 An image's root file system is its initramfs, in guest RAM. With `guest.root: disk` (M284, a
 format-1 addition, the default with `browser:`) the root is a read-only ext4 file system on the
 disk, which a small initramfs mounts. `hydo build` makes it in a helper VM of the Mac engine.
@@ -395,8 +400,9 @@ module or root, with one vCPU and a patched guest kernel (`bzImage-kvm`). With `
 2 to 8 vCPUs in turns of counted exits with the SMP kernel `bzImage-kvm-smp`
 (`docs/design/kvm-vcpus.md`, M219). An image built at the fingerprint epoch 3 or later boots their
 builds with cgroups, `bzImage-kvm-cg` and `bzImage-kvm-smp-cg` (M234; `hydo_kvm::kernel` picks by
-the image's epoch), and `hydo explore --turns` and `--sweep turns` draw and search
-those turns (M227). The vCPU is at the
+the image's epoch). An image built at epoch 7 or later boots their builds with `/proc/<pid>/io`,
+`bzImage-kvm-io` and `bzImage-kvm-smp-io` (M376). `hydo explore --turns` and `--sweep turns`
+draw and search those turns (M227). The vCPU is at the
 x86-64-v2 level, or at x86-64-v3 for `guest.cpu: v3` on a host whose KVM has AVX2 (M189;
 `hv/kvm/v3-check.sh`). It runs on Intel and on AMD (GitHub's ubuntu-24.04 runners, 2026-11-08).
 Its fingerprints are its own. They differ between CPU vendors, because the guest's FXSAVE writes
@@ -2463,6 +2469,27 @@ value of `hydo/onboard/recorded.json` built at epoch 6 moves and waits for the 0
 item 105, docs/REBASELINE.md section 30). The reference is MANIFEST.md "Outcomes after a power
 cut"; the details are in `docs/HISTORY.md` Milestone 353.
 
+**The fingerprint epoch 7 (M376, tentative number).** `hydo_image::EPOCH` is 7. An image built at
+epoch 7 or later boots the Mac and KVM guest kernels with per-process I/O accounting
+(`CONFIG_TASKSTATS`, `CONFIG_TASK_XACCT`, `CONFIG_TASK_IO_ACCOUNTING`), so the guest has
+`/proc/<pid>/io` (`hydo_image::defaults`, `proc_io`). Typesense 30.2's bundled brpc reads
+`/proc/self/io` in a static initializer and stopped with SIGSEGV at every start on KVM (open item
+188). The new kernels are builds beside the old ones: `bzImage-kvm-io`, `bzImage-kvm-smp-io`,
+`bzImage-kvm-containers-io` and `bzImage-kvm-smp-containers-io` (`hv/kvm/linux/kernel-procio.nix`,
+`PROCIO=1` of `build-kernel.sh`), and `Image-explore-io`, `Image-explore-netns-io` and
+`Image-explore-containers-io` (`PROCIO=1` of `build-guest-cg.sh` and `build-guest-containers.sh`).
+docs/BUILD-PINS.md "The guest kernels with /proc/<pid>/io" has the pins. `guest.proc_io: false`
+(a format-1 addition) writes `"proc_io": false` into the image's record and boots the kernels of
+epoch 6. An image built at epoch 6 or before keeps its kernels and values. hvx's kernel already
+has the file and does not change. On KVM (GitHub's runners, Intel and AMD) the guest of an
+epoch-7 image reads `/proc/self/io` with 1 and 2 vCPUs and with the kernels for containers. Each
+schedule gives one fingerprint per CPU vendor, and an epoch-6 image gives its recorded values.
+The Typesense example starts there: its clean run passes, and its three regressions fail as on
+hvx. The Mac kernels are built and pinned and have no run yet. Every value of `hydo/onboard/recorded.json`
+moves at epoch 7, on hvx through the image's record only, and waits for the 0.8.0 pass (open
+item 105). The reference is MANIFEST.md "I/O accounting"; the details are in `docs/HISTORY.md`
+Milestone 376.
+
 **Documentation.** `docs/STYLE.md` is the writing standard. `sh ci/vale.sh` checks 64 documents
 (`sh ci/vale.sh --list`), and `cargo test -p hydo --test it docs::` checks their links and the
 facts and commands of `README.md` and the quickstarts. Release step 6a is a docs review by a
@@ -2822,8 +2849,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `skill-v1.0.0` to `skill-v2.4.0` wait for deletion after 0.5.0 is published.
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
-    milestone and the values it moves; the pass removes the lines. Empty since the 0.6.0
-    re-recording pass (docs/REBASELINE.md section 31).
+    milestone and the values it moves; the pass removes the lines. The lines since the 0.6.0
+    re-recording pass (docs/REBASELINE.md section 31):
+    - M376, the fingerprint epoch 7 (docs/REBASELINE.md section 34): every value of the list. Every
+      image built at epoch 7 has new bytes through its record. So every run moves: 43 hvx images
+      and 141 runs, 21 Mac images and 76 runs, and 6 KVM images and 19 runs. On the Mac and KVM
+      engines the guest also boots the new kernels with `/proc/<pid>/io`. So a verdict that
+      depends on where a fault falls can change there, and the pass decides each. On hvx only the record's bytes
+      move, and no verdict is expected to change. The list's `epoch` becomes 7.
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -4259,14 +4292,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The second exploration was stopped after its 60 first runs, during its
       shrinks: no `exploration.json` or report. A node whose `raft_meta` `G=` zeroed stayed up
       and unhealthy; its log was not read.
-    - On KVM (M373, three Xeon 6975P-C and three AMD EPYC hosts) every node stops with SIGSEGV
-      at its start, so every run ends `ERROR service start (ts1)`. The KVM guest kernels have no
-      `CONFIG_TASK_IO_ACCOUNTING`, so `/proc/self/io` is missing. Typesense's bundled brpc reads
-      it in a static initializer and logs the failure with glog before glog is set up.
-      Typesense's commit `b708744220` (#3093) fixes it, and no release has it yet. The proposal
-      of new kernels at a new fingerprint epoch is the section "No `/proc/<pid>/io` in the guest"
-      of `docs/design/kvm-engine.md`; it waits for the user. The Mac engine's kernels are built
-      without the option too, and the Mac engine did not run the example.
+    - On KVM (M373) every node of an image built at epoch 6 stops with SIGSEGV at its start.
+      The KVM guest kernels of that epoch have no `/proc/self/io`, which Typesense's bundled
+      brpc reads in a static initializer. Since M376 an image built at the fingerprint
+      epoch 7 boots kernels with the file. On KVM the example's clean run then passes, and
+      its three regressions fail as on hvx (six runners, Intel and AMD). The Mac engine has
+      the new kernels too, but they have no run yet: its VM lock was the user's.
     - Not run: five nodes. A live race of a delete by a filter with another client's writes of
       its documents did not run. Aliases, synonyms, curations, API keys, and the embedding models
       have no command.
@@ -5611,14 +5642,20 @@ build machine, before 2026-10-13.
   (docs/REBASELINE.md section 33), and no KVM image. Release step 6a fixed two sentences. Both
   releases were built twice to the same bytes, and the Mac one is signed and notarized. They were
   verified on hvx, the Mac and KVM, where a runner rebuilt the Linux tarball byte for byte
+- M376 (tentative number): the fingerprint epoch 7. The Mac and KVM guest kernels get
+  per-process I/O accounting as new builds beside the old ones. So an image built at epoch 7 has
+  `/proc/<pid>/io`, which Typesense's brpc reads at start. `guest.proc_io: false` keeps the
+  kernels of epoch 6, and an image built before keeps its kernels and values. On KVM Typesense's
+  clean run passes and its three regressions fail as on hvx; the Mac kernels have no run yet.
+  Every value of the list waits for the 0.8.0 pass
 
 ## Where to look
 
 - `docs/HISTORY.md`: every milestone with its evidence, and the superseded values.
 - `docs/USE-CASES.md`: every use case with its status, by testing stage and by who asks, and the
   ideas not built yet.
-- `docs/REBASELINE.md`: the recorded fingerprints by section. Sections 13, 19, 24, 26, 29, and
-  30 name the epochs 1 to 6.
+- `docs/REBASELINE.md`: the recorded fingerprints by section. Sections 13, 19, 24, 26, 29, 30
+  and 34 name the epochs 1 to 7.
 - `docs/BUILD-PINS.md`: the pinned toolchain and guest programs.
 - `docs/CI.md`: what CI runs, where, and how long it takes.
 - `docs/RELEASING.md` and `docs/PUBLISHING.md`: the release and publishing steps.

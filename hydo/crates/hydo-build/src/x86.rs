@@ -822,7 +822,8 @@ pub fn build(
     let (bin, sha) = crate::agent::binary(ctx, bdir, false, io)?;
     crate::agent::install(&bin, &sha, &r, "/sbin/init", io)?;
     let variant = crate::record::kernel_variant(&m);
-    crate::record::write_inside(&r, "x86_64", false, variant.as_deref())?;
+    let record = crate::record::record_of(&m, "x86_64", false);
+    crate::record::write_inside(&r, &record)?;
     crate::stage::compose_stage(&m, &r)?;
     // `writable: true` image services: their trees go onto the data partition (staged here)
     let dstage = bdir.join(format!("{out}-data"));
@@ -996,18 +997,25 @@ pub fn build(
         ),
     );
     image::print_shas(io, &[&ext4, &data, &disk])?;
-    crate::record::write_sidecar(
-        &disk,
-        None,
-        hydo_image::kernels::record_with("x86_64", false, variant.as_deref()),
-        manifest_path,
-        &p.oci,
-        io,
-    )?;
+    let io_kernel = record.proc_io();
+    crate::record::write_sidecar(&disk, None, record, manifest_path, &p.oci, io)?;
     if variant.as_deref() == Some(hydo_image::kernels::CONTAINERS) {
         outln(
             io,
-            "hydo-build: guest.kernel: containers: the KVM engine boots this image with its kernel for containers (bzImage-kvm-containers); hvx boots its own kernel, which has those options, the network ones as modules that the image must load itself",
+            &format!(
+                "hydo-build: guest.kernel: containers: the KVM engine boots this image with its kernel for containers ({}); hvx boots its own kernel, which has those options, the network ones as modules that the image must load itself",
+                if io_kernel {
+                    "bzImage-kvm-containers-io"
+                } else {
+                    "bzImage-kvm-containers"
+                }
+            ),
+        );
+    }
+    if !io_kernel {
+        outln(
+            io,
+            "hydo-build: guest.proc_io: false: the KVM engine boots this image with its kernels of the fingerprint epoch 6, without /proc/<pid>/io; hvx boots its own kernel, which has the file",
         );
     }
     crate::contracts::write_plan(&m, manifest_path, &disk, io)?;

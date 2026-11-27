@@ -23,10 +23,6 @@ use std::process::Command;
 
 pub const BUSYBOX_ARM64: &str = "/nix/store/zbc5fx2yszji1a4aw2ff46m0p99c6yxb-busybox-static-aarch64-unknown-linux-musl-1.36.1/bin/busybox";
 pub const TC_ARM64: &str = "/nix/store/qmhi9c99dpgxyfg6cipf8xbmcvsr1vx2-iproute2-6.8.0/bin/tc";
-/// The second arm64 kernel of this hydo's images (with cgroups since the fingerprint epoch 3,
-/// Milestone 234; the image record names it too).
-pub const NETNS_KERNEL: &str = hydo_image::kernels::ARM64_NETNS_KERNEL_CG.file;
-pub const NETNS_KERNEL_SHA256: &str = hydo_image::kernels::ARM64_NETNS_KERNEL_CG.sha256;
 pub const IP_ARM64: &str = "/nix/store/qmhi9c99dpgxyfg6cipf8xbmcvsr1vx2-iproute2-6.8.0/bin/ip";
 pub const IPTABLES_ARM64: &str = "/nix/store/y6j6xf1bfshzhdw7hip3swpgd6fqfs3b-iptables-1.8.10";
 const IPT_FILES: &[&str] = &[
@@ -356,6 +352,10 @@ pub fn build(
     // guest.kernel (Milestone 256): the variant's kernel, which serves service networks too
     let variant = crate::record::kernel_variant(&m);
     let containers = variant.as_deref() == Some(hydo_image::kernels::CONTAINERS);
+    // the record names the kernel the image boots: with cgroups since the fingerprint epoch 3
+    // (Milestone 234), with /proc/<pid>/io since epoch 7 unless guest.proc_io: false (M376)
+    let record = crate::record::record_of(&m, "arm64", netns_k);
+    let default_kernel = hydo_image::kernels::arm64_kernel_of(false, record.proc_io());
     let mut fcbin = None;
     let mut fc = None;
     if shell::has_freeze(&m) {
@@ -492,16 +492,10 @@ pub fn build(
             ),
         );
     }
-    if containers {
-        let k = &hydo_image::kernels::ARM64_KERNEL_CONTAINERS;
+    if containers || netns_k {
         fsx::write_text(
             &r.join("etc/hydo/kernel"),
-            &format!("{} {}\n", k.file, k.sha256),
-        )?;
-    } else if netns_k {
-        fsx::write_text(
-            &r.join("etc/hydo/kernel"),
-            &format!("{NETNS_KERNEL} {NETNS_KERNEL_SHA256}\n"),
+            &format!("{} {}\n", record.kernel.file, record.kernel.sha256),
         )?;
     }
     let tools = ShellTools {
@@ -547,7 +541,7 @@ pub fn build(
     }
     // the agent is the kernel's first process itself (rdinit=/init): no shell before it
     crate::agent::install(&agent_bin, &agent_sha, &r, "/init", io)?;
-    crate::record::write_inside(&r, "arm64", netns_k, variant.as_deref())?;
+    crate::record::write_inside(&r, &record)?;
     let dsec = section(&m, "data")?;
     let dmib = pyv::get(dsec, "size_mib")?
         .map(|v| pyv::int(v, "data.size_mib"))
@@ -677,24 +671,17 @@ pub fn build(
         }
     }
     image::print_shas(io, &[&cpio, &disk])?;
-    crate::record::write_sidecar(
-        &cpio,
-        Some(&disk),
-        hydo_image::kernels::record_with("arm64", netns_k, variant.as_deref()),
-        manifest_path,
-        &p.oci,
-        io,
-    )?;
+    let (kfile, ksha) = (record.kernel.file.clone(), record.kernel.sha256.clone());
+    crate::record::write_sidecar(&cpio, Some(&disk), record, manifest_path, &p.oci, io)?;
     crate::contracts::write_plan(&m, manifest_path, &cpio, io)?;
     crate::stage::write_regressions(&cpio, &p.regressions, io)?;
     if containers {
-        let k = &hydo_image::kernels::ARM64_KERNEL_CONTAINERS;
         outln(
             io,
             &format!(
                 "hydo-build: this image boots the guest kernel variant containers (guest.kernel), {} (sha256 {}); recorded in the image as /etc/hydo/kernel",
-                k.file,
-                &k.sha256[..16]
+                kfile,
+                &ksha[..16]
             ),
         );
     } else if netns_k {
@@ -711,9 +698,9 @@ pub fn build(
         outln(
             io,
             &format!(
-                "hydo-build: this image boots the guest kernel {NETNS_KERNEL} (sha256 {}), not {}: it needs {}; recorded in the image as /etc/hydo/kernel",
-                &NETNS_KERNEL_SHA256[..16],
-                hydo_image::kernels::arm64_kernel(false).file,
+                "hydo-build: this image boots the guest kernel {kfile} (sha256 {}), not {}: it needs {}; recorded in the image as /etc/hydo/kernel",
+                &ksha[..16],
+                default_kernel.file,
                 why.join(", ")
             ),
         );

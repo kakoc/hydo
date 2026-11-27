@@ -97,13 +97,15 @@ Check each item and report what you found.
   available; run the binary directly or as an image service.
 - **Kernel modules.** The guest kernel is a fixed Linux 6.6 build; a program that needs a module
   the image does not load (FUSE, special filesystems) is a blocker to report.
-- **`/proc/<pid>/io`.** The guest kernels of the KVM engine have no I/O accounting, so the
-  file `/proc/<pid>/io` does not exist. The Mac engine's kernels are built from configs without
-  it too. hvx's kernel has the file. A program that needs it at start does not start on KVM.
-  Typesense 30.2 stops with SIGSEGV at every start there: its bundled brpc reads `/proc/self/io`
-  in a static initializer and logs the failure before its logger is set up. Run such a program
-  on hvx. Without the file VictoriaMetrics logs one `ERROR` line, which the `errors:` scan
-  reports.
+- **`/proc/<pid>/io`.** An image built at the fingerprint epoch 7 or later has the file
+  `/proc/<pid>/io` on every engine. An image built before boots the Mac and KVM guest kernels of
+  its own epoch. They have no I/O accounting, so the file does not exist there. hvx's kernel has
+  always had it. A program that needs the file at start does not start on such an image. Typesense
+  30.2 stops with SIGSEGV at every start: its bundled brpc reads `/proc/self/io` in a static
+  initializer and logs the failure before its logger is set up. Rebuild the image with a hydo of
+  epoch 7 (`hydo build`). Without the file VictoriaMetrics logs one `ERROR` line, which the
+  `errors:` scan reports. `guest.proc_io: false` boots the kernels of epoch 6 again, for a
+  project that compares fingerprints with runs from before (MANIFEST.md, "I/O accounting").
 - **busybox tools in checks.** Checks run busybox: `grep -v -x -F -f FILE` with an EMPTY `FILE`
   matches every line (GNU grep matches none), so "acknowledged ids that were not read back" comes
   out empty exactly when nothing was read back. Compare sets with `awk` keyed on `FILENAME`, or

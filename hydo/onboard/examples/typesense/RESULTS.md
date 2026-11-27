@@ -207,9 +207,9 @@ brpc reads the file in a static initializer (`bvar::read_proc_io`) and logs the 
 glog before glog is set up. glog then reads a null pointer in `google::LogMessage::Init`. On a
 runner, `typesense-server` stopped the same way with status 139 when every open of
 `/proc/<pid>/io` failed. Typesense's commit `b708744220` (#3093, after v30.2) logs the failure
-with `fprintf`; no release has it yet. The section "No `/proc/<pid>/io` in the guest" of
-`docs/design/kvm-engine.md` has the cause and the proposal. The Mac engine's kernels are built without the option too; the Mac
-engine did not run the example.
+with `fprintf`; no release has it yet. The section "`/proc/<pid>/io` in the guest" of
+`docs/design/kvm-engine.md` has the cause. The Mac engine's kernels were built without the
+option too; the Mac engine did not run the example.
 
 | image | hosts | verdict | fingerprint |
 |---|---|---|---|
@@ -217,6 +217,21 @@ engine did not run the example.
 | `de22e524…` | an EPYC 7763 and two EPYC 9V74 | `ERROR service start (ts1)` | `ce4ff2694a847f79` |
 | `guest.cpu: v3` (`93dc08be…`) | a Xeon 6975P-C | `ERROR service start (ts1)` | `aeb47edf1016f135` |
 | `guest.cpu: v3` (`93dc08be…`) | an EPYC 7763 | `ERROR service start (ts1)` | `15302d9d3b1eb9b9` |
+
+**On the KVM engine at the fingerprint epoch 7 (Milestone 376).** Since the epoch 7 the Mac and
+KVM guest kernels have `/proc/<pid>/io`, and the example runs on KVM. The image built by a hydo of
+epoch 7 is `3dc411ac…` on every host. Each schedule ran on six of GitHub's runners (run
+46007828454), each twice from fresh boots for the clean run, with one fingerprint per CPU vendor:
+
+| schedule | verdict | four Xeon 6975P-C and a Xeon Platinum 8573C | an EPYC 9V74 |
+|---|---|---|---|
+| `disk=none \| run` | OK, 134 commands without a failure, every check held | `2cd3857e1b8161e1` | `41339a5ff05742cd` |
+| `export-and-batched-delete-stop-after-a-backward-clock-step` | `VIOLATION`, as expected | `e3ece4ba9f590b99` | `b91950cc7954b382` |
+| `follower-lacks-documents-after-a-restart` | `VIOLATION`, as expected | `ba9edaf46419365a` | `dc94b0e3b7e2b06a` |
+| `no-election-after-a-backward-clock-step` | `VIOLATION`, as expected | `35056153f14892c2` | `1233fbd59723f8f5` |
+
+`hydo repro --regressions` gave 3 of 3 as expected on every host, so the three findings hold on
+KVM too. The Mac engine's kernels with the file are built, and no Mac run used them yet.
 
 ## What was found
 
