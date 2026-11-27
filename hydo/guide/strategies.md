@@ -720,9 +720,9 @@ is the exploration that drew most of them.
     check asked about transactions it had already committed at every interval. The producer
     answered "commit" each time, and the broker stored the message again: `u17` six times in
     50 s. The claim `duplicates: forbidden` over the drain's offsets (`o=`) caught it; `no-loss`
-    held. The audit ranked the check's function 46th of 155, by another line of it. A step back
+    held. The audit ranked the check's function at place 46 of 155, by another line of it. A step back
     also keeps a slave from copying the consumer offsets for the step's length
-    (`ReplicasManager.handleSlaveSynchronize`, the audit's 10th place).
+    (`ReplicasManager.handleSlaveSynchronize`, the audit's place 10).
 - **What it misses.** Many clock effects are by design. Examples are Temporal's delayed timers,
   and River's runs of every periodic job that a forward step skipped. The audit reads text. It
   found no place in Redpanda's 2,694 C++ files, whose transaction expiry uses Seastar's wall
@@ -848,7 +848,7 @@ is the exploration that drew most of them.
   - RocketMQ (finding 1, known in its parts): in controller mode each broker writes its epoch
     file `epochFileCheckpoint` without a sync when the controller gives it a role. A cut 17 s
     after the brokers became slaves left both slaves' files at 0 bytes (`hydo inspect` listed
-    the store), and each stopped at every start on the unchecked parse of an empty header
+    the store). Each stopped at every start on the unchecked parse of an empty header
     (apache/rocketmq#11460). `disk=cut | run C=20` does it; blind in 4 of e1's 40 schedules,
     and one broker's power loss (`L=`) in 8 more. The stop came from the epoch file, not from the
     commit log, which `SYNC_FLUSH` syncs.
@@ -1325,7 +1325,7 @@ is the exploration that drew most of them.
   - Garage (finding 3): the peer list written without a sync, once a minute.
   - ClickHouse (finding 1): `fsync_after_insert` and the merge's fsync off by default.
   - RocketMQ (finding 1): `IOTinyUtils.writeStringToFile`, through which `MixAll.string2File`
-    writes the epoch file, as its 22nd of 29 places. Its first places were the commit log's
+    writes the epoch file, as its place 22 of 29. Its first places were the commit log's
     flush services, whose `SYNC_FLUSH` path held in every run. The audit ran after the finding.
 - **What it misses.** It reads text. A write through an interface, a sync in another thread, or a
   library that the project does not hold (rclone, RocksDB) is not followed. A place is a fact of

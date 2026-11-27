@@ -26364,8 +26364,9 @@ Apache RocketMQ 5.5.0 became the example `hydo/onboard/examples/rocketmq` (RESUL
 `docs/ONBOARDING-PLAYBOOK.md`. The image and the directed runs used hvx on the bare-metal machine,
 with hydo of `main` at `bdb403f4` (0.7.0 and Milestones 368 to 374) over the guest files of the
 published 0.6.0 Linux release, at the fingerprint epoch 6. The explorations ran on GitHub's KVM
-runners with `explore.yml`. One new candidate, a clock effect, and two findings known in their
-parts; nothing was posted, and nothing recorded moved.
+runners with `explore.yml`. The record was rebased on `main` at `f8cec823` before the goldens and
+the tests. One new candidate, a clock effect, one finding known in its parts, and one known finding;
+nothing was posted, and nothing recorded moved.
 
 **The target.** RocketMQ 5 was the task's first choice, and it fit within the half hour of the
 check. The newest release with an official image is 5.5.0 (5.5.1 of 2026-08-20 has none). The image
@@ -26401,11 +26402,14 @@ failed (after its power loss)`), and the diagnosis replay's log of `broker1` end
 `NumberFormatException`.
 
 **Finding 2, known.** A failover moves the groups' committed offsets back by up to 10 s, and the
-consumers get acknowledged messages again: `K=brokers.primary@10+3` breaks `jobs.after-ack` and
-`order.after-ack` of `hydo-offsets.yaml`. A slave copies the offsets from its master every 10 s of
-the wall clock (`ReplicasManager.handleSlaveSynchronize`). apache/rocketmq#7790 (closed as stale)
-has a maintainer's answer that repeated consumption follows every master switch. A pause of the
-master past the heartbeat timeout does the same, and no acknowledged message was lost.
+consumers get acknowledged messages again: `K=brokers.primary@10+3` breaks `jobs.after-ack` of
+`hydo-offsets.yaml` (and `order.after-ack` on the first image). A slave copies the offsets from its
+master every 10 s of the wall clock (`ReplicasManager.handleSlaveSynchronize`). apache/rocketmq#7790
+(closed as stale) has a maintainer's answer that repeated consumption follows every master switch. A
+pause of the master past the heartbeat timeout does the same, and no acknowledged message was lost.
+The same copy holds the delay offsets and the transaction check's progress: five schedules of e2
+stored a delayed message or a committed transaction twice after a kill or a pause of a broker, and
+on hvx the schedule of e2's seed 70 stored `u14` twice (`jobs.duplicates`).
 
 **Finding 3, new, a clock effect.** The broker writes the commit and rollback records of
 transactions in batches, 3 s after its last write by `System.currentTimeMillis()`
@@ -26433,15 +26437,14 @@ topic after their retries, and each key's messages arrived in order.
 the same bytes) gives `b40afc5cabb53082` on two clean runs. Each regression gave one fingerprint
 over two fresh runs on hvx: finding 1 `b5252e4bc9b73a2c`, finding 3a `5fc8566af3802f2f`, finding 3b
 `e4f10ed629b3d8be`, and finding 2 on the image of `hydo-offsets.yaml` `8cd67eee89799522`. `hydo
-repro --regressions` on the final image gave 3 of 3 as expected, with the same fingerprints.
-On the image of `hydo-offsets.yaml` it gave 4 of 4 as
-expected; that image's fingerprints are its own.
+repro --regressions` on the final image gave 3 of 3 as expected, with the same fingerprints. On the
+image of `hydo-offsets.yaml` it gave 4 of 4 as expected; that image's fingerprints are its own.
 
 **The explorations.** Both on GitHub's KVM runners, 20 parts of 2 seeds with one worker each and
 `--strategy process --new-faults --cluster-faults --storage-faults --no-shrink`; directed runs on
 hvx judged each failure. e1 (seeds 1-40, the first client): 32 seeds ran. Finding 1 at 4 cuts and at
 8 power losses of one broker, finding 3a as a drain that never ended (1), finding 3b (1, broke
-`dead-letter` first on hvx), the client's own mistakes (13: a provisioning message that a failover
+`dead-letter` first on hvx), the client's own mistakes (14: a provisioning message that a failover
 delivered again, and an attempt count on redeliveries), detected damage (1), a group's `primary:`
 that named no member (1), and 2 passes. e2 (seeds 41-80, the final client): 34 seeds ran. Finding 3b
 after steps back of 30 s to a day (6), finding 1 (7), a committed transaction or a delayed message
@@ -26473,5 +26476,6 @@ Retro: RocketMQ 5.5.0, hvx and KVM, 2026-11-27
   limit that `--check` does not see; the import's addresses and ports; `--ref` with a short commit
   (open item 196).
 - Strategies: the RocketMQ evidence in "Power cuts of the whole guest", "Clock steps and the clock
-  audit" and "The messages check's claims" of `hydo guide strategies`; the first table names
-  RocketMQ.
+  audit", "The messages check's claims" and "The sync audit and power cuts after an answer" of
+  `hydo guide strategies`; the table "By type of system" names RocketMQ. The sync audit, run after
+  the finding, names the epoch file's write as its place 22 of 29.

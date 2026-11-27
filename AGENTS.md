@@ -1515,25 +1515,24 @@ twice, and the default image's contrast of finding 1 gave OK `179ac0194c742e8d`.
 has what is left.
 
 **RocketMQ (M378, tentative number).** Apache RocketMQ 5.5.0, the newest release with an official
-image, runs in controller mode in one hvx guest of 3,072 MiB, in `hydo/onboard/examples/rocketmq`
-(RESULTS.md), imported with `hydo compose`. A NameServer with the controller embedded and one
-replica group of three brokers run with `allAckInSyncStateSet` and `SYNC_FLUSH`, each node's store
-on a file system of its own. A Go client on rocketmq-client-go v2.1.2, with a small remoting
-client of its own for exact pulls and synchronous offset commits, sends plain, delayed, ordered
-and transactional messages, retries poison messages into the dead-letter topic, and commits
-consumer offsets. Two messages checks judge them; `hydo-offsets.yaml` also claims `after_ack`.
-The directed runs used hvx and the explorations GitHub's KVM runners. No message acknowledged with
-`SEND_OK` was lost to kills, pauses, partitions, failovers, or a kill of the controller. Nothing
-was posted:
+image, runs in controller mode in one hvx guest of 3,072 MiB. The example is
+`hydo/onboard/examples/rocketmq` (RESULTS.md), imported with `hydo compose`. A NameServer with the
+controller embedded and one replica group of three brokers run with `allAckInSyncStateSet` and
+`SYNC_FLUSH`. Each node's store is on a file system of its own. A Go client sends plain, delayed,
+ordered, and transactional messages with rocketmq-client-go v2.1.2. A small remoting client of its
+own pulls at exact offsets, commits offsets synchronously, and gives poison messages back. Two
+messages checks judge them, and `hydo-offsets.yaml` also claims `after_ack`. The directed runs used
+hvx, and the explorations GitHub's KVM runners. No message acknowledged with `SEND_OK` was lost to
+kills, pauses, partitions, failovers, or a kill of the controller. Nothing was posted:
 - New, a clock effect: the broker writes the commit and rollback records of transactions in
-  batches timed by the wall clock (`batchSendOpMessage`), so after a backward step it writes
-  none for the step's length. The transaction check then asks again about transactions it had
-  committed and stores each message again at every check (`T=10:-3600`: `u17` six times in
-  50 s). After a step back of 30 days it stops at a half message without its record and checks
-  no transaction at all, so one that waits for a check is never delivered (`T=2:-2592000`).
-- Known in its parts (apache/rocketmq#11460, #5905): a broker writes its epoch file without a
-  sync when the controller gives it a role. A power cut 17 s later left both slaves' files at 0
-  bytes, and each stops at every start on the unchecked parse of an empty header (`C=20`); one
+  batches timed by the wall clock (`batchSendOpMessage`). After a backward step it writes none for
+  the step's length. The transaction check then asks again about transactions it had committed,
+  and the broker stores each message again at every check (`T=10:-3600`: `u17` six times in
+  50 s). After a step back of 30 days the check stops at a half message without its record. It
+  checks no transaction, so one that waits for a check is never delivered (`T=2:-2592000`).
+- Known in its parts (apache/rocketmq#11460, #5905): a broker writes its epoch file without a sync
+  when the controller gives it a role. A power cut 17 s later left both slaves' files at 0 bytes
+  (`C=20`). Each slave then stops at every start on the unchecked parse of an empty header. One
   broker's power loss (`L=`) does the same.
 - Known (apache/rocketmq#7790): a slave copies the consumer offsets every 10 s, so a failover
   delivers acknowledged messages again (`K=brokers.primary@10+3`).
@@ -4645,10 +4644,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       example `deadlock`. On the Mac the workspace's clippy and the `docs::`, `equivalence::` and
       `agents_equivalence::` tests did not run, for lack of disk.
 196. What the example `rocketmq` left (M378, tentative number):
-    - No finding is posted. Finding 3 (the transaction check after a backward clock step) is new;
-      a report would name `batchSendOpMessage`'s wall-clock interval and the check's stop at a
-      half message stored "after" it began. Finding 1 would be a comment on #11460: a power cut
-      makes the empty header, and with no `.bak` the pull request's fallback reads no epochs.
+    - No finding is posted. Finding 3, the transaction check after a backward clock step, is new.
+      A report would name `batchSendOpMessage`'s wall-clock interval. It would also name the
+      check's stop at a half message stored "after" the check began. Finding 1 would be a comment
+      on #11460: a power cut makes the empty header, and without a `.bak` file the pull request's
+      fallback reads no epochs.
     - On GitHub's AMD EPYC 7763 runners the image does not boot on KVM: the boot ends in `SPIN`
       after 12,695 to 18,135 stops, before S1. The EPYC 9V45 and 9V74 and the Intel hosts boot
       it. The part's job passes, and its exploration counts both seeds as failures with the
@@ -4669,9 +4669,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       of its last copy. Five schedules of e2 stored a delayed message or a committed transaction
       twice after a kill or a pause of a broker, and on hvx seed 70's schedule stored `u14` twice.
       Which offset the copy lacked in each was not traced.
-    - Not run: the Mac engine, three controllers, two replica groups, the proxy and its gRPC
-      clients, POP consumption, the timer wheel's delays of arbitrary length, RocksDB-based
-      consume queues, and `hydo explore --configs` over `flush` and `allack`.
+    - Not run: the Mac engine, three controllers, two replica groups, and the proxy with its gRPC
+      clients. Nor POP consumption, the timer wheel's delays of any length, the consume queues in
+      RocksDB, or `hydo explore --configs` over `flush` and `allack`.
 
 ## Milestone index
 
@@ -5982,11 +5982,11 @@ build machine, before 2026-10-13.
   and `hydo shrink <explore dir> --problem N` shrinks one problem later in the same folder.
   Shrinks made later give the files of shrinks made as it went. Nothing recorded moved
 - M378 (tentative number): the onboarding of Apache RocketMQ 5.5.0 in controller mode, a
-  NameServer with the controller and three brokers, on hvx and on KVM. New, a clock effect: after
-  a backward step the broker writes no commit or rollback records of transactions, so the check
-  stores a committed transaction again at every interval, or checks none. Known in their parts: a
-  power cut leaves the slaves' epoch files empty, and they never start again; a failover moves
-  consumer offsets back by up to 10 s. Nothing posted, nothing recorded moved
+  NameServer with the controller and three brokers, on hvx and KVM. New, a clock effect: after a
+  backward step the broker writes no commit or rollback records of transactions. So the check
+  stores a committed transaction again at every interval, or checks none. Known in its parts: a
+  power cut leaves the slaves' epoch files empty, and they never start again. Known: a failover
+  moves consumer offsets back by up to 10 s. Nothing posted, nothing recorded moved
 
 ## Where to look
 
