@@ -1,0 +1,60 @@
+# hydo.yaml of this folder for the KVM engine (Milestone 379, docs/design/service-clocks.md). The
+# KVM engine runs a service of clock: own only on an image of guest.kernel: containers: of its
+# guest kernels only the ones for containers have the seccomp filters that hydo-clock installs.
+# hydo build gives such an image the build of hydo-clock with the feature `words`, which reaches
+# the traced program's memory with PTRACE_PEEKDATA where the kernel has no process_vm_readv.
+# Build (x86_64): ./build.sh, then hydo build hydo-kvm.yaml with HYDO_CLOCKBIN_WORDS naming the
+# hydo-clock-words of hydo/crates/hydo-clock/build.sh. The schedules and verdicts are hydo.yaml's:
+#       disk=none | run T=3:5        -> OK: both clocks jump together
+#       disk=none | run T=n2@3:5     -> VIOLATION [lease.one_leader]: n2's clock alone runs 5 s
+#                                       ahead, n2 takes the lease while n1 still leads
+name: service-clocks-kvm
+description: Two lease holders that trust their own wall clocks, for the KVM engine.
+
+guest:
+  kernel: containers
+
+root:
+  files:
+    - {src: lease.sh, dst: /bin/lease.sh, mode: "0755"}
+    - {src: clockprobe.bin, dst: /bin/clockprobe, mode: "0755"}
+
+services:
+  - name: n1
+    cmd: /bin/lease.sh n1
+    ready: test -s /tmp/lease
+    clock: own
+  - name: n2
+    cmd: /bin/lease.sh n2
+    ready: test -s /tmp/clock.n2
+    clock: own
+
+workload:
+  steps: 8                          # each step waits 1 s of guest time
+  run: |
+    i=$HYDO_FROM
+    if [ "$i" = 0 ]; then   # the cost of a read of the wall clock, without and with hydo-clock
+      echo "hydo-clocks: guest $(/bin/clockprobe bench 20000)" > /dev/ttyS0
+      echo "hydo-clocks: own $(/bin/hydo-clock /tmp/clock.none /bin/clockprobe bench 20000)" > /dev/ttyS0
+    fi
+    while [ $i -lt $HYDO_TO ]; do
+      sleep 1
+      echo $i >> $HYDO_ACKED
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: lease.one_leader
+    msg: at most one node counts itself the leader at a time (the lead changes at most once)
+    cmd: |
+      [ -s /tmp/leads ] || { echo "no node led"; exit 1; }
+      awk '{ if (p != "" && $2 != p) { s++; if (s == 2) at = $1 } p = $2 }
+        END { if (s >= 2) { printf "two leaders at once: the lead changed %d times, the second time at uptime %s\n", s, at; exit 1 }
+              printf "the lead changed %d times\n", s }' /tmp/leads
+  - id: clocks.offset
+    msg: the clocks the two nodes read, against the guest kernel's uptime
+    cmd: |
+      a=$(tail -1 /tmp/clock.n1); b=$(tail -1 /tmp/clock.n2)
+      echo "$a $b" | awk '{ printf "n2 reads %d ms ahead of n1 (n1 %s ms at uptime %s, n2 %s ms at uptime %s)\n", ($4 - $3 * 1000) - ($2 - $1 * 1000), $2, $1, $4, $3 }'
+
+faults: [clock]

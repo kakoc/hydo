@@ -718,13 +718,19 @@ pub fn build(
         );
     }
     // Milestone 372: a service with `clock: own` starts under hydo-clock; an image without such
-    // a service has no new file
+    // a service has no new file. Milestone 379: an image of `guest.kernel: containers`, the
+    // kernels that the KVM engine boots for `clock: own`, gets the build with the feature `words`,
+    // which reaches the traced memory without process_vm_readv; every other image keeps
+    // Milestone 372's build and its bytes
     if uses_own_clock(&m) {
-        let cb = tool(
-            &ctx.inputs.clockbin,
-            &bdir.join("hydo-clock").to_string_lossy(),
-            isfile,
-        )?;
+        let words = crate::record::kernel_variant(&m).as_deref()
+            == Some(hydo_image::kernels::CONTAINERS);
+        let (input, name) = if words {
+            (&ctx.inputs.clockbin_words, "hydo-clock-words")
+        } else {
+            (&ctx.inputs.clockbin, "hydo-clock")
+        };
+        let cb = tool(input, &bdir.join(name).to_string_lossy(), isfile)?;
         put_exec(&cb, &r.join("bin/hydo-clock"))?;
         outln(
             io,

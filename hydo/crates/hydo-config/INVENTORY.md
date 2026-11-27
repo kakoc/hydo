@@ -202,6 +202,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HYDO_WORLDBIN_TLS` | user | path; empty = default | <build dir>/hydo-world-tls | hydo-build | The x86_64 `hydo-world-tls` (hydo-world with the TLS front), staged instead of `hydo-world` for manifests whose fakes or proxies have `tls:`. |
 | `HYDO_WORLDBIN_TLS_ARM64` | user | path; empty = default | <build dir>/hydo-world-tls-arm64 | hydo-build | The arm64 `hydo-world-tls`. |
 | `HYDO_CLOCKBIN` | user | path; empty = default | <build dir>/hydo-clock | hydo-build | The x86_64 `hydo-clock` (one service's own wall clock, Milestone 372), staged only for manifests with a service of `clock: own`. |
+| `HYDO_CLOCKBIN_WORDS` | user | path; empty = default | <build dir>/hydo-clock-words | hydo-build | The x86_64 `hydo-clock` built with the feature `words` (Milestone 379), staged instead of `hydo-clock` for an image of `guest.kernel: containers`, whose KVM kernels have no `process_vm_readv`. |
 | `HYDO_READ_BIN` | user | path; empty = default | <build dir>/hydo-read | hydo-build | The x86_64 `hydo-read`. |
 | `HYDO_READ_BIN_ARM64` | user | path; empty = default | <build dir>/hydo-read-arm64 | hydo-build | The arm64 `hydo-read`. |
 | `HYDO_SQL_BIN` | user | path; empty = default | <build dir>/hydo-sql | hydo-build | The x86_64 `hydo-sql` (the ready-made SQL workloads and checks), staged only when a command calls it. |
