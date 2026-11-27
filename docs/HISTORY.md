@@ -23685,7 +23685,10 @@ by no election for the step's length. braft's `RepeatedTimerTask` schedules the 
 election timer at `butil::milliseconds_from_now` (`src/braft/repeated_timer_task.cpp` lines 128
 to 130), and brpc's timer thread compares with `gettimeofday_us` (`src/bthread/timer_thread.cpp`
 lines 372 and 427). `T=20:-120 P=nodes.primary@30+25` left the two other nodes followers without
-a leader for 68 s, until the pause ended; the same pause without `T=` got a new leader.
+a leader for 116 s, until the late timer fired 120 s plus one election timeout after the step
+(the check's probes saw 68 s of it); the same pause without `T=` got a new leader in 11.8 s. The
+released hydo 0.6.0 from a fresh clone at `e2058be0` gave both clock findings again on hvx, each with
+one fingerprint over two runs (finding 2 `7d80c69637796b19`, finding 3 `ec4fae531d94d397`).
 
 **The runs.** The final image `explore-ob-typesense-disk.img` (`02024a5f…`) gives
 `097b8fcffac8545b` on two clean runs. Each regression gave one fingerprint over two fresh runs:

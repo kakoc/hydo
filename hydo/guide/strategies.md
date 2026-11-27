@@ -701,7 +701,7 @@ These findings hold for every type of system:
     back of an hour an export of more than 100 documents ends after its first batch on every
     node (`T=20:-3600`). A delete by a filter of more than one batch stops part way.
     braft's election timer runs at wall-clock times. A pause of the leader 10 s after a step
-    back of 120 s left the cluster without a leader for 68 s (`T=20:-120
+    back of 120 s left the cluster without a leader for 116 s (`T=20:-120
     P=nodes.primary@30+25`). Blind in 5 of the first 30 schedules for the export, each shrunk to
     one step back of 150 s or more. A check that the client samples every node's Raft state once
     a second (`final_available`) showed the missing election; no check of the data did.

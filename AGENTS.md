@@ -1325,7 +1325,7 @@ files, power cuts, and clock steps. Three new candidates, not posted:
   one batch. h2o's event loop fires no timer while the wall clock is behind (h2o/h2o#2321).
 - A clock effect: after a backward clock step, a pause of the leader is followed by no election
   for the step's length. braft's election timer runs at wall-clock times (`T=20:-120
-  P=nodes.primary@30+25`: 68 s without a leader).
+  P=nodes.primary@30+25`: 116 s without a leader).
 
 Open item 188 has what is left.
 

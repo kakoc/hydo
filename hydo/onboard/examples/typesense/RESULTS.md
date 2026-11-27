@@ -30,7 +30,8 @@ nobody reported.
   3. **New, a clock effect: after a backward step of the wall clock, a failure of the leader is
      followed by no election for the step's length.** braft's election timer runs at wall-clock
      times, so its next run comes as late as the clock went back. A pause of the leader 10 s
-     after a step back of 120 s left the two other nodes without a leader for 68 s
+     after a step back of 120 s left the two other nodes without a leader for 116 s, until the
+     late timer fired, 120 s plus one election timeout after the step
      (`regressions/no-election-after-a-backward-clock-step.schedule`).
 - **What held?** Every write that Typesense acknowledged was on the leader at the end, unless a
   later write of the same document replaced it, and no refused write took effect. That held for
@@ -319,8 +320,14 @@ engine did not run the example.
 - **The schedule.** `disk=none | run T=20:-120 P=nodes.primary@30+25`: the wall clock goes back
   by 120 s before step 20, and the leader (`ts3` in this run) is paused with SIGSTOP from step 30 to step 55.
 - **What breaks.** `final_available`: `from 43.8 s to 112.7 s of uptime no node was the leader
-  while two or more answered (ts1=4,ts2=4,ts3=-1)`, so `no leader for 68 s`. The two other nodes answered `/debug` as followers (`state 4`) for the whole pause, and
-  writes through them got no answer. Without `T=` the same pause gave a new leader, and
+  while two or more answered (ts1=4,ts2=4,ts3=-1)`, so `no leader for 68 s`: the gap that the
+  check's probes saw, in windows of 12 s. The nodes' logs (the released hydo 0.6.0 from a fresh
+  clone at `e2058be0`, `ec4fae531d94d397` on two runs) give the whole outage: the step comes at
+  about 34.3 s of uptime and the pause at about 42.7 s, and `ts1` logs `Lost connection from
+  leader`, `start pre_vote` and `become leader ... term 3` at about 158.8 s, 116 s after the pause
+  and about 124.5 s after the step, while `ts3` was still paused (until about 284.5 s). Writes
+  through the two nodes got no answer until then. Without `T=` `ts1` became leader at about
+  54.5 s, 11.8 s after the pause. Without `T=` the same pause gave a new leader, and
   `final_available` held. On an earlier image, with `T=20:-3600`, the two nodes stayed followers
   for 289 s, until the pause ended. A kill instead of the pause, `T=20:-120
   K=nodes.primary@30+25`, left the cluster without a leader for 36 s.
@@ -335,8 +342,11 @@ engine did not run the example.
 - **The consequence.** For the length of a step back, a failure of the leader makes the cluster
   refuse writes, where the guide promises that a cluster of three serves with one node down. A
   killed leader that starts again has new timers and ends the wait, so the outage lasts as long
-  as the leader is down or the step, whichever is shorter.
-- **Duplicates.** No issue of Typesense, braft or brpc names a clock step and the election timer.
+  as the leader is down or the step plus one election timeout, whichever is shorter.
+- **Duplicates.** No issue of Typesense or braft names a clock step and the election timer.
+  apache/brpc#2763 (closed without a change) reported that brpc's bthread timeouts follow the wall
+  clock and break on clock jumps; brpc's #3268 (1.17.0) moved other parts to the monotonic clock,
+  but not `bthread/timer_thread.cpp`, which compares with `gettimeofday_us` on brpc's master too.
   braft's issue baidu/braft#50 is about the step-down timer's log lines, not about the clock.
 - **A clock effect.** As finding 2, a step back by NTP or an operator is enough.
 
