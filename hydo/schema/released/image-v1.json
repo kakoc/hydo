@@ -52,6 +52,13 @@
             "string",
             "null"
           ]
+        },
+        "proc_io": {
+          "description": "`false` when the manifest says `guest.proc_io: false` (Milestone 376): the image boots the\nMac and KVM guest kernels of the fingerprint epoch 6, without `/proc/<pid>/io`, though it\nwas built at epoch 7 or later. On arm64 `kernel` names that kernel too; on x86_64 the KVM\nengine picks its build by this field. Absent: what the image's epoch means\n([`EpochDefaults::proc_io`]). An image without the key has no field.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "required": [

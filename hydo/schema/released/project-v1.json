@@ -504,6 +504,14 @@
           ],
           "default": false
         },
+        "proc_io": {
+          "description": "The Mac and KVM engines boot the guest with a kernel that has per-process I/O\naccounting, so the guest has /proc/<pid>/io, which some programs read at start (brpc in\nTypesense stops without it). The default for images built at fingerprint epoch 7 and\nlater; an image built earlier keeps the kernels it was built for. false: the guest\nkernels of epoch 6, without the file, and their timing. hvx's guest kernel always has the\nfile (Milestone 376).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
         "description": {
           "anyOf": [
             {
@@ -983,6 +991,17 @@
             }
           ]
         },
+        "clock": {
+          "description": "`own`: the service gets a wall clock of its own (Milestone 372). It starts under\n`/bin/hydo-clock`, and `T=<svc>@<at>:<change>` steps its clock (`T=n2@5:-30`,\n`T=n2@5:1500ms`) or makes it drift (`T=n2@0:200ppm`), while the other services and the\nchecks keep the guest's clock (MANIFEST.md \"One service's own clock\"). x86_64 images\nonly.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServiceClock"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "description": {
           "anyOf": [
             {
@@ -1176,6 +1195,13 @@
       "enum": [
         "ready",
         "started"
+      ]
+    },
+    "ServiceClock": {
+      "description": "Whose wall clock a service reads (Milestone 372): `own` starts it under hydo-clock, so that\n`T=<svc>@<at>:<change>` steps it or makes it drift while the other services keep the\nguest's clock.",
+      "type": "string",
+      "enum": [
+        "own"
       ]
     },
     "ServiceErrors": {
@@ -1532,6 +1558,30 @@
             }
           ]
         },
+        "restart": {
+          "description": "How the members come back after a fault killed two or more of them (Milestone 374):\none-by-one (each after the one before is ready), or together (all started, then each\none's readiness checked), for a cluster whose members get ready only with a quorum.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupRestart"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "one-by-one"
+        },
+        "links": {
+          "description": "Which links between the members the explorer may cut with `network: bridge` (Milestone\n374): depends_on (only those that name each other there, the default) or all (every two\nmembers, for a cluster whose nodes talk to each other).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupLinks"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "depends_on"
+        },
         "description": {
           "anyOf": [
             {
@@ -1547,6 +1597,22 @@
       "required": [
         "name",
         "services"
+      ]
+    },
+    "GroupRestart": {
+      "description": "How a group's killed members are started again.",
+      "type": "string",
+      "enum": [
+        "one-by-one",
+        "together"
+      ]
+    },
+    "GroupLinks": {
+      "description": "Which links between a group's members the explorer draws network faults on.",
+      "type": "string",
+      "enum": [
+        "depends_on",
+        "all"
       ]
     },
     "Workload": {

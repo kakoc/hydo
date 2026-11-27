@@ -15,7 +15,7 @@ off.
 ## Install
 
 ```sh
-go get github.com/kakoc/hydo/sdk/go@v0.7.0
+go get github.com/kakoc/hydo/sdk/go@v0.8.0
 ```
 
 ## A complete program
