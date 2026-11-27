@@ -5728,6 +5728,14 @@ build machine, before 2026-10-13.
   kernels of epoch 6, and an image built before keeps its kernels and values. On KVM Typesense's
   clean run passes and its three regressions fail as on hvx; the Mac kernels have no run yet.
   Every value of the list waits for the 0.8.0 pass
+- M380 (tentative number): a ledger of the 223 findings of the onboarding examples
+  (`docs/design/findings-ledger.csv`). Each row says how its finding came first and what it
+  cost. A blind process
+  exploration found 60 of the 105 bugs first, most within 20 schedules; the clock audit, the
+  scan of write routes and explored settings found none. Clock steps were needed in a third of
+  the bugs. A second commit adds the check that noticed each finding. The generic set of checks
+  would have caught 63 of the 105 bugs. Business rules alone caught 19, and made 21 of the 30
+  false findings. The page proposes a first hour and default oracles. Nothing recorded moved
 - M381 (tentative number): the sync audit, `hydo rules scan --kind sync`. It lists the writes and
   renames that a system can answer before they are synced, and streams synced before their flush.
   It also lists `O_DIRECT` without `O_DSYNC`, settings that turn syncing off, and syncs on a
