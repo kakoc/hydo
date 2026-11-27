@@ -26368,35 +26368,36 @@ runners with `explore.yml`. One new candidate, a clock effect, and two findings 
 parts; nothing was posted, and nothing recorded moved.
 
 **The target.** RocketMQ 5 was the task's first choice, and it fit within the half hour of the
-check. The newest release with an official image is 5.5.0 (5.5.1 of 2026-08-20 has none). The
-image runs as one user with JVM heaps that environment variables set, and the controller mode
-forms from fixed addresses. The issues are on GitHub.
+check. The newest release with an official image is 5.5.0 (5.5.1 of 2026-08-20 has none). The image
+runs as one user with JVM heaps that environment variables set, and the controller mode forms from
+fixed addresses. The issues are on GitHub.
 
-**The example.** A NameServer with the controller embedded and one replica group `broker-a` of
-three brokers in controller mode, the shape of RocketMQ's `docs/en/controller/deploy.md`, from the
-official image `apache/rocketmq:5.5.0` in one guest of 3,072 MiB, imported with `hydo compose`.
-The brokers run with `allAckInSyncStateSet` and `SYNC_FLUSH`, the documented durable settings;
-each node's store is a file system of its own. The Go client `rmq` uses rocketmq-client-go
-v2.1.2 for plain, delayed, ordered and transactional sends, and a small remoting client of its
-own for what that library does not offer: a pull at an exact offset, a synchronous offset commit,
-the send-back of a poison message, and the creation of topics. Two messages checks judge the
-topic `j` (`duplicates: forbidden`, `dead_letter`, `delay`) and the ordered topic `o` (`order:
-fifo` per key). The drain answers the broker's transaction checks from a synced decisions file
-and ends after 45 s without a message it had not received. `hydo/hydo-offsets.yaml` adds
-`after_ack: no-redelivery` to both checks. The three brokers form the group `brokers` with
-`restart: together` and `links: all` (Milestone 374).
+**The example.** A NameServer with the controller embedded and one replica group `broker-a` of three
+brokers in controller mode, the shape of RocketMQ's `docs/en/controller/deploy.md`, from the
+official image `apache/rocketmq:5.5.0` in one guest of 3,072 MiB, imported with `hydo compose`. The
+brokers run with `allAckInSyncStateSet` and `SYNC_FLUSH`, the documented durable settings; each
+node's store is a file system of its own. The Go client `rmq` uses rocketmq-client-go v2.1.2 for
+plain, delayed, ordered and transactional sends, and a small remoting client of its own for what
+that library does not offer: a pull at an exact offset, a synchronous offset commit, the send-back
+of a poison message, and the creation of topics. Two messages checks judge the topic `j`
+(`duplicates: forbidden`, `dead_letter`, `delay`) and the ordered topic `o` (`order: fifo` per key).
+The drain answers the broker's transaction checks from a synced decisions file and ends after 45 s
+without a message it had not received. `hydo/hydo-offsets.yaml` adds `after_ack: no-redelivery` to
+both checks. The three brokers form the group `brokers` with `restart: together` and `links: all`
+(Milestone 374).
 
-**Finding 1, known in its parts.** After a power cut of the whole guest, both slaves stop at
-every start: `disk=cut | run C=20`, `VIOLATION service cannot recover (committed data
-unrecoverable) (broker0)`. The broker's log ends in `NumberFormatException: null` from
-`CheckpointFile.read` and `EpochFileCache.initCacheFromFile`. `hydo inspect` at the end of the
-recovery boot showed `epochFileCheckpoint` at 0 bytes on `broker0` and `broker1`, written 17 s
-before the cut when the controller made them slaves, with no `.bak` file. `MixAll.string2File`
-writes the file in place without a sync, and the parse of an empty header throws an unchecked
-exception that skips the backup. apache/rocketmq#11460 (open) names the parse, with pull request
+**Finding 1, known in its parts.** After a power cut of the whole guest, both slaves stop at every
+start: `disk=cut | run C=20`, `VIOLATION service cannot recover (committed data unrecoverable)
+(broker0)`. The broker's log ends in `NumberFormatException: null` from `CheckpointFile.read` and
+`EpochFileCache.initCacheFromFile`. `hydo inspect` at the end of the recovery boot showed
+`epochFileCheckpoint` at 0 bytes on `broker0` and `broker1`, written 17 s before the cut when the
+controller made them slaves, with no `.bak` file. `MixAll.string2File` writes the file in place
+without a sync, and the parse of an empty header throws an unchecked exception that skips the
+backup. apache/rocketmq#11460 (open) names the parse, with pull request
 #11463; #5905 (closed) reported config files of 0 bytes after a forced restart. Blind in e1: 4
-cuts (`C=30`) and 8 power losses of one broker (`L=`) ended this way. On hvx one broker's power loss alone, `L=broker1@14+3`, stopped
-`broker1` at its restart the same way (`ERROR broker1 restart failed (after its power loss)`).
+cuts (`C=30`) and 8 power losses of one broker (`L=`) ended this way. On hvx one broker's power loss
+alone, `L=broker1@14+3`, stopped `broker1` at its restart the same way (`ERROR broker1 restart
+failed (after its power loss)`).
 
 **Finding 2, known.** A failover moves the groups' committed offsets back by up to 10 s, and the
 consumers get acknowledged messages again: `K=brokers.primary@10+3` breaks `jobs.after-ack` and
@@ -26407,69 +26408,68 @@ master past the heartbeat timeout does the same, and no acknowledged message was
 
 **Finding 3, new, a clock effect.** The broker writes the commit and rollback records of
 transactions in batches, 3 s after its last write by `System.currentTimeMillis()`
-(`TransactionalMessageServiceImpl.batchSendOpMessage`), so after a backward step of the wall
-clock it writes none for the step's length. 3a: after `T=10:-3600` the transaction check found
-the transactions it had committed without their records, asked the producer group again at every
-interval of 10 s, and stored each message again: `VIOLATION [jobs.duplicates] u17 is stored
-twice: it carries the system ids 1000000 and 1000005`; the drain received `u17`, `u20` and `u44`
-six times each in 50 s, and the clean run checks each once. 3b: after `T=2:-2592000` the check
-found the half message of `r3`, rolled back in the round before the step, without its record and
-stored 30 days "after" the check began, and it stops at such a message (`getStoreTimestamp() >=
-startTime`) at every round. No transaction was checked, and the ones whose producers answered
-"unknown" were never committed: `VIOLATION [jobs.no-loss] u17 was acknowledged ... and never
-delivered`. #9640 (closed) reports checks of committed transactions under load, with no clock
-step and no second copy; no issue names the batch's interval with a clock step. In e2 six
-schedules with steps back of 30 s to a day lost such a transaction before the drain ended.
+(`TransactionalMessageServiceImpl.batchSendOpMessage`), so after a backward step of the wall clock
+it writes none for the step's length. 3a: after `T=10:-3600` the transaction check found the
+transactions it had committed without their records, asked the producer group again at every
+interval of 10 s, and stored each message again: `VIOLATION [jobs.duplicates] u17 is stored twice:
+it carries the system ids 1000000 and 1000005`; the drain received `u17`, `u20` and `u44` six times
+each in 50 s, and the clean run checks each once. 3b: after `T=2:-2592000` the check found the half
+message of `r3`, rolled back in the round before the step, without its record and stored 30 days
+"after" the check began, and it stops at such a message (`getStoreTimestamp() >= startTime`) at
+every round. No transaction was checked, and the ones whose producers answered "unknown" were never
+committed: `VIOLATION [jobs.no-loss] u17 was acknowledged ... and never delivered`. #9640 (closed)
+reports checks of committed transactions under load, with no clock step and no second copy; no issue
+names the batch's interval with a clock step. In e2 six schedules with steps back of 30 s to a day
+lost such a transaction before the drain ended.
 
-**What held.** No message that `SendSync` acknowledged with `SEND_OK` was lost under kills,
-pauses past the heartbeat timeout, partitions and one-way loss, failovers, a kill of the
-NameServer and its controller, or clock steps, wherever the brokers came back. Rolled-back
-transactions were never delivered, delayed messages never came before their delay, poison
-messages reached the dead-letter topic after their retries, and each key's messages arrived in
-order.
+**What held.** No message that `SendSync` acknowledged with `SEND_OK` was lost under kills, pauses
+past the heartbeat timeout, partitions and one-way loss, failovers, a kill of the NameServer and its
+controller, or clock steps, wherever the brokers came back. Rolled-back transactions were never
+delivered, delayed messages never came before their delay, poison messages reached the dead-letter
+topic after their retries, and each key's messages arrived in order.
 
 **The runs.** The final image `explore-ob-rocketmq-disk.img` (`0198df27c8ec09e5…`, built twice to
 the same bytes) gives `b40afc5cabb53082` on two clean runs. Each regression gave one fingerprint
-over two fresh runs on hvx: finding 1 `b5252e4bc9b73a2c`, finding 3a `5fc8566af3802f2f`, finding
-3b `e4f10ed629b3d8be`, and finding 2 on the image of `hydo-offsets.yaml` `8cd67eee89799522`. `hydo
+over two fresh runs on hvx: finding 1 `b5252e4bc9b73a2c`, finding 3a `5fc8566af3802f2f`, finding 3b
+`e4f10ed629b3d8be`, and finding 2 on the image of `hydo-offsets.yaml` `8cd67eee89799522`. `hydo
 repro --regressions` on the final image gave 3 of 3 as expected, with the same fingerprints.
 OFFREPRO
 
 **The explorations.** Both on GitHub's KVM runners, 20 parts of 2 seeds with one worker each and
 `--strategy process --new-faults --cluster-faults --storage-faults --no-shrink`; directed runs on
-hvx judged each failure. e1 (seeds 1-40, the first client): 32 seeds ran. Finding 1 at 4 cuts
-and at 8 power losses of one broker, finding 3a as a drain that never ended (1), finding 3b (1,
-broke `dead-letter` first on hvx), the client's own mistakes (13: a provisioning message that a
-failover delivered again, and an attempt count on redeliveries), detected damage (1), a group's
-`primary:` that named no member (1), and 2 passes. e2 (seeds 41-80, the final client): 34 seeds
-ran. Finding 3b after steps back of 30 s to a day (6), finding 1 (7), a committed transaction or
-a delayed message stored twice after a failover (5: the 10-s copy of finding 2), a transaction
-lost after a forward step with kills (3, not traced), an exhausted exit budget after a step back
-of an hour (2), a poison message's count (1), detected damage (1), and 9 passes. On AMD
-EPYC 7763 runners, and on one EPYC 9V74, the image never booted: `ERROR boot: SPIN` before S1, so
-14 of the 80 seeds did not run, and their parts counted them as failures. The runners built the image to
-hvx's bytes (`0198df27…` in e2's record).
+hvx judged each failure. e1 (seeds 1-40, the first client): 32 seeds ran. Finding 1 at 4 cuts and at
+8 power losses of one broker, finding 3a as a drain that never ended (1), finding 3b (1, broke
+`dead-letter` first on hvx), the client's own mistakes (13: a provisioning message that a failover
+delivered again, and an attempt count on redeliveries), detected damage (1), a group's `primary:`
+that named no member (1), and 2 passes. e2 (seeds 41-80, the final client): 34 seeds ran. Finding 3b
+after steps back of 30 s to a day (6), finding 1 (7), a committed transaction or a delayed message
+stored twice after a failover (5: the 10-s copy of finding 2), a transaction lost after a forward
+step with kills (3, not traced), an exhausted exit budget after a step back of an hour (2), a poison
+message's count (1), detected damage (1), and 9 passes. On AMD EPYC 7763 runners, and on one EPYC
+9V74, the image never booted: `ERROR boot: SPIN` before S1, so 14 of the 80 seeds did not run, and
+their parts counted them as failures. The runners built the image to hvx's bytes (`0198df27…` in
+e2's record).
 
 **Tests.** TESTS
 
 Retro: RocketMQ 5.5.0, hvx and KVM, 2026-11-27
-- Time to the first clean run: 1 hour 20 minutes of wall time, about 30 minutes of it building
-  this tree's programs and the image on the loaded machine.
-- Schedules run before the first finding: 1, the first directed power cut. The first rule
-  mistakes were the client's: an unrecorded provisioning message that a failover delivered
-  again, an attempt count on redeliveries that RocketMQ does not count, and a drain that a
-  message coming back every 10 s kept open.
-- The findings: 1 new, a clock effect (the transaction check after a step back, in two forms);
-  2 known (the epoch file, in its parts; the offsets at a failover, with the delay offsets and the
+- Time to the first clean run: 1 hour 20 minutes of wall time, about 30 minutes of it building this
+  tree's programs and the image on the loaded machine.
+- Schedules run before the first finding: 1, the first directed power cut. The first rule mistakes
+  were the client's: an unrecorded provisioning message that a failover delivered again, an attempt
+  count on redeliveries that RocketMQ does not count, and a drain that a message coming back every
+  10 s kept open.
+- The findings: 1 new, a clock effect (the transaction check after a step back, in two forms); 2
+  known (the epoch file, in its parts; the offsets at a failover, with the delay offsets and the
   transaction check's progress in the same copy); detected damage of a file in 2 schedules; 3
   schedules with a forward clock step and kills that lost a transaction, not traced.
-- What took the most time: the queue of directed runs on the machine that a release pass
-  loaded, 5 to 10 minutes a run; e1's last part, which ran 2.5 hours; the first explorations'
-  failures of the client's own mistakes.
-- What hydo lacked: KVM boots that spin on AMD EPYC 7763 and parts that count it as failures;
-  the console of 64 KiB; `L=` without a group selector; claims that cannot be build parameters;
-  a disk limit that `--check` does not see; the import's addresses and ports; `--ref` with a
-  short commit (open item 196).
+- What took the most time: the queue of directed runs on the machine that a release pass loaded, 5
+  to 10 minutes a run; e1's last part, which ran 2.5 hours; the first explorations' failures of the
+  client's own mistakes.
+- What hydo lacked: KVM boots that spin on AMD EPYC 7763 and parts that count it as failures; the
+  console of 64 KiB; `L=` without a group selector; claims that cannot be build parameters; a disk
+  limit that `--check` does not see; the import's addresses and ports; `--ref` with a short commit
+  (open item 196).
 - Strategies: the RocketMQ evidence in "Power cuts of the whole guest", "Clock steps and the clock
   audit" and "The messages check's claims" of `hydo guide strategies`; the first table names
   RocketMQ.
