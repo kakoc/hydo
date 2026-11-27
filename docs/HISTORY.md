@@ -24541,6 +24541,77 @@ say this now. No regression file changed.
 
 **What is left.** Open item 192.
 
+## Milestone 371, the three failures traced
+
+The Garnet example's three failures whose cause was not found are traced. Each is a bug of Garnet
+2.2.14, and the code is the same on `main` at `ff769f86`. The work ran on hvx on the
+bare-metal machine with the released hydo 0.7.0. Its Linux tarball was checked by `SHA256SUMS`
+and installed with `install.sh --prefix <folder> --no-module`. The tree was a `git archive` of
+`main` at `bdb403f4`, with the client `f3951b59…` built on the Mac from it and the onboarding's
+image file. The `fs` image was
+built again with its recorded sha256 (`57aaef25…`). Each regression gave its recorded fingerprint
+twice: A `e12c7c93adf9d46c`, B `674c2b16f5e9438b`, C `012c520d5bb92ffc`. Held runs (`hydo
+inspect start <run> --at <stop>`) read every node's `INFO`, `CLUSTER NODES`, keys, threads, and log
+at stops before and after each failure. A copy of the example with Garnet's log level
+`Information` gave the same failures (A `bb0d392e801a000b`, C `3a8118d0f88895df`) and the logs of
+the replication steps. The section "The three failures traced" of RESULTS.md has the evidence and
+the code lines.
+
+**A, new.** With `--aof-commit-wait`, a replica stops answering when its primary dies before it
+commits what it streamed. The primary `g1` died 10 ms after a `BGSAVE`; its replica `g4` had
+received the checkpoint's markers, and `g1` started again with its AOF at tail 404. A replica
+appends streamed records uncommitted and commits only on its primary's commit records
+(`ReplicaReplaySession.cs` line 104, `ReplicaReplayDriver.cs` line 193). Every gossip reply on a
+cluster session waits for the AOF commit (`ClusterSession.cs` lines 222 to 226), so on `g4` each
+reply blocked its thread. The peers' gossip to `g4` timed out from 4 s after the kill, before `g1`
+came back. `g4` had 19 waiting thread-pool workers at the stop `run:1700000` and 80 at the end of
+the trace run, where the other nodes had 15 to 19 threads in all. The run's lost `RPUSH` is
+finding B, in shard 3.
+
+**B, new, with finding 2's cause.** A failover of a migration's source gives the slot two
+primaries. Slot 13404 moved from `g3` to `g1`, and `CLUSTER FAILOVER` on `g6` came before gossip
+told it. `g6` took over the slots of its own slot map, 13404 among them, with config epoch 10,
+the epoch of `g1`'s claim (`ClusterManager.cs` line 389, `ClusterConfig.cs` lines 1393 and
+1400). With equal epochs `MergeSlotMap` moves the slot to neither (lines 1262 to 1268), and both
+acknowledged writes of it. The failover of shard 1 to `g4` raised `g4`'s epoch to 13, the slot
+went to shard 1, and the two writes that `g6` had acknowledged stayed on `g6` and `g3`.
+
+**C, new.** A replica that attaches after a failover damages its AOF file below its new tail.
+The old primary `g1` replayed its own AOF up to 1596 and called `Log.Initialize(beginAddress,
+1596)`. That call reads no page when the tail lies inside one (`TsavoriteLog.cs` line 589,
+`Recovery.cs` lines 1643 to 1680). The first flush rewrote the sector from 1536. Before the power
+cut the two AOF files differed in bytes 1536 to 1595 only. There `g1`'s file held 16 earlier bytes
+three times, and zeros. After the cut `g1` replayed 3 records of the range 1372 to 2460, where `g4`
+replayed 12. It set its offset to 2460 all the same, because the replay returns the address it was
+asked to reach (`AofRecover.cs` line 66). It lacked every write after the failover and held an
+empty string for a counter.
+
+**The runs that separate the causes**, one each on hvx:
+
+- A passes with the kill 2 s after the `BGSAVE` (`66518ef67d425f02`), and on an image without
+  `--aof-commit-wait` (`--set wait=no`, `8cf849360412507e`). With the kill at the event itself it
+  fails the same way (`6efd2887a84c26ad`).
+- B passes without the failovers (`oserial_driver_failover`, `4e7ef3a4bc87e9db`), with the same
+  pause and the same migration of slot 13404.
+- C passes without the power cut (`057b2b492432c418`). It also passes without the kill of `g4`
+  (`1123bb3544856201`), with the same failover and power cut; why the kill is needed was not
+  separated.
+
+**Files.** RESULTS.md has the new section and the runs that separate the causes. Its short
+answers name findings 3 to 5, and its duplicate searches have the rows of A, B, and C. Findings 1
+and 2 name their reports, #2441 and #2440.
+The comments of the three regression files say the causes. The explorer's four corpus goldens
+hold each file's sha256, so they were recorded again with `HYDO_BLESS=1`, each in its mode:
+`HYDO_CORPUS_QUICK=1` for the quick corpus, and `HYDO_IDENT_FULL=1` for the full identity stream.
+The controller's corpus golden did not change. The tests ran on the bare-metal machine, in a
+copy of the worktree with an index of its tracked files and a target folder of its own. These
+passed: `cargo test -p hydo-explore --test it` (63 passed), the controller's `corpus::`, `-p
+hydo-agents --test it` (16 passed) and `-p hydo --test it -- docs::` (14 passed). The copy has no
+`AGENTS.local.md`, so a `grep` of the listed values checked the added lines and found none. `sh
+ci/vale.sh` finds nothing. No Rust code changed, and nothing recorded moved.
+
+**What is left.** Open item 192.
+
 ## Milestone 372 (tentative number): one service's own wall clock
 
 Status: a prototype, done on 2026-11-26 on the bare-metal machine (hvx and the tests) from this
