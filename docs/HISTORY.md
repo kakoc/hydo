@@ -25693,3 +25693,41 @@ build are the report before the shrinks, then the generated client with the gene
 
 **Checks.** Vale on the page and `sh ci/vale.sh` found nothing. No VM ran and nothing was built.
 A `git grep` of each value of the list of `AGENTS.local.md` found none in the changed files.
+
+## Milestone 388 (tentative number): a benchmark of unexplained failures for debugging tools
+
+hydo may build four debugging tools that only a deterministic hypervisor can offer: every thread's
+stacks and locks at any stop (`hydo inspect stacks`, being built), data watchpoints across all
+nodes, the first divergence between a failing run and its nearest passing run with counterfactual
+branches, and a message's path from its send to its apply. The lead builds only what answers
+recorded problems. The page `docs/design/debug-benchmark.md` collects them from this file, the
+open items of `AGENTS.md`, every example's `RESULTS.md`, and the findings ledger of Milestone 380.
+No VM ran and nothing was built.
+
+**The cases.** 72 cases, each with its source, schedule and fingerprint where the record has
+them:
+
+- 44 failures of real systems whose cause is still open, such as Garnet's three candidates,
+  the kill of `rabbit2` that RabbitMQ's finding 1 needs, and etcd 14685's second symptom;
+- 9 gaps of hydo's own engines, such as the lock-step hang of the gRPC stack's seed 6 and the
+  KVM fingerprints that differ between two Intel models;
+- 19 causes found late or first described wrongly, such as RabbitMQ's findings 1 and 3, the
+  ClickHouse Keeper loop that was first read as hydo's TIMEOUT, and Typesense's SIGSEGV on KVM.
+
+Nine more records stay out, because only a tool on the host reaches them.
+
+**The counts.** By the primary tool of each case: the divergence 21, watchpoints 15, stacks 12,
+the message's path 12, the existing logs and held runs 9, and none 3. By any mention: watchpoints
+27, the divergence 26, the path 20, stacks 15. The divergence leads because 7 of the 9 engine gaps
+need it. Watchpoints answer most of the late traces (6 of 19), two of them first described
+wrongly. Nine cases needed only a log or one command in a held run.
+
+**The proposal.** Finish `stacks` first, proven on the Keeper loop and Typesense's SIGSEGV, whose
+answers are known, and then on Garnet's hanging replica. Then build the divergence in two steps,
+first over the events hydo records today with counterfactual branches, then at the machine level.
+Then watchpoints, proven on RabbitMQ's finding 3 and Typesense's finding 1, then etcd 14685. Then
+the message's path on top of both. The page names five first proofs per tool. No code, guide
+topic, playbook or skill changed; the lead decides.
+
+**Checks.** Vale on the page and `sh ci/vale.sh` found nothing. A `git grep` of each value of the
+list of `AGENTS.local.md` found none in the changed files.
