@@ -5,7 +5,7 @@ authority on the token text is `hydo-schedule` (`ServiceClockChange` in `src/clo
 test `service_clocks` in `tests/language.rs`). The program that gives a service its own clock is
 `hydo/crates/hydo-clock`. The controller's side is
 `hydo/crates/hydo-control/src/features/clock.rs`. The example is `hydo/onboard/examples/service-clocks`. This page explains the problem, the
-options, the choice, the schedule syntax, the explorer, and what is left.
+options, the choice, the schedule syntax, the explorer, the runs on real systems, and what is left.
 
 ## The problem
 
@@ -118,14 +118,36 @@ fingerprint. The controller refuses the token before any VM when the service has
 ppm -> 0 ppm)`, and a step gives the same `fault.clock_back` or `fault.clock_fwd` record as a step
 of the guest's clock.
 
-## The explorer (designed, not built)
+## The explorer
 
-`hydo explore` would draw a service's clock only for a manifest with `clock: own` and `clock` in
-`faults:`, from a stream of its own, so every other manifest draws the schedules it draws today.
-For such a manifest one clock fault in two would be a service's own: one service of `clock: own`
-at random, a step from `±250ms`, `±1500ms`, `±5`, `±30` and `±300`, or a drift of `±200ppm` and
-`±50000ppm`. The shrinker would remove the token, then halve the step towards 0. The clock audit
-would propose one service's step for a place that a single service runs.
+Built in Milestone 375 (tentative number). `hydo explore --service-clocks` draws a service's
+own clock for a manifest that has services with `clock: own` and `clock` in `faults:`. The draws
+come from a stream of their own (`SERVICE_CLOCK_SALT` in `hydo-explore`'s `gen.rs`), so every
+other field of a seed's schedule stays as it was. Without the option, and for every manifest
+without `clock: own`, the explorer draws the schedules it drew before: the corpus goldens of
+`hydo-explore` did not change. The option is opt-in, not a default, because a default would
+change the draws of the manifests that already have `clock: own`.
+
+Most drawn schedules get one service's own clock change:
+
+- A schedule with a step of the guest's clock (`T=<at>:<delta>`) gives it up in half of the
+  schedules for one service's change before the same step.
+- A schedule without one gets a service's change in 60 % of the schedules.
+- The service is one of the services of `clock: own`, at random. The change is a step of
+  `±250ms`, `±1500ms`, `±5`, `±30` or `±300`, or a drift of `±200ppm` or `±50000ppm`.
+- With two or more such services, a quarter of the changes put two of them apart: a second
+  service gets the opposite change before the same step.
+
+The shrinker removes each token. It also halves a step longer than 250 ms and a drift larger
+than 200 ppm, towards 0. A schedule with a service's clock is in the failure class of the clock
+faults (`clock`, or `clock` with the other families). The explorer refuses `--service-clocks` before
+any run when the image's manifest has no service with `clock: own`, and when the manifest's
+`faults:` does not allow `clock`.
+
+The clock audit (`hydo rules scan --kind clock`) proposes two more schedules for a place whose
+code a service of `clock: own` runs. In `own-ahead` that service's clock alone goes forward by
+more than the place's limit, and in `own-behind` it goes back by as much. A project without
+`clock: own` gets the audit's report of before.
 
 ## What moves
 
@@ -155,8 +177,33 @@ and the image record would name the kernel by its sha256, as `guest.kernel: cont
 - The offset file is in the run directory, so a recovery boot after a power cut and a reboot
   start every own clock at the guest's clock. A drift restarts from 0 when hydo-clock starts
   again after a kill.
-- x86_64 only: the Mac engine needs an arm64 build of hydo-clock (other registers and system call
-  numbers). On the KVM and Mac engines the service needs the `containers` kernel for seccomp.
-  Without it hydo-clock stops with `hydo-clock: cannot install the clock filter` and the status
-  126, and the service does not start. Neither engine ran it.
-- The explorer does not draw it, and the clock audit does not propose it.
+- x86_64 only, and hvx only. Neither the KVM nor the Mac engine ran it. The section "The KVM and
+  Mac engines" says what they need.
+
+## The KVM and Mac engines
+
+Milestone 375 (tentative number) read what the two other engines lack; nothing was built. Both
+engines' guest kernels start from `allnoconfig` and a list of options, so an option that no list
+names is off:
+
+- **seccomp.** Only the `containers` lists have `CONFIG_SECCOMP_FILTER`
+  (`hv/kvm/linux/hydo-kvm-containers.config` and `hv/hvm/explore/hvm-containers.config`). A
+  service of `clock: own` therefore needs `guest.kernel: containers` there. Without it hydo-clock
+  stops with `hydo-clock: cannot install the clock filter` and the status 126.
+- **Memory of the traced process.** hydo-clock reads and writes the traced process's memory with
+  `process_vm_readv` and `process_vm_writev`. They need `CONFIG_CROSS_MEMORY_ATTACH`, which no
+  KVM or Mac list names, so even the `containers` kernels answer `ENOSYS`. Either the
+  `containers` lists gain the option, a change of their kernels, or hydo-clock falls back to
+  `PTRACE_PEEKDATA` and `PTRACE_POKEDATA`, one word per call. The fallback changes no kernel, and
+  it changes the bytes of hydo-clock, so of the images with `clock: own` only.
+- **arm64.** The Mac engine needs an arm64 build of hydo-clock. The system call number is in
+  `x8` and the arguments in `x0` to `x5`; the registers come from `PTRACE_GETREGSET` with
+  `NT_PRSTATUS`, and a skipped call gets the number -1 through `NT_ARM_SYSTEM_CALL`. arm64 has no
+  `time` system call, and `clock_gettime`, `gettimeofday` and `clock_nanosleep` have other
+  numbers (113, 169 and 115). The vDSO is hidden the same way, by `AT_SYSINFO_EHDR`.
+- **The engines' clocks.** The KVM and Mac engines count exits, as hvx does, so a read under
+  hydo-clock costs guest time there too; no measurement was made.
+
+So the smallest step is the fallback in hydo-clock and `guest.kernel: containers` on KVM, then
+the arm64 port for the Mac. A kernel variant with a realtime offset per time namespace would
+replace all of it, at the cost of four kernel builds (the section "The options").

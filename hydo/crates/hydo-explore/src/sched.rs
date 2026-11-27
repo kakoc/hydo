@@ -195,6 +195,9 @@ pub struct S {
     pub t: Option<(i64, i64)>,
     /// T=at:@point (Milestone 225): the point's text; then `t`'s delta is 0.
     pub tp: Option<String>,
+    /// `T=<svc>@<at>:<change>` (Milestones 372 and 375): one service's own clock, a step or a
+    /// drift, in token order; printed after the guest's `T=`.
+    pub ts: Vec<(String, i64, hydo_schedule::ServiceClockChange)>,
     /// O=svc@a-b:dir:netem
     pub o: Option<(String, i64, i64, String, Kinds)>,
     /// `Q=n[d]`
@@ -246,6 +249,11 @@ pub fn dseed_shown(s: &S) -> u64 {
     } else {
         s.dseed
     }
+}
+
+/// The text of one `T=<svc>@<at>:<change>` token (Milestone 375).
+pub fn render_ts(svc: &str, at: i64, change: &hydo_schedule::ServiceClockChange) -> String {
+    format!("T={svc}@{at}:{change}")
 }
 
 /// A G= token: (target, step, steps down or None for in place, the corruption's text). The

@@ -671,6 +671,19 @@ fn setup(a: Args, env: &Env) -> Cx {
         die("hydo explore: --upgrades switches services to their other versions, and no service of this image's manifest has versions: (MANIFEST.md, \"Versions of a service and upgrades\")");
     }
     cx.ex.upgrades = a.upgrades;
+    // Milestone 375: steps and drifts of one service's own clock
+    let has_own_clock = m
+        .as_ref()
+        .and_then(|m| m.get("services"))
+        .and_then(Value::as_array)
+        .is_some_and(|s| {
+            s.iter()
+                .any(|x| x.get("clock").and_then(Value::as_str) == Some("own"))
+        });
+    if a.service_clocks && !has_own_clock {
+        die("hydo explore: --service-clocks steps one service's own clock, and no service of this image's manifest has clock: own (MANIFEST.md, \"One service's own clock\")");
+    }
+    cx.ex.service_clocks = a.service_clocks;
     cx.ex.pause_max = a.pause_max;
     // Milestone 226: the earliest start and the lengths of a drawn pause
     if a.pause_min < 0 || a.pause_min > a.pause_max {
@@ -979,6 +992,7 @@ fn drawn(a: &Args) -> crate::space::Drawn {
         thread_pauses: a.pause_threads.is_some(),
         upgrades: a.upgrades,
         block: a.block_faults,
+        service_clocks: a.service_clocks,
         aimed: a.reactive_at.is_some(),
     }
 }

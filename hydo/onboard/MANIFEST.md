@@ -1241,8 +1241,11 @@ What it covers and what it costs (`docs/design/service-clocks.md`):
 - The kernel's own times stay the guest's: file modification times, socket time stamps and
   `/proc/uptime`. A recovery boot and a reboot start every own clock at the guest's clock.
 - On the KVM and Mac engines the guest kernel needs seccomp, which only `guest.kernel: containers`
-  has, and the Mac needs an arm64 build of hydo-clock; neither ran. `hydo explore` does not draw
-  the token yet.
+  has, and the Mac needs an arm64 build of hydo-clock; neither ran.
+- `hydo explore --service-clocks` (Milestone 375) draws the token for the services with `clock:
+  own` when `faults:` allows `clock`: steps of 250 ms to 5 minutes and drifts of 200 and 50,000
+  ppm, either way, from a stream of their own. Without the option it draws what it drew before
+  (`hydo guide faults`).
 
 ### Clock after a power cut (`guest.clock_after_cut`)
 

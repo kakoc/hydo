@@ -173,7 +173,7 @@ type Draws = (
     &'static str,
 );
 
-const DRAWING: [Draws; 7] = [
+const DRAWING: [Draws; 8] = [
     (
         "--new-faults",
         |e| e.new_faults,
@@ -212,6 +212,13 @@ const DRAWING: [Draws; 7] = [
         |e| e.workload_pauses,
         |e, v| e.workload_pauses = v,
         "the manifest's faults: does not allow pause",
+    ),
+    (
+        "--service-clocks",
+        |e| e.service_clocks,
+        |e, v| e.service_clocks = v,
+        "it steps the clocks of the services with clock: own, and the manifest's faults: does \
+         not allow clock",
     ),
     (
         "--corrupt-several",
