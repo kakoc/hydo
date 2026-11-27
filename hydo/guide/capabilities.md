@@ -13,17 +13,17 @@ State of hydo 0.8.0 (2026-11-27).
   through hydo's kernel module (`hydo module install`). The reference engine: every feature.
 - **kvm** (`--backend kvm`, or `HYDO_BACKEND=kvm`; in the Linux release since 0.2.0): the same x86_64 images on
   stock Linux KVM (`/dev/kvm`, no module, no root; also in a VM with nested virtualization). Guest
-  time is counted in VM exits, as on the Mac. It needs the KVM build of the image's guest kernel
-  (`bzImage-kvm-io` for an image built at fingerprint epoch 7 or later, `bzImage-kvm-cg` from epoch
-  3, `bzImage-kvm` for an older one; `hydo doctor --backend kvm` says whether it is there). Its fingerprints are its own: `hydo
+  time is counted in VM exits, as on the Mac. It needs the KVM build of the image's guest kernel:
+  `bzImage-kvm-io` for an image built at fingerprint epoch 7 or later, `bzImage-kvm-cg` from epoch
+  3, and `bzImage-kvm` for an older one. `hydo doctor --backend kvm` says whether it is there. Its fingerprints are its own: `hydo
   repro` across engines compares verdicts.
 - **hvm** (the Mac release, `hydo-mac-<version>`): arm64 guests on an Apple Silicon Mac, through
   Hypervisor.framework. The arm64 build (`hydo-build --arch arm64`, which the Mac release runs)
   supports every manifest feature except `guest.cpu: v3`. `network: bridge`, `addr:` and `faults:
   [freeze]` build the image for a second Mac guest kernel, `Image-explore-netns-io`, which the image
   records and hydo boots by itself. An image built at fingerprint epoch 7 or later boots
-  `Image-explore-io` or `Image-explore-netns-io`, which have cgroups and `/proc/<pid>/io`; an image
-  built at epoch 3 to 6 boots `Image-explore-cg` or `Image-explore-netns-cg`, and an older image
+  `Image-explore-io` or `Image-explore-netns-io`, which have cgroups and `/proc/<pid>/io`. An image
+  built at epoch 3 to 6 boots `Image-explore-cg` or `Image-explore-netns-cg`. An older image boots
   `Image-explore` or `Image-explore-netns`, the kernels it was recorded with.
 - **hydo's repository on x86_64 Linux**: the `hydo-build` program (`cargo build --release -p
   hydo-build`) with the helper programs built from source (`hydo/crates/hydo-world/build.sh` for
