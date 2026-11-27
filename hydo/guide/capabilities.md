@@ -14,15 +14,16 @@ State of hydo 0.8.0 (2026-11-27).
 - **kvm** (`--backend kvm`, or `HYDO_BACKEND=kvm`; in the Linux release since 0.2.0): the same x86_64 images on
   stock Linux KVM (`/dev/kvm`, no module, no root; also in a VM with nested virtualization). Guest
   time is counted in VM exits, as on the Mac. It needs the KVM build of the image's guest kernel
-  (`bzImage-kvm-cg` for an image built at fingerprint epoch 3 or later, `bzImage-kvm` for an older
-  one; `hydo doctor --backend kvm` says whether it is there). Its fingerprints are its own: `hydo
+  (`bzImage-kvm-io` for an image built at fingerprint epoch 7 or later, `bzImage-kvm-cg` from epoch
+  3, `bzImage-kvm` for an older one; `hydo doctor --backend kvm` says whether it is there). Its fingerprints are its own: `hydo
   repro` across engines compares verdicts.
 - **hvm** (the Mac release, `hydo-mac-<version>`): arm64 guests on an Apple Silicon Mac, through
   Hypervisor.framework. The arm64 build (`hydo-build --arch arm64`, which the Mac release runs)
   supports every manifest feature except `guest.cpu: v3`. `network: bridge`, `addr:` and `faults:
-  [freeze]` build the image for a second Mac guest kernel, `Image-explore-netns-cg`, which the image
-  records and hydo boots by itself. An image built at fingerprint epoch 3 or later boots
-  `Image-explore-cg` or `Image-explore-netns-cg`, which have cgroups; an older image boots
+  [freeze]` build the image for a second Mac guest kernel, `Image-explore-netns-io`, which the image
+  records and hydo boots by itself. An image built at fingerprint epoch 7 or later boots
+  `Image-explore-io` or `Image-explore-netns-io`, which have cgroups and `/proc/<pid>/io`; an image
+  built at epoch 3 to 6 boots `Image-explore-cg` or `Image-explore-netns-cg`, and an older image
   `Image-explore` or `Image-explore-netns`, the kernels it was recorded with.
 - **hydo's repository on x86_64 Linux**: the `hydo-build` program (`cargo build --release -p
   hydo-build`) with the helper programs built from source (`hydo/crates/hydo-world/build.sh` for
@@ -67,11 +68,11 @@ is Rust programs only and needs no Python.
 | upgrades and rollbacks `U=` (services with `versions:`), `--upgrades` | yes | yes (not run on kvm yet) | yes (not run on the Mac yet) |
 | disk faults `disk=cut`, `disk=ioerr:<p>`, `disk=lying:<p>` | yes | yes | yes |
 | a power cut at the k-th disk FLUSH (`cf=`), `--more-faults` (it draws `cf=`) | yes | no | no |
-| several vCPUs (`--vcpus N`, `--turns`, `--sweep turns`) | yes (turns of guest branches) | yes (turns of VM exits, the SMP guest kernel `bzImage-kvm-smp`) | no |
+| several vCPUs (`--vcpus N`, `--turns`, `--sweep turns`) | yes (turns of guest branches) | yes (turns of VM exits, the SMP guest kernel `bzImage-kvm-smp-io`) | no |
 | tick jitter (`--timing`, `tj=`) | yes (branch-counted ticks) | yes (counted in VM exits) | yes (counted in VM exits) |
 | forced preemption (`--preempt`) | yes (`pp=`, `xt=`) | yes (`pct=`, counted in VM exits) | yes (`pct=`, counted in VM exits) |
 | pauses of the workload (`P=workload@<at>~<off>:<dur>`, `--pause-workload`) | yes | yes (not run on kvm yet) | yes |
-| pauses of threads of the workload (`P=workload/<thread>@<at>~<off>:<dur>`, `--pause-thread`) | yes | yes for an image built at fingerprint epoch 3 or later (the guest kernel `bzImage-kvm-cg`); an older image is refused before any VM | yes for an image built at fingerprint epoch 3 or later (`Image-explore-cg`); an older image is refused before any VM |
+| pauses of threads of the workload (`P=workload/<thread>@<at>~<off>:<dur>`, `--pause-thread`) | yes | yes for an image built at fingerprint epoch 3 or later (the guest kernel `bzImage-kvm-cg`, from epoch 7 `bzImage-kvm-io`); an older image is refused before any VM | yes for an image built at fingerprint epoch 3 or later (`Image-explore-cg`, from epoch 7 `Image-explore-io`); an older image is refused before any VM |
 | code coverage (Intel Processor Trace) | yes | no | no |
 | a counter loop with no VM exits (`while (flag) n++`) | interrupted by the PMU clock | resolved in the rewind mode (`spin=rewind`, automatic) | resolved in the rewind mode (automatic) |
 

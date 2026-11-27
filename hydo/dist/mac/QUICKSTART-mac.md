@@ -346,7 +346,7 @@ The release carries every guest file the arm64 build stages, so these work from 
 - `network: bridge`, `addr:` and `faults: [freeze]`. With them each service runs in its own
   network namespace, which is its own network stack and address. Faults then hit the links
   between services, and a freeze stops a service at the n-th packet it sends or receives. Such an image is built
-  for the release's second guest kernel (`Image-explore-netns`). The build says so and records it
+  for the release's second guest kernel (`Image-explore-netns-io`). The build says so and records it
   in the image, and `hydo run` and `hydo explore` boot that kernel by themselves;
 - `fakes:` and `proxies:`: fake outside services, and protocol faults (wrong, late, or missing
   answers of those services);

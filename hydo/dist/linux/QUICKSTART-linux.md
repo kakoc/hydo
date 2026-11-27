@@ -410,9 +410,9 @@ the KVM engine by itself, so `--backend kvm` is needed only on a machine that ha
 
 `HYDO_BACKEND=kvm` selects it for every command instead of `--backend kvm`. The engine runs inside
 `hydo` (or as `bin/hydo-kvm` with `HYDO_KVM=process`) and boots its own build of the guest kernel,
-`guest/bzImage-kvm-cg`, which takes all its time from the engine's clock. An image built by a hydo
-before the fingerprint epoch 3 (hydo 0.3.3 and earlier) boots the build it was made for,
-`guest/bzImage-kvm`. Runs are deterministic, with
+`guest/bzImage-kvm-io`, which takes all its time from the engine's clock. An image built by an
+older hydo boots the build it was made for: `guest/bzImage-kvm-cg` before the fingerprint epoch 7
+(hydo 0.7.0 and earlier), `guest/bzImage-kvm` before the epoch 3 (hydo 0.3.3 and earlier). Runs are deterministic, with
 the same verdicts as with hvx, but they are counted differently:
 
 - Guest time advances with the virtual machine's exits to the engine; there is no PMU branch
@@ -420,7 +420,7 @@ the same verdicts as with hvx, but they are counted differently:
 - A guest has one virtual CPU, or 2 to 8 with `--vcpus N` (`hydo run --backend kvm --vcpus 2
   …`). Several vCPUs take turns: one vCPU runs until it has made a fixed number of VM exits,
   then the next one runs. They boot the kernel's build for several CPUs,
-  `guest/bzImage-kvm-smp-cg` (`hydo guide flaky-tests`). The vCPUs run at the x86-64-v2 level (the
+  `guest/bzImage-kvm-smp-io` (`hydo guide flaky-tests`). The vCPUs run at the x86-64-v2 level (the
   x86_64 instruction set with SSE4.2 and POPCNT, no AVX), or with `guest.cpu: v3` at x86-64-v3
   (AVX2) on a host that has it.
 - The fingerprints are this engine's own. `hydo repro` of an hvx run with `--backend kvm` (or the
