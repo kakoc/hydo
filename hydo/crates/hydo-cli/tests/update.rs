@@ -385,7 +385,7 @@ impl Case {
         for (k, v) in extra {
             c.env(k, v);
         }
-        let o = c.output().unwrap();
+        let o = output_retrying_busy(&mut c);
         let mut s = String::from_utf8_lossy(&o.stdout).into_owned();
         s.push_str(&String::from_utf8_lossy(&o.stderr));
         (o.status.code().unwrap_or(-1), s)
@@ -1020,7 +1020,7 @@ fn gh_auth_token_gives_the_token_when_no_variable_does() {
     c.fake(&c.top.join("bin"), "gh", &format!("echo {token}"));
     // macOS checks a new program at its first start, which took seconds beside the other
     // cases, longer than hydo waits for gh: start it once first
-    let warm = Command::new(c.top.join("bin/gh")).output().unwrap();
+    let warm = output_retrying_busy(&mut Command::new(c.top.join("bin/gh")));
     assert!(warm.status.success());
     std::fs::remove_file(c.log_path()).unwrap();
     let origin = c.srv.url("");
@@ -1085,4 +1085,21 @@ fn one_request_for_the_release_list_per_command() {
     let (rc, out) = c.run(&hydo, &["skill", "update"], &[]);
     assert_eq!(rc, 0, "{out}");
     assert_eq!(c.srv.api_requests(), 2);
+}
+
+/// Runs a program that a test has just written. On Linux another test's child, forked while
+/// the new file was still open for writing, can hold that handle for a moment, and exec then
+/// fails with ETXTBSY ("Text file busy"). Try again for up to 5 s instead of failing.
+fn output_retrying_busy(c: &mut Command) -> std::process::Output {
+    const ETXTBSY: i32 = 26;
+    let mut tries = 0;
+    loop {
+        match c.output() {
+            Err(e) if e.raw_os_error() == Some(ETXTBSY) && tries < 100 => {
+                tries += 1;
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            r => return r.unwrap(),
+        }
+    }
 }
