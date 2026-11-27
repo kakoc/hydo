@@ -167,10 +167,11 @@ over two fresh runs on hvx:
 |---|---|---|
 | `slaves-never-start-after-power-cut.schedule` | 1 | `b5252e4bc9b73a2c` |
 | `committed-transaction-stored-again-after-clock-step.schedule` | 3a | `5fc8566af3802f2f` |
-| `no-transaction-checked-after-clock-step.schedule` | 3b | `e4f10ed629b3d8be` FP3B |
+| `no-transaction-checked-after-clock-step.schedule` | 3b | `e4f10ed629b3d8be` |
 | `offsets-move-back-at-failover` (inline in `hydo-offsets.yaml`) | 2 | `8cd67eee89799522`, on that manifest's image |
 
-REPRO
+`hydo repro --regressions` on the final image gave 3 of 3 as expected, with the same
+fingerprints. OFFREPRO
 
 ## What was found
 

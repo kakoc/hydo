@@ -1324,6 +1324,9 @@ is the exploration that drew most of them.
   - Mender (finding 1): the version file synced while its bytes are still in the stream.
   - Garage (finding 3): the peer list written without a sync, once a minute.
   - ClickHouse (finding 1): `fsync_after_insert` and the merge's fsync off by default.
+  - RocketMQ (finding 1): `IOTinyUtils.writeStringToFile`, through which `MixAll.string2File`
+    writes the epoch file, as its 22nd of 29 places. Its first places were the commit log's
+    flush services, whose `SYNC_FLUSH` path held in every run. The audit ran after the finding.
 - **What it misses.** It reads text. A write through an interface, a sync in another thread, or a
   library that the project does not hold (rclone, RocksDB) is not followed. A place is a fact of
   the code: a relaxed default that the project documents is a trade-off, and `hydo explore

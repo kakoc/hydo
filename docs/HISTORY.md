@@ -26431,7 +26431,9 @@ order.
 **The runs.** The final image `explore-ob-rocketmq-disk.img` (`0198df27c8ec09e5…`, built twice to
 the same bytes) gives `b40afc5cabb53082` on two clean runs. Each regression gave one fingerprint
 over two fresh runs on hvx: finding 1 `b5252e4bc9b73a2c`, finding 3a `5fc8566af3802f2f`, finding
-3b `e4f10ed629b3d8be` FP3B, and finding 2 on the image of `hydo-offsets.yaml` `8cd67eee89799522`. REPRO
+3b `e4f10ed629b3d8be`, and finding 2 on the image of `hydo-offsets.yaml` `8cd67eee89799522`. `hydo
+repro --regressions` on the final image gave 3 of 3 as expected, with the same fingerprints.
+OFFREPRO
 
 **The explorations.** Both on GitHub's KVM runners, 20 parts of 2 seeds with one worker each and
 `--strategy process --new-faults --cluster-faults --storage-faults --no-shrink`; directed runs on
