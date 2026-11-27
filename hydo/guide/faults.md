@@ -347,7 +347,7 @@ hydo rules scan --kind clock --json          # every place as JSON, each with it
 ```
 
 The audit reads Go, C and C++, Rust, Java and Kotlin, Python, JavaScript and TypeScript, Ruby,
-C# and SQL. It skips test files, examples, and vendored code. It also skips the test code inside
+C#, Erlang, Elixir, and SQL. It skips test files and examples. It also skips the test code inside
 a source file, by each language's conventions:
 
 - Rust: a `#[cfg(test)]` module and a `#[test]` function;
@@ -357,13 +357,29 @@ a source file, by each language's conventions:
 - JavaScript: a `describe(` or `it(` block;
 - C and C++: googletest's `TEST(`.
 
-The report's head counts what it left out. A place is one of three shapes:
+The report's head counts what it left out.
+
+The audit also reads the bundled third-party code that is in the tree, because the services run
+it too:
+
+- Go's and Rust's `vendor/`, each module or crate a library;
+- `third_party/` and `deps/`, each folder a library;
+- the repositories that Bazel fetched, in `bazel-<name>/external/` of a built tree.
+
+A folder of `deps/` that the root's `.gitignore` keeps, such as RabbitMQ's own applications, is
+the project's code. The places of bundled code have a section of their own after the project's.
+A library's timers come first there: a timer wheel, a timer thread, an event loop. Typesense's
+two clock findings are in such code, h2o's timer wheel and braft's election timer, which Bazel
+fetches.
+
+A place is one of four shapes:
 
 | shape | what the code does | example |
 |---|---|---|
 | `elapsed` | subtracts an earlier wall-clock reading from a later one and compares the result with a limit | `if now.Sub(lastRefresh) < refreshMin` |
 | `deadline` | adds a duration to a wall-clock reading and keeps the result | `SET expires_at = now() + make_interval(secs => @ttl)` |
 | `check` | compares a wall-clock reading with a stored deadline | `WHERE expires_at < now()` |
+| `rewind` | compares a time with a wall-clock reading that the code stored earlier | `if (now < ctx->last_run)` |
 
 The audit follows a reading through small functions, variables, fields, and parameters. For
 example, Go's `time.Now().UTC()` drops the monotonic reading, so a `Now()` method that returns
@@ -373,6 +389,25 @@ the audit reads past namespaces and template arguments, and past a cast such as
 Kvrocks's `util::GetTimeStamp()` and `GetTimeStampMS()` are readings, and the replica's
 acknowledgement throttle `now - last_ack_time_secs_ >= 1` is a place. Each place says where its
 reading comes from, and the limit with its value when the code states it.
+
+The audit follows a project's own clock in other ways too:
+
+- A small function whose returned value comes from a reading inside it is a reading, whatever its
+  name. Restate's `recent_us()` returns an atomic that a thread sets from `SystemTime::now()`.
+- A cached clock: an atomic that a store sets from a reading, and every load of it.
+  VictoriaMetrics's `fasttime.UnixTimestamp()` returns the time of a ticker's last tick.
+- Go's `time.Now()` with its monotonic reading, passed to a function or delivered by a ticker,
+  once a conversion drops that reading: `.Unix()`, `.UnixMilli()`, `timestamp.FromTime(t)`. A
+  chain such as `time.Now().Add(d).UnixMilli()` is a wall-clock deadline.
+- A function that returns now plus a duration, such as brpc's `butil::milliseconds_from_now(ms)`,
+  makes a deadline wherever it is called.
+- Erlang's maps and records carry a reading under a key. Ra stamps each command with
+  `erlang:system_time(millisecond)` under `ts`, and RabbitMQ's stream coordinator reads it back as
+  `system_time` and parks a retry at that time plus a backoff.
+
+A comparison with a reading that the code stored earlier is the shape `rewind`. A new reading
+against a stored one, in a timer's code, finds nothing due after a step back. A timestamp of
+data against a stored start time keeps nothing after a step back until the clock catches up.
 
 A place is `high` when the code compares the duration with a limit or keeps a lease, and
 `medium` when only its names suggest a deadline. Only `high` places get schedules. A reading
@@ -416,6 +451,20 @@ one service runs the place's code, the schedules name it instead of `<service>` 
 When several do, or none, or the audit cannot tell, a line under the schedules says why the
 placeholder stays. A step back
 is at least 5 minutes and ten times the limit. A step forward is longer than the limit.
+
+When the project's own code has no place, the report says so and gives fallback schedules. They
+aim at no place, but at the paths that most systems time with the wall clock:
+
+- `restart-back` for each service: the service is killed and starts again, and the clock goes back
+  while its retries, leases and timers run;
+- `back-failover` for each group with a `primary:` command: the clock goes back, then the
+  primary is killed, so that an election timer on the wall clock waits the step;
+- `back-long`: the clock goes back by a day, for data kept for a time and work scheduled at a
+  time;
+- `forward`: the clock goes forward by an hour, so that leases, sessions and timeouts end at
+  once.
+
+`--json` lists them as `fallback`.
 
 Try a schedule with `hydo explore --schedule "<schedule>"`, which runs it once. It does not
 shrink a failure: leave tokens out by hand to find the ones the failure needs. Move the steps
