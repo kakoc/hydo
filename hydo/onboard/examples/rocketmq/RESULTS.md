@@ -100,18 +100,103 @@ The test composer runs 30 rounds of 1 s with up to 2 of these commands each:
   the example's own remoting client sends them.
 
 The drain (`rmq drain`) answers the broker's transaction checks and takes every message left of
-`j`, `o`, `%RETRY%w` and `%DLQ%w` until a quiet window of 45 s.
+`j`, `o`, `%RETRY%w` and `%DLQ%w`. It ends after a quiet window of 45 s without a message that it
+had not received yet, so that a message that comes again and again (finding 3) does not keep it
+open. It records a receive only when it got messages, which keeps hvx's 64 KiB of console per boot
+for the workload's records.
 
 ## The rules
 
 Two `type: messages` checks, one history each (`hydo guide messages`):
 
-- `jobs` (history `q`): `delivery: at-least-once`, `after_ack: no-redelivery` (a committed offset
-  holds), `dead_letter: {after: 3, to: dlq}` and `delay: per-message`. A rolled-back transaction
-  is a failed send, so its delivery is an aborted delivery (`no-phantom`).
-- `order` (history `o`): `delivery: at-least-once`, `order: {kind: fifo, scope: key}` and
-  `after_ack: no-redelivery`.
+- `jobs` (history `q`): `delivery: at-least-once`, `duplicates: forbidden` (one stored copy per
+  message, so a committed transaction is delivered as one message), `dead_letter: {after: 3, to:
+  dlq}` and `delay: per-message`. A rolled-back transaction is a failed send, so a delivery of it
+  would be an aborted delivery (`no-phantom`).
+- `order` (history `o`): `delivery: at-least-once` and `order: {kind: fifo, scope: key}`.
 
 The drain is the `final:` of `jobs`; `order` has the placeholder `final: "true"`.
+
+`hydo/hydo-offsets.yaml` is `hydo.yaml` with one more claim in both checks, `after_ack:
+no-redelivery`: a committed consumer offset holds, also across a failover. Every failover breaks
+it (finding 2), so the example's manifest leaves it out, and the variant keeps that finding's
+regression.
+
+## What was found
+
+### 1. Known in its parts: after a power cut, two of the three brokers never start again
+
+**The schedule.** `disk=cut | run C=20`: a power cut of the whole guest before step 20. In the
+recovery boot `broker0` exits with status 255 at every start, until its readiness limit of 300 s
+runs out: `VIOLATION service cannot recover (committed data unrecoverable) (broker0)`. Its log
+ends with:
+
+```text
+java.lang.NumberFormatException: null
+	at java.lang.Integer.parseInt(Integer.java:542)
+	at org.apache.rocketmq.common.utils.CheckpointFile.read(CheckpointFile.java:107)
+	at org.apache.rocketmq.common.utils.CheckpointFile.read(CheckpointFile.java:146)
+	at org.apache.rocketmq.store.ha.autoswitch.EpochFileCache.initCacheFromFile(EpochFileCache.java:59)
+	at org.apache.rocketmq.store.ha.autoswitch.AutoSwitchHAService.init(AutoSwitchHAService.java:84)
+	at org.apache.rocketmq.store.DefaultMessageStore.start(DefaultMessageStore.java:426)
+```
+
+**What the disk held.** `hydo inspect` at the end of the recovery boot listed each broker's
+store. The epoch file `epochFileCheckpoint` of both slaves, `broker0` and `broker1`, is 0 bytes;
+each was written at 00:00:38 of the guest clock, when the controller made the node a slave, 17 s before the cut,
+and neither has a `.bak` file. The master's file, `broker2`'s, holds its epoch `1-5858`. The commit
+log, which `SYNC_FLUSH` syncs, is whole on all three.
+
+**The cause.**
+
+1. A broker in controller mode keeps its epochs in `epochFileCheckpoint`
+   (`EpochFileCache.flush` and `CheckpointFile.write`). The file is written with
+   `MixAll.string2File`, which copies the old content to `.bak` and then writes the file in place
+   (`IOTinyUtils.writeStringToFile`). Neither write is synced, and the directory is not synced. A
+   power cut in the next seconds leaves the file truncated to 0 bytes: the new size reached the
+   file system's journal, its data did not.
+2. At the next start `CheckpointFile.read` parses the first line with `Integer.parseInt`. An empty
+   file gives `null`, and `NumberFormatException` is not an `IOException`, so `read()` never tries
+   the `.bak` file, and `EpochFileCache.initCacheFromFile` does not catch it. `BrokerStartup` exits.
+3. The broker stops this way at every start, so the replica group keeps one broker. The
+   SyncStateSet shrinks to the master, and a loss of that one broker leaves the group without a
+   master, because the controller elects only from the SyncStateSet.
+
+**The duplicate search.** Issue #11460 (open since 2026-10-20) names step 2 from a unit test: an
+empty or malformed header skips the `.bak` recovery. Pull request #11463 (open) turns the parse
+error into an `IOException`. Here no `.bak` exists, so with that fix the read returns no entries
+and the broker would start with an empty epoch cache. Issue #5905 (closed, RocketMQ 4.x) reported
+config files of size 0 after a forced restart of a VM; the code since writes in place, still
+without a sync. No issue shows a broker that never starts after a power cut in controller mode.
+Label: known in its parts (#11460, #5905); the power cut that makes the empty file is the new
+detail.
+
+**Native run.** None: the cause is plain in the code, and the empty file is on the disk.
+
+### 2. Known: a failover moves a group's committed offsets back
+
+**The schedule.** `disk=none | run K=brokers.primary@10+3`: a kill of the master (`broker2`)
+before step 10, a restart before step 13. A pause of the master past the controller's heartbeat
+timeout (`P=brokers.primary@10+15`) does the same. With `hydo-offsets.yaml`:
+`VIOLATION [jobs.after-ack] m2 was delivered again to process 27 in group w of channel j after
+process 7's acknowledgement of it completed at 41.093 s`, and `order.after-ack` breaks in the same
+run for `o6`. No acknowledged message was lost (`no-loss` held for 14 and 9 messages).
+
+**The cause.** A slave copies the consumer offsets from the master every 10 s
+(`ReplicasManager.handleSlaveSynchronize`, which calls `SlaveSynchronize.syncAll()` when 10 s of
+the wall clock passed). The new master starts with the offsets of its last copy, so a group goes
+back up to 10 s and gets those messages again. A slave measures the 10 s on the wall clock, so
+after a backward clock step it copies nothing for the length of the step, and a failover in that
+time moves the offsets back further.
+
+**The duplicate search.** Issue #7790 (DLedger mode, closed as stale) reports repeated consumption
+after a master switch; a maintainer's answer there: "Since the consumption progress is synchronized
+every 10 seconds, ... in theory, repeated consumption will occur as long as a master-slave switch
+occurs." Label: known, and RocketMQ promises at-least-once delivery. The task's promise that an
+offset is not moved back after a failover does not hold; the documentation does not make it.
+
+### 3. New, a clock effect: after a backward clock step, a committed transaction is delivered again at every check
+
+TBD3
 
 RESULTS_REST
