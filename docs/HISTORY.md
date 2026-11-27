@@ -25693,3 +25693,115 @@ build are the report before the shrinks, then the generated client with the gene
 
 **Checks.** Vale on the page and `sh ci/vale.sh` found nothing. No VM ran and nothing was built.
 A `git grep` of each value of the list of `AGENTS.local.md` found none in the changed files.
+
+## The 0.8.0 release, prepared for publication (2026-11-27)
+
+The lead chose "Prepare 0.8.0" on 2026-11-27, and publishing waits for the user's word. 0.8.0
+holds everything on `main` after 0.7.0's release commit `7d1b66e2`: Milestones 368 to 376 (the
+gaps of the Typesense, Pulsar, rqlite, RabbitMQ and Garnet onboardings, the examples rqlite,
+RabbitMQ and Garnet, one service's own wall clock, the NSQ, SeaweedFS and Typesense examples on
+KVM, and the guest kernels with `/proc/<pid>/io`). Milestone 376 raised the fingerprint epoch to
+7, so this release re-records every value of `hydo/onboard/recorded.json` (open item 105). A
+release with features raises the middle number (docs/RELEASING.md step 1). Plans keep
+`hydo_version: "0.3"`. The kernel module did not change since 0.3.1. Nothing was published: no
+tag, no GitHub release, no registry upload, no tap push, and no push of `main`. The one-off branch
+`tmp-rel080-kvm` (the version commit plus its workflow file) is the only push.
+
+**The commits**, on a branch from `main` at `b1de3da2`:
+
+| Commit | What |
+|---|---|
+| `7a828fd3` | the version 0.8.0, the skill's four version fields, the re-pins, the released image and project schemas |
+| `a6c710ac` | the goldens that hold the version |
+| `23fe2233` | release step 6a: the pages name the guest kernels of the fingerprint epoch 7 |
+| `91745e3e` | the merge of `main` (Milestones 380, 381 and 385, and the setup test's asset counts) |
+| `b77dd072` | the goldens recorded again after the merge |
+| `f812e092` | release step 6a: the new kernel sentences in shorter sentences (Vale) |
+| `ecf089b3` | the values of the fingerprint epoch 7, docs/REBASELINE.md section 35 |
+
+**The version** (`7a828fd3`). The same files as at 0.7.0. The guest programs that carry the
+version were re-pinned, built on the bare-metal machine: `hydo-world` x86_64 `943f1a2d…`, arm64
+`68008b45…`; `hydo-world-tls` `b2c47512…`, `67ade638…`; `hydo-grpc` `4487ef92…`, arm64
+`3a8c8c53…`. The Mac quick candidate's build of the arm64 ones gave the same bytes.
+docs/INSTALL.md "Upgrading" says what 0.8.0 changes for images.
+
+**The released schemas.** `image-v1` and `project-v1` differed from their released copies
+(Milestone 376's `proc_io`) and were copied; the other four equal theirs.
+
+**The goldens** (`a6c710ac`). Recorded with `HYDO_BLESS=1` on the bare-metal machine in a git
+checkout of the version commit, then checked without it: the CLI goldens, the explorer's 32
+fake-engine goldens, and the equivalence corpora of hydo-build and hydo-manifest. Every answer
+differs only in the version and the hashes of the files that carry it.
+
+**The guest kernels.** The release ships Milestone 376's kernels for the first time.
+`assets.sha256` pins them, and two builds reproduced every pin:
+
+- the three Mac kernels on the bare-metal machine with `build-guest-cg.sh` and
+  `build-guest-containers.sh` (`PROCIO=1`): `Image-explore-io` `21928f71…`,
+  `Image-explore-netns-io` `40b1a3e2…` and `Image-explore-containers-io` `81fb1b5c…`;
+- the four KVM kernels in a sandboxed Nix on GitHub's runners (run 46042381928, each built twice
+  with `nix-build --check`), and the bare-metal machine's store paths of Milestone 376.
+
+**The quick candidates.** One build of each platform from the version commit: Linux on the
+bare-metal machine `6d5f58be9b13ee7d…` (with the sources archive and the skill's archive), and
+the Mac on this Mac `aee59b82a8b59578…` (unsigned, built up to the tarball). A runner of the KVM
+workflow rebuilt the Linux candidate byte for byte from the published 0.7.0 tarball's assets and
+the four kernels. The re-recording pass ran with these candidates as `--release`.
+
+**The re-recording pass at the fingerprint epoch 7** (docs/REBASELINE.md section 35).
+
+| Engine | Images moved | Runs moved | Verdicts changed |
+|---|---|---|---|
+| hvx (the bare-metal machine, 19,640 s) | 43 of 43 | 30 of 141 | none |
+| Mac (one image at a time, 941 s for 20 images) | 20 of 21 | 72 of 76 | none |
+| KVM (runs 46042381928 and 46047132233, nine runners) | 6 of 6 | 19 of 19 | one, decided |
+
+Every image built twice with the same bytes, and every run gave one result twice from fresh
+boots. The decisions:
+
+- **hvx.** Only the 30 runs of the 9 images that carry `hydo-world`, `hydo-grpc` or an SDK's
+  version moved, the runs that moved at 0.6.0 and 0.7.0. The other 111 gave their epoch-6 values:
+  hvx boots the same kernel with the same command line, and its fingerprint does not change with
+  the image's record. Milestone 376 had expected every hvx run to move.
+- **KVM.** The pause of Qdrant's test thread at 179 ms passes now. `pause-check.sh` on three
+  runners found the one failing start of 80 at 243 ms. The pauses at 243 ms (fails) and 244 ms
+  (passes) replace 179 and 180 ms, and the fixed test moves to 243 ms; the second run recorded
+  them on three AMD hosts with one value each. `C=11 R=everysec` still loses `k:1`. The values
+  are the AMD hosts' (EPYC 7763, 9V45 and 9V74); the Intel hosts gave the same verdicts.
+- **The Mac.** These were the first runs of the Mac kernels with `/proc/<pid>/io`. No verdict
+  changed. Three verdict lines differ in their numbers and keep their class (`hvm/ledger`,
+  `hvm/redis-composed-racy`, `hvm/python-kv-hist`). An epoch-7 image's guest reads
+  `/proc/<pid>/io`, also with `guest.kernel: containers`; `guest.proc_io: false` and an image
+  built by 0.7.0 have no file. The image that hydo 0.7.0 builds from the release Redis example
+  (`502d7540…`) gave all 7 recorded values under the candidate.
+- **`hvm/voting` was not re-recorded.** Its build and runs need about 4 GB more than this Mac
+  had free above the 13 GB floor; other work had filled the disk and the swap. The pass's
+  watchdog stopped it twice. It keeps its epoch-6 values (open item 105).
+
+**The merge of `main`.** During the pass `main` gained Milestones 380, 381 and 385 and the
+setup test's asset counts of epoch 7 (`abba10cd`), and the release branch merged it on the lead's
+word (`91745e3e`).
+They move no recorded value: with a `hydo` built from the merged tree, the pinned reproducers of
+the epochs 2, 4, 5, 6 and 7 gave their recorded values on hvx, and the quickstart's Redis image
+built with the same bytes and gave its two cited values, as with the candidate (23 of 23
+checks). The CLI goldens and hydo-build's OCI corpus were recorded again on the merged tree
+(`b77dd072`).
+
+**Release step 6a.** The quickstarts, README.md and docs/ONBOARD.md cite the values of the
+quick candidates now: on hvx only the images' sha256 changed, on the Mac and KVM the fingerprints
+too. The quickstart runs gave them from clean prefixes: on hvx the five cited schedules twice,
+the exploration's 9 failures and 13 of 13 reproduced, and netem; on the Mac every cited value
+twice, 11 failures in 3 problems in the page's order and 15 of 15 reproduced, and the messages
+tutorial (`22e26b7951a64e6a` twice, the page's minimal schedule); on KVM (six runners) the
+quickstart twice, 10 failures, the page's five minimal schedules and 15 of 15 reproduced. With
+fresh eyes on the pages changed since 0.7.0 (the guide topics `faults`, `hazards`, `messages`,
+`rules`, `strategies`, `workflow` and `capabilities`, MANIFEST.md and docs/INSTALL.md), two
+fixes, each its own commit: the pages named the guest kernels of epoch 3 where an image of 0.8.0
+boots those of epoch 7 (`23fe2233`), and Vale found three of the new sentences too long
+(`f812e092`). `sh ci/vale.sh` reports no findings. No finding was deferred.
+
+**What is left before the release files** (docs/RELEASING.md step 2 onward): the final commit,
+which the lead names after more milestones that move no recorded value; both releases built
+twice to the same bytes, the Mac one signed and notarized; the verification on hvx, the Mac and
+KVM; and the prepared release notes, Homebrew formula and release-index lines. `hvm/voting`
+waits for a Mac with more free disk (open item 105).
