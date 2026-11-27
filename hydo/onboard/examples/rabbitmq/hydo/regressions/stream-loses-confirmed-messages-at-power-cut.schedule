@@ -1,0 +1,7 @@
+# Finding 2 (RESULTS.md): documented, Data Safety when using Streams. A power cut of the whole
+# guest is an uncontrolled shutdown of all three nodes at once. A stream does not sync its data
+# (osiris has no file:sync call), so s34, which its publisher confirm acknowledged a second before
+# the cut, is gone in the recovery boot. The quorum queues j, jd and k lose nothing at the same
+# cut: they confirm a message only after a majority of their members synced it.
+# expect: violation      (documented: streams do not flush their data to disk)
+disk=cut | run C=25

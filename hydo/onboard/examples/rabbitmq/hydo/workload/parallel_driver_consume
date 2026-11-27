@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=30
+# take one message from j, hold it 1 s, acknowledge it (crash on a poison message)
+exec /bin/rmqc consume $HYDO_CMD_ID

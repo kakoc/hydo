@@ -1352,6 +1352,28 @@ clock steps. No history of 95 schedules broke strict serializability. Nothing wa
 
 Open item 189 has what is left.
 
+**RabbitMQ (M370, tentative number).** RabbitMQ 4.4.1 runs as a cluster of three nodes from the
+official image in one hvx guest of 3,072 MiB, in `hydo/onboard/examples/rabbitmq` (RESULTS.md),
+imported with `hydo compose`. The nodes find each other from fixed names, and each node's data is
+on a file system of its own. A Go client on amqp091-go and rabbitmq-stream-go-client publishes
+with publisher confirms to three places. They are a quorum queue with a delivery limit and
+dead-lettering at least once, a quorum queue with a single active consumer, and a stream of three
+replicas. It consumes with acknowledgements, crashes on poison messages, and reads the stream with
+an offset that the server keeps. Three messages checks judge them (`lease`, `dead_letter`, `acked_outcome`, an order
+per key, `duplicates`, `order: log`, `after_ack`). The quorum queues kept every confirmed message
+under kills, pauses past the net tick time, partitions, one node's power loss or damaged files,
+power cuts, and clock steps. Nothing was posted:
+- New: one node's power loss loses a confirmed message of the stream for good. A stream confirms
+  once a majority wrote a chunk and never syncs. With a third node paused, that majority was the
+  leader and one replica. The leader lost its power, and the stream went on without the message,
+  although the replica had written it (`K=rabbit2@1+3 ... P=rabbit1@16+11 ... L=rabbit3@21+3`).
+- Documented: a power cut of the whole guest loses confirmed messages of the stream, and a new
+  message can take a lost one's offset (Data Safety when using Streams).
+- New, a clock effect: a backward clock step, a node's restart, and a kill of the stream's leader
+  leave the stream without a leader for the rest of the run. Every node runs again.
+
+Open item 191 has what is left.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -4227,6 +4249,27 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       Typesense cases of open items 147 and 170 and of the Typesense example are next.
     - The example is not in `hydo/onboard/recorded.json`, and the release does not ship
       hydo-clock.
+191. What the example `rabbitmq` left (M370, tentative number):
+    - The two candidates are not reported upstream. Finding 1's window is narrow: on the final
+      image each run without one of its five faults passes, and which members formed the
+      election's quorum was not traced. Finding 3's cause (a retry parked on a clock that a node
+      restarted after the step keeps a day behind) was not shown in a run.
+    - After a kill of a group, hydo restarts its members one at a time and waits for each one's
+      readiness (as open item 147). A RabbitMQ node that restarts with data opens AMQP only after
+      its peers answer, so the example's readiness is the Erlang distribution port.
+    - A messages check's `final:` runs before the `eventually_` commands, and no guide says so;
+      a probe after the faults has to be part of the drain. One drain for several histories needs
+      the placeholder `final: "true"` on the other checks.
+    - The Go SDK's newest tag (v0.6.0) has no `Drained`, which `hydo guide messages` shows.
+    - An exploration cannot leave out one fault kind (as open items 140 and 141), and two images
+      of one folder need `--image` on every run (as open item 188).
+    - The clock audit reads no Erlang. `T=<step>:+<secs>` is refused; only `T=<step>:<secs>`.
+    - `hydo explore --configs` read the files under the example's `.hydo/` for 23 minutes before
+      its first build, the copies' unpacked roots and disk images among them.
+    - `hydo compose` dropped Compose's `hostname:` without a warning. The 0.6.0 release's import
+      also took epmd's port from the image's `EXPOSE`, which M367 now warns of.
+    - Not run: the Mac engine and KVM, five nodes, AMQP 1.0, super streams, a stream's single
+      active consumer, Khepri's own promises, and a native run of either candidate.
 
 ## Milestone index
 
@@ -5429,6 +5472,11 @@ build machine, before 2026-10-13.
   a node loses the queued writes that it has answered. A node removed while it was down
   never joins again after its restart. A list-append check in a file is dropped when hydo.yaml
   has `checks:`. Nothing recorded moved
+- M370 (tentative number): the onboarding of RabbitMQ 4.4.1 on hvx, three nodes with quorum
+  queues and a stream. Two new candidates, not posted. One node's power loss loses a confirmed
+  message of the stream for good, after a kill and a pause of the two other nodes. After a
+  backward clock step, a kill of the stream's leader leaves the stream without a leader. A power
+  cut of the whole guest loses unsynced stream data, as documented. Nothing recorded moved
 - M372 (tentative number): one service's own wall clock, a prototype on hvx. `clock: own` starts
   a service under hydo-clock, a tracer that hides the vDSO and answers its wall-clock reads with
   an offset; `T=<svc>@<at>:<change>` steps or drifts that clock alone. Time namespaces offset no

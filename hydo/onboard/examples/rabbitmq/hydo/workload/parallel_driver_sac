@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=30
+# consume k for 3 s; with a single active consumer only one of these gets messages at a time
+exec /bin/rmqc sac $HYDO_CMD_ID

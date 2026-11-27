@@ -24167,6 +24167,118 @@ Retro: rqlite 10.8.0, hvx, 2026-11-26
 
 **What is left.** Open item 189.
 
+## Milestone 370 (tentative number): RabbitMQ, a stream that loses a confirmed message after one node's power loss
+
+RabbitMQ 4.4.1 became the example `hydo/onboard/examples/rabbitmq` (RESULTS.md), by
+`docs/ONBOARDING-PLAYBOOK.md`, with hydo of `main` at `e2058be0` and the guest files of the
+published 0.6.0 Linux release, on hvx on the bare-metal machine. Two new candidates and one
+documented loss, all of the stream; nothing was posted, and nothing recorded moved.
+
+**The example.** Three nodes of the official image `rabbitmq:4.4.1`, which find each other from
+fixed names with classic peer discovery, imported with `hydo compose`. Each node's data is on a
+file system of its own, and the stream plugin is on. A node is ready when its Erlang distribution
+port answers, the nodes start together, `net_ticktime` is 15 s (the build parameter `ticktime`),
+and `consumer_timeout` is 30 s. The Go client `rmqc` (amqp091-go v1.17.0,
+rabbitmq-stream-go-client v1.10.0, `hydohist` of the Go SDK v0.6.0) declares a quorum queue `j`
+with a delivery limit of 2 that dead-letters at least once into `jd`, a quorum queue `k` with a
+single active consumer, and a stream `s` of three replicas. It publishes with publisher confirms,
+consumes with acknowledgements that a passive declare on the channel confirms, crashes on poison
+messages, deduplicates stream publishes by producer name, and reads the stream as a consumer
+whose offset the server keeps. Three messages checks judge `j` (`lease`, `dead_letter`,
+`acked_outcome`), `k` (`order: fifo` per key) and `s` (`duplicates`, `order: log`, `after_ack`,
+`fan_out` over the reader and a group that reads from the first offset). One drain takes all five
+groups in parallel and starts with one recorded publish to `j` and to `s`. The build parameter
+`replicas` (3 or 1) is the example's `configs:` entry. RabbitMQ 4.3 removed the partition
+handling strategies with Mnesia, so the example has no such setting.
+
+**Finding 1, new.** One node's power loss loses a confirmed message of the stream for good. A
+stream's writer confirms a chunk once a majority of the members wrote it (`agreed_commit/1`,
+`osiris_writer.erl` line 653), osiris 1.14.1 never syncs, and the stream coordinator promotes a new
+writer from a quorum of the members stopped in the epoch (`rabbit_stream_coordinator.erl` lines
+1997, 2068 and 2534). With `rabbit1` paused, the majority that confirmed `s29` was `rabbit2` and
+`rabbit3`; `rabbit3` lost its power, and the stream went on in epoch 3 with `rabbit1` as its
+writer and without `s29`, although `rabbit2` had written it. Blind at seed 2 of e2:
+`K=rabbit2@1+3 N=nodes.bridge.6@21-23:loss,100% P=rabbit1@16+11 W=5764a73c,p3,q2,r1000
+G=rabbit3@20:flip,n=4,seed=4979bdc4 L=rabbit3@21+3`. On e2's image it needed the kill, the pause
+and the power loss; on the final image each run without one of the five faults passes, a narrow
+window. The documentation says that a single node's loss "would typically just be re-replicated
+from the other nodes". No issue or discussion names it.
+
+**Finding 2, documented.** A power cut of the whole guest loses confirmed messages of the stream,
+and a new message can take a lost one's offset (`C=12`: "share offset 0"); a reader's stored
+offset can go back too. The documentation's "Data Safety when using Streams" says that streams do
+not flush their data. The quorum queues lost nothing at any cut.
+
+**Finding 3, new, a clock effect.** After a backward step of the wall clock, a node's restart and a
+kill of the stream's leader, the stream gets no new leader: every publish answers `Leader not Ready
+yet` for the rest of the run, while every node runs. The coordinator logs `failed to stop member ...
+nodedown` and nothing more. Seed 10 of e3 (`K=nodes.primary@12+2 ... T=7:-86400 ...
+G=rabbit3@7+2:trunc`) needed the step, the kill and the restart that `G=` makes; seed 4 of e4 failed
+the same probe after `K=rabbit1@21+9 P=rabbit1@8+1 T=10:-2592000`, not separated. The likely cause,
+not traced: since 4.4.0 the coordinator parks a failed action until a `nodeup` or a retry time of
+the leader's clock, and a node that starts after a step back keeps a system time a day behind.
+4.4.0's release notes fixed a bug with the same symptom without a clock step (pull request 16515).
+
+**What held.** The quorum queues kept every confirmed message under kills, pauses past the net
+tick time, partitions, one-way loss, one node's power loss, damaged files, power cuts and clock
+steps. A consumer's crash gave its message back, poison messages were dead-lettered at least once,
+the single active consumer kept each key's order, and the stream stored no message twice.
+
+**The runs.** The final image `explore-ob-rabbitmq-disk.img` (`0f93b104…`) gives `08ff275ad7f8aac4`
+on two clean runs. Each regression gave one fingerprint over two fresh runs: finding 1
+`46d06ab61b82f53e`, finding 2 `2d220bcd3276c1b7`, finding 3 `efcd83d18848454a`. Finding 1 on e2's
+image gave `83cc413c2d60d1ae` twice, and finding 3 on e3's image `33f9b1d69512cda5` twice. Both
+windows move with the image's bytes: finding 3's saved schedule kills the leader a step later than
+e3's seed did. `hydo repro --regressions` gave 3 of 3 as expected with the same values.
+
+**The explorations.** All with one worker and `--no-shrink`, because the stream's documented loss at
+a cut would have taken every shrink; directed runs judged each failure. e2, 20 schedules without
+power cuts (`explore-nocut.yaml`) and `--cluster-faults --storage-faults`: finding 1 (seed 2),
+hydo's restart of a killed group one node at a time (3), detected damage of the metadata store
+(3). e3, 15 schedules of the final client with `--new-faults`: finding 3 (seed 10) and a drain
+that did not end (seed 4). e4, 12 schedules with power cuts and a stream check without
+`delivery` (`explore-cutqq.yaml`): probably finding 3 without a damaged file (seed 4) and finding
+2 at 3 of 5 cuts. e5, the grid `--reactive-at rmq.pub_confirmed@10,rmq.stream_confirmed@10
+--react-actions kill-now,powerloss`: 24 schedules, no failure. The configs exploration of `replicas` (3 and 1, seeds 1 to 6, `--storage-faults`)
+found finding 1 again blind in its default combination (seed 2, without `N=`). With one replica,
+seed 1 lost a confirmed stream message at the power loss of that replica's node, the setting's
+documented trade-off; with three it passed. With one replica 3 of 5 seeds failed, with three 2 of
+6. The exploration was stopped during its shrinks, so `configs.json` has no table.
+
+**Tests.** The new example enters the explorer's and the controller's corpora. Re-recorded with
+`HYDO_BLESS=1` on the bare-metal machine, in a copy of the worktree with an index of its files and
+a target folder of this task's own: the explorer's corpus goldens (full and quick), its identity
+goldens (quick and full), and the controller's quick corpus golden, which only adds the example's
+entries. `cargo test -p hydo-explore --test it` (61 passed), the controller's corpus tests (2
+passed while recording), `-p hydo --test it -- equivalence:: agents_equivalence::` (9 passed)
+and `-p hydo-agents --test it` (16 passed). The copy has no `AGENTS.local.md`, so
+`public_content::` checked the generic patterns; a `grep` of the listed values found only the
+repository's own GitHub path in the client's module paths, as in the other Go clients. `sh
+ci/vale.sh` finds nothing. No Rust code changed.
+
+Retro: RabbitMQ 4.4.1, hvx, 2026-11-26
+- Time to the first clean run: 40 minutes of wall time, about 20 of them waiting for the build
+  of this tree's programs and the image.
+- Schedules run before the first finding: 2 (e2's seed 2, finding 1). None of the failures was a
+  mistake of the rules, but four changes of the client were: the poison crash needed a recorded
+  give-back, the consumers' give-up a requeue, the probe had to move into the drain, and the
+  declaration had to wait for every node to join.
+- The findings: 2 new (the stream's loss after one node's power loss, the stream without a leader
+  after a clock step), 1 documented (the stream's loss at a power cut), 3 schedules of detected
+  damage and 3 of hydo's restart of a group one node at a time.
+- What took the most time: images that the client's changes made over again, about 2 hours with
+  the clean runs; timing-sensitive candidates that passed on the next image, about 1 hour; the
+  restart of a killed group, which needed the readiness on the distribution port.
+- What hydo lacked: a group restarted one node at a time; a messages check's `final:` before the
+  `eventually_` commands; one drain for several histories; no `Drained` in the tagged Go SDK; no
+  way to leave one fault kind out; two images in one folder; no Erlang in the clock audit; a
+  forward step written with `+` (open item 191).
+- Strategies: the RabbitMQ evidence in "Power cuts of the whole guest", "One node's storage
+  faults" and "Clock steps and the clock audit" of `hydo guide strategies`; the first table names
+  RabbitMQ.
+
+**What is left.** Open item 191.
+
 ## Milestone 372 (tentative number): one service's own wall clock
 
 Status: a prototype, done on 2026-11-26 on the bare-metal machine (hvx and the tests) from this

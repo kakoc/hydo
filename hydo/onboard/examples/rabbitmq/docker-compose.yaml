@@ -1,0 +1,58 @@
+# RabbitMQ 4.4.1 (the newest release, 2026-11-16) as a cluster of three nodes, the shape of
+# RabbitMQ's production checklist (an odd number of nodes, three at least, for quorum queues and
+# streams). The nodes find each other from fixed names (classic peer discovery,
+# https://www.rabbitmq.com/docs/cluster-formation), share one Erlang cookie, and each keeps its
+# data in a volume of its own. The stream plugin is on, so that streams serve their own protocol.
+services:
+  rabbit1:
+    image: rabbitmq:4.4.1
+    hostname: rabbit1
+    environment:
+      RABBITMQ_NODENAME: rabbit@rabbit1
+      RABBITMQ_CONFIG_FILE: /etc/rabbitmq-hydo/rabbit1.conf
+      RABBITMQ_ENABLED_PLUGINS_FILE: /etc/rabbitmq-hydo/enabled_plugins
+      RABBITMQ_ERLANG_COOKIE: hydo-rabbitmq-cookie
+    volumes:
+      - ./config:/etc/rabbitmq-hydo:ro
+      - rabbit1:/var/lib/rabbitmq
+    networks:
+      rmq: {ipv4_address: 10.89.0.11}
+    ports: ["5672:5672", "5552:5552"]
+    restart: unless-stopped
+  rabbit2:
+    image: rabbitmq:4.4.1
+    hostname: rabbit2
+    environment:
+      RABBITMQ_NODENAME: rabbit@rabbit2
+      RABBITMQ_CONFIG_FILE: /etc/rabbitmq-hydo/rabbit2.conf
+      RABBITMQ_ENABLED_PLUGINS_FILE: /etc/rabbitmq-hydo/enabled_plugins
+      RABBITMQ_ERLANG_COOKIE: hydo-rabbitmq-cookie
+    volumes:
+      - ./config:/etc/rabbitmq-hydo:ro
+      - rabbit2:/var/lib/rabbitmq
+    networks:
+      rmq: {ipv4_address: 10.89.0.12}
+    restart: unless-stopped
+  rabbit3:
+    image: rabbitmq:4.4.1
+    hostname: rabbit3
+    environment:
+      RABBITMQ_NODENAME: rabbit@rabbit3
+      RABBITMQ_CONFIG_FILE: /etc/rabbitmq-hydo/rabbit3.conf
+      RABBITMQ_ENABLED_PLUGINS_FILE: /etc/rabbitmq-hydo/enabled_plugins
+      RABBITMQ_ERLANG_COOKIE: hydo-rabbitmq-cookie
+    volumes:
+      - ./config:/etc/rabbitmq-hydo:ro
+      - rabbit3:/var/lib/rabbitmq
+    networks:
+      rmq: {ipv4_address: 10.89.0.13}
+    restart: unless-stopped
+networks:
+  rmq:
+    ipam:
+      config:
+        - subnet: 10.89.0.0/24
+volumes:
+  rabbit1: {}
+  rabbit2: {}
+  rabbit3: {}
