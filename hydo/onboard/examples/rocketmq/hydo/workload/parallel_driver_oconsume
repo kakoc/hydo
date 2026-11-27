@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=30
+# pull up to 4 messages of one queue of o from the group og's offset, and commit the offset
+exec /bin/rmq oconsume $HYDO_CMD_ID

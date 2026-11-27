@@ -1,0 +1,226 @@
+# Apache RocketMQ 5.5.0 (the newest official image) in controller mode, as ../docker-compose.yaml
+# runs it and RocketMQ's docs/en/controller/deploy.md describes it: a NameServer with the
+# controller embedded, and one replica group broker-a of three brokers, each with its store on a
+# file system of its own. RESULTS.md has the promises under test and what was found.
+#
+#   sh ../build.sh            # bin/rmq-amd64, the test client (../client)
+#   sh fetch-images.sh        # the image by digest
+#   hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --new-faults --cluster-faults --storage-faults
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The services below are the importer's,
+# with these changes:
+# - each service keeps its addr: of the Compose file (the importer moved every address by one,
+#   and the brokers' configuration names the NameServer's and the controller's address);
+# - each node's store (/home/rocketmq/store) is a file system of its own (storage:), the target
+#   of L= and G=, instead of the importer's folder on the shared data disk; its logs go to
+#   /dev/shm (user.home), because the image's root is read-only in the guest;
+# - a broker's port is 10911 and it is ready when the port answers (the importer took 9876 from
+#   the image's EXPOSE for each broker);
+# - the brokers' settings are build parameters (start-broker.sh puts them into broker.conf);
+# - the test client rmq is in the image (../build.sh).
+format: 1
+name: rocketmq
+description: "Apache RocketMQ 5.5.0 in controller mode, a NameServer with the controller and three brokers of one replica group with allAckInSyncStateSet and SYNC_FLUSH: every message that SendSync acknowledged reaches the consumer group, a committed transaction is delivered and a rolled-back one never, a delayed message arrives after its delay, a poison message is retried and dead-lettered, each key's messages arrive in order, and a committed consumer offset holds, under kills, pauses, partitions, failovers, one node's power loss or damaged files, power cuts and clock steps"
+hydo_version: "0.6"
+
+params:
+  allack: "true"        # allAckInSyncStateSet: every replica of the SyncStateSet has a message before its acknowledgement
+  flush: SYNC_FLUSH     # flushDiskType: SYNC_FLUSH | ASYNC_FLUSH (RocketMQ's default)
+  mininsync: "1"        # minInSyncReplicas (RocketMQ's default 1)
+  txcheck: "10000"      # transactionCheckInterval in ms (60000 in RocketMQ's Helm chart)
+
+configs:
+  flush:
+    values: [SYNC_FLUSH, ASYNC_FLUSH]
+    doc: "https://rocketmq.apache.org/docs/deploymentOperations/01deploy (flushDiskType)"
+    tradeoff:
+      ASYNC_FLUSH: "the master acknowledges a message before it reaches the disk: a power loss of every replica can lose it"
+  allack:
+    values: ["true", "false"]
+    doc: "https://github.com/apache/rocketmq/blob/develop/docs/en/controller/deploy.md (allAckInSyncStateSet)"
+    tradeoff:
+      "false": "a message is acknowledged after inSyncReplicas copies (1: the master alone), so a failover can lose it"
+
+env:
+  RMQ_ALLACK: "{{allack}}"
+  RMQ_FLUSH: "{{flush}}"
+  RMQ_MININSYNC: "{{mininsync}}"
+  RMQ_TXCHECK: "{{txcheck}}"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 3072
+  clock_start: 1795737600   # 2026-11-27 00:00 UTC, the day of the import
+  clock_after_cut: 60       # a real machine's clock runs on across a power cut
+
+data:
+  size_mib: 1408  # the data disk: the four nodes' own file systems (1,216 MiB) and the client's files
+  dirs: [vol/namesrv, vol/broker0, vol/broker1, vol/broker2, client]
+
+root:
+  share_images: true   # the four nodes share one tree of the rocketmq image
+  files:                 # bind-mount sources, copied into the read-only root
+    - {src: ../config, dst: /etc/hydo/compose/bind/0-config}
+    - {src: ../bin/rmq-amd64, dst: /bin/rmq, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.10 namesrv
+      10.89.0.11 broker0
+      10.89.0.12 broker1
+      10.89.0.13 broker2
+
+# K=brokers.primary and the like: broker-a's master, as the NameServer names it
+groups:
+  - name: brokers
+    services: [broker0, broker1, broker2]
+    primary: /bin/rmq leader
+    links: all          # the brokers replicate to each other: the explorer cuts their links
+    restart: together   # a killed group's brokers start together, as Compose starts them
+
+services:
+  # Compose service namesrv
+  # image apache/rocketmq:5.5.0 = docker.io/apache/rocketmq@sha256:7e8f6c9dbd9df742ed26ba69c00d4ad69e2f86a56f3ca7782ff8144dd0798132
+  #   linux/amd64: sha256:a613f1341f3404b96900cf11e5c35f2d049c103504a1dd60242a04cebf5be467
+  #   linux/arm64: sha256:2bf396167ec51a79f394a1aa3bc232c0a8bed8fbed53489e48c9a2d5af77fa25
+  - name: namesrv
+    image: {x86_64: images/apache-rocketmq-5.5.0-amd64.docker.tar, arm64: images/apache-rocketmq-5.5.0-arm64-oci}
+    image_ref: "apache/rocketmq:5.5.0"
+    entrypoint: [sh, "-c", "cd $ROCKETMQ_HOME/bin && exec ./mqnamesrv -c /etc/rocketmq-hydo/namesrv.conf"]
+    env:
+      HEAP_OPTS: "-Xms128m -Xmx128m -Xmn64m"
+      JAVA_OPT_EXT: "-XX:-AlwaysPreTouch -Duser.home=/dev/shm"
+    port: 9876
+    addr: 10.89.0.10
+    ready: "tcp:9876"
+    ready_timeout: 300
+    restart: "unless-stopped"
+    setup: chown 3000:3000 /data/vol/namesrv   # the image's user rocketmq
+    storage: {dir: vol/namesrv, size_mib: 64}   # the controller's DLedger log
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 128m}
+      - {src: /etc/hydo/compose/bind/0-config, dst: /etc/rocketmq-hydo}
+      - {src: /data/vol/namesrv, dst: /home/rocketmq/store}
+  # Compose service broker0
+  - name: broker0
+    image: {x86_64: images/apache-rocketmq-5.5.0-amd64.docker.tar, arm64: images/apache-rocketmq-5.5.0-arm64-oci}
+    image_ref: "apache/rocketmq:5.5.0"
+    entrypoint: [sh, /etc/rocketmq-hydo/start-broker.sh]
+    env:
+      BROKER_ADDR: "10.89.0.11"
+      HEAP_OPTS: "-Xms256m -Xmx256m -Xmn128m -XX:MaxDirectMemorySize=128m"
+      JAVA_OPT_EXT: "-XX:-AlwaysPreTouch -XX:G1HeapRegionSize=1m -Duser.home=/dev/shm"
+    port: 10911
+    addr: 10.89.0.11
+    depends_on: [namesrv]
+    start_after: started   # Compose's service_started: no wait for readiness
+    ready: "tcp:10911"
+    ready_timeout: 300
+    restart: "unless-stopped"
+    setup: chown 3000:3000 /data/vol/broker0   # the image's user rocketmq
+    storage: {dir: vol/broker0, size_mib: 384}   # the commit log, consume queues, epoch file, offsets
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 128m}
+      - {src: /etc/hydo/compose/bind/0-config, dst: /etc/rocketmq-hydo}
+      - {src: /data/vol/broker0, dst: /home/rocketmq/store}
+  # Compose service broker1
+  - name: broker1
+    image: {x86_64: images/apache-rocketmq-5.5.0-amd64.docker.tar, arm64: images/apache-rocketmq-5.5.0-arm64-oci}
+    image_ref: "apache/rocketmq:5.5.0"
+    entrypoint: [sh, /etc/rocketmq-hydo/start-broker.sh]
+    env:
+      BROKER_ADDR: "10.89.0.12"
+      HEAP_OPTS: "-Xms256m -Xmx256m -Xmn128m -XX:MaxDirectMemorySize=128m"
+      JAVA_OPT_EXT: "-XX:-AlwaysPreTouch -XX:G1HeapRegionSize=1m -Duser.home=/dev/shm"
+    port: 10911
+    addr: 10.89.0.12
+    depends_on: [namesrv]
+    start_after: started
+    ready: "tcp:10911"
+    ready_timeout: 300
+    restart: "unless-stopped"
+    setup: chown 3000:3000 /data/vol/broker1   # the image's user rocketmq
+    storage: {dir: vol/broker1, size_mib: 384}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 128m}
+      - {src: /etc/hydo/compose/bind/0-config, dst: /etc/rocketmq-hydo}
+      - {src: /data/vol/broker1, dst: /home/rocketmq/store}
+  # Compose service broker2
+  - name: broker2
+    image: {x86_64: images/apache-rocketmq-5.5.0-amd64.docker.tar, arm64: images/apache-rocketmq-5.5.0-arm64-oci}
+    image_ref: "apache/rocketmq:5.5.0"
+    entrypoint: [sh, /etc/rocketmq-hydo/start-broker.sh]
+    env:
+      BROKER_ADDR: "10.89.0.13"
+      HEAP_OPTS: "-Xms256m -Xmx256m -Xmn128m -XX:MaxDirectMemorySize=128m"
+      JAVA_OPT_EXT: "-XX:-AlwaysPreTouch -XX:G1HeapRegionSize=1m -Duser.home=/dev/shm"
+    port: 10911
+    addr: 10.89.0.13
+    depends_on: [namesrv]
+    start_after: started
+    ready: "tcp:10911"
+    ready_timeout: 300
+    restart: "unless-stopped"
+    setup: chown 3000:3000 /data/vol/broker2   # the image's user rocketmq
+    storage: {dir: vol/broker2, size_mib: 384}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 128m}
+      - {src: /etc/hydo/compose/bind/0-config, dst: /etc/rocketmq-hydo}
+      - {src: /data/vol/broker2, dst: /home/rocketmq/store}
+
+# a master, and the topics j, o, %RETRY%w and %DLQ%w, before the window under test
+provision: /bin/rmq provision
+
+# 30 rounds of 1 s with up to 2 commands each: about 60 commands, whose records fit hvx's 64 KiB
+# of console per boot.
+workload:
+  steps: 30
+  timeout: 330    # also the drain's limit: it gives up after 250 s
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 1000
+  command_timeout: 60
+  drain_timeout: 45
+
+checks:
+  # The topic j and the group w. The drain takes every message left of j, of the retry topic and
+  # of the dead-letter topic, and answers the broker's transaction checks, until a quiet window of
+  # 45 s; then it writes the drained records of both histories.
+  - id: jobs
+    type: messages
+    history: q
+    msg: every message that SendSync acknowledged reaches the group w, a committed transaction too and a rolled-back one never, a delayed message not before its delay, a poison message the dead-letter topic after 3 deliveries, and no message comes again after its offset was committed
+    final: /bin/rmq drain
+    acknowledgement: explicit
+    claims:
+      delivery: at-least-once
+      after_ack: no-redelivery        # a committed offset holds, also across a failover
+      dead_letter: {after: 3, to: dlq}  # maxReconsumeTimes 2: two retries, then %DLQ%w
+      delay: per-message              # d<id>: delay level 2, 5 s
+  # The topic o: one queue per key, consumed by the group og.
+  - id: order
+    type: messages
+    history: o
+    final: "true"   # the drain of the check jobs (rmq drain) takes o too
+    msg: the group og gets every acknowledged message of o, each key's in the order they were sent, and none again after its offset was committed
+    acknowledgement: explicit
+    claims:
+      delivery: at-least-once
+      order: {kind: fifo, scope: key}
+      after_ack: no-redelivery
+
+faults: [kill, pause, network, oneway, cut, clock, corrupt, powerloss]

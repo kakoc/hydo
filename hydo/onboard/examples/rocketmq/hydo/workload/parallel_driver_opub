@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=30
+# send one message to the topic o, to the queue of its key
+exec /bin/rmq opub $HYDO_CMD_ID

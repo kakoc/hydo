@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=30
+# pull up to 4 messages of one queue of j (or of the retry topic) from the group w's offset,
+# give poison messages back, and commit the offset
+exec /bin/rmq consume $HYDO_CMD_ID
