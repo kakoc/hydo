@@ -182,12 +182,16 @@ q.drained(9, "jobs", "-");
 ```
 
 Clients in other languages write the same lines with their history recorder's generic records.
-The Go SDK's `hydohist` also has a call for the drain's last record:
+The Go SDK's `hydohist` also has a call for the drain's last record, from the module's version
+v0.7.0 on (`github.com/kakoc/hydo/sdk/go`, the tag `sdk/go/v0.7.0`):
 
 ```go
 q := hydohist.New("jobs")
 q.Drained(9, "jobs", "-") // drained jobs -: the drain read every message of the group
 ```
+
+v0.6.0 and older lack `Drained`. With them, write the same line with the generic record:
+`q.Record(9, "ok", "drained", hydohist.Enc("jobs"), hydohist.Enc("-"))`.
 
 ## Write the drain
 
