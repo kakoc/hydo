@@ -1561,8 +1561,8 @@ mod tests {
     #[test]
     fn the_built_in_lists_parse_and_map_into_the_release() {
         for (p, assets, guest, n_assets, n_guest) in [
-            (Platform::Linux, LINUX_ASSETS, LINUX_GUEST, 44, 6),
-            (Platform::Mac, MAC_ASSETS, MAC_GUEST, 65, 5),
+            (Platform::Linux, LINUX_ASSETS, LINUX_GUEST, 48, 6),
+            (Platform::Mac, MAC_ASSETS, MAC_GUEST, 68, 5),
         ] {
             let a = parse_sums(assets).unwrap();
             assert_eq!(a.len(), n_assets, "{p:?} assets");

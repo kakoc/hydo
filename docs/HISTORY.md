@@ -25445,3 +25445,251 @@ link instead of the copy, as `tests/equivalence.rs` makes, is left.
 with the new kernels: `/proc/self/io` in the guest, one fingerprint per schedule, and an epoch-6
 image's recorded values. The release lines of the new kernels in `hydo/dist/releases.txt`, with
 the first release that ships them. Open item 188's other lines.
+
+## Milestone 380 (tentative number): which techniques found the bugs, measured
+
+`hydo guide strategies` lists the techniques that found bugs, and an onboarding chooses among
+them by judgement. This milestone counts what every onboarding example found and how. The ledger
+is `docs/design/findings-ledger.csv`, and the page `docs/design/findings-ledger.md` explains its
+columns, holds the analysis, and proposes a first hour for every onboarding. No code, guide topic,
+playbook or skill changed; the lead decides on the proposal.
+
+**The ledger.** 189 rows hold 223 findings. They come from the `RESULTS.md` pages of the
+examples, their sections of this file, and the four evaluations of `hydo fuzz`. Each row gives
+these values:
+
+- the class, and how the finding came first;
+- the entries of the strategies page that it needs, and the faults of its minimal schedule;
+- the engine, the first failing schedule, and the cost;
+- the upstream report, its answer, and what a later run changed.
+
+The 47 examples of real systems hold 105 bugs: 49 new, 29 known, and 27 clock effects. They also
+hold 27 documented trade-offs, 27 failures of the environment, 30 mistakes of the checks, and 3
+errors of hydo.
+
+**The numbers.**
+
+- A blind exploration with the process strategy found 60 of the 105 bugs first. It found a first
+  bug in 30 of the 40 examples where it ran, 1.4 bugs per 100 of its 4,318 schedules.
+- Of the 43 blind first finds with a recorded position, 25 came within the first 10 schedules.
+  The median position was 7.
+- Schedules written from the code, the documentation, or an upstream report found 23 first. Aimed
+  reaction grids found 4 in 563 schedules on 8 examples, and the page walk 4 on 2 examples.
+- The swarm strategy found 2 first in 620 schedules. Explored settings, the clock audit, the scan
+  of write routes, and timing explorations of services found none first.
+- 26 onboardings with phase tables took 138 hours of wall time for 63 bugs.
+
+**The lead's five impressions.**
+
+1. Clock steps were needed in 13 of the 40 recent bugs (33 %, Milestones 311 to 371), and in 32
+   of all 105, not half. Blind explorations found 9 of the 13 first, and the clock audit found
+   none: it missed the clock bugs of six examples whose audit is recorded. Partly.
+2. An acknowledgement before a sync caused 6 of the 40 recent bugs, 2 of them with one node's
+   power loss. With the documented trade-offs the share is 15 of 54. Refuted.
+3. An operator's action was needed in 8 of the 40 recent bugs. The rest are mostly election and
+   replication logic and crash windows under plain faults. Refuted.
+4. Ten explorations ran a median of 6.9 re-runs and shrink candidates per first run. In 13
+   onboardings the explorations and the judging took a median of 58 % of the wall time.
+   Confirmed.
+5. Of 7 findings checked again from a fresh clone, 2 had a trigger described wrongly (RabbitMQ 1
+   and 3). Five saved schedules stopped failing when the image or the engine changed. Partly.
+
+**The proposal.** The first hour has four steps:
+
+1. production's shape with its durable settings;
+2. read-back checks that judge the run without faults;
+3. 20 seeds of `--strategy process --cluster-faults --no-shrink`, with clock steps, kills, and
+   power cuts;
+4. directed runs that judge each failure.
+
+The operator's actions in the workload and an aimed grid at the acknowledgement events come
+next. The clock audit and the scan of write routes stay as reading aids. `--configs` labels a
+documented loss. Damaged files, the swarm strategy, timing, contracts, and version pairs come
+later.
+
+**The oracles (a second commit).** The CSV gained the columns `oracle`, `oracle_check`,
+`generic_would_catch` and `generic_note`. They name the check that noticed each finding first,
+and whether a check of the generic set would have caught it. The generic set has five checks:
+
+- a read-back of every acknowledged write, and the replicas compared after the heal;
+- a check that the system serves writes after the heal, and the error-log scan;
+- a history checker where there are transactions.
+
+- Business rules noticed 32 bugs first, the read-back of acknowledged writes 29, liveness checks
+  10, and the comparison of replicas 10.
+- The generic set would have caught 63 of the 105 bugs and 29 of the 40 recent ones. Only a
+  project-specific oracle caught 19 bugs in 13 examples. They break promises of at most once, of
+  a limit, of a device's version, of a listing, or of an expiry.
+- Business rules made 21 of the 30 false findings, a false share of 36 %. The read-back made 2,
+  a share of 6 %.
+- On Blnk the value property broke in 9 of 30 blind schedules and the overdraft rule in 1. The
+  contracts broke only where the rules did, and found nothing new.
+
+The page proposes the generic set as every onboarding's default oracles, business rules for
+promises that the generic set cannot state, and contracts for function fuzzing only.
+
+**Checks.** `sh ci/vale.sh` and Vale on the new page found nothing. On the bare-metal machine,
+in a copy of the tracked files, `cargo test -p hydo-agents --test it` (16 passed) and `cargo test
+-p hydo --test it -- docs::` (14 passed) passed. The copy has no `AGENTS.local.md`, so a `grep` of
+the listed values checked the new files, and it found none.
+
+**What is left.** The lead decides on the proposal. The records give wall time and schedules, not
+machine hours per exploration, and most of them do not count their directed runs.
+
+## Milestone 381 (tentative number): the sync audit
+
+Status: done on 2026-11-27, on the bare-metal machine (the builds, the tests, and the runs of the
+audit) from this Mac. No VM ran. Nothing recorded moved: the audit is a new kind of `hydo rules
+scan`, and no engine, image, agent, or fingerprint changed. The fingerprint epoch stays as it was.
+
+**Why.** About a third of hydo's findings up to Milestone 374 had one cause. The system answered a
+write, or finished a transfer of state, before the data or a rename was on the disk, and a power
+cut or one node's power loss lost it:
+
+- NSQ (finding 1): go-diskqueue writes a queue's metadata only at its first sync, and renames it
+  without a sync of the folder.
+- Kvrocks (finding 1): a replica writes the fetched checkpoint without a sync, renames it into
+  place, and destroys its old database.
+- RabbitMQ (findings 1 and 2): osiris never syncs a stream's segments.
+- Garnet (known #2281): the default device writes with `O_DIRECT` and never syncs.
+- Meilisearch (findings 2 and 3): a payload renamed into place without a sync, a dump never synced.
+- Vikunja (finding 1): SQLite in WAL mode with the driver's `synchronous=NORMAL`.
+- SWUpdate: the raw handler syncs an image only when it turned a write protection off.
+- Mender (finding 1): the scripts' version file synced while its byte is in a stream's buffer.
+- Garage (finding 3): each node saves its peers once a minute without a sync.
+- ClickHouse (finding 1): no fsync after a merge or a fetch by default.
+- The fuzz-vm example: a save by rename with tempfile and no sync.
+
+**What was built.** `hydo rules scan --kind sync [DIR] [--json] [--all] [--max N] [--manifest
+FILE]`, in its own module `hydo_cli::syncscan`. The scan's entry (`hydo_cli::rules::cmd_scan`)
+only gained the kind and its help paragraph; the clock audit and the write scan are untouched,
+and the scan without `--kind` lists no sync places. The audit reads text with the clock audit's
+rules for test code (`clockscan::outline`) and its map of the programs that hydo.yaml's services
+run (`clockmap`). It reads the clock audit's languages and Erlang, whose comments and functions
+it reads itself. It leaves out build scripts, benchmarks, samples, and the tool folders at a
+repository's top. Each function becomes a list of opens for writing, writes, syncs, renames,
+answers, and removals of old data. A place is one of these shapes:
+
+- `write`: a write that no later sync at its depth covers, in a function whose callers do not
+  all sync after the call;
+- `rename`: a rename that no sync follows, in a function whose callers do not all sync after it;
+- `stream`: a C++ stream synced before it is flushed or closed;
+- `direct`: `O_DIRECT` in a file that opens files for writing, without `O_DSYNC` or a sync;
+- `setting`: a setting about syncing whose literal turns it off, SQLite's WAL mode without
+  `synchronous=FULL` in the tree, or `synchronous` set to `NORMAL` or `OFF`;
+- `interval`: a setting that syncs every so often;
+- `periodic`: a loop that saves or syncs on a timer.
+
+The answer is searched after the write and in the callers by name, three calls deep. A place is
+`high` when an answer follows it, when the code shows that the author meant it to be durable (a
+write renamed into place, a sync under a condition), or when its names speak of stored data.
+Each `high` place gets `powerloss-after` and `cut-after`, aimed 10 ms after the workload's event
+of an answered write (read from the SDK calls in the folder of hydo.yaml), or else before the
+middle step. A periodic place with a stated interval also gets `cut-in-window`. The reference is
+`hydo guide faults`, "Find the writes acknowledged before they are synced"; the design is the
+section "The sync audit" of `docs/design/rule-suggestion.md`. `hydo guide strategies` has the
+entry "The sync audit and power cuts after an answer", and the onboarding skill runs the audit
+after the clock audit (`plugin/skills/onboard/SKILL.md`, step 4, and its report).
+
+**The measurement.** Each project's tagged sources were fetched on the bare-metal machine into an
+empty folder of their own and read by the audit, without a `hydo.yaml`; nothing in them ran. The
+Mac's disk was kept for the release pass, so the sources stayed on the bare-metal machine. The
+known place of every finding above was listed and `high`, and in each project the first known
+place was among the first 5:
+
+| project | source files | places | high | the known place, and its rank |
+|---|---|---|---|---|
+| go-diskqueue v1.1.0 (NSQ's finding 1) | 1 | 4 | 4 | `ioLoop`'s sync on a timer: 1; `persistMetaData`'s rename without a sync of the folder: 2; `writeOne`'s write: 4 |
+| Kvrocks v2.17.0 (finding 1) | 244 | 11 | 9 | `RestoreFromCheckpoint`: 3; `SwapTmpFile`: 5; `fetchFile`: 8 |
+| osiris v1.14.1 (RabbitMQ's findings 1 and 2) | 20 | 3 | 3 | `open_new_segment`: 1; `write_chunk`: 2 |
+| Garnet v2.2.14 (#2281) | 986 | 4 | 3 | `O_DIRECT` in `file_linux.cc` line 327: 2 |
+| Meilisearch v1.57.0 (findings 2 and 3) | 570 | 30 | 14 | the payload's `persist`: 1; `process_dump_creation`: 2 |
+| Vikunja v2.8.0 (finding 1) | 991 | 14 | 6 | WAL without `synchronous=FULL` in `pkg/db/db.go`: 1 |
+| SWUpdate 2026.05.1 | 174 | 16 | 4 | `install_raw_image`, the sync under a condition: 3 |
+| Mender 5.2.0 (finding 1) | 158 | 5 | 3 | the version file's stream in `Parse`: 1 |
+| Garage v2.5.0 (finding 3) | 204 | 13 | 11 | `Persister::save`: 5; `metadata_fsync`: 8; the peer list's loop: 10 |
+| ClickHouse v26.10.6.18 (finding 1) | 9,964 | 40 | 20 | `min_rows_to_fsync_after_merge`: 4; `fsync_after_insert`: 7 |
+| the fuzz-vm example's `save` (tempfile 3.27.0) | 1 | 1 | 1 | `save`: 1; `save_synced` is no place |
+| goleveldb `c3a204f8e965` (TiKV's finding 2, PD's MANIFEST) | 54 | 7 | 7 | `newManifest`: 5 |
+
+ClickHouse's 9,964 files took 47 to 207 s in three runs on the shared machine, and 790 MB; each
+other project took less than 16 s. NSQ v1.3.0 gave its own `PersistMetadata` rename first, then
+nsq_to_file's 30 s sync interval and nsqd's `SyncEvery` and `SyncTimeout`. bbolt v1.4.0, which syncs its pages, gave no `high` place, and
+tempfile 3.27.0 gave none at all.
+
+A hand review read 30 `high` places drawn with seed 381 from the 84 that the run before the last
+change ranked; the last change counts the settings of one function each on its own line (90 in
+the final report, which holds the 30 too). 25 were correct. The 5 others were goleveldb's `recoverTable` (synced unless `NoSync`), goleveldb's
+diagnostic `LOG`, Meilisearch's analytics id `instance-uid`, the files of Meilisearch's dump in
+its temporary folder, and `meilitool`'s compaction, whose old file stays valid. Among the correct
+ones are places that no finding had named: ClickHouse's `renameExchange` of table metadata and
+its local object storage's publish, Kvrocks's `CreateBackup`, SWUpdate's delta handler and GRUB
+environment, Vikunja's file attachments, and Meilisearch's `VERSION` file. Garage's first 3
+places are its SQLite adapter, which sets `synchronous` to `NORMAL` in WAL mode even with
+`metadata_fsync` on; the Garage example runs LMDB, so no run met it.
+
+Three rounds of the measurement fixed the audit's own false places: `O_DIRECTORY` taken for
+`O_DIRECT`, a reader's `O_DIRECT`, ClickHouse's settings documentation inside C++ raw strings, a
+query's `SYNC` modifier (`ast_drop_query.sync = false`), a method named `rename` taken for
+`rename(2)`, a writer stored for later taken for a write, a constructor taken for a save, and
+`benchmark/` and `samples/` folders.
+
+**Tests.** Eight unit tests of `syncscan` hold the shapes on shortened copies of the real code
+(go-diskqueue, the fuzz-vm saves, SWUpdate's raw handler, Mender's stream, ClickHouse's,
+Kvrocks's, Garage's, Vikunja's and NSQ's settings, Garnet's `O_DIRECT`, osiris's segments, and a
+write that its caller syncs). The integration test `syncscan::the_sync_audit_aims_power_cuts_after_unsynced_answers`
+runs the command on a small Go project with hydo.yaml, a `storage:` service and a workload event.
+On the bare-metal machine `cargo fmt`, `cargo clippy -p hydo --all-targets -- -D warnings`, the
+tests of `hydo` (its unit tests and `--test it`, with the CLI goldens and the clock audit's and
+the write scan's tests unchanged), and `hydo-agents --test it` passed. Two goldens moved on purpose
+and were recorded again with `HYDO_BLESS=1`. The answers of `hydo skill install` in `hydo`'s
+`tests/golden/cli.jsonl` (8 cases) hash the skill's `SKILL.md`, which names the sync audit. The
+guide topics `faults`, `rules`, `strategies` and `skill` grew, and only their 4 lines of
+`tests/guide-sizes.txt` were recorded again. Two tests of `update::` failed in one parallel run
+at the spawn of a fake program (`update.rs` line 388), as in Milestone 374; all 16 passed with
+`--test-threads=1`. The test `skillupdate::tests::each_agent_gets_its_folder` finds the
+repository's root by its `.git` folder, so it failed in the copied tree until the tree got a
+repository of its own.
+
+**What is left** is open item 193.
+
+## Milestone 385 (tentative number): the time to a first real run and to a first bug, measured
+
+A user meets two clocks. The first runs from a repository with a Compose file to a first real
+run, an exploration whose checks judge the system's promises. The second runs from the first
+exploration to a first failure with its replay command. The page
+`docs/design/time-to-first-bug.md` measures both from the records: the examples' `RESULTS.md`
+pages, the trials of Milestones 297 and 359, the findings ledger of Milestone 380, the playbook,
+and Milestone 304. It estimates five changes and proposes a target for each clock. No code, guide
+topic, playbook or skill changed; the lead decides.
+
+**Clock 1.** hydo's own steps take seconds to minutes: the import under 1 s, a fetch 3 to 17 s,
+a build 5 s to 4 minutes, a run 4 s to 14 minutes. The agent writes the rest by hand. The 17
+onboardings from Milestone 287 on wrote a client of a median 1,229 lines, 7 workload commands
+and 3 check files. The first clean run came at a median of 23 minutes in 9 records timed from the
+start, and of 68 minutes of scouting and setup in 16 phase tables. Fixes of the checks' own
+mistakes took 17 minutes to 2 hours after it, each with a new image.
+
+**Clock 2.** The first blind bug came at a median of the seventh schedule. Re-runs and shrinks
+then took 85 % to 94 % of an exploration's runs or busy time, and `hydo explore` writes its report
+only after the last shrink. Judging took as long as exploring, or longer. On 20 KVM runners
+Dragonfly's 60 seeds took 31 minutes against 75 on one; the 6-minute build and the slowest part
+set the time.
+
+**The estimates.**
+
+- A client generated from the import, with the generic checks, reaches 37 of the 105 bugs with
+  drivers for HTTP and common protocols, and 47 with operator actions. It would make clock 1 the
+  import, the fetch, the build and two runs: 5 to 15 minutes.
+- Reporting before shrinking cuts the time to a report by a factor of 4 to 6. Lago's first
+  exploration would report after about 4 of its 66 minutes.
+- Runners by default cut Dragonfly's time by a factor of 2.4, and with the report first,
+  Redpanda's 2 hours 53 minutes to about 40.
+- The ledger's first hour gives a first bug in about 6 of 10 examples within 20 seeds.
+
+The targets are a first real run in 3 commands and 15 minutes with no hand-written file, and a
+first reported failure within 20 minutes of the exploration's start. The first two things to
+build are the report before the shrinks, then the generated client with the generic checks.
+
+**Checks.** Vale on the page and `sh ci/vale.sh` found nothing. No VM ran and nothing was built.
+A `git grep` of each value of the list of `AGENTS.local.md` found none in the changed files.

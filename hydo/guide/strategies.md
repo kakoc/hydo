@@ -495,6 +495,39 @@ These findings hold for every type of system:
 - **Cost.** One recovery boot per cut. In Redpanda most of a 3 to 14 minute schedule went to
   recovery boots and drains. It runs on every engine.
 
+### The sync audit and power cuts after an answer
+
+- **What it is.** `hydo rules scan --kind sync` lists the code that can answer a write before
+  the write is on the disk. Examples are a file written without `fsync`, a rename without a sync
+  of its folder, and a setting that turns syncing off. Each place gets one service's power loss
+  and a power cut of the guest, right after the answer that follows it.
+- **What to write.** Run the audit, give the service of the place `storage:`, and run its
+  schedules with `hydo explore --schedule`. With an event of an answered write in the workload, a
+  schedule reads `disk=cut | run A=nsq.pub_acked+10:powerloss-nsqd` (`hydo guide faults`,
+  "Find the writes acknowledged before they are synced").
+- **When it fits.** Any system that stores data in files of its own. Examples are a queue, a log,
+  a store, a device updater, and a server that saves its own state, such as its peers.
+- **What it found.** It came after these findings. It names the place of each:
+  - NSQ (finding 1): go-diskqueue's metadata renamed without a sync of the folder, and its
+    writes answered before the sync on a timer.
+  - Kvrocks (finding 1): the fetched checkpoint's files written without a sync, renamed, and the
+    old database destroyed.
+  - RabbitMQ (findings 1 and 2): osiris writes stream segments and never syncs them.
+  - Garnet (known #2281): the default device opens its files with `O_DIRECT` and no `O_DSYNC`.
+  - Meilisearch (findings 2 and 3): the payload renamed into place without a sync, and the dump
+    never synced before its task succeeds.
+  - Vikunja (finding 1): the database in SQLite's WAL mode without `synchronous=FULL`.
+  - SWUpdate: the raw handler syncs only when it turned the write protection off.
+  - Mender (finding 1): the version file synced while its bytes are still in the stream.
+  - Garage (finding 3): the peer list written without a sync, once a minute.
+  - ClickHouse (finding 1): `fsync_after_insert` and the merge's fsync off by default.
+- **What it misses.** It reads text. A write through an interface, a sync in another thread, or a
+  library that the project does not hold (rclone, RocksDB) is not followed. A place is a fact of
+  the code: a relaxed default that the project documents is a trade-off, and `hydo explore
+  --configs` labels it so.
+- **Cost.** Seconds for most projects, about a minute for ClickHouse. Each schedule is one
+  recovery boot, on every engine.
+
 ### Power cuts at the k-th disk flush (`cf=`)
 
 - **What it is.** The disk loses its power at one exact flush, so the cut falls inside a commit.
