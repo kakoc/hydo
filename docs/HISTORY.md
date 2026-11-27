@@ -24014,7 +24014,13 @@ made; the parts' reports were read one by one.
 
 **Tests.** The new example enters the explorer's and the controller's corpora. Re-recorded with
 `HYDO_BLESS=1`: the explorer's corpus goldens (full and quick), its identity goldens (quick and
-full), and the controller's quick corpus golden. MILESTONE_TESTS No Rust code changed.
+full), and the controller's quick corpus golden. With a target folder of this task's own on the
+bare-metal machine, in a copy of the worktree with an index of its tracked files: `cargo test -p
+hydo-explore --test it` (61 passed), the controller's corpus tests, `-p hydo --test it --
+equivalence:: agents_equivalence::` (9 passed) and `-p hydo-agents --test it` (16 passed). The
+copy has no `AGENTS.local.md`, so `public_content::` checked the generic patterns, and a `grep` of
+the listed values found none in the new text. `sh ci/vale.sh` finds nothing in the changed
+documents. No Rust code changed.
 
 Retro: Garnet 2.2.14, hvx and KVM, 2026-11-26 and 27
 - Time to the first clean run: 1 hour of wall time, about 25 minutes of it waiting for builds.
