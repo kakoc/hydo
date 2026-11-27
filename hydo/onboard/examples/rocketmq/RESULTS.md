@@ -167,8 +167,8 @@ fingerprint over two fresh runs on hvx:
 | `offsets-move-back-at-failover` (inline in `hydo-offsets.yaml`) | 2 | `8cd67eee89799522`, on that manifest's image |
 
 `hydo repro --regressions` on the final image gave 3 of 3 as expected, with the same fingerprints.
-On the image of `hydo-offsets.yaml` it gave 4 of 4 as expected; that image's fingerprints are its
-own.
+On the image of `hydo-offsets.yaml` (`e097cbf9faa513a4…`) it gave 4 of 4 as expected; that
+image's fingerprints are its own.
 
 ## What was found
 
@@ -188,6 +188,11 @@ java.lang.NumberFormatException: null
 	at org.apache.rocketmq.store.ha.autoswitch.AutoSwitchHAService.init(AutoSwitchHAService.java:84)
 	at org.apache.rocketmq.store.DefaultMessageStore.start(DefaultMessageStore.java:426)
 ```
+
+One broker's power loss alone does the same: `disk=none | run L=broker1@14+3` ends `ERROR broker1
+restart failed (after its power loss)`, and the diagnosis replay's log of `broker1` ends in the same
+`NumberFormatException` at `CheckpointFile.java:107`. Blind, e1 and e2 reached it at 8 and 3 power
+losses of one broker.
 
 **What the disk held.** `hydo inspect` at the end of the recovery boot listed each broker's store.
 The epoch file `epochFileCheckpoint` of both slaves, `broker0` and `broker1`, is 0 bytes; each was
@@ -334,7 +339,10 @@ the delay offsets of `SCHEDULE_TOPIC_XXXX` and the consume offsets of the transa
 and operation queues. After a failover the new master starts from them, so a delayed message whose
 delay ended after the last copy is stored in `j` again, and a transaction that the old master had
 committed is checked and committed again. e2's seeds 47, 58, 62, 69 and 70 broke `duplicates` so,
-each with a kill or a pause of a broker, and seed 69 with a forward clock step besides. DELAYED
+each with a kill or a pause of a broker, and seed 69 with a forward clock step besides.
+On hvx the schedule of seed 70, which kills a broker and pauses the NameServer with the
+controller, stored a committed transaction twice: `VIOLATION [jobs.duplicates] u14 is stored twice:
+it carries the system ids 2000001 and 2000002` (on KVM it was a delayed message).
 
 ## What hydo lacked
 

@@ -4665,9 +4665,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The send record of a delayed message carries the offset that RocketMQ answers, which is
       the offset in `SCHEDULE_TOPIC_XXXX`, not in `j`. The example's `duplicates` claim did not
       misjudge it, but its `o=` names no copy of `j`.
-    - A failover also gives the new master the delay offsets of its last copy, and e2's seed 70
-      delivered a delayed message twice after a kill of a broker. It was judged in a directed run
-      only (RESULTS.md); with `duplicates: forbidden` it fails like finding 2.
+    - A failover also gives the new master the delay offsets and the transaction check's progress
+      of its last copy. Five schedules of e2 stored a delayed message or a committed transaction
+      twice after a kill or a pause of a broker, and on hvx seed 70's schedule stored `u14` twice.
+      Which offset the copy lacked in each was not traced.
     - Not run: the Mac engine, three controllers, two replica groups, the proxy and its gRPC
       clients, POP consumption, the timer wheel's delays of arbitrary length, RocksDB-based
       consume queues, and `hydo explore --configs` over `flush` and `allack`.

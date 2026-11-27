@@ -26397,7 +26397,8 @@ backup. apache/rocketmq#11460 (open) names the parse, with pull request
 #11463; #5905 (closed) reported config files of 0 bytes after a forced restart. Blind in e1: 4
 cuts (`C=30`) and 8 power losses of one broker (`L=`) ended this way. On hvx one broker's power loss
 alone, `L=broker1@14+3`, stopped `broker1` at its restart the same way (`ERROR broker1 restart
-failed (after its power loss)`).
+failed (after its power loss)`), and the diagnosis replay's log of `broker1` ends in the same
+`NumberFormatException`.
 
 **Finding 2, known.** A failover moves the groups' committed offsets back by up to 10 s, and the
 consumers get acknowledged messages again: `K=brokers.primary@10+3` breaks `jobs.after-ack` and
