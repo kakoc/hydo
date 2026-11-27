@@ -3585,6 +3585,8 @@ pub struct Services {
     pub words: HashSet<String>,
     /// which code of the tree the services and the workload run (Milestone 324)
     pub map: crate::clockmap::Mapping,
+    /// the services with `clock: own` (Milestone 375), whose clock a schedule steps alone
+    pub own_clock: Vec<String>,
 }
 
 /// Words of a command line that name no feature.
@@ -3656,6 +3658,9 @@ pub fn services_of(text: &str, name: &str) -> Services {
             continue;
         };
         s.names.push(n.to_string());
+        if svc.get("clock").and_then(|x| x.as_str()) == Some("own") {
+            s.own_clock.push(n.to_string());
+        }
         let cmd = svc
             .get("cmd")
             .map(|c| c.to_string())
@@ -3957,8 +3962,49 @@ pub fn step_sizes(limit: Option<f64>) -> (u64, u64) {
 }
 
 /// The schedules aimed at a match: a step back before the fault, a step back after it, and a
-/// step forward.
+/// step forward. Milestone 375: when a service that runs the place's code has `clock: own`, two
+/// more that step that service's clock alone, ahead and behind the others.
 pub fn proposals(m: &ClockMatch, svcs: &Services) -> (String, Vec<Proposal>) {
+    let (why, mut ps) = guest_proposals(m, svcs);
+    ps.extend(own_clock_proposals(m, svcs));
+    (why, ps)
+}
+
+/// Milestone 375: the schedules that step the own clock of one service that runs the place's
+/// code (`clock: own`, `T=<svc>@<at>:<change>`), by more than the place's limit, ahead and then
+/// behind; the other services keep the guest's clock. None when no such service runs it.
+fn own_clock_proposals(m: &ClockMatch, svcs: &Services) -> Vec<Proposal> {
+    let Some(who) = services_running(m, svcs)
+        .unwrap_or_default()
+        .into_iter()
+        .find(|s| svcs.own_clock.contains(s))
+    else {
+        return Vec::new();
+    };
+    let (_, fwd) = step_sizes(m.limit.as_ref().and_then(|l| l.seconds));
+    let steps = svcs.steps.unwrap_or(20).max(4);
+    let a = if steps >= 8 { 2 } else { 1 };
+    let size = seconds_words(fwd);
+    vec![
+        Proposal {
+            name: "own-ahead",
+            schedule: format!("disk=none | run T={who}@{a}:{fwd}"),
+            says: format!(
+                "the clock of {who} alone goes forward by {size} before step {a}, while the other services keep the guest's clock"
+            ),
+        },
+        Proposal {
+            name: "own-behind",
+            schedule: format!("disk=none | run T={who}@{a}:-{fwd}"),
+            says: format!(
+                "the clock of {who} alone goes back by {size} before step {a}, so that it runs behind the other services"
+            ),
+        },
+    ]
+}
+
+/// The schedules of [`proposals`] that step the guest's clock, every service's at once.
+fn guest_proposals(m: &ClockMatch, svcs: &Services) -> (String, Vec<Proposal>) {
     if m.shape == "order" {
         return order_proposals(m, svcs);
     }

@@ -1,0 +1,11 @@
+# Finding 1 of RESULTS.md (known as pingcap/tidb#44822, a clock effect) reached by a skew of one
+# PD member, the case that RESULTS.md expected and did not run. The clock of pd3, PD's leader,
+# alone goes 5 minutes ahead before step 10 (clock: own), and pd3 is killed before step 30. The
+# new leader starts its timestamps from the window pd3 saved, 5 minutes ahead of its own clock
+# ("system time may be incorrect"), and keeps their physical part until its wall clock gets
+# there. TiKV judges a lock's time to live by that physical part, so the locks of a client that
+# crashed inside its commit never expire within the run: eventually_writable fails 90 s after the
+# heal. The same step on a follower (T=pd1 or T=pd2) with the same kill passes. Two runs on hvx
+# gave fp=f04bf542d4fd5a11.
+# expect: violation      (known and accepted upstream)
+disk=none | run T=pd3@10:300 K=pds.primary@30+4

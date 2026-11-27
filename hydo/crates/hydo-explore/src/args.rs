@@ -13,7 +13,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--shrink-from-snapshots | --shrink-from-s1] [--check-continued]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...] [--kill-now]]
        [--reactive-at EVENT[#K][@STEP][,...] [--react-delays A..B[/STEP]] [--react-actions kill-now,kill,cut,...]]
-       [--storage-faults [--corrupt-several]] [--block-faults] [--upgrades] [--pause-workload] [--pause-thread NAME[,NAME...]] [--pause-min MS] [--pause-max MS]
+       [--storage-faults [--corrupt-several]] [--block-faults] [--upgrades] [--service-clocks] [--pause-workload] [--pause-thread NAME[,NAME...]] [--pause-min MS] [--pause-max MS]
        [--pause-lengths MS[,MS...]]
        [--steer ID | --steer-match REGEX [--steer-goal min|max] [--steer-mix N]
         [--steer-batch N] [--steer-corpus N] [--steer-stop]]
@@ -74,6 +74,9 @@ pub struct Args {
     pub cluster_faults: bool,
     /// `--upgrades` (Milestone 238): draw upgrades (`U=`) of the services with `versions:`.
     pub upgrades: bool,
+    /// `--service-clocks` (Milestone 375): draw steps and drifts of one service's own clock
+    /// (`T=<svc>@<at>:<change>`) for the services with `clock: own`.
+    pub service_clocks: bool,
     /// `--pause-workload` (Milestone 216): draw pauses of the workload's own process tree
     /// (`P=workload@<at>~<off>:<dur>`), at most `--pause-max` ms after the step's start.
     pub workload_pauses: bool,
@@ -240,6 +243,7 @@ impl Default for Args {
             cluster_faults: false,
             workload_pauses: false,
             upgrades: false,
+            service_clocks: false,
             pause_max: crate::gen::WP_MAX,
             pause_threads: None,
             pause_min: 0,
@@ -302,7 +306,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 32] = [
+const FLAGS: [&str; 33] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -316,6 +320,7 @@ const FLAGS: [&str; 32] = [
     "block-faults",
     "cluster-faults",
     "upgrades",
+    "service-clocks",
     "pause-workload",
     "freeze-call",
     "protocol-faults",
@@ -499,6 +504,7 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "cluster-faults" => a.cluster_faults = true,
             "pause-workload" => a.workload_pauses = true,
             "upgrades" => a.upgrades = true,
+            "service-clocks" => a.service_clocks = true,
             "pause-max" => a.pause_max = int("pause-max", v)?,
             "pause-thread" => a.pause_threads = Some(val),
             "pause-min" => a.pause_min = int("pause-min", v)?,

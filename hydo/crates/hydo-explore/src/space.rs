@@ -53,6 +53,8 @@ pub struct Drawn {
     pub upgrades: bool,
     /// `--block-faults` (Milestone 313).
     pub block: bool,
+    /// `--service-clocks` (Milestone 375).
+    pub service_clocks: bool,
     /// `--reactive-at` (Milestone 345): each schedule is one aimed reaction, and nothing is drawn.
     pub aimed: bool,
 }
@@ -116,6 +118,9 @@ pub struct Space {
     pub versions: Vec<(String, String, Vec<String>)>,
     /// The same as written, before `{{param}}` references are replaced.
     pub versions_raw: Vec<(String, String, Vec<String>)>,
+    /// The services with `clock: own` (Milestones 372 and 375), in the manifest's order: the
+    /// targets of `--service-clocks`'s `T=<svc>@<at>:<change>`.
+    pub clock_svcs: Vec<String>,
 }
 
 /// `{{name}}` in the version names replaced by the image's parameter values (`params`), else by
@@ -207,6 +212,11 @@ impl Space {
             .collect();
         let clock_points: Vec<String> = arr(m.get("clock_points")).iter().map(str_of).collect();
         let svcs: Vec<String> = services.iter().map(name_of).collect();
+        let clock_svcs: Vec<String> = services
+            .iter()
+            .filter(|s| s.get("clock").and_then(Value::as_str) == Some("own"))
+            .map(name_of)
+            .collect();
         let ported: Vec<String> = services
             .iter()
             .filter(|s| get(s, "port").is_some_and(truthy))
@@ -331,6 +341,7 @@ impl Space {
             .collect();
         let versions = resolve_versions(&versions_raw, &m, &[]);
         Ok(Space {
+            clock_svcs,
             versions,
             versions_raw,
             jobs,
@@ -525,6 +536,15 @@ impl Space {
                 on.push(w.to_string());
             } else if kinds.iter().any(|k| self.has_fault(k)) {
                 ask.push((opt, w));
+            }
+        }
+        // Milestone 375: one service's own clock, for the services with `clock: own`
+        if !self.clock_svcs.is_empty() && self.has_fault("clock") {
+            let w = "steps and drifts of one service's own clock";
+            if o.service_clocks {
+                on.push(w.to_string());
+            } else {
+                ask.push(("--service-clocks", w));
             }
         }
         if !self.knobs.is_empty() {

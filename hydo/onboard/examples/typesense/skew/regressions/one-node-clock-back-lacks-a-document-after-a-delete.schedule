@@ -1,0 +1,10 @@
+# A new candidate in Typesense 30.2, a clock effect (RESULTS.md, finding 4). The clock of the
+# follower ts3 alone goes back by 60 s before step 20 (clock: own). Each node applies a delete by
+# a filter from its Raft log and runs the later batches from a timer of its own HTTP event loop,
+# which fires no timer while that node's clock is behind its last run (finding 2). The leader ts1
+# finishes the delete; ts3 applies the next writes from its log first, and its late batch then
+# deletes the new version of a document: eventually_converge fails with "ts3 lacks i29x4, which
+# the leader ts1 holds as w122" (finding 1's order, without a restart). Two runs on hvx gave
+# fp=b1761b4adaaa1c6c.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run T=ts3@20:-60

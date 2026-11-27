@@ -1,0 +1,8 @@
+# Finding 3 of RESULTS.md (a clock effect) on the followers' own clocks. The clocks of ts2 and
+# ts3 alone go back by 120 s before step 20 (clock: own), and the leader ts1 is paused before
+# step 30. braft's election timer runs at wall-clock times on each node, so neither follower
+# starts an election until its late timer fires: final_available fails with "no leader for 69 s
+# while two or more nodes answered". With one follower's clock behind (T=ts2@20:-120 alone) the
+# other follower takes over at once and the run passes. Two runs on hvx gave fp=4d3093d8b68377e2.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run T=ts2@20:-120 T=ts3@20:-120 P=nodes.primary@30+25

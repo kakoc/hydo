@@ -115,6 +115,7 @@ hydo-explore::reactive                   fast
 hydo-explore::protocol_cover             fast
 hydo-explore::refusals                   fast
 hydo-explore::route_errors               fast
+hydo-explore::service_clocks             fast
 hydo-explore::shell_sdk                  fast
 hydo-explore::storage_faults             fast
 hydo-explore::upgrades                   fast

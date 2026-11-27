@@ -461,6 +461,27 @@ bytes, and the pinned reproducers kept their values. The design and the options 
 offset no wall clock; a kernel variant is the second step) are `docs/design/service-clocks.md`;
 the details are in `docs/HISTORY.md` Milestone 372 (open item 190).
 
+**One service's own clock in the explorer and on real systems (M375, tentative number).**
+`hydo explore --service-clocks` draws `T=<svc>@<at>:<change>` for the services of `clock: own`
+from a stream of its own. It draws steps of 250 ms to 5 minutes and drifts of 200 and 50,000
+ppm, either way, and a quarter of them put two services apart. The shrinker removes and halves
+them.
+Without the option the explorer draws what it drew before; its corpus goldens did not change.
+`hydo rules scan --kind clock` proposes `own-ahead` and `own-behind` for a place that a service of
+`clock: own` runs. The TiKV, Typesense, and Prometheus examples have a `skew/` folder whose
+manifest gives the nodes `clock: own`, so the recorded images stay. They ran on hvx:
+- TiKV: when the leader of PD runs 5 minutes ahead and is then killed, every writer of a crashed
+  transaction's keys waits. The new leader goes on from the saved timestamp window. That is
+  finding 1, known as pingcap/tidb#44822. A store 5 minutes behind or ahead held.
+- Typesense: one node's clock 30 s or more behind makes it run a delete by a filter's later
+  batches after later writes. So it lacks an acknowledged document for good (finding 4, new, a
+  clock effect). Finding 3 needs both followers' clocks behind.
+- Prometheus: a sender more than 10 minutes ahead of the server loses every sample
+  (`maxAheadTime`), by design; an exploration of 20 seeds with the option found nothing.
+
+The KVM and Mac engines lack `CONFIG_CROSS_MEMORY_ATTACH` besides seccomp (the design page). The
+details are in `docs/HISTORY.md` Milestone 375 (open item 190).
+
 **The cgroup2 mount (M283, tentative number).** From the fingerprint epoch 4 the host controller
 mounts the cgroup2 file system on `/sys/fs/cgroup` at the start of every boot, before the S0
 snapshot, with the agent's existing `mount` primitive. So the agent and its pin stay, and an
@@ -3398,9 +3419,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       synthetic records only.
 147. The TiKV example (M287). What is left:
     - Finding 1 (crashed transactions' locks after a backward clock step) is the known and accepted
-      pingcap/tidb#44822, so it is not reported. Another way to reach it was not run: a move of PD's leadership away from a
-      member whose clock runs ahead. Pessimistic locks and async commit's locks under the step
-      were not tried.
+      pingcap/tidb#44822, so it is not reported. Since M375 a move of PD's leadership away from a
+      member whose own clock runs 5 minutes ahead reaches it too (`skew/`). Pessimistic locks and
+      async commit's locks under the step were not tried.
     - Seed 4 of the first exploration also timed out the readers of the locked accounts. The
       directed runs blocked writers only, and why that run's reads could not pass the lock was
       not traced.
@@ -3888,8 +3909,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 170. The Prometheus example (M342, tentative number). What is left:
     - Its three candidates are not posted. Finding 1 is new; findings 2 and 3 are details for the
       known prometheus#8312 and #11496.
-    - The agent and the server share the guest's clock, so a server whose clock alone runs ahead
-      of its senders cannot be tested (the idea "Clocks per service" of `docs/USE-CASES.md`).
+    - Since M375 the agent and the server can have clocks of their own (`skew/`). A server more
+      than its out-of-order window ahead of its senders refuses their samples, and a sender more
+      than 10 minutes ahead loses its samples, both by design. The explorer's steps of at most 5
+      minutes stay below both limits.
     - A check cannot tell which faults its run had. A power loss of the server alone (`L=`) may
       lose what the WAL had not synced, a kill may not. So the rules take the build parameter
       `powerloss`, and the explorations with `--storage-faults` use an image of their own.
@@ -4324,12 +4347,20 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       snapshot. A damaged Raft log of one node (`G=` on `raft.db`) left that node without an
       acknowledged delete for good, without an error. rqlite checks no checksum of its Raft log,
       and its page "Data Integrity" says that it checks "every on-disk data file" at a start.
-190. One service's own wall clock (M372, tentative number; `docs/design/service-clocks.md`).
-    What is left:
-    - `hydo explore` does not draw `T=<svc>@<at>:<change>`, and the clock audit does not propose
-      it. The design page says how the explorer would draw it, from a stream of its own.
+190. One service's own wall clock (M372, M375, tentative numbers;
+    `docs/design/service-clocks.md`). Since M375 `hydo explore --service-clocks` draws it, the
+    clock audit proposes it, and it ran on TiKV, Typesense, and Prometheus. What is left:
+    - The explorer's steps are at most 5 minutes, so a limit of 10 minutes (Prometheus's
+      `maxAheadTime` and its out-of-order window) needs a directed schedule. The option is not a
+      default for a manifest with `clock: own`, because that would change its draws.
+    - The Typesense candidate (finding 4) is not reported upstream. The explorations with the
+      option found no failure of a node's own clock. Their drawn steps did not put one node 30 s
+      or more behind, which finding 4 needs. TiKV's effect needs a kill of PD's leader after the
+      step, which the explorer draws apart from it.
     - Only hvx ran it. The KVM and Mac guest kernels have seccomp only in their `containers`
-      variants, and the Mac needs an arm64 build of hydo-clock; `clock: own` is refused for
+      variants, and none has `CONFIG_CROSS_MEMORY_ATTACH`, which hydo-clock's
+      `process_vm_readv` and `process_vm_writev` need; a fallback to `PTRACE_PEEKDATA` would need
+      no kernel. The Mac needs an arm64 build of hydo-clock; `clock: own` is refused for
       `--arch arm64`.
     - A read of the wall clock costs 40.5 µs of guest time under hydo-clock against 4.4 µs. A
       guest kernel variant with a realtime offset per time namespace would cost nothing per read.
@@ -4339,8 +4370,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       times, socket time stamps) stay the guest's. A wait keeps its deadline when the offset
       changes during it.
     - A recovery boot and a reboot start every own clock at the guest's clock, and a drift
-      restarts from 0 after a kill. No real project ran with it yet: the TiKV, Prometheus and
-      Typesense cases of open items 147 and 170 and of the Typesense example are next.
+      restarts from 0 after a kill.
     - The example is not in `hydo/onboard/recorded.json`, and the release does not ship
       hydo-clock.
 191. What the example `rabbitmq` left (M370, tentative number):
@@ -5642,6 +5672,13 @@ build machine, before 2026-10-13.
   (docs/REBASELINE.md section 33), and no KVM image. Release step 6a fixed two sentences. Both
   releases were built twice to the same bytes, and the Mac one is signed and notarized. They were
   verified on hvx, the Mac and KVM, where a runner rebuilt the Linux tarball byte for byte
+- M375 (tentative number): one service's own clock in the explorer and on real systems. `hydo
+  explore --service-clocks` draws steps and drifts of one service's clock from a stream of its
+  own. The shrinker removes and halves them, and the clock audit proposes them; the explorer's
+  goldens did not change. On hvx, TiKV's PD leader 5 minutes ahead and then killed blocks
+  writers (known tidb#44822). One Typesense node 30 s behind loses a document for good after a
+  delete by a filter (new). A Prometheus sender 10 minutes ahead loses its samples (by design).
+  Nothing recorded moved
 - M376 (tentative number): the fingerprint epoch 7. The Mac and KVM guest kernels get
   per-process I/O accounting as new builds beside the old ones. So an image built at epoch 7 has
   `/proc/<pid>/io`, which Typesense's brpc reads at start. `guest.proc_io: false` keeps the

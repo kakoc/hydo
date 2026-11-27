@@ -13,6 +13,7 @@ use crate::rng::{mix64, SplitMix, GOLDEN};
 use crate::sched::{netem_args, render_fc, render_h, render_preempt, render_tj, render_turns};
 use crate::sched::{parse_a, render_a, Fc, Kinds, Pause, Ra, Tj, H, KV, RV, S};
 use crate::space::{PfTarget, Space};
+use hydo_schedule::ServiceClockChange;
 use regex::Regex;
 use std::sync::OnceLock;
 
@@ -77,6 +78,28 @@ pub const WP_MAX: i64 = 1000;
 pub const WALK_SALT: u64 = 0x57A1_4B5E_EDC0_FFEE;
 /// The upgrades' own stream (`--upgrades`, Milestone 238).
 pub const UPGRADE_SALT: u64 = 0x0B6EADEC0FFEE0B6;
+/// The service clocks' own stream (`--service-clocks`, Milestone 375).
+pub const SERVICE_CLOCK_SALT: u64 = 0x5C10_C4E5_C0FF_E375;
+/// What a drawn `T=<svc>@<at>:<change>` does to one service's clock (Milestone 375,
+/// `docs/design/service-clocks.md`): a step of 250 ms, 1.5 s, 5 s, 30 s or 5 minutes either way,
+/// as NTP corrects a node or an operator sets it, or a drift of 200 ppm (a poor oscillator) or
+/// 50,000 ppm (a node whose clock runs 5 % off, as after a paused VM's catch-up) either way.
+pub const SERVICE_CLOCK_CHANGES: [ServiceClockChange; 14] = [
+    ServiceClockChange::Step(250),
+    ServiceClockChange::Step(-250),
+    ServiceClockChange::Step(1500),
+    ServiceClockChange::Step(-1500),
+    ServiceClockChange::Step(5000),
+    ServiceClockChange::Step(-5000),
+    ServiceClockChange::Step(30_000),
+    ServiceClockChange::Step(-30_000),
+    ServiceClockChange::Step(300_000),
+    ServiceClockChange::Step(-300_000),
+    ServiceClockChange::Drift(200),
+    ServiceClockChange::Drift(-200),
+    ServiceClockChange::Drift(50_000),
+    ServiceClockChange::Drift(-50_000),
+];
 /// The cluster faults' own stream (`--cluster-faults`, Milestone 195).
 pub const CLUSTER_SALT: u64 = 0xC1B57E5C0FFEEC1B;
 /// The selectors a cluster kill or pause draws (`primary` only for a group with a probe).
@@ -205,6 +228,10 @@ pub struct Ex {
     /// `--upgrades` (Milestone 238): upgrades of the services with `versions:` (`U=`) from
     /// their own stream (UPGRADE_SALT).
     pub upgrades: bool,
+    /// `--service-clocks` (Milestone 375): steps and drifts of one service's own clock
+    /// (`T=<svc>@<at>:<change>`) for the services with `clock: own`, from their own stream
+    /// (SERVICE_CLOCK_SALT).
+    pub service_clocks: bool,
     pub pause_max: i64,
     /// `--pause-thread` (Milestone 226): the targets a drawn pause names, `workload/<name>`
     /// (and `workload` with `--pause-workload`); empty: `workload` only.
@@ -292,6 +319,7 @@ impl Default for Ex {
             cluster_faults: false,
             workload_pauses: false,
             upgrades: false,
+            service_clocks: false,
             pause_max: WP_MAX,
             pause_targets: Vec::new(),
             pause_min: 0,
@@ -1546,6 +1574,59 @@ impl Ex {
         s
     }
 
+    /// `--service-clocks` (Milestone 375, `docs/design/service-clocks.md`): for a manifest whose
+    /// `faults:` allows `clock` and that has services with `clock: own`, a step or a drift of one
+    /// such service's own clock, from its own stream (SERVICE_CLOCK_SALT), so every other field
+    /// of a seed's schedule stays as it was; every draw is made whether it is used or not. One
+    /// clock fault in two is a service's own: a schedule with a step of the guest's clock (`T=`)
+    /// gives it up in half of the schedules for one service's change before the same step, and
+    /// a schedule without one gets a service's change in 60 % of them. The change is one of
+    /// [`SERVICE_CLOCK_CHANGES`], before a step of the workload. With two or more such services,
+    /// a quarter of the changes put two of them apart: a second service gets the opposite
+    /// change before the same step.
+    pub fn add_service_clocks(&self, mut s: S, seed: u64) -> S {
+        if !self.service_clocks {
+            return s;
+        }
+        let Some(sp) = &self.space else {
+            return s;
+        };
+        if sp.clock_svcs.is_empty() || !sp.has_fault("clock") {
+            return s;
+        }
+        let mut t = SplitMix::new(seed ^ SERVICE_CLOCK_SALT);
+        let on = t.below(100) < 60;
+        let instead = t.below(2) == 0;
+        let which = t.next();
+        let which2 = t.next();
+        let change = SERVICE_CLOCK_CHANGES[t.below(SERVICE_CLOCK_CHANGES.len() as i64) as usize];
+        let pair = t.below(4) == 0;
+        let at_r = t.next();
+        let n = sp.clock_svcs.len() as u64;
+        let at = match (s.t, instead) {
+            (Some((at, _)), true) => {
+                s.t = None;
+                s.tp = None;
+                at
+            }
+            (Some(_), false) => return s,
+            (None, _) if on => (at_r % self.norders.max(1) as u64) as i64,
+            (None, _) => return s,
+        };
+        let first = (which % n) as usize;
+        s.ts.push((sp.clock_svcs[first].clone(), at, change));
+        if pair && n >= 2 {
+            // another service, the opposite way
+            let second = (first + 1 + (which2 % (n - 1)) as usize) % n as usize;
+            let opposite = match change {
+                ServiceClockChange::Step(ms) => ServiceClockChange::Step(-ms),
+                ServiceClockChange::Drift(p) => ServiceClockChange::Drift(-p),
+            };
+            s.ts.push((sp.clock_svcs[second].clone(), at, opposite));
+        }
+        s
+    }
+
     /// `--cluster-faults` (M195): for a manifest with `groups:`, from their own stream
     /// (CLUSTER_SALT), so every other field of a seed's schedule stays as it was, and every draw
     /// is made whether it is used or not: a kill of a group's members (50% of the schedules; the
@@ -1713,6 +1794,7 @@ impl Ex {
         s = self.add_protocol_cover(s, seed);
         s = self.add_grpc_faults(s, seed);
         s = self.add_upgrades(s, seed);
+        s = self.add_service_clocks(s, seed);
         let s = self.add_point_streams(s, seed);
         if self.no_faults {
             // `--no-faults` (Milestone 306): the seed's workload alone
@@ -1870,6 +1952,10 @@ impl Ex {
                 Some(tp) => g.push(format!("T={at}:{tp}")),
                 None => g.push(format!("T={at}:{d}")),
             }
+        }
+        // Milestone 375: one service's own clock (nothing without --service-clocks)
+        for (svc, at, ch) in &s.ts {
+            g.push(crate::sched::render_ts(svc, *at, ch));
         }
         if let Some((svc, a, b, d, kinds)) = &s.o {
             g.push(format!("O={svc}@{a}-{b}:{d}:{}", netem_args(kinds)));
@@ -2075,7 +2161,12 @@ impl Ex {
                 }
                 "T" => {
                     let (at, d) = v.split_once(':').ok_or("T=: no :")?;
-                    if d.starts_with('@') {
+                    if let Some((svc, at)) = at.split_once('@') {
+                        // Milestone 372: one service's own clock (`T=<svc>@<at>:<change>`)
+                        let ch = hydo_schedule::ServiceClockChange::parse(d, "T=")
+                            .map_err(|e| e.message)?;
+                        s.ts.push((svc.to_string(), pint(at)?, ch));
+                    } else if d.starts_with('@') {
                         hydo_schedule::ClockPoint::parse(d, "T=").map_err(|e| e.message)?;
                         s.t = Some((pint(at)?, 0));
                         s.tp = Some(d.to_string());
@@ -2228,7 +2319,8 @@ impl Ex {
                 .iter()
                 .any(|r| r.kind() != "cut" && !r.kind().starts_with("clock"));
         had[1] = s.n.is_some() || s.o.is_some();
-        had[2] = s.t.is_some() || s.a.iter().any(|r| r.kind().starts_with("clock"));
+        had[2] =
+            s.t.is_some() || !s.ts.is_empty() || s.a.iter().any(|r| r.kind().starts_with("clock"));
         had[3] = !s.h.is_empty();
         had[4] = s.tj.is_some()
             || s.xt.is_some()
@@ -2287,6 +2379,11 @@ impl Ex {
             var(&|t| {
                 t.t = None;
                 t.tp = None;
+            });
+        }
+        for i in 0..s.ts.len() {
+            var(&|t| {
+                t.ts.remove(i);
             });
         }
         if s.o.is_some() {
@@ -2658,6 +2755,22 @@ impl Ex {
             if d.abs() > 30 {
                 let half = (d as f64 / 2.0) as i64;
                 var(&|t| t.t = Some((at, half)));
+            }
+        }
+        // Milestone 375: one service's own clock shrinks by going (above) and by a half of its
+        // step or drift, towards 0, down to 250 ms and 200 ppm
+        for (i, (_, _, ch)) in s.ts.iter().enumerate() {
+            let half = match *ch {
+                ServiceClockChange::Step(ms) if ms.abs() > 250 => {
+                    Some(ServiceClockChange::Step(ms / 2))
+                }
+                ServiceClockChange::Drift(p) if p.abs() > 200 => {
+                    Some(ServiceClockChange::Drift(p / 2))
+                }
+                _ => None,
+            };
+            if let Some(h) = half {
+                var(&|t| t.ts[i].2 = h);
             }
         }
         if let Some((svc, a, b, d, kinds)) = &s.o {

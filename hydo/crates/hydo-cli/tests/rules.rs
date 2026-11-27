@@ -568,3 +568,54 @@ fn the_clock_audit_names_the_service_when_there_is_no_database() {
     );
     assert!(!text.contains("<database>"), "{text}");
 }
+
+/// Milestone 375: a place that a service with `clock: own` runs gets two more schedules, which
+/// step that service's own clock alone, ahead of the others and behind them
+/// (`T=<svc>@<at>:<change>`). The same project without `clock: own` gets its three schedules
+/// alone, as before.
+#[test]
+fn the_clock_audit_steps_the_own_clock_of_the_service_that_runs_a_place() {
+    let t = T::new("clockown");
+    let w = |rel: &str, text: &str| {
+        let p = t.dir.join("proj").join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, text).unwrap();
+    };
+    w("go.mod", "module example.com/l\n\ngo 1.22\n");
+    w(
+        "cmd/node/main.go",
+        "package main\n\nimport \"example.com/l/lease\"\n\nfunc main() { lease.Run() }\n",
+    );
+    w(
+        "lease/lease.go",
+        "package lease\n\nfunc (l *Lease) renewIdle() {\n\tif time.Now().UTC().Sub(l.lastRenewal) > l.leaseTimeout {\n\t}\n}\n",
+    );
+    let manifest = |own: &str| {
+        format!(
+            "format: 1\nname: l\nservices:\n  - name: n1\n    cmd: \"/bin/node\"\n{own}  - name: n2\n    cmd: \"/bin/node\"\n{own}workload:\n  steps: 12\n"
+        )
+    };
+    w("hydo/hydo.yaml", &manifest(""));
+    let (rc, before) = t.hydo(&["rules", "scan", "proj", "--kind", "clock"]);
+    assert_eq!(rc, 0, "{before}");
+    assert!(!before.contains("own-ahead"), "{before}");
+    w("hydo/hydo.yaml", &manifest("    clock: own\n"));
+    let (rc, text) = t.hydo(&["rules", "scan", "proj", "--kind", "clock"]);
+    assert_eq!(rc, 0, "{text}");
+    assert!(
+        text.contains("own-ahead      disk=none | run T=n1@2:"),
+        "{text}"
+    );
+    assert!(
+        text.contains("own-behind     disk=none | run T=n1@2:-"),
+        "{text}"
+    );
+    assert!(
+        text.contains("the clock of n1 alone goes forward"),
+        "{text}"
+    );
+    // the guest's schedules stay as they were
+    for l in before.lines().filter(|l| l.contains("disk=none | run")) {
+        assert!(text.contains(l), "{l} is gone:\n{text}");
+    }
+}

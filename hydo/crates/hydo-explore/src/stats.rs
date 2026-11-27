@@ -570,6 +570,10 @@ pub fn faults_of(schedule: &str) -> Vec<(String, Option<String>, Option<u64>)> {
             'L' => ("powerloss", at_target(v).0, at_target(v).1),
             'U' => ("upgrade", at_target(v).0, at_target(v).1),
             'C' => ("cut", None, lead(v)),
+            // Milestone 375: `T=<svc>@<at>:<change>` is one service's clock
+            'T' if v.split(':').next().is_some_and(|h| h.contains('@')) => {
+                ("clock", at_target(v).0, at_target(v).1)
+            }
             'T' => ("clock", None, lead(v)),
             'A' => {
                 let (ev, action) = v.split_once(':').unwrap_or((v, ""));

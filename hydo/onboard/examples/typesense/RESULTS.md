@@ -9,7 +9,7 @@ nobody reported.
 
 ## The short answers
 
-- **What was found?** One new bug that needs no clock step, and two new clock effects. Nothing
+- **What was found?** One new bug that needs no clock step, and three new clock effects. Nothing
   was posted.
   1. **New: a node that replays its Raft log applies a delete by a filter in several batches out
      of order with the writes after it, and it then lacks documents for good.** A delete by a
@@ -33,6 +33,12 @@ nobody reported.
      after a step back of 120 s left the two other nodes without a leader for 116 s, until the
      late timer fired, 120 s plus one election timeout after the step
      (`regressions/no-election-after-a-backward-clock-step.schedule`).
+  4. **New, a clock effect (Milestone 375): one node whose own clock steps back by 30 s or more
+     lacks a document for good after a delete by a filter.** That node runs the delete's later
+     batches late, after the writes that followed it, and the late batch deletes their new
+     versions; the other nodes hold them. Only one node's clock moved, with `clock: own`
+     (`skew/regressions/one-node-clock-back-lacks-a-document-after-a-delete.schedule`; the
+     section "One node's own clock").
 - **What held?** Every write that Typesense acknowledged was on the leader at the end, unless a
   later write of the same document replaced it, and no refused write took effect. That held for
   creates, upserts, partial updates, deletes, deletes and updates by a filter, imports of 2 to 100
@@ -464,6 +470,95 @@ In the order of the time each cost:
    ipv4_address 10.89.0.11 ignored; the service is at 10.89.0.11` for each node. The services got
    the same addresses, from hydo's own order of `addr:`, so the warning names a difference that
    is not there. Since Milestone 368 a kept address gives no warning.
+
+## One node's own clock (Milestone 375)
+
+The runs above step the guest's clock, so every node's clock moves at once. Milestone 375 gave
+each node a wall clock of its own (`clock: own`, `docs/design/service-clocks.md`) and stepped
+one node's clock, or two, while the others, the client and the checks kept the guest's clock.
+The manifest is `skew/hydo.yaml`: `hydo/hydo.yaml` with `clock: own` on `ts1`, `ts2` and `ts3`
+and the name `typesense-skew`, so that `hydo/hydo.yaml`'s image and its values stay. Its folders
+`workload/` and `checks/` are links to `hydo/`'s, and its saved regressions are in
+`skew/regressions/`. The runs used hvx on the bare-metal machine, this tree's `hydo` over the
+0.6.0 Linux release's guest files, and the onboarding's client (`tsc-amd64` `3dc4d230…`).
+`ts1` was the leader in these runs.
+
+### 4. New, a clock effect: one node whose clock steps back applies a delete by a filter out of order with the writes after it, and lacks documents for good
+
+- **The schedule.** `disk=none | run T=ts3@20:-60`: the clock of the follower `ts3` alone goes
+  back by 60 s before step 20.
+- **What breaks.** `eventually_converge`: `ts3 lacks i29x4, which the leader ts1 holds as w122`.
+  The write `w122` is an acknowledged upsert after a delete by a filter. The other two nodes hold
+  it. With a step back of an hour (`T=ts3@20:-3600`) the check finds the other side of the same
+  cause: `ts3` holds 64 documents that the delete removed on the other nodes, until its timer
+  fires an hour later.
+- **The cause.** Findings 1 and 2 together, on one node. Each node applies a delete by a filter
+  from its Raft log (`ReplicationState::on_apply` hands every entry to the batched indexer), and
+  the handler runs its later batches from a timer of the node's own HTTP event loop
+  (`defer_processing(req, res, 0)`, `src/core_api.cpp` line 2196). That loop fires no timer
+  while the node's wall clock is behind its last run (finding 2). The leader's batches run at
+  once, and the delete is acknowledged. On `ts3` they wait for the step's length; in the
+  meantime `ts3` applies the next writes from its log. When the timer fires, the late batches
+  delete the new versions of the documents that the later writes upserted (finding 1's order),
+  and `ts3` lacks those acknowledged documents for good.
+- **With a step of every node's clock.** Every node's timers then wait. Finding 2's second
+  exploration saw the nodes stop at different points, as `eventually_converge` failures after a
+  step back. With one node's step the divergence came in every run.
+- **The fingerprints.** The table below.
+
+On the final image (`84f22e51…`, the fingerprint epoch 6), with `ts1` the leader:
+
+| schedule | verdict | fingerprint |
+|---|---|---|
+| `disk=none \| run` | OK | `16319872f7d3dd4c` |
+| `disk=none \| run T=ts3@20:-5` | OK | `67e4f101dedb6526` |
+| `disk=none \| run T=ts3@20:-30` | `converge`: `ts3` lacks `i67x18`, which `ts1` holds as `w109` | `2e6ed47ae01bae13` |
+| `disk=none \| run T=ts3@20:-60` | `converge`: `ts3` lacks `i29x4`, which `ts1` holds as `w122` | `b1761b4adaaa1c6c` (two runs) |
+| `disk=none \| run T=ts3@20:-3600` | `converge`: `ts3` holds 64 documents that `ts1` does not | `e4c433aa042301fd` (two runs) |
+| `disk=none \| run T=ts2@20:-120 T=ts3@20:-120 P=nodes.primary@30+25` | `available`: no leader for 69 s | `4d3093d8b68377e2` (two runs) |
+| `disk=none \| run T=ts2@20:-120 P=nodes.primary@30+25` | OK | `4b63eff2c4e21276` |
+
+The first image of the manifest (`ebf4cba4…`, before the manifest moved into `skew/`) gave the
+same verdicts. On it a step back of an hour of the leader `ts1` alone also left `ts1` with 66
+documents that the new leader `ts3` lacked: `ts1`'s Raft timers stopped too, and `ts3` took the
+lead.
+
+- **Duplicates.** typesense/typesense#2626 (open) reports a cluster whose nodes answer one search
+  with different counts, with the same number of documents on every node; the maintainers named
+  the network between the nodes. Its cause is not known, and nothing ties it to a clock. No
+  Typesense issue names a clock step and a delete by a filter.
+- **A clock effect.** An NTP client steps one node's clock when its offset is large (ntpd
+  above 128 ms, chrony with `makestep`). The promise broken is the replicas': every node holds
+  every acknowledged write.
+
+### Finding 3 on one node's clock
+
+- `T=ts2@20:-120 T=ts3@20:-120 P=nodes.primary@30+25`, both followers' clocks back by 120 s and
+  then a pause of the leader `ts1`: no leader for 69 s while two nodes answered
+  (`final_available`), as with a step of the guest's clock (`T=20:-120`, the same 69 s on the
+  first image).
+- `T=ts2@20:-120 P=nodes.primary@30+25`, one follower's clock back: the other follower's
+  election timer fires on time, and the run passes.
+- `T=ts1@20:-120 P=nodes.primary@30+25`, the leader's own clock back: the run passes (on the
+  first image).
+
+So the late election needs a majority of the remaining nodes with clocks behind.
+
+### What held
+
+On the first image, forward steps of 30 s and 300 s of one or two nodes, a drift of 50,000 ppm
+of one node, and a drift of -50,000 ppm of both followers held every check.
+
+### The exploration with one node's clock
+
+`hydo explore --seeds 1-20 --strategy process --new-faults --service-clocks --workers 1` on the
+final image ran 20 schedules in 12 minutes. 8 of them drew a node's own clock, 11 changes in
+all: steps of 1.5 s either way and of 5 minutes forward, and drifts of 200 and 50,000 ppm either
+way, three of them with two nodes apart. None of those 8 failed. The 5 failures were finding 2,
+each with a step of the guest's clock back by 5 minutes to 30 days. The shrinker reduced them
+to `T=28:-324000` (`bdelete`) and to `K=ts3@0+13 T=18:-300` (`export`). Finding 4 needs one node
+30 s or more behind, and the explorer drew no step back of 30 s or 5 minutes on one node in these
+seeds, so it found finding 4 only by the directed schedules.
 
 ## Time
 
