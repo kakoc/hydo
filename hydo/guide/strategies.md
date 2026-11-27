@@ -14,7 +14,7 @@ results page: new as far as the search found, known, by design, or a deployment 
 
 | system | its promise | the techniques that found most | where they found bugs |
 |---|---|---|---|
-| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults; failovers by the client with a late write; replicas compared after a restart | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus, Kvrocks, Typesense |
+| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults; failovers by the client with a late write; replicas compared after a restart | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus, Kvrocks, Typesense, Garnet |
 | object store | an acknowledged object stays as written; a listing shows what exists | a listing compared with a read of each key; kills and pauses of one node; clock steps | Garage |
 | log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults; a client that leaves transactions open, and power cuts and clock steps | Redpanda, NATS, Pulsar |
 | job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate, NSQ |
@@ -420,8 +420,16 @@ These findings hold for every type of system:
   delete by a filter before the delete's later batches, which then deleted the new versions.
   Blind in 3 of 60 schedules without a step back of the clock. The failing schedules passed
   on an image whose deletes run in one batch.
+- **What it found in a sharded cluster.** Garnet 2.2.14 (finding 1), three primaries with one
+  replica each: a kill of one primary and its restart (`K=g1@15+3`) left its replica without
+  replication for good. The replica reported its link to the primary up, the primary listed no
+  replica, and every write after the restart was missing on the replica. The check compared
+  each primary with its replica, shard by shard, and also found keys of a slot that had moved
+  away still on the replica. With Garnet's `--cluster-replication-reestablishment-timeout 5` the
+  same schedule passed. A kill of the replica passed with either value.
 - **What it misses.** A difference that the system repairs before the check runs, and one that
-  needs a node to become the leader.
+  needs a node to become the leader. A check of a replica's own status (`master_link_status`)
+  instead of its keys: the status of Garnet's replica said `up` while it received nothing.
 - **Cost.** One export of every node at the end. It runs on every engine.
 
 ## Faults
@@ -721,9 +729,19 @@ These findings hold for every type of system:
   late write rejoined by a full synchronization. A power cut or one node's power loss in the
   next seconds left that node unable to start. Blind in 10 of 60 schedules, and in 14 of 30
   cuts aimed after the failover's event.
+- **What it found in a sharded cluster.** Garnet 2.2.14 (finding 2), whose cluster is passive:
+  the client moved slots with `MIGRATE ... SLOTS` and failed shards over with `CLUSTER FAILOVER`,
+  as a control plane does, as two `serial_driver_` commands. A failover that came right after a
+  migration into the same shard left the migrated slot without an owner on every node, for
+  good. The bug needs no fault, only the failover before the gossip of the migration; the
+  faults of the schedule moved the moment so (seed 96 of the example's e2). The
+  blind exploration found it in 3 of 51 first runs on KVM. A check that every node names one
+  owner for every slot, and that the owner is a primary, named it. The same composition
+  without faults passed on another image, where the gossip came first.
 - **What it misses.** The failover runs between workload steps, so a fault inside its own steps
   comes only from a reaction at its events. The client's failover is not Sentinel's: it has no
-  quorum and no election.
+  quorum and no election. Two control-plane steps meet only when the composition puts them
+  next to each other.
 - **Cost.** A synced file for the master's name, and a check that the replicas agree with the
   master after the heal. It runs on every engine.
 

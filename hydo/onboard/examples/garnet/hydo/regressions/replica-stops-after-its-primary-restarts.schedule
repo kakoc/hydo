@@ -1,0 +1,12 @@
+# Finding 1 in Garnet 2.2.14 and on `main` (RESULTS.md). With Garnet's default
+# --cluster-replication-reestablishment-timeout 0 (the build parameter reest=0), a kill of the
+# primary g1 before step 15 and its start with --recover 3 steps later leave its replica g4
+# without replication for good: g1 lists no replica (connected_slaves:0), g4 reports
+# master_link_status:up and an offset that stays where it was, and every write that g1
+# acknowledges after its restart, and every deletion of a slot that moves away from g1, is
+# missing on g4. eventually_converge fails 120 s after the heal. With reest=5, the example's
+# default, the same schedule passes.
+# params: reest=0
+# commands: anytime_read first_init parallel_driver_del parallel_driver_hset parallel_driver_incr parallel_driver_lua parallel_driver_over parallel_driver_rpush parallel_driver_sadd parallel_driver_set parallel_driver_setex parallel_driver_txn parallel_driver_zadd serial_driver_failover serial_driver_migrate serial_driver_save
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run K=g1@15+3

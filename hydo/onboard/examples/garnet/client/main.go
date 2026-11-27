@@ -1271,8 +1271,12 @@ func readBack() int {
 	by, oc := opsByKey()
 	own, why := waitServed(time.Now().Add(120 * time.Second))
 	if own == nil {
+		// read back what is served; a write of a slot without an owner that answers stays
+		// undecided, and the converge and slots checks say why
 		fmt.Printf("the cluster does not serve every slot of the test: %s\n", why)
-		return 0
+		if own, _, _ = owners(); own == nil {
+			return 0
+		}
 	}
 	cl := map[string]*redis.Client{}
 	get := func(n string) *redis.Client {
@@ -1292,8 +1296,16 @@ func readBack() int {
 	}
 	sort.Strings(keys)
 	var ids, items, unread []string
+	unserved := map[int]int{}
 	for _, k := range keys {
 		ops := by[k]
+		if own[slotOf(k)] == "" {
+			for _, o := range ops {
+				unread = append(unread, o.id())
+			}
+			unserved[slotOf(k)] += len(ops)
+			continue
+		}
 		c := get(own[slotOf(k)])
 		ctx, cancel := ctxT(10 * time.Second)
 		if isRegister(ops[0].kind) {
@@ -1410,6 +1422,14 @@ func readBack() int {
 		j := min(i+20, len(unread))
 		hrec(proc, "invoke", append([]string{"status", "writes"}, unread[i:j]...)...)
 		hrec(proc, "info", append([]string{"status", "writes"}, unread[i:j]...)...)
+	}
+	var us []int
+	for s := range unserved {
+		us = append(us, s)
+	}
+	sort.Ints(us)
+	for _, s := range us {
+		fmt.Printf("slot %d has no owner in CLUSTER SLOTS: %d writes of it not read back\n", s, unserved[s])
 	}
 	fmt.Printf("read back %d writes of %d keys from the owners of their slots\n", len(items), len(keys))
 	return 0
@@ -1622,35 +1642,74 @@ func checkConverge() int {
 	return 0
 }
 
-// checkSlots: after the heal every node names the same owner for every slot of the test, that
-// owner is a primary, and no primary holds a key of a slot that it does not own (a key that a
-// migration left behind comes back when the slot moves back).
+// checkSlots: after the heal every node names the same owner for every slot of the test, and
+// that owner is a primary. For the first slot that the nodes disagree on, it prints each node's
+// owner, its CLUSTER SLOTSTATE, its role and its config epoch.
 func checkSlots() int {
-	var ref map[int]string
-	refNode := ""
+	var slots []int
+	for t := 0; t < ntags; t++ {
+		slots = append(slots, tagSlot(t))
+	}
+	sort.Ints(slots)
+	views := map[string]map[int]string{}
 	for _, n := range nodes {
-		m := map[int]string{}
-		for t := 0; t < ntags; t++ {
-			m[tagSlot(t)] = slotOwnerAt(n, tagSlot(t))
-		}
-		if ref == nil {
-			ref, refNode = m, n
-			continue
-		}
-		for s, o := range m {
-			if o != ref[s] {
-				fmt.Printf("%s names %s as the owner of slot %d, and %s names %s\n", n, o, s, refNode, ref[s])
-				return 1
-			}
+		views[n] = map[int]string{}
+		for _, s := range slots {
+			views[n][s] = slotOwnerAt(n, s)
 		}
 	}
-	for s, o := range ref {
+	ref := views[nodes[0]]
+	for _, s := range slots {
+		agree := true
+		for _, n := range nodes[1:] {
+			if views[n][s] != ref[s] {
+				agree = false
+			}
+		}
+		if agree {
+			continue
+		}
+		for _, n := range nodes {
+			fmt.Printf("%s names %s as the owner of slot %d; %s\n", n, views[n][s], s, nodeState(n, s))
+		}
+		fmt.Printf("the nodes name different owners of slot %d\n", s)
+		return 1
+	}
+	for _, s := range slots {
+		o := ref[s]
 		if r, err := role(o); err != nil || r != "master" {
 			fmt.Printf("every node names %s as the owner of slot %d, and %s is %s %s\n", o, s, o, r, errText(err))
 			return 1
 		}
 	}
 	return 0
+}
+
+// nodeState is a node's CLUSTER SLOTSTATE of a slot, its role, its config epoch and the epoch
+// it knows of the cluster, in one line.
+func nodeState(n string, slot int) string {
+	c := client(n, 3*time.Second)
+	defer c.Close()
+	ctx, cancel := ctxT(8 * time.Second)
+	defer cancel()
+	st, err := c.Do(ctx, "CLUSTER", "SLOTSTATE", slot).Slice()
+	state := errText(err)
+	if err == nil {
+		state = fmt.Sprint(st)
+	}
+	info, err := c.ClusterInfo(ctx).Result()
+	epochs := errText(err)
+	if err == nil {
+		var f []string
+		for _, l := range strings.Split(info, "\n") {
+			if strings.HasPrefix(l, "cluster_current_epoch") || strings.HasPrefix(l, "cluster_my_epoch") {
+				f = append(f, strings.TrimSpace(l))
+			}
+		}
+		epochs = strings.Join(f, " ")
+	}
+	r, _ := role(n)
+	return fmt.Sprintf("slotstate %s, role %s, %s", state, r, epochs)
 }
 
 // checkAtomic: on every node each transaction and script has all of its writes or none.
@@ -1884,7 +1943,14 @@ func cmdInit() int {
 	}
 }
 
+// quiet drops go-redis's own log lines (a failed dial prints one per try), which would fill
+// hvx's console of 64 KiB through the commands' output notes.
+type quiet struct{}
+
+func (quiet) Printf(context.Context, string, ...any) {}
+
 func main() {
+	redis.SetLogger(quiet{})
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: gnc ready <addr> | init | primary <shard> | op <kind> | failover | migrate | save | read | readback | check <rule> | dump <node>")
 		os.Exit(2)

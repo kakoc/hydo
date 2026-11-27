@@ -1,0 +1,14 @@
+# Finding 2, a new candidate in Garnet 2.2.14 and on `main` (RESULTS.md); seed 96 of the second
+# exploration. The composition moves the slot 8943 (tag t1) from g2 to g1 with MIGRATE ... SLOTS,
+# waits until g1 and g2 name g1 as its owner, and fails shard 1 over to g4 with CLUSTER FAILOVER
+# at once. g4 takes over only the slots that its own copy of the configuration gives to g1, which
+# does not have the migrated slot yet (ClusterConfig.TakeOverFromPrimary). So no node serves slot
+# 8943 any more: g2 names g1, the others name none, the writes of the tag fail with "slot 8943 has
+# no owner", and the read-back and the checks end with CLUSTERDOWN Hash slot not served. The
+# faults are not needed for the bug, only for this timing: without them, or with the power cut
+# alone, the failover came after the gossip on the final image. native/slot-lost-after-failover.sh
+# shows it without hydo, and a wait of 6 s between the migration and the failover avoids it.
+# params: device=FileStream reest=5
+# commands: anytime_read first_init parallel_driver_del parallel_driver_hset parallel_driver_incr parallel_driver_lua parallel_driver_over parallel_driver_rpush parallel_driver_sadd parallel_driver_set parallel_driver_setex parallel_driver_txn parallel_driver_zadd serial_driver_failover serial_driver_migrate serial_driver_save
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut dseed=0 | run K=g6@15+3 N=g1-g5@27-29:loss,65% C=40 P=g4@0+6 T=37:3600 W=9abb9e17,p3,q2,r250 L=g3@29+3

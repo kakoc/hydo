@@ -23920,3 +23920,123 @@ the failing check's output (`HYDO-CHECK-OUT`), and else keep the original delay.
 compares verdicts by their signature. The check's output is in the controller's records, not in
 the results the shrinker reads, so the guard needs that output carried into each candidate's
 result. That was more than this round's time (open item 184).
+
+## Milestone 371 (tentative number): Garnet, a slot without an owner after a failover that follows a migration
+
+Microsoft Garnet 2.2.14 became the example `hydo/onboard/examples/garnet` (RESULTS.md), by
+`docs/ONBOARDING-PLAYBOOK.md`. The image and the directed runs used the published 0.6.0 Linux
+release on hvx on the bare-metal machine, and the explorations ran on GitHub's KVM runners with
+`explore.yml`. One new candidate, one finding that needs Garnet's default of a setting, one known
+bug, and three candidates whose cause was not traced; nothing was posted, and nothing recorded
+moved.
+
+**Finding 2, new.** A default `CLUSTER FAILOVER` right after a `MIGRATE ... SLOTS` into the same
+shard leaves the migrated slot without an owner on every node, for good. The client waited until
+the source and the target named the target as the owner, and then failed the target's shard
+over at once. The replica takes over the slots that its own copy of the configuration gives its
+primary (`ClusterConfig.TakeOverFromPrimary`, `libs/cluster/Server/ClusterConfig.cs` line 1393),
+and gossip had not brought it the migration yet. The old primary becomes a replica and serves
+no slot. So the slot's keys, which the new primary replicated, are served by no node:
+`CLUSTERDOWN Hash slot not served` through the new primary, and `MOVED` to the old primary through
+the source. The exploration e2 failed seeds 96, 99 and 120 so; the first two showed it in the recovery boot
+after a power cut.
+On hvx seed 96 failed with its faults, without its power cut, and without its clock step. Its
+composition alone passed on the final image, where the gossip came before the failover, so the
+race depends on that moment. `native/slot-lost-after-failover.sh` reproduces it with Docker, also across a restart of
+every node, and passes with a wait of 6 s between the two steps. No issue names it.
+
+**The example.** Six nodes of Garnet 2.2.14 from the official image, in cluster mode as three
+primaries with one replica each, at fixed addresses, imported with `hydo compose`. Each node's
+AOF, checkpoints and cluster configuration are on a file system of its own. The build parameters
+are `--aof-commit-wait` (`wait`, `yes`), `--aof-commit-freq` (`freq`), `--checkpoint-freq`
+(`ckpt`), `--device-type` (`device`), and `--cluster-replication-reestablishment-timeout`
+(`reest`, `5` in the example, `0` in Garnet), each a `configs:` entry. The Go client `gnc` forms
+the cluster with `CLUSTER MEET`, `ADDSLOTSRANGE` and `REPLICATE`. It sends each write once to the
+owner of its slot and follows `MOVED` and `ASK` itself. The writes are strings, expiring keys,
+hashes, counters, lists, sets, sorted sets, `MULTI`/`EXEC` and Lua scripts over 16 hash tags. As
+a control plane does, it fails a shard over with `CLUSTER FAILOVER` and a late write to the old
+primary, moves slots with `MIGRATE ... SLOTS`, and takes checkpoints with `BGSAVE`. A messages
+check with `acked_outcome` reads every write back from the owner of its slot. Four checks judge
+the rest: each replica holds its primary's keys and none of a slot that left its shard, every
+node names one owner per slot, transactions and scripts apply whole, and counters stay within
+their `INCR`s. Garnet has no `WAIT`, so replication is asynchronous and the client never forces
+a failover.
+
+**Finding 1, a deployment setting with a status that hides it.** With Garnet's default
+`--cluster-replication-reestablishment-timeout 0`, a kill of a primary and its start with
+`--recover` leave its replica without replication for good. The primary drives the AOF stream
+only to a replica that attached, and a replica attaches again by itself only in
+`ReplicationManager.EnsureReplication`, which returns at once when the option is 0
+(`libs/cluster/Server/Replication/ReplicationManager.cs` line 189). The replica's
+`master_link_status` is its gossip connection (`Gossip.GetPrimaryLinkStatus`), so it says `up`.
+`disk=none | run K=g1@15+3` left `g4` at offset 1,668 while `g1` was at 5,984, without 18 keys
+that `g1` acknowledged after its restart, and with 5 keys of two slots that moved away after it.
+With `reest=5` the same schedule passes. A kill of the replica passes with either value.
+`native/replica-after-primary-restart.sh` reproduces it with Docker: 0 of 10 keys on the replica
+60 s after the restart, `connected_slaves:0` on the primary, and 10 of 10 with `REEST=5`. A
+default `CLUSTER FAILOVER` in that state aborts (`native/failover-after-primary-restart.sh`); a
+forced one would promote the stale replica. microsoft/garnet#2087 reported the same
+`master_link_status:up` for a write through `READWRITE`, and was closed with a fix of that
+trigger only.
+
+**Known: microsoft/garnet#2281.** With the default device, a power cut of the guest loses writes
+that Garnet acknowledged with `--aof-commit-wait`: `disk=cut | run C=10` lost 5 of 20. With
+`--device-type FileStream`, the issue's workaround, the same cut and `C=30` lost none.
+
+**Three candidates whose cause was not traced**, each with a regression on the `fs` image and two
+equal fingerprints on KVM: a kill of a primary 10 ms after a `BGSAVE` leaves its replica
+answering nothing after the heal; a pause of a migration's target and failovers of both shards
+after the migration lose two acknowledged writes; and after a kill of a new primary and a power
+cut, its replica holds other data at the same replication offset.
+
+**The runs.** The final images were built with the client `f3951b59…`: the default image
+`explore-ob-garnet-disk.img` (`f9d61a2f…`) gives `96eee05052238c8b` on two clean runs. Each
+regression gave one fingerprint over two runs on hvx: finding 1 on the `reest=0` image
+(`c5bc4e25…`) `982a16effdb11bfa`, finding 2 on the `device=FileStream` image (`57aaef25…`)
+`5a4771d51585eeff`, and #2281 on the default image `bb4299751e2f04c0`. `hydo repro --regressions`
+on each image replayed the regression of its build parameters as expected and left the others
+out. Kills of a migration's source and target at the migration's events, of a newly promoted
+primary, power cuts at the client's events and at the 300th and 600th flush (`cf=`, with
+`device=FileStream`), and steps of the clock by an hour each way passed.
+
+**The explorations** ran on GitHub's KVM runners with `explore.yml`, 20 parts each, from the
+branch's first version of the example. A first run took 200 to 350 s there, four times hvx's.
+e1, the default image with `--strategy process --new-faults --cluster-faults --storage-faults`
+over seeds 1-60, was cancelled after 9 first runs: its one failure was #2281, and its shrink took
+81 runs. e2, the same options on the `device=FileStream` image over seeds 61-120, read 51 first
+runs from 17 parts. It found finding 2 in seeds 96, 99 and 120, the candidates B (seed 89) and C
+(seed 115), damaged files in 8 seeds, one run whose group `primary:` named no member, and one
+`SPIN` of KVM in a recovery boot. e3, `--strategy swarm --new-faults
+--cluster-faults --reactive fault` at the client's five events with `--kill-now`, over seeds
+121-160, read 32 first runs from 16 parts and found candidate A (seed 144). The last 3 parts of
+e2 and 4 of e3 were still shrinking when the round ended and were cancelled, so no merged report was
+made; the parts' reports were read one by one.
+
+**Tests.** The new example enters the explorer's and the controller's corpora. Re-recorded with
+`HYDO_BLESS=1`: the explorer's corpus goldens (full and quick), its identity goldens (quick and
+full), and the controller's quick corpus golden. MILESTONE_TESTS No Rust code changed.
+
+Retro: Garnet 2.2.14, hvx and KVM, 2026-11-26 and 27
+- Time to the first clean run: 1 hour of wall time, about 25 minutes of it waiting for builds.
+  The first run stopped at `--logdir` without a storage tier.
+- Schedules run before the first finding: 3 directed runs (finding 1 at the first kill of a
+  primary); finding 2 came at e2's seed 96, the 36th seed of the exploration on the durable device. No
+  failure was a mistake of the rules; the first converge check stopped at a `MOVED` of an orphan
+  key instead of naming it.
+- The findings: 1 new (a slot without an owner after a failover that follows a migration), 1
+  deployment setting with a status that hides it (no replication after a primary's restart), 1
+  known (#2281), 3 candidates whose cause was not traced, and 8 schedules of damaged files.
+- What took the most time: the KVM runs at four times hvx's run time and the shrinks of finding
+  2's exhausted exit budget (about 4 hours of runners); separating finding 2's race from its
+  faults (about 2 hours of hvx runs); three rebuilds of every image for the client's diagnostics
+  (about 1.5 hours).
+- What hydo lacked: no `depends_on` links between a Compose cluster's nodes, so no network
+  faults until they were named by hand; no way to leave one fault kind out; the class
+  `durable-defaults` for a failure on the durable device; the diagnosis that named a
+  `kill-now-` reaction's SIGKILL the kernel's out-of-memory killer; the console of 64 KiB (open
+  item 193).
+- Strategies: "Failovers by the client, with a late write" gained finding 2 (two control-plane
+  steps next to each other), and "Every replica compared with the leader after a restart" gained
+  finding 1; the first table names Garnet.
+
+**What is left.** Open item 193.
