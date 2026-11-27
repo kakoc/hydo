@@ -820,6 +820,27 @@ commit; none moves a recorded value:
 
 The details are in `docs/HISTORY.md` Milestone 368 (open items 181, 184 and 188).
 
+**The gaps of the rqlite, RabbitMQ and Garnet onboardings (M374, tentative number).** Each fix
+its own commit; none moves a recorded value:
+- A `checks/list_append_*` or `linearizable_*` file beside a `checks:` section of `hydo.yaml` is
+  declared and judged; before, the controller dropped it without a word.
+- `groups[].restart: together` (a format-1 addition) starts a group's killed members at once and
+  checks each one's readiness after all are started, at the end of a `K=` and in the heal.
+- `groups[].links: all` (a format-1 addition) lets the explorer cut the links between the
+  members with `network: bridge`. `hydo compose` writes such a group for the services of one
+  image and one command, and says so.
+- The diagnosis counts a SIGKILL that hydo sent from the guest (a `kill-now-` reaction's relay)
+  as hydo's, not the out-of-memory killer's.
+- `hydo guide messages` names the Go SDK's v0.7.0 for `Drained` and gives the order of a run's
+  end; a messages check without `final:` takes another messages check's drain.
+- `T=<step>:+<secs>` is `T=<step>:<secs>`, and prints so.
+- `hydo build` and `--check` warn when an image's non-root user cannot write its own `storage:`
+  file system, and name the `chown`.
+- The image input key (`hydo explore --configs`, `hydo ci`) reads no build folder, run or
+  exploration of the `hydo/` folder.
+
+The details are in `docs/HISTORY.md` Milestone 374 (open items 97, 147, 157, 189, 191 and 192).
+
 **Each image service's own `/tmp` (M331, tentative number; fingerprint epoch 5).** An image
 service of an image built at epoch 5 has a `/tmp` of its own, as a container has. It is the
 guest's folder `/tmp/oci/<service>` (`hydo_image::defaults`, `oci_own_tmp`). The guest's
@@ -2755,7 +2776,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     in `result.json` (`details.output`) and `hydo report`; the verdict line still lacks them.
 97. Network links from `depends_on` only (M224). A service that talks to another without naming it
     in `depends_on` has no link to it in the fault space. Blnk's worker reaches PostgreSQL and
-    Redis, and Blnk's Compose file names neither for it; the example names them by hand.
+    Redis, and Blnk's Compose file names neither for it; the example names them by hand. Since
+    M374 a group with `links: all` makes its members linked, and `hydo compose` writes such a
+    group for the services of one image and one command (the nodes of one cluster). Services of
+    other images, such as Blnk's worker and its database, still need `depends_on`.
 98. The Linux release and `network: bridge` (M224). `hydo build` of the unpacked release stops with
     `HYDO_IPROUTE2 not found at /nix/store/...` until `hydo setup` unpacks `guest/store.tar`. The
     message does not name `hydo setup`.
@@ -3348,8 +3372,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       ran on one worker. A `hydo run` beside the explorer ends with `the engine exited` and no
       reason.
     - After a kill of a group, hydo restarts its members one at a time, each after the one
-      before is ready. So a member whose readiness needs a quorum never becomes ready. In the
-      example, PD's members count as ready at once. So a PD member that dies in the recovery
+      before is ready. So a member whose readiness needs a quorum never becomes ready. Since M374
+      `restart: together` on the group starts them all first; the example did not run with it.
+      In the example, PD's members count as ready at once. So a PD member that dies in the recovery
       boot is not named, and the verdict names the store that cannot reach PD (finding 2).
     - Finding 2 (tikv/pd#11596) is known and fixed on PD's master only. A power cut shortly
       after any start of PD reaches it, so explorations with power cuts meet it often until a
@@ -3524,7 +3549,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       data disk has 1,024 MiB; a third replica or a larger data set does not fit.
     - After a kill of a group, hydo restarts its members one at a time, each after the one before
       is ready (as open item 147). A Keeper opens its client port only with a quorum, so the
-      Keepers count as ready at once, and a Keeper that does not start is not named.
+      Keepers count as ready at once, and a Keeper that does not start is not named. Since M374
+      `restart: together` on the group starts them all first; the example did not run with it.
     - `hydo compose` took the Keeper's port from the image's `EXPOSE` (2181; it listens on 9181)
       and kept the images' `entrypoint.sh`, which changes owners in the read-only root. The
       import does not propose `guest.cpu: v3`, without which the programs stop with SIGILL.
@@ -4245,18 +4271,14 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Nothing is posted. Finding 1 is the open pull request rqlite#3027. Findings 2 and 3 are new
       as far as the search found. In finding 2 a graceful stop loses the queued writes that the
       node answered. In finding 3 a node removed while it was down never joins again.
-    - With a `checks:` section in hydo.yaml, a `checks/list_append_*` or `linearizable_*` file is
-      dropped without a word. The host controller reads `manifest.sh` only when hydo.yaml has no
-      history check (`hydo-control/src/agent.rs`, lines 245 to 262). The example declares its
-      list-append check in hydo.yaml.
     - No fault stops a service gracefully: `K=` sends SIGKILL. The client sends SIGTERM itself,
       so the explorer cannot draw the stop and the shrinker cannot drop it (the idea "A
       graceful stop as a fault" of `docs/USE-CASES.md`).
     - A pause by steps lasts as long as a serial driver holds the round: `P=rq3@10+1` lasted 90
       s behind a driver that waited, and `hydo guide faults` does not say so.
     - A file system of `storage:` belongs to root, so an image that runs as another user cannot
-      write to it; neither `hydo compose` nor `--check` says so (the example's `setup:` runs
-      `chown`).
+      write to it. Since M374 `hydo build` and `--check` warn and name the `chown` fix; `hydo
+      compose` writes no `storage:` and says nothing.
     - `hydo rules scan --kind writes` found none of rqlite's routes, a `switch` on `r.URL.Path`
       with `strings.HasPrefix`. The clock audit listed no wall-clock reading kept as an order:
       the staged WAL files of an incremental snapshot are named by `time.Now().UnixNano()`.
@@ -4293,18 +4315,16 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `rabbit2` before step 1 was not traced. Its quorum and its deletion are traced (the
       replay with hydo 0.7.0 in RESULTS.md). Finding 3's cause (a retry parked on a clock that a
       node restarted after the step keeps a day behind) was not shown in a run.
-    - After a kill of a group, hydo restarts its members one at a time and waits for each one's
-      readiness (as open item 147). A RabbitMQ node that restarts with data opens AMQP only after
-      its peers answer, so the example's readiness is the Erlang distribution port.
-    - A messages check's `final:` runs before the `eventually_` commands, and no guide says so;
-      a probe after the faults has to be part of the drain. One drain for several histories needs
-      the placeholder `final: "true"` on the other checks.
-    - The Go SDK's newest tag (v0.6.0) has no `Drained`, which `hydo guide messages` shows.
+    - A RabbitMQ node that restarts with data opens AMQP only after its peers answer. Since M374
+      `restart: together` on a group starts its killed members at once and checks each one's
+      readiness after all are started. The example keeps the Erlang distribution port as its
+      readiness, and its `hydo.yaml` was not changed.
+    - Since M374 the order of a run's end is in `hydo guide messages` and MANIFEST.md, and a
+      messages check without `final:` takes another check's drain; the example keeps its
+      placeholders `final: "true"`.
     - An exploration cannot leave out one fault kind (as open items 140 and 141), and two images
       of one folder need `--image` on every run (as open item 188).
-    - The clock audit reads no Erlang. `T=<step>:+<secs>` is refused; only `T=<step>:<secs>`.
-    - `hydo explore --configs` read the files under the example's `.hydo/` for 23 minutes before
-      its first build, the copies' unpacked roots and disk images among them.
+    - The clock audit reads no Erlang.
     - `hydo compose` dropped Compose's `hostname:` without a warning. The 0.6.0 release's import
       also took epmd's port from the image's `EXPOSE`, which M367 now warns of.
     - Not run: the Mac engine and KVM, five nodes, AMQP 1.0, super streams, a stream's single
@@ -4324,9 +4344,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A run took 200 to 350 s on GitHub's KVM runners and 50 to 60 s on hvx. A shrink of a
       power cut on the default device took 81 runs, so the first exploration was stopped.
     - Open items 140 and 141 say it too: no exploration leaves out one fault kind.
-    - A cluster imported from Compose has no links between its nodes. So the explorer drew no
-      network fault between them until the example named them in each node's list of
-      dependencies (as open item 97).
+    - The example names every earlier node in each node's `depends_on`, because the explorer
+      seemed to draw no link fault between the imported nodes. M374 found that an import whose
+      services name no `depends_on` gets every pair already; a node pair loses its link once any
+      service names a dependency. Since M374 `hydo compose` writes a group with `links: all` for
+      the six nodes, and the example's `hydo.yaml` was not imported again.
     - The import called each fixed address of the Compose file ignored, as open item 188 says.
     - The grid of aimed reactions multiplies by the six services. The explorations used the
       client's events with drawn reactions instead.
@@ -4335,8 +4357,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - On KVM finding 2 ended as an exhausted exit budget while the checks waited for the
       unserved slot. Its class was the one of relaxed durability settings, on the durable
       device. Each shrink candidate ran to the budget, so those parts ran for hours.
-    - The diagnosis called the SIGKILL of a kill-now reaction the kernel's out-of-memory
-      killer.
     - The shrinker kept the faults of another node in seed 120's minimal schedule, as in open
       item 188. A group's primary command that names no member ends the run before its checks
       (seed 90).
@@ -5572,6 +5592,13 @@ build machine, before 2026-10-13.
   at every start: the KVM guest kernels have no `/proc/<pid>/io`, and its bundled brpc reads the
   file in a static initializer. The design page proposes kernels with I/O accounting at a new
   epoch. Nothing recorded moved
+- M374 (tentative number): the gaps of the rqlite, RabbitMQ and Garnet onboardings, each its own
+  commit. A history check file beside a `checks:` section is judged. A group may restart its
+  killed members together (`restart: together`) and link them all (`links: all`, which `hydo
+  compose` writes for one image's nodes). A relay's SIGKILL is hydo's in the diagnosis. The
+  smaller ones: the Go SDK's version of `Drained`, a shared drain, and `T=<step>:+<secs>`. A
+  warning names a `storage:` file system that its user cannot write, and the input key leaves
+  out hydo's outputs. Nothing recorded moved
 - The 0.7.0 release (no milestone number): prepared, not published. The version is raised with
   the skill's four version fields, `hydo-world`, `hydo-world-tls` and `hydo-grpc` are re-pinned,
   and the released results schema is copied. The re-pins moved 9 hvx and 9 Mac images
