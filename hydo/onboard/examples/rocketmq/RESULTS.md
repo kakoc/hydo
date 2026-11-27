@@ -9,7 +9,41 @@ SyncStateSet has it, and `SYNC_FLUSH`. It looks for bugs that nobody reported.
 
 ## The short answers
 
-FINDINGS
+- **What was found?** One new candidate, a clock effect, one finding known in its parts, and one
+  known finding. Nothing was posted.
+  1. **Known in its parts: after a power cut, the slaves never start again.** A broker writes its
+     epoch file `epochFileCheckpoint` without a sync when the controller gives it a role. A power
+     cut 17 s later left both slaves' files at 0 bytes, and each broker exits at every start on
+     the unchecked parse of an empty header. The replica group keeps one broker. Issue #11460
+     names the parse; #5905 named config files of 0 bytes after a forced restart
+     (`regressions/slaves-never-start-after-power-cut.schedule`). One broker's power loss does
+     the same.
+  2. **Known: a failover moves a group's committed offsets back by up to 10 s.** A slave copies
+     the offsets from its master every 10 s, so after a kill of the master the consumers get
+     acknowledged messages again (#7790). The same copy holds the delay offsets and the
+     transaction check's progress, so a failover can store a delayed message or a committed
+     transaction a second time (`hydo-offsets.yaml`, its inline regression).
+  3. **New, a clock effect: after a backward step of the wall clock, the transaction check stores
+     committed transactions again, or checks none.** The broker writes the commit and rollback
+     records of transactions in batches timed by the wall clock, so after a step back it writes
+     none for the step's length. A step back of an hour made the broker store each committed
+     transaction again at every check, six times in 50 s
+     (`regressions/committed-transaction-stored-again-after-clock-step.schedule`). A step back of
+     30 days stopped the check at a half message without its record, so no transaction was
+     checked, and one that waited for a check was never delivered
+     (`regressions/no-transaction-checked-after-clock-step.schedule`).
+- **What held?** No message that `SendSync` acknowledged with `SEND_OK` was lost under kills,
+  pauses past the controller's heartbeat timeout, partitions and one-way loss, failovers, a kill
+  of the NameServer with its controller, or clock steps, whenever every broker came back. A
+  rolled-back transaction was never delivered, a delayed message never came before its delay, a
+  poison message reached the dead-letter topic after its retries, and each key's messages came in
+  order.
+- **What is the environment or detected damage?** A damaged file of a broker's store (`G=`) made
+  that broker refuse to start (exit status 253): RocketMQ detects it, and the run ends in an
+  ERROR.
+- **What hydo lacked?** The section "What hydo lacked" lists thirteen gaps. The two that cost
+  most were the KVM boots on AMD EPYC 7763 runners, which spin before S1 and count as failures,
+  and hvx's console of 64 KiB, which the drain's records filled.
 
 ## The version
 
@@ -122,6 +156,22 @@ no-redelivery`: a committed consumer offset holds, also across a failover. Every
 it (finding 2), so the example's manifest leaves it out, and the variant keeps that finding's
 regression.
 
+## Without faults, and the regressions
+
+The final image `explore-ob-rocketmq-disk.img` (`0198df27c8ec09e5…`) gives `b40afc5cabb53082` on
+two clean runs of `disk=none | run` on hvx. The run's 46 commands send 12 messages and 8
+transactions to `j` and 9 messages to `o`, and consume 17 times; every claim holds. Each saved regression gave one fingerprint
+over two fresh runs on hvx:
+
+| regression | finding | fingerprint |
+|---|---|---|
+| `slaves-never-start-after-power-cut.schedule` | 1 | `b5252e4bc9b73a2c` |
+| `committed-transaction-stored-again-after-clock-step.schedule` | 3a | `5fc8566af3802f2f` |
+| `no-transaction-checked-after-clock-step.schedule` | 3b | `e4f10ed629b3d8be` FP3B |
+| `offsets-move-back-at-failover` (inline in `hydo-offsets.yaml`) | 2 | `8cd67eee89799522`, on that manifest's image |
+
+REPRO
+
 ## What was found
 
 ### 1. Known in its parts: after a power cut, two of the three brokers never start again
@@ -177,17 +227,20 @@ detail.
 
 **The schedule.** `disk=none | run K=brokers.primary@10+3`: a kill of the master (`broker2`)
 before step 10, a restart before step 13. A pause of the master past the controller's heartbeat
-timeout (`P=brokers.primary@10+15`) does the same. With `hydo-offsets.yaml`:
+timeout (`P=brokers.primary@10+15`) does the same. On the image of `hydo-offsets.yaml`:
 `VIOLATION [jobs.after-ack] m2 was delivered again to process 27 in group w of channel j after
-process 7's acknowledgement of it completed at 41.093 s`, and `order.after-ack` breaks in the same
-run for `o6`. No acknowledged message was lost (`no-loss` held for 14 and 9 messages).
+process 7's acknowledgement of it completed at 40.037 s`. On the first image `order.after-ack`
+broke in the same run for `o6`. No acknowledged message was lost, and on the final image of
+`hydo.yaml` the schedule passes every claim.
 
 **The cause.** A slave copies the consumer offsets from the master every 10 s
 (`ReplicasManager.handleSlaveSynchronize`, which calls `SlaveSynchronize.syncAll()` when 10 s of
 the wall clock passed). The new master starts with the offsets of its last copy, so a group goes
 back up to 10 s and gets those messages again. A slave measures the 10 s on the wall clock, so
 after a backward clock step it copies nothing for the length of the step, and a failover in that
-time moves the offsets back further.
+time moves the offsets back further. The same copy holds the delay offsets and the transaction
+check's progress (the section "The explorations"), so a failover can also store a delayed
+message or a committed transaction a second time.
 
 **The duplicate search.** Issue #7790 (DLedger mode, closed as stale) reports repeated consumption
 after a master switch; a maintainer's answer there: "Since the consumption progress is synchronized
@@ -269,43 +322,93 @@ closed, on 2026-11-27.
 | `system time`, `clock`, `currentTimeMillis`, `time rollback`, `clock jump` | 3 | #9455 (closed): a broker that does not register after a forward and back jump; #6679: a client's subscription after a step back |
 | `transaction duplicate`, `transactional message delivered twice`, `delay message duplicate` | 3 | nothing |
 
-RESULTS_REST
+## The explorations
+
+Both explorations ran on GitHub's KVM runners with `explore.yml` (`ci/remote-explore.sh`), 20
+parts of 2 seeds each, one worker per part, with `--strategy process --new-faults
+--cluster-faults --storage-faults --no-shrink`: the shrinks of a power cut or a clock step take
+hours on KVM (the Garnet example), and directed runs on hvx judged each failure instead. A first
+run took 5 to 12 minutes on a runner; e1's last part ran 2.5 hours, and e2's two slowest about
+as long. The runners were Intel Xeon 6975P-C and Platinum 8573C hosts and AMD EPYC 9V45, 9V74
+and 7763 hosts.
+
+| exploration | image | seeds | runs that ran | failures by cause |
+|---|---|---|---|---|
+| e1 | the first client (commit `910deefc`) | 1-40 | 32: the 4 parts on EPYC 7763 hosts did not boot | finding 1 at a cut (seeds 12, 20, 21, 40); one broker's power loss stopping it at its restart (seeds 1, 6, 9, 16, 25, 26, 28, 29); finding 3a as an exhausted exit budget of the drain (seed 7); the provisioning message `p` that a failover delivered again (11 seeds: the client's mistake, and finding 2); the attempt count of a redelivery (seeds 4 and 15: the client's mistake); a no-loss of an unknown transaction after a step back of 30 days (seed 18, finding 3b; on hvx its replay broke `dead-letter` first); detected damage of a file (seed 13); the group's `primary:` that named no member (seed 10); 2 seeds passed |
+| e2 | the final client and image (commit `4b28431b`) | 41-80 | 34: the parts on EPYC 7763 hosts and one EPYC 9V74 host did not boot | finding 3b after steps back of 30 s to a day (seeds 42, 45, 51, 56, 66, 79); an unknown transaction not delivered after forward steps of 5 minutes and a day, each with kills (seeds 61, 77, 80; not traced); finding 1 at a cut (seeds 49, 52, 57, 78) and at one broker's power loss (seeds 48, 50, 72); a committed transaction stored twice after failovers (seeds 47, 69) and a delayed message stored twice after a failover (seeds 58, 62, 70): the 10-s copy of finding 2 (see below); the attempt count of a give-back that got no answer (seed 53, gap 12 below); an exhausted exit budget after a step back of an hour (seeds 54 and 59, as e1's seed 7); detected damage (seed 67); 9 seeds passed |
+
+**The copy every 10 s is more than the consumer offsets.** `SlaveSynchronize.syncAll()` also
+copies the delay offsets of `SCHEDULE_TOPIC_XXXX` and the consume offsets of the transaction
+check's half and operation queues. After a failover the new master starts from them, so a
+delayed message whose delay ended after the last copy is stored in `j` again, and a transaction
+that the old master had committed is checked and committed again. e2's seeds 47, 58, 62, 69
+and 70 broke `duplicates` so, each with a kill or a pause of a broker, and seed 69 with a forward
+clock step besides. DELAYED
 
 ## What hydo lacked
 
 In the order of the time each cost:
 
 1. **On AMD EPYC 7763 runners the image does not boot on KVM, and the parts count it as
-   failures.** Every part of e1 on an EPYC 7763 host (parts 12, 16, 18 and 19) stopped in the
-   boot before S1: `ERROR boot: SPIN (guest loops without exits; run invalid)` after 12,695 to
-   18,135 stops. So 8 of e1's 40 seeds never ran. The part's job passed, its `exploration.json`
-   counted both seeds as failures with the signature `ERROR worker: ''`, and its `explore.txt`
-   alone said why. The EPYC 9V45 and the Intel hosts booted the same image.
+   failures.** Every part of e1 and e2 on an EPYC 7763 host, and one on an EPYC 9V74 host,
+   stopped in the boot before S1: `ERROR boot: SPIN (guest loops without exits; run invalid)`
+   after 12,695 to 18,135 stops. So 14 of the 80 seeds never ran. The part's job passed, its
+   `exploration.json` counted both seeds as failures with the signature `ERROR worker: ''`, its
+   `explore.txt` alone said why, and the merged report called them "The run stopped early after
+   hydo damaged a file of broker1". Other EPYC 9V74 hosts, the EPYC 9V45 and the Intel hosts
+   booted the same image.
 2. **The drain filled hvx's console.** hvx keeps 64 KiB of console per boot. The first drain
    recorded every empty receive of 10 queues once a second, 1,111 history records in a clean run,
    and the console reached 65,673 bytes. The drain now records a receive only when it got
    messages, and writes its invocation after the pull; the clean run's console is 24 KB. Nothing
    warns while a run's records are cut off (as open item 181 says for Pulsar).
-2. **`L=` takes no group selector.** `K=brokers.primary@10+3` and `P=brokers.primary@...` aim at
+3. **The exploration's problems name the wrong fault.** The merged report of e1 grouped the
+   brokers that one broker's power loss stopped as "broker2 did not start again after hydo
+   damaged a file of broker1": the class follows the first storage fault of the schedule, and
+   the schedules had a `G=` beside the `L=`. Only directed runs separated them.
+4. **`L=` takes no group selector.** `K=brokers.primary@10+3` and `P=brokers.primary@...` aim at
    the master, but `L=brokers.primary@10+3` stopped with `"brokers.primary" is not a service name`
    before any VM. One broker's power loss has to name the broker, which depends on the image.
-3. **A claim cannot be a build parameter.** Every failover breaks `after_ack: no-redelivery` by
+5. **A claim cannot be a build parameter.** Every failover breaks `after_ack: no-redelivery` by
    design (finding 2), which would hide every other failure of a failover. The example keeps the
-   claim in a second manifest, `hydo-offsets.yaml`, built as an image of its own (as open items
-   140 and 181 say for `faults:` and claims).
-4. **`hydo build --check` passes a disk that `hydo build` refuses.** With 1,792 MiB of data disk
+   claim in a second manifest, `hydo-offsets.yaml`, built as an image of its own, with its
+   regression inline (as open items 140 and 181 say for `faults:` and claims).
+6. **`hydo build --check` passes a disk that `hydo build` refuses.** With 1,792 MiB of data disk
    and four storage file systems of 1,664 MiB, `--check` printed OK, and the build stopped after
    about 2 minutes: `the disk with the services' own file systems is 4101 MiB, more than the 4096
    MiB an engine maps`.
-5. **The import moved every address by one.** The Compose file gives the NameServer
+7. **The import moved every address by one.** The Compose file gives the NameServer
    `10.89.0.10` and the brokers `.11` to `.13`. `hydo compose` warned `ipv4_address 10.89.0.10
-   ignored; the service is at 10.89.0.11` for each, and wrote addresses one higher. The brokers'
-   configuration names the NameServer's and the controller's address, so the example sets each
-   `addr:` back by hand.
-6. **The import took the first port of `EXPOSE`.** The image exposes 9876, 10909, 10911 and
+   ignored; the service is at 10.89.0.11` for each, and wrote addresses one higher (as open item
+   188). The brokers' configuration names the NameServer's and the controller's address, so the
+   example sets each `addr:` back by hand.
+8. **The import took the first port of `EXPOSE`.** The image exposes 9876, 10909, 10911 and
    10912, and every broker got `port: 9876` and a readiness check on it, the NameServer's port.
-7. **`ci/remote-explore.sh --ref` with a short commit fails on the runner.** The build's
+9. **`ci/remote-explore.sh --ref` with a short commit fails on the runner.** The build's
    checkout fetched `refs/heads/4b28431b*` and stopped after a minute; a branch name works.
-8. **A routine run replays itself.** `hydo run` makes a diagnosis replay after every failing
-   run, which doubles the time of a directed run of 5 to 10 minutes; the directed runs used
-   `--no-diagnose`.
+10. **A routine run replays itself.** `hydo run` makes a diagnosis replay after every failing
+    run, which doubles the time of a directed run of 5 to 10 minutes. The directed runs used
+    `--no-diagnose`, and then the diagnosis of a broker that did not start says only that no
+    exit or readiness result was recorded.
+11. **The verdict overstates a broker that does not start.** Finding 1 ends `VIOLATION service
+    cannot recover (committed data unrecoverable) (broker0)`, while the commit log was whole and
+    the stop came from the epoch file.
+12. **`dead_letter` counts a delivery whose give-back failed.** RocketMQ counts only the
+    give-backs it accepted (`maxReconsumeTimes`). In the replay of e1's seed 18, the first
+    give-back of `x5` got no answer during a failover, the message came again from `j`, and it
+    went to the dead-letter topic after four deliveries: `x5 was delivered 4 times ... more than
+    the limit of 3`.
+13. **A group's `primary:` must name a member.** In e1's seed 10 the NameServer named no master
+    while one was killed and the controller elected the next, and the run ended in `ERROR
+    brokers.primary: the group's primary: command named no member`, before its checks (as open
+    item 192 for Garnet).
+
+## Time
+
+| phase | wall time |
+|---|---|
+| scouting: the release, the image, the controller's documentation, the Helm chart | 30 minutes |
+| setup to a first clean run: the import, the client, the console's limit, the check-backs | 1 hour 20 minutes, about 30 minutes of it waiting for builds on the loaded machine |
+| directed runs on hvx | about 7 hours, most of it waiting for runs of 5 to 10 minutes on the machine that a release pass loaded |
+| explorations on KVM | about 5 hours, beside the directed runs |
+| judging, the code of the transaction check, and the write-up | about 2 hours |
