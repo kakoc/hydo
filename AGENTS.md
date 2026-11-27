@@ -5749,6 +5749,11 @@ build machine, before 2026-10-13.
   to 94 % of an exploration before its report. A generated client with the generic checks would
   reach 37 of the 105 bugs. The page proposes the report before the shrinks, then that client.
   Nothing recorded moved
+- M388 (tentative number): a benchmark of 72 unexplained or late-explained failures for
+  debugging tools (`docs/design/debug-benchmark.md`). By primary tool, the first divergence from a
+  passing run serves 21, watchpoints 15, thread stacks 12, a message's path 12, and the existing
+  logs 9. The page proposes stacks first, then the divergence, watchpoints, and the path, each
+  with five first proofs. Nothing recorded moved
 
 ## Where to look
 
