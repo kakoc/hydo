@@ -167,7 +167,8 @@ fingerprint over two fresh runs on hvx:
 | `offsets-move-back-at-failover` (inline in `hydo-offsets.yaml`) | 2 | `8cd67eee89799522`, on that manifest's image |
 
 `hydo repro --regressions` on the final image gave 3 of 3 as expected, with the same fingerprints.
-OFFREPRO
+On the image of `hydo-offsets.yaml` it gave 4 of 4 as expected; that image's fingerprints are its
+own.
 
 ## What was found
 
@@ -191,8 +192,8 @@ java.lang.NumberFormatException: null
 **What the disk held.** `hydo inspect` at the end of the recovery boot listed each broker's store.
 The epoch file `epochFileCheckpoint` of both slaves, `broker0` and `broker1`, is 0 bytes; each was
 written at 00:00:38 of the guest clock, when the controller made the node a slave, 17 s before the
-cut, and neither has a `.bak` file. The master's file, `broker2`'s, holds its epoch `1-5858`. The
-commit log, which `SYNC_FLUSH` syncs, is whole on all three.
+cut, and neither has a `.bak` file. The master `broker2` started again and rewrote its own file in
+the recovery boot (`1-5858`). Every broker's commit log folder was there.
 
 **The cause.**
 
@@ -204,9 +205,9 @@ commit log, which `SYNC_FLUSH` syncs, is whole on all three.
 2. At the next start `CheckpointFile.read` parses the first line with `Integer.parseInt`. An empty
    file gives `null`, and `NumberFormatException` is not an `IOException`, so `read()` never tries
    the `.bak` file, and `EpochFileCache.initCacheFromFile` does not catch it. `BrokerStartup` exits.
-3. The broker stops this way at every start, so the replica group keeps one broker. The SyncStateSet
-   shrinks to the master, and a loss of that one broker leaves the group without a master, because
-   the controller elects only from the SyncStateSet.
+3. The broker stops this way at every start, so the replica group runs on one broker. A loss of
+   that broker would leave the group without a master, because the controller elects only from the
+   SyncStateSet (`enableElectUncleanMaster=false`).
 
 **The duplicate search.** Issue #11460 (open since 2026-10-20) names step 2 from a unit test: an
 empty or malformed header skips the `.bak` recovery. Pull request #11463 (open) turns the parse
@@ -380,8 +381,8 @@ In the order of the time each cost:
     `--no-diagnose`, and then the diagnosis of a broker that did not start says only that no exit or
     readiness result was recorded.
 11. **The verdict overstates a broker that does not start.** Finding 1 ends `VIOLATION service
-    cannot recover (committed data unrecoverable) (broker0)`, while the commit log was whole and the
-    stop came from the epoch file.
+    cannot recover (committed data unrecoverable) (broker0)`, while the stop came from the epoch
+    file, and the commit log's folder was there.
 12. **`dead_letter` counts a delivery whose give-back failed.** RocketMQ counts only the give-backs
     it accepted (`maxReconsumeTimes`). In the replay of e1's seed 18, the first give-back of `x5`
     got no answer during a failover, the message came again from `j`, and it went to the dead-letter

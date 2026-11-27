@@ -850,8 +850,8 @@ is the exploration that drew most of them.
     after the brokers became slaves left both slaves' files at 0 bytes (`hydo inspect` listed
     the store), and each stopped at every start on the unchecked parse of an empty header
     (apache/rocketmq#11460). `disk=cut | run C=20` does it; blind in 4 of e1's 40 schedules,
-    and one broker's power loss (`L=`) in 8 more. The commit log, which `SYNC_FLUSH` syncs, was
-    whole. A cut that comes long after the last role change passes.
+    and one broker's power loss (`L=`) in 8 more. The stop came from the epoch file, not from the
+    commit log, which `SYNC_FLUSH` syncs.
 - **What it misses.** hydo's S3 emulator writes its objects without an fsync, so a cut of the
   guest loses objects that it acknowledged. In GreptimeDB a query of the recovery boot read an
   SST object shorter than its manifest says. A system whose data lives in object storage needs
