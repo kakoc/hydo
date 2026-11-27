@@ -1374,6 +1374,37 @@ power cuts, and clock steps. Nothing was posted:
 
 Open item 191 has what is left.
 
+**Garnet (M371, tentative number).** Microsoft Garnet 2.2.14 runs in cluster mode as three
+primaries with one replica each, from the official image in one guest of 3,072 MiB. The example
+is `hydo/onboard/examples/garnet` (RESULTS.md), imported with `hydo compose`. Each node's AOF,
+checkpoints and cluster configuration are on a file system of its own, with `--aof-commit-wait`.
+A Go client forms the cluster and writes strings, expiring keys, hashes, counters, lists, sets,
+sorted sets, transactions and Lua scripts to the owner of each slot. As a control plane does, it
+fails shards over with `CLUSTER FAILOVER`, moves slots with `MIGRATE ... SLOTS`, and takes
+checkpoints with `BGSAVE`. A messages check with `acked_outcome` and four checks judge them. The
+image and the directed runs used hvx with the released 0.6.0, and the explorations GitHub's KVM
+runners. Every acknowledged write stayed under kills, pauses, partitions, one node's power loss,
+clock steps, and, with `--device-type FileStream`, power cuts. Nothing was posted:
+- New: a `CLUSTER FAILOVER` right after a `MIGRATE ... SLOTS` into the same shard leaves the
+  migrated slot without an owner on every node, for good. The new primary takes over only the
+  slots that its own copy of the configuration gives its primary, and gossip had not brought the
+  migration yet (`ClusterConfig.TakeOverFromPrimary`). The bug needs no fault; the blind seed
+  96 of the exploration timed it so, and `native/` reproduces it with Docker. A wait of 6 s
+  avoids it.
+- A deployment setting with a status that hides it: with Garnet's default
+  `--cluster-replication-reestablishment-timeout 0`, a replica never replicates again after its
+  primary restarts. It reports `master_link_status:up`, and lacks every write since the restart
+  (`K=g1@15+3`, `# params: reest=0`). With `5` the schedule passes. `native/` reproduces it with
+  Docker. microsoft/garnet#2087 had the same status for another trigger.
+- Known (microsoft/garnet#2281, open): with the default device a power cut loses writes
+  acknowledged with `--aof-commit-wait` (`disk=cut | run C=10`, 5 of 20).
+- Three candidates whose cause was not traced, each with a regression. A kill of a primary 10 ms
+  after `BGSAVE` leaves its replica without an answer. Failovers of both shards after a migration
+  lose two acknowledged writes. After a kill and a power cut a replica holds other data at its
+  primary's offset.
+
+Open item 192 has what is left.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -4270,6 +4301,41 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       also took epmd's port from the image's `EXPOSE`, which M367 now warns of.
     - Not run: the Mac engine and KVM, five nodes, AMQP 1.0, super streams, a stream's single
       active consumer, Khepri's own promises, and a native run of either candidate.
+192. What the example `garnet` left (M371, tentative number):
+    - Neither finding is reported upstream. The native script of finding 2 is ready. Finding 1
+      is labeled a deployment setting, because Garnet's cluster is passive and has the option.
+      A report would name the replica's link status, which says up without a stream, as
+      microsoft/garnet#2087 did for another trigger.
+    - Three candidates have no traced cause. Each has a regression on the image with the
+      FileStream device, and none was reproduced without hydo. In the first, a replica answers
+      nothing after a kill of its primary during a checkpoint. In the second, two writes are
+      lost after failovers on both sides of a migration. In the third, a replica holds other
+      data at its primary's offset after a power cut.
+    - A run took 200 to 350 s on GitHub's KVM runners and 50 to 60 s on hvx. A shrink of a
+      power cut on the default device took 81 runs, so the first exploration was stopped.
+    - Open items 140 and 141 say it too: no exploration leaves out one fault kind.
+    - A cluster imported from Compose has no links between its nodes. So the explorer drew no
+      network fault between them until the example named them in each node's list of
+      dependencies (as open item 97).
+    - The import called each fixed address of the Compose file ignored, as open item 188 says.
+    - The grid of aimed reactions multiplies by the six services. The explorations used the
+      client's events with drawn reactions instead.
+    - The client's Redis library printed a line for each failed dial into hvx's console of
+      64 KiB. The client turns that logger off.
+    - On KVM finding 2 ended as an exhausted exit budget while the checks waited for the
+      unserved slot. Its class was the one of relaxed durability settings, on the durable
+      device. Each shrink candidate ran to the budget, so those parts ran for hours.
+    - The diagnosis called the SIGKILL of a kill-now reaction the kernel's out-of-memory
+      killer.
+    - The shrinker kept the faults of another node in seed 120's minimal schedule, as in open
+      item 188. A group's primary command that names no member ends the run before its checks
+      (seed 90).
+    - The last parts of the second and the third exploration ran past this round and were
+      cancelled. Their seeds are not in the results page. KVM ended seed 103's recovery boot in
+      `SPIN`, a loop without VM exits, and it was not looked at.
+    - Not run: the Mac engine, and the settings exploration over the five parameters. Neither
+      ran the parallel replication, diskless replication, a log on disk, or several replicas
+      per shard. No slot moved back to its first shard after a failure.
 
 ## Milestone index
 
@@ -5444,14 +5510,6 @@ build machine, before 2026-10-13.
   in batches out of order. It then lacks acknowledged documents for good. After a backward clock step
   an export of more than one batch stops after its first part, for the step's length. A failure
   of the leader then brings no election. Nothing recorded moved
-
-- The 0.6.0 release (no milestone number): prepared, not published. The version is raised with
-  the skill's four version fields, `hydo-world`, `hydo-world-tls` and `hydo-grpc` are re-pinned,
-  and the released schemas are copied. The re-pins moved 9 hvx and 9 Mac images (docs/REBASELINE.md
-  section 32), and no KVM image. A fresh reader's review found `hydo guide strategies` empty since
-  the Pulsar merge; it is restored. The release commit drops the build tree's path from `bin/hydo`.
-  Both releases were built twice to the same bytes, the Mac one signed and notarized, and verified
-  on hvx and the Mac
 - M367 (tentative number): the gaps of the NSQ and SeaweedFS onboardings, each its own commit.
   `--check` counts the services' own file systems. A stopped `hydo explore` stops its engines and
   names their pids. `hydo save` keeps one regression per finding, and the write scan reads
@@ -5477,6 +5535,21 @@ build machine, before 2026-10-13.
   message of the stream for good, after a kill and a pause of the two other nodes. After a
   backward clock step, a kill of the stream's leader leaves the stream without a leader. A power
   cut of the whole guest loses unsynced stream data, as documented. Nothing recorded moved
+- M371 (tentative number): the onboarding of Microsoft Garnet 2.2.14 in cluster mode, three
+  primaries with one replica each, on hvx, and on KVM. New: a failover right after a slot migration
+  into the same shard leaves the slot without an owner on every node, for good. With Garnet's
+  default `--cluster-replication-reestablishment-timeout 0`, a replica never replicates again
+  after its primary restarts, and it reports its link up. A power cut loses acknowledged writes
+  with the default device (known, #2281). Transactions, scripts, and expiries held. Nothing
+  posted, nothing recorded moved
+
+- The 0.6.0 release (no milestone number): prepared, not published. The version is raised with
+  the skill's four version fields, `hydo-world`, `hydo-world-tls` and `hydo-grpc` are re-pinned,
+  and the released schemas are copied. The re-pins moved 9 hvx and 9 Mac images (docs/REBASELINE.md
+  section 32), and no KVM image. A fresh reader's review found `hydo guide strategies` empty since
+  the Pulsar merge; it is restored. The release commit drops the build tree's path from `bin/hydo`.
+  Both releases were built twice to the same bytes, the Mac one signed and notarized, and verified
+  on hvx and the Mac
 - M372 (tentative number): one service's own wall clock, a prototype on hvx. `clock: own` starts
   a service under hydo-clock, a tracer that hides the vDSO and answers its wall-clock reads with
   an offset; `T=<svc>@<at>:<change>` steps or drifts that clock alone. Time namespaces offset no

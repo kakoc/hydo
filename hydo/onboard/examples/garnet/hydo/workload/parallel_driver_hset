@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# HSET of a new hash's field, sent to the primary that owns its slot
+exec /bin/gnc op hset

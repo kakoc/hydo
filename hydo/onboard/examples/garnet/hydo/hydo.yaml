@@ -1,0 +1,258 @@
+# Microsoft Garnet 2.2.14 (the newest release, 2026-11-23), the Redis-compatible cache-store in C#,
+# in cluster mode, as ../docker-compose.yaml runs it: three primaries with one replica each, every
+# node with its AOF, its checkpoints and its cluster configuration on a file system of its own,
+# and --aof-commit-wait. The test client forms the cluster, fails shards over with CLUSTER
+# FAILOVER and moves slots with MIGRATE ... SLOTS, as a control plane does. RESULTS.md has the
+# promises under test and what was found.
+#
+#   sh ../build.sh            # bin/gnc-<arch>, the test client (../client)
+#   sh fetch-images.sh        # the image by digest
+#   hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --new-faults --cluster-faults --storage-faults
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The services below are the importer's,
+# with these changes:
+# - each node's /data is a file system of its own (storage:), the target of L= and G=, instead of
+#   the importer's folder on the shared data disk;
+# - the readiness checks ask PING with the test client, not a TCP connect;
+# - the durability settings are build parameters;
+# - the test client gnc is in the image (../build.sh).
+format: 1
+name: garnet
+description: "Microsoft Garnet 2.2.14 in cluster mode, three primaries with one replica each: acknowledged writes of strings, expiring keys, hashes, counters, lists, sets, sorted sets, MULTI/EXEC transactions and Lua scripts stay as acknowledged through failovers, slot migrations and checkpoints, transactions and scripts apply whole, expiries keep their deadlines, the replicas converge and every node agrees on the slots' owners, under kills, pauses, partitions, one node's power loss or damaged files, power cuts and clock steps"
+hydo_version: "0.6"
+
+params:
+  arch: amd64     # amd64 | arm64: the client's architecture, the same as the image's
+  wait: "yes"     # --aof-commit-wait of every node: yes | no (Garnet's default)
+  freq: "0"       # --aof-commit-freq of every node in ms (Garnet's default 0 commits after every write)
+  ckpt: "0"       # --checkpoint-freq of every node in s (Garnet's default 0 takes no checkpoint by itself)
+  device: Default # --device-type of every node: Default | FileStream (O_SYNC files, microsoft/garnet#2281)
+  reest: "5"      # --cluster-replication-reestablishment-timeout of every node in s: Garnet's default 0
+                  #   never attaches a replica to its restarted primary again (RESULTS.md, finding 1)
+
+configs:
+  wait:
+    values: ["yes", "no"]
+    service: [g1, g2, g3, g4, g5, g6]
+    doc: "https://github.com/microsoft/garnet/blob/v2.2.14/libs/host/defaults.conf (WaitForCommit)"
+    tradeoff:
+      "no": "--aof-commit-wait off: Garnet answers before the AOF commit is on the disk, so a crash can lose acknowledged writes (defaults.conf: \"Wait for AOF to flush the commit before returning results to client\")"
+  freq:
+    values: ["0", "100"]
+    service: [g1, g2, g3, g4, g5, g6]
+    doc: "https://github.com/microsoft/garnet/blob/v2.2.14/libs/host/defaults.conf (CommitFrequencyMs)"
+  ckpt:
+    values: ["0", "5"]
+    service: [g1, g2, g3, g4, g5, g6]
+    doc: "https://github.com/microsoft/garnet/blob/v2.2.14/libs/host/defaults.conf (CheckpointFrequencySecs)"
+  device:
+    values: [Default, FileStream]
+    service: [g1, g2, g3, g4, g5, g6]
+    doc: "https://github.com/microsoft/garnet/blob/v2.2.14/libs/host/defaults.conf (DeviceType)"
+  reest:
+    values: ["5", "0"]
+    service: [g1, g2, g3, g4, g5, g6]
+    doc: "https://github.com/microsoft/garnet/blob/v2.2.14/libs/host/defaults.conf (ClusterReplicationReestablishmentTimeout)"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 3072
+  clock_start: 1795651200   # 2026-11-26 00:00 UTC, the day of the import
+  clock_after_cut: 60       # a SET ... PXAT deadline is a wall-clock time: no real clock runs back across a power cut
+
+data:
+  size_mib: 1536   # the data disk: the six nodes' own file systems of 192 MiB each, and the rest
+  dirs: [vol/g1, vol/g2, vol/g3, vol/g4, vol/g5, vol/g6, gnc]
+
+root:
+  share_images: true   # the six nodes share one tree of the garnet image
+  files:                 # bind-mount sources, copied into the read-only root
+    - {src: ../config/start.sh, dst: /etc/hydo/compose/bind/0-start.sh}
+    - {src: "../bin/gnc-{{arch}}", dst: /bin/gnc, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 g1
+      10.89.0.12 g2
+      10.89.0.13 g3
+      10.89.0.14 g4
+      10.89.0.15 g5
+      10.89.0.16 g6
+
+# A shard is a primary and its replica. A failover swaps their roles; the primary: command names
+# the member whose ROLE is master.
+groups:
+  - name: shard1
+    services: [g1, g4]
+    primary: /bin/gnc primary 1
+  - name: shard2
+    services: [g2, g5]
+    primary: /bin/gnc primary 2
+  - name: shard3
+    services: [g3, g6]
+    primary: /bin/gnc primary 3
+
+services:
+  # Compose service g1, a primary at the cluster's first start
+  # image ghcr.io/microsoft/garnet:2.2.14 = ghcr.io/microsoft/garnet@sha256:9ea4c7f379e0366e5647c94ddbe17710d3aba434a92d974658dd90e4a3efc4ed
+  #   linux/amd64: sha256:c5f73c1ec85f260e40bb35ed3e9f10f431f1506cd95286c6063fc1675fae1ea1
+  #   linux/arm64: sha256:52b5e51fdb637afa4e7612656e1017624e383b2d070bad2233767a561127249c
+  - name: g1
+    image: {x86_64: images/ghcr.io-microsoft-garnet-2.2.14-amd64.docker.tar, arm64: images/ghcr.io-microsoft-garnet-2.2.14-arm64-oci}
+    image_ref: "ghcr.io/microsoft/garnet:2.2.14"
+    entrypoint: [sh, /etc/gnc/start.sh]
+    env: &genv
+      GARNET_COMMIT_WAIT: "{{wait}}"
+      GARNET_COMMIT_FREQ: "{{freq}}"
+      GARNET_CKPT_FREQ: "{{ckpt}}"
+      GARNET_DEVICE: "{{device}}"
+      GARNET_REEST: "{{reest}}"
+      GARNET_ADDR: "10.89.0.11"
+    user: "root"
+    port: 6379
+    addr: 10.89.0.11
+    ready: "timeout 5 /bin/gnc ready 10.89.0.11"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/g1, size_mib: 192}   # the AOF, the checkpoints and the cluster configuration
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-start.sh, dst: /etc/gnc/start.sh}
+      - {src: /data/vol/g1, dst: /data}
+  # Compose service g2, a primary at the cluster's first start
+  - name: g2
+    image: {x86_64: images/ghcr.io-microsoft-garnet-2.2.14-amd64.docker.tar, arm64: images/ghcr.io-microsoft-garnet-2.2.14-arm64-oci}
+    image_ref: "ghcr.io/microsoft/garnet:2.2.14"
+    entrypoint: [sh, /etc/gnc/start.sh]
+    env: {<<: *genv, GARNET_ADDR: "10.89.0.12"}
+    user: "root"
+    port: 6379
+    addr: 10.89.0.12
+    depends_on: [g1]   # the nodes gossip, replicate and migrate with each other: a link to every node before it
+    ready: "timeout 5 /bin/gnc ready 10.89.0.12"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/g2, size_mib: 192}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-start.sh, dst: /etc/gnc/start.sh}
+      - {src: /data/vol/g2, dst: /data}
+  # Compose service g3, a primary at the cluster's first start
+  - name: g3
+    image: {x86_64: images/ghcr.io-microsoft-garnet-2.2.14-amd64.docker.tar, arm64: images/ghcr.io-microsoft-garnet-2.2.14-arm64-oci}
+    image_ref: "ghcr.io/microsoft/garnet:2.2.14"
+    entrypoint: [sh, /etc/gnc/start.sh]
+    env: {<<: *genv, GARNET_ADDR: "10.89.0.13"}
+    user: "root"
+    port: 6379
+    addr: 10.89.0.13
+    depends_on: [g1, g2]
+    ready: "timeout 5 /bin/gnc ready 10.89.0.13"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/g3, size_mib: 192}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-start.sh, dst: /etc/gnc/start.sh}
+      - {src: /data/vol/g3, dst: /data}
+  # Compose service g4, the replica of g1 at the cluster's first start
+  - name: g4
+    image: {x86_64: images/ghcr.io-microsoft-garnet-2.2.14-amd64.docker.tar, arm64: images/ghcr.io-microsoft-garnet-2.2.14-arm64-oci}
+    image_ref: "ghcr.io/microsoft/garnet:2.2.14"
+    entrypoint: [sh, /etc/gnc/start.sh]
+    env: {<<: *genv, GARNET_ADDR: "10.89.0.14"}
+    user: "root"
+    port: 6379
+    addr: 10.89.0.14
+    depends_on: [g1, g2, g3]
+    ready: "timeout 5 /bin/gnc ready 10.89.0.14"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/g4, size_mib: 192}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-start.sh, dst: /etc/gnc/start.sh}
+      - {src: /data/vol/g4, dst: /data}
+  # Compose service g5, the replica of g2 at the cluster's first start
+  - name: g5
+    image: {x86_64: images/ghcr.io-microsoft-garnet-2.2.14-amd64.docker.tar, arm64: images/ghcr.io-microsoft-garnet-2.2.14-arm64-oci}
+    image_ref: "ghcr.io/microsoft/garnet:2.2.14"
+    entrypoint: [sh, /etc/gnc/start.sh]
+    env: {<<: *genv, GARNET_ADDR: "10.89.0.15"}
+    user: "root"
+    port: 6379
+    addr: 10.89.0.15
+    depends_on: [g1, g2, g3, g4]
+    ready: "timeout 5 /bin/gnc ready 10.89.0.15"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/g5, size_mib: 192}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-start.sh, dst: /etc/gnc/start.sh}
+      - {src: /data/vol/g5, dst: /data}
+  # Compose service g6, the replica of g3 at the cluster's first start
+  - name: g6
+    image: {x86_64: images/ghcr.io-microsoft-garnet-2.2.14-amd64.docker.tar, arm64: images/ghcr.io-microsoft-garnet-2.2.14-arm64-oci}
+    image_ref: "ghcr.io/microsoft/garnet:2.2.14"
+    entrypoint: [sh, /etc/gnc/start.sh]
+    env: {<<: *genv, GARNET_ADDR: "10.89.0.16"}
+    user: "root"
+    port: 6379
+    addr: 10.89.0.16
+    depends_on: [g1, g2, g3, g4, g5]
+    ready: "timeout 5 /bin/gnc ready 10.89.0.16"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/g6, size_mib: 192}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-start.sh, dst: /etc/gnc/start.sh}
+      - {src: /data/vol/g6, dst: /data}
+
+# 40 rounds of 500 ms with up to 3 commands each: about 100 writes, a few failovers, slot
+# migrations and checkpoints.
+workload:
+  steps: 40
+  timeout: 300    # also the read-back's limit
+
+test:
+  parallel: 4
+  per_round: 3
+  round_ms: 500
+  command_timeout: 60
+  drain_timeout: 60
+
+checks:
+  # hydo's ready-made claim (hydo guide messages, "Read back the final states"): every write that
+  # Garnet acknowledged is there at the end, unless a later write of the same register replaced
+  # it or its PXAT deadline passed, and no write that Garnet refused took effect. The client
+  # records each write as a send of its id, and `gnc readback` reads every register and member
+  # back from the owner of its slot and writes each write's effect (f=1 or f=0).
+  - id: writes
+    type: messages
+    history: writes
+    msg: every write that Garnet acknowledged ends as Garnet acknowledged it
+    final: /bin/gnc readback
+    claims:
+      acked_outcome:
+        client_errors: [refused]   # a redirect, CLUSTERDOWN, TRYAGAIN, EXECABORT, a DEL that found nothing: Garnet applied nothing
+        effect: recorded
+
+faults: [kill, pause, network, oneway, cut, clock, corrupt, powerloss]

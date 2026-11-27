@@ -1,0 +1,9 @@
+# Candidate A in Garnet 2.2.14 (RESULTS.md, "Candidates whose cause was not traced"); seed 144 of
+# the third exploration. kill-now-g1 stops the primary g1 10 ms after the client's BGSAVE and keeps
+# it down until the heal. 120 s after the heal its replica g4 still answers no command (i/o
+# timeout), the nodes name different owners of a slot, and the read-back lacks an acknowledged
+# RPUSH. The cause was not traced.
+# params: device=FileStream reest=5
+# commands: anytime_read first_init parallel_driver_del parallel_driver_hset parallel_driver_incr parallel_driver_lua parallel_driver_over parallel_driver_rpush parallel_driver_sadd parallel_driver_set parallel_driver_setex parallel_driver_txn parallel_driver_zadd serial_driver_failover serial_driver_migrate serial_driver_save
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=0 | run W=69274d70,p3,q1,r500,oparallel_driver_del A=garnet.bgsave+10:kill-now-g1

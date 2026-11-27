@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# SADD of a new member to one of 16 sets, sent to the primary that owns its slot
+exec /bin/gnc op sadd

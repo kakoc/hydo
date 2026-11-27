@@ -1,0 +1,9 @@
+# Candidate C in Garnet 2.2.14 (RESULTS.md, "Candidates whose cause was not traced"); seed 115 of
+# the second exploration. A kill of g4, by then the primary of shard 1, before step 22, and a power
+# cut before step 40. In the recovery boot the replica g1 reports the primary's replication offset
+# and holds other data: it lacks keys, has an older list, and holds an empty string for a counter.
+# The cause was not traced.
+# params: device=FileStream reest=5
+# commands: anytime_read first_init parallel_driver_del parallel_driver_hset parallel_driver_incr parallel_driver_lua parallel_driver_over parallel_driver_rpush parallel_driver_sadd parallel_driver_set parallel_driver_setex parallel_driver_txn parallel_driver_zadd serial_driver_failover serial_driver_migrate serial_driver_save
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut dseed=0 | run K=g4@22+1 C=40 W=a0075364,p1,q1,r500

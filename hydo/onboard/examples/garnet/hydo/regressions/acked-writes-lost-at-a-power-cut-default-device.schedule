@@ -1,0 +1,10 @@
+# The known microsoft/garnet#2281 (open; RESULTS.md, "Known"). With --aof --aof-commit-wait and
+# Garnet's default device, a power cut of the guest before step 10 loses writes that Garnet
+# acknowledged in the seconds before it: the device writes the AOF and its commit records with
+# O_DIRECT and never syncs the file system's metadata. With device=FileStream (O_SYNC files) the
+# same schedule passes. The moment of the cut among the writes depends on the image's bytes: on an
+# image built with reest=0 the same schedule passed, so the line below names both parameters.
+# params: device=Default reest=5
+# commands: anytime_read first_init parallel_driver_del parallel_driver_hset parallel_driver_incr parallel_driver_lua parallel_driver_over parallel_driver_rpush parallel_driver_sadd parallel_driver_set parallel_driver_setex parallel_driver_txn parallel_driver_zadd serial_driver_failover serial_driver_migrate serial_driver_save
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run C=10

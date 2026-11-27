@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# DEL of a known register's key, sent to the primary that owns its slot
+exec /bin/gnc op del

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: within 120 s of the heal every node names the same owner for every slot of the test, and that owner is a primary
+exec /bin/gnc check slots

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: within=120 after=heal poll=5
+# hydo-msg: within 120 s of the heal every shard has a primary and a replica in step that holds what the primary holds, key for key, and no node of a shard holds a key of a slot that the shard does not own
+exec /bin/gnc check converge

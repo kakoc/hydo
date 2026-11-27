@@ -1,0 +1,10 @@
+# Candidate B in Garnet 2.2.14 (RESULTS.md, "Candidates whose cause was not traced"); seed 89 of
+# the second exploration. A pause of g1 before steps 12 to 15, then the composition moves slot
+# 13404 from g3 to g1 and fails shard 3 over to g6 and shard 1 over to g4. After the heal g6 and
+# g3 still hold two keys of the slot, which shard 3 no longer owns, and the owner lacks both:
+# two acknowledged writes are lost. As far as the logs show, it is finding 2's race on both sides
+# of a migration.
+# params: device=FileStream reest=5
+# commands: anytime_read first_init parallel_driver_del parallel_driver_hset parallel_driver_incr parallel_driver_lua parallel_driver_over parallel_driver_rpush parallel_driver_sadd parallel_driver_set parallel_driver_setex parallel_driver_txn parallel_driver_zadd serial_driver_failover serial_driver_migrate serial_driver_save
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=0 | run P=g1@12+3 W=0a39fa3d,p1,q2,r500

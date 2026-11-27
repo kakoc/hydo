@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# MULTI, SET, HSET, SADD, RPUSH, EXEC on four new keys of one slot, sent to the primary that owns its slot
+exec /bin/gnc op txn

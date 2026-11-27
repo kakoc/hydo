@@ -1,0 +1,123 @@
+# Microsoft Garnet 2.2.14 (the newest release, 2026-11-23), the Redis-compatible cache-store in C#,
+# in cluster mode: three primaries with one replica each, the shape of Garnet's cluster with
+# replication (website/docs/cluster/replication.md). Each node keeps its AOF, its checkpoints and
+# its cluster configuration in a volume of its own. The test client forms the cluster with CLUSTER
+# MEET, ADDSLOTSRANGE and REPLICATE (the setup of the cluster's documentation), and it fails a
+# shard over with CLUSTER FAILOVER and moves slots with MIGRATE ... SLOTS, as a control plane does.
+# The nodes run as root, so that a fresh volume needs no change of owner.
+services:
+  g1:  # a primary at the cluster's first start
+    image: ghcr.io/microsoft/garnet:2.2.14
+    user: root
+    entrypoint: ["sh", "/etc/gnc/start.sh"]
+    environment:
+      GARNET_ADDR: "10.89.0.11"
+      GARNET_COMMIT_WAIT: "yes"
+      GARNET_COMMIT_FREQ: "0"
+      GARNET_CKPT_FREQ: "0"
+      GARNET_DEVICE: "Default"
+      GARNET_REEST: "5"
+    volumes:
+      - ./config/start.sh:/etc/gnc/start.sh:ro
+      - g1:/data
+    networks:
+      garnet: {ipv4_address: 10.89.0.11}
+    ports: ["6379:6379"]
+    restart: unless-stopped
+  g2:  # a primary at the cluster's first start
+    image: ghcr.io/microsoft/garnet:2.2.14
+    user: root
+    entrypoint: ["sh", "/etc/gnc/start.sh"]
+    environment:
+      GARNET_ADDR: "10.89.0.12"
+      GARNET_COMMIT_WAIT: "yes"
+      GARNET_COMMIT_FREQ: "0"
+      GARNET_CKPT_FREQ: "0"
+      GARNET_DEVICE: "Default"
+      GARNET_REEST: "5"
+    volumes:
+      - ./config/start.sh:/etc/gnc/start.sh:ro
+      - g2:/data
+    networks:
+      garnet: {ipv4_address: 10.89.0.12}
+    restart: unless-stopped
+  g3:  # a primary at the cluster's first start
+    image: ghcr.io/microsoft/garnet:2.2.14
+    user: root
+    entrypoint: ["sh", "/etc/gnc/start.sh"]
+    environment:
+      GARNET_ADDR: "10.89.0.13"
+      GARNET_COMMIT_WAIT: "yes"
+      GARNET_COMMIT_FREQ: "0"
+      GARNET_CKPT_FREQ: "0"
+      GARNET_DEVICE: "Default"
+      GARNET_REEST: "5"
+    volumes:
+      - ./config/start.sh:/etc/gnc/start.sh:ro
+      - g3:/data
+    networks:
+      garnet: {ipv4_address: 10.89.0.13}
+    restart: unless-stopped
+  g4:  # the replica of g1 at the cluster's first start
+    image: ghcr.io/microsoft/garnet:2.2.14
+    user: root
+    entrypoint: ["sh", "/etc/gnc/start.sh"]
+    environment:
+      GARNET_ADDR: "10.89.0.14"
+      GARNET_COMMIT_WAIT: "yes"
+      GARNET_COMMIT_FREQ: "0"
+      GARNET_CKPT_FREQ: "0"
+      GARNET_DEVICE: "Default"
+      GARNET_REEST: "5"
+    volumes:
+      - ./config/start.sh:/etc/gnc/start.sh:ro
+      - g4:/data
+    networks:
+      garnet: {ipv4_address: 10.89.0.14}
+    restart: unless-stopped
+  g5:  # the replica of g2 at the cluster's first start
+    image: ghcr.io/microsoft/garnet:2.2.14
+    user: root
+    entrypoint: ["sh", "/etc/gnc/start.sh"]
+    environment:
+      GARNET_ADDR: "10.89.0.15"
+      GARNET_COMMIT_WAIT: "yes"
+      GARNET_COMMIT_FREQ: "0"
+      GARNET_CKPT_FREQ: "0"
+      GARNET_DEVICE: "Default"
+      GARNET_REEST: "5"
+    volumes:
+      - ./config/start.sh:/etc/gnc/start.sh:ro
+      - g5:/data
+    networks:
+      garnet: {ipv4_address: 10.89.0.15}
+    restart: unless-stopped
+  g6:  # the replica of g3 at the cluster's first start
+    image: ghcr.io/microsoft/garnet:2.2.14
+    user: root
+    entrypoint: ["sh", "/etc/gnc/start.sh"]
+    environment:
+      GARNET_ADDR: "10.89.0.16"
+      GARNET_COMMIT_WAIT: "yes"
+      GARNET_COMMIT_FREQ: "0"
+      GARNET_CKPT_FREQ: "0"
+      GARNET_DEVICE: "Default"
+      GARNET_REEST: "5"
+    volumes:
+      - ./config/start.sh:/etc/gnc/start.sh:ro
+      - g6:/data
+    networks:
+      garnet: {ipv4_address: 10.89.0.16}
+    restart: unless-stopped
+networks:
+  garnet:
+    ipam:
+      config:
+        - subnet: 10.89.0.0/24
+volumes:
+  g1: {}
+  g2: {}
+  g3: {}
+  g4: {}
+  g5: {}
+  g6: {}

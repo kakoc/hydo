@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=180
+# form the cluster: three primaries with one replica each, and wait until every replica is in step
+exec /bin/gnc init

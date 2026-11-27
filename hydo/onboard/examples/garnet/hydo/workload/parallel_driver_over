@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# SET or HSET over a known register, sent to the primary that owns its slot
+exec /bin/gnc op over

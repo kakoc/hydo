@@ -1,0 +1,73 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "ghcr.io/microsoft/garnet:2.2.14": {
+   "index_digest": "sha256:9ea4c7f379e0366e5647c94ddbe17710d3aba434a92d974658dd90e4a3efc4ed",
+   "name": "ghcr.io/microsoft/garnet",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/app/GarnetServer"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "APP_UID=1654",
+       "ASPNETCORE_HTTP_PORTS=8080",
+       "DOTNET_RUNNING_IN_CONTAINER=true",
+       "DOTNET_VERSION=10.0.15"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1654",
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:c5f73c1ec85f260e40bb35ed3e9f10f431f1506cd95286c6063fc1675fae1ea1",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/app/GarnetServer"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "APP_UID=1654",
+       "ASPNETCORE_HTTP_PORTS=8080",
+       "DOTNET_RUNNING_IN_CONTAINER=true",
+       "DOTNET_VERSION=10.0.15"
+      ],
+      "ExposedPorts": {
+       "6379/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1654",
+      "Volumes": {
+       "/data": {}
+      },
+      "WorkingDir": "/app"
+     },
+     "digest": "sha256:52b5e51fdb637afa4e7612656e1017624e383b2d070bad2233767a561127249c",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "ghcr.io/microsoft/garnet:2.2.14",
+   "registry": "ghcr.io",
+   "repo": "microsoft/garnet",
+   "tag": "2.2.14"
+  }
+ }
+}

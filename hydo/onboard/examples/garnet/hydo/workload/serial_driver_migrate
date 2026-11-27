@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=120
+# MIGRATE ... SLOTS of the slot of one hash tag to another primary, and wait until it serves the slot
+exec /bin/gnc migrate
