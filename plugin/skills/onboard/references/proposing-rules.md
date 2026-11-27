@@ -25,6 +25,11 @@ it first.
 
 ## 2. Write the candidates
 
+Write a rule where the default checks cannot see the promise. Such promises are at most once,
+once per period, a money limit, a device's version, a listing, an expiry, and a retention. The
+read-back of the acknowledged writes already covers the promise that an acknowledged write stays
+(`hydo guide strategies`, section "Which check noticed each bug").
+
 For each promise, write one rule into `hydo/rules.yaml` (`hydo guide rules`, "The candidates
 file"):
 
@@ -59,6 +64,17 @@ After the image builds and a clean run passes (SKILL.md step 4), run
   rule is wrong (fix it and validate again), or the system has a bug on its normal path. Never
   turn such a rule into a check without the owner's decision.
 - `unevaluated`: fix the command and validate again.
+
+Then review each rule that holds on two points before the first exploration, because business
+rules made most of the false findings so far (`hydo guide strategies`, "Which check noticed each
+bug"):
+
+- **The wait.** A rule that waits for the system must wait out the system's own recovery: its
+  leases and retry timers, a failover, and the recovery boot after a power cut.
+- **The clock.** Under a clock step the rule must expect what the system promises, not what the
+  wall clock's new time implies.
+
+Fix a rule that fails either point before you explore.
 
 A rule that holds on the clean runs is ready for exploring, not proven: Blnk's overdraft rule held
 on three clean compositions and failed on the one with concurrent draws. When the project has

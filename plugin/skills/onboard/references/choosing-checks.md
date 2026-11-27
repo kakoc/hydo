@@ -4,7 +4,18 @@ A check is worth writing when it states something the system **promises**: in it
 its API contract, its schema constraints, or what its users rely on. A check derived from what the
 code happens to do today finds nothing and breaks on every change.
 
-Start from what the user said must never happen, then go through this list:
+Write the default checks first, before the first run, so that the run without faults already
+judges something. The section "The first hour of exploring" of `hydo guide workflow` lists
+them. The section "Which check noticed each bug" of `hydo guide strategies` says what each one
+caught, and how often it was wrong. In short:
+
+- a read-back of every acknowledged write with its final outcome (items 1 and 3 below);
+- every replica compared with the leader after the heal, for a system with replicas;
+- a liveness check that the system serves writes after the heal (item 7);
+- the error-log scan;
+- a history checker where the workload has transactions (item 9).
+
+Then start from what the user said must never happen, and go through this list:
 
 1. **Acknowledged writes survive** every fault, including a power cut. The first check of almost
    every project.
@@ -14,7 +25,10 @@ Start from what the user said must never happen, then go through this list:
    operation whose outcome the client did not learn may have either; do not check it either way.
    Do check that it ends: item 7.)
 4. **Domain rules**: no negative balance, totals conserved, no order without its items, unique
-   keys unique. Propose them from the project's own sources and validate them with hydo
+   keys unique. Write them where the promise is one that the default checks cannot see (`hydo
+   guide strategies`, "Which check noticed each bug"): at most once, once per period, a limit,
+   a device's version, a listing, an expiry, or a retention. Propose them from the project's own
+   sources, validate them with hydo, and review each one
    ([proposing-rules.md](proposing-rules.md)); the domain lists in `hydo guide workloads` are a
    last check for rules the sources did not give. Write each over SQL tables as a `.sql` check (a
    query that must return no rows) rather than a shell loop.

@@ -102,7 +102,8 @@ its data directory, its dependencies, and the file where you found each fact. Sh
 2. Decide where every program comes from: the guest has no network, so each program must be in
    the image (`hydo guide workflow`, "Where each program comes from").
 3. One service per long-running process (`hydo guide services`). Give each the restart behaviour
-   and the durability settings it has in production. Copy production's shape too: read the
+   and the durability settings it has in production, each at its durable value and as a build
+   parameter. Copy production's shape too: read the
    deployment manifests (Helm values, Kustomize overlays, the platform's environment files) and
    list each service's replica count, each cluster's size, and each enabled feature, such as a
    cache or the replication of results. The folder must match them, scaled down only in memory
@@ -124,17 +125,19 @@ its data directory, its dependencies, and the file where you found each fact. Sh
    not cover (the application's own API), and keep the generated ones beside them.
    An `eventually_` command runs once, so it must retry by itself until its own deadline; an
    `eventually_` check is polled by hydo until it holds (`hydo guide checks`).
-5. Plan the checks and the faults together: first read `hydo guide strategies` (an older hydo
-   answers "no guide topic"; go on without it). It names the techniques that found bugs in
-   systems of the same type, with their evidence. Tell the user which ones you chose and why.
-   Checks: propose the business rules from the project's own sources (its schema, API,
-   documentation, tests and client library) with
-   [references/proposing-rules.md](references/proposing-rules.md), into `hydo/rules.yaml`; hydo
-   validates them in step 4. Choose the other checks with
-   [references/choosing-checks.md](references/choosing-checks.md), write
-   them as `hydo guide checks` says, and prefer hydo's ready-made checkers to hand-written loops:
-   a business rule over SQL tables is a `.sql` check (a query that must return no rows), and a
-   rule that compares the books with what an outside service saw is one `hydo-sql check` line
+5. Plan the checks and the faults together: first read `hydo guide workflow`, "The first hour of
+   exploring", and `hydo guide strategies` (an older hydo answers "no guide topic"; go on without
+   them). They give the order that found most bugs, and the techniques that found bugs in systems
+   of the same type, with their evidence. Tell the user which ones you chose and why.
+   Checks: write the default checks first, before the first run, so that the run without faults
+   already judges something. Choose them and the others with
+   [references/choosing-checks.md](references/choosing-checks.md). Propose business rules only
+   where they pay, with [references/proposing-rules.md](references/proposing-rules.md), into
+   `hydo/rules.yaml`. Take them from the project's own sources: its schema, API, documentation,
+   tests and client library. hydo validates them in step 4, and you review each one there. Write
+   the checks as `hydo guide checks` says, and prefer hydo's ready-made checkers to hand-written
+   loops. A business rule over SQL tables is a `.sql` check (a query that must return no rows),
+   and a rule that compares the books with what an outside service saw is one `hydo-sql check` line
    over a `sql` and a `world` source (`hydo guide workloads`).
    Turn on error logs as findings (`hydo guide error-logs`). For a queue, log or stream, write
    the drain of the `messages` check as `hydo guide messages` says ("Write the drain"): it must
@@ -161,20 +164,35 @@ with the limits as that topic says.
 Use the "Build and run" commands of `hydo guide workflow`: build the image, run one schedule
 without faults twice (it must pass, with the same fingerprint both times), validate the proposed
 rules (`hydo rules check hydo/rules.yaml --mutate`, step 3 of
-[references/proposing-rules.md](references/proposing-rules.md)), show the owner the rules that
-hold, and write the confirmed ones as checks. Then run the clock audit, `hydo rules scan --kind
-clock` (`hydo guide faults`, "Find the durations measured on the wall clock"), when the
-installed hydo has it. Show the owner its first three places in plain words, and offer only
-their schedules: `hydo explore --schedule`, after you fill in the placeholders and move the
-steps to where that code runs. Mention the rest with the report's last line. Keep `clock` in `faults:`.
-Run the sync audit the same way, `hydo rules scan --kind sync` (`hydo guide faults`, "Find the
-writes acknowledged before they are synced"), when the installed hydo has it. Show its first
-three places and offer their power cuts. Keep `cut` and `powerloss` in `faults:`. Then explore. A first
-run that fails points at the folder or at a real bug. Before changing anything, read why: the
-`hydo: diagnosis:` lines `hydo run` prints and the `diagnosis` in the run directory's
+[references/proposing-rules.md](references/proposing-rules.md)), review each rule as that step
+says, show the owner the rules that hold, and write the confirmed ones as checks.
+
+A first run that fails points at the folder or at a real bug. Before changing anything, read why:
+the `hydo: diagnosis:` lines `hydo run` prints and the `diagnosis` in the run directory's
 `result.json`; then, when your hydo has `hydo inspect` (`hydo inspect --help`), look inside the
 failed run at the stop that matters (`hydo guide inspect`). Do not add debug commands to the
 image to find a cause: that changes the run's timing, and the failure can go away.
+
+Then explore in the order of the section "The first hour of exploring" of `hydo guide
+workflow`. Read its options and fault kinds there, and tell the user each step as you start it:
+
+1. The first exploration: 20 seeds without shrinks, with clock steps, kills and power cuts kept
+   in `faults:`.
+2. Judge each failure with directed runs (`hydo guide workflow` says how), and shrink only the
+   one that you report. Read why it failed before you call it a finding: the first failures are
+   often the checks' own mistakes.
+3. Add the operator's actions that the system has (failovers, migrations, the removal of a node,
+   graceful stops, upgrades) to the workload. Then explore the next seeds.
+4. Where a crash can fall between an answer and a commit or a sync, give the client an event at
+   the answer and aim a reaction grid at it.
+5. Run the sync audit and the clock audit, when the installed hydo has them (`hydo guide
+   faults`, "Find the writes acknowledged before they are synced" and "Find the durations
+   measured on the wall clock"). They are reading aids, not finders. Show the owner the first
+   three places of each in plain words, and offer only their schedules as directed runs. Fill in
+   the placeholders first, and move the steps to where that code runs. Mention the rest with the
+   report's last line.
+
+Leave the techniques that the section names for later rounds until the first hour is done.
 
 When the first exploration finds nothing, do not report "no bugs" yet. Run a second round, and
 tell the user what it adds:

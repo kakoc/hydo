@@ -4,8 +4,9 @@ An onboarding chooses its checks and faults from `hydo guide strategies` by judg
 counts what every onboarding example found, how it found it, which check noticed it, and what it
 cost. It then checks
 five impressions of the lead against the numbers, and proposes a first hour for every
-onboarding. The proposal changes nothing yet: `hydo/guide/strategies.md`, the playbook, and the
-skill stay as they are until the lead decides.
+onboarding. Milestone 386 (tentative number) took the first hour and the default oracles into
+`hydo guide workflow` ("The first hour of exploring"), `hydo/guide/strategies.md`, the playbook,
+and the skill.
 
 The ledger itself is the file `findings-ledger.csv` beside this page: one row per finding, 189
 rows. A few rows hold several findings of one kind, so the rows hold 223 findings.

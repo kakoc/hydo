@@ -25652,3 +25652,87 @@ repository's root by its `.git` folder, so it failed in the copied tree until th
 repository of its own.
 
 **What is left** is open item 193.
+
+## Milestone 386 (tentative number): the first hour of an onboarding, from the ledger
+
+Status: done on 2026-11-27. The documents were written on this Mac, and the tests ran on the
+bare-metal machine. No code changed, no VM ran, and nothing recorded moved.
+
+**Why.** Milestone 380 counted what 47 onboardings of real systems found, and how. It proposed a
+first hour and a set of default checks, and left the playbook, the skill, and `hydo guide
+strategies` as they were until the lead decided. The lead decided to take the proposal. The
+numbers that decide the order:
+
+- A blind exploration with the process strategy found 60 of the 105 bugs first, 35 of its 43
+  recorded first finds within 20 schedules.
+- The explorations ran a median of 6.9 re-runs and shrink candidates per first run.
+- An operator's action in the workload was needed for 14 bugs, and aimed reaction grids found 4
+  first in 8 examples.
+- The clock audit, the scan of write routes, the swarm strategy, explored settings, timing on
+  services, and contracts in a whole-system run found no bug first, or almost none.
+- The default checks with hydo's own verdicts would have caught 63 of the 105 bugs. Business
+  rules caught 19 that no default check would, and made 21 of the 30 false findings.
+
+**What changed.** Each document cites the ledger's numbers for each rule.
+
+- `hydo guide workflow` has a new section, "The first hour of exploring." A user can follow it
+  without the skill. Its steps:
+  1. production's shape, with each durability setting at its durable value as a build
+     parameter;
+  2. the default checks before the first run: a read-back of every acknowledged write with its
+     final outcome, the replicas against the leader, an `eventually_` check that the system serves
+     writes, the error-log scan, and a history checker for transactions;
+  3. 20 seeds of `--strategy process --cluster-faults --no-shrink`, keeping clock steps, kills
+     and power cuts, with `--storage-faults` and `powerloss` (without `corrupt`) for nodes with
+     storage of their own;
+  4. directed runs that judge each failure, and a shrink only for the one to report, by
+     exploring its seed alone;
+  5. the operator's actions in the workload, then aimed reaction grids, then the sync and clock
+     audits as reading aids for directed schedules.
+
+  It says when a business rule pays, and the two points of its review. The rule's wait covers
+  the system's own recovery, and its result under a clock step matches the promise. It says when
+  a value property pays, and what comes in later rounds.
+- `docs/ONBOARDING-PLAYBOOK.md`: phase 3 is now the first hour, then later rounds, in the same
+  order and with the numbers. Section 2 says where domain rules pay and how to review them. Section
+  3 names kills, clock steps and power cuts as the faults that found most, and the audits as
+  reading aids. Phase 2 declares the default checks before the first run, phase 4 judges by
+  directed runs, and the retro adds each finding to the ledger.
+- The skill: step 3.5 writes the default checks first and proposes business rules only where
+  they pay. Step 4 explores in the order of the new section and runs the audits last, as reading
+  aids. `references/choosing-checks.md` lists the default checks first, and
+  `references/proposing-rules.md` says when a rule pays and reviews each rule before exploring.
+  Every fact stays in `hydo guide`; the skill's version stays 0.7.0.
+- `hydo guide strategies`:
+  - The section "Start here" begins with three tables from the ledger: how each bug came first,
+    which faults the bugs needed, and their causes.
+  - Each entry has a line "Yield" with its counts.
+  - The checks are in two groups: the default checks first, then the project's own checks, each
+    group in the order of the bugs that its checks noticed first.
+  - The faults are in the order of the bugs that needed them, with the explorer's strategy first.
+  - The new section "Which check noticed each bug" gives each check's count and false share, what
+    the default set would catch, and the review of business rules.
+  - The section "Measured without a gain" is now "Found no bug first over many tries." It has
+    a table of each technique's tries and the use to keep it for.
+- `docs/USE-CASES.md`: the row "Which checks and faults should a new project start with?" names
+  the new section and the milestone. `docs/design/findings-ledger.md` says that this milestone
+  took the proposal.
+
+**Checks.** `sh ci/vale.sh` found nothing in its 66 documents. On the bare-metal machine, in a
+copy of the tracked files with `AGENTS.local.md`, these passed:
+
+- `cargo test -p hydo-agents --test it`: 16 passed, among them `skill_check::`,
+  `guide_topics::` and `public_content::`;
+- `cargo test -p hydo --test it -- equivalence:: agents_equivalence:: docs::`: 23 passed.
+
+The first run named two failures, both fixed. `docs::no_guide_topic_names_a_milestone` found a
+milestone's number in the strategies page, now "the 14 latest onboardings".
+`equivalence::cli_matches_golden` found 8 differences, all in the hashes and lengths of the
+skill's files that `hydo skill install` copies. Its golden `cli.jsonl` is recorded again with `HYDO_BLESS=1` for
+those 8 lines only. `tests/guide-sizes.txt` records the new sizes of the three topics that grew
+on purpose: `skill` (15,749 bytes), `strategies` (110,182), and `workflow` (47,509).
+
+**What is left.** The order rests on the ledger's records. They count schedules and wall time,
+not machine hours, and most of them do not count their directed runs (the ledger's page, section
+"What the ledger cannot say"). No onboarding has followed the new order yet; the next one's retro
+measures it.

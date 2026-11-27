@@ -546,7 +546,20 @@ They are production's topology, the features behind a flag, the checks of how ea
 outcome ends, and pauses past a failure detector. The skill copies
 production's shape from the deployment manifests and marks promises that no owner confirmed. It
 reads the build's RAM warnings before the first run and asks for a second round before it
-reports no bugs. Its version stays until the lead sets it. The assertion SDKs are in `sdk/`
+reports no bugs. Its version stays until the lead sets it. Since M386 (tentative number) the
+playbook, the skill, and `hydo guide strategies` follow the measured yields of M380's findings
+ledger. The section "The first hour of exploring" of `hydo guide workflow` gives the order to a
+user without the skill:
+- production's shape with its durable settings, and the default checks before the first run;
+- 20 seeds of `--strategy process --cluster-faults --no-shrink`, and directed runs that judge
+  each failure, with a shrink only for the one to report;
+- the operator's actions in the workload, aimed reaction grids, and the sync and clock audits as
+  reading aids.
+
+Business rules are for the promises that the default checks cannot see. Each rule's wait and its
+result under a clock step are reviewed before the first exploration. The strategies page ranks
+its entries by yield, and each entry has a line of its counts. A section of the page says which
+check noticed each bug. The assertion SDKs are in `sdk/`
 (Rust is the reference), with the shared cases in `sdk/cases/`. `sdk/README.md` is for SDK
 maintainers: the shared cases, and the Go module with its frozen copy in `hydo/stack` (section
 "The Go module and the frozen copy in `hydo/stack`"). Every code example on the package pages is a
@@ -5743,6 +5756,12 @@ build machine, before 2026-10-13.
   answer. Every one of 12 known
   places of hydo's findings was listed as `high`; 25 of 30 sampled places were real. Nothing
   recorded moved
+- M386 (tentative number): the onboarding follows the measured first hour of M380's ledger. The
+  playbook's phase 3, the skill, and a new section "The first hour of exploring" of `hydo guide
+  workflow` give one order. It starts with production's shape and the default checks before the
+  first run, then 20 seeds of the process strategy without shrinks. Operator actions, aimed
+  grids, and the audits as reading aids come after. `hydo guide strategies` ranks its entries by
+  yield and adds which check noticed each bug. No code changed; nothing recorded moved
 
 ## Where to look
 
