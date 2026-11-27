@@ -1594,8 +1594,11 @@ is the subset's number modulo the number of subsets, and 0 when it is not writte
 
 `primary` runs the group's `primary:` command in the guest before the fault's step. The command
 prints the service name of the current primary on its first line and exits 0. hydo asks it up to
-10 times, one second of guest time apart. If no answer names a member, the run ends with
-`HYDO-ORACLE: ERROR <group>.primary: the group's primary: command named no member`.
+30 times, one second of guest time apart, so that the wait covers an election after a kill of
+the primary. If no answer names a member, the run ends with `HYDO-ORACLE: ERROR <group>.primary:
+the group's primary: command named no member`, and the message names the likely cause: no
+primary for that long, or a first line that is no member's name (a node id or an address instead
+of the service's name).
 
 The host controller writes each resolution to the guest's log and to the control transcript,
 for example `K: nodes.primary = n2`. The schedule keeps the selector's text, and the transcript

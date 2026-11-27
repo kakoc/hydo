@@ -443,7 +443,9 @@ In the order of the time each cost.
    drained record") and the sends counted 46 unknown, because the records after 64 KiB were
    gone. `hydo guide hazards` names the limit, but the run printed no warning. The client now
    records one receive and one acknowledgement per batch, leaves out empty receives, and the
-   order history carries keys only; a run writes about 40 KiB. About 40 minutes.
+   order history carries keys only; a run writes about 40 KiB. About 40 minutes. Since Milestone
+   368 a cut console warns in `hydo run`, `result.json` and `hydo report`, and a messages claim
+   that the missing records break is an ERROR that names the cut.
 2. **`hydo explore` refused a check whose claim is a build parameter.** `after_ack:
    "{{afterack}}"` passed `hydo build --check` and the build, and `hydo explore` refused the
    image (`checks[0]: claims.after_ack: one of allowed, no-redelivery, not '{{afterack}}'`,
@@ -458,7 +460,8 @@ In the order of the time each cost.
 4. **A process has one operation in flight, also when the history is the only reason.** The
    transaction's receive and acknowledgement were records of the sending process, so the checker
    counted the transaction's sends as unknown. They are records of a process of their own now.
-   About 10 minutes.
+   About 10 minutes. Since Milestone 368 a process token `<process>#<op>` gives each operation
+   of one process its own completion.
 5. **The clock steps of the explorations hide the other failures.** One transaction in eight is
    left open, so every drawn step back that comes within 10 s of one fails the run with finding
    2, and the explorations cannot leave clock steps out without a copy of the manifest (open item

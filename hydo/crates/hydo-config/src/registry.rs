@@ -608,6 +608,9 @@ variables! {
     HYDO_FAKE_ENGINE_BIN: Tests, Test, "path", "the test binary", "hydo-explore tests";
     /// Another explorer to run on the scripted engine.
     HYDO_FAKE_EXPLORER: Tests, Test, "command", "hydo-explore", "hydo-explore tests";
+    /// Not empty: the scripted engine plays the `guard_` scenarios (a reaction's delay whose
+    /// cause changes below 20 ms, and storage faults the failure does not need, M368).
+    HYDO_FAKE_GUARD: Tests, Test, "flag: not empty", "", "hydo-explore tests";
     /// Not empty: the scripted engine prints history records.
     HYDO_FAKE_HIST: Tests, Test, "flag: not empty", "", "hydo-explore tests";
     /// `1`: the scripted engine answers turn tokens in KVM's unit, VM exits, with the shape of

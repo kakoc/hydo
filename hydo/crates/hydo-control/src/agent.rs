@@ -502,7 +502,7 @@ pub fn write_run_files(dir: &Path, tag: &str, prefix: &str, ran: &Ran, boot: Opt
     };
     let _ = std::fs::write(
         dir.join(format!("{tag}.log")),
-        console_text(&run_t, &ran.run.console) + &more(false),
+        console_text(&run_t, &ran.run.console) + &more(false) + &console_cut_note(dir, tag, ""),
     );
     let [b, r, rc] = transcript_files(prefix);
     let _ = std::fs::write(dir.join(&r.1), run_t.to_jsonl());
@@ -512,7 +512,9 @@ pub fn write_run_files(dir: &Path, tag: &str, prefix: &str, ran: &Ran, boot: Opt
         let rec_t = take_screens(&rec.transcript, &dir.join(format!("{prefix}screens")));
         let _ = std::fs::write(
             dir.join(format!("{tag}.recovery.log")),
-            console_text(&rec_t, &rec.console) + &more(true),
+            console_text(&rec_t, &rec.console)
+                + &more(true)
+                + &console_cut_note(dir, tag, ".recovery"),
         );
         let _ = std::fs::write(dir.join(&rc.1), rec_t.to_jsonl());
     }
@@ -524,6 +526,26 @@ pub fn write_run_files(dir: &Path, tag: &str, prefix: &str, ran: &Ran, boot: Opt
     }
     if let Some(bt) = boot {
         let _ = std::fs::write(dir.join(&b.1), bt.transcript.to_jsonl());
+    }
+}
+
+/// Milestone 368: the prefix of the note that a console was cut. hvx keeps 64 KiB of a VM's
+/// console; its engine leaves `<tag><suffix>.console-cut` beside the console when the guest
+/// filled it, and the run's console ends with this note, so that the run's warnings and the
+/// history checks can say that later records are missing. No hash covers it.
+pub const CONSOLE_CUT_NOTE: &str = "HYDO-CONSOLE-CUT";
+
+/// The `HYDO-CONSOLE-CUT <words>` line (with its newline) for the console `<tag><suffix>` of
+/// `dir`, or "" when the engine left no note file. The file is taken (removed), so that a later
+/// run of the same tag does not find it.
+pub fn console_cut_note(dir: &Path, tag: &str, suffix: &str) -> String {
+    let p = dir.join(format!("{tag}{suffix}.console-cut"));
+    match std::fs::read_to_string(&p) {
+        Ok(w) => {
+            let _ = std::fs::remove_file(&p);
+            format!("{CONSOLE_CUT_NOTE} {}\n", w.trim())
+        }
+        Err(_) => String::new(),
     }
 }
 

@@ -187,6 +187,24 @@ pub struct CheckInfo {
     pub details: String,
 }
 
+/// Milestone 368: the note that an engine cut a console (`HYDO-CONSOLE-CUT <words>`, which the
+/// host adds when hvx's 64 KiB of a VM's console filled), as the sentence a messages claim's
+/// error starts with; None when no source has it.
+pub fn console_cut<S: AsRef<str>, T: AsRef<str>>(sources: &[(S, T)]) -> Option<String> {
+    sources.iter().find_map(|(label, text)| {
+        text.as_ref()
+            .lines()
+            .any(|l| l.starts_with("HYDO-CONSOLE-CUT "))
+            .then(|| {
+                format!(
+                    "the console {} was cut at 64 KiB (hvx keeps the first 65536 bytes of a VM's \
+                     console)",
+                    label.as_ref()
+                )
+            })
+    })
+}
+
 fn dict(pairs: Vec<(&str, PyVal)>) -> PyVal {
     PyVal::Dict(pairs.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
 }
@@ -241,6 +259,7 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
     let mut oks: Vec<(PyVal, String)> = Vec::new();
     let mut messages_out: Vec<String> = Vec::new();
     let clock = messages::hist::clock_positions(&ev, &messages::hist::clock_lines(sources));
+    let cut = console_cut(sources);
     for decl_sp in &specs {
         // A messages check is one property per claim (`<id>.<claim>`); the others are one each.
         let parts: Vec<(PyVal, CheckResult)> = if is_messages(decl_sp) {
@@ -273,6 +292,24 @@ pub fn run_checks<S: AsRef<str>, T: AsRef<str>>(
                 .cloned()
                 .ok_or_else(|| Crash("KeyError: 'id'".into()))?;
             let key = id.key()?;
+            if let (Some(c), true) = (&cut, is_messages(decl_sp)) {
+                if matches!(r.status, Outcome::Violation | Outcome::Undecided) {
+                    // Milestone 368: the engine cut a console, so the records after the cut
+                    // (reads, status items, drained records) are missing; a loss or an
+                    // undecided claim is then the cut's, not the system's
+                    r = CheckResult {
+                        status: Outcome::Error,
+                        summary: format!(
+                            "{c}, so the records after the cut are missing and this claim \
+                             cannot be judged ({})",
+                            r.summary
+                        ),
+                        explanation: r.explanation,
+                        details: r.details,
+                        warnings: r.warnings,
+                    };
+                }
+            }
             if frc.truthy() && r.status == Outcome::Ok {
                 // the read-back did not complete: the history may miss the reads that matter
                 r = CheckResult {

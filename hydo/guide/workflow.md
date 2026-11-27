@@ -329,6 +329,14 @@ corrupted`. Such an error is not shrunk, because its shrink only shows the damag
 a new error line of the service's log (`hydo guide error-logs`) that first appeared in such a
 run. `--shrink-detected-damage` shrinks both, for a system that must start on damaged files.
 
+Two rules keep a shrink's cause the failure's own. A storage fault (`G=`, `L=`, a block fault)
+names the failure's class. So after its rounds the shrinker tries to leave out each one that is
+left, also when its budget of runs ended the rounds first. The class of the minimal schedule is
+then named by the faults it keeps. And a reaction's delay (`A=<event>+<ms>:...`) shrinks towards
+`+0` only while the failing check says the same as before: the first line of its output, with
+every number left out. A shorter delay can reach another cause's window and fail the same check
+with other words; the shrink then keeps the longer delay.
+
 ### Shrinks that continue from snapshots
 
 A shrink candidate keeps the faults before the one it changes. So it runs again what an earlier

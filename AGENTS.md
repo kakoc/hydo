@@ -784,6 +784,29 @@ commit; none moves a recorded value:
 
 The details are in `docs/HISTORY.md` Milestone 367 (open items 184 and 186).
 
+**The gaps of the Typesense and Pulsar onboardings (M368, tentative number).** Each fix its own
+commit; none moves a recorded value:
+- hvx keeps 64 KiB of a VM's console. A run that fills it now ends its console with a
+  `HYDO-CONSOLE-CUT` line, and `hydo run`, `result.json`, `hydo report` and an exploration warn.
+  A messages claim that the missing records break is an ERROR that names the cut, not a loss.
+  Before, the engine waited for a count past the buffer, which the module never gives.
+- A history record's process token `<process>#<op>` names one operation of a process. So a
+  client may have several in flight; the messages claims that compare processes take the part
+  before `#` (the Rust SDK's `op_proc`).
+- A group's `primary:` command is asked 30 times a second apart, enough for an election after a
+  kill of the primary, and its ERROR names the likely cause.
+- After its rounds the shrinker tries to leave out each storage fault (`G=`, `L=`, a block
+  fault), so the minimal schedule's class names only the faults the failure needs. A reaction's
+  delay shrinks towards `+0` only while the failing check's first line of output stays the same
+  (open item 184's guard).
+- `hydo rules scan --kind writes` reads C and C++ registrations such as Typesense's
+  `server->post("/collections", post_create_collection)`.
+- Of several images in one folder, `hydo run` and its kin take the one built from `hydo.yaml`,
+  else the newest, and say which.
+- `hydo compose` says nothing of an `ipv4_address` that the service keeps.
+
+The details are in `docs/HISTORY.md` Milestone 368 (open items 181, 184 and 188).
+
 **Each image service's own `/tmp` (M331, tentative number; fingerprint epoch 5).** An image
 service of an image built at epoch 5 has a `/tmp` of its own, as a container has. It is the
 guest's folder `/tmp/oci/<service>` (`hydo_image::defaults`, `oci_own_tmp`). The guest's
@@ -3969,14 +3992,15 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       1499 open. The example builds its client from that pull request's head, a fork 14 commits
       behind v0.21.0. Findings 2 and 3 (the coordinator's timeouts) are new as far as the search
       found.
-    - hvx keeps 64 KiB of the guest's console per boot. A run that wrote more printed no
-      warning, although MANIFEST.md says that `hydo run` warns. The first workload's records
-      were cut off, and the claims were undecided with a message about the drain.
+    - hvx keeps 64 KiB of the guest's console per boot. Since M368 a run that fills it warns,
+      and a messages claim that the missing records break is an ERROR that names the cut. The
+      limit itself is the kernel module's and stays; the Pulsar example did not run again.
     - `hydo explore` reads a check's claims without the build's parameters, so a claim cannot be
       a parameter (as open item 140 for `faults:`). `kill-workload/<name>` finds no process of
       a composed workload's commands.
-    - A process has one operation in flight. So the acknowledgement inside a transaction needs a
-      process number of its own, and the claims judge it as a plain acknowledgement. The idea
+    - A process had one operation in flight. Since M368 a token `<process>#<op>` gives each
+      operation its own completion; the claims still judge the acknowledgement inside a
+      transaction as a plain acknowledgement. The idea
       "Transactions across messages" of `docs/USE-CASES.md` would judge a transaction whole.
     - `hydo rules scan --kind writes` lists the 256 routes of the administrator's API. It lists
       none of the binary protocol's operations: produce, acknowledge, and transactions.
@@ -4045,9 +4069,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       its draft waits for the lead. It belongs to go-diskqueue, which nsqio/nsq requires.
     - A shrink of a reaction's delay moves it towards `+0`. The trial's aimed grid shrank its
       in-flight losses to `+0`, where finding 1 hides the in-flight loss, and the report named the
-      wrong cause. Only directed delays on both sides of NSQ's 2 s sync told them apart. The
-      guard of Milestone 367 is not built (`docs/HISTORY.md` Milestone 367). It keeps a smaller
-      delay only when its run gives the same finding key and the same failing check's output.
+      wrong cause. Only directed delays on both sides of NSQ's 2 s sync told them apart. Since
+      M368 the shrinker keeps a shorter delay only when its run gives the same finding key and
+      the same first line of the failing check's output, numbers left out. It ran on the
+      scripted engine; NSQ's aimed grid did not run again with it. A cause whose check prints
+      the same first line in both windows still shrinks across.
     - The messages check's `no-loss` judged none of the messages that finding 1 lost until the
       drain recorded `sub jobs work from=start`: they were sent before any receive (open item
       183). Since M367 `hydo guide messages` says that such a record from a `first_` command has
@@ -4114,19 +4140,20 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The three candidates are not reported upstream. h2o/h2o#2321, the event loop's clock, is
       open in h2o, and Typesense's issue #3181 (per-node drift under deletes by a filter and
       restarts, with `async_reference` fields) names no cause.
-    - hvx keeps 64 KiB of the guest's console per boot, and a run that wrote more printed no
-      warning. The first client's history records stopped at 15 s of a 60 s workload. The
-      messages check then reported every write unread. The client now writes short ids and one record
-      per import (as open item 181).
-    - `hydo rules scan --kind writes` found none of the 57 routes that Typesense registers in
-      C++ with `server->post(...)` and its kin (`src/main/typesense_server.cpp`).
+    - hvx keeps 64 KiB of the guest's console per boot. Since M368 a run that fills it warns,
+      and a messages claim that the missing records break is an ERROR that names the cut. The
+      warning was shown on hvx with a copy of the example. The client still writes short ids and one
+      record per import (as open item 181).
+    - Since M368 `hydo rules scan --kind writes` reads Typesense's C++ registrations
+      (`server->post(...)` and its kin): 54 routes that write, and 3 that read by their names.
+      A registration over several lines, or through a table, is not read.
     - The clock audit named 14 functions and none of the findings' places, which are in h2o and
       braft.
-    - A group's `primary:` command is asked 10 times a second apart. An election after a kill
-      of the leader took longer, and the run ended `ERROR nodes.primary: ... named no member`;
-      the example's command waits 15 s itself.
-    - The shrinker kept a `G=` damage that the failure did not need, and the class of the
-      minimal schedule named it (`corrupted-files`).
+    - Since M368 a group's `primary:` command is asked 30 times a second apart, and the ERROR
+      names the likely cause; the example's command still waits 15 s itself. A system whose
+      election takes longer than 30 s still needs its own wait.
+    - Since M368 the shrinker tries to leave out each storage fault after its rounds; the
+      example's explorations did not run again with it.
     - The second exploration was stopped after its 60 first runs, during its
       shrinks: no `exploration.json` or report. A node whose `raft_meta` `G=` zeroed stayed up
       and unhealthy; its log was not read.
@@ -5376,6 +5403,12 @@ build machine, before 2026-10-13.
   stats` counts `disk=cut` with the cut, and a failed check keeps the services' logs. `inspect
   exec --service` enters an image service's root, and the guide names the FIPS limit. Nothing
   recorded moved
+- M368 (tentative number): the gaps of the Typesense and Pulsar onboardings, each its own commit.
+  A console that hvx cut warns, and a messages claim it breaks is an ERROR that names the cut. A
+  process may have several operations in flight (`<process>#<op>`). A group's primary is asked
+  for 30 s. The shrinker leaves out storage faults it does not need and keeps a reaction delay
+  whose check's words change. The write scan reads C++ registrations, a folder of two images
+  takes one, and a kept `ipv4_address` gives no warning. Nothing recorded moved
 - M369 (tentative number): the onboarding of rqlite 10.8.0 on hvx, three Raft nodes, with a
   list-append check at strict serializability beside the messages check. One known bug was
   reached: a queued write with `wait` is answered 200 after the queue dropped it, at a kill or a

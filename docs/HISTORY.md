@@ -23921,6 +23921,147 @@ compares verdicts by their signature. The check's output is in the controller's 
 the results the shrinker reads, so the guard needs that output carried into each candidate's
 result. That was more than this round's time (open item 184).
 
+## Milestone 368 (tentative number): the gaps of the Typesense and Pulsar onboardings
+
+Status: done on 2026-11-26, on the bare-metal machine (hvx and the tests) from this Mac. Each fix
+below is its own commit. Nothing recorded moved: every change is in the host's side of the hvx
+engine, the controller, the explorer, the checkers, the scans, the commands and the words. No
+engine's guest behaviour, agent, image or fingerprint changed, and the fingerprint epoch stays
+6. The gaps are the "What hydo lacked" sections of the Typesense and Pulsar examples' RESULTS.md
+and the guard that Milestone 367 left (open items 181, 184 and 188).
+
+**1. A cut console says so.** hvx keeps the first 64 KiB of a VM's console
+(`HVX_CONSOLE_SZ`). The Typesense and Pulsar onboardings wrote more, and no run warned, although
+`hydo guide hazards` said that `hydo run` warns. The cause: the hvx engine wrote its note `hvx:
+console full` only when the module's count passed the buffer's size, and `hvx.c` stops counting
+at the size. So the note never came. Now:
+
+- The engine notes a buffer that is full (`hydo_hvx::engine`, `console_full_note`). It leaves
+  `<tag><suffix>.console-cut` beside the console it saves, a host file that no hash covers. The
+  module and the console's bytes are unchanged, so no fingerprint moves.
+- The controller takes that file when it writes the run's console and ends the console with a
+  `HYDO-CONSOLE-CUT <words>` line (`hydo_control::agent::console_cut_note`).
+- A run with the line gets a warning first (`hydo_explore::results::console_cut_warnings`).
+  `hydo run` prints it, `result.json` keeps it, `hydo report <run dir>` shows it, and an
+  exploration counts such first runs apart from its passes that checked nothing.
+- A `type: messages` claim that is violated or undecided in a run with the line is an ERROR whose
+  words start with `the console <name> was cut at 64 KiB ...`, with the claim's own words after
+  them (`hydo_history::console_cut`). A claim that held stays held.
+
+The limit stays: it is the kernel module's, and the module does not change.
+
+The proof ran on hvx in this tree, with the 0.6.0 release's guest files, on a copy of the
+Typesense example in a folder of its own. The copy adds a command `eventually_noise` that prints
+700 lines of 100 bytes to the console. The other session's tree was only read.
+
+| run | programs | console | warning | fp | ctl |
+|---|---|---|---|---|---|
+| `disk=none \| run` | 0.6.0 | 314 of the 700 lines kept | none | `00bfacca721662f2` | `228425142b44cf81` |
+| `disk=none \| run` | this tree's `hydo` with 0.6.0's `hydo-hvx` | the same | none | the same | the same |
+| `disk=none \| run` | this tree's `hydo` and `hydo-hvx` | the same, then the `HYDO-CONSOLE-CUT` line | `hydo run`, `result.json`, `hydo report`, and `hvx: console full` in engine.log | the same | the same |
+
+The fingerprints and control transcripts of the three runs are equal, so the change moved
+nothing that a run hashes. The second row also showed that a `hydo` copied out of its checkout
+starts the release's `hydo-hvx`, as open item 182 says; `HYDO_HVX_EXPLORE` named this tree's.
+In this copy the check's read-back ran before the noise, so its records were whole and the check
+held; a claim that the cut breaks is shown by the tests `messages::a_cut_console_makes_a_loss_an_error`
+(hydo-history) and `messages_results::a_cut_console_is_a_warning_and_no_loss` (hydo-explore).
+
+**2. Several operations of one process in flight.** The Typesense client's import recorded one
+`send` per document from one process, and the checker counted 337 of 352 sends as unknown: a
+process has one operation in flight, so each invocation closed the one before. A process token
+`<process>#<op>` now names one operation of the process. The messages checker pairs a completion
+with the open invocation of its whole token, and the claims that compare processes (`members`
+and the members' leases) take the part before the first `#`. A token without `#` reads as
+before. No recorded history has a `#` in a process token. For list-append and register checks
+each token is a process of its own, as it was. The Rust SDK's `history::messages::op_proc(3,
+"d17")` writes `3#d17`; it is at the end of the module behind the feature `messages`, so the
+programs built without the feature keep their bytes. The other SDKs keep their frozen scope; a
+client of theirs writes the token as its process. `hydo guide messages` and HISTORIES.md say so,
+and that a batch of one request is one `send` with several items.
+
+**3. A group's primary during an election.** hydo asked a group's `primary:` command 10 times a
+second apart, and Typesense's Raft election after a kill of its leader took longer. It asks 30
+times now. Only a run whose probe named no member within 10 tries runs otherwise, and such a run
+ended in an ERROR. The ERROR names the likely cause: a first line that is no member's name (a
+node id or an address) or no primary for 29 s of guest time, with what to do.
+
+The proof ran on hvx on a copy of the Typesense example whose `primary:` command asks once
+(`timeout 2 /bin/tsc primary`), without the 15 s that the example's command waits itself:
+
+| schedule | 0.6.0 | this tree |
+|---|---|---|
+| `K=nodes.primary@10+20 P=nodes.primary@11+2` | the primary after 4 tries | the same, with one fingerprint |
+| `K=nodes.all@10+1 P=nodes.primary@11+2` | after 4 tries | the same, with one fingerprint |
+| `K=nodes.all@10+30 P=nodes.primary@11+2`, no member up | `ERROR ... named no member in 10 tries (exit status 143, first line "")` | `ERROR ... in 30 tries, a second of guest time apart (exit status 143, first line ""); the group had no primary for 29 s of guest time, or the command failed. ...` |
+
+Typesense's elections after these kills ended within 4 tries, so no run here reached the case of
+the onboarding, an election that outlasted 10 tries; the third row shows the longer wait and the
+words. The passing runs gave 0.6.0's fingerprints and control transcripts.
+
+**4. The shrinker leaves out a storage fault that the failure does not need.** Seed 3 of the
+Typesense exploration shrank to `T=35:-21600 W=... G=ts3@8+3:zero,...` with the class
+`corrupted-files`, although the step alone fails. Its events show why: every round kept the
+candidate that halved the clock step, which comes before the one without `G=`, and the budget
+of 40 runs ended the rounds first. After its rounds the shrinker now tries, one at a time, the
+schedule without each storage fault that is left (`G=`, `L=`, each block fault;
+`Ex::storage_removals`), whatever the budget, and skips one it already decided. The minimal
+schedule's class (`min_class`) is named by the faults it keeps, as before.
+
+**5. The write scan reads C and C++ registrations.** `hydo rules scan --kind writes` found none
+of Typesense's routes. It now reads `<server>->post("<path>", <handler>, ...)` and its kin
+`put`, `patch`, `del` and `delete` (also with `.`) in C and C++ files, with the handler's
+definition in any C or C++ file. A path is a literal that starts with `/`, an HTTP client's call
+is no route, and a handler named for its method (`post_multi_search`) is judged by the words
+after the method. On Typesense 30.2's sources it lists 54 routes that write and leaves out 3
+`POST` routes whose names say that they read; the file has 57 such registrations. The earlier
+projects' reports keep their bytes: their tests passed unchanged.
+
+**6. Two images in one folder.** A build of a copy of `hydo.yaml` with `--set` wrote a second
+image beside the first, and `hydo run`, `hydo repro` and the other commands that find the image
+stopped. Of several images they now take the one whose build record (`<image>.json`) names a
+manifest called `hydo.yaml`, when exactly one does, else the newest, and print a note that names
+it, the reason, and the others with `--image`.
+
+**7. A kept address says nothing.** `hydo compose` warned `ipv4_address 10.89.0.11 ignored; the
+service is at 10.89.0.11`. An `ipv4_address` that hydo's own order gives the service too gives no
+warning now; another address is still named. No recorded import had an equal pair.
+
+**8. The guard of a shrunk reaction delay.** Milestone 367 left it (open item 184): a shrink moved
+the NSQ trial's in-flight loss to `+0`, into finding 1's window, and the report named the wrong
+cause. A candidate whose only change is a shorter delay of a reaction is kept now only when it
+fails with the same key and the same first violation text as the schedule kept so far. The text
+is the first line of the violated check's `HYDO-CHECK-OUT` note, else of a host check's
+explanation, else the verdict, with every number left out (`report::first_violation_text`).
+Otherwise the earlier delay stays.
+
+The scripted engine's new scenario `guard_shrinks_keep_the_cause` shows both shrink rules. A kill
+of redis 30 ms after an event loses the message in flight, and earlier than 20 ms it fails the
+same check with another cause; its shrink keeps `+30`. A kill of mysql fails alike at every delay
+and shrinks to `+0`. On the RAUC manifest with storage faults, where only a step back of the
+clock fails, no shrink keeps a `G=`. With the guard turned off the first part fails, and with the
+storage pass turned off the second (`T=10:-168 G=device@3+3:zero,...` kept its `G=`).
+
+**The recorded answers that changed**, recorded again with `HYDO_BLESS=1`:
+
+- `hydo-control/tests/golden/groups.txt`: the transcript of `K=deaf.primary@3+1`, a probe that
+  never names a member, now 30 tries and the new words.
+
+- `hydo-cli/tests/golden/cli.jsonl`: the answers of `hydo guide manifest` (linux c007 and mac
+  c033), which prints MANIFEST.md.
+
+On the bare-metal machine `cargo clippy --workspace --all-targets` was clean, and these passed:
+the tests of hydo-history, hydo-hvx, hydo-control, hydo-explore (with the 32 scenarios of the
+scripted engine), hydo-compose, hydo-agents, the Rust SDK with the feature `messages`, and
+`cargo test -p hydo --test it` with `equivalence::` and `agents_equivalence::`. Three tests
+failed there for reasons outside this milestone:
+
+- `skillupdate::tests::each_agent_gets_its_folder` (hydo's unit tests) and
+  `identity::local_outputs_are_no_inputs` (hydo-explore) need a git checkout; the copy on the
+  bare-metal machine is an rsync of the tracked files, without `.git`.
+- `value_properties::a_broken_value_property_is_a_violation_with_one_signature` failed once under
+  a load of 19 and passed alone.
+
 ## Milestone 369 (tentative number): rqlite, queued writes answered and then lost, and a removed node that never joins again
 
 rqlite 10.8.0 became the example `hydo/onboard/examples/rqlite` (RESULTS.md), by

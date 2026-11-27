@@ -519,7 +519,7 @@ input	hydo/onboard/examples/rqlite/hydo/checks/final_available	5d3de434be3a84a7e
 input	hydo/onboard/examples/rqlite/hydo/fetch-images.sh	07aa3cdcb3d865e63c5d52901c78f46d6bf1029e9d14db781eb9552239451ed3
 input	hydo/onboard/examples/rqlite/hydo/hydo-compose.lock.json	9636b89718b884488f5c270059feb1896358597694cd75c3d1dd284b770c4979
 input	hydo/onboard/examples/rqlite/hydo/regressions/README.md	12626dbf5d05271968e602d2f27283b99d4e2df749d5cc83d8e4678a5ddf7664
-input	hydo/onboard/examples/rqlite/hydo/regressions/node-removed-while-down-never-joins-again.schedule	1e5c18bccf6cef010c7c11a79f7f0732eabc2cfab7924bc57880348f6c43e5e9
+input	hydo/onboard/examples/rqlite/hydo/regressions/node-removed-while-down-never-joins-again.schedule	0e282d4bc39b4504c9c2f3efbac4d31242574c6a9d4b647967d57ec95118c545
 input	hydo/onboard/examples/rqlite/hydo/regressions/queued-write-with-wait-acked-and-lost-behind-a-slow-leader.schedule	4ef3b86347e63b2a3fa0ea2f43c422d37957089b2b20ac3a8e4b0a53e3245e11
 input	hydo/onboard/examples/rqlite/hydo/regressions/queued-write-with-wait-acked-and-lost-when-the-leader-dies.schedule	def3b3daa8c2d7dc885faf77999d23e533af50faf9226d89880bdf12cbbc9048
 input	hydo/onboard/examples/rqlite/hydo/regressions/queued-writes-lost-at-a-graceful-stop.schedule	9c38e2f2bf50a1dc3af0e5bbaa250556ffe6fadb4538c056eb98208295ec04d1

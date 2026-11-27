@@ -32,8 +32,42 @@ pub(crate) fn image_pattern(ctx: &Ctx) -> (&'static str, &'static str) {
     }
 }
 
+/// Milestone 368: of several images in one folder, the one whose build record
+/// (`<image>.json`, `manifest.path`) names a manifest called `hydo.yaml`, when exactly one does;
+/// else the newest by its file's time (a tie: the last by name). With the reason in words.
+pub(crate) fn pick_image(imgs: &[PathBuf]) -> (PathBuf, &'static str) {
+    let manifest_of = |p: &Path| -> Option<String> {
+        let rec = std::fs::read_to_string(format!("{}.json", p.display())).ok()?;
+        let v: Value = serde_json::from_str(&rec).ok()?;
+        Some(v.pointer("/manifest/path")?.as_str()?.to_string())
+    };
+    let own: Vec<&PathBuf> = imgs
+        .iter()
+        .filter(|p| {
+            manifest_of(p).is_some_and(|m| {
+                Path::new(&m).file_name().and_then(|f| f.to_str()) == Some("hydo.yaml")
+            })
+        })
+        .collect();
+    if own.len() == 1 {
+        return (own[0].clone(), "built from hydo.yaml");
+    }
+    let newest = imgs
+        .iter()
+        .max_by_key(|p| {
+            (
+                std::fs::metadata(p).and_then(|m| m.modified()).ok(),
+                p.to_path_buf(),
+            )
+        })
+        .cloned()
+        .unwrap_or_default();
+    (newest, "the newest")
+}
+
 /// `--image IMG`, or a leading positional image, or the one image `hydo build` wrote in ./hydo-out
-/// (then ./.hydo, where a project's hydo/hydo.yaml builds).
+/// (then ./.hydo, where a project's hydo/hydo.yaml builds). Of several, [`pick_image`] takes one
+/// and says which.
 pub fn find_image(ctx: &Ctx, args: &mut Vec<String>) -> PathBuf {
     let (built, suffix) = image_pattern(ctx);
     let mut img = take(args, "--image");
@@ -48,15 +82,23 @@ pub fn find_image(ctx: &Ctx, args: &mut Vec<String>) -> PathBuf {
                 imgs = glob_simple(Path::new(PROJECT_OUT), "", built);
             }
             if imgs.len() > 1 {
-                // name them (0.3.3's readers had two and had to look which)
-                die(&format!(
-                    "no image given, and there are {} images: {}; pass one with --image",
+                // Milestone 368: a build of a copy of the manifest (`--set` on `hydo-big.yaml`)
+                // writes a second image beside the first, and every command stopped; take the
+                // one built from the folder's own hydo.yaml, else the newest, and say which
+                let (pick, why) = pick_image(&imgs);
+                let others: Vec<String> = imgs
+                    .iter()
+                    .filter(|p| **p != pick)
+                    .map(|p| p.display().to_string())
+                    .collect();
+                eprintln!(
+                    "hydo: note: no image given, and there are {} images; this takes {} ({why}). \
+                     Pass --image <path> for another: {}",
                     imgs.len(),
-                    imgs.iter()
-                        .map(|p| p.display().to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ));
+                    pick.display(),
+                    others.join(", ")
+                );
+                imgs = vec![pick];
             }
             if imgs.len() != 1 {
                 die(&format!(
@@ -1120,12 +1162,22 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
         println!("{l}");
     }
     // hvx keeps 64 KiB of a VM's console (the kernel module's buffer); hydo-hvx says in
-    // engine.log when a VM wrote more (hydo_hvx::engine::CONSOLE_FULL_MARK)
+    // engine.log when a VM filled it (hydo_hvx::engine::CONSOLE_FULL_MARK). Since Milestone 368
+    // the run's console carries the note too, and the run's warnings say it; engine.log speaks
+    // only for a console without the note.
     let elog = std::fs::read_to_string(outdir.join("engine.log")).unwrap_or_default();
-    if let Some(l) = elog.lines().find(|l| l.contains("hvx: console full")) {
+    let noted = run
+        .warnings
+        .iter()
+        .any(|w| hydo_explore::results::is_console_cut_warning(w));
+    if let Some(l) = elog
+        .lines()
+        .find(|l| l.contains("hvx: console full"))
+        .filter(|_| !noted)
+    {
         println!(
             "hydo: warning: {}. Print less (short history records, no per-id lines), or run on \
-             the KVM engine (--backend kvm), which keeps 4 MiB.",
+             the KVM engine (--backend kvm), which keeps 32 MiB.",
             l.trim()
         );
     }
@@ -2338,5 +2390,36 @@ mod tests {
         assert!(bad(0, None).check(Platform::Linux, false).is_err());
         assert!(bad(1, Some(160)).check(Platform::Linux, false).is_err());
         assert!(bad(2, Some(4)).check(Platform::Linux, false).is_err());
+    }
+
+    /// Milestone 368: of two images in one folder (a build of a copy of the manifest with
+    /// `--set`), the one built from hydo.yaml, else the newest.
+    #[test]
+    fn of_two_images_the_one_of_hydo_yaml_or_the_newest() {
+        use super::pick_image;
+        use std::path::Path;
+        let dir = std::env::temp_dir().join(format!("hydo-pick-image-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = dir.join("explore-ob-a-disk.img");
+        let b = dir.join("explore-ob-b-disk.img");
+        let rec = |img: &Path, m: &str| {
+            std::fs::write(img, b"x").unwrap();
+            std::fs::write(
+                format!("{}.json", img.display()),
+                format!("{{\"manifest\":{{\"path\":\"{m}\",\"sha256\":\"0\"}}}}"),
+            )
+            .unwrap();
+        };
+        rec(&a, "hydo/hydo.yaml");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        rec(&b, "hydo/hydo-batch.yaml");
+        let imgs = vec![a.clone(), b.clone()];
+        assert_eq!(pick_image(&imgs), (a.clone(), "built from hydo.yaml"));
+        rec(&a, "hydo/hydo-other.yaml");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(&b, b"y").unwrap();
+        assert_eq!(pick_image(&imgs), (b.clone(), "the newest"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

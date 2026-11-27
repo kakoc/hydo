@@ -93,3 +93,45 @@ fn a_messages_check_in_a_run_document() {
     let got: Value = serde_json::from_str(&doc).unwrap();
     assert_eq!(got, want, "{doc}");
 }
+
+/// Milestone 368: a console that ends with the host's `HYDO-CONSOLE-CUT` note (hvx kept 64 KiB of
+/// it) gives the run a warning first, and the claim that the missing records broke is an ERROR
+/// that names the cut, not a loss.
+#[test]
+fn a_cut_console_is_a_warning_and_no_loss() {
+    let console = format!("{CONSOLE}HYDO-CONSOLE-CUT hvx: console full: ...\n");
+    let srcs = vec![("one".to_string(), console.clone())];
+    let guest = "HYDO-ORACLE: OK invariants=0 held ()";
+    let checks =
+        hydo_history::run_checks(&srcs, Some(guest), hydo_history::DEFAULT_BUDGET, None).unwrap();
+    let mut res = Res::new();
+    res.insert("fp".into(), json!("0000000000000000"));
+    keep_checks(&mut res, &checks);
+    res.insert("guest_verdict".into(), json!(guest));
+    res.insert("verdict".into(), json!(checks.verdict));
+    let run = run_of(
+        "one",
+        "disk=cut | run C=12",
+        &res,
+        &[("one.log".into(), console)],
+    );
+    assert!(
+        run.verdict
+            .text
+            .starts_with("HYDO-ORACLE: ERROR check jobs.no-loss could not be evaluated: the console one was cut at 64 KiB"),
+        "{}",
+        run.verdict.text
+    );
+    assert!(
+        hydo_explore::results::is_console_cut_warning(&run.warnings[0]),
+        "{:?}",
+        run.warnings
+    );
+    assert!(run.warnings[0].starts_with("the console (one.log) was cut at 64 KiB"));
+    let nl = run
+        .findings
+        .iter()
+        .find(|f| f.id == "jobs.no-loss")
+        .unwrap();
+    assert_eq!(nl.status, "error");
+}

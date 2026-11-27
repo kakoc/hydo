@@ -588,6 +588,10 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
     } else {
         Vec::new()
     };
+    // Milestone 368: a console that the engine cut (hvx keeps 64 KiB of a VM's) comes first
+    let mut cut = console_cut_warnings(consoles);
+    cut.append(&mut warnings);
+    let mut warnings = cut;
     let unseen = unseen_events(text, consoles);
     // Milestone 355: a reaction that the controller noted as never fired, unless the line of
     // unseen_events already says that no record names its event
@@ -1419,6 +1423,34 @@ pub fn unseen_events(schedule: &str, consoles: &[(String, String)]) -> Vec<Strin
         }
     }
     out
+}
+
+/// Milestone 368: one warning per console that ends with a `HYDO-CONSOLE-CUT` note (hvx keeps
+/// 64 KiB of a VM's console and cut the rest). The words name the console and what is lost.
+pub fn console_cut_warnings(consoles: &[(String, String)]) -> Vec<String> {
+    let mut out = Vec::new();
+    for (name, c) in consoles {
+        if c.lines().any(|l| l.starts_with("HYDO-CONSOLE-CUT ")) {
+            let boot = if name.contains(".recovery") {
+                "the recovery boot's console"
+            } else {
+                "the console"
+            };
+            out.push(format!(
+                "{boot} ({name}) was cut at 64 KiB: the hvx engine keeps the first 65536 bytes of \
+                 a VM's console, so the records written after them (HYDO-HIST and HYDO-ASSERT too) \
+                 are missing, and a check of those records judged only the first part. Print less \
+                 (short ids, one history record per batch), or run on the KVM engine \
+                 (--backend kvm), which keeps 32 MiB"
+            ));
+        }
+    }
+    out
+}
+
+/// Whether a run's warning is one of [`console_cut_warnings`].
+pub fn is_console_cut_warning(w: &str) -> bool {
+    w.contains("was cut at 64 KiB: the hvx engine keeps")
 }
 
 /// Milestone 355: the reactions that the controller noted as never fired (its

@@ -2242,7 +2242,12 @@ impl<'a> Importer<'a> {
             for (_, nd) in nets.map_items() {
                 if nd.is_map() {
                     aliases.extend(as_list(nd.get("aliases")).iter().map(pstr));
-                    if let Some(ip) = nd.get("ipv4_address").filter(|x| x.truthy()) {
+                    // Milestone 368: an address that hydo's own order gives the service too is
+                    // kept, and nothing is said (the Typesense onboarding's 10.89.0.11)
+                    if let Some(ip) = nd
+                        .get("ipv4_address")
+                        .filter(|x| x.truthy() && pstr(x) != self.addr_of(n))
+                    {
                         self.w.warn(
                             "networks",
                             format!(

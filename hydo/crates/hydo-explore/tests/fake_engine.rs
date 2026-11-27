@@ -189,6 +189,14 @@ fn run(prog: &mut Command, dir: &Path, out: &Path) -> String {
                 ""
             },
         )
+        .env(
+            "HYDO_FAKE_GUARD",
+            if out.to_string_lossy().contains("guard_") {
+                "1"
+            } else {
+                ""
+            },
+        )
         .current_dir(top())
         .output()
         .expect("run");
@@ -315,6 +323,9 @@ fn scenario(name: &str, args: &[&str]) {
     }
     if name == RESTART_SCENARIO {
         return restart_scenario();
+    }
+    if name == GUARD_SCENARIO {
+        return guard_scenario();
     }
     let dir = scratch(name);
     let out = dir.join("out");
@@ -683,7 +694,126 @@ const SCENARIOS: &[(&str, &[&str])] = &[
     (REPEATS_SCENARIO, &[]),
     // no golden: restart_scenario() checks which errors are shrunk
     (RESTART_SCENARIO, &[]),
+    // no golden: guard_scenario() checks a shrunk reaction delay and a left-out G=
+    (GUARD_SCENARIO, &[]),
 ];
+
+const GUARD_SCENARIO: &str = "guard_shrinks_keep_the_cause";
+
+/// Milestone 368. Two shrinks on the scripted engine's guard rules (HYDO_FAKE_GUARD):
+///
+/// - A reaction's delay is shrunk towards `+0` only while the violated check says the same. A
+///   kill of redis 30 ms after the event loses the message in flight; earlier than 20 ms it
+///   fails the same check with another cause (the NSQ trial's two windows, open item 184), so
+///   its shrink keeps `+30`. A kill of mysql fails alike at every delay and shrinks to `+0`.
+/// - A storage fault that the failure does not need is left out after the shrink's rounds, also
+///   when halving a clock step used up their budget (the Typesense onboarding's seed 3), and the
+///   minimal schedule's class is not `corrupted-files`.
+fn guard_scenario() {
+    let dir = scratch(GUARD_SCENARIO);
+    let explore = |name: &str, args: &[&str]| -> serde_json::Value {
+        let out = dir.join(name);
+        let mut c = Command::new(env!("CARGO_BIN_EXE_hydo-explore"));
+        c.args(args)
+            .args(IMAGE)
+            .args(["--workers", "3", "--out"])
+            .arg(&out);
+        run(&mut c, &dir, &out);
+        let t = std::fs::read_to_string(out.join("exploration.json")).unwrap();
+        serde_json::from_str(&t).unwrap()
+    };
+    let shrinks = |d: &serde_json::Value| -> Vec<(String, String, String)> {
+        d["shrinks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| {
+                (
+                    s["verdict"].as_str().unwrap_or("").to_string(),
+                    s["minimal"].as_str().unwrap_or("").to_string(),
+                    s["min_class"].as_str().unwrap_or("").to_string(),
+                )
+            })
+            .collect()
+    };
+    let a_of = |s: &str| -> String {
+        s.split_whitespace()
+            .find(|t| t.starts_with("A="))
+            .unwrap_or("")
+            .to_string()
+    };
+    let d = explore(
+        "delays",
+        &[
+            "--reactive-at",
+            "jobs.recv",
+            "--react-delays",
+            "30",
+            "--react-actions",
+            "kill-redis,kill-mysql",
+            "--seeds",
+            "1-2",
+        ],
+    );
+    let s = shrinks(&d);
+    let redis = s
+        .iter()
+        .find(|x| x.0.contains("[jobs.no-loss]"))
+        .unwrap_or_else(|| panic!("no shrink of the kill of redis: {s:?}"));
+    assert_eq!(a_of(&redis.1), "A=jobs.recv+30:kill-redis", "{redis:?}");
+    let mysql = s
+        .iter()
+        .find(|x| x.0.contains("[jobs.at-most-once]"))
+        .unwrap_or_else(|| panic!("no shrink of the kill of mysql: {s:?}"));
+    assert_eq!(a_of(&mysql.1), "A=jobs.recv:kill-mysql", "{mysql:?}");
+    // the shorter delays of the kill of redis ran and failed, and were not kept
+    let ev = std::fs::read_to_string(dir.join("delays/events.jsonl")).unwrap();
+    let refused = ev
+        .lines()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .filter(|r| {
+            r["schedule"]
+                .as_str()
+                .is_some_and(|x| x.contains("A=jobs.recv:kill-redis"))
+                && r["shrink"]["kept"] == serde_json::json!(false)
+                && r["verdict"]["kind"] == serde_json::json!("violation")
+        })
+        .count();
+    assert!(refused >= 1, "{ev}");
+
+    let d = explore(
+        "storage",
+        &[
+            "--seeds",
+            "1-60",
+            "--strategy",
+            "process",
+            "--storage-faults",
+            "--new-faults",
+            "--manifest",
+            "hydo/onboard/examples/rauc/hydo.yaml",
+        ],
+    );
+    let failed_with_g: Vec<String> = d["failures"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|f| f["run"]["schedule"].as_str())
+        .filter(|x| x.contains(" G=") && x.contains(" T="))
+        .map(str::to_string)
+        .collect();
+    assert!(
+        !failed_with_g.is_empty(),
+        "no failure with a G= beside its step back"
+    );
+    let s = shrinks(&d);
+    assert!(!s.is_empty());
+    for (v, m, class) in &s {
+        assert!(!m.contains(" G="), "the shrink of {v} kept a G=: {m}");
+        assert_ne!(class, "corrupted-files", "{m}");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
 
 const CACHE_SCENARIO: &str = "cache_key_is_the_image_bytes";
 const TIME_LIMIT_SCENARIO: &str = "time_limit_cuts_at_a_seed_boundary";
@@ -1554,6 +1684,39 @@ mod engine {
             } else {
                 "HYDO-ORACLE: OK acked=30".into()
             };
+        }
+        // the shrink guard's scenario (Milestone 368; HYDO_FAKE_GUARD, set for the scenarios
+        // named guard_*). Only two things fail:
+        // - a reaction's kill of redis or mysql loses a message; the check's output names the
+        //   cause, and a kill of redis earlier than 20 ms after the event has another cause (the
+        //   NSQ trial: a new queue that started empty) with the same verdict;
+        // - a step back of the clock, alone: a G= beside it changes nothing.
+        if std::env::var("HYDO_FAKE_GUARD").is_ok_and(|v| !v.is_empty()) {
+            verdict = "HYDO-ORACLE: OK acked=30".into();
+            if let Some(av) = nonempty(tok(guest, "A")) {
+                let (head, action) = av.split_once(':').unwrap_or((av, ""));
+                let ms: i64 = head
+                    .split_once('+')
+                    .and_then(|(_, d)| d.parse().ok())
+                    .unwrap_or(0);
+                let (id, why) = match action {
+                    "kill-redis" if ms < 20 => ("no-loss", "the new queue started empty"),
+                    "kill-redis" => ("no-loss", "the message in flight was lost"),
+                    "kill-mysql" => ("at-most-once", "the message came twice"),
+                    _ => ("", ""),
+                };
+                if !id.is_empty() {
+                    verdict = format!(
+                        "HYDO-ORACLE: VIOLATION [jobs.{id}] m1 was acknowledged and then lost"
+                    );
+                    lines.push(format!(
+                        "HYDO-CHECK-OUT {{\"id\":\"jobs.{id}\",\"lines\":[\"{why}\"]}}"
+                    ));
+                }
+            }
+            if nonempty(t).is_some_and(|tv| after(tv, ':', 1).starts_with('-')) {
+                verdict = "HYDO-ORACLE: VIOLATION [converge] the nodes hold other documents".into();
+            }
         }
         // the restart scenario (Milestone 339; HYDO_FAKE_RESTART, set for the scenarios named
         // restart_*): a service whose files a G= damaged does not start again, as a system that

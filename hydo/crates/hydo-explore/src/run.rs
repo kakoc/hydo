@@ -2429,6 +2429,7 @@ fn shrink(
     keep: Option<Keep<'_>>,
     prefix: &str,
     ch: &Chain,
+    first: Option<String>,
 ) -> (S, String, i64) {
     let mut budget = 40;
     let (mut cur, mut cur_v, mut tries, mut rnd, mut tjk) = (s, verdict.to_string(), 0i64, 0, tjk);
@@ -2445,66 +2446,149 @@ fn shrink(
     // candidates (the steps after the failure), so counting whole rounds ended its shrink after
     // three rounds and nine runs (Milestone 264). Every other schedule counts as explore.py did.
     let walk = cur.i.is_some();
+    // Milestone 368: what the violated check said in the failure being shrunk, for the guard of
+    // a shorter reaction delay; every candidate decided, so that the storage pass after the
+    // rounds runs none twice
+    let mut cur_text = first;
+    let mut decided: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut st = RoundState {
+        cur: &mut cur,
+        cur_v: &mut cur_v,
+        cur_text: &mut cur_text,
+        tjk: &mut tjk,
+        decided: &mut decided,
+        log,
+    };
     while tries < budget {
-        let cands = cx.ex.candidates(&cur, tjk);
+        let cands = cx.ex.candidates(st.cur, *st.tjk);
         if cands.is_empty() {
             break;
         }
         rnd += 1;
-        let items: Vec<(String, String)> = cands
-            .iter()
-            .enumerate()
-            .map(|(i, c)| (format!("{prefix}-{rnd}-{i}"), cx.render(c)))
-            .collect();
+        let n = cands.len() as i64;
         if !walk {
-            tries += items.len() as i64;
+            tries += n;
         }
-        // run the round's candidates side by side, but decide in candidate order and stop as soon
-        // as the first one that keeps the failure is known (explore.py ran the whole round and then
-        // took the first one that kept it: the same candidate)
-        let mut b = pool.batch(&items, true);
-        let mut got: HashMap<String, Res> = HashMap::new();
-        let mut next = 0;
-        let mut progressed = false;
-        'round: while let Some((tag, _, r)) = b.next_done() {
-            got.insert(tag, r);
-            while next < items.len() {
-                let Some(r) = got.get(&items[next].0) else {
-                    break;
-                };
-                let v = py_str(&r["verdict"]);
-                let kept = match keep {
-                    Some(k) => k(&v, r),
-                    None => same_outcome(&cur_v, &v),
-                };
-                let mut run = cx.chain_run(ch, &items[next].0, &items[next].1, r, ch.role);
-                run.shrink = Some(ShrinkStep {
-                    of: ch.of.clone(),
-                    round: rnd as u64,
-                    kept,
-                });
-                log.push(run);
-                if walk {
-                    tries += 1;
-                }
-                if kept {
-                    cur = cands[next].clone();
-                    cur_v = v;
-                    if let Some(Value::Array(t)) = r.get("tjk") {
-                        tjk = Some((t[0].as_i64().unwrap_or(0), t[1].as_i64().unwrap_or(0)));
-                    }
-                    progressed = true;
-                    b.cancel();
-                    break 'round;
-                }
-                next += 1;
-            }
+        let (progressed, ran) = shrink_round(cx, pool, cands, keep, prefix, ch, rnd, &mut st);
+        if walk {
+            tries += ran;
         }
         if !progressed {
             break;
         }
     }
+    // Milestone 368: a storage fault that the rounds did not leave out, because the budget ended
+    // them before its turn (the Typesense onboarding: seven rounds that halved a clock step), is
+    // tried alone; it names the class, so one that the failure does not need misleads
+    loop {
+        let cands: Vec<S> = cx
+            .ex
+            .storage_removals(st.cur)
+            .into_iter()
+            .filter(|c| !st.decided.contains(&cx.render(c)))
+            .collect();
+        if cands.is_empty() {
+            break;
+        }
+        rnd += 1;
+        tries += cands.len() as i64;
+        if !shrink_round(cx, pool, cands, keep, prefix, ch, rnd, &mut st).0 {
+            break;
+        }
+    }
     (cur, cur_v, tries)
+}
+
+/// What a shrink's rounds change: the schedule kept so far, its verdict, what its violated check
+/// said, its tick-jitter pair, the candidates decided, and the runs used.
+struct RoundState<'a> {
+    cur: &'a mut S,
+    cur_v: &'a mut String,
+    cur_text: &'a mut Option<String>,
+    tjk: &'a mut Option<(i64, i64)>,
+    decided: &'a mut std::collections::HashSet<String>,
+    log: &'a mut Vec<Run>,
+}
+
+/// Whether `cand` differs from `cur` by a shorter delay of one of its reactions (`A=...+<ms>`).
+fn shortens_a_delay(cur: &S, cand: &S) -> bool {
+    cur.a.len() == cand.a.len()
+        && cur
+            .a
+            .iter()
+            .zip(&cand.a)
+            .any(|(x, y)| y.delay < x.delay && y.event == x.event && y.action == x.action)
+}
+
+/// One round of a shrink: run the candidates side by side, but decide in candidate order and
+/// stop as soon as the first one that keeps the failure is known (explore.py ran the whole round
+/// and then took the first one that kept it: the same candidate). Returns whether one was kept,
+/// and how many were decided.
+#[allow(clippy::too_many_arguments)]
+fn shrink_round(
+    cx: &Cx,
+    pool: &Pool,
+    cands: Vec<S>,
+    keep: Option<Keep<'_>>,
+    prefix: &str,
+    ch: &Chain,
+    rnd: i32,
+    st: &mut RoundState<'_>,
+) -> (bool, i64) {
+    let items: Vec<(String, String)> = cands
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (format!("{prefix}-{rnd}-{i}"), cx.render(c)))
+        .collect();
+    let mut b = pool.batch(&items, true);
+    let mut got: HashMap<String, Res> = HashMap::new();
+    let mut next = 0;
+    let mut ran = 0i64;
+    while let Some((tag, _, r)) = b.next_done() {
+        got.insert(tag, r);
+        while next < items.len() {
+            let Some(r) = got.get(&items[next].0) else {
+                break;
+            };
+            let v = py_str(&r["verdict"]);
+            let mut kept = match keep {
+                Some(k) => k(&v, r),
+                None => same_outcome(st.cur_v, &v),
+            };
+            // Milestone 368 (open item 184): a shorter reaction delay is kept only when the
+            // violated check says the same as before. A delay that moves into another cause's
+            // window can fail the same check with other words; the earlier delay stays then.
+            let text = report::first_violation_text(
+                &v,
+                &results::explorer_consoles(&cx.out, &items[next].0),
+                r,
+            );
+            if kept && keep.is_none() && shortens_a_delay(st.cur, &cands[next]) {
+                kept = text.is_some() && text == *st.cur_text;
+            }
+            let mut run = cx.chain_run(ch, &items[next].0, &items[next].1, r, ch.role);
+            run.shrink = Some(ShrinkStep {
+                of: ch.of.clone(),
+                round: rnd as u64,
+                kept,
+            });
+            st.log.push(run);
+            st.decided.insert(items[next].1.clone());
+            ran += 1;
+            if kept {
+                *st.cur = cands[next].clone();
+                *st.cur_v = v;
+                *st.cur_text = text;
+                if let Some(Value::Array(t)) = r.get("tjk") {
+                    *st.tjk = Some((t[0].as_i64().unwrap_or(0), t[1].as_i64().unwrap_or(0)));
+                }
+                b.cancel();
+                return (true, ran);
+            }
+            next += 1;
+        }
+    }
+    (false, ran)
 }
 
 /// The fault kinds of a schedule, for `--shrink-causes` (Milestone 225): the host part's keys
@@ -2583,6 +2667,12 @@ fn shrink_violation(
         .get("tjk")
         .and_then(Value::as_array)
         .map(|t| (t[0].as_i64().unwrap_or(0), t[1].as_i64().unwrap_or(0)));
+    // Milestone 368: what the violated check said in the first run, for the delay guard
+    let first = report::first_violation_text(
+        &py_str(&f["verdict"]),
+        &results::explorer_consoles(&cx.out, &format!("seed-{}", ch.seed)),
+        f,
+    );
     let (mut m, mv, n) = shrink(
         cx,
         pool,
@@ -2593,6 +2683,7 @@ fn shrink_violation(
         None,
         &prefix,
         &ch,
+        first,
     );
     let mut mt = cx.render(&m);
     let conf_pair = |t: &str, log: &mut Vec<Run>| {
@@ -2729,6 +2820,7 @@ fn shrink_errkind(cx: &Cx, pool: &Pool, x: &errlog::Aggregate) -> (String, Error
         Some(&keep),
         &format!("errshrink-{sig}"),
         &ch,
+        None,
     );
     let mt = cx.render(&m);
     let (ta, tb) = (format!("errmin-a-{sig}"), format!("errmin-b-{sig}"));
@@ -3138,6 +3230,8 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
     // Milestone 355: first runs with a reaction that never fired, counted apart
     let mut unfired: Vec<String> = Vec::new();
     let mut nunfired = 0u64;
+    // Milestone 368: first runs whose console the engine cut, counted apart
+    let mut ncut = 0u64;
     let vacuous = seeds
         .iter()
         .filter(|sd| {
@@ -3165,9 +3259,17 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
                         unfired.push(nf[0].clone());
                     }
                 }
-                r.warnings
+                if r.warnings
                     .iter()
-                    .any(|w| !u.contains(w) && !results::is_unfired_warning(w))
+                    .any(|w| results::is_console_cut_warning(w))
+                {
+                    ncut += 1;
+                }
+                r.warnings.iter().any(|w| {
+                    !u.contains(w)
+                        && !results::is_unfired_warning(w)
+                        && !results::is_console_cut_warning(w)
+                })
             })
         })
         .count() as u64;
@@ -3185,6 +3287,14 @@ fn explore(cx: &Cx, pool: Pool, t0: Instant, inp: Inputs) -> i32 {
             "hydo: warning: in {nunmatched} of {} first runs {}",
             seeds.len(),
             unmatched.first().map(String::as_str).unwrap_or("")
+        );
+    }
+    if ncut > 0 {
+        eprintln!(
+            "hydo: warning: the engine cut the console of {ncut} of {} first runs at 64 KiB, so \
+             their checks judged only the records before the cut (the run records in events.jsonl \
+             have the warning); print less, or explore on the KVM engine",
+            seeds.len()
         );
     }
     if vacuous > 0 {

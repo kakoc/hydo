@@ -108,6 +108,9 @@ Check each item and report what you found.
   matches every line (GNU grep matches none), so "acknowledged ids that were not read back" comes
   out empty exactly when nothing was read back. Compare sets with `awk` keyed on `FILENAME`, or
   with `hydo-check`.
-- **Console size.** The guest console holds 64 KiB per VM on hvx (`hydo run` warns when a run
-  wrote more) and 4 MiB on the KVM engine and the Mac. Print short lines; do not print every
-  acknowledged id. A long history (thousands of operations) fits on the KVM engine or the Mac.
+- **Console size.** The guest console holds 64 KiB per VM on hvx and 32 MiB on the KVM engine
+  and the Mac. When an hvx run fills it, the run's console ends with a `HYDO-CONSOLE-CUT` line,
+  and `hydo run`, `result.json` and `hydo report` warn that the console was cut. A messages check
+  that the missing records break is then an ERROR that names the cut, not a loss. Print short
+  lines; do not print every acknowledged id, and record one history operation per batch. A long
+  history (thousands of operations) fits on the KVM engine or the Mac.

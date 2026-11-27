@@ -198,6 +198,16 @@ fn the_primary_is_asked_at_the_step() {
         v.contains("deaf.primary: the group's primary: command named no member"),
         "{v}"
     );
+    // Milestone 368: the probe covers an election after a kill of the primary (30 tries a
+    // second apart), and the error names the likely cause
+    assert!(
+        v.contains("in 30 tries, a second of guest time apart"),
+        "{v}"
+    );
+    assert!(
+        v.contains("the command printed \"nobody\", which is no member's name (n1, n2)"),
+        "{v}"
+    );
     assert!(signals(&r.run.items, Sig::Kill).is_empty());
 }
 

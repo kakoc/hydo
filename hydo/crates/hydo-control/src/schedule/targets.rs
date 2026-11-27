@@ -22,8 +22,12 @@ use crate::seams::Unsupported;
 use hydo_schedule::{NetTarget, Selector, Target};
 
 /// How often the primary's probe is asked before the run ends in an error, one second of guest
-/// time apart (an election takes a few seconds).
-pub(super) const PROBE_TRIES: u32 = 10;
+/// time apart. An election takes a few seconds, and after a kill of the primary longer: the
+/// members wait out their election timeout first, and a member that restarts rejoins later. The
+/// Typesense onboarding's Raft election after a kill of its leader took more than the 10 tries of
+/// Milestone 195, so Milestone 368 asks for 30 s. Only a run whose probe named no member within
+/// 10 tries, which ended in an error, runs otherwise.
+pub(super) const PROBE_TRIES: u32 = 30;
 /// The most output of the probe kept.
 const PROBE_CAPTURE: u32 = 4096;
 
@@ -155,6 +159,7 @@ pub(super) fn primary(fx: &mut F<'_>, ctx: &Ctx, group: &str) -> Step<String> {
         );
     }
     let mut last = String::new();
+    let mut named = String::new();
     for i in 0..PROBE_TRIES {
         if i > 0 {
             let e = env(fx, ctx, &[]);
@@ -172,14 +177,35 @@ pub(super) fn primary(fx: &mut F<'_>, ctx: &Ctx, group: &str) -> Step<String> {
         if r.status == 0 && g.services.contains(&first) {
             return Ok(first);
         }
+        if r.status == 0 && !first.is_empty() && named.is_empty() {
+            named = first.clone();
+        }
         last = format!("exit status {}, first line {first:?}", r.status);
     }
-    die_oracle(
-        fx,
+    die_oracle(fx, no_primary_words(group, &g.services, &named, &last))
+}
+
+/// The ERROR of a group whose `primary:` command named no member in [`PROBE_TRIES`] tries,
+/// with the likely cause: `named` is a first line that was no member's name (a node id or an
+/// address instead of the service's name); else the group had no primary that long.
+pub fn no_primary_words(group: &str, members: &[String], named: &str, last: &str) -> String {
+    let secs = PROBE_TRIES - 1;
+    let why = if named.is_empty() {
         format!(
-            "HYDO-ORACLE: ERROR {group}.primary: the group's primary: command named no member \
-             in {PROBE_TRIES} tries ({last})"
-        ),
+            "the group had no primary for {secs} s of guest time, or the command failed. An \
+             election after a kill or a partition of the primary can take longer: make the \
+             command wait for a primary itself, or aim the fault at a later step"
+        )
+    } else {
+        format!(
+            "the command printed {named:?}, which is no member's name ({}): it must print the \
+             service's name from hydo.yaml, not the system's own id or address of the node",
+            members.join(", ")
+        )
+    };
+    format!(
+        "HYDO-ORACLE: ERROR {group}.primary: the group's primary: command named no member \
+         in {PROBE_TRIES} tries, a second of guest time apart ({last}); {why}"
     )
 }
 

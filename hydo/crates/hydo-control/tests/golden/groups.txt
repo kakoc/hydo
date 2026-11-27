@@ -4,7 +4,7 @@
 loopback	disk=none | run K=n1,n3@2+2	ee5565d5db35e8b76986abcbcf6fa30c2f2ca4eb8bd18f7dbc17545132597bb6
 loopback	disk=none | run K=nodes.majority.2@2+1	505528b7fab2e63ed403e844b311e7a3f44e1755dd7a0db0b86c66e0da2daf7d
 loopback	disk=none | run K=nodes.primary@3+1	a01b5e576d976d6a5dae87fddfd993618a9958ba4e3c354c1f59f776c7b3ce1e
-loopback	disk=none | run K=deaf.primary@3+1	cb8e6686eed8f30c1a932abb3281db137f900d24acea4812a02a908b91c8a8ad
+loopback	disk=none | run K=deaf.primary@3+1	de10a4e51f7ec7ed378fb00940388fbfaa47b833392de565cdb8ce9f3319065d
 loopback	disk=none | run P=nodes.all@1~100:400	5317ca450875b67daaf890ce8bf3e11d78afddf854419db26b72dfdeaafff46e
 loopback	disk=none | run X=nodes.one.1@2~50	429025523f93c7fb0690960c227c1c1810e5e8d193ddd7a15ed33510baf3e056
 loopback	disk=cut | run K=nodes.all@2+3 C=4	6722b4daaf02a83db81aed2d08c7c71ab8ef8e6eb7e1417208592a9df8a2a3be
