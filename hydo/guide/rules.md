@@ -35,6 +35,11 @@ durations measured on the wall clock").
 A seventh section, `writes`, lists the routes of the project's API that write. The next section
 describes it.
 
+`hydo rules scan --kind sync` is the sync audit: it lists the code that can answer a write before
+the write is on the disk, and proposes power cuts right after that answer. The scan without
+`--kind` does not show it (`hydo guide faults`, "Find the writes acknowledged before they are
+synced").
+
 ## List the routes that write: `hydo rules scan --kind writes`
 
 ```sh
