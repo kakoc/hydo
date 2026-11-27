@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# every node's lists at level none, then the leader's at level strong: each node's list must be a prefix of the leader's
+exec /bin/rqc read

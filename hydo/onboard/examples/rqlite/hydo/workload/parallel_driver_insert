@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# INSERT of a new row of kv through a node that the seed picks
+exec /bin/rqc op insert

@@ -1,0 +1,163 @@
+# rqlite 10.8.0 (the newest release, 2026-11-26), the distributed database on SQLite and Raft, as
+# a cluster of three nodes, as ../docker-compose.yaml runs it. Each node keeps its data on a file
+# system of its own. RESULTS.md has the promises under test and what was found.
+#
+#   sh ../build.sh            # bin/rqc-<arch>, the test client (../client)
+#   sh fetch-images.sh        # the image by digest
+#   hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --new-faults --cluster-faults --storage-faults
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The services below are the importer's,
+# with these changes:
+# - each node's /rqlite/file is a file system of its own (storage:), the target of L= and G=,
+#   instead of the importer's folder on the shared data disk;
+# - the readiness check asks /status with the test client and takes any answer: a node alone
+#   has no leader, so a check of /readyz would keep a restarted node from being ready;
+# - the nodes start together (start_after: started), as Compose starts them: each waits for the
+#   other two before it bootstraps (-bootstrap-expect 3);
+# - the snapshot threshold is a build parameter, 64 log entries instead of 8,192, so that a run
+#   of a few minutes takes snapshots;
+# - the test client rqc is in the image (../build.sh).
+format: 1
+name: rqlite
+description: "rqlite 10.8.0, a cluster of three Raft nodes: acknowledged inserts, upserts, updates, deletes, transactions and queued writes with wait stay as acknowledged, transactions of list appends and linearizable or strong reads are strict serializable, a backup holds every append acknowledged before it, every node's lists are prefixes of the leader's, the nodes converge, and the cluster serves writes through every node after the heal, under kills, pauses, partitions, one node's power loss or damaged files, power cuts and clock steps"
+hydo_version: "0.6"
+
+params:
+  arch: amd64     # amd64 | arm64: the client's architecture, the same as the image's
+  snap: "64"      # -raft-snap of every node: the Raft log entries that trigger a snapshot
+                  #   (rqlite's default is 8192); a node checks it every 5 s (-raft-snap-int)
+  qstop: "no"     # yes: serial_driver_qstop sends queued writes through a node and stops that node
+                  #   with SIGTERM (RESULTS.md, finding 2); off by default, because every run with
+                  #   it fails
+
+env:
+  RQC_QSTOP: "{{qstop}}"   # the client reads it
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 1024
+  clock_start: 1795651200   # 2026-11-26 00:00 UTC, the day of the import
+  clock_after_cut: 60       # a real machine's clock runs on across a power cut
+
+data:
+  size_mib: 1024  # the data disk: the three nodes' own file systems of 256 MiB each, and the rest
+  dirs: [vol/rq1, vol/rq2, vol/rq3]
+
+root:
+  share_images: true   # the three nodes share one tree of the rqlite image
+  files:
+    - {src: "../bin/rqc-{{arch}}", dst: /bin/rqc, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 rq1
+      10.89.0.12 rq2
+      10.89.0.13 rq3
+
+groups:
+  - name: nodes
+    services: [rq1, rq2, rq3]
+    primary: /bin/rqc primary   # the Raft leader, from each node's /status
+
+services:
+  # Compose service rq1
+  # image rqlite/rqlite:10.8.0 = docker.io/rqlite/rqlite@sha256:71b122313e060f915918225d07f802825547d4fc9cc1f7be007d6aab0b34c9ca
+  #   linux/amd64: sha256:ac2e29dda37f80063076d951867f689d987f3c5584b3cfb298626d268a0775d1
+  #   linux/arm64: sha256:e8396e5d0631d23df596feaede7b31fc20ac1b3dbcbbc450c2888b32c522f1c4
+  - name: rq1
+    image: {x86_64: images/rqlite-rqlite-10.8.0-amd64.docker.tar, arm64: images/rqlite-rqlite-10.8.0-arm64-oci}
+    image_ref: "rqlite/rqlite:10.8.0"
+    cmd: ["-node-id", rq1, "-http-addr", "0.0.0.0:4001", "-http-adv-addr", "10.89.0.11:4001", "-raft-addr", "0.0.0.0:4002", "-raft-adv-addr", "10.89.0.11:4002", "-bootstrap-expect", "3", "-join", "10.89.0.11:4002,10.89.0.12:4002,10.89.0.13:4002", "-raft-snap", "{{snap}}"]
+    port: 4001
+    addr: 10.89.0.11
+    ready: "timeout 5 /bin/rqc ready 10.89.0.11"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/rq1, size_mib: 256}   # the Raft log, the snapshots and the SQLite database
+    setup: chown 1000:1000 /data/vol/rq1     # the image runs as uid 1000 (rqlite); a new file system's root is root's
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/rq1, dst: /rqlite/file, copy_up: true}
+  # Compose service rq2
+  - name: rq2
+    image: {x86_64: images/rqlite-rqlite-10.8.0-amd64.docker.tar, arm64: images/rqlite-rqlite-10.8.0-arm64-oci}
+    image_ref: "rqlite/rqlite:10.8.0"
+    cmd: ["-node-id", rq2, "-http-addr", "0.0.0.0:4001", "-http-adv-addr", "10.89.0.12:4001", "-raft-addr", "0.0.0.0:4002", "-raft-adv-addr", "10.89.0.12:4002", "-bootstrap-expect", "3", "-join", "10.89.0.11:4002,10.89.0.12:4002,10.89.0.13:4002", "-raft-snap", "{{snap}}"]
+    port: 4001
+    addr: 10.89.0.12
+    start_after: started   # Compose starts the three nodes together
+    ready: "timeout 5 /bin/rqc ready 10.89.0.12"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/rq2, size_mib: 256}
+    setup: chown 1000:1000 /data/vol/rq2
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/rq2, dst: /rqlite/file, copy_up: true}
+  # Compose service rq3
+  - name: rq3
+    image: {x86_64: images/rqlite-rqlite-10.8.0-amd64.docker.tar, arm64: images/rqlite-rqlite-10.8.0-arm64-oci}
+    image_ref: "rqlite/rqlite:10.8.0"
+    cmd: ["-node-id", rq3, "-http-addr", "0.0.0.0:4001", "-http-adv-addr", "10.89.0.13:4001", "-raft-addr", "0.0.0.0:4002", "-raft-adv-addr", "10.89.0.13:4002", "-bootstrap-expect", "3", "-join", "10.89.0.11:4002,10.89.0.12:4002,10.89.0.13:4002", "-raft-snap", "{{snap}}"]
+    port: 4001
+    addr: 10.89.0.13
+    start_after: started
+    ready: "timeout 5 /bin/rqc ready 10.89.0.13"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/rq3, size_mib: 256}
+    setup: chown 1000:1000 /data/vol/rq3
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/rq3, dst: /rqlite/file, copy_up: true}
+
+# 50 rounds of 1 s with up to 3 commands each: about 120 writes and transactions, and a few
+# snapshots of every node. hvx keeps 64 KiB of the guest's console, so the run stays small.
+workload:
+  steps: 50
+  timeout: 300    # also the read-backs' limit
+
+test:
+  parallel: 4
+  per_round: 3
+  round_ms: 1000
+  command_timeout: 60
+  drain_timeout: 60
+
+checks:
+  # hydo's ready-made claim (hydo guide messages, "Read back the final states"): every write of
+  # the table kv that rqlite acknowledged is there at the end, unless a later write of the same
+  # key replaced it, and no write that rqlite refused took effect. A queued write with wait
+  # counts as acknowledged when rqlite answers that the queue committed it. `rqc readback` reads
+  # every row back from the leader at level strong and writes each write's effect (f=1 or f=0).
+  - id: writes
+    type: messages
+    history: w
+    msg: every write that rqlite acknowledged ends as rqlite acknowledged it
+    final: /bin/rqc readback
+    claims:
+      acked_outcome:
+        client_errors: [refused]   # a statement's error (rolled back), 400, or 503 "leader not found": rqlite applied nothing
+        effect: recorded
+  # Transactions of list appends and reads (rqc txn) at level linearizable or strong, checked
+  # at strict serializability (hydo guide checks, "History checks"). It is here and not a file
+  # checks/list_append_la: with a checks: section in hydo.yaml, hydo 0.6.0 drops such a file
+  # (RESULTS.md, "What hydo lacked").
+  - id: la
+    type: list-append
+    history: la
+    consistency: strict-serializable
+    msg: transactions of list appends and linearizable or strong reads are strict serializable, and no acknowledged append is lost
+    final: /bin/rqc lafinal
+
+faults: [kill, pause, network, oneway, cut, clock, corrupt, powerloss]

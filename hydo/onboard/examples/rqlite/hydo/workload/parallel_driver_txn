@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# a transaction of 1 to 3 list appends and reads of la at level linearizable or strong (/db/request?transaction)
+exec /bin/rqc txn

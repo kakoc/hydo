@@ -1,0 +1,10 @@
+# A new candidate in rqlite 10.8.0 (RESULTS.md, finding 2). With the build parameter qstop=yes,
+# serial_driver_qstop sends 2 or 3 queued writes without wait (/db/execute?queue) through one
+# node, each answered 200, and then stops that node gracefully with SIGTERM. The node closes its
+# HTTP service, which closes the write queue: Queue.Close returns without writing the batch it
+# holds (queue/queue.go, run, case <-q.done), and Service.Close stops runQueue (http/service.go,
+# Close). So every queued write is lost, in a run without a fault, although the node shut down
+# cleanly and took its snapshot on close. Build it with: hydo build hydo.yaml --set qstop=yes
+# params: qstop=yes
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run

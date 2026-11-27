@@ -1,0 +1,7 @@
+# A known bug of rqlite 10.8.0 (RESULTS.md, finding 1; the open pull request rqlite/rqlite#3027),
+# without a kill. The leader's links get a delay of 500 ms from step 17 to step 20. A queued write
+# with wait through a follower fails twice to reach the leader in time, runQueue gives up after
+# its retry (http/service.go, runQueue) and still releases the waiting caller, which gets 200
+# after about 3 s. No node has the row. Shrunk from seed 46 of the second exploration.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run N=nodes.primary@17-20:delay,500ms W=2da25f11,p3,q1,r2000,oanytime_backup

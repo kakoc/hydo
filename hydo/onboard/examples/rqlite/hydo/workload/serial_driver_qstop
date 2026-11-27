@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# at most once a run: 2 or 3 queued writes without wait (?queue) through a node, then SIGTERM to that node, a graceful stop; the restart policy starts it again
+exec /bin/rqc qstop

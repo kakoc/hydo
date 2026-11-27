@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=60
+# at most once a run: DELETE /remove of a follower, then the end of its process; it starts again with -join (the check converge asks that it is a reachable voter after the heal)
+exec /bin/rqc remove

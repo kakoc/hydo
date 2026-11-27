@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=20
+# every node's Raft state from /status, recorded for the check final_available
+exec /bin/rqc probe
