@@ -20,6 +20,12 @@ tikv/tikv and tikv/pd.
   exploration reached it first (seed 4), where readers of the accounts timed out too (section
   "Finding 1"). No issue of tikv/tikv, tikv/pd, tikv/client-go or pingcap/tidb describes it.
   Nothing was posted.
+- **The same effect with one PD member's own clock (Milestone 375).** With `clock: own`, PD's
+  leader 5 minutes ahead of the other members and then killed gives finding 1 without a step of
+  the guest's clock: the new leader goes on from the saved window ahead of its own clock
+  (`skew/regressions/pd-leader-ahead-then-failover-blocks-writers.schedule`; the section "One
+  node's own clock"). A follower ahead, a store 5 minutes behind or ahead, and a member's clock
+  5 % fast held.
 - **One known bug, reached blind: a PD member that restarted shortly before a power cut never
   starts again.** PD's LevelDB of region metadata, an old goleveldb, points `CURRENT` at a new
   MANIFEST that it never synced. After the cut that member stops at every start with `leveldb:
@@ -260,7 +266,8 @@ commit's `min_commit_ts`) were not tried.
 A step back of the PD leader's clock happens when NTP corrects a clock that ran ahead, and the
 deployment guide's NTP does that by a step when the offset is large. A move of PD's leadership
 from a member whose clock ran ahead to one whose clock is right should have the same effect,
-because the new leader starts from the saved timestamp window; that was not run.
+because the new leader starts from the saved timestamp window. Milestone 375 ran it with one
+member's own clock, and it has that effect (section "One node's own clock").
 
 **The label.** A clock effect: the TSO's frozen physical part is documented, and nothing is lost.
 It breaks a promise of the transaction model, that a crashed client's locks are resolved after
@@ -424,6 +431,74 @@ In the order of the time each cost:
 8. **No way to crash the client inside an operation.** hydo kills services, not the workload at
    a point of its code, so the crash inside a commit needed client-go's test helpers in the
    client.
+
+## One node's own clock (Milestone 375)
+
+The runs above step the guest's clock, so every PD member and every store moves at once.
+Milestone 375 gave each of them a wall clock of its own (`clock: own`,
+`docs/design/service-clocks.md`) and stepped one node's clock, while the others, the client and
+the checks kept the guest's clock. The manifest is `skew/hydo.yaml`: `hydo/hydo.yaml` with
+`clock: own` on the three PD members and the three stores and the name `tikv-skew`, so that
+`hydo/hydo.yaml`'s image and its values stay. Its folders `workload/` and `checks/` are links to
+`hydo/`'s, and its saved regression is in `skew/regressions/`. The runs used hvx on the
+bare-metal machine, alone, this tree's `hydo` over the 0.6.0 Linux release's guest files, the
+image `21ef8adf…` (the fingerprint epoch 6) and the onboarding's client (`tkc-amd64`
+`202b493f…`). A run took 3 to 10 minutes. `pd3` was PD's leader in these runs (`P=pds.primary@9+1` named it).
+
+### Finding 1 again: PD's leader ahead, then a failover, blocks every writer of a crashed transaction's keys
+
+- **The schedule.** `disk=none | run T=pd3@10:300 K=pds.primary@30+4`: the clock of PD's leader
+  `pd3` alone runs 5 minutes ahead from step 10, and `pd3` is killed before step 30.
+- **What breaks.** `eventually_writable`: `the accounts cannot be written: ... context deadline
+  exceeded` 90 s after the heal, as in finding 1.
+- **The cause.** Finding 1's, through the window PD saves. `pd3` saved its timestamps' upper
+  bound 5 minutes ahead of the other members' clocks. The new leader `pd1` took it at its start
+  (`SyncTimestamp`, `pkg/tso/tso.go`): its log says `system time may be incorrect` with
+  `last=00:05:39.728` and `next=00:00:47.006`, and it went on from `00:05:39.729`. Its timestamps
+  then keep their physical part until its own clock gets there, 5 minutes later, and it logged
+  `the logical time may be not enough` three times. TiKV judges a lock's time to live by the
+  physical part (`check_txn_status.rs`), so the locks of a client that crashed inside its commit
+  do not expire within the run. TiKV also logged `possible invalid max_ts update; double
+  checking` (tikv/tikv#18055's fix).
+- **The controls.** The same step of a follower with the same kill passes (`T=pd1@10:300` and
+  `T=pd2@10:300` with `K=pds.primary@30+4`), and so does the leader's step without the kill
+  (`T=pd3@10:300`). A step of 30 s with the kill passes too: the frozen part then lasts less
+  than the check's 90 s.
+- **The label.** Known and accepted: pingcap/tidb#44822 ("Resolve lock may hang for a long time
+  after clock skew") is this effect. RESULTS.md's finding 1 said that a move of the lead from a
+  member whose clock ran ahead should have the same effect and that it was not run; this is that
+  run. A clock effect.
+
+### What held
+
+| schedule | what it is | verdict | fingerprint |
+|---|---|---|---|
+| `disk=none \| run` | | OK | `f8f42eed121ccee0` |
+| `disk=none \| run T=pd1@10:300` | a PD follower 5 minutes ahead | OK | `40a536036e46eec7` |
+| `disk=none \| run T=pd1@10:300 K=pd1@30+4` | the same, and the follower killed | OK | `e69a5df50cdee373` |
+| `disk=none \| run T=pd1@0:50000ppm` | a PD follower's clock 5 % fast | OK | `bbce46d2b8879cbb` |
+| `disk=none \| run T=tikv1@10:-300` | one store 5 minutes behind (the setting of tikv/tikv#17995) | OK | `75e65949db1f3738` |
+| `disk=none \| run T=tikv1@10:300` | one store 5 minutes ahead | OK | `9d5971fabd425e04` |
+| `disk=none \| run T=pd1@10:300 K=pds.primary@30+4` | a follower ahead, the leader killed | OK | `ab274b74a41ce2ec` |
+| `disk=none \| run T=pd2@10:300 K=pds.primary@30+4` | the same with `pd2` | OK | `fb5e85c0ac10d162` |
+| `disk=none \| run T=pd3@10:300 K=pds.primary@30+4` | finding 1 | `VIOLATION [writable]` | `f04bf542d4fd5a11` (two runs) |
+| `disk=none \| run T=pd3@10:30 K=pds.primary@30+4` | the leader 30 s ahead, then killed | OK | `4d66624abde4699e` |
+| `disk=none \| run T=pd3@10:300` | the leader 5 minutes ahead, no kill | OK | `8fdfcc4c50fe7803` |
+
+A store 5 minutes behind or ahead did not stop the workload: the client's transactions take
+their timestamps from PD, and TiKV's lease reads measure time on the monotonic clock
+(tikv/tikv#964 and #1127). tikv/tikv#17995 (closed) reported throughput falling to zero with
+such a store under TPC-C; this workload of a few operations a second did not show it.
+
+### The exploration with one node's clock
+
+`hydo explore --seeds 1-8 --strategy process --new-faults --service-clocks --no-shrink --workers
+1` on the final image ran alone, 8 schedules in 25 minutes (133 s a run). Three of them drew a
+node's own clock: `T=pd3@74:1500ms`, `T=tikv3@46:-1500ms T=pd2@46:1500ms` (two nodes apart), and
+`T=pd3@27:300`, the leader 5 minutes ahead without a kill after it. All three passed. The two
+failures, seeds 4 and 5, were finding 1 under a step of the guest's clock back by 30 days
+(`eventually_writable`). The explorer draws a kill of PD's leader and a step of its clock
+independently, so 8 seeds did not pair them.
 
 ## Time
 

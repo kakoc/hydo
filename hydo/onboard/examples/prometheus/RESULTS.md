@@ -37,8 +37,11 @@ out-of-order samples, retention, clock steps, and snapshots.
   - A step back of more than the out-of-order window stops ingestion.
   - A forward step of a year lets retention delete the older blocks.
   - A damaged block file is shared by the snapshots that hard-link it.
+  - Since Milestone 375, with one service's own clock: an agent more than 10 minutes ahead of the
+    server loses every sample it scrapes, and a server more than its out-of-order window ahead of
+    its senders refuses theirs (section "One node's own clock").
 - **What did hydo lack?** Section "What hydo lacked": a check cannot tell which faults its run
-  had, every service shares one clock, and memory on a shared machine.
+  had, every service shared one clock until Milestone 375, and memory on a shared machine.
 
 ## The version
 
@@ -325,7 +328,8 @@ results are not in this page (open item 170).
    start time was in the block and snapshot records.
 2. **One clock for every service.** The agent and the server share the guest's clock, so a server
    whose clock alone runs ahead of its senders cannot be tested. That case is #8312's and #10169's
-   field report (open item 170, the idea "Clocks per service").
+   field report (open item 170, the idea "Clocks per service"). Since Milestone 375 `clock: own`
+   tests it (the section "One node's own clock").
 3. **Memory on a shared machine.** One hvx worker with a guest of 2,048 MiB held about 5 GB of
    the host. The explorer warned that 4 workers can take 40 GB. The host's out-of-memory killer
    ended an engine of the first exploration beside the other onboarding's runs, and the
@@ -338,6 +342,62 @@ results are not in this page (open item 170).
    compaction with `no space left on device` on the server's file system of 512 MiB, and the
    only sign was 8 error-log lines. The example sets the hidden flag
    `--storage.tsdb.max-block-chunk-segment-size=16MB`.
+
+## One node's own clock (Milestone 375)
+
+The runs above step the guest's clock, so the agent's and the server's clocks move together
+(item 2 of "What hydo lacked"). Milestone 375 gave the server and the agent wall clocks of their
+own (`clock: own`, `docs/design/service-clocks.md`) and stepped one of them, while the exporter,
+the client and the checks kept the guest's clock. The manifest is `skew/hydo.yaml`:
+`hydo/hydo.yaml` with `clock: own` on `prometheus` and `agent` and the name
+`prometheus-skew`, built with `--set ooo_snapshots=skip --set scrape_times=skip` as the
+explorations' images are. Its folders `workload/` and `checks/` are links to `hydo/`'s, and its
+saved regression is in `skew/regressions/`. The runs used hvx on the bare-metal machine, this
+tree's `hydo` over the 0.6.0 Linux release's guest files, and the onboarding's client
+(`promc-amd64` `efc52a60…`).
+
+### By design: a sender more than 10 minutes ahead of the server loses every sample, and a server more than its out-of-order window ahead of its senders refuses theirs
+
+| schedule | verdict |
+|---|---|
+| `T=agent@10:300` (the agent 5 minutes ahead) | OK |
+| `T=agent@10:660` (11 minutes ahead) | `VIOLATION [scrape]`: none of the 35 scrapes served 10 to 45 s ago is in the server |
+| `T=agent@10:900` (15 minutes ahead) | the same |
+| `T=prometheus@10:300` (the server 5 minutes ahead) | OK |
+| `T=prometheus@10:660` and `T=prometheus@10:900` | OK; `eventually_scrape` says `not judged`, and the server logs `Out of order sample from remote write` for every sample of the agent |
+| `T=agent@10:-900` (the agent 15 minutes behind) | OK |
+| `T=agent@0:50000ppm`, `T=prometheus@0:50000ppm` | OK |
+
+- **The cause.** The remote-write receiver refuses a sample whose timestamp is more than
+  `maxAheadTime`, 10 minutes, ahead of the server's own clock (`storage/remote/write_handler.go`
+  line 53 at v3.16.0): `out of bounds: timestamp is too far in the future`. The agent treats the
+  answer, a 400, as a non-recoverable error and drops the batch (`queue_manager.go`). So every
+  sample that an agent more than 10 minutes ahead scrapes is lost, for as long as its clock is
+  ahead. The other way, the server's own scrapes take its newest sample ahead, and a sample older
+  than the newest one by more than the out-of-order window (10 minutes in the example) is out of
+  bounds, which the example's check calls by design (`not judged`).
+- **The label.** By design, a clock effect. The 10 minutes are a fixed limit that guards the
+  TSDB against a sender with a wrong clock (prometheus#13573, a sender's clock in 2098, broke a
+  TSDB). Discussion prometheus#10169 and #8243 are the field reports of the other way. Five
+  minutes either way held.
+- **The fingerprints.** The table above ran on the first image of the manifest; the final
+  image (`bbb797c9…`, the fingerprint epoch 6) gave:
+
+| schedule | verdict | fingerprint |
+|---|---|---|
+| `disk=none \| run` | OK | `c4193436778f8185` |
+| `disk=none \| run T=agent@10:300` | OK | `ec36af3d9534d723` |
+| `disk=none \| run T=agent@10:900` | `VIOLATION [scrape]` | `53ae7f9900601e58` (two runs) |
+| `disk=none \| run T=prometheus@10:900` | OK, `scrape` not judged: the clock is 899 s behind the server's newest sample | `436888e860eea95a` |
+
+  The regression is `skew/regressions/agent-ahead-of-the-server-loses-its-samples.schedule`.
+
+- **The exploration.** `hydo explore --seeds 1-20 --strategy process --new-faults
+  --service-clocks` on the first image of this manifest drew a service's own clock in 8 of the 20
+  schedules: steps of 1.5 s to 5 minutes and drifts of 200 and 50,000 ppm, alone or with the
+  two services apart. Every schedule passed. Its three new error kinds came from steps of the
+  guest's clock of 30 days back, as in the explorations above. The drawn steps are at most 5
+  minutes, below the 10 minutes of both limits.
 
 ## Time
 
