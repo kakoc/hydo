@@ -26455,7 +26455,18 @@ message's count (1), detected damage (1), and 9 passes. On AMD EPYC 7763 runners
 their parts counted them as failures. The runners built the image to hvx's bytes (`0198df27…` in
 e2's record).
 
-**Tests.** TESTS
+**Tests.** The new example enters the explorer's and the controller's corpora. In a copy of the
+rebased worktree on the bare-metal machine, with a target folder of its own, `HYDO_BLESS=1` recorded
+again the explorer's corpus goldens (full and quick), its identity goldens (quick and full), and the
+controller's quick corpus golden, which only adds the example's entries. The explorer's goldens also
+take in the example `deadlock` of Milestone 383, whose milestone left them.
+`identity::local_outputs_are_no_inputs` failed in the copy until the copy had a git index of its
+files, because it reads the ignore rules with `git check-ignore`. Then `cargo test -p hydo-explore
+--test it` (67 passed), `-p hydo --test it -- equivalence:: agents_equivalence::` (9 passed) and `-p
+hydo-agents --test it` (16 passed) passed, and `sh ci/vale.sh` found nothing in the changed
+documents. The copy has no `AGENTS.local.md`, so `public_content::` checked the generic patterns; a
+search of the listed values in the changed files found only the repository's own GitHub path in the
+client's module path, as in the other Go clients. No Rust code changed.
 
 Retro: RocketMQ 5.5.0, hvx and KVM, 2026-11-27
 - Time to the first clean run: 1 hour 20 minutes of wall time, about 30 minutes of it building this
@@ -26476,6 +26487,6 @@ Retro: RocketMQ 5.5.0, hvx and KVM, 2026-11-27
   limit that `--check` does not see; the import's addresses and ports; `--ref` with a short commit
   (open item 196).
 - Strategies: the RocketMQ evidence in "Power cuts of the whole guest", "Clock steps and the clock
-  audit", "The messages check's claims" and "The sync audit and power cuts after an answer" of
-  `hydo guide strategies`; the table "By type of system" names RocketMQ. The sync audit, run after
-  the finding, names the epoch file's write as its place 22 of 29.
+  audit", "The messages check's claims" and "The sync audit and power cuts after an answer" of `hydo
+  guide strategies`; the table "By type of system" names RocketMQ. The sync audit, run after the
+  finding, names the epoch file's write as its place 22 of 29.
