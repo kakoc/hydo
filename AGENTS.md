@@ -227,7 +227,7 @@ workflow (run 45950230345) published the crates of `cargo install hydo`, `hydo-a
 crates.io, PyPI and npm, and the Go tag `sdk/go/v0.7.0`; the Homebrew tap names 0.7.0, and
 `hydo/dist/releases.txt` has its lines. The files and the prepared material are in
 `hydo/dist/out/0.7.0/` of the main checkout. 0.7.0 holds Milestones 362 to 367 at the fingerprint
-epoch 6, and the final files reproduce every recorded value on the Mac, on hvx (43 images and 141
+epoch 6. The final files reproduce every recorded value on the Mac, on hvx (43 images and 141
 schedules, each twice) and on KVM (AMD hosts). The record is the section "The 0.7.0 release" of
 `docs/HISTORY.md`.
 
