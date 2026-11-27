@@ -168,6 +168,9 @@ guest:
   path: false                  # optional: every command hydo starts gets PATH, so a program it
                                # starts finds hydo-oci by name (default true since fingerprint
                                # epoch 6); see "Services from a Docker/OCI image"
+  proc_io: false               # optional (the Mac and KVM engines): the guest kernels of epoch 6,
+                               # without /proc/<pid>/io (default true since fingerprint epoch 7);
+                               # see "I/O accounting"
 
 network: bridge                # loopback (default): one network for everything in the guest;
                                # bridge: each service in its own network namespace at its addr:
@@ -1483,6 +1486,26 @@ Who sees what:
 A pause of threads (`P=workload/<thread>@...`, "Pause threads of the workload" in `hydo guide
 faults`) uses the same mount. When the guest kernel has no cgroup2, the boot goes on without the
 mount, and the run's log says so. Every engine's guest kernel for an epoch-4 image has cgroup2.
+
+### I/O accounting (`guest.proc_io`)
+
+Linux counts each process's reads and writes in `/proc/<pid>/io`: the bytes and calls of
+`read` and `write`, and the bytes the process made the block layer read and write. Some programs
+read the file at start. brpc, which Typesense bundles, reads `/proc/self/io` in a static
+initializer, and Typesense 30.2 stops with SIGSEGV when the file is missing. VictoriaMetrics'
+`metrics` package, psutil's `io_counters()`, and the process statistics of Apache Doris, Apache
+Impala, Dovecot and cyrus-imapd read it too.
+
+From the fingerprint epoch 7 (Milestone 376) the Mac and KVM engines boot an image with guest
+kernels that have the file (`CONFIG_TASKSTATS`, `CONFIG_TASK_XACCT` and
+`CONFIG_TASK_IO_ACCOUNTING`). The counters count the guest's own work, so they are the same in
+every run of a schedule. hvx's guest kernel has always had the file, and nothing changes there.
+
+An image built before epoch 7 keeps the kernels it was built for, without the file, so it keeps
+its recorded fingerprints. A new kernel moves every fingerprint of an image, so `guest.proc_io:
+false` is there for a project that keeps comparing fingerprints with runs of epoch 6: the image
+then boots the kernels of epoch 6 (the image's record says `"proc_io": false`). `true` is the
+default and changes nothing.
 
 ### The guest's timer tick on hvx (`guest.exact_tick`)
 

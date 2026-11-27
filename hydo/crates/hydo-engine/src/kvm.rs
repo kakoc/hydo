@@ -56,7 +56,8 @@ pub struct KvmBoot {
 /// initramfs by sha256 (M155; an image without one: the x86_64 defaults); the initramfs is looked
 /// up by sha256 in `dirs`, and the kernel is the KVM build paired with the recorded kernel
 /// (`hydo_kvm::kernel::twin_for`) for the image's fingerprint epoch (the build with cgroups from
-/// epoch 3 on, M234) and kernel variant (`guest.kernel: containers`, M256), looked up by its own
+/// epoch 3 on, M234, and with `/proc/<pid>/io` from epoch 7 on, M376, unless the record says
+/// `proc_io: false`) and kernel variant (`guest.kernel: containers`, M256), looked up by its own
 /// sha256 in `dirs`, unless `given` names one.
 pub fn boot_files(image: &Path, dirs: &[PathBuf], given: Option<&Path>) -> Result<KvmBoot, String> {
     boot_files_n(image, dirs, given, 1)
@@ -121,9 +122,11 @@ pub fn boot_files_n(
                 .as_ref()
                 .map_or(hydo_image::EPOCH_BEFORE_RECORDS, |r| r.epoch);
             let variant = rec.as_ref().and_then(|r| r.kernel_variant.as_deref());
-            let t = hydo_kvm::kernel::twin_for(&kref, vcpus, epoch, variant).ok_or_else(|| {
-                match variant {
-                    Some(v) => format!(
+            let io = rec.as_ref().is_some_and(|r| r.proc_io());
+            let t =
+                hydo_kvm::kernel::twin_for(&kref, vcpus, epoch, variant, io).ok_or_else(|| {
+                    match variant {
+                        Some(v) => format!(
                         "{} was built for the guest kernel variant {v:?} (guest.kernel) at the \
                          fingerprint epoch {epoch}, which has no KVM build in this hydo \
                          (hydo_kvm::kernel::TWINS); this hydo knows the variants {:?}: rebuild \
@@ -131,14 +134,14 @@ pub fn boot_files_n(
                         image.display(),
                         hydo_image::kernels::VARIANTS
                     ),
-                    None => format!(
+                        None => format!(
                         "{} was built for the guest kernel with sha256 {kref}, which has no KVM \
                          build in this hydo (hydo_kvm::kernel::TWINS); rebuild the image with \
                          this hydo",
                         image.display()
                     ),
-                }
-            })?;
+                    }
+                })?;
             let want = FileRef {
                 file: t.file.into(),
                 sha256: t.sha256.into(),
@@ -146,20 +149,13 @@ pub fn boot_files_n(
             locate(&want, Role::Kernel, dirs).ok_or_else(|| {
                 format!(
                     "the KVM engine's guest kernel {} (Linux {}, sha256 {}) is not in {}; build it \
-                     with {}{}sh hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) or name it \
+                     with {}sh hv/kvm/linux/build-kernel.sh (docs/BUILD-PINS.md) or name it \
                      with HYDO_KVM_KERNEL",
                     t.file,
                     t.version,
                     t.sha256,
                     shown.join(", "),
-                    if t.variant == Some(hydo_image::kernels::CONTAINERS) {
-                        "CONTAINERS=1 "
-                    } else if t.epochs.0 >= 3 {
-                        "CGROUPS=1 "
-                    } else {
-                        ""
-                    },
-                    if vcpus > 1 { "SMP=1 " } else { "" }
+                    t.build_vars(),
                 )
             })?
         }
@@ -400,47 +396,82 @@ mod tests {
     #[test]
     fn the_twin_is_of_the_recorded_x86_kernel() {
         use hydo_kvm::kernel::{
-            twin_for, twin_of, KERNEL, KERNEL_CG, KERNEL_CONTAINERS, KERNEL_SMP, KERNEL_SMP_CG,
-            KERNEL_SMP_CONTAINERS,
+            twin_for, twin_of, CURRENT, CURRENT_SMP, KERNEL, KERNEL_CG, KERNEL_CONTAINERS,
+            KERNEL_CONTAINERS_IO, KERNEL_IO, KERNEL_SMP, KERNEL_SMP_CG, KERNEL_SMP_CONTAINERS,
+            KERNEL_SMP_CONTAINERS_IO, KERNEL_SMP_IO,
         };
-        assert_eq!(KERNEL.of, X86_KERNEL.sha256);
+        let x = X86_KERNEL.sha256;
+        assert_eq!(KERNEL.of, x);
         assert_eq!(KERNEL.version, X86_KERNEL.version);
+        // what an image's record means: the builds with /proc/<pid>/io from epoch 7 (M376),
+        // unless the record says proc_io: false
+        let io = |e: u64| hydo_image::defaults(e, "x86_64").proc_io;
         // an image built at epoch 2 or before boots the builds it was recorded with; several
         // vCPUs: the SMP build of the same kernel
         for e in [1, 2] {
-            assert_eq!(twin_for(X86_KERNEL.sha256, 1, e, None), Some(KERNEL));
-            assert_eq!(twin_for(X86_KERNEL.sha256, 2, e, None), Some(KERNEL_SMP));
+            assert_eq!(twin_for(x, 1, e, None, io(e)), Some(KERNEL));
+            assert_eq!(twin_for(x, 2, e, None, io(e)), Some(KERNEL_SMP));
+            assert_eq!(twin_of(x, e), Some(KERNEL));
         }
-        // from epoch 3 (M234): the builds with cgroups
-        for e in [3, hydo_image::EPOCH] {
-            assert_eq!(twin_for(X86_KERNEL.sha256, 1, e, None), Some(KERNEL_CG));
-            assert_eq!(twin_for(X86_KERNEL.sha256, 4, e, None), Some(KERNEL_SMP_CG));
+        // epochs 3 to 6 (M234): the builds with cgroups; from epoch 7 they boot only an image
+        // whose record says proc_io: false
+        for e in [3, 6] {
+            assert_eq!(twin_for(x, 1, e, None, io(e)), Some(KERNEL_CG));
+            assert_eq!(twin_for(x, 4, e, None, io(e)), Some(KERNEL_SMP_CG));
+            assert_eq!(twin_of(x, e), Some(KERNEL_CG));
+            // a record of epoch 6 never asks for the new builds, but none would be found
+            assert_eq!(twin_for(x, 1, e, None, true), None);
         }
+        for e in [7, hydo_image::EPOCH] {
+            assert_eq!(twin_for(x, 1, e, None, io(e)), Some(KERNEL_IO));
+            assert_eq!(twin_for(x, 4, e, None, io(e)), Some(KERNEL_SMP_IO));
+            assert_eq!(twin_of(x, e), Some(KERNEL_IO));
+            assert_eq!(twin_for(x, 1, e, None, false), Some(KERNEL_CG));
+            assert_eq!(twin_for(x, 2, e, None, false), Some(KERNEL_SMP_CG));
+        }
+        assert_eq!((CURRENT, CURRENT_SMP), (KERNEL_IO, KERNEL_SMP_IO));
         assert_eq!(
             (KERNEL_CG.file, KERNEL_SMP_CG.file),
             ("bzImage-kvm-cg", "bzImage-kvm-smp-cg")
+        );
+        assert_eq!(
+            (KERNEL_IO.file, KERNEL_SMP_IO.file),
+            ("bzImage-kvm-io", "bzImage-kvm-smp-io")
         );
         assert_eq!(twin_of(&"ab".repeat(32), 3), None);
         // the variant `containers` (M256): its own builds, from epoch 3 only; another variant
         // has no build
         let c = Some(hydo_image::kernels::CONTAINERS);
-        for e in [3, hydo_image::EPOCH] {
-            assert_eq!(
-                twin_for(X86_KERNEL.sha256, 1, e, c),
-                Some(KERNEL_CONTAINERS)
-            );
-            assert_eq!(
-                twin_for(X86_KERNEL.sha256, 2, e, c),
-                Some(KERNEL_SMP_CONTAINERS)
-            );
-            assert_eq!(twin_for(X86_KERNEL.sha256, 1, e, Some("other")), None);
+        for e in [3, 6] {
+            assert_eq!(twin_for(x, 1, e, c, io(e)), Some(KERNEL_CONTAINERS));
+            assert_eq!(twin_for(x, 2, e, c, io(e)), Some(KERNEL_SMP_CONTAINERS));
+            assert_eq!(twin_for(x, 1, e, Some("other"), io(e)), None);
         }
-        assert_eq!(twin_for(X86_KERNEL.sha256, 1, 2, c), None);
+        for e in [7, hydo_image::EPOCH] {
+            assert_eq!(twin_for(x, 1, e, c, io(e)), Some(KERNEL_CONTAINERS_IO));
+            assert_eq!(twin_for(x, 2, e, c, io(e)), Some(KERNEL_SMP_CONTAINERS_IO));
+            assert_eq!(twin_for(x, 1, e, c, false), Some(KERNEL_CONTAINERS));
+            assert_eq!(twin_for(x, 1, e, Some("other"), io(e)), None);
+        }
+        assert_eq!(twin_for(x, 1, 2, c, false), None);
         assert_eq!(
             (KERNEL_CONTAINERS.file, KERNEL_SMP_CONTAINERS.file),
             ("bzImage-kvm-containers", "bzImage-kvm-smp-containers")
         );
-        assert_eq!(hydo_kvm::kernel::all().count(), 6);
+        assert_eq!(
+            (KERNEL_CONTAINERS_IO.file, KERNEL_SMP_CONTAINERS_IO.file),
+            ("bzImage-kvm-containers-io", "bzImage-kvm-smp-containers-io")
+        );
+        assert_eq!(hydo_kvm::kernel::all().count(), 10);
+        // the command that builds each, as the refusal names it
+        assert_eq!(KERNEL.build_vars(), "");
+        assert_eq!(KERNEL_SMP_CG.build_vars(), "CGROUPS=1 SMP=1 ");
+        assert_eq!(KERNEL_SMP_CONTAINERS.build_vars(), "CONTAINERS=1 SMP=1 ");
+        assert_eq!(KERNEL_IO.build_vars(), "PROCIO=1 ");
+        assert_eq!(
+            KERNEL_SMP_CONTAINERS_IO.build_vars(),
+            "CONTAINERS=1 PROCIO=1 SMP=1 "
+        );
     }
 
     #[test]

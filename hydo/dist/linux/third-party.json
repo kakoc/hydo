@@ -361,7 +361,11 @@
         "guest/bzImage-kvm-cg",
         "guest/bzImage-kvm-smp-cg",
         "guest/bzImage-kvm-containers",
-        "guest/bzImage-kvm-smp-containers"
+        "guest/bzImage-kvm-smp-containers",
+        "guest/bzImage-kvm-io",
+        "guest/bzImage-kvm-smp-io",
+        "guest/bzImage-kvm-containers-io",
+        "guest/bzImage-kvm-smp-containers-io"
       ],
       "texts": [
         "hydo/dist/licenses/linux-6.6.35/COPYING",
@@ -388,9 +392,11 @@
         "hv/kvm/linux/hydo-kvm-cgroups.config",
         "hv/kvm/linux/kernel-cg.nix",
         "hv/kvm/linux/hydo-kvm-containers.config",
-        "hv/kvm/linux/kernel-containers.nix"
+        "hv/kvm/linux/kernel-containers.nix",
+        "hv/kvm/linux/hydo-kvm-procio.config",
+        "hv/kvm/linux/kernel-procio.nix"
       ],
-      "note": "guest/bzImage-kvm is the guest kernel of the KVM engine (bin/hydo-kvm, docs/design/kvm-engine.md): kernel.org's Linux 6.6.35 (upstream/linux-6.6.35.tar.xz) with hydo's patch hv/kvm/linux/hydo-kvm-guest.patch (all its time from the engine's exit clock, never the TSC), configured with allnoconfig plus hv/kvm/linux/hydo-kvm.config, and built by hv/kvm/linux/kernel.nix (run by build-kernel.sh) with the pinned nixpkgs tree (upstream/nixpkgs-89c49874fb15.tar.gz: its gcc 13.2.0, binutils, bc, bison, flex, perl, python3 and elfutils) in Nix's sandbox; `nix-build --check` rebuilds it to the same bytes (docs/BUILD-PINS.md \"The KVM engine's guest kernel\"). Every driver it needs is built in; it loads no modules. guest/bzImage-kvm-smp (since 0.3.2) is the same kernel for several vCPUs (`--vcpus N`, docs/design/kvm-vcpus.md): hv/kvm/linux/kernel-smp.nix (run by `SMP=1 sh build-kernel.sh`) adds hv/kvm/linux/hydo-kvm-smp.patch after hydo-kvm-guest.patch and hv/kvm/linux/hydo-kvm-smp.config on top of hydo-kvm.config, from the same upstream tarball and nixpkgs tree, in Nix's sandbox (docs/BUILD-PINS.md \"The build for several virtual CPUs\"). guest/bzImage-kvm-cg and guest/bzImage-kvm-smp-cg (Milestone 234) boot the images built at the fingerprint epoch 3 and later: hv/kvm/linux/kernel-cg.nix (run by `CGROUPS=1 sh build-kernel.sh`, with `SMP=1` for the second) adds hv/kvm/linux/hydo-kvm-cgroups.config to the lists of the first two, from the same upstream tarball and nixpkgs tree, in Nix's sandbox. guest/bzImage-kvm-containers and guest/bzImage-kvm-smp-containers (Milestone 256) boot the images whose manifest says `guest.kernel: containers`: hv/kvm/linux/kernel-containers.nix (run by `CONTAINERS=1 sh build-kernel.sh`, with `SMP=1` for the second) takes the lists of the kernels with cgroups without the options that hv/kvm/linux/hydo-kvm-containers.config names, then that file, from the same upstream tarball and nixpkgs tree, in Nix's sandbox."
+      "note": "guest/bzImage-kvm is the guest kernel of the KVM engine (bin/hydo-kvm, docs/design/kvm-engine.md): kernel.org's Linux 6.6.35 (upstream/linux-6.6.35.tar.xz) with hydo's patch hv/kvm/linux/hydo-kvm-guest.patch (all its time from the engine's exit clock, never the TSC), configured with allnoconfig plus hv/kvm/linux/hydo-kvm.config, and built by hv/kvm/linux/kernel.nix (run by build-kernel.sh) with the pinned nixpkgs tree (upstream/nixpkgs-89c49874fb15.tar.gz: its gcc 13.2.0, binutils, bc, bison, flex, perl, python3 and elfutils) in Nix's sandbox; `nix-build --check` rebuilds it to the same bytes (docs/BUILD-PINS.md \"The KVM engine's guest kernel\"). Every driver it needs is built in; it loads no modules. guest/bzImage-kvm-smp (since 0.3.2) is the same kernel for several vCPUs (`--vcpus N`, docs/design/kvm-vcpus.md): hv/kvm/linux/kernel-smp.nix (run by `SMP=1 sh build-kernel.sh`) adds hv/kvm/linux/hydo-kvm-smp.patch after hydo-kvm-guest.patch and hv/kvm/linux/hydo-kvm-smp.config on top of hydo-kvm.config, from the same upstream tarball and nixpkgs tree, in Nix's sandbox (docs/BUILD-PINS.md \"The build for several virtual CPUs\"). guest/bzImage-kvm-cg and guest/bzImage-kvm-smp-cg (Milestone 234) boot the images built at the fingerprint epoch 3 and later: hv/kvm/linux/kernel-cg.nix (run by `CGROUPS=1 sh build-kernel.sh`, with `SMP=1` for the second) adds hv/kvm/linux/hydo-kvm-cgroups.config to the lists of the first two, from the same upstream tarball and nixpkgs tree, in Nix's sandbox. guest/bzImage-kvm-containers and guest/bzImage-kvm-smp-containers (Milestone 256) boot the images whose manifest says `guest.kernel: containers`: hv/kvm/linux/kernel-containers.nix (run by `CONTAINERS=1 sh build-kernel.sh`, with `SMP=1` for the second) takes the lists of the kernels with cgroups without the options that hv/kvm/linux/hydo-kvm-containers.config names, then that file, from the same upstream tarball and nixpkgs tree, in Nix's sandbox. guest/bzImage-kvm-io, guest/bzImage-kvm-smp-io, guest/bzImage-kvm-containers-io and guest/bzImage-kvm-smp-containers-io (Milestone 376) boot the images built at the fingerprint epoch 7 and later: hv/kvm/linux/kernel-procio.nix (run by `PROCIO=1 sh build-kernel.sh`, with `SMP=1` and `CONTAINERS=1` for the others) appends hv/kvm/linux/hydo-kvm-procio.config to the lists of the kernels with cgroups and of the variant `containers`, from the same upstream tarball and nixpkgs tree, in Nix's sandbox."
     },
     {
       "id": "busybox-1.37.0",

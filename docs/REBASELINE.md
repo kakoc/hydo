@@ -4089,3 +4089,45 @@ workflow `tmp-rel070-kvm` (run 45890231174) confirmed it with the final Linux ta
 runner rebuilt byte for byte. On four AMD hosts (EPYC 9V45 three times, 7763 once) `--check
 --thorough` built the 6 images twice with the recorded bytes and gave all 19 schedules the
 list's values twice. Two Xeon 6975P-C hosts gave their own fingerprints with the same verdicts.
+
+## 34. The fingerprint epoch 7 (M376, 2026-11-27)
+
+The Mac and KVM guest kernels had no per-process I/O accounting, so the guest had no
+`/proc/<pid>/io`, and Typesense 30.2 stopped with SIGSEGV at every start on KVM (open item 188).
+Milestone 376 builds the kernels with the file as new builds beside the old ones, as section 24
+did for the kernels with cgroups. A new kernel moves every fingerprint of the engine, so the
+epoch rises. This section records the decision. Under the rule "Re-recording runs in batches"
+(AGENTS.md), the values are not re-recorded with the change. `hydo/onboard/recorded.json` keeps
+its epoch-6 values of sections 31 to 33 and its `epoch` 6 until the re-recording pass before the
+0.8.0 release (AGENTS.md open item 105).
+
+**The fingerprint epoch is 7.** An image built at epoch 7 or later boots the Mac and KVM guest
+kernels with `/proc/<pid>/io` (`hydo_image::defaults`: `proc_io`):
+
+- the Mac engine: `Image-explore-io`, `Image-explore-netns-io`, and for `guest.kernel:
+  containers` `Image-explore-containers-io`, which the image's record names;
+- the KVM engine: `bzImage-kvm-io` and `bzImage-kvm-smp-io`, and for `guest.kernel: containers`
+  `bzImage-kvm-containers-io` and `bzImage-kvm-smp-containers-io`, which `hydo_kvm::kernel`
+  picks by the record's epoch.
+
+`guest.proc_io: false` (a format-1 addition) writes `"proc_io": false` into the image's record,
+and the image boots the kernels of epoch 6. An image built at epoch 6 or before keeps the kernels
+of its own epoch, so it runs as it did. hvx's guest kernel and defaults do not change.
+
+**What moves.** Every image of the list built at epoch 7 has new bytes, because its record
+`/etc/hydo/image.json` says epoch 7: hvm 21 images, kvm 6 and hvx 43. Nothing else in an image
+changes: hydo-build writes the same files as at epoch 6. So every run of an epoch-7 image moves
+on all three engines: hvm 76 runs, kvm 19 and hvx 141.
+
+- On the Mac and KVM engines the guest also boots another kernel. The kernel's own code and data
+  differ, so its timing in guest exits differs too, and a verdict that depends on where a fault
+  falls can change, as `C=12 R=everysec` changed on KVM at epoch 3 (section 24). The pass decides
+  each verdict change as sections 20, 26, 29 and 31 did.
+- On hvx only the record's bytes move: the guest boots the same kernel with the same command
+  line. Every verdict on hvx is expected to stay.
+
+**The pinned reproducers** keep their images and values. Their epoch-6 images in
+`~/hydo/build/rel060` (`db33d71069816103`, `c421af1ccb714225` on hvx, `96b8fd4017db3274`,
+`87d6319a26da08c7` on KVM), and the older ones of section 31, boot the kernels of their own
+epochs. docs/HISTORY.md Milestone 376 has the proof that an epoch-6 image keeps its KVM values
+under this hydo.

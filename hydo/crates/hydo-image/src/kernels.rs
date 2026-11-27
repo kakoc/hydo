@@ -3,13 +3,18 @@
 //!
 //! The kernels are the releases' pinned files (`hydo/dist/linux/assets.sha256`: `guest/bzImage`
 //! and `guest/initramfs-kafka.cpio.gz`; `hydo/dist/mac/assets.sha256`: `Image-explore`,
-//! `Image-explore-netns`, and since the fingerprint epoch 3 `Image-explore-cg` and
-//! `Image-explore-netns-cg`, and the variant `Image-explore-containers`; docs/BUILD-PINS.md). `tests/kernels.rs` checks this table against
-//! those pin files and the command lines against the engines'.
+//! `Image-explore-netns`, since the fingerprint epoch 3 `Image-explore-cg` and
+//! `Image-explore-netns-cg`, the variant `Image-explore-containers`, and since the fingerprint
+//! epoch 7 `Image-explore-io`, `Image-explore-netns-io` and `Image-explore-containers-io`;
+//! docs/BUILD-PINS.md). `tests/kernels.rs` checks this table against those pin files and the
+//! command lines against the engines'.
 //!
 //! An image records the kernel it was built for, so an image built at epoch 2 or before keeps
-//! naming `Image-explore` or `Image-explore-netns` and keeps its fingerprints; [`record_for`]
-//! names the kernels with cgroups (Milestone 234, docs/design/guest-cgroups.md).
+//! naming `Image-explore` or `Image-explore-netns` and keeps its fingerprints, and an image built
+//! at epochs 3 to 6 keeps naming the kernels with cgroups (Milestone 234,
+//! docs/design/guest-cgroups.md). [`record_for`] names the kernels with cgroups and
+//! `/proc/<pid>/io` (Milestone 376); a manifest's `guest.proc_io: false` keeps the kernels of
+//! epoch 6 ([`record_opts`]).
 //!
 //! A manifest may ask for a kernel variant with `guest.kernel` (Milestone 256,
 //! docs/design/k3s-in-guest.md): [`CONTAINERS`], a kernel with what containers and Kubernetes
@@ -117,8 +122,40 @@ pub const ARM64_KERNEL_CONTAINERS: Known = Known {
     version: "6.6.35",
 };
 
+/// The default arm64 guest kernel of images built at the fingerprint epoch 7 and later
+/// (Milestone 376): `Image-explore-cg`'s list with the lines of `hv/hvm/explore/hvm-procio.config`
+/// (`build-guest-cg.sh` `NETNS=0 PROCIO=1`), so the guest has `/proc/<pid>/io`.
+pub const ARM64_KERNEL_IO: Known = Known {
+    arch: "arm64",
+    role: Role::Kernel,
+    file: "Image-explore-io",
+    sha256: "21928f712ca3a575cc9c0e8595ac6927b3ae1f173ce5f0be17ba4c7d7330cfb7",
+    version: "6.6.35",
+};
+
+/// The second arm64 guest kernel with `/proc/<pid>/io`, from the fingerprint epoch 7 on
+/// (`build-guest-cg.sh` `NETNS=1 PROCIO=1`).
+pub const ARM64_NETNS_KERNEL_IO: Known = Known {
+    arch: "arm64",
+    role: Role::Kernel,
+    file: "Image-explore-netns-io",
+    sha256: "40b1a3e28c53052f94bf80fcde21033b0316cf2b23204f36e29ff0431bc21794",
+    version: "6.6.35",
+};
+
+/// The arm64 guest kernel of the variant [`CONTAINERS`] from the fingerprint epoch 7 on
+/// (`build-guest-containers.sh` `PROCIO=1`): `Image-explore-containers`'s list with the lines of
+/// `hv/hvm/explore/hvm-procio.config`.
+pub const ARM64_KERNEL_CONTAINERS_IO: Known = Known {
+    arch: "arm64",
+    role: Role::Kernel,
+    file: "Image-explore-containers-io",
+    sha256: "81fb1b5c446c044a905ed6222e81094445c787b9d1311a29929703c0901bec8e",
+    version: "6.6.35",
+};
+
 /// Every file of the table.
-pub const KNOWN: [Known; 7] = [
+pub const KNOWN: [Known; 10] = [
     X86_KERNEL,
     X86_INITRD,
     ARM64_KERNEL,
@@ -126,12 +163,17 @@ pub const KNOWN: [Known; 7] = [
     ARM64_KERNEL_CG,
     ARM64_NETNS_KERNEL_CG,
     ARM64_KERNEL_CONTAINERS,
+    ARM64_KERNEL_IO,
+    ARM64_NETNS_KERNEL_IO,
+    ARM64_KERNEL_CONTAINERS_IO,
 ];
 
 /// The guest kernel variant for containers (`guest.kernel: containers`, Milestone 256): the
 /// namespaces, seccomp, the memory, pids and BPF device controllers of cgroup v2, overlayfs,
 /// connection tracking, NAT, iptables and nftables, and ipsets, all built in. The Mac engine boots
-/// [`ARM64_KERNEL_CONTAINERS`], the KVM engine its own builds (`hydo_kvm::kernel`). hvx boots its
+/// [`ARM64_KERNEL_CONTAINERS_IO`] (an image built before the fingerprint epoch 7, or with
+/// `guest.proc_io: false`: [`ARM64_KERNEL_CONTAINERS`]), the KVM engine its own builds
+/// (`hydo_kvm::kernel`). hvx boots its
 /// one kernel, which has all of it, the network parts as modules that the image loads itself.
 pub const CONTAINERS: &str = "containers";
 
@@ -159,12 +201,20 @@ fn kernel_of(k: &Known, cmdline: &str) -> Kernel {
 }
 
 /// The arm64 kernel `hydo build` gives an image of this epoch (`netns`: an image that needs the
-/// second kernel): the kernels with cgroups since epoch 3 (Milestone 234).
+/// second kernel): the kernels with cgroups since epoch 3 (Milestone 234), and with
+/// `/proc/<pid>/io` since epoch 7 (Milestone 376).
 pub fn arm64_kernel(netns: bool) -> &'static Known {
-    if netns {
-        &ARM64_NETNS_KERNEL_CG
-    } else {
-        &ARM64_KERNEL_CG
+    arm64_kernel_of(netns, true)
+}
+
+/// [`arm64_kernel`] with `proc_io` false for a manifest that says `guest.proc_io: false`: the
+/// kernels with cgroups of epochs 3 to 6.
+pub fn arm64_kernel_of(netns: bool, proc_io: bool) -> &'static Known {
+    match (netns, proc_io) {
+        (true, true) => &ARM64_NETNS_KERNEL_IO,
+        (false, true) => &ARM64_KERNEL_IO,
+        (true, false) => &ARM64_NETNS_KERNEL_CG,
+        (false, false) => &ARM64_KERNEL_CG,
     }
 }
 
@@ -178,22 +228,37 @@ pub fn record_for(arch: &str, netns: bool) -> ImageRecord {
 /// [`VARIANTS`]; the manifest's validation refuses any other). On arm64 the variant's kernel
 /// serves `network: bridge` too, so `netns` does not matter then.
 pub fn record_with(arch: &str, netns: bool, variant: Option<&str>) -> ImageRecord {
-    let mut rec = record_plain(arch, netns);
+    record_opts(arch, netns, variant, true)
+}
+
+/// [`record_with`] for a manifest that may say `guest.proc_io: false` (`proc_io` false,
+/// Milestone 376): the record then says `"proc_io": false`, and on arm64 names the kernel of
+/// epoch 6. With `proc_io` true the record is [`record_with`]'s, without the field.
+pub fn record_opts(arch: &str, netns: bool, variant: Option<&str>, proc_io: bool) -> ImageRecord {
+    let mut rec = record_plain(arch, netns, proc_io);
     if let Some(v) = variant {
         if arch == "arm64" && v == CONTAINERS {
-            rec.kernel = kernel_of(&ARM64_KERNEL_CONTAINERS, ARM64_CMDLINE);
+            let k = if proc_io {
+                &ARM64_KERNEL_CONTAINERS_IO
+            } else {
+                &ARM64_KERNEL_CONTAINERS
+            };
+            rec.kernel = kernel_of(k, ARM64_CMDLINE);
         }
         rec.kernel_variant = Some(v.to_string());
+    }
+    if !proc_io {
+        rec.proc_io = Some(false);
     }
     rec
 }
 
-fn record_plain(arch: &str, netns: bool) -> ImageRecord {
+fn record_plain(arch: &str, netns: bool, proc_io: bool) -> ImageRecord {
     if arch == "arm64" {
         ImageRecord {
             arch: "arm64".into(),
             epoch: EPOCH,
-            kernel: kernel_of(arm64_kernel(netns), ARM64_CMDLINE),
+            kernel: kernel_of(arm64_kernel_of(netns, proc_io), ARM64_CMDLINE),
             initrd: None,
             ..ImageRecord::default()
         }

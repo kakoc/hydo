@@ -147,6 +147,7 @@ pub(crate) const KNOWN_GUEST: &[&str] = &[
     "cgroup2",
     "exact_tick",
     "path",
+    "proc_io",
     "description",
 ];
 pub const KNOWN_KNOB: &[&str] = &[
@@ -986,6 +987,17 @@ pub fn validate(m: &mut Value) -> R<()> {
         if !c.is_boolean() {
             return Err(err(format!(
                 "guest.path: true (every command hydo starts gets PATH, so its programs find hydo-oci and the guest's programs by name) or false (the default; got {})",
+                repr(c)
+            )));
+        }
+    }
+    // Milestone 376: the Mac and KVM guest kernels with /proc/<pid>/io (from the fingerprint
+    // epoch 7)
+    if has(&guest, "proc_io")? {
+        let c = index(&guest, "proc_io")?;
+        if !c.is_boolean() {
+            return Err(err(format!(
+                "guest.proc_io: true (the Mac and KVM engines boot a guest kernel with /proc/<pid>/io; the default) or false (the guest kernels of the fingerprint epoch 6, without the file) (got {})",
                 repr(c)
             )));
         }

@@ -231,12 +231,12 @@ kernel (it has every driver built in), and it goes on to mount `/dev/vda1` and s
 was written to do (its errors are ignored by design). The host controller's own `insmod`s of
 network modules are ignored the same way.
 
-## No `/proc/<pid>/io` in the guest (Milestone 373, a proposal)
+## `/proc/<pid>/io` in the guest (Milestones 373 and 376)
 
-The KVM guest kernels are allnoconfig with the fragments of `hv/kvm/linux/`, and no fragment
-sets `CONFIG_TASKSTATS`, `CONFIG_TASK_XACCT` or `CONFIG_TASK_IO_ACCOUNTING`. So the guest has no
-`/proc/<pid>/io`: in a guest of the Typesense example, `cat /proc/self/io` answered `No such
-file or directory`. The Mac guest kernels are made the same way (`hv/hvm/linux/hvm.config` on
+Before the fingerprint epoch 7 the KVM guest kernels were allnoconfig with the fragments of
+`hv/kvm/linux/`, and no fragment set `CONFIG_TASKSTATS`, `CONFIG_TASK_XACCT` or
+`CONFIG_TASK_IO_ACCOUNTING`. So the guest had no `/proc/<pid>/io`: in a guest of the Typesense
+example, `cat /proc/self/io` answered `No such file or directory` (Milestone 373). The Mac guest kernels are made the same way (`hv/hvm/linux/hvm.config` on
 allnoconfig). hvx's `bzImage` is nixpkgs's `linux_6_6`, which has the file.
 
 Typesense 30.2 stops with SIGSEGV at every start without the file, also for `--version`. The
@@ -260,19 +260,31 @@ report. psutil's `Process.io_counters()`, Apache Doris's and Apache Impala's pro
 and Dovecot's and cyrus-imapd's statistics read it as well. The JDK's sources and the Prometheus
 Go client's process collector do not.
 
-The proposal, built only when the user agrees:
+**What Milestone 376 built.** The proposal of Milestone 373, which the user agreed to:
 
-- Add `CONFIG_TASKSTATS=y`, `CONFIG_TASK_XACCT=y` and `CONFIG_TASK_IO_ACCOUNTING=y` to the KVM
-  and Mac guest kernels, as new builds beside the current ones, in the way of Milestone 234's
-  builds with cgroups.
-- Key them on a new fingerprint epoch: `hydo_kvm::kernel` gives the current builds the epochs 3
-  to 6 and the new builds the new epoch and later. A new kernel moves every fingerprint of the
-  engine, so the epoch rule of AGENTS.md applies, with its section in `docs/REBASELINE.md`.
-- Give an image a key that boots the current builds at the new epoch
-  (`hydo_image::defaults`), as `guest.cgroup2: false` does. An image built before keeps its
-  kernel and its values.
-- The counters count the guest's own reads and writes, so they are the same in every run of
-  one schedule and add no nondeterminism.
+- `hv/kvm/linux/hydo-kvm-procio.config` and `hv/hvm/explore/hvm-procio.config` set
+  `CONFIG_TASKSTATS=y`, `CONFIG_TASK_XACCT=y` and `CONFIG_TASK_IO_ACCOUNTING=y`, and keep
+  `CONFIG_TASK_DELAY_ACCT` and `CONFIG_BSD_PROCESS_ACCT` off. Delay accounting reads the clock at
+  every wait, and process accounting writes a file.
+- New builds beside the current ones, in the way of Milestone 234's builds with cgroups: the
+  lists of the kernels with cgroups and of the variant `containers` with those lines appended
+  (`hv/kvm/linux/kernel-procio.nix`, `PROCIO=1` of `build-kernel.sh`, `build-guest-cg.sh` and
+  `build-guest-containers.sh`). Each new `.config` differs from its predecessor's in four lines:
+  the three options and `# CONFIG_TASK_DELAY_ACCT is not set`. docs/BUILD-PINS.md "The guest
+  kernels with /proc/<pid>/io" has the pins.
+- `hydo_image::EPOCH` is 7. `hydo_kvm::kernel` gives the builds with cgroups the epochs from 3
+  on without I/O accounting, and the new builds the epochs from 7 on with it
+  (`Twin::proc_io`). An arm64 image's record names its kernel itself.
+- `guest.proc_io: false` (a format-1 addition) writes `"proc_io": false` into the image's record
+  (`hydo_image::ImageRecord::proc_io`), and the image boots the builds of epoch 6. An image built
+  before epoch 7 keeps its kernel and its values.
+- The counters count the guest's own reads and writes, so they are the same in every run of one
+  schedule and add no nondeterminism. The kernel accounts them at each system call and block
+  request, and no timer reads them.
+
+hvx's kernel did not change. Its `.config` (`extract-ikconfig` of `bzImage` `0a9ede35…`) has
+`CONFIG_TASKSTATS=y`, `CONFIG_TASK_DELAY_ACCT=y`, `CONFIG_TASK_XACCT=y` and
+`CONFIG_TASK_IO_ACCOUNTING=y`, as nixpkgs's `linux_6_6` sets them.
 
 ## Devices and layout
 

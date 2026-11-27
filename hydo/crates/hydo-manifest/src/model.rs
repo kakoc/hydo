@@ -845,6 +845,15 @@ pub struct Guest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = false))]
     pub path: Option<bool>,
+    /// The Mac and KVM engines boot the guest with a kernel that has per-process I/O
+    /// accounting, so the guest has /proc/<pid>/io, which some programs read at start (brpc in
+    /// Typesense stops without it). The default for images built at fingerprint epoch 7 and
+    /// later; an image built earlier keeps the kernels it was built for. false: the guest
+    /// kernels of epoch 6, without the file, and their timing. hvx's guest kernel always has the
+    /// file (Milestone 376).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = true))]
+    pub proc_io: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }

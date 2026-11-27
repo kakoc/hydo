@@ -504,6 +504,14 @@
           ],
           "default": false
         },
+        "proc_io": {
+          "description": "The Mac and KVM engines boot the guest with a kernel that has per-process I/O\naccounting, so the guest has /proc/<pid>/io, which some programs read at start (brpc in\nTypesense stops without it). The default for images built at fingerprint epoch 7 and\nlater; an image built earlier keeps the kernels it was built for. false: the guest\nkernels of epoch 6, without the file, and their timing. hvx's guest kernel always has the\nfile (Milestone 376).",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": true
+        },
         "description": {
           "anyOf": [
             {

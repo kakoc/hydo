@@ -28,6 +28,11 @@
 #   guest/bzImage-kvm-smp-containers               (guest.kernel: containers, Milestone 256; the same
 #                                                  place, CONTAINERS=1 [SMP=1] sh
 #                                                  hv/kvm/linux/build-kernel.sh)
+#   guest/bzImage-kvm-io, guest/bzImage-kvm-smp-io,  the four KVM kernels with /proc/<pid>/io for
+#   guest/bzImage-kvm-containers-io,               images built at the fingerprint epoch 7 and later
+#   guest/bzImage-kvm-smp-containers-io            (Milestone 376; the same place, PROCIO=1
+#                                                  [CONTAINERS=1] [SMP=1] sh hv/kvm/linux/build-kernel.sh);
+#                                                  the four above stay for images built before
 #   guest/busybox                                  static busybox 1.37.0 (every image's /bin)
 #   guest/hvx_seedrng, guest/hydo_fc               static helpers, compiled there with the pinned
 #                                                  musl gcc from hv/hvx/images/hvx_seedrng.c, hydo/onboard/hydo_fc.c
@@ -83,7 +88,7 @@ if [ ! -f "$A/.complete" ]; then
     W=\$(mktemp -d /dev/shm/hydo-linux-release.XXXXXX); trap 'chmod -R u+w \$W; rm -rf \$W' EXIT
     cd \$W && tar xf - >&2
     mkdir -p out/guest/modules out/tools/bin out/tools/lib out/redis
-    cp ~/hydo/build/bzImage ~/hydo/build/bzImage-kvm ~/hydo/build/bzImage-kvm-smp ~/hydo/build/bzImage-kvm-cg ~/hydo/build/bzImage-kvm-smp-cg ~/hydo/build/bzImage-kvm-containers ~/hydo/build/bzImage-kvm-smp-containers ~/hydo/build/initramfs-kafka.cpio.gz out/guest/
+    cp ~/hydo/build/bzImage ~/hydo/build/bzImage-kvm ~/hydo/build/bzImage-kvm-smp ~/hydo/build/bzImage-kvm-cg ~/hydo/build/bzImage-kvm-smp-cg ~/hydo/build/bzImage-kvm-containers ~/hydo/build/bzImage-kvm-smp-containers ~/hydo/build/bzImage-kvm-io ~/hydo/build/bzImage-kvm-smp-io ~/hydo/build/bzImage-kvm-containers-io ~/hydo/build/bzImage-kvm-smp-containers-io ~/hydo/build/initramfs-kafka.cpio.gz out/guest/
     cp $BUSYBOX out/guest/busybox
     $GCC_MUSL -static -O2 -Wall -B $MUSL_ROOT/lib hv/hvx/images/hvx_seedrng.c -o out/guest/hvx_seedrng >&2
     $GCC_MUSL -static -O2 -Wall -B $MUSL_ROOT/lib hydo/onboard/hydo_fc.c -o out/guest/hydo_fc >&2
@@ -101,7 +106,7 @@ if [ ! -f "$A/.complete" ]; then
       ldd \$b | sed -n 's#.*=> \(/nix/store/[^ ]*\) .*#\1#p; s#^\s*\(/nix/store/[^ ]*ld-linux-x86-64.so.2\) .*#\1#p'
     done | sort -u | while read l; do cp -L \$l out/tools/lib/\$(basename \$l); done
     cp $REDIS/bin/redis-server $REDIS/bin/redis-cli out/redis/
-    chmod -R u+w out/tools out/redis out/guest/bzImage out/guest/bzImage-kvm out/guest/bzImage-kvm-smp out/guest/bzImage-kvm-cg out/guest/bzImage-kvm-smp-cg out/guest/bzImage-kvm-containers out/guest/bzImage-kvm-smp-containers out/guest/initramfs-kafka.cpio.gz out/guest/busybox
+    chmod -R u+w out/tools out/redis out/guest/bzImage out/guest/bzImage-kvm out/guest/bzImage-kvm-smp out/guest/bzImage-kvm-cg out/guest/bzImage-kvm-smp-cg out/guest/bzImage-kvm-containers out/guest/bzImage-kvm-smp-containers out/guest/bzImage-kvm-io out/guest/bzImage-kvm-smp-io out/guest/bzImage-kvm-containers-io out/guest/bzImage-kvm-smp-containers-io out/guest/initramfs-kafka.cpio.gz out/guest/busybox
     cd out && tar cf - .
   " | ( cd "$A" && tar xpf - )
   touch "$A/.complete"
@@ -131,7 +136,9 @@ mkdir -p "$REL/bin" "$REL/libexec/bin" "$REL/hydo/onboard" \
 # hydo/crates/hydo-kvm, which hydo starts with HYDO_KVM=process; by default it runs inside hydo too;
 # M172: in the release since 0.2.0, with guest/bzImage-kvm, and since 0.3.2 guest/bzImage-kvm-smp
 # for --vcpus N; since the fingerprint epoch 3 also guest/bzImage-kvm-cg and bzImage-kvm-smp-cg,
-# and since Milestone 256 the variant for containers, bzImage-kvm-containers and bzImage-kvm-smp-containers),
+# since Milestone 256 the variant for containers, bzImage-kvm-containers and bzImage-kvm-smp-containers,
+# and since the fingerprint epoch 7 the four builds with /proc/<pid>/io, bzImage-kvm-io,
+# bzImage-kvm-smp-io, bzImage-kvm-containers-io and bzImage-kvm-smp-containers-io),
 # bin/hydo-build (the image builder with its own command line, for scripts; `hydo build` is the same builder with the release's tools) and
 # bin/hydo-fetch-image (what fetch-images.sh of `hydo compose` calls), and the gRPC driver
 # generator (libexec/hydo-grpc-gen, started by the wrapper bin/hydo-grpc-gen, which points its

@@ -115,10 +115,16 @@ filled once from the machine with the Nix store paths).
   Twice.
 - The guest kernels of each tarball are the ones `assets.sha256` pins, and a test of `docs::`
   checks that this list names each of them. Linux: `guest/bzImage`, `guest/bzImage-kvm`,
-  `guest/bzImage-kvm-smp`, `guest/bzImage-kvm-cg`, `guest/bzImage-kvm-smp-cg`, and from 0.4.0
-  on `guest/bzImage-kvm-containers` and `guest/bzImage-kvm-smp-containers`. Mac:
-  `Image-explore`, `Image-explore-netns`, `Image-explore-cg`, `Image-explore-netns-cg`, and from
-  0.4.0 on `Image-explore-containers` (`HYDO_KERNEL_CONTAINERS` for `build-release.sh`). A hydo
+  `guest/bzImage-kvm-smp`, `guest/bzImage-kvm-cg`, `guest/bzImage-kvm-smp-cg`, from 0.4.0
+  on `guest/bzImage-kvm-containers` and `guest/bzImage-kvm-smp-containers`, and from the first
+  release with Milestone 376 `guest/bzImage-kvm-io`, `guest/bzImage-kvm-smp-io`,
+  `guest/bzImage-kvm-containers-io` and `guest/bzImage-kvm-smp-containers-io` (in `~/hydo/build`
+  of the machine that builds the release, made with a sandboxed Nix). Mac: `Image-explore`,
+  `Image-explore-netns`, `Image-explore-cg`, `Image-explore-netns-cg`, from 0.4.0 on
+  `Image-explore-containers` (`HYDO_KERNEL_CONTAINERS` for `build-release.sh`), and from the
+  first release with Milestone 376 `Image-explore-io`, `Image-explore-netns-io` and
+  `Image-explore-containers-io` (`HYDO_KERNEL_IO`, `HYDO_KERNEL_NETNS_IO` and
+  `HYDO_KERNEL_CONTAINERS_IO`). A hydo
   built from a tree after a release can pin a guest file that the release lacks; `hydo setup`
   then names the file and refuses (Milestone 301).
 - The two builds of each platform must give the same sha256 for the tarball and for the
@@ -280,13 +286,19 @@ is published and only then (a line names a file that must exist at
   tarball (today `guest/bzImage`, `guest/bzImage-kvm` (since 0.2.0), `guest/bzImage-kvm-smp`
   (since 0.3.2), `guest/bzImage-kvm-cg` and `guest/bzImage-kvm-smp-cg` (from the first release
   with Milestone 234), `guest/bzImage-kvm-containers` and `guest/bzImage-kvm-smp-containers`
-  (from the first release with Milestone 256) and `guest/initramfs-kafka.cpio.gz` for Linux,
+  (from the first release with Milestone 256), `guest/bzImage-kvm-io`, `guest/bzImage-kvm-smp-io`,
+  `guest/bzImage-kvm-containers-io` and `guest/bzImage-kvm-smp-containers-io` (from the first
+  release with Milestone 376) and `guest/initramfs-kafka.cpio.gz` for Linux,
   `hv/hvm/explore/out/Image-explore`, `Image-explore-netns`, from the first release with
-  Milestone 234 `Image-explore-cg` and `Image-explore-netns-cg`, and from the first release
-  with Milestone 256 `Image-explore-containers` for the Mac), with the sha256 of the tarball's
-  own `SHA256SUMS` line. The release that first ships the kernels with cgroups also sets
-  `HYDO_KERNEL_CG` and `HYDO_KERNEL_NETNS_CG` for the Mac's `build-release.sh`, and the release
-  that first ships the kernel for containers sets `HYDO_KERNEL_CONTAINERS`.
+  Milestone 234 `Image-explore-cg` and `Image-explore-netns-cg`, from the first release
+  with Milestone 256 `Image-explore-containers`, and from the first release with Milestone 376
+  `Image-explore-io`, `Image-explore-netns-io` and `Image-explore-containers-io` for the Mac),
+  with the sha256 of the tarball's own `SHA256SUMS` line. The release that first ships the
+  kernels with cgroups also sets `HYDO_KERNEL_CG` and `HYDO_KERNEL_NETNS_CG` for the Mac's
+  `build-release.sh`, the release that first ships the kernel for containers sets
+  `HYDO_KERNEL_CONTAINERS`, and the release that first ships the kernels with
+  `/proc/<pid>/io` sets `HYDO_KERNEL_IO`, `HYDO_KERNEL_NETNS_IO` and
+  `HYDO_KERNEL_CONTAINERS_IO`.
 
 Never change a line that is there. `cargo test -p hydo-image` checks the format. The release
 tarballs and `build-release.sh` do not change for this: the index is in the program, not in the

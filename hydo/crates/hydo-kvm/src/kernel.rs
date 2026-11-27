@@ -20,6 +20,12 @@
 //! docs/design/k3s-in-guest.md) records it in `kernel_variant`, and boots the build of that
 //! variant: `bzImage-kvm-containers` (or `bzImage-kvm-smp-containers`). The recorded kernel is
 //! still hvx's, which has those options already.
+//!
+//! From the fingerprint epoch 7 (Milestone 376) an image boots the builds with `/proc/<pid>/io`
+//! as well (`bzImage-kvm-io`, `bzImage-kvm-smp-io`, `bzImage-kvm-containers-io`,
+//! `bzImage-kvm-smp-containers-io`; hv/kvm/linux/kernel-procio.nix). A record that says
+//! `proc_io: false` (`guest.proc_io: false`) boots the builds of epoch 6. hvx's kernel has the
+//! file already, so the recorded kernel stays hvx's.
 
 /// A KVM build of a recorded kernel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,6 +42,28 @@ pub struct Twin {
     /// the kernel variant an image's record names (`kernel_variant`), None for the images
     /// without one
     pub variant: Option<&'static str>,
+    /// whether it has `/proc/<pid>/io` (Milestone 376): it boots the images for which
+    /// `hydo_image::ImageRecord::proc_io` is true
+    pub proc_io: bool,
+}
+
+impl Twin {
+    /// The variables of `sh hv/kvm/linux/build-kernel.sh` that build it (docs/BUILD-PINS.md).
+    pub fn build_vars(&self) -> String {
+        let mut v = String::new();
+        if self.variant == Some("containers") {
+            v.push_str("CONTAINERS=1 ");
+        } else if self.epochs.0 >= 3 && !self.proc_io {
+            v.push_str("CGROUPS=1 ");
+        }
+        if self.proc_io {
+            v.push_str("PROCIO=1 ");
+        }
+        if self.file.contains("-smp") {
+            v.push_str("SMP=1 ");
+        }
+        v
+    }
 }
 
 /// The KVM build of the x86_64 guest kernel (Linux 6.6.35) for images built at the fingerprint
@@ -47,6 +75,7 @@ pub const KERNEL: Twin = Twin {
     version: "6.6.35",
     epochs: (0, 2),
     variant: None,
+    proc_io: false,
 };
 
 /// The SMP build of the same kernel, for several vCPUs (docs/design/kvm-vcpus.md):
@@ -58,6 +87,7 @@ pub const KERNEL_SMP: Twin = Twin {
     version: "6.6.35",
     epochs: (0, 2),
     variant: None,
+    proc_io: false,
 };
 
 /// The KVM build with cgroups, for images built at the fingerprint epoch 3 and later
@@ -69,6 +99,7 @@ pub const KERNEL_CG: Twin = Twin {
     version: "6.6.35",
     epochs: (3, u64::MAX),
     variant: None,
+    proc_io: false,
 };
 
 /// The SMP build with cgroups (`CGROUPS=1 SMP=1 sh hv/kvm/linux/build-kernel.sh`).
@@ -79,6 +110,7 @@ pub const KERNEL_SMP_CG: Twin = Twin {
     version: "6.6.35",
     epochs: (3, u64::MAX),
     variant: None,
+    proc_io: false,
 };
 
 /// The KVM build of the variant `containers` (Milestone 256): `bzImage-kvm-cg`'s list with the
@@ -91,6 +123,7 @@ pub const KERNEL_CONTAINERS: Twin = Twin {
     version: "6.6.35",
     epochs: (3, u64::MAX),
     variant: Some("containers"),
+    proc_io: false,
 };
 
 /// The SMP build of the variant `containers`, with the cpuset controller too
@@ -102,34 +135,120 @@ pub const KERNEL_SMP_CONTAINERS: Twin = Twin {
     version: "6.6.35",
     epochs: (3, u64::MAX),
     variant: Some("containers"),
+    proc_io: false,
+};
+
+/// The KVM build with cgroups and `/proc/<pid>/io`, for images built at the fingerprint epoch 7
+/// and later (Milestone 376): `bzImage-kvm-cg`'s list with hv/kvm/linux/hydo-kvm-procio.config
+/// (hv/kvm/linux/kernel-procio.nix, `PROCIO=1 sh hv/kvm/linux/build-kernel.sh`).
+pub const KERNEL_IO: Twin = Twin {
+    of: KERNEL.of,
+    file: "bzImage-kvm-io",
+    sha256: "4aef551c1aed38206dbc2aaa9a1e08e2fc65b60e7eb88dfde004ad1c68bb4fb4",
+    version: "6.6.35",
+    epochs: (7, u64::MAX),
+    variant: None,
+    proc_io: true,
+};
+
+/// The SMP build with cgroups and `/proc/<pid>/io` (`PROCIO=1 SMP=1 sh
+/// hv/kvm/linux/build-kernel.sh`).
+pub const KERNEL_SMP_IO: Twin = Twin {
+    of: KERNEL.of,
+    file: "bzImage-kvm-smp-io",
+    sha256: "e5b9cf4a5936e45a6211aa192b2f01593ab7a5fe52897419c3a6c5a0682168a5",
+    version: "6.6.35",
+    epochs: (7, u64::MAX),
+    variant: None,
+    proc_io: true,
+};
+
+/// The build of the variant `containers` with `/proc/<pid>/io` (`CONTAINERS=1 PROCIO=1 sh
+/// hv/kvm/linux/build-kernel.sh`).
+pub const KERNEL_CONTAINERS_IO: Twin = Twin {
+    of: KERNEL.of,
+    file: "bzImage-kvm-containers-io",
+    sha256: "e61bdc8ec87166ba7f9618dc8ca961b23785c5026264275d3aff4555b72d7564",
+    version: "6.6.35",
+    epochs: (7, u64::MAX),
+    variant: Some("containers"),
+    proc_io: true,
+};
+
+/// The SMP build of the variant `containers` with `/proc/<pid>/io` (`CONTAINERS=1 PROCIO=1 SMP=1
+/// sh hv/kvm/linux/build-kernel.sh`).
+pub const KERNEL_SMP_CONTAINERS_IO: Twin = Twin {
+    of: KERNEL.of,
+    file: "bzImage-kvm-smp-containers-io",
+    sha256: "51ea6c6e40c96519679ff1bac374f4bc2d02855545a1796e729ea541bebe0587",
+    version: "6.6.35",
+    epochs: (7, u64::MAX),
+    variant: Some("containers"),
+    proc_io: true,
 };
 
 /// The one-vCPU builds this engine knows.
-pub const TWINS: [Twin; 3] = [KERNEL, KERNEL_CG, KERNEL_CONTAINERS];
+pub const TWINS: [Twin; 5] = [
+    KERNEL,
+    KERNEL_CG,
+    KERNEL_CONTAINERS,
+    KERNEL_IO,
+    KERNEL_CONTAINERS_IO,
+];
 
 /// The SMP builds, as [`TWINS`].
-pub const SMP_TWINS: [Twin; 3] = [KERNEL_SMP, KERNEL_SMP_CG, KERNEL_SMP_CONTAINERS];
+pub const SMP_TWINS: [Twin; 5] = [
+    KERNEL_SMP,
+    KERNEL_SMP_CG,
+    KERNEL_SMP_CONTAINERS,
+    KERNEL_SMP_IO,
+    KERNEL_SMP_CONTAINERS_IO,
+];
 
-fn pick(list: &[Twin], of: &str, epoch: u64, variant: Option<&str>) -> Option<Twin> {
-    list.iter()
-        .copied()
-        .find(|t| t.of == of && (t.epochs.0..=t.epochs.1).contains(&epoch) && t.variant == variant)
+/// The one-vCPU build that boots the images this hydo builds by default (the fingerprint epoch
+/// [`hydo_image::EPOCH`], no variant, no `guest.proc_io: false`).
+pub const CURRENT: Twin = KERNEL_IO;
+
+/// The SMP build of [`CURRENT`].
+pub const CURRENT_SMP: Twin = KERNEL_SMP_IO;
+
+fn pick(list: &[Twin], of: &str, epoch: u64, variant: Option<&str>, io: bool) -> Option<Twin> {
+    list.iter().copied().find(|t| {
+        t.of == of
+            && (t.epochs.0..=t.epochs.1).contains(&epoch)
+            && t.variant == variant
+            && t.proc_io == io
+    })
 }
 
 /// The one-vCPU KVM build of the kernel with sha256 `of` for an image built at `epoch` without a
-/// kernel variant.
+/// kernel variant and without `guest.proc_io: false`.
 pub fn twin_of(of: &str, epoch: u64) -> Option<Twin> {
-    pick(&TWINS, of, epoch, None)
+    pick(
+        &TWINS,
+        of,
+        epoch,
+        None,
+        hydo_image::defaults(epoch, "x86_64").proc_io,
+    )
 }
 
 /// The KVM build of the kernel with sha256 `of` for an image built at `epoch` with the kernel
 /// variant `variant` (the record's `kernel_variant`) on a machine of `vcpus` vCPUs: the UP build
-/// for one, the SMP build for more.
-pub fn twin_for(of: &str, vcpus: u32, epoch: u64, variant: Option<&str>) -> Option<Twin> {
+/// for one, the SMP build for more. `proc_io` is the record's
+/// (`hydo_image::ImageRecord::proc_io`): the builds with `/proc/<pid>/io`, which exist from the
+/// fingerprint epoch 7 only.
+pub fn twin_for(
+    of: &str,
+    vcpus: u32,
+    epoch: u64,
+    variant: Option<&str>,
+    proc_io: bool,
+) -> Option<Twin> {
     if vcpus > 1 {
-        pick(&SMP_TWINS, of, epoch, variant)
+        pick(&SMP_TWINS, of, epoch, variant, proc_io)
     } else {
-        pick(&TWINS, of, epoch, variant)
+        pick(&TWINS, of, epoch, variant, proc_io)
     }
 }
 

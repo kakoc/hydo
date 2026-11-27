@@ -74,8 +74,13 @@ pub const VERSION: u64 = 1;
 /// ([`EpochDefaults::pause_largest_session`]). Epoch 6 (Milestone 353): the recovery boot after a
 /// power cut starts with the first boot's last outcomes in `$HYDO_OUTCOMES`
 /// ([`EpochDefaults::outcomes_after_cut`]), and (Milestone 348) every command that the host
-/// controller starts gets a `PATH` ([`EpochDefaults::command_path`]).
-pub const EPOCH: u64 = 6;
+/// controller starts gets a `PATH` ([`EpochDefaults::command_path`]). Epoch 7 (Milestone 376):
+/// the Mac and KVM engines' guest kernels with `/proc/<pid>/io` (`Image-explore-io`,
+/// `Image-explore-netns-io`, `Image-explore-containers-io`, `bzImage-kvm-io`,
+/// `bzImage-kvm-smp-io`, `bzImage-kvm-containers-io`, `bzImage-kvm-smp-containers-io`;
+/// [`EpochDefaults::proc_io`]), so a program that reads its own I/O counters at start
+/// (Typesense's brpc) runs there.
+pub const EPOCH: u64 = 7;
 
 /// The epoch of a run, exploration or cache entry that recorded none (written before M155).
 pub const EPOCH_BEFORE_RECORDS: u64 = 1;
@@ -185,6 +190,15 @@ pub struct EpochDefaults {
     /// command, the write of the file, which is then in guest RAM, so every run with a power cut
     /// gets another control transcript and fingerprint. From epoch 6 (Milestone 353).
     pub outcomes_after_cut: bool,
+    /// What an absent `guest.proc_io` means: the Mac and KVM engines boot the image with a guest
+    /// kernel that has per-process I/O accounting (`CONFIG_TASKSTATS`, `CONFIG_TASK_XACCT`,
+    /// `CONFIG_TASK_IO_ACCOUNTING`), so the guest has `/proc/<pid>/io`. Before, those kernels had
+    /// no such file, and Typesense 30.2 stopped with SIGSEGV at every start: brpc reads
+    /// `/proc/self/io` in a static initializer (open item 188). A new kernel moves every
+    /// fingerprint of the engine. From epoch 7 (Milestone 376), and `guest.proc_io: false`
+    /// boots the kernels of epoch 6 ([`ImageRecord::proc_io`]). hvx's guest kernel has always
+    /// had the file.
+    pub proc_io: bool,
 }
 
 /// The `PATH` that `guest.path` gives the project's commands: busybox's own default.
@@ -210,6 +224,7 @@ pub fn defaults(epoch: u64, arch: &str) -> EpochDefaults {
         pause_largest_session: epoch >= 5,
         command_path: epoch >= 6,
         outcomes_after_cut: epoch >= 6,
+        proc_io: epoch >= 7,
     }
 }
 
@@ -322,6 +337,21 @@ pub struct ImageRecord {
     /// field. An image without the key has no field, so its record keeps its bytes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub kernel_variant: Option<String>,
+    /// `false` when the manifest says `guest.proc_io: false` (Milestone 376): the image boots the
+    /// Mac and KVM guest kernels of the fingerprint epoch 6, without `/proc/<pid>/io`, though it
+    /// was built at epoch 7 or later. On arm64 `kernel` names that kernel too; on x86_64 the KVM
+    /// engine picks its build by this field. Absent: what the image's epoch means
+    /// ([`EpochDefaults::proc_io`]). An image without the key has no field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proc_io: Option<bool>,
+}
+
+impl ImageRecord {
+    /// Whether the Mac and KVM engines boot this image with a guest kernel that has
+    /// `/proc/<pid>/io`: from the fingerprint epoch 7, unless the record says `proc_io: false`.
+    pub fn proc_io(&self) -> bool {
+        defaults(self.epoch, &self.arch).proc_io && self.proc_io != Some(false)
+    }
 }
 
 /// The hydo that built an image.
@@ -553,7 +583,7 @@ mod tests {
     fn canonical_sorts_and_reads_back() {
         let r = kernels::record_for("x86_64", false);
         let t = canonical(&r);
-        assert!(t.starts_with("{\"arch\":\"x86_64\",\"epoch\":6,\"initrd\":{"));
+        assert!(t.starts_with("{\"arch\":\"x86_64\",\"epoch\":7,\"initrd\":{"));
         assert!(t.ends_with("}\n") && !t.contains(": "));
         assert_eq!(parse_record(&t).unwrap(), r);
         let mut v: Value = serde_json::from_str(&t).unwrap();
@@ -679,7 +709,22 @@ mod tests {
         );
         assert!(defaults(6, "arm64").command_path && defaults(6, "arm64").outcomes_after_cut);
         assert!(!defaults(6, "arm64").exact_tick);
-        assert_eq!(defaults(EPOCH, "x86_64"), six);
+        // Milestone 376: the Mac and KVM guest kernels with /proc/<pid>/io from epoch 7 only
+        for e in 1..=6 {
+            for arch in ["x86_64", "arm64"] {
+                assert!(!defaults(e, arch).proc_io, "epoch {e} {arch}");
+            }
+        }
+        let seven = defaults(7, "x86_64");
+        assert_eq!(
+            seven,
+            EpochDefaults {
+                proc_io: true,
+                ..six
+            }
+        );
+        assert!(defaults(7, "arm64").proc_io);
+        assert_eq!(defaults(EPOCH, "x86_64"), seven);
     }
 
     #[test]
