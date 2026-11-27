@@ -22,7 +22,7 @@ Words this page uses:
 - Verdict: the run's outcome: `OK`, `VIOLATION` (an invariant, a property that must always hold,
   failed), or `ERROR` (the run could not finish its workload).
 - Fingerprint epoch: the generation of hydo's fingerprints. A change that moves recorded
-  fingerprints raises it; this release's is 6. Runs of different epochs compare only verdicts.
+  fingerprints raises it; this release's is 7. Runs of different epochs compare only verdicts.
 - Recovery: after a power cut, hydo boots the guest again on what the disk kept and runs the
   invariants there.
 - Engine: the program that runs the virtual machine: hvx (hydo's kernel module) or KVM.
@@ -166,7 +166,7 @@ This writes `hydo-out/explore-ob-redis-disk.img`, and next to it the steps of th
 and `hydo-agent`, plus a data partition. `hydo-agent` is a small program that is the guest's first
 process and only carries out what the host tells it. Every decision (when to start Redis, when to
 inject a fault, when to check the invariant) is made by `hydo` on the host, which also records it.
-Building the same `hydo.yaml` again gives the same bytes (sha256 `8fae694627b8ba31…`).
+Building the same `hydo.yaml` again gives the same bytes (sha256 `245920356063c32a…`).
 
 Run one schedule with no faults. Then run one with a power cut before step 12, while Redis is set
 to sync its log only once a second. The workload's 20 steps count from 0, and step 5, for
@@ -213,7 +213,7 @@ hydo run "disk=cut | run C=12"
 ```
 
 It ends `OK` with `acked=12 all present` (`47ae607ed0a15c48`; with `--backend kvm`
-`03ff0b2cb2ea75a0`).
+`55250382c9110637`).
 
 `hydo run` exits with status 0 whenever the run finishes, whatever its verdict. A script tells a
 pass from a failure by `verdict.kind` in the run's `result.json`: `ok`, `violation`, or `error`.
@@ -337,8 +337,8 @@ hydo build hydo-netem.yaml
 hydo run --image hydo-out/explore-ob-redis-netem-disk.img "disk=none | run N=redis@3-6:delay,300ms"
 ```
 
-It ends `OK` with `retrans=0` (`95b9691f0b29d173`; on the KVM engine `dbfed47d20867cbf`; image
-sha256 `15a88e799b1e5b9a…`): no packet was sent twice. With two images in `hydo-out`, `hydo
+It ends `OK` with `retrans=0` (`95b9691f0b29d173`; on the KVM engine `e27a97b68c2e83de`; image
+sha256 `157bbdfb92162307…`): no packet was sent twice. With two images in `hydo-out`, `hydo
 run` and `hydo explore` need `--image` to know which one you mean.
 
 ## 5. Onboard your own project
@@ -429,10 +429,10 @@ the same verdicts as with hvx, but they are counted differently:
 
 A host power cut at the k-th disk flush (`cf=`) and inserted ticks (`pp=`, `xt…`) are hvx's
 alone; the explorer draws the faults both engines apply. With the image of section 2, the two
-schedules end `OK` (`b222402de473ea1b`) and `VIOLATION … key k:1 lost` (`3e8260560d47b5b0`).
+schedules end `OK` (`abe369f236f79c57`) and `VIOLATION … key k:1 lost` (`ab57b0e096f95548`).
 On KVM the power cut is before step 11, not step 12. Where a cut falls against Redis's
 one-second sync differs between the engines, and on KVM the cut before step 12 loses nothing.
-The values come from AMD EPYC CPUs (the 7763 and the 9V74 give the same values). Intel CPUs
+The values come from AMD EPYC CPUs (the 7763 and the 9V45 give the same values). Intel CPUs
 give the same verdicts with fingerprints of their own.
 
 The exploration finds 10 failures, and its report gives five minimal schedules:

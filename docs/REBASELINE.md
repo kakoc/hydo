@@ -4131,3 +4131,87 @@ on all three engines: hvm 76 runs, kvm 19 and hvx 141.
 `87d6319a26da08c7` on KVM), and the older ones of section 31, boot the kernels of their own
 epochs. docs/HISTORY.md Milestone 376 has the proof that an epoch-6 image keeps its KVM values
 under this hydo.
+
+## 35. The re-recording pass at the fingerprint epoch 7, and hydo 0.8.0 (2026-11-27)
+
+This pass re-records the list at the fingerprint epoch 7 of section 34, with the version 0.8.0
+(docs/HISTORY.md "The 0.8.0 release, prepared for publication"). It ran `hydo-bench rebaseline
+--write --thorough --accept-verdicts` with the quick 0.8.0 candidates as `--release`: the Linux
+one (`6d5f58be…`), whose `guest/` holds the four KVM kernels with `/proc/<pid>/io`, and the Mac one
+(`aee59b82…`, unsigned), whose `hv/hvm/explore/out/` holds the three Mac kernels with the file. So
+one pass covers both changes: the epoch 7 moves every image of the list, and the version moves the
+images with `hydo-world` or `hydo-grpc` and the SDK examples again.
+
+**hvx** (the bare-metal machine, the Linux candidate unpacked under umask 022 and set up with `hydo
+setup`, the module `91D86B693F4D4035C368F9B`). `--write --thorough --accept-verdicts` took
+19,640 s (builds 12,846 s, runs 6,791 s) on a machine that other sessions loaded. All 43 images
+were built twice with the same bytes and have new bytes. All 141 schedules gave the same values
+twice from fresh boots, and no verdict changed. Only 30 runs moved: those of the 9 images that
+carry `hydo-world` or `hydo-grpc` or an SDK's version, the runs that moved at 0.6.0 and 0.7.0.
+The other 111 runs gave their epoch-6 values. Section 34 expected every hvx run to move with the
+record's bytes. It does not: hvx boots the same kernel with the same command line, and its
+fingerprint does not change with the record `/etc/hydo/image.json`.
+
+**KVM** (GitHub's runners, the one-off workflow `tmp-rel080-kvm`, run 46042381928). A job built
+the four KVM kernels with `/proc/<pid>/io` in a sandboxed Nix, each twice with the pinned bytes. A
+job built the Linux candidate from the version commit with the assets of the published 0.7.0 and
+those kernels: the bare-metal machine's bytes. Six jobs ran `--write --thorough --accept-verdicts`
+of the whole KVM list with the candidate's own `hydo`, `hydo-hvx`, `hydo-build` and
+`hydo-fetch-image`: three AMD hosts (EPYC 7763 twice, 9V45) and three Intel Xeon 6975P-C hosts.
+Each built all 6 images twice with the same bytes and ran all 19 schedules twice from fresh boots
+with the same values; every image and every run moved. The three AMD hosts wrote the same list,
+whose values are the recorded ones; the Intel hosts gave the same verdicts with fingerprints of
+their own. One verdict changed on every host:
+
+- `kvm/qdrant-flaky-buggy` `P=workload/tests::wal_reco@0~179:500`: the test passes now. Three
+  more jobs ran the example's `pause-check.sh` with the candidate (two AMD EPYC 7763, one Xeon
+  6975P-C). Each found 1 failing start of 80, at 243 ms; it failed twice with one fingerprint
+  (AMD `d8d14a94cef011fd`), and at 243 ms the fixed test and a pause of the whole workload passed.
+  The pauses at 243 ms (fails) and 244 ms (passes)
+  replace those at 179 and 180 ms, and the fixed test moves to 243 ms. The workflow's second
+  commit (run 46047132233) re-recorded the two Qdrant images with them on four runners. The three
+  AMD hosts (EPYC 9V74 twice, 9V45) wrote the same values: `d8d14a94cef011fd` at 243 ms (VIOLATION),
+  `161c1eb42b7d90e4` at 244 ms (OK), and the fixed test's `bd3e3162da39d52c` at 243 ms (OK). Each
+  image built twice with the same bytes, and each run gave one result twice. A Xeon Platinum 8573C
+  gave the same verdicts with fingerprints of its own.
+
+`C=11 R=everysec` still loses `k:1` on KVM (`ab57b0e096f95548`). The quickstart section of every
+job ran the `R=everysec` cuts before the steps 2 to 19: the cuts before 2 to 5, 10, 11, 13, 15
+and 18 lose `k:1`, the others pass, so the schedule stays.
+
+**The Mac** (this Mac, the quick Mac candidate, a target folder of the pass's own). The pass took
+one image at a time under the shared Mac VM lock, with at least 13 GB of the disk free, and
+deleted each image's build after its values were written. 20 of the 21 images were built twice
+with the same bytes and have new bytes; their 72 runs gave the same values twice from fresh boots,
+and every run moved (941 s: builds 335 s, runs 605 s). No verdict changed. Three verdict lines
+differ in their numbers and keep their class and property:
+
+- `hvm/ledger` `O=front@0-30:resp:loss,50%`: the entry stored twice is 11 instead of 19;
+- `hvm/redis-composed-racy`: the balances sum to 497 instead of 509;
+- `hvm/python-kv-hist` `C=12 S=never`: the times of the history's operations.
+
+`hvm/voting` keeps its epoch-6 values (AGENTS.md open item 105). Its one build at epoch 7
+(`68e52fe560be68d6`) and its runs need about 4 GB more than this Mac had free above its 13 GB
+floor while other work filled the disk and the swap, and the pass's watchdog stopped it twice.
+
+These are the Mac kernels' first runs. An image built by hydo 0.7.0 (the release Redis example,
+`502d7540…`, epoch 6) gave all 7 recorded values of `hvm/release-redis` under the candidate. The
+same example with an invariant that reads `/proc/self/io` and the `/proc/<pid>/io` of
+`redis-server` ended `OK` at epoch 7, twice with one fingerprint, also with `guest.kernel:
+containers`; with `guest.proc_io: false`, and built by hydo 0.7.0, it ended `VIOLATION
+[procio.readable] no /proc/self/io`. The release Redis image (`efcacb4a…`) gives
+`690ba17b113132a5` without faults, `620ef75eee122006` at `C=12 R=everysec` (`k:0` lost) and
+`7ba8e0d68df64e1d` at `C=12`.
+
+With the three engines done the list's `epoch` is 7. AGENTS.md open item 105 holds one line, `hvm/voting`.
+
+**The pinned reproducers.** Their epoch-7 images are the list's `stack-old` (`7dd445a8…`) and
+`stack-fix` (`d00c6481…`), copied to `~/hydo/build/rel080`. On hvx they give the epoch-6 values
+`db33d71069816103` (VIOLATION, order 11) and `c421af1ccb714225` (OK); on KVM (AMD)
+`8460a6161dd8cd55` and `4c26ed448d1ad58d`. With the candidate's `hydo` and with a `hydo` built from
+the release branch after the merge of `main`'s Milestones 380, 381 and 385, the images of every
+epoch gave their recorded values on hvx: `a76d7fe857fdb37c` and `efbde7b57264be0f` (epoch 2, in
+`~/hydo/build/m204`), `e153f376096a072c` and `6a5c2fe208174af3` (epoch 4, `m302`),
+`b6e78273b1d21304` and `b531d6bcaa8489b7` (epoch 5, `rel050`), and the values above for epochs 6
+(`rel060`) and 7. Both builds of the quickstart's Redis image gave `245920356063c32a…`, and its
+two cited schedules gave `2f5a6dc34e0c8ba6` and `f2715295eae4d5a2` with both programs.
