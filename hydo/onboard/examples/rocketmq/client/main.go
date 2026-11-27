@@ -402,6 +402,21 @@ func item(m *msgExt, withKey bool) string {
 // falls between, and hvx's 64 KiB of console per boot keeps room for the workload's records.
 var quietRecv bool
 
+// seen holds the ids the drain received; fresh counts the ids it had not received before. The
+// drain's quiet window counts from the last fresh id, so that a message that comes again and
+// again (finding 3) does not keep it open.
+var (
+	seen  = map[string]bool{}
+	fresh int
+)
+
+func mark(body string) {
+	if !seen[body] {
+		seen[body] = true
+		fresh++
+	}
+}
+
 type recvOp struct {
 	h              *hydohist.History
 	proc           int
@@ -471,6 +486,7 @@ func one(h *hydohist.History, proc int, channel, group, topic string, q int, ord
 	items := []string{}
 	for _, m := range p.msgs {
 		items = append(items, item(m, ordered))
+		mark(m.body)
 	}
 	rec.ok(items...)
 	if len(items) == 0 {
@@ -533,7 +549,8 @@ func oconsume(proc int) int {
 }
 
 // drain answers the broker's transaction checks and takes every message left, until a quiet
-// window of 45 s without a message or an error, within 250 s (workload.timeout is 300 s).
+// window of 45 s without a message it had not received or an error, within 250 s
+// (workload.timeout is 300 s).
 func drain() int {
 	const proc = 100000
 	quietRecv = true
@@ -555,6 +572,7 @@ func drain() int {
 	last := uptime()
 	for uptime() < deadline {
 		got := 0
+		fresh = 0
 		failed := false
 		for q := 0; q < queues; q++ {
 			for {
@@ -602,7 +620,7 @@ func drain() int {
 				break
 			}
 		}
-		if got > 0 || failed {
+		if fresh > 0 || failed {
 			last = uptime()
 		}
 		if uptime()-last >= 45 {
@@ -638,6 +656,7 @@ func dlq(proc int) (int, error) {
 	items := []string{}
 	for _, m := range p.msgs {
 		items = append(items, hydohist.Enc(m.body))
+		mark(m.body)
 	}
 	rec.ok(items...)
 	if len(items) == 0 {

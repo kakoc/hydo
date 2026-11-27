@@ -213,11 +213,12 @@ checks:
   - id: jobs
     type: messages
     history: q
-    msg: every message that SendSync acknowledged reaches the group w, a committed transaction too and a rolled-back one never, a delayed message not before its delay, and a poison message the dead-letter topic after 3 deliveries
+    msg: every message that SendSync acknowledged reaches the group w, a committed transaction too, once, and a rolled-back one never, a delayed message not before its delay, and a poison message the dead-letter topic after 3 deliveries
     final: /bin/rmq drain
     acknowledgement: explicit
     claims:
       delivery: at-least-once
+      duplicates: forbidden           # one stored copy per message: a committed transaction once
       dead_letter: {after: 3, to: dlq}  # maxReconsumeTimes 2: two retries, then %DLQ%w
       delay: per-message              # d<id>: delay level 2, 5 s
       after_ack: no-redelivery        # a committed offset holds, also across a failover
