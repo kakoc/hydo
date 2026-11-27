@@ -28,6 +28,10 @@ looks for bugs that nobody reported.
      loss of every node in its first minute.** Each node saves the addresses of its peers once a
      minute, by truncating and writing a file without a sync, and the documented deployment
      sets no `bootstrap_peers` (the build `--set peerwait=no`, section "What was found").
+  4. **Known, with the SQLite engine (issue #1571, open): a power cut of every node loses
+     acknowledged writes, also with `metadata_fsync = true`.** Garage then runs SQLite in WAL mode
+     with `synchronous = NORMAL`. `hydo/hydo-sqlite.yaml` shows it on hvx (Milestone 384); the
+     LMDB image passes the same schedules.
 - **What held?** With `metadata_fsync` and `data_fsync` on, every acknowledged PutObject,
   DeleteObject, DeleteObjects, multipart upload and its abort, and every CopyObject without a
   clock step, stayed as acknowledged. That held through kills, pauses, partitions and one-way
@@ -303,6 +307,44 @@ connect` again, or set `bootstrap_peers`.
 **Status.** New as far as the search found. Issues #1457 and pull request #1488 (2026-07) changed
 how often the file is written, not how. Not posted.
 
+### 4. Known (#1571): with the SQLite engine, a power cut of every node loses acknowledged writes
+
+This finding comes from Milestone 384, on hvx. The sync audit (`hydo rules scan --kind sync`,
+Milestone 381) ranks Garage's SQLite adapter first. With `metadata_fsync = true` Garage opens
+SQLite in WAL mode with `synchronous = NORMAL` (`SqliteDb::open`, `src/db/sqlite_adapter.rs`, line
+79). SQLite then syncs the WAL only at a checkpoint, so a commit returns before it is on the disk.
+The example's `hydo.yaml` runs LMDB, so no earlier run met it.
+
+**The variant.** `hydo/hydo-sqlite.yaml` is `hydo.yaml` with `db_engine = "sqlite"` in the nodes'
+configuration (`config/garage-sqlite-fsync-<fsync>.toml`). The workload, the checks and the
+build parameter `fsync = true` are the same. On hvx, with this tree's hydo, the image
+`explore-ob-garage-sqlite-disk.img` (`ce8592a991f3bf6a`) against the image of `hydo.yaml`
+(`0e42f5bed445cad9`), both built with `--set arch=amd64`:
+
+| schedule | SQLite | LMDB |
+|---|---|---|
+| `disk=none \| run` | OK, `c02cf3d733856138` | not run |
+| `disk=cut \| run A=garage.put_acked@10+10:cut`, the audit's cut 10 ms after an acknowledged PutObject | `VIOLATION [objects.acked-outcome]`: the multipart upload `mpu.k93` was acknowledged and is gone, `fcd596d9e0a8c850`, twice | OK, 93 operations judged |
+| `disk=cut \| run C=20`, the audit's cut after step 20 | `VIOLATION`: 5 of 47 acknowledged operations are gone (two CopyObjects, two deletions of DeleteObjects, one PutObject), and an upload whose abort Garage acknowledged is listed again, `baf58af8f496c189` | OK, 47 operations judged |
+
+A first build of the same file, with another comment at its top (`fe6b6f0873c14210`), gave the
+same two violations. It also ran one node's power loss: `disk=cut | run
+A=garage.put_acked@10+10:powerloss-garage1` passed, and `disk=cut | run L=garage1@20+3` broke
+only the listing (`VIOLATION [list]`, two deleted keys listed, finding 2) and lost no
+acknowledged operation.
+
+A power loss of one node loses no acknowledged write, because the two other nodes hold it. The
+whole guest's power cut takes the last commits of every node at once. The schedule is saved as
+`schedules/sqlite-acked-writes-lost-at-a-power-cut.schedule`; it is not in `hydo/regressions/`,
+because the image of `hydo.yaml` would replay it too.
+
+**Status.** Known: issue
+[#1571](https://git.deuxfleurs.fr/Deuxfleurs/garage/issues/1571) (open, 2026-10-09) reports the
+same cause on a single node and asks for a setting with `synchronous = FULL`. The configuration
+reference lists `PRAGMA synchronous = NORMAL` for `metadata_fsync = true`. This run adds that a
+cluster of three nodes loses the writes too when every node loses its power. `main-v2` on
+2026-11-27 still sets `NORMAL` (it added `journal_size_limit`). Not posted.
+
 ### Not bugs
 
 | failure | label | where |
@@ -325,6 +367,7 @@ to `main-v2` was read too.
 | 1, the copy | `copy timestamp`, `CopyObject`, `copy object`, `clock`, `timestamp`, `last writer wins`, `overwrite lost`, `1621` | #1621 (closed): "CopyObject doesn't check quotas", fixed by #1627 (`4dde841d`), which also takes `next_timestamp`. #543 (2023) introduced the increasing timestamps for the other writes. No report of a lost copy |
 | 2, the listing | `list deleted`, `ListObjects deleted`, `deleted object listed`, `listing`, `ListObjectsV2`, `filter merge`, `read_range filter`, `matches_filter`, `get_range`, `IsData`, `tombstone`, `delete marker`, `deleted file still`, `ghost`, `list consistency` | no report. #544 (2023) ran Jepsen's set test on PutObject and ListObjects, without deletions. #1136 (open) revives entries from a restored snapshot, another cause |
 | 3, the peers | `peer_list`, `peer list`, `Persister`, `cluster_layout corrupted`, `node connect reboot`, `nodes do not reconnect`, `fsync` | #1457 and #1488 (how often the list is written), #1150 (a panic when the layout cannot be saved), #1571 (open: a single node with SQLite loses an acknowledged PUT at a power loss with `metadata_fsync = true`, and names LMDB's `MDB_NOMETASYNC`). No report of lost peers |
+| 4, SQLite (2026-11-27) | `sqlite`, `synchronous`, `synchronous NORMAL`, `metadata_fsync`, `WAL`, `journal_mode`, `sqlite power`, `sqlite fsync`, `sqlite durability`, `sqlite corruption`, `db_engine sqlite`, `power failure`, `power loss`, `fsync`, `lost write` | #1571 (open), the same cause on one node. Other causes: #1594 (closed: the WAL grows, fixed by `journal_size_limit`), #1200 (a malformed SQLite file), #1224 (open: lost data on a single node, no cause named) |
 
 ## What held, and why
 

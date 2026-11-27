@@ -1,0 +1,117 @@
+# Apache Kvrocks 2.17.0 as one node: a backup that BGSAVE made and reported done, and a power cut
+# right after it. The sync audit (hydo rules scan --kind sync, Milestone 381) names the place:
+# Storage::CreateBackup (src/storage/storage.cc) makes a RocksDB checkpoint in <backup-dir>.tmp,
+# destroys the old backup, and renames the new one into place without a sync of the folder.
+# ../RESULTS.md, "A backup and a power cut", says what it shows. The node and its configuration
+# are the ones of ../hydo/hydo.yaml's kv1. This folder is apart from ../hydo, so the image of
+# ../hydo/hydo.yaml keeps its bytes, and the test composer of ../hydo/workload does not run here.
+#
+#   sh ../build.sh            # bin/kvc-<arch>, the readiness check
+#   sh ../hydo/fetch-images.sh   # the image by digest, into ../hydo/images/
+#   hydo build hydo.yaml      # in this folder; x86_64: hvx or KVM
+#   hydo run "disk=none | run"      # OK
+#   hydo run "disk=cut | run C=2"   # the power goes off right after the second BGSAVE was reported done
+format: 1
+name: kvrocks-backup
+description: "Apache Kvrocks 2.17.0, one node: a backup that BGSAVE reported done is at backup-dir after a power cut"
+hydo_version: "0.5"
+
+params:
+  arch: amd64     # amd64 | arm64: the client's architecture, the same as the image's
+
+guest:
+  ram_mib: 1024
+  clock_start: 1795478400   # 2026-11-24 00:00 UTC, the day of the import
+  clock_after_cut: 60
+
+data:
+  size_mib: 384   # the data disk: the node's own file system and the rest
+  dirs: [vol/kv1]
+
+root:
+  files:
+    - {src: ../config/kvrocks.conf, dst: /etc/hydo/compose/bind/0-kvrocks.conf}
+    - {src: ../config/start.sh, dst: /etc/hydo/compose/bind/1-start.sh}
+    - {src: "../bin/kvc-{{arch}}", dst: /bin/kvc, mode: "0755"}
+
+shell: |
+  # q <args>: one command through the image's redis-cli, with a deadline of 30 s
+  q() { timeout 30 /bin/hydo-oci kv1 redis-cli -p 6666 "$@"; }
+  # info <field>: one field of INFO persistence
+  info() { q INFO persistence | tr -d '\r' | sed -n "s/^$1://p"; }
+  # bgsave: start a backup and wait until Kvrocks reports it done and ok (at most 60 s)
+  bgsave() {
+    before=$(info last_bgsave_time)
+    q BGSAVE || return 1
+    n=0
+    while [ $n -lt 60 ]; do
+      if [ "$(info bgsave_in_progress)" = 0 ] && [ "$(info last_bgsave_time)" != "$before" ]; then
+        [ "$(info last_bgsave_status)" = ok ]; return
+      fi
+      sleep 1; n=$((n + 1))
+    done
+    return 1
+  }
+  # event <id>: the console record that a reaction A=<id>... waits for
+  event() { c=/dev/ttyS0; [ -c $c ] || c=/dev/console; echo "HYDO-ASSERT {\"t\":\"reachable\",\"id\":\"$1\",\"ok\":true,\"msg\":\"$1\",\"details\":{}}" > $c; }
+
+services:
+  # image apache/kvrocks:2.17.0 = docker.io/apache/kvrocks@sha256:a1e99b3653fb900d5a17b80a9487f74079edc6d5e9b70e3103c01cbfc0d5146a
+  #   linux/amd64: sha256:d389bf9a7911d243e69b240ee9697cdb83f31ef696a6d1e13fb4aeb6152818df
+  #   linux/arm64: sha256:a56ba7b968d4e0900159af2864606dcf45ade840e90a26f8d45979e4ac4813af
+  - name: kv1
+    image: {x86_64: ../hydo/images/apache-kvrocks-2.17.0-amd64.docker.tar, arm64: ../hydo/images/apache-kvrocks-2.17.0-arm64-oci}
+    image_ref: "apache/kvrocks:2.17.0"
+    entrypoint: [sh, /etc/kvc/start.sh]
+    env:
+      KVROCKS_SYNC: "yes"
+      KVROCKS_RSID: "yes"
+    user: "root"
+    port: 6666
+    ready: "timeout 5 /bin/kvc ready 127.0.0.1"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/kv1, size_mib: 160}   # RocksDB's db/, the node's node.conf and backup/
+    mounts:
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-kvrocks.conf, dst: /etc/kvc/kvrocks.conf}
+      - {src: /etc/hydo/compose/bind/1-start.sh, dst: /etc/kvc/start.sh}
+      - {src: /data/vol/kv1, dst: /var/lib/kvrocks}
+
+# Step 0 writes bk:first, makes the first backup, and syncs, so the first backup is on the disk.
+# Step 1 writes bk:second with a synced write (rocksdb.write_options.sync yes) and makes the second
+# backup. Once INFO persistence reports it done and ok, it writes backup2 to $HYDO_ACKED. The other
+# steps only wait.
+workload:
+  steps: 6
+  timeout: 180
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      case $i in
+        0) q SET bk:first 1 > /dev/null && bgsave && sync || exit 1 ;;
+        1) q SET bk:second 2 > /dev/null && bgsave || exit 1
+           echo backup2 >> $HYDO_ACKED
+           event kvrocks.backup_acked ;;
+        *) sleep 1 ;;
+      esac
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: backup_kept
+    type: eventually
+    within: 60
+    msg: the backup that BGSAVE reported done and ok is at backup-dir, with the write made before it
+    cmd: |
+      b=/data/vol/kv1/backup
+      grep -qx backup2 $HYDO_ACKED || { echo "no backup was reported done"; exit 0; }
+      if [ -f $b/CURRENT ] && grep -q -a 'bk:second' $b/*.log $b/*.sst 2>/dev/null; then
+        echo "the backup at backup-dir holds bk:second"; exit 0
+      fi
+      ls -la /data/vol/kv1 $b $b.tmp 2>&1 | head -40
+      if [ -f $b/CURRENT ]; then echo "backup-dir holds an older backup, without bk:second"; else echo "backup-dir holds no backup"; fi
+      exit 1
+
+faults: [kill, cut]

@@ -521,10 +521,26 @@ These findings hold for every type of system:
   - Mender (finding 1): the version file synced while its bytes are still in the stream.
   - Garage (finding 3): the peer list written without a sync, once a minute.
   - ClickHouse (finding 1): `fsync_after_insert` and the merge's fsync off by default.
+
+  Its own schedules then reached places that no earlier finding had named, each at the first
+  try, on hvx:
+  - Garage with its SQLite engine: a power cut 10 ms after an acknowledged PutObject lost an
+    acknowledged upload, also with `metadata_fsync = true`. The LMDB engine passed the same
+    schedule. Known as Garage #1571.
+  - ClickHouse: a power cut right after an `ALTER TABLE ADD COLUMN` or an `EXCHANGE TABLES`
+    reverted it. Known as ClickHouse #111348.
+  - Meilisearch: a new database does not start again after a power cut in its first seconds,
+    because its `VERSION` file is not synced. Meilisearch #4584 reported it and closed it because
+    nobody could reproduce it.
+  - Kvrocks, new: a backup that `BGSAVE` reported done is the older one after a power cut,
+    because the new backup is renamed into place without a sync of the folder.
 - **What it misses.** It reads text. A write through an interface, a sync in another thread, or a
   library that the project does not hold (rclone, RocksDB) is not followed. A place is a fact of
   the code: a relaxed default that the project documents is a trade-off, and `hydo explore
-  --configs` labels it so.
+  --configs` labels it so. It reads a workload's events only in the folder of `hydo.yaml`, so a
+  client in another folder gets schedules at a step; aim them at its event by hand. A place at a
+  service's first start needs a workload that makes the state anew, because hydo syncs the disks
+  after provisioning.
 - **Cost.** Seconds for most projects, about a minute for ClickHouse. Each schedule is one
   recovery boot, on every engine.
 

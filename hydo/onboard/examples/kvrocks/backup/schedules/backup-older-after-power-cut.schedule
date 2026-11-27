@@ -1,0 +1,9 @@
+# A new candidate, minor (../../RESULTS.md, finding 3). Build ../hydo.yaml. Step 1 writes
+# bk:second, runs BGSAVE, and waits until INFO persistence reports the backup done and ok. The
+# power of the guest goes off right after. Kvrocks destroyed the old backup and renamed the new
+# one into place without a sync of the folder, so the recovery boot finds the first backup in
+# backup-dir and the second in backup.tmp. backup_kept fails ("backup-dir holds an older backup,
+# without bk:second"), fingerprint 2b2723bd64d5179b on hvx with the image dc4a818382fb5721.
+#   hydo run <image> "$(tail -1 backup-older-after-power-cut.schedule)"
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run C=2

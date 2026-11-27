@@ -1,0 +1,150 @@
+# Garage v2.5.0 with the SQLite metadata engine instead of LMDB: hydo.yaml with
+# db_engine = "sqlite" in the nodes' configuration (../config/garage-sqlite-fsync-<fsync>.toml).
+# The sync audit (hydo rules scan --kind sync, Milestone 381) ranked Garage's SQLite adapter
+# first: it opens SQLite in WAL mode with synchronous = NORMAL even with metadata_fsync = true.
+# ../RESULTS.md, finding 4, has what the power cuts after an acknowledgement did. This file is
+# apart from hydo.yaml, so the image of hydo.yaml keeps its bytes.
+#
+#   sh ../build.sh            # bin/gac-<arch>, the test client (../client)
+#   sh fetch-images.sh        # the image by digest
+#   hydo build hydo-sqlite.yaml --set arch=amd64 --out sqlite-out     # on hvx; arm64 on the Mac engine
+#   hydo run sqlite-out/explore-ob-garage-sqlite-disk.img "disk=cut | run A=garage.put_acked@10+10:cut"
+#
+# The services are hydo.yaml's, as `hydo compose` imported them from ../docker-compose.yaml:
+# - each node's /var/lib/garage (meta/ and data/) is a file system of its own (storage:), the
+#   target of L= and G=, instead of the importer's two folders on the shared data disk;
+# - the configuration is one file for the three nodes (../config/garage-sqlite-fsync-<fsync>.toml);
+#   each node finds its own address in the service network (rpc_public_addr_subnet);
+# - the readiness checks connect to the admin port 3903, which Garage opens at its start; the
+#   cluster's health is the first_init command's wait, because a node is not healthy before the
+#   layout exists;
+# - the test client gac is in the image (../build.sh).
+format: 1
+name: garage-sqlite
+description: "Garage v2.5.0 with its SQLite metadata engine, three nodes with replication factor 3 and consistent mode: acknowledged writes, deletions, multipart uploads and copies stay as acknowledged, every node reads them after the acknowledgement, and the listing agrees with the objects, under kills, pauses past the failure detector, partitions, one node's power loss or damaged files, power cuts and clock steps"
+hydo_version: "0.5"
+
+params:
+  arch: arm64     # amd64 | arm64: the client's architecture, the same as the image's
+  fsync: "true"   # metadata_fsync and data_fsync of every node: true | false (Garage's default)
+  peerwait: "yes" # yes: first_init waits until every node saved its peers; no: finding 3 (RESULTS.md)
+
+configs:
+  fsync:
+    values: ["true", "false"]
+    service: [garage1, garage2, garage3]
+    doc: "https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/#metadata_fsync"
+    tradeoff:
+      "false": "metadata_fsync and data_fsync off: a power failure of several nodes at once can corrupt the metadata or lose data blocks (configuration reference, metadata_fsync and data_fsync)"
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 1024   # the three Garage processes peak at 41 to 44 MiB each without faults (hydo run --memory); the rest is the root and the page cache
+  clock_start: 1795392000   # 2026-11-23 00:00 UTC, the day of the import
+  clock_after_cut: 60       # Garage orders the versions of an object by their wall-clock timestamps
+  outcomes_after_cut: true  # the read-back in a recovery boot reads the unknown outcomes too
+
+data:
+  size_mib: 768   # the data disk: the three nodes' own file systems of 192 MiB each, and the rest
+  dirs: [vol/garage1, vol/garage2, vol/garage3]
+
+root:
+  share_images: true   # the three nodes share one tree of the garage image
+  files:                 # bind-mount sources, copied into the read-only root
+    - {src: "../config/garage-sqlite-fsync-{{fsync}}.toml", dst: /etc/hydo/compose/bind/0-garage.toml}
+    - {src: "../bin/gac-{{arch}}", dst: /bin/gac, mode: "0755"}
+  text:
+    /etc/gac/peer-wait: "{{peerwait}}"
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 garage1
+      10.89.0.12 garage2
+      10.89.0.13 garage3
+
+groups:
+  - name: nodes
+    services: [garage1, garage2, garage3]
+
+services:
+  # Compose service garage1
+  # image dxflrs/garage:v2.5.0 = docker.io/dxflrs/garage@sha256:677e5b758e4425a325b811c425c026bf35a4bf42f7ddbaa773de3f4fd779a5a5
+  #   linux/amd64: sha256:23b16d34e0348d9aca9b960a7429a7e6d494974b5288bfb8f6c3ab856895f71e
+  #   linux/arm64: sha256:32b5de84cf9e3ae9c0b4d0f02566c442029e62203a4ed1bca9cdf2327fc19388
+  - name: garage1
+    image: {x86_64: images/dxflrs-garage-v2.5.0-amd64.docker.tar, arm64: images/dxflrs-garage-v2.5.0-arm64-oci}
+    image_ref: "dxflrs/garage:v2.5.0"
+    port: 3900
+    addr: 10.89.0.11
+    ready: "tcp:3903"
+    restart: "unless-stopped"
+    storage: {dir: vol/garage1, size_mib: 192}   # meta/ (SQLite) and data/ (the blocks)
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-garage.toml, dst: /etc/garage.toml}
+      - {src: /data/vol/garage1, dst: /var/lib/garage}
+  # Compose service garage2
+  - name: garage2
+    image: {x86_64: images/dxflrs-garage-v2.5.0-amd64.docker.tar, arm64: images/dxflrs-garage-v2.5.0-arm64-oci}
+    image_ref: "dxflrs/garage:v2.5.0"
+    port: 3900
+    addr: 10.89.0.12
+    start_after: started   # Compose starts the three nodes together
+    ready: "tcp:3903"
+    restart: "unless-stopped"
+    storage: {dir: vol/garage2, size_mib: 192}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-garage.toml, dst: /etc/garage.toml}
+      - {src: /data/vol/garage2, dst: /var/lib/garage}
+  # Compose service garage3
+  - name: garage3
+    image: {x86_64: images/dxflrs-garage-v2.5.0-amd64.docker.tar, arm64: images/dxflrs-garage-v2.5.0-arm64-oci}
+    image_ref: "dxflrs/garage:v2.5.0"
+    port: 3900
+    addr: 10.89.0.13
+    start_after: started
+    ready: "tcp:3903"
+    restart: "unless-stopped"
+    storage: {dir: vol/garage3, size_mib: 192}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-garage.toml, dst: /etc/garage.toml}
+      - {src: /data/vol/garage3, dst: /var/lib/garage}
+
+# 40 rounds of 1 s with up to 3 operations each: about 80 writes. A pause past Garage's failure
+# detector (4 missed pings 15 s apart) needs a minute of the workload.
+workload:
+  steps: 40
+  timeout: 300    # also the read-back's limit: it gives up after 150 s
+
+test:
+  parallel: 4
+  per_round: 3
+  round_ms: 1000
+  command_timeout: 60
+  drain_timeout: 60
+
+checks:
+  # hydo's ready-made claim (Milestone 346, hydo guide messages, "Read back the final states"):
+  # every write that Garage acknowledged is the key's value at the end, unless a later write of
+  # the same key replaced it, and no write that Garage refused took effect. The client records
+  # each operation as a send of its id, and `gac readback` reads every key back and writes each
+  # operation's effect (f=1 or f=0).
+  - id: objects
+    type: messages
+    history: objects
+    msg: every write that Garage acknowledged ends as Garage acknowledged it
+    final: /bin/gac readback
+    claims:
+      acked_outcome:
+        client_errors: [refused]   # a 4xx answer: Garage applied nothing
+        effect: recorded
+
+faults: [kill, pause, network, oneway, cut, clock, corrupt, powerloss]

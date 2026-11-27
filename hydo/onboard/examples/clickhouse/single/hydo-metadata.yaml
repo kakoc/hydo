@@ -1,0 +1,102 @@
+# ClickHouse v26.10.6.18 as one server: an acknowledged ALTER ADD COLUMN and an acknowledged
+# EXCHANGE TABLES, and a power cut right after each answer. The sync audit (hydo rules scan
+# --kind sync, Milestone 381) names both places: DatabaseAtomic writes and syncs a table's new
+# metadata file, then swaps it into place with renameat2(RENAME_EXCHANGE) and does not sync the
+# folder (src/Common/atomicRename.cpp, renameExchange and renameExchangeIfSupported).
+# ../RESULTS.md, the section "One server: the table metadata after a power cut", says what it
+# shows. The server and its settings are hydo.yaml's; this file is apart from it, so the image of
+# hydo.yaml keeps its bytes.
+#
+#   sh ../hydo/fetch-images.sh x86_64   # the server's image by digest, into ../hydo/images/
+#   hydo build hydo-metadata.yaml       # x86_64: hvx or KVM
+#   hydo run --image <image> "disk=none | run"   # OK
+#   hydo run --image <image> "disk=cut | run C=1"   # the power goes off right after the ADD COLUMN's answer
+#   hydo run --image <image> "disk=cut | run C=2"   # ... right after the EXCHANGE TABLES's answer
+format: 1
+name: clickhouse-metadata
+description: "ClickHouse v26.10.6.18, one server: an acknowledged ALTER ADD COLUMN and an acknowledged EXCHANGE TABLES stay after a power cut"
+hydo_version: "0.3"
+
+guest:
+  ram_mib: 2048
+  cpu: v3   # the official x86_64 binary stops with SIGILL on the x86-64-v2 guest
+  clock_start: 1795392000   # 2026-11-23 00:00 UTC
+
+data:
+  size_mib: 512   # the data disk: the server's data directory (the fault target)
+  dirs: [vol/ch]
+
+root:
+  files:
+    - {src: server.xml, dst: /etc/hydo/single/server.xml}
+
+shell: |
+  # q <query>: one query through the image's clickhouse-client, with a deadline of 30 s
+  q() { timeout 30 /bin/hydo-oci clickhouse clickhouse-client --query "$1"; }
+
+services:
+  # image clickhouse/clickhouse-server:26.10.6 = docker.io/clickhouse/clickhouse-server@sha256:9c55d8d8a77e03e1fd399d59e4d0a1c7a5e42df70098ff1c5d8bd18eb1a5d106
+  #   linux/amd64: sha256:9084cd79bde01fa4a99060d8d9cf71acdc4d3df44fce586230f566890277b2d6
+  #   linux/arm64: sha256:d610448be0bfbb32c1aae9dfb900054f7175a77084d692840f95593d60a35274
+  - name: clickhouse
+    image: {x86_64: ../hydo/images/clickhouse-clickhouse-server-26.10.6-amd64.docker.tar, arm64: ../hydo/images/clickhouse-clickhouse-server-26.10.6-arm64-oci}
+    image_ref: "clickhouse/clickhouse-server:26.10.6"
+    user: ""
+    entrypoint: [/usr/bin/clickhouse-server]   # the image's entrypoint.sh changes owners in its read-only root
+    cmd: ["--config-file=/etc/clickhouse-server/config.xml"]
+    env:
+      CLICKHOUSE_WATCHDOG_ENABLE: "0"
+    port: 9000
+    ready: "q 'SELECT 1'"
+    ready_timeout: 180
+    restart: "always"
+    mounts:
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/single/server.xml, dst: /etc/clickhouse-server/config.d/hydo.xml}
+      - {src: /data/vol/ch, dst: /var/lib/clickhouse}
+
+# Three tables of the default database (the Atomic engine), each with one synced part. The table
+# a holds the row 'a' and b the row 'b'.
+provision: |
+  q "CREATE TABLE t (id UInt64) ENGINE = MergeTree ORDER BY id SETTINGS fsync_after_insert = 1, fsync_part_directory = 1"
+  q "CREATE TABLE a (v String) ENGINE = MergeTree ORDER BY v SETTINGS fsync_after_insert = 1, fsync_part_directory = 1"
+  q "CREATE TABLE b (v String) ENGINE = MergeTree ORDER BY v SETTINGS fsync_after_insert = 1, fsync_part_directory = 1"
+  q "INSERT INTO t VALUES (1)"
+  q "INSERT INTO a VALUES ('a')"
+  q "INSERT INTO b VALUES ('b')"
+
+# Step 0 adds the column d to t, step 1 exchanges the tables a and b. Each writes its word to
+# $HYDO_ACKED once ClickHouse answered. The other steps only wait, so that C=5 cuts the power
+# seconds after both answers.
+workload:
+  steps: 6
+  timeout: 120
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      case $i in
+        0) q "ALTER TABLE t ADD COLUMN d UInt32 DEFAULT 5" && echo add >> $HYDO_ACKED ;;
+        1) q "EXCHANGE TABLES a AND b" && echo exchange >> $HYDO_ACKED ;;
+        *) sleep 1 ;;
+      esac
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: metadata_kept
+    type: eventually
+    within: 60
+    msg: an acknowledged ALTER ADD COLUMN and an acknowledged EXCHANGE TABLES stay after a restart
+    cmd: |
+      d=$(q "SELECT count() FROM system.columns WHERE database = 'default' AND table = 't' AND name = 'd'") || exit 1
+      av=$(q "SELECT v FROM a") || exit 1
+      bad=""
+      if grep -qx add $HYDO_ACKED && [ "$d" != 1 ]; then bad="$bad the acknowledged ADD COLUMN d is gone;"; fi
+      if grep -qx exchange $HYDO_ACKED && [ "$av" != b ]; then bad="$bad the acknowledged EXCHANGE TABLES is undone (a holds '$av');"; fi
+      if [ -z "$bad" ]; then echo "column d: $d, table a holds '$av'"; exit 0; fi
+      q "SELECT name, metadata_modification_time FROM system.tables WHERE database = 'default' ORDER BY name FORMAT TSV"
+      echo "$bad"
+      exit 1
+
+faults: [kill, cut, disk]

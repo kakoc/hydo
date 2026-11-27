@@ -1928,6 +1928,12 @@ and in each project the first known place was among the first 5. 25 of 30 sample
 were real. The guide is the section
 "Find the writes acknowledged before they are synced" of `hydo guide faults`, and the design and
 the numbers are the section "The sync audit" of `docs/design/rule-suggestion.md` (open item 193).
+Since M384 (tentative number) its schedules ran on hvx at the places that no finding had named,
+each in a new manifest of its example. They reproduced three known bugs at the first try. The
+bugs are Garage on SQLite (#1571, `garage/hydo/hydo-sqlite.yaml`), ClickHouse's metadata rename
+(#111348, `clickhouse/single/hydo-metadata.yaml`), and the `VERSION` file of a new Meilisearch
+database (#4584, `meilisearch/fresh/`). A new minor candidate: a Kvrocks backup that `BGSAVE` reported
+done is the older one after a power cut (`kvrocks/backup/`).
 
 **Web apps through their Playwright tests (M253).** `browser:` (a format-1 addition) runs a team's
 Playwright tests unchanged as the workload, in Microsoft's Playwright image 1.65.1, which `hydo
@@ -4459,11 +4465,25 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Not run: the Mac engine, and the settings exploration over the five parameters. Neither
       ran the parallel replication, diskless replication, a log on disk, or several replicas
       per shard. No slot moved back to its first shard after a failure.
-193. What the sync audit left (M381, tentative number):
-    - Its schedules did not run in a VM. The known places' findings ran before the audit, with
-      the examples' own schedules.
-    - It ran without the examples' `hydo.yaml`, so the ranking by the code that the services run
-      and the schedules aimed at a workload's event were tested on a small project only.
+193. What the sync audit left (M381, M384, tentative numbers):
+    - Since M384 its schedules ran in VMs on hvx, at four places that no finding had named. They
+      are the SQLite adapter of Garage, the metadata exchange of ClickHouse, the `VERSION` file of
+      Meilisearch, and the backup of Kvrocks. Each place that a workload reached broke under the
+      audit's own cut.
+      None ran on the Mac engine or KVM, and no exploration drew them.
+    - The audit reads a workload's events only in the folder of `hydo.yaml`. The examples'
+      clients live in `client/` beside it, so for Garage and Meilisearch it proposed `L=` and
+      `C=` at a step, and the schedules were aimed at `garage.put_acked` by hand. It keeps
+      `<service>` for a place that several services run (Garage's three nodes).
+    - A place at a database's first start is out of reach of every schedule, because hydo syncs
+      the disks after provisioning. Meilisearch's needed a workload that makes a new database
+      (`meilisearch/fresh/`).
+    - Three places did not run. The walk of the Vikunja example uploads no attachment, and its
+      SQLite loses the row too. No example has a local object storage disk of ClickHouse. The
+      SWUpdate example is built for U-Boot with Docker, so its GRUB environment did not run;
+      SWUpdate fixed that write on `master` (`d294ee7113`), in no release. Nothing was posted.
+    - SWUpdate's delta handler is a false place: it writes to `/dev/null`.
+    - The ranking by the code that the services run was tested on Garage and Meilisearch only.
     - It reads text. A write through an interface, a sync in another thread, and a library that
       the project only links (RocksDB, rclone, a driver's build flags such as go-sqlite3's
       `SQLITE_DEFAULT_WAL_SYNCHRONOUS`) are not followed. A default computed in code or set in a
@@ -4471,9 +4491,6 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The answer is found by words, so a condition that names `commit` counts as one.
     - 5 of 30 sampled places were wrong: a sync behind a documented option, a diagnostic log, an
       analytics id, a dump's temporary folder, and an offline tool's copy.
-    - The places that no finding had named were not run or reported. Examples are ClickHouse's
-      metadata exchange of `RENAME TABLE`, Kvrocks's backup, SWUpdate's delta handler and GRUB
-      environment, Vikunja's attachments, and Meilisearch's `VERSION` file.
     - The scan without `--kind` does not list the sync audit's places.
 
 ## Milestone index
@@ -5735,6 +5752,12 @@ build machine, before 2026-10-13.
   answer. Every one of 12 known
   places of hydo's findings was listed as `high`; 25 of 30 sampled places were real. Nothing
   recorded moved
+- M384 (tentative number): the sync audit's new places run on hvx, each in a new manifest of its
+  example. Power cuts right after an answer reproduced three known bugs at the first try. The
+  SQLite engine of Garage loses acknowledged writes also with `metadata_fsync` (#1571), and
+  ClickHouse reverts an acknowledged `ADD COLUMN` and `EXCHANGE TABLES` (#111348). A new Meilisearch
+  database never starts again (#4584, which nobody had reproduced). New and minor: a Kvrocks
+  backup that `BGSAVE` reported done is the older one after a power cut. Nothing recorded moved
 
 ## Where to look
 

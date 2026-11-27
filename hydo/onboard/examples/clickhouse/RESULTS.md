@@ -30,6 +30,12 @@ when enough replicas hold it.
      acknowledged `ALTER UPDATE`, waits behind it until `KILL MUTATION`. The variant `single/`
      shows it with `disk=cut | run C=6`. Nothing was posted (the section "One server: a mutation
      of a dropped column after a power cut").
+  5. **A known bug on one server: an acknowledged `ALTER ADD COLUMN` and an acknowledged
+     `EXCHANGE TABLES` revert after a power cut.** The table's new metadata file is swapped into
+     place without a sync of its folder
+     ([#111348](https://github.com/ClickHouse/ClickHouse/issues/111348), open). The variant
+     `single/hydo-metadata.yaml` shows it with `disk=cut | run C=2` (the section "One server: the
+     table metadata after a power cut").
 - **What held?** No retried insert was stored twice: not a retry after an error or a timeout, not
   a deliberate second send of an acknowledged block, not with `insert_deduplication_token`, and
   not with async inserts. Every acknowledged quorum insert (`insert_quorum = 2`, parallel or
@@ -463,6 +469,59 @@ ClickHouse issue #120975 names the same check in `splitAndModifyMutationCommands
 part that a restart brought back, and says that a part with rows would still fail. Its fix,
 #125293, changed only a test. The searches for this candidate are in the next section.
 
+## One server: the table metadata after a power cut (a known bug, Milestone 384)
+
+**The label.** A known bug: ClickHouse issue
+[#111348](https://github.com/ClickHouse/ClickHouse/issues/111348) (open) and its pull request
+[#111405](https://github.com/ClickHouse/ClickHouse/pull/111405) (open) name this cause.
+Nothing was posted.
+
+**Why it ran.** The sync audit (`hydo rules scan --kind sync`, Milestone 381) lists two places
+of ClickHouse's table metadata that no finding of this example had named. They are
+`renameExchange` and `renameExchangeIfSupported` in `src/Common/atomicRename.cpp`, a rename
+without a sync of its folder. The audit traced them to `DatabaseAtomic::renameTable` and
+`DatabaseAtomic::commitAlterTable`.
+
+**The variant.** `single/hydo-metadata.yaml` runs the server of `single/hydo.yaml` with three
+`MergeTree` tables in the default database, whose engine is `Atomic`. Each table has one synced
+part. Step 0 runs `ALTER TABLE t ADD COLUMN d UInt32 DEFAULT 5`, and step 1 runs `EXCHANGE
+TABLES a AND b`. Each writes its word to `$HYDO_ACKED` after ClickHouse answered. The check
+`metadata_kept` says that an acknowledged `ADD COLUMN` and an acknowledged `EXCHANGE TABLES`
+stay after a restart:
+
+```sh
+sh hydo/fetch-images.sh x86_64
+cd single && hydo build hydo-metadata.yaml
+hydo run "disk=none | run"       # OK
+hydo run "disk=cut | run C=2"    # the power goes off right after the EXCHANGE TABLES's answer
+```
+
+**What happens.** On hvx with this tree's hydo and the image `dd365579233483cf`:
+
+| schedule | verdict | fingerprint |
+|---|---|---|
+| `disk=none \| run` | OK | `86c85c691fbe72a2` |
+| `disk=cut \| run C=1`, right after the `ADD COLUMN`'s answer | `VIOLATION [metadata_kept]`: the column `d` is gone | `4855fa01f5e06905` |
+| `disk=cut \| run C=2`, right after the `EXCHANGE TABLES`'s answer | `VIOLATION [metadata_kept]`: the column `d` is gone, and `a` holds `'a'` again | `86516e86259630a9`, twice |
+| `disk=cut \| run C=5`, 3 s after the second answer | the same violation | `5ddd5e7b217a3e8d` |
+
+In the recovery boot `system.tables` lists the three tables with the metadata times of their
+creation. The schedule is saved as `single/schedules/alter-and-exchange-undone-after-power-cut.schedule`.
+
+**The cause in the code** (the tag of v26.10.6.18, and `master` on 2026-11-27):
+
+- `DatabaseAtomic::commitAlterTable` writes the new metadata to a temporary file and syncs it
+  (`fsync_metadata`, on by default). It then swaps the file into place with
+  `renameExchangeIfSupported` (`src/Databases/DatabaseAtomic.cpp`, line 495 on `master`) and
+  syncs no folder.
+- `EXCHANGE TABLES` swaps the two tables' metadata files with `renameExchange` the same way.
+- On ext4 a rename reaches the disk when the journal commits, by default within 5 s or at the
+  next sync of any file. One server whose tables take no insert syncs nothing in that time.
+  So a power cut 3 s after the second answer still loses both changes.
+
+Issue #111348 shows the same for `DROP TABLE`, `RENAME TABLE` and `EXCHANGE TABLES`, and pull
+request #111405 also syncs the folder at the commit of an `ALTER`.
+
 ## The duplicate searches
 
 Each phrase was searched in ClickHouse's issues and pull requests, open and closed, with `gh
@@ -512,6 +571,14 @@ items.
 | `broken-on-start mutation` | #132832 (a `ReplicatedMergeTree` merge lost at a host crash, `NO_REPLICA_HAS_PART`), #125904, #113179: other paths |
 | `splitAndModifyMutationCommands`, `splitAndModifyMutationCommands READ_COLUMN` | #120869 (`DROP COLUMN` accepted with a column the table lacks), #123602 (a mutation queued before `RENAME COLUMN`), #119354 (merged: a column absent from the table in some part formats); none covers a `MODIFY` of a dropped column on a part with rows |
 | `MergeTreeMutationEntry` (the first run's search; #111380 read again) | #111380 and #111416: the mutation files are not synced after their rename, so an acknowledged `DELETE` or `KILL MUTATION` can be lost; here the files survived |
+
+The phrases of the table metadata after a power cut were searched on 2026-11-27 with the same
+command.
+
+| phrase | what it found |
+|---|---|
+| `fsync_metadata` | #111348 (open): an acknowledged `DROP TABLE`, `RENAME TABLE` or `EXCHANGE TABLES` on an `Atomic` database reverts after a power loss, because the commit's rename is not synced. Its pull request #111405 (open) syncs the folder at that commit and at the commit of a `CREATE` or an `ALTER`. Also #115549 (open: a replica stays read-only when a power loss reverts an applied `ALTER`'s local metadata), #111381 and #111322: other files of the same kind |
+| `renameExchange fsync`, `fsync directory metadata`, `power loss metadata`, `ALTER lost after power`, `metadata directory fsync`, `EXCHANGE TABLES power`, `power failure table metadata`, `sync directory after rename`, `renameat2 fsync` | nothing |
 
 ## The explorations
 

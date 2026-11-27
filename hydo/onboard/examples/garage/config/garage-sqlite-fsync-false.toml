@@ -1,0 +1,25 @@
+# Garage v2.5.0 with the SQLite metadata engine (RESULTS.md, "The SQLite engine"), the
+# configuration of all three nodes. It is garage-fsync-false.toml with db_engine = "sqlite". With
+# metadata_fsync = false Garage opens SQLite in WAL mode with synchronous = OFF (the
+# configuration reference, metadata_fsync). hydo-sqlite.yaml's build parameter fsync picks this
+# file or its twin. Garage's own default is false for both settings.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+metadata_fsync = false
+data_fsync = false
+
+replication_factor = 3
+consistency_mode = "consistent"
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr_subnet = "10.89.0.0/24"
+rpc_secret = "1799bccfd7411eddcf9ebd316bc1f5287ad12a68094e1c6ac6abde7e6feae1ec"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+
+[admin]
+api_bind_addr = "[::]:3903"
+admin_token = "hydo-garage-admin-token"

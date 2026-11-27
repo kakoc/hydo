@@ -1,0 +1,12 @@
+# A known bug with the SQLite engine (../RESULTS.md, finding 4; Garage issue #1571, open). Build
+# ../hydo/hydo-sqlite.yaml (on hvx: hydo build hydo/hydo-sqlite.yaml --set arch=amd64). With
+# metadata_fsync = true Garage runs SQLite in WAL mode with synchronous = NORMAL, so a commit is
+# not synced. The power of the whole guest goes off 10 ms after the first PutObject that Garage
+# acknowledged from step 10 on. objects.acked-outcome fails: the multipart upload mpu.k93 was
+# acknowledged and is gone. Fingerprint fcd596d9e0a8c850 twice on hvx with the image
+# ce8592a991f3bf6a.
+# The image of ../hydo/hydo.yaml (LMDB) passes it. It is not in ../hydo/regressions/, because
+# that image would replay it too.
+#   hydo run <image> "$(tail -1 sqlite-acked-writes-lost-at-a-power-cut.schedule)"
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run A=garage.put_acked@10+10:cut
