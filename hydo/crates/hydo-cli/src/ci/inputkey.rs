@@ -79,6 +79,60 @@ fn walk(top: &Path, d: &Path, out: &mut Vec<(String, bool, String)>) {
     }
 }
 
+/// The folders under a `hydo/` folder that hold what hydo made, not what it builds from: the build
+/// folders (`.hydo`, `hydo-out`) and every run's or exploration's folder (one with a
+/// `result.json` or an `exploration.json`). Their images, unpacked roots and disk images are no
+/// input of an image. Before Milestone 374 the key read them all: `hydo explore --configs` on
+/// the RabbitMQ example read 13 GB of its copies' builds for 23 minutes (open item 191).
+fn is_output_dir(d: &Path) -> bool {
+    let name = d.file_name().map(|n| n.to_string_lossy().into_owned());
+    matches!(name.as_deref(), Some(".hydo" | "hydo-out"))
+        || d.join("result.json").is_file()
+        || d.join("exploration.json").is_file()
+}
+
+/// [`walk`] without the folders [`is_output_dir`] names.
+fn walk_inputs(top: &Path, d: &Path, out: &mut Vec<(String, bool, String)>) {
+    let Ok(rd) = std::fs::read_dir(d) else {
+        return;
+    };
+    for e in rd.flatten() {
+        let p = e.path();
+        let Ok(md) = std::fs::metadata(&p) else {
+            continue;
+        };
+        if md.is_dir() {
+            if is_output_dir(&p) || e.file_name() == ".git" {
+                continue;
+            }
+            walk_inputs(top, &p, out);
+        } else {
+            let mut one = Vec::new();
+            walk_one(top, &p, &md, &mut one);
+            out.extend(one);
+        }
+    }
+}
+
+/// One file of [`walk`]: its relative path, its executable bit and its sha256.
+fn walk_one(top: &Path, p: &Path, md: &std::fs::Metadata, out: &mut Vec<(String, bool, String)>) {
+    let name = p
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    if !md.is_file() || name == ".DS_Store" {
+        return;
+    }
+    use std::os::unix::fs::PermissionsExt;
+    let rel = p
+        .strip_prefix(top)
+        .unwrap_or(p)
+        .to_string_lossy()
+        .into_owned();
+    let exec = md.permissions().mode() & 0o111 != 0;
+    out.push((rel, exec, file_sha(p).unwrap_or_default()));
+}
+
 /// Every `src:` value of the manifest's data (root files, directories, mounts, ...), as written.
 pub fn src_paths(data: &serde_json::Value, out: &mut Vec<String>) {
     match data {
@@ -146,11 +200,12 @@ pub fn input_key(i: &Inputs) -> (Vec<String>, String) {
             .to_string_lossy()
             .into_owned()
     };
-    // the manifest, and the whole hydo/ folder when the manifest is in one
+    // the manifest, and the whole hydo/ folder when the manifest is in one, without hydo's own
+    // outputs there (Milestone 374)
     let mut files = vec![i.manifest.to_path_buf()];
     if mdir.file_name().is_some_and(|n| n == "hydo") {
         let mut all = Vec::new();
-        walk(mdir, mdir, &mut all);
+        walk_inputs(mdir, mdir, &mut all);
         files = all
             .into_iter()
             .filter(|(r, _, _)| r != "ci.yaml" && r != "known-findings.yaml")
@@ -193,6 +248,47 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("hydo")).unwrap();
         d
+    }
+
+    /// Milestone 374: hydo's own outputs in the hydo/ folder (the build folder, a run's or an
+    /// exploration's folder) are no input: adding or changing them keeps the key.
+    #[test]
+    fn the_key_leaves_out_hydos_outputs() {
+        let d = tmp("outputs");
+        std::fs::write(d.join("hydo/hydo.yaml"), "name: x\n").unwrap();
+        std::fs::create_dir_all(d.join("hydo/workload")).unwrap();
+        std::fs::write(d.join("hydo/workload/serial_driver_a"), "#!/bin/sh\n").unwrap();
+        let none = BTreeMap::new();
+        let k = || {
+            input_key(&Inputs {
+                hydo: "0.7.0 abc".into(),
+                arch: "x86_64",
+                sets: &[],
+                manifest: &d.join("hydo/hydo.yaml"),
+                project: &d,
+                srcs: &[],
+                inputs: &none,
+                built_here: false,
+            })
+        };
+        let (lines, k1) = k();
+        assert!(lines
+            .iter()
+            .any(|l| l.starts_with("file hydo/workload/serial_driver_a ")));
+        for (dir, file) in [
+            (".hydo", "explore-ob-x-disk.img"),
+            ("hydo-out/runs/run-1", "one.log"),
+            ("explore", "exploration.json"),
+            ("e2/runs/seed-3", "result.json"),
+        ] {
+            std::fs::create_dir_all(d.join("hydo").join(dir)).unwrap();
+            std::fs::write(d.join("hydo").join(dir).join(file), "made by hydo").unwrap();
+            assert_eq!(k().1, k1, "{dir}/{file} is hydo's output");
+        }
+        // a file the folder plan reads is an input
+        std::fs::write(d.join("hydo/workload/serial_driver_a"), "#!/bin/sh\necho\n").unwrap();
+        assert_ne!(k().1, k1);
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
