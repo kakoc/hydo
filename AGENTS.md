@@ -1514,6 +1514,32 @@ The released hydo 0.7.0 replayed findings 1 and 2 on hvx with their recorded fin
 twice, and the default image's contrast of finding 1 gave OK `179ac0194c742e8d`. Open item 192
 has what is left.
 
+**RocketMQ (M378, tentative number).** Apache RocketMQ 5.5.0, the newest release with an official
+image, runs in controller mode in one hvx guest of 3,072 MiB, in `hydo/onboard/examples/rocketmq`
+(RESULTS.md), imported with `hydo compose`. A NameServer with the controller embedded and one
+replica group of three brokers run with `allAckInSyncStateSet` and `SYNC_FLUSH`, each node's store
+on a file system of its own. A Go client on rocketmq-client-go v2.1.2, with a small remoting
+client of its own for exact pulls and synchronous offset commits, sends plain, delayed, ordered
+and transactional messages, retries poison messages into the dead-letter topic, and commits
+consumer offsets. Two messages checks judge them; `hydo-offsets.yaml` also claims `after_ack`.
+The directed runs used hvx and the explorations GitHub's KVM runners. No message acknowledged with
+`SEND_OK` was lost to kills, pauses, partitions, failovers, or a kill of the controller. Nothing
+was posted:
+- New, a clock effect: the broker writes the commit and rollback records of transactions in
+  batches timed by the wall clock (`batchSendOpMessage`), so after a backward step it writes
+  none for the step's length. The transaction check then asks again about transactions it had
+  committed and stores each message again at every check (`T=10:-3600`: `u17` six times in
+  50 s). After a step back of 30 days it stops at a half message without its record and checks
+  no transaction at all, so one that waits for a check is never delivered (`T=2:-2592000`).
+- Known in its parts (apache/rocketmq#11460, #5905): a broker writes its epoch file without a
+  sync when the controller gives it a role. A power cut 17 s later left both slaves' files at 0
+  bytes, and each stops at every start on the unchecked parse of an empty header (`C=20`); one
+  broker's power loss (`L=`) does the same.
+- Known (apache/rocketmq#7790): a slave copies the consumer offsets every 10 s, so a failover
+  delivers acknowledged messages again (`K=brokers.primary@10+3`).
+
+Open item 196 has what is left.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -4614,6 +4640,37 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       their own rounds, which run before the first runs end.
     - An exploration that a `--time-limit` cut writes its first report after the cut, and its
       shrinks then run past the limit, as before.
+    - Checks left before the merge (Milestone 383, "Tests"): hydo-control's identity corpus
+      failed on the bare-metal machine, and the tests of hydo-explore did not run with the new
+      example `deadlock`. On the Mac the workspace's clippy and the `docs::`, `equivalence::` and
+      `agents_equivalence::` tests did not run, for lack of disk.
+196. What the example `rocketmq` left (M378, tentative number):
+    - No finding is posted. Finding 3 (the transaction check after a backward clock step) is new;
+      a report would name `batchSendOpMessage`'s wall-clock interval and the check's stop at a
+      half message stored "after" it began. Finding 1 would be a comment on #11460: a power cut
+      makes the empty header, and with no `.bak` the pull request's fallback reads no epochs.
+    - On GitHub's AMD EPYC 7763 runners the image does not boot on KVM: the boot ends in `SPIN`
+      after 12,695 to 18,135 stops, before S1. The EPYC 9V45 and 9V74 and the Intel hosts boot
+      it. The part's job passes, and its exploration counts both seeds as failures with the
+      signature `ERROR worker: ''`; only its `explore.txt` names the cause. Why the boot loops
+      there was not looked at.
+    - `L=` takes no group selector, so one broker's power loss names a broker, not the master.
+    - A claim cannot be a build parameter (as open items 140 and 181), so `after_ack` lives in a
+      second manifest with an inline regression.
+    - `hydo build --check` passed a data disk and storage file systems over 4,096 MiB, which the
+      build then refused.
+    - The import moved every address of the Compose file by one (as open item 188) and gave each
+      broker the image's first `EXPOSE` port, 9876, the NameServer's.
+    - `ci/remote-explore.sh --ref` with a short commit fails at the runner's checkout.
+    - The send record of a delayed message carries the offset that RocketMQ answers, which is
+      the offset in `SCHEDULE_TOPIC_XXXX`, not in `j`. The example's `duplicates` claim did not
+      misjudge it, but its `o=` names no copy of `j`.
+    - A failover also gives the new master the delay offsets of its last copy, and e2's seed 70
+      delivered a delayed message twice after a kill of a broker. It was judged in a directed run
+      only (RESULTS.md); with `duplicates: forbidden` it fails like finding 2.
+    - Not run: the Mac engine, three controllers, two replica groups, the proxy and its gRPC
+      clients, POP consumption, the timer wheel's delays of arbitrary length, RocksDB-based
+      consume queues, and `hydo explore --configs` over `flush` and `allack`.
 
 ## Milestone index
 
@@ -5923,6 +5980,12 @@ build machine, before 2026-10-13.
   its shrink ends, and the report is written again as each shrink ends. `--shrink-later` shrinks nothing,
   and `hydo shrink <explore dir> --problem N` shrinks one problem later in the same folder.
   Shrinks made later give the files of shrinks made as it went. Nothing recorded moved
+- M378 (tentative number): the onboarding of Apache RocketMQ 5.5.0 in controller mode, a
+  NameServer with the controller and three brokers, on hvx and on KVM. New, a clock effect: after
+  a backward step the broker writes no commit or rollback records of transactions, so the check
+  stores a committed transaction again at every interval, or checks none. Known in their parts: a
+  power cut leaves the slaves' epoch files empty, and they never start again; a failover moves
+  consumer offsets back by up to 10 s. Nothing posted, nothing recorded moved
 
 ## Where to look
 

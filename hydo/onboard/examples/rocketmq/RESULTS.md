@@ -251,6 +251,24 @@ found, a clock effect.
 **Native run.** None: the cause is plain in the code, and the client's notes show which checks
 came.
 
+## The duplicate searches
+
+Each phrase was searched with `gh search issues --repo apache/rocketmq --include-prs`, open and
+closed, on 2026-11-27.
+
+| phrase | finding | what it found |
+|---|---|---|
+| `epochFileCheckpoint` | 1 | #6586, #6250, #6100: none about an empty file |
+| `CheckpointFile`, `EpochFileCache` | 1 | #11460 and its pull request #11463 (open): the unchecked parse of an empty header skips `.bak`; #10863, #11032, #11642: empty checkpoint state, not a power cut |
+| `string2File`, `power off`, `power failure` | 1 | #5905 (closed, 4.x): config files of 0 bytes after a forced restart of a VM; #4463, #405, #3129: other files |
+| `controller mode broker start`, `NumberFormatException epoch`, `broker cannot start after` | 1 | nothing |
+| `repeated consumption`, `syncConsumerOffset` | 2 | #7790 (closed as stale): repeated consumption after a master switch, with a maintainer's explanation |
+| `SlaveSynchronize`, `consume offset master slave switch`, `delayOffset` | 2 | #9984, #9996, #11041: other metadata of the copy; nothing about offsets moving back |
+| `batchSendOpMessage`, `transactionOpBatchInterval` | 3 | #10966 and #10967: a busy loop of the same service, not a clock step |
+| `transaction check`, `half message`, `valueOfCurrentMinusBorn` | 3 | #9640 (closed): checks of committed transactions under load; #9486, #11574, #11622: other causes |
+| `system time`, `clock`, `currentTimeMillis`, `time rollback`, `clock jump` | 3 | #9455 (closed): a broker that does not register after a forward and back jump; #6679: a client's subscription after a step back |
+| `transaction duplicate`, `transactional message delivered twice`, `delay message duplicate` | 3 | nothing |
+
 RESULTS_REST
 
 ## What hydo lacked
