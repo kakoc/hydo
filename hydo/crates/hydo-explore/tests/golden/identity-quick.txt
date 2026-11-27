@@ -160,6 +160,7 @@ input	hydo/onboard/examples/garage/hydo/checks/final_list	21da35f0b085563fb3bfb2
 input	hydo/onboard/examples/garage/hydo/checks/final_uploads	1e8ccda425abeeb2c2c6a7200432c401e44e466191aebb4f84030bb3c5e46803
 input	hydo/onboard/examples/garage/hydo/fetch-images.sh	dbc57fc2928b053cb3e663423a8ce1c7501faa58876f5e26b1e045921e4b2e29
 input	hydo/onboard/examples/garage/hydo/hydo-compose.lock.json	d936dbef371803c97a2c8e6d094ece78cc5aa16117ad3aafbf4d7af3e06463c3
+input	hydo/onboard/examples/garage/hydo/hydo-sqlite.yaml	8f03604f9b77ce9f5f06840abfdd133b71414061d42eca0ef79237fa92805cdd
 input	hydo/onboard/examples/garage/hydo/regressions/README.md	12626dbf5d05271968e602d2f27283b99d4e2df749d5cc83d8e4678a5ddf7664
 input	hydo/onboard/examples/garage/hydo/regressions/aborted-upload-listed-after-a-node-returns.schedule	b054dde0b664ee313997b45eaa2f1e607b38f44034bf4090ec882ee2528ccf2a
 input	hydo/onboard/examples/garage/hydo/regressions/copy-lost-after-a-backward-clock-step.schedule	455e9eaf0ff84660af963316d382775374c772fc1c217ebd1b72c47f370c4719

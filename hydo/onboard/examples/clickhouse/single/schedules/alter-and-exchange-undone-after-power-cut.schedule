@@ -1,0 +1,11 @@
+# A known bug (../../RESULTS.md, "One server: the table metadata after a power cut";
+# ClickHouse issue #111348, open, and its pull request #111405). Build ../hydo-metadata.yaml.
+# The power goes off right after ClickHouse answered EXCHANGE TABLES a AND b, about a second
+# after it answered ALTER TABLE t ADD COLUMN d. DatabaseAtomic swaps each table's new metadata
+# file into place with renameat2(RENAME_EXCHANGE) and does not sync the folder, so the recovery
+# boot loads the old files: the column d is gone and a holds 'a' again. metadata_kept fails
+# ("the acknowledged ADD COLUMN d is gone; the acknowledged EXCHANGE TABLES is undone (a holds
+# 'a')"), fingerprint 86516e86259630a9 on hvx with the image dd365579233483cf.
+#   hydo run <image> "$(tail -1 alter-and-exchange-undone-after-power-cut.schedule)"
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run C=2

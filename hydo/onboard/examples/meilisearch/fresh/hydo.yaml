@@ -1,0 +1,107 @@
+# Meilisearch v1.57.0 on a new database, and a power cut in its first seconds. The sync audit
+# (hydo rules scan --kind sync, Milestone 381) names the place: at every start Meilisearch writes
+# the database's VERSION file through a temporary file and a rename (create_version_file in
+# crates/meilisearch-types/src/versioning.rs), and syncs neither the file nor its folder. At a
+# later start an empty or missing VERSION in a database that is not empty stops Meilisearch.
+# ../RESULTS.md, "A new database and a power cut", says what it shows. The service is the one of
+# ../hydo/hydo.yaml. This folder is apart from ../hydo, so the image of ../hydo/hydo.yaml keeps
+# its bytes, and the test composer of ../hydo/workload does not run here.
+#
+# hydo syncs the guest's disks after provisioning, so the database that the service creates at
+# its first start is on the disk before any schedule. Here the kill of the schedule
+# (K=meilisearch@0+2) stops Meilisearch, step 1 removes the database, and the restart before
+# step 2 creates a new one, as a new deployment does. With --set fresh=no step 1 keeps the
+# database, and the restart only writes VERSION again.
+#
+#   sh ../build.sh            # bin/mlc-<arch>, the test client's readiness check
+#   sh ../hydo/fetch-images.sh   # the Meilisearch image by digest, into ../hydo/images/
+#   hydo build hydo.yaml      # in this folder; x86_64: hvx or KVM
+#   hydo run "disk=none | run K=meilisearch@0+2"         # OK
+#   hydo run "disk=cut | run K=meilisearch@0+2 C=4"      # the power goes off right after the first task's answer
+format: 1
+name: meilisearch-fresh
+description: "Meilisearch v1.57.0 on a new database: a task acknowledged in the database's first seconds stays, and Meilisearch starts again, after a power cut"
+hydo_version: "0.3"
+
+params:
+  arch: amd64     # amd64 | arm64: the client's architecture, the same as the image's
+  fresh: "yes"    # yes: step 1 removes the database, so the restart creates a new one; no: it keeps it
+
+guest:
+  ram_mib: 1536
+  clock_start: 1794873600   # 2026-11-17 00:00 UTC, the day of the import
+  clock_after_cut: 60
+
+data:
+  size_mib: 768   # the data disk (the fault target); Meilisearch's directory is a file system of its own on it
+
+root:
+  files:
+    - {src: "../bin/mlc-{{arch}}", dst: /bin/mlc, mode: "0755"}
+  text:
+    /etc/meili/fresh: "{{fresh}}"
+
+shell: |
+  # post <path> <json>: one POST to Meilisearch, the answer's body on stdout
+  post() { wget -q -T 20 -O - --header 'Content-Type: application/json' --post-data "$2" "http://127.0.0.1:7700$1"; }
+  # event <id>: the console record that a reaction A=<id>... waits for
+  event() { c=/dev/ttyS0; [ -c $c ] || c=/dev/console; echo "HYDO-ASSERT {\"t\":\"reachable\",\"id\":\"$1\",\"ok\":true,\"msg\":\"$1\",\"details\":{}}" > $c; }
+
+services:
+  # image getmeili/meilisearch:v1.57.0 = docker.io/getmeili/meilisearch@sha256:91bf09897482c17205c8faeca8daa8d57999fb9de20d862763cdfa92ba4ec790
+  #   linux/amd64: sha256:540676d5fdde739d8a3f276e700d8844893ddab292f694165de884f2091f4cc6
+  #   linux/arm64: sha256:ed87e30e7638d091520d0ecd0cca70e4ca62c770534a744dfb7bc6e5666b1ce1
+  - name: meilisearch
+    image: {x86_64: ../hydo/images/getmeili-meilisearch-v1.57.0-amd64.docker.tar, arm64: ../hydo/images/getmeili-meilisearch-v1.57.0-arm64-oci}
+    image_ref: "getmeili/meilisearch:v1.57.0"
+    cmd: [/bin/meilisearch, "--http-addr", "127.0.0.1:7700", "--db-path", /meili_data/data.ms, "--dump-dir", /meili_data/dumps, "--snapshot-dir", /meili_data/snapshots]
+    env:
+      MEILI_ENV: "development"
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_MAX_INDEXING_MEMORY: "256Mb"
+      MEILI_MAX_INDEXING_THREADS: "2"
+    port: 7700
+    ready: "timeout 5 /bin/mlc ready"
+    ready_timeout: 120
+    restart: "on-failure"
+    storage: {dir: vol/meili, size_mib: 512}
+    mounts:
+      - {src: /data/vol/meili, dst: /meili_data}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+
+# Step 1 runs while the schedule's K=meilisearch@0+2 keeps Meilisearch down: it removes the
+# database (with --set fresh=yes) and syncs, so that only the new database's own writes are at
+# risk. Step 3 enqueues one addition and writes its task's uid to $HYDO_ACKED once Meilisearch
+# answered 202. The other steps only wait.
+workload:
+  steps: 8
+  timeout: 120
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      case $i in
+        1) if [ "$(cat /etc/meili/fresh)" = yes ]; then rm -rf /data/vol/meili/data.ms; fi; sync ;;
+        3) out=$(post /indexes/docs/documents '[{"id":"d1","v":1}]') || exit 1
+           uid=$(echo "$out" | sed -n 's/.*"taskUid":\([0-9]*\).*/\1/p')
+           [ -n "$uid" ] || { echo "no task uid in: $out"; exit 1; }
+           echo "task:$uid" >> $HYDO_ACKED
+           event meili.fresh_acked ;;
+        *) sleep 1 ;;
+      esac
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: fresh_db
+    type: eventually
+    within: 60
+    msg: Meilisearch starts again on its database, and every task it acknowledged is in its queue
+    cmd: |
+      timeout 5 /bin/mlc ready || { echo "Meilisearch does not answer"; exit 1; }
+      for t in $(sed -n 's/^task://p' $HYDO_ACKED); do
+        wget -q -T 10 -O /dev/null "http://127.0.0.1:7700/tasks/$t" || { echo "the acknowledged task $t is gone"; exit 1; }
+      done
+      echo "Meilisearch answers, and every acknowledged task is there"
+
+faults: [kill, cut]

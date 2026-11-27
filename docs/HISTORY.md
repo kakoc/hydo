@@ -26357,3 +26357,98 @@ count is older than its list: `identity::local_outputs_are_no_inputs` reads git'
 recorded value moved: the scripted engine's runs, verdicts and minimal schedules are the
 goldens', and the pinned reproducers did not run, because no engine, image or guest program
 changed.
+
+## Milestone 384 (tentative number): the sync audit's new places, run in VMs
+
+Status: done on 2026-11-27 on the bare-metal machine (hvx) from this Mac, beside the 0.8.0
+re-recording pass, one VM at a time. Milestone 381 built the sync audit, `hydo rules scan --kind
+sync`. Its hand review named places that no finding of hydo's examples had named, and none of
+them had run (open item 193). This milestone ran each one that a workload can reach, in the
+order of the promise most likely broken. Each ran in a new manifest file or folder of its example,
+so every image of the examples keeps its bytes. Nothing recorded moved, and the fingerprint
+epoch stays as it was. Nothing was posted.
+
+**How it ran.** This tree's hydo ran on hvx over the guest files of the 0.6.0 release. Each
+example got one new manifest that reaches the place, and each place got the audit's schedules: a
+power cut of the guest (`C=` or `A=<event>+10:cut`) and one service's power loss (`L=` or
+`A=<event>+10:powerloss-<svc>`) right after the answer. Each verdict was judged by
+`docs/ONBOARDING-PLAYBOOK.md`, and each failure got the duplicate search. The Mac engine was not
+used: its lock was the user's, and every example here has an x86_64 image.
+
+**The results, per place:**
+
+| place | the run | verdict | label |
+|---|---|---|---|
+| Garage's SQLite adapter: WAL with `synchronous = NORMAL`, also with `metadata_fsync = true` | `garage/hydo/hydo-sqlite.yaml`: three nodes on SQLite, the example's workload | a power cut of the guest 10 ms after an acknowledged PutObject lost an acknowledged multipart upload; `C=20` lost 5 of 47 acknowledged operations and brought back an aborted upload. The LMDB image passed both. One node's power loss lost nothing | known: Garage #1571 (open) reports it on one node |
+| ClickHouse's `renameExchange` of table metadata | `clickhouse/single/hydo-metadata.yaml`: `ALTER TABLE ADD COLUMN`, then `EXCHANGE TABLES`, one server | a power cut right after either answer, and 3 s after, reverted both | known: ClickHouse #111348 and pull request #111405 (open) |
+| ClickHouse's local object storage's publish | not run | `LocalObjectStorage` serves only a disk of the type `local_blob_storage`, which no example uses | the class is known: #111330 (object storage disks ignore the fsync settings) |
+| Meilisearch's `VERSION` file | `meilisearch/fresh/hydo.yaml`: a kill, the database removed, a new database at the restart, one task, a power cut | every start after the cut stops with `failed to infer the version of the database`; one service's power loss does the same; with the database kept the schedule passes | known and never reproduced upstream: Meilisearch #4584 and #6202 (closed) |
+| Kvrocks's `CreateBackup` | `kvrocks/backup/hydo.yaml`: one node, `BGSAVE` twice, each waited for until `INFO persistence` reports it done and `ok` | a power cut right after the second backup was reported done, 10 ms after it, and one node's power loss each left the first backup in `backup-dir` and the second in `backup.tmp` | new as far as the search found, minor: the live database kept every write |
+| SWUpdate's GRUB environment (`grubenv_write`) | not run: the example's SWUpdate is built for U-Boot in Docker, which the bare-metal machine lacks | read from the code: the block is written with `fwrite` and renamed before `fclose` flushes it, and nothing syncs, so a power cut can leave an empty `grubenv` | fixed on `master` by `d294ee7113` (2026-10-13), in no release (2026.05.2 lacks it) |
+| SWUpdate's delta handler (`install_delta`) | not run | a false place of the audit: the file it writes is `/dev/null`; the chained handler writes the image. On `master` the raw handler syncs since `76876a3bad` (2026-10-14) | none |
+| Vikunja's file attachments (`localStorage.Write`) | not run: the example's walk uploads no file, and its SQLite in WAL mode with `synchronous=NORMAL` loses the attachment's row too (finding 1) | read from the code: the file is written to a temporary name, closed, and renamed, with no sync; with PostgreSQL or MySQL a power cut can leave a row whose file is empty or missing. `main` has the same code | a candidate from the code; the duplicate search found nothing |
+
+**What each run showed.**
+
+- *Garage.* `hydo-sqlite.yaml` is `hydo.yaml` with `db_engine = "sqlite"` in the nodes'
+  configuration, the build parameter `fsync = true`, and the same workload and checks. The image
+  `ce8592a991f3bf6a` gave OK without faults (`c02cf3d733856138`), `fcd596d9e0a8c850` twice for
+  `disk=cut | run A=garage.put_acked@10+10:cut` (`objects.acked-outcome`: `mpu.k93`
+  acknowledged and gone), and `baf58af8f496c189` for `disk=cut | run C=20`. The image of
+  `hydo.yaml` built for hvx (`0e42f5bed445cad9`) passed both schedules, with 93 and 47 judged
+  operations. On a first build of the file, `L=garage1@20+3` broke only the listing (finding 2
+  of the example), and `powerloss-garage1` 10 ms after an answer passed: the two other nodes
+  hold every acknowledged write. The schedule is saved as
+  `garage/schedules/sqlite-acked-writes-lost-at-a-power-cut.schedule`.
+- *ClickHouse.* The image `dd365579233483cf` gave OK without faults (`86c85c691fbe72a2`). `C=1`
+  after the `ADD COLUMN` (`4855fa01f5e06905`), `C=2` after the `EXCHANGE TABLES`
+  (`86516e86259630a9`) and `C=5`, 3 s later (`5ddd5e7b217a3e8d`), each failed `metadata_kept`:
+  the column was gone and the tables held their old data. `C=2` gave its fingerprint twice, and
+  is saved as `single/schedules/alter-and-exchange-undone-after-power-cut.schedule`.
+- *Meilisearch.* hydo syncs the guest's disks after provisioning, so the database that a service
+  creates at its first start is on the disk before any schedule. The variant `fresh/` creates a
+  new database inside the workload with the schedule's own kill. The image `999ebd681046eb44`
+  gave OK without a cut (`363a1da216c220fc`), `3a1aec7c61e5c7fc` for `C=4`, `c65342bdd07daf8f`
+  for the audit's `A=meili.fresh_acked@3+10:cut`, and an ERROR for its `powerloss-meilisearch`.
+  The image built with `--set fresh=no` passed `C=4` (`1d1aed836a03780a`). `C=4` gave its
+  fingerprint twice, and is saved as `fresh/schedules/new-database-unstartable-after-power-cut.schedule`.
+- *Kvrocks.* The image `dc4a818382fb5721` gave OK without faults (`ddd078da6ee98f6c`).
+  `disk=cut | run C=2` (`2b2723bd64d5179b`, twice), the audit's
+  `A=kvrocks.backup_acked@1+10:cut` (`08b66468d0466959`) and its
+  `A=kvrocks.backup_acked@1+10:powerloss-kv1` (`ef93a19e44087896`) each failed `backup_kept`:
+  `backup-dir` held the first backup, and `backup.tmp` the second, with `bk:second`.
+  `CreateBackup` destroys the old backup and renames the checkpoint into place, and syncs no
+  folder; the unlinks and the rename were in one uncommitted journal transaction, so the cut kept
+  the old backup. `C=5`, 3 s after the report, failed the same way (`9e2c39a5ba0b7653`). The
+  schedule is saved as
+  `kvrocks/backup/schedules/backup-older-after-power-cut.schedule`.
+
+**What the runs taught about the audit.**
+
+- Every one of the four places that a workload reached broke its promise under the audit's own
+  kinds of schedules, at the first try. Three were known bugs, and the Meilisearch one had never
+  been reproduced by its maintainers. The fourth, Kvrocks's backup, is new.
+- Run with the manifest (`--manifest`), the audit found no event for Garage and for
+  `meilisearch/hydo/hydo.yaml`: their clients live in `client/`, beside `hydo/`, and the audit
+  reads the events only in the folder of `hydo.yaml`. So it proposed `L=<service>@<step>+3` and
+  `C=<step>` at the middle step. For Garage it kept `<service>`, because three services run the
+  place. The Garage schedules here were aimed by hand at the client's event `garage.put_acked`.
+  For `meilisearch/fresh/hydo.yaml` it proposed `L=meilisearch@4+3` and `C=4`; `C=4` is the
+  schedule that broke.
+- A place at a database's first start is out of reach of every schedule, because hydo syncs
+  after provisioning. Its schedule needs a workload that makes the state anew, as `fresh/` does.
+- One false place: SWUpdate's delta handler writes to `/dev/null`.
+
+**Tests.** In a copy of the tree on the bare-metal machine, with an index of its tracked files:
+`sh ci/vale.sh` found nothing, `cargo test -p hydo-agents --test it` passed (16 tests), and
+`cargo test -p hydo --test it -- equivalence:: agents_equivalence:: docs::` passed (23 tests).
+The copy has no `AGENTS.local.md`, so `public_content::` checked the generic patterns, and a
+`grep` of the listed values found none in the new text. No regression file was added to a
+`regressions/` folder. The explorer's corpus and identity goldens list the manifests they were
+recorded from, and `garage/hydo/hydo-sqlite.yaml` is a new one. They were recorded again with
+`HYDO_BLESS=1` (corpus quick and full, identity quick and full), and each gained only that input
+line; the schedules did not change, and the four tests then passed without `HYDO_BLESS`. The
+other new manifests are in folders of their own, which the corpora do not read. The
+controller's quick corpus test passed unchanged (2 tests, 47 minutes). No Rust code changed.
+
+**What is left** is in open item 193.

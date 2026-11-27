@@ -26,6 +26,11 @@ the task queue promises across kills, power cuts, disk faults, and clock steps.
      kill between the two commits, a deletion that took effect ends `failed` with
      `index_not_found`, and a creation `failed` with `index_already_exists`. hydo's claim
      `acked_outcome` found both from the tasks' final states and effects.
+  5. **Known and never reproduced upstream (#4584, #6202): a new database does not start again
+     after a power cut in its first seconds** (Milestone 384). Meilisearch writes the database's
+     `VERSION` file through a temporary file and a rename and syncs neither. After a power cut
+     right after the first task's `202`, every start stops with `failed to infer the version of
+     the database`. The variant `fresh/` shows it on hvx.
 - **What held?** No acknowledged task was lost from the queue, and the tasks of each index ran in
   the order of their uids. Kills and pauses of the service and clock steps of 30 s to a year
   broke no check in 75 blind schedules and the directed ones. The settings were those of the
@@ -317,6 +322,58 @@ are missing, and the claim says `ended succeeded, but its effect is not there`. 
 `A=meili.add_acked@20+40:cut` the additions succeeded with `indexedDocuments` 0 and their
 documents are stored, so the claim held there; only `final_tasks` counts that as broken.
 
+### 5. Known, never reproduced upstream: a new database does not start again after a power cut
+
+**Label: a known bug.** Issue [#4584](https://github.com/meilisearch/meilisearch/issues/4584)
+(2024, closed in 2025 because nobody could reproduce it) reports a new database whose `VERSION`
+file was empty, and guesses "a disk sync or something". Issue
+[#6202](https://github.com/meilisearch/meilisearch/issues/6202) (closed) reports the same on
+Kubernetes. Its fix, pull request #6275, changed only the error message. Nothing was posted.
+
+**Why it ran.** The sync audit (`hydo rules scan --kind sync`, Milestone 381) lists
+`create_version_file` (`crates/meilisearch-types/src/versioning.rs`, line 27): a write that no
+sync follows, and a rename into place without a sync of the folder. hydo syncs the guest's disks
+after provisioning, so the database that `hydo/hydo.yaml`'s service creates at its first start is
+on the disk before every schedule. No run of the example met the place.
+
+**The variant.** `fresh/hydo.yaml` runs the service of `hydo/hydo.yaml` with a workload of its
+own. The schedule's `K=meilisearch@0+2` keeps Meilisearch down during steps 0 and 1. Step 1
+removes the database and syncs, and the restart before step 2 creates a new database, as a new
+deployment does. Step 3 enqueues one document addition and records its task's uid after the
+`202`. The check `fresh_db` says that Meilisearch answers again and that every acknowledged task
+is in its queue. With `--set fresh=no` step 1 keeps the database.
+
+On hvx, with this tree's hydo and the image `999ebd681046eb44`:
+
+| schedule | verdict | fingerprint |
+|---|---|---|
+| `disk=none \| run K=meilisearch@0+2` | OK | `363a1da216c220fc` |
+| `disk=cut \| run K=meilisearch@0+2 C=4`, right after the task's `202` | `VIOLATION service cannot recover (committed data unrecoverable) (meilisearch)` | `3a1aec7c61e5c7fc`, twice |
+| `disk=cut \| run K=meilisearch@0+2 A=meili.fresh_acked@3+10:cut`, the audit's cut 10 ms after the answer | the same violation | `c65342bdd07daf8f` |
+| `disk=cut \| run K=meilisearch@0+2 A=meili.fresh_acked@3+10:powerloss-meilisearch`, the audit's power loss of the service | `ERROR`: Meilisearch does not start again after its power loss, with the same log line | `97f757a448812aad` |
+| `disk=cut \| run K=meilisearch@0+2 C=4` on the image built with `--set fresh=no` (`ef1a5a466e81d1f1`) | OK | `1d1aed836a03780a` |
+
+In the recovery boot every start of Meilisearch exits with status 1 and the log line
+`Meilisearch (v1.57.0) failed to infer the version of the database`. The schedule is saved as
+`fresh/schedules/new-database-unstartable-after-power-cut.schedule`.
+
+**The cause in the code** (the tag of v1.57.0, and `main` at `9fb6a904` on 2026-11-27):
+
+- At every start `open_or_create_database_unchecked` (`crates/meilisearch/src/lib.rs`, line 474)
+  calls `create_current_version_file`. It writes the version into a `NamedTempFile` in `data.ms`,
+  calls `flush`, which syncs nothing, and `persist`, a rename.
+- A new database's `VERSION` is a new name in the folder. The other files of the database are
+  LMDB's, which syncs at each commit. On ext4 such a sync commits the journal, and with it the
+  rename of `VERSION`. The data of `VERSION` is written only when the kernel writes it back,
+  about 30 s later. So a power cut in the first 30 s leaves `VERSION` empty or missing.
+- At the next start `is_empty_db` sees a folder that is not empty, so `check_version` reads
+  `VERSION`. `get_version` returns `MissingVersionFile` for an empty or missing file, and
+  Meilisearch exits. Every acknowledged task of the new database is out of reach until an
+  operator writes the file by hand.
+- An existing database rewrites `VERSION` at every start through the same rename over the old
+  file. ext4 writes the new file's data before such a rename commits, so a later cut leaves the
+  old or the new version.
+
 ## The duplicate searches
 
 `gh search issues --include-prs` over meilisearch/meilisearch, open and closed, on 2026-11-17,
@@ -337,6 +394,17 @@ and the discussions of meilisearch/meilisearch and meilisearch/product:
 | discussions: swap, crash; product: swap indexes | product#834, #814, #79, #607, #585: no crash case |
 
 `crates/file-store/src/lib.rs` and `process_dump_creation.rs` have no sync on `main` either.
+
+The phrases of finding 5 were searched on 2026-11-27 with the same command:
+
+| phrase | found |
+|---|---|
+| `VERSION file`, `version file` | #4584 (closed 2025, not reproduced): a new database with an empty `VERSION`, "We could have missed a disk sync or something". #6202 (closed): an empty `VERSION` on Kubernetes, fixed by #6275, which changed only the error. #6249 (closed): another fix of the message. #5280, #3069, #2166: other causes |
+| `failed to infer the version of the database` | #2503, #4917, #2389, #2292: upgrades and dumps; #6258: a panic on virtiofs |
+| `MissingVersionFile`, `data.ms VERSION` | #6202, #6249, #6275 |
+| `VERSION file empty`, `version file power`, `VERSION file missing`, `version file corrupted`, `startup failure VERSION`, `Kubernetes VERSION empty`, `new database power`, `first start crash`, `fsync VERSION`, `NamedTempFile persist sync`, `power outage` | nothing |
+| `power loss` | #6749 (open): findings 2 and 3 of this page |
+| `create_version_file` | #1860 (2021): the design of the file |
 
 ## The explorations
 

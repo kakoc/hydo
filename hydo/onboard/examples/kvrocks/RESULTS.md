@@ -10,7 +10,7 @@ and looks for bugs that nobody reported.
 
 ## The short answers
 
-- **What was found?** Two new candidates. Nothing was posted.
+- **What was found?** Three new candidates. Nothing was posted.
   1. **New: a node that has just rejoined by a full synchronization does not start again after
      a power loss.** The replica writes the checkpoint's files (SST files, the MANIFEST,
      `CURRENT`, a WAL) without a sync, renames them into place, and destroys its old database. A
@@ -26,6 +26,10 @@ and looks for bugs that nobody reported.
      last one, and an idle master forces none. The master's `INFO replication` reports a lag for
      both replicas for as long
      (`regressions/wait-answers-0-after-a-backward-clock-step.schedule`).
+  3. **New, minor: a backup that `BGSAVE` reported done and `ok` is the older one after a power
+     cut** (Milestone 384). The new backup is renamed into place after the old one is
+     destroyed, and no sync of the folder follows. The variant `backup/` shows it on hvx with
+     `disk=cut | run C=2`; the live database keeps every write.
 - **What held?** With `rocksdb.write_options.sync yes` and `use-rsid-psync yes`, every write that
   `WAIT 2` confirmed stayed as acknowledged, also across failovers and the late writes of a client
   that had not learned of a failover yet. That held through kills, pauses, partitions and one-way
@@ -253,6 +257,48 @@ replicas behind for as long. The general idea of reading a monotonic clock was d
 
 **No native run.** The cause is plain in the code.
 
+### 3. New, minor: a backup that BGSAVE reported done is the older one after a power cut
+
+This finding comes from Milestone 384, on hvx. The sync audit (`hydo rules scan --kind sync`,
+Milestone 381) lists `Storage::CreateBackup` (`src/storage/storage.cc`, line 445): a rename into
+place that no sync of the folder follows, after the old backup is destroyed.
+
+**The variant.** `backup/hydo.yaml` runs the node `kv1` of `hydo/hydo.yaml` alone, with
+`rocksdb.write_options.sync yes`. Step 0 writes `bk:first`, runs `BGSAVE`, waits until `INFO
+persistence` reports `bgsave_in_progress:0` and `last_bgsave_status:ok`, and syncs the disks.
+Step 1 writes `bk:second`, runs `BGSAVE` again, waits the same way, and records the backup as
+acknowledged. The check `backup_kept` says that the backup in `backup-dir` then holds
+`bk:second`. On hvx, with this tree's hydo and the image `dc4a818382fb5721`:
+
+| schedule | verdict | fingerprint |
+|---|---|---|
+| `disk=none \| run` | OK | `ddd078da6ee98f6c` |
+| `disk=cut \| run C=2`, right after the second backup was reported done | `VIOLATION [backup_kept]`: `backup-dir holds an older backup, without bk:second` | `2b2723bd64d5179b`, twice |
+| `disk=cut \| run A=kvrocks.backup_acked@1+10:cut`, the audit's cut 10 ms after the report | the same violation | `08b66468d0466959` |
+| `disk=cut \| run A=kvrocks.backup_acked@1+10:powerloss-kv1`, the audit's power loss of the node | the same violation | `ef93a19e44087896` |
+| `disk=cut \| run C=5`, 3 s after the report | the same violation | `9e2c39a5ba0b7653` |
+
+In the recovery boot `backup/` holds the first backup, with a WAL of 150 bytes, and
+`backup.tmp/` holds the second, with a WAL of 227 bytes that has `bk:second`. The live database
+kept both writes. The schedule is saved as `backup/schedules/backup-older-after-power-cut.schedule`.
+
+**The cause** (the tag of v2.17.0, and `unstable` at `d5e0ce4a` on 2026-11-27):
+
+1. `CreateBackup` makes a RocksDB checkpoint in `<backup-dir>.tmp`, then destroys the old
+   backup with `rocksdb::DestroyDB(task_backup_dir)` and renames the checkpoint into place with
+   `env_->RenameFile(tmpdir, task_backup_dir)`. It syncs no folder after the two.
+2. `AsyncBgSaveDB` (`src/server/server.cc`, line 1678) then sets `last_bgsave_status` to `ok`,
+   which `INFO persistence` and `LASTSAVE` report.
+3. On ext4 the unlinks and the rename reach the disk when the journal commits, by default within
+   5 s or at the next sync of any file. A power cut before that leaves the old backup in place
+   and the new one under `backup.tmp`. The next `BGSAVE` starts with `DestroyDB(tmpdir)`, which
+   removes it. A sync of another file between the destruction and the rename, for example a
+   client's write with `rocksdb.write_options.sync yes`, would leave no backup at all; no run
+   showed that.
+
+The live database is not affected, so the loss is a backup that an operator believes is newer
+than it is, for example before `kvrocksrestore` or a copy to other storage. Nothing was posted.
+
 ### Not bugs
 
 - **A mistake of the expiry check.** In e4, `T=17:-648000` alone failed `writes.acked-outcome`:
@@ -288,6 +334,16 @@ replicas behind for as long. The general idea of reading a monotonic clock was d
 | `WAIT replica`, `WAIT command`, `sendReplConfAck`, `replconf ack` | #3061, #3075, #3117, #3220 (the `WAIT` features), #3157 and #3197 (flaky tests); none about the clock |
 | `last_ack_time`, `WAIT returns 0`, `WAIT timeout replica`, `replication lag wrong` | nothing |
 | `system clock`, `time jump`, `ntp`, `clock` | #1466 (a proposal to read `steady_clock`, closed), #983, #1038; none about the ack |
+
+The phrases of finding 3 were searched on 2026-11-27 with the same command:
+
+| phrase | what it found |
+|---|---|
+| `bgsave` | #1344 (a `BACKUP` command, open), #3057 (a lightweight `BGSAVE`, closed), #1702 (`LASTSAVE`): none about a power cut |
+| `backup-dir` | #1478 (backups to S3, open), #82 (the `kvrocksrestore` tool), #1026, #2186: none about a sync |
+| `RenameFile` | #3559: a race of the full synchronization's checkpoint with the purge of backups; another cause |
+| `power loss`, `fsync` | #3827 (finding 1 of this page), #3710 and #3712 (`CONFIG REWRITE`), #3602 and #3603 (`FLUSHWAL`) |
+| `CreateBackup`, `backup.tmp`, `backup power`, `backup crash`, `backup sync`, `backup fsync`, `backup rename`, `backup lost`, `backup directory missing`, `DestroyDB backup`, `bgsave power` | nothing |
 
 ## What held, and why
 

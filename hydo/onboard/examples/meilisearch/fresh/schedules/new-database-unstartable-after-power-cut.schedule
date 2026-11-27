@@ -1,0 +1,13 @@
+# A known bug that nobody reproduced upstream (../../RESULTS.md, finding 5; Meilisearch issues
+# #4584 and #6202, closed). Build ../hydo.yaml. The kill keeps Meilisearch
+# down during steps 0 and 1, step 1 removes its database, and the restart before step 2 creates a
+# new one, whose VERSION file Meilisearch writes through a temporary file and a rename without a
+# sync. Step 3 enqueues a document addition, and the power goes off right after its 202. The
+# recovery boot's Meilisearch stops at every start with "failed to infer the version of the
+# database": VERSION is empty or missing in a database that is not empty. The run ends with
+# "VIOLATION service cannot recover (committed data unrecoverable) (meilisearch)", fingerprint
+# 3a1aec7c61e5c7fc on hvx with the image 999ebd681046eb44. With --set fresh=no (the database
+# kept, VERSION written again over the old file) the schedule passes.
+#   hydo run <image> "$(tail -1 new-database-unstartable-after-power-cut.schedule)"
+# expect: violation      (change to ok when the bug is fixed)
+disk=cut | run K=meilisearch@0+2 C=4

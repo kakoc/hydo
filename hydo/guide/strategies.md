@@ -1279,9 +1279,10 @@ is the exploration that drew most of them.
   the write is on the disk. Examples are a file written without `fsync`, a rename without a sync
   of its folder, and a setting that turns syncing off. Each place gets one service's power loss
   and a power cut of the guest, right after the answer that follows it.
-- **Yield.** No bug first: the audit came after the findings that it names. Use it as a reading aid.
-  Its places suggest directed power cuts, and its list says which acknowledgements to aim a reaction
-  at.
+- **Yield.** The audit came after the findings that it names. Its own schedules then found 1 new
+  candidate first (Kvrocks's backup) and reached 3 known bugs at the first try. Use it as a
+  reading aid: its places suggest directed power cuts, and its list says which acknowledgements
+  to aim a reaction at.
 - **What to write.** Run the audit, give the service of the place `storage:`, and run its
   schedules with `hydo explore --schedule`. With an event of an answered write in the workload, a
   schedule reads `disk=cut | run A=nsq.pub_acked+10:powerloss-nsqd` (`hydo guide faults`,
@@ -1302,10 +1303,26 @@ is the exploration that drew most of them.
   - Mender (finding 1): the version file synced while its bytes are still in the stream.
   - Garage (finding 3): the peer list written without a sync, once a minute.
   - ClickHouse (finding 1): `fsync_after_insert` and the merge's fsync off by default.
+
+  Its own schedules then reached places that no earlier finding had named, each at the first
+  try, on hvx:
+  - Garage with its SQLite engine: a power cut 10 ms after an acknowledged PutObject lost an
+    acknowledged upload, also with `metadata_fsync = true`. The LMDB engine passed the same
+    schedule. Known as Garage #1571.
+  - ClickHouse: a power cut right after an `ALTER TABLE ADD COLUMN` or an `EXCHANGE TABLES`
+    reverted it. Known as ClickHouse #111348.
+  - Meilisearch: a new database does not start again after a power cut in its first seconds,
+    because its `VERSION` file is not synced. Meilisearch #4584 reported it and closed it because
+    nobody could reproduce it.
+  - Kvrocks, new: a backup that `BGSAVE` reported done is the older one after a power cut,
+    because the new backup is renamed into place without a sync of the folder.
 - **What it misses.** It reads text. A write through an interface, a sync in another thread, or a
   library that the project does not hold (rclone, RocksDB) is not followed. A place is a fact of
   the code: a relaxed default that the project documents is a trade-off, and `hydo explore
-  --configs` labels it so.
+  --configs` labels it so. It reads a workload's events only in the folder of `hydo.yaml`, so a
+  client in another folder gets schedules at a step; aim them at its event by hand. A place at a
+  service's first start needs a workload that makes the state anew, because hydo syncs the disks
+  after provisioning.
 - **Cost.** Seconds for most projects, about a minute for ClickHouse. Each schedule is one
   recovery boot, on every engine.
 
@@ -1558,7 +1575,7 @@ Keep these techniques for later in an onboarding, for the use that each row name
 | technique | tries | what it found | keep it for |
 |---|---|---|---|
 | the clock audit (`hydo rules scan --kind clock`) | 12 examples with a recorded outcome | no bug; it missed the clock bugs of 6 examples and named no place in 4 | reading: directed clock steps at the places it names |
-| the sync audit (`hydo rules scan --kind sync`) | written after the findings it names | no bug first | reading: directed power cuts after the answers it names |
+| the sync audit (`hydo rules scan --kind sync`) | written after the findings it names; 8 new places, 4 run in VMs | 1 minor new candidate (Kvrocks's backup) and 3 known bugs | reading: directed power cuts after the answers it names |
 | the scan of write routes (`--kind writes`) | 6 examples | no bug; no route in 3 | the workload's list of operations |
 | the swarm strategy | 620 schedules, 19 examples | 2 bugs first; most failures were disk faults | a later round, with `--durable-only` |
 | timing and forced preemption points on services | 90 schedules, 3 examples | nothing first | flaky tests |
