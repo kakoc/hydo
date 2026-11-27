@@ -49,81 +49,70 @@ archives, their checksums, and hydo's own kernel module for Intel machines.
 
 ## What hydo found in real projects
 
-Most bugs in these systems need a rare moment: a crash in one particular millisecond, a power
-cut, or a clock that jumps. Ordinary tests almost never hit that moment. hydo makes such moments
-on purpose, and then repeats the exact run as often as you like. Each project's folder in
-[`hydo/onboard/examples/`](hydo/onboard/examples/) has hydo's setup for it, so you can see each bug happen yourself.
+Each project's folder in [`hydo/onboard/examples/`](hydo/onboard/examples/) has hydo's setup for it, so you can see
+each bug happen yourself.
 
 **New bugs that hydo found and reported to each project:**
 
-- **[ClickHouse](hydo/onboard/examples/clickhouse/):** after a power cut, a change to a table's columns gets stuck
-  for good, and every later change to that table waits behind it
-  ([#134373](https://github.com/ClickHouse/ClickHouse/issues/134373)).
-- **[RabbitMQ](hydo/onboard/examples/rabbitmq/):** a message that RabbitMQ confirmed is lost for good when one server
-  loses power while another one is paused ([#18515](https://github.com/rabbitmq/rabbitmq-server/issues/18515)).
-- **[Microsoft Garnet](hydo/onboard/examples/garnet/):** when data moves to another server and that server's backup
+- **[ClickHouse](hydo/onboard/examples/clickhouse/)**: after a power cut, a change to a table's columns gets stuck for
+  good, and every later change to that table waits behind it ([#134373](https://github.com/ClickHouse/ClickHouse/issues/134373)).
+- **[RabbitMQ](hydo/onboard/examples/rabbitmq/)**: a message that RabbitMQ confirmed is lost for good when one server
+  loses power while another one is paused ([#18515](https://github.com/rabbitmq/rabbitmq-server/issues/18515)). After the
+  clock is set back, a stream has no server to write to for that long
+  ([#18516](https://github.com/rabbitmq/rabbitmq-server/issues/18516)).
+- **[Microsoft Garnet](hydo/onboard/examples/garnet/)**: when data moves to another server and that server's backup
   takes over right after, part of the data has no server that answers for it, for good
-  ([#2440](https://github.com/microsoft/garnet/issues/2440)). A backup server stops copying its main server after
-  that one restarts, and still reports that it is in sync ([#2441](https://github.com/microsoft/garnet/issues/2441)).
-- **[Redpanda](hydo/onboard/examples/redpanda/):** a transaction can be saved in one place and dropped in another,
-  and a confirmed write can be lost. Redpanda confirmed both and fixed them
+  ([#2440](https://github.com/microsoft/garnet/issues/2440)). A backup server stops copying its main server after that one
+  restarts, and still reports that it is in sync ([#2441](https://github.com/microsoft/garnet/issues/2441)).
+- **[Redpanda](hydo/onboard/examples/redpanda/)**: a transaction can be saved in one place and dropped in another, and
+  a confirmed write can be lost. Redpanda confirmed both and fixed them
   ([#395](https://github.com/redpanda-data/community/issues/395), [#396](https://github.com/redpanda-data/community/issues/396)).
-- **[Apache Pulsar](hydo/onboard/examples/pulsar/):** after a server restart, the unfinished transaction of a client
+- **[Apache Pulsar](hydo/onboard/examples/pulsar/)**: after a server restart, the unfinished transaction of a client
   that crashed holds back every message after it ([#27749](https://github.com/apache/pulsar/issues/27749)).
-- **[Apache Kvrocks](hydo/onboard/examples/kvrocks/):** a backup server that has just copied all the data from its
-  main server does not start again after a power cut ([#3827](https://github.com/apache/kvrocks/issues/3827)).
-- **[Typesense](hydo/onboard/examples/typesense/):** a server that restarts repeats a delete in the wrong order and
-  loses documents that it had saved ([#3202](https://github.com/typesense/typesense/issues/3202)).
-- **[Meilisearch](hydo/onboard/examples/meilisearch/):** after a crash, a swap of two indexes runs a second time and
-  undoes itself ([#6743](https://github.com/meilisearch/meilisearch/issues/6743)). A power cut empties an upload
-  that Meilisearch had accepted ([#6749](https://github.com/meilisearch/meilisearch/issues/6749)).
-- **[Prometheus](hydo/onboard/examples/prometheus/):** a backup snapshot leaves out data that arrived late
+- **[Apache Kvrocks](hydo/onboard/examples/kvrocks/)**: a backup server that has just copied all the data from its main
+  server does not start again after a power cut ([#3827](https://github.com/apache/kvrocks/issues/3827)).
+- **[VictoriaMetrics](hydo/onboard/examples/victoriametrics/)**: after the clock is set back, every server deletes the
+  current month's data. Fixed ([#11973](https://github.com/VictoriaMetrics/VictoriaMetrics/issues/11973)).
+- **[Typesense](hydo/onboard/examples/typesense/)**: a server that restarts repeats a delete in the wrong order and
+  loses documents that it had saved ([#3202](https://github.com/typesense/typesense/issues/3202)). After the clock is set
+  back, the cluster does not replace a failed leader for that long
+  ([#3203](https://github.com/typesense/typesense/issues/3203)).
+- **[Meilisearch](hydo/onboard/examples/meilisearch/)**: after a crash, a swap of two indexes runs a second time and
+  undoes itself ([#6743](https://github.com/meilisearch/meilisearch/issues/6743)). A power cut empties an upload that
+  Meilisearch had accepted ([#6749](https://github.com/meilisearch/meilisearch/issues/6749)).
+- **[Prometheus](hydo/onboard/examples/prometheus/)**: a backup snapshot leaves out data that arrived late
   ([#20547](https://github.com/prometheus/prometheus/issues/20547)).
-- **[NSQ](hydo/onboard/examples/nsq/):** a crash in the first seconds of a new queue loses the messages it had
+- **[Dragonfly](hydo/onboard/examples/dragonfly/)**: after the clock is set back, a restart loads an older copy of the
+  data ([#8826](https://github.com/dragonflydb/dragonfly/issues/8826)).
+- **[Temporal](hydo/onboard/examples/temporal/)**: after the clock is set back, one database crash leaves the server
+  without its database for that long ([#13099](https://github.com/temporalio/temporal/issues/13099)).
+- **[Valkey](hydo/onboard/examples/valkey/)**: after the clock is set back, copying data to a backup server waits for
+  that long ([#5406](https://github.com/valkey-io/valkey/issues/5406)).
+- **[Restate](hydo/onboard/examples/restate/)**: after the clock is set back and a restart, accepted work waits for
+  that long ([#5951](https://github.com/restatedev/restate/issues/5951)).
+- **[NSQ](hydo/onboard/examples/nsq/)**: a crash in the first seconds of a new queue loses the messages it had
   accepted ([#1542](https://github.com/nsqio/nsq/issues/1542)).
-- **[SurrealKV](hydo/onboard/examples/surrealdb/):** one damaged byte on the disk makes it lose later data that it
-  had saved ([#536](https://github.com/surrealdb/surrealkv/issues/536)).
+- **[SurrealKV](hydo/onboard/examples/surrealdb/)**: one damaged byte on the disk makes it lose later data that it had
+  saved ([#536](https://github.com/surrealdb/surrealkv/issues/536)).
+- **[Saleor](hydo/onboard/examples/saleor/)**: a refund can be lost, and a gift card can be charged for an order that
+  stays unpaid ([#20022](https://github.com/saleor/saleor/issues/20022), [#20023](https://github.com/saleor/saleor/issues/20023)).
+- **[Blnk](hydo/onboard/examples/blnk/)**: payments can go past their overdraft limit ([#437](https://github.com/blnkfinance/blnk/issues/437)), and
+  a batch that must be all or nothing can be half done ([#438](https://github.com/blnkfinance/blnk/issues/438)).
+- **[Lago](hydo/onboard/examples/lago/)**: one month can be billed twice ([#7164](https://github.com/getlago/lago-api/issues/7164)).
+- **[Hatchet](hydo/onboard/examples/hatchet/)**: after a crash, work that Hatchet had accepted never runs
+  ([#5527](https://github.com/hatchet-dev/hatchet/issues/5527)).
+- **[Formance Ledger](hydo/onboard/examples/formance-ledger/)**: two payments that use a new account at the same moment
+  can make one of them fail ([#2542](https://github.com/formancehq/ledger/issues/2542)).
 
-**When a server's clock is set back.** Servers correct their clocks all the time, and a
-correction can move a clock back by seconds or hours. hydo found that after such a correction:
+**Known bugs that showed up rarely, and with hydo show up on every run:**
 
-- every [VictoriaMetrics](hydo/onboard/examples/victoriametrics/) server deletes the current month's data
-  ([#11973](https://github.com/VictoriaMetrics/VictoriaMetrics/issues/11973), fixed);
-- a [Typesense](hydo/onboard/examples/typesense/) cluster does not replace a failed leader for as long as the clock
-  was set back ([#3203](https://github.com/typesense/typesense/issues/3203));
-- a [RabbitMQ](hydo/onboard/examples/rabbitmq/) stream has no server to write to for that long
-  ([#18516](https://github.com/rabbitmq/rabbitmq-server/issues/18516));
-- [Dragonfly](hydo/onboard/examples/dragonfly/) loads an older copy of its data after a restart
-  ([#8826](https://github.com/dragonflydb/dragonfly/issues/8826));
-- [Temporal](hydo/onboard/examples/temporal/) cannot use its database after one database crash
-  ([#13099](https://github.com/temporalio/temporal/issues/13099)), [Valkey](hydo/onboard/examples/valkey/) delays copying its data to its backup servers
-  ([#5406](https://github.com/valkey-io/valkey/issues/5406)), and [Restate](hydo/onboard/examples/restate/) holds back work it has accepted
-  ([#5951](https://github.com/restatedev/restate/issues/5951)).
-
-**Money and orders.** hydo also checks rules that you write about your own business, for example that
-a refund is never lost. With such rules it found that [Saleor](hydo/onboard/examples/saleor/) can lose a refund
-or charge a gift card for an order that stays unpaid
-([#20022](https://github.com/saleor/saleor/issues/20022), [#20023](https://github.com/saleor/saleor/issues/20023)).
-[Blnk](hydo/onboard/examples/blnk/) can let payments go past their overdraft limit
-([#437](https://github.com/blnkfinance/blnk/issues/437)) and keep half of a batch that must be all or nothing
-([#438](https://github.com/blnkfinance/blnk/issues/438)).
-[Lago](hydo/onboard/examples/lago/) can bill one month twice ([#7164](https://github.com/getlago/lago-api/issues/7164)). Rules like
-these found bugs in [Hatchet](hydo/onboard/examples/hatchet/)
-([#5527](https://github.com/hatchet-dev/hatchet/issues/5527)) and [Formance Ledger](hydo/onboard/examples/formance-ledger/)
-([#2542](https://github.com/formancehq/ledger/issues/2542)).
-
-**Known bugs that were hard to see.** These bugs were already reported, but they showed up
-rarely or only on some machines. hydo makes each of them happen on every run, so a developer can
-watch it and check a fix:
-
-- an [etcd](hydo/onboard/examples/etcd/) server that crashes at one moment comes back out of step with the
-  others ([#14685](https://github.com/etcd-io/etcd/issues/14685)). hydo found it without being told where to
-  look;
-- a power cut deletes a whole [NATS](hydo/onboard/examples/nats-jetstream/) stream
-  ([#6888](https://github.com/nats-io/nats-server/issues/6888)). Found the same way;
-- a [TigerBeetle](hydo/onboard/examples/tigerbeetle/) server stops for good when two payments expire in the same
-  nanosecond ([#3960](https://github.com/tigerbeetle/tigerbeetle/issues/3960));
-- a [Qdrant](hydo/onboard/examples/qdrant-flaky-10200/) test that passed 2,604 times in a row fails on every run
+- **[etcd](hydo/onboard/examples/etcd/)**: a server that crashes at one moment comes back out of step with the others
+  ([#14685](https://github.com/etcd-io/etcd/issues/14685)). hydo found it without being told where to look.
+- **[NATS](hydo/onboard/examples/nats-jetstream/)**: a power cut deletes a whole stream ([#6888](https://github.com/nats-io/nats-server/issues/6888)).
+  hydo found it without being told where to look.
+- **[TigerBeetle](hydo/onboard/examples/tigerbeetle/)**: a server stops for good when two payments expire in the same
+  nanosecond ([#3960](https://github.com/tigerbeetle/tigerbeetle/issues/3960)).
+- **[Qdrant](hydo/onboard/examples/qdrant-flaky-10200/)**: a test that passed 2,604 times in a row fails on every run
   when hydo pauses one of its threads at the right moment
   ([#10200](https://github.com/qdrant/qdrant/issues/10200#issuecomment-6803314544)).
 
