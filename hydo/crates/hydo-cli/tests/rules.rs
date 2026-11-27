@@ -602,9 +602,18 @@ fn the_clock_audit_steps_the_own_clock_of_the_service_that_runs_a_place() {
     w("hydo/hydo.yaml", &manifest("    clock: own\n"));
     let (rc, text) = t.hydo(&["rules", "scan", "proj", "--kind", "clock"]);
     assert_eq!(rc, 0, "{text}");
-    assert!(text.contains("own-ahead      disk=none | run T=n1@2:"), "{text}");
-    assert!(text.contains("own-behind     disk=none | run T=n1@2:-"), "{text}");
-    assert!(text.contains("the clock of n1 alone goes forward"), "{text}");
+    assert!(
+        text.contains("own-ahead      disk=none | run T=n1@2:"),
+        "{text}"
+    );
+    assert!(
+        text.contains("own-behind     disk=none | run T=n1@2:-"),
+        "{text}"
+    );
+    assert!(
+        text.contains("the clock of n1 alone goes forward"),
+        "{text}"
+    );
     // the guest's schedules stay as they were
     for l in before.lines().filter(|l| l.contains("disk=none | run")) {
         assert!(text.contains(l), "{l} is gone:\n{text}");

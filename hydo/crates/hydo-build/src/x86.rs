@@ -723,8 +723,8 @@ pub fn build(
     // which reaches the traced memory without process_vm_readv; every other image keeps
     // Milestone 372's build and its bytes
     if uses_own_clock(&m) {
-        let words = crate::record::kernel_variant(&m).as_deref()
-            == Some(hydo_image::kernels::CONTAINERS);
+        let words =
+            crate::record::kernel_variant(&m).as_deref() == Some(hydo_image::kernels::CONTAINERS);
         let (input, name) = if words {
             (&ctx.inputs.clockbin_words, "hydo-clock-words")
         } else {

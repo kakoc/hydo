@@ -80,7 +80,10 @@ fn service_clocks_are_drawn_from_their_own_stream() {
                 pairs += (s.ts.len() == 2) as usize;
                 drifts += matches!(s.ts[0].2, ServiceClockChange::Drift(_)) as usize;
                 for (svc, at, _) in &s.ts {
-                    assert!(svc == "n1" || svc == "n2", "{svc}: not a clock: own service");
+                    assert!(
+                        svc == "n1" || svc == "n2",
+                        "{svc}: not a clock: own service"
+                    );
                     assert!((0..20).contains(at));
                 }
                 if s.ts.len() == 2 {
@@ -111,8 +114,14 @@ fn service_clocks_are_drawn_from_their_own_stream() {
         "{drawn} of {total}"
     );
     assert!(instead > 0, "no guest step was replaced");
-    assert!(pairs > drawn / 8 && pairs < drawn * 2 / 5, "{pairs} of {drawn}");
-    assert!(drifts > drawn / 8 && drifts < drawn / 2, "{drifts} of {drawn}");
+    assert!(
+        pairs > drawn / 8 && pairs < drawn * 2 / 5,
+        "{pairs} of {drawn}"
+    );
+    assert!(
+        drifts > drawn / 8 && drifts < drawn / 2,
+        "{drifts} of {drawn}"
+    );
 }
 
 #[test]
@@ -158,7 +167,9 @@ fn a_service_clock_shrinks_by_going_and_by_halves() {
     assert!(texts
         .iter()
         .any(|t| t == "disk=none dseed=0 | run T=n2@3:750ms T=n1@0:200ppm T=n2@4:-250ms"));
-    assert!(!texts.iter().any(|t| t.contains("100ppm") || t.contains("125ms")));
+    assert!(!texts
+        .iter()
+        .any(|t| t.contains("100ppm") || t.contains("125ms")));
     // a schedule with a service's clock is in the class of its clock faults
     let s = e.parse("disk=none dseed=0 | run T=n2@3:5").unwrap();
     assert_eq!(e.finding_class(&s), "clock");

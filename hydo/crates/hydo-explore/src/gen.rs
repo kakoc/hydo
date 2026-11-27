@@ -2319,9 +2319,8 @@ impl Ex {
                 .iter()
                 .any(|r| r.kind() != "cut" && !r.kind().starts_with("clock"));
         had[1] = s.n.is_some() || s.o.is_some();
-        had[2] = s.t.is_some()
-            || !s.ts.is_empty()
-            || s.a.iter().any(|r| r.kind().starts_with("clock"));
+        had[2] =
+            s.t.is_some() || !s.ts.is_empty() || s.a.iter().any(|r| r.kind().starts_with("clock"));
         had[3] = !s.h.is_empty();
         had[4] = s.tj.is_some()
             || s.xt.is_some()
