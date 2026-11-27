@@ -24354,7 +24354,8 @@ after a power cut.
 On hvx seed 96 failed with its faults, without its power cut, and without its clock step. Its
 composition alone passed on the final image, where the gossip came before the failover, so the
 race depends on that moment. `native/slot-lost-after-failover.sh` reproduces it with Docker, also across a restart of
-every node, and passes with a wait of 6 s between the two steps. No issue names it.
+every node, and passes with a wait of 6 s between the two steps. No issue names it. The paragraph
+"Findings 1 and 2 checked again with hydo 0.7.0" below has why gossip never repairs it.
 
 **The example.** Six nodes of Garnet 2.2.14 from the official image, in cluster mode as three
 primaries with one replica each, at fixed addresses, imported with `hydo compose`. Each node's
@@ -24455,6 +24456,33 @@ Retro: Garnet 2.2.14, hvx and KVM, 2026-11-26 and 27
 - Strategies: "Failovers by the client, with a late write" gained finding 2 (two control-plane
   steps next to each other), and "Every replica compared with the leader after a restart" gained
   finding 1; the first table names Garnet.
+
+**Findings 1 and 2 checked again with hydo 0.7.0.** The released hydo 0.7.0, from a fresh clone
+at `67ccb6ee`, built the three images again on hvx with the sha256 values of the paragraph on the runs. Each schedule
+gave its recorded value twice:
+
+- finding 2's seed 96 on the `fs` image `5a4771d51585eeff`. A held run asked every node: only
+  `g2` names an owner of slot 8943, `g1`, which is a replica of `g4` now. A `GET` of a key of the
+  slot answers `MOVED` to `g1` on `g2` and `CLUSTERDOWN Hash slot not served` on the five others.
+- finding 1's `K=g1@15+3` on the `r0` image `982a16effdb11bfa`. `INFO replication` gave `g1`
+  `connected_slaves:0` at offset 5,984, and `g4` offset 1,668 with `master_link_status:up`.
+- the same schedule on the default image (`reest=5`) OK, `179ac0194c742e8d`. This value is new;
+  the record had only `8ccf4e5c0b279c83` of an older client.
+
+The Docker script of finding 2 gave two end states in three runs on this Mac, both with the slot
+unserved for good. In two, the nodes named owners as in hydo's run. In one, `a`, `b` and `c`
+named the new primary `ra`, and `ra` named none: `ra` had set the slot `OFFLINE` right after the
+migration (`MergeSlotMap`, `ClusterConfig.cs` line 1248). With `MIGSLEEP=6` every node named
+`ra`. The code shows why gossip never repairs it. `MergeSlotMap` (line 1217) sets a slot
+`OFFLINE` when its believed primary's message does not claim it (lines 1239 to 1258). A
+replica's message never gives such a slot an owner (line 1277, from pull request #2089). No
+primary claims it: `TakeOverFromPrimary` (line 1393) claimed only the slots of the new primary's
+own slot map (`GetLocalPrimarySlots`, line 334). For finding 1 the record now names three
+lines. `defaults.conf` line 598 sets the option to 0, its declaration in `Options.cs` (line 777)
+has no help text, and `EnsureReplication` returns at once for 0 (`ReplicationManager.cs` lines
+183 to 190). `master_link_status` is the cluster connection's state (`Gossip.cs` line 232), not
+the AOF stream's. RESULTS.md, the AGENTS.md paragraph and open item 192, and the use-cases rows
+say this now. No regression file changed.
 
 **What is left.** Open item 192.
 

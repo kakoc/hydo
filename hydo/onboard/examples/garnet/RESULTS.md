@@ -51,6 +51,8 @@ client that plays the control plane, and looks for bugs that nobody reported.
   (2026-11-24), where they are unchanged.
 - hydo: the published 0.6.0 Linux release (`12fe3299…`) for the image and the directed runs on
   hvx; this branch's hydo (0.6.0 and Milestones 363 to 367) on GitHub's KVM runners.
+- The released hydo 0.7.0 replayed findings 1 and 2 on hvx again, from a fresh clone at
+  `67ccb6ee`. Each finding's paragraph "The replay with hydo 0.7.0" has the runs.
 
 ## The promises
 
@@ -167,8 +169,9 @@ before that, which also printed go-redis's own log lines:
 
 | schedule | image | verdict | fingerprint |
 |---|---|---|---|
-| `disk=none \| run K=g1@15+3` | `r0` | `converge` (two runs) | `982a16effdb11bfa` |
+| `disk=none \| run K=g1@15+3` | `r0` | `converge` (two runs, and two with hydo 0.7.0) | `982a16effdb11bfa` |
 | the same | `r0`, client 2 | the same (two runs) | `59e40847341696b9` |
+| the same | default (`reest=5`), with hydo 0.7.0 | OK (two runs) | `179ac0194c742e8d` |
 | the same | default, client 2 (`reest=5`) | OK | `8ccf4e5c0b279c83` |
 | `disk=none \| run K=g4@15+3`, a kill of the replica | client 1, `reest=0` | OK | `caa84a69cc7b1e77` |
 | `disk=cut \| run C=10` | default | `acked-outcome`, 5 of 20 lost (two runs) | `bb4299751e2f04c0` |
@@ -187,7 +190,7 @@ before that, which also printed go-redis's own log lines:
 | `disk=cut \| run A=garnet.failover_done:cut` | the same | OK | `d4c1c1af5ed986b7`: the cut came at the same stop as the one before |
 | `disk=cut cf=300 \| run` | the same | OK | `beb19a39ed210ae8` |
 | `disk=cut cf=600 \| run` | the same | OK | `c2abf6c4e69956c8` |
-| seed 96 of e2: `disk=cut dseed=0 \| run K=g6@15+3 N=g1-g5@27-29:loss,65% C=40 P=g4@0+6 T=37:3600 W=9abb9e17,p3,q2,r250 L=g3@29+3` | `fs` | `converge` and `slots`: `CLUSTERDOWN Hash slot not served` (finding 2, two runs) | `5a4771d51585eeff` |
+| seed 96 of e2: `disk=cut dseed=0 \| run K=g6@15+3 N=g1-g5@27-29:loss,65% C=40 P=g4@0+6 T=37:3600 W=9abb9e17,p3,q2,r250 L=g3@29+3` | `fs` | `converge` and `slots`: `CLUSTERDOWN Hash slot not served` (finding 2, two runs, and two with hydo 0.7.0) | `5a4771d51585eeff` |
 | the same | `fs`, client 2 | the same | `8ef9c39df29e6745` |
 | its composition and the power cut alone, `disk=cut dseed=0 \| run C=40 W=9abb9e17,p3,q2,r250` | `fs`, client 2 | the same | `8a2f907f37e1dbae` |
 | seed 96 without its clock step `T=37:3600` | `fs`, client 2 | the same | `99972f8e8b388925` |
@@ -201,8 +204,8 @@ before that, which also printed go-redis's own log lines:
 
 **Label: a deployment setting, with a status that hides it (Garnet's default
 `--cluster-replication-reestablishment-timeout 0`).** The symptom of the status is the one that
-microsoft/garnet#2087 reported for another trigger; that issue was closed with a fix of its
-trigger only.
+microsoft/garnet#2087 reported for another trigger. That trigger was a client's write on the
+replica through `READWRITE`, and #2109 fixed it by a change of `READWRITE` only.
 
 `disk=none | run K=g1@15+3` kills the primary `g1` of shard 1 before step 15 and starts it again
 3 steps later. `g1` recovers its data from its AOF and serves its slots. Its replica `g4` was not
@@ -233,12 +236,31 @@ The cause, at `v2.2.14` and unchanged on `main`:
    (`CLUSTER REPLICATE`). A primary that restarts has no replica session, and it starts none.
 2. A replica attaches again by itself only in `ReplicationManager.EnsureReplication`
    (`libs/cluster/Server/Replication/ReplicationManager.cs`, line 183), which each gossip message
-   calls (`libs/cluster/Session/RespClusterBasicCommands.cs`, line 465). It returns at once when
-   `cluster-replication-reestablishment-timeout` is 0 (line 189, "Disabled"), the default of
-   `libs/host/defaults.conf` (line 598).
-3. The replica's `master_link_status` is the state of its gossip connection to the primary, not
-   of the AOF stream (`Gossip.GetPrimaryLinkStatus`, `libs/cluster/Server/Gossip/Gossip.cs`,
-   line 232). The gossip connection comes back after the restart, so the replica says `up`.
+   calls (`libs/cluster/Session/RespClusterBasicCommands.cs`, line 465). Lines 185 to 190 read
+   the option and return at once when it is 0: `if (pollFrequency == 0) { // Disabled
+   return; }`. 0 is the default of `libs/host/defaults.conf` (line 598,
+   `"ClusterReplicationReestablishmentTimeout": 0`).
+3. The replica's `master_link_status` is the state of its cluster connection to the primary, the
+   connection of the gossip, not of the AOF stream (`Gossip.GetPrimaryLinkStatus`,
+   `libs/cluster/Server/Gossip/Gossip.cs`, line 232). The cluster connection comes back after the
+   restart, so the replica says `up`.
+
+**The replay with hydo 0.7.0.** The released hydo 0.7.0, from a fresh clone of `main` at
+`67ccb6ee`, built the three images again on hvx with the sha256 values of the section "Without faults,
+and the regressions" (`f9d61a2f…`, `c5bc4e25…` and `57aaef25…`). `disk=none | run K=g1@15+3`
+gave the same `converge` violation on the `r0` image with `982a16effdb11bfa` twice. On the default image, with
+`reest=5`, it passed twice with `179ac0194c742e8d`: 91 commands, and 69 writes judged by
+`acked_outcome`. A held run of the `r0` image (`hydo inspect start <run> --at end`) read `INFO
+replication` of both nodes of shard 1:
+
+```text
+g1: role:master  connected_slaves:0  master_repl_offset:5984  sync_driver_count:0
+g4: role:slave  master_host:10.89.0.11  master_link_status:up  master_last_io_seconds_ago:2
+    master_repl_offset:1668  slave_read_repl_offset:1668
+```
+
+So the primary has no replica session, and the replica reports its link up at an offset that
+stays 4,316 bytes behind.
 
 With `--cluster-replication-reestablishment-timeout 5` (the example's default `reest=5`) the
 same schedule passes on hvx, and the replica holds every key. A kill of the replica `g4` instead
@@ -251,10 +273,11 @@ primary reports `connected_slaves:0`. With `REEST=5` it holds all 10, and the pr
 online at the same offset. The cause is plain in the code after this run, so the script is the
 only native run.
 
-The documentation of the option is one line of `defaults.conf`, "Maximum frequency cluster
-Replicas will attempt to re-establish replicating their Primaries, in seconds", and a row of
-`website/docs/getting-started/configuration.md` without a description. Neither says that 0 turns
-it off, and `website/docs/cluster/replication.md` says that "replicas can recover from their own
+The documentation of the option is one comment line of `defaults.conf` (line 597), "Maximum
+frequency cluster Replicas will attempt to re-establish replicating their Primaries, in
+seconds". Its declaration in `libs/host/Configuration/Options.cs` (line 777) has no `HelpText`,
+and its row of `website/docs/getting-started/configuration.md` has no description and no
+default. None of them says that 0 turns it off, and `website/docs/cluster/replication.md` says that "replicas can recover from their own
 checkpoint and replay their AOF before connecting to their primary and resuming
 synchronization". Garnet's cluster is passive by design (`cluster/overview.md`, "Control
 Plane"), so a control plane could attach the replica again with `CLUSTER REPLICATE`. It would
@@ -299,33 +322,71 @@ the nodes name different owners of slot 8943
 The read-back judged 43 of the run's 44 acknowledged writes and left the one of slot 8943
 undecided: no node serves it.
 
-What happens, step by step:
+**The replay with hydo 0.7.0.** The released hydo 0.7.0, from a fresh clone of `main` at
+`67ccb6ee`, built the `fs` image again on hvx with the same sha256 (`57aaef25…`). Seed 96's
+schedule gave the `converge` and `slots` violations with `5a4771d51585eeff` twice, and the check
+printed the same six views, line for line. A held run (`hydo inspect start <run> --at end`)
+asked every node for its `CLUSTER NODES`, `CLUSTER SLOTS` and a `GET` of a key of the tag:
 
-1. `MIGRATE <g1> 6379 "" 0 5000 SLOTS 8943` on `g2` moves the slot's keys to `g1` and gives the
-   slot to `g1` on `g1` and `g2`. The client waits until both name `g1` in `CLUSTER SLOTS`, the
-   check that `website/docs/cluster/key-migration.md` names. The other nodes, among them `g1`'s
-   replica `g4`, learn the new owner by gossip some seconds later.
+| node | role | the owner of slot 8943 in its `CLUSTER SLOTS` | `GET {t1}k` |
+|---|---|---|---|
+| `g1` | replica of `g4` | none | `CLUSTERDOWN Hash slot not served` |
+| `g2` | primary | `g1` | `MOVED 8943 10.89.0.11:6379`, the address of `g1` |
+| `g3` | primary | none | `CLUSTERDOWN Hash slot not served` |
+| `g4` | primary of shard 1 | none | `CLUSTERDOWN Hash slot not served` |
+| `g5` | replica of `g2` | none | `CLUSTERDOWN Hash slot not served` |
+| `g6` | replica of `g3` | none | `CLUSTERDOWN Hash slot not served` |
+
+`g2`'s `CLUSTER NODES` lists `g1` as `slave 8558ef5c… 16 connected 8943`: a replica with the
+slot. No other node's `CLUSTER NODES` lists slot 8943 for any node.
+
+What happens, step by step, at `v2.2.14` (the same code is on `main` at `ff769f86`):
+
+1. `MIGRATE <g1> 6379 "" 0 5000 SLOTS 8943` on `g2` moves the slot's keys to `g1`. The migration
+   driver gives the slot to `g1` on `g1` and on `g2` and then gossips with `g1` alone
+   (`libs/cluster/Server/Migration/MigrationDriver.cs`, lines 201, 210 and 219). The client waits
+   until both name `g1` in `CLUSTER SLOTS`, the check that
+   `website/docs/cluster/key-migration.md` names. The other nodes, among them `g1`'s replica
+   `g4`, learn of the change later, by gossip.
 2. The client sends `CLUSTER FAILOVER`, without an option, to `g4` at once. `g4` waits until it
-   has replicated `g1`'s AOF, which holds the migrated keys, and takes over.
-3. `g4` takes over the slots that its own copy of the cluster's configuration gives to `g1`
-   (`ClusterConfig.TakeOverFromPrimary`, `libs/cluster/Server/ClusterConfig.cs` line 1393, which
-   reads `GetLocalPrimarySlots()`; `ClusterManager.TryTakeOverForPrimary`,
-   `libs/cluster/Server/ClusterManager.cs` line 389). That copy does not have slot 8943 yet.
-4. `g1` becomes a replica of `g4` and serves no slot. No node claims slot 8943 any more, and
-   gossip never gives it a new owner: `g2` still names `g1`, and every other node names none.
-   This holds across a restart of every node and a power cut.
+   has replicated `g1`'s AOF, which holds the migrated keys, and takes over
+   (`TakeOverAsPrimaryAsync`, `libs/cluster/Server/Failover/ReplicaFailoverSession.cs`, line
+   262, which calls `TryTakeOverForPrimary` at line 285).
+3. `ClusterManager.TryTakeOverForPrimary` (`libs/cluster/Server/ClusterManager.cs`, line 380)
+   calls `ClusterConfig.TakeOverFromPrimary` at line 389. That function
+   (`libs/cluster/Server/ClusterConfig.cs`, line 1393) claims the slots of
+   `GetLocalPrimarySlots()` (line 334), which reads this node's own slot map. `g4`'s slot map
+   still gave slot 8943 to `g2`, so `g4` did not claim it.
+4. `g1` becomes a replica of `g4` (`MakeReplicaOf`, line 1365).
+5. Gossip never gives the slot an owner again. Every node merges each gossip message in
+   `MergeSlotMap` (line 1217). When a primary's message does not claim a slot that this node
+   gives to that primary, lines 1239 to 1258 set the slot `OFFLINE` with no owner. So `g2`'s
+   messages, which no longer claim slot 8943, take it from `g2` on every node that had not yet
+   learned of the migration. A replica's message cannot give an owner to such a slot: line 1277
+   is `if (currentOwnerId == RESERVED_WORKER_ID) continue;`, with the comment "a replica must
+   never introduce ownership" (from pull request #2089). Only a primary's claim could, and no
+   primary claims the slot: `g4` did not take it, and `g1` is a replica.
 
-The keys of the slot are on `g4`, which replicated them, but no node serves them: a read through
-`g4` answers `CLUSTERDOWN Hash slot not served`, and one through `g2` answers `MOVED` to `g1`,
-which is a replica. Every acknowledged write of the slot is unavailable for good, and so is every
-new write of its keys. The cause is the same at `v2.2.14` and on `main`.
+This state holds across a restart of every node and a power cut. The keys of the slot are on
+`g4`, which replicated them, but no node serves them. Every acknowledged write of the slot is
+unavailable for good, and so is every new write of its keys.
 
 `native/slot-lost-after-failover.sh` reproduces it with Docker, without hydo, with three
-primaries and one replica: after the migration and the failover, `a` (the old primary), `c`
-and `ra` (the new primary) name no owner of the slot, `b` names `a`, and a `GET` through `ra`
-answers `CLUSTERDOWN Hash slot not served`, also 30 s after a restart of all four nodes. With
-`MIGSLEEP=6`, a wait of 6 s between the migration and the failover, gossip reaches `ra` first,
-`ra` takes the slot over, and every node names `ra`.
+primaries `a`, `b` and `c`, and `ra`, the replica of `a`. It moves slot 8943 from `b` to `a` and
+sends `CLUSTER FAILOVER` to `ra` at once. On this Mac three runs gave two end states, and in both
+the slot stays unserved, also 30 s after a `SIGKILL` and a start of all four nodes:
+
+- In two runs, as in hydo's run, `a` (the old primary), `c` and `ra` (the new primary) name no
+  owner, and `b` names `a`. A `GET` through `b` answers `MOVED` to `a`, and through `ra`
+  `CLUSTERDOWN Hash slot not served`.
+- In one run, `a`, `b` and `c` name `ra`, and `ra` names none. `ra` had set the slot `OFFLINE`
+  right after the migration, before the failover, when `b`'s gossip no longer claimed it (line
+  1248). So `ra`'s takeover did not claim it, and line 1277 keeps the replica `a`'s messages
+  from giving it to `ra`. A `GET` through `b` answers `MOVED 8943` to `ra`, and through `ra`
+  `CLUSTERDOWN Hash slot not served`.
+
+With `MIGSLEEP=6`, a wait of 6 s between the migration and the failover, gossip reaches `ra`
+first, `ra` takes the slot over, every node names `ra`, and a `GET` through `ra` answers `v1`.
 
 The documentation of `CLUSTER FAILOVER` asks a control plane to serialize failovers and to check
 that the reachable nodes agree on the new owner after a failover. It says nothing about a
