@@ -533,7 +533,10 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
                 a.out = val;
                 out_given = true;
             }
-            "schedule" => a.schedule = Some(val),
+            // Milestone 374: the canonical text (`T=10:+120` is `T=10:120`)
+            "schedule" => {
+                a.schedule = Some(hydo_schedule::Schedule::canonical(&val).unwrap_or(val))
+            }
             "tj-pm" => a.tj_pm = val,
             "strategy" => {
                 a.strategy = choice("strategy", v, &["process", "random", "swarm", "swarm-pos"])?

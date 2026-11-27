@@ -1125,6 +1125,18 @@ impl GuestToken {
                         to: ClockPoint::parse(d, what)?,
                     }
                 } else {
+                    // Milestone 374: a forward step may be written with its sign (`T=10:+120`),
+                    // which reads as `T=10:120` and prints so (the guest sees the printed form)
+                    let d = match d.strip_prefix('+') {
+                        Some(n) if !n.starts_with(['+', '-']) && n != "0" => n,
+                        Some(_) => {
+                            return Err(err(format!(
+                                "{what}: {d:?}: a forward step is +<seconds> or <seconds>, a \
+                                 backward one -<seconds>"
+                            )))
+                        }
+                        None => d,
+                    };
                     GuestToken::Clock {
                         at: dec(a, what)?,
                         delta: sdec(d, what)?,

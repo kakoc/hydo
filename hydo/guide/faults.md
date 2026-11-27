@@ -307,9 +307,10 @@ The section "One service's own clock" of MANIFEST.md says which programs it cove
 
 ## Clock steps and durations on the wall clock
 
-The number in `T=<step>:<seconds>` is in seconds. The shrinker halves a step while it looks for
-the smallest failing one, so a minimal schedule can hold an uneven number: `T=7:-10125` steps
-the clock back by 10,125 seconds. The report says it in words, with the hours and minutes:
+The number in `T=<step>:<seconds>` is in seconds, negative for a step back. A step forward may
+carry its sign: `T=10:+120` is `T=10:120`, and hydo prints it so. The shrinker halves a step
+while it looks for the smallest failing one, so a minimal schedule can hold an uneven number:
+`T=7:-10125` steps the clock back by 10,125 seconds. The report says it in words, with the hours and minutes:
 `the system clock jumps back by 10125 seconds (2 h 48 min 45 s)`.
 
 A system that measures leases, timeouts or visibility on the wall clock fails under such a step.

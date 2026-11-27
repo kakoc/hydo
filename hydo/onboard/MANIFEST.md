@@ -793,7 +793,7 @@ verdict rules are in `hydo/HISTORIES.md`.
 | `N=<svc>@<from>-<to>:<netem>` | `tc netem` on traffic to the service's `port` for steps `[from,to)` |
 | `O=<svc>@<from>-<to>:req\|resp:<netem>` | one direction only |
 | `C=<at>` | power cut before step `at` |
-| `T=<at>:<delta>` | step the realtime clock by `delta` seconds |
+| `T=<at>:<delta>` | step the realtime clock by `delta` seconds (`-30` back; `+30` and `30` forward, printed `30`) |
 | `T=<at>:@<point>` | set the realtime clock to the next instant of a time of day or a calendar boundary, in UTC (`@00:10`, `@:10-2s`, `@month+10m`); see "Clock steps to a time" |
 | `T=<svc>@<at>:<change>` | step one service's own wall clock (`-30` seconds, `1500ms`) or make it drift (`200ppm`, `0ppm` stops it), while the other services keep the guest's clock (Milestone 372); the service needs `clock: own`; see "One service's own clock" |
 | `N=<a>-<b>@...`, `N=<a>-*@...` | netem on the link between two services with `addr:` (or between `a` and every other one); see "Link faults" |
