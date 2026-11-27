@@ -110,6 +110,12 @@ pub fn machine(ctx: &Ctx, rec: &Recorded, outdir: &Path) -> Result<Machine, Prob
     let image = rec.image()?;
     let (eng, spec) = crate::runs::controlled_engine(ctx, &image, outdir, &rec.eargs, true);
     let a = AgentEngine::for_image(eng, &image).map_err(|e| Problem::new("refused", e, vec![]))?;
+    // Milestone 383: where `hydo inspect stacks` finds the state, the kernel and the programs
+    super::stacks::set_env(super::stacks::Env {
+        image: image.clone(),
+        kernel: spec.kernel.clone(),
+        dir: outdir.to_path_buf(),
+    });
     Ok(Machine {
         eng: a.inner.clone(),
         spec,
@@ -284,6 +290,63 @@ pub fn oneshot(ctx: &Ctx, dir: &Path, at: &str, req: Req) -> Result<Value, Probl
         }
     }
     Ok(v)
+}
+
+/// `hydo inspect stacks <run dir> --check-run [--every N]` (Milestone 383): replay the whole run
+/// with the engine writing the stop's state at every N-th stop, and compare the replay's
+/// fingerprint with the recorded run's: equal values mean that reading the stops left the run as
+/// it was.
+pub fn check_run(ctx: &Ctx, dir: &Path, every: u64) -> Result<Value, Problem> {
+    let t0 = Instant::now();
+    let rec = Recorded::load(dir)?;
+    let tmp = scratch(ctx, "check");
+    let m = machine(ctx, &rec, &tmp)?;
+    let path = super::stacks::dump_path();
+    let r = m.check_run(
+        &rec,
+        every,
+        &path.display().to_string(),
+        &tmp.join("engine.err"),
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+    let c = r?;
+    let recorded = rec.doc.fingerprints.fp.clone();
+    let got = c
+        .results
+        .last()
+        .and_then(|(_, l)| super::drive::result_fp(l))
+        .unwrap_or_default();
+    let mut notes = vec![format!(
+        "replayed the run with the engine's state written at one stop in every {every}: {} \
+         dumps over {} stops",
+        c.dumps, c.stops
+    )];
+    for (conv, line) in &c.results {
+        notes.push(format!("{}: {line}", conv.name()));
+    }
+    if got != recorded {
+        return Err(Problem::new(
+            "engine",
+            format!(
+                "the replay with dumps ended with fp={got}, the recorded run with fp={recorded}"
+            ),
+            vec![format!("hydo repro {}", dir.display())],
+        ));
+    }
+    notes.push(format!(
+        "the fingerprint is the recorded run's: fp={recorded} with the dumps and without them"
+    ));
+    let a = Inspect {
+        op: "stacks".into(),
+        state_fp: Some(got),
+        notes,
+        cost: Some(hydo_results::InspectCost {
+            wall_ms: now_ms(t0),
+            stops: c.stops,
+        }),
+        ..Inspect::default()
+    };
+    Ok(serde_json::to_value(a).unwrap_or(Value::Null))
 }
 
 /// How long one-shot calls on one run directory count as one look (Milestone 328).

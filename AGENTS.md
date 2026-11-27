@@ -841,6 +841,31 @@ its own commit; none moves a recorded value:
 
 The details are in `docs/HISTORY.md` Milestone 374 (open items 97, 147, 157, 189, 191 and 192).
 
+**Every guest thread's stack at a stop (M383, tentative number; a first version on hvx).** `hydo
+inspect stacks <session | run dir> [--at P] [--pid P] [--text]` answers which lock the threads of
+a hung service wait on, and which function likely holds it. It changes nothing in the guest. The
+engines' protocol has `DUMP <path>`. The hvx engine writes every vCPU's registers and the guest's
+RAM to a file, with no module change, and the Mac and KVM engines refuse it. The host reads the
+file (`hydo_contracts::stacks`):
+- the guest kernel's task list, with the layouts of its own BTF in guest memory, and the symbols
+  of the `System.map` beside the kernel (`<kernel>.System.map`, or `--kernel-map`);
+- each process's page tables (x86_64 and arm64), each thread's saved registers and system call,
+  and its kernel stack through the kernel's ORC tables;
+- each user stack through Go's table of frame sizes, `.eh_frame` or frame pointers, named from
+  the image's own programs;
+- a Go program's goroutines from its runtime, and the locks: a futex's address, or a goroutine's
+  `sync.Mutex`, named by the program's globals;
+- each lock's likely holders (a frame whose function refers to the lock's variable), and the
+  cycles of waits.
+
+`--follow` reads the stacks at each `advance`. `--check-run [--every N]` replays the run with a
+dump at every N-th stop and compares its fingerprint with the recorded one. The example
+`hydo/onboard/examples/deadlock` has a Go and a Rust service that deadlock after a pause. On
+M325's recorded run the command gave the Keeper loop in one call: the two handler threads were
+runnable on `exit_to_user_mode_prepare`. Garnet's hung replica had 78 thread-pool workers, each asleep in
+`futex`. The design is `docs/design/inspect-stacks.md`, the how-to `hydo guide inspect` section
+5; the details are in `docs/HISTORY.md` Milestone 383 (open item 194).
+
 **Each image service's own `/tmp` (M331, tentative number; fingerprint epoch 5).** An image
 service of an image built at epoch 5 has a `/tmp` of its own, as a container has. It is the
 guest's folder `/tmp/oci/<service>` (`hydo_image::defaults`, `oci_own_tmp`). The guest's
@@ -4371,6 +4396,34 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Not run: the Mac engine, and the settings exploration over the five parameters. Neither
       ran the parallel replication, diskless replication, a log on disk, or several replicas
       per shard. No slot moved back to its first shard after a failure.
+194. Every guest thread's stack (M383, tentative number; `docs/design/inspect-stacks.md`). What
+    is left:
+    - Only hvx writes the dump. The Mac and KVM engines refuse `DUMP` and need the command.
+      The KVM guest kernels of the fingerprint epoch 6 carry no BTF, and neither do the Mac's. So
+      each such kernel needs its layouts kept beside it.
+    - No release carries a symbol file of its guest kernel yet. For the proofs, the `System.map`
+      of the same nixpkgs build was put beside the kernel by hand.
+    - A likely holder is a guess. It is a function that refers to the lock's global variable, or
+      a stack slot with its address. A lock in a heap structure, taken through a pointer, is found
+      only by the slot, and named by its address.
+    - A shared library's frames are not named (the process's mappings are not read), and the
+      goroutines need the Go program's DWARF. A JIT's frames (.NET, the JVM) are not named: the
+      Garnet case showed its threads and waits, not its methods.
+    - Where the Garnet replica's 78 thread-pool workers wait (M371's candidate A) is not traced.
+      Its frames are .NET's runtime and JIT code, and the image's root tree was not kept beside
+      the image.
+    - No stop comes at a fault or a signal of the guest. A stop of the lock-step protocol comes
+      at the engine's cadence. So a crash, such as the benchmark's Typesense crash on KVM (case
+      C9), is not read before its process ends. KVM has no dump yet either.
+    - A frame's line is the innermost inlined function's (a `Lock` that the compiler inlined
+      names the mutex's file); Go's inline tree and DWARF's inlined calls are not read.
+    - A live session's stacks call costs one stop. A dump writes the guest's whole RAM, so a
+      reading of a guest of several GiB writes that much to the session's folder.
+    - Several vCPUs on hvx were not run.
+    - Checks left before the merge (Milestone 383, "Tests"): hydo-control's identity corpus
+      failed on the bare-metal machine, and the tests of hydo-explore did not run with the new
+      example `deadlock`. On the Mac the workspace's clippy and the `docs::`, `equivalence::` and
+      `agents_equivalence::` tests did not run, for lack of disk.
 
 ## Milestone index
 
@@ -5611,6 +5664,14 @@ build machine, before 2026-10-13.
   (docs/REBASELINE.md section 33), and no KVM image. Release step 6a fixed two sentences. Both
   releases were built twice to the same bytes, and the Mac one is signed and notarized. They were
   verified on hvx, the Mac and KVM, where a runner rebuilt the Linux tarball byte for byte
+- M383 (tentative number): every guest thread's stack at any stop, read by the hypervisor without
+  a change of the run. The engines' `DUMP` writes the vCPUs' registers and the guest RAM (hvx,
+  no module change). `hydo inspect stacks` reads the kernel's task list through its own BTF and
+  its `System.map`, and the kernel and user stacks. It reads a Go program's goroutines, the locks
+  with their likely holders, and the cycles of waits. The example `deadlock` names both locks
+  and both frames of a Go and a Rust deadlock, and `--check-run` proves the fingerprint
+  unchanged. It gave M325's Keeper loop in one call, and the Garnet replica's 78 blocked
+  workers. Nothing recorded moved
 
 ## Where to look
 

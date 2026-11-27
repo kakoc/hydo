@@ -117,6 +117,10 @@ pub enum EngineAction {
     /// an `lse=` host token (the sectors under a file of a service's storage that a `G=...:bad`
     /// or `G=...:rot` names). The engine's `DISK` command; the Mac and KVM engines.
     BadSectors(String),
+    /// Milestone 383 (docs/design/inspect-stacks.md): write every vCPU's registers and the
+    /// guest's RAM at this stop to the file at this path, for `hydo inspect stacks`. It only
+    /// reads the guest. The engine's `DUMP` command; hvx.
+    Dump(String),
 }
 
 impl EngineAction {
@@ -124,6 +128,7 @@ impl EngineAction {
         match self {
             EngineAction::DiskFaultsOff => "disk-faults-off",
             EngineAction::BadSectors(_) => "disk",
+            EngineAction::Dump(_) => "dump",
         }
     }
 
@@ -131,6 +136,7 @@ impl EngineAction {
     pub fn text(&self) -> String {
         match self {
             EngineAction::BadSectors(t) => format!("disk {t}"),
+            EngineAction::Dump(p) => format!("dump {p}"),
             a => a.name().to_string(),
         }
     }
@@ -138,9 +144,12 @@ impl EngineAction {
     pub fn from_name(s: &str) -> Option<EngineAction> {
         match s {
             "disk-faults-off" => Some(EngineAction::DiskFaultsOff),
-            _ => s
-                .strip_prefix("disk ")
-                .map(|t| EngineAction::BadSectors(t.to_string())),
+            _ => match s.strip_prefix("dump ") {
+                Some(p) => Some(EngineAction::Dump(p.to_string())),
+                None => s
+                    .strip_prefix("disk ")
+                    .map(|t| EngineAction::BadSectors(t.to_string())),
+            },
         }
     }
 }

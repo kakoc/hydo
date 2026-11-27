@@ -4172,7 +4172,7 @@
           "$ref": "#/$defs/InspectType"
         },
         "op": {
-          "description": "`start`, `status`, `list`, `stop`, `exec`, `read`, `ls`, `logs`, `ps`, `sockets`,\n`advance`.",
+          "description": "`start`, `status`, `list`, `stop`, `exec`, `read`, `ls`, `logs`, `ps`, `sockets`,\n`advance`, `stacks` (Milestone 383).",
           "type": "string"
         },
         "id": {
@@ -4300,6 +4300,17 @@
           "items": {
             "type": "string"
           }
+        },
+        "stacks": {
+          "description": "`stacks`: every guest thread's stack and the locks they wait on, read by the engine\nwithout a change of the run (added in Milestone 383).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InspectStacks"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -4638,6 +4649,350 @@
       "required": [
         "name",
         "created"
+      ]
+    },
+    "InspectStacks": {
+      "description": "The stacks of a stop (added in Milestone 383, docs/design/inspect-stacks.md): the guest's\nthreads from its kernel's task list, each with its user and kernel stack, the goroutines of\nGo programs, and the locks they wait on.",
+      "type": "object",
+      "properties": {
+        "engine": {
+          "description": "The engine that read the state (`hvx`).",
+          "type": "string"
+        },
+        "arch": {
+          "description": "`x86_64` or `arm64`.",
+          "type": "string"
+        },
+        "kernel": {
+          "description": "The guest kernel's release, as its `linux_banner` says.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StackThread"
+          }
+        },
+        "goroutines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StackGoroutine"
+          }
+        },
+        "locks": {
+          "description": "Every lock a thread or a goroutine waits on, with its waiters and its likely holders.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StackLock"
+          }
+        },
+        "cycles": {
+          "description": "Waits that close a cycle: each waits on a lock that the next one holds.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StackCycle"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "engine",
+        "arch",
+        "threads"
+      ]
+    },
+    "StackThread": {
+      "description": "One guest thread (a task of the guest kernel).",
+      "type": "object",
+      "properties": {
+        "pid": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tid": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "comm": {
+          "description": "The thread's name (`comm`).",
+          "type": "string"
+        },
+        "program": {
+          "description": "The process's program, as its path in the guest.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "service": {
+          "description": "The hydo service the process runs for (`HYDO_SVC` in its environment).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "`running`, `sleeping`, `disk-sleep`, `stopped`, `traced`, `frozen`, `zombie`, `dead`,\nor `idle`.",
+          "type": "string"
+        },
+        "vcpu": {
+          "description": "The vCPU the thread runs on at the stop.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "syscall": {
+          "description": "The system call the thread is in.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StackSyscall"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "waits_on": {
+          "description": "The lock the thread waits on (`locks[].addr`).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "user": {
+          "description": "The user stack, innermost frame first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StackFrame"
+          }
+        },
+        "kernel": {
+          "description": "The kernel stack, innermost frame first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StackFrame"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "pid",
+        "tid",
+        "comm",
+        "state"
+      ]
+    },
+    "StackSyscall": {
+      "description": "The system call a thread is in, from the registers the kernel saved at its entry.",
+      "type": "object",
+      "properties": {
+        "nr": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "name": {
+          "description": "`futex`, `read`, `epoll_wait`, ... (empty when hydo does not know the number).",
+          "type": "string"
+        },
+        "args": {
+          "description": "The first arguments, in hexadecimal.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "nr",
+        "name",
+        "args"
+      ]
+    },
+    "StackFrame": {
+      "description": "One frame of a stack.",
+      "type": "object",
+      "properties": {
+        "pc": {
+          "description": "The program counter, in hexadecimal.",
+          "type": "string"
+        },
+        "function": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "how": {
+          "description": "How the frame was found: `regs` (the registers), `cfi` (the program's call frame\ninformation), `fp` (frame pointers), `go` (Go's table of frame sizes), `orc` (the\nkernel's unwind tables), `scan` (an address in the kernel's text found on the stack).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pc",
+        "how"
+      ]
+    },
+    "StackGoroutine": {
+      "description": "One goroutine of a Go program.",
+      "type": "object",
+      "properties": {
+        "pid": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "goid": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "status": {
+          "description": "`runnable`, `running`, `syscall`, `waiting`, ...",
+          "type": "string"
+        },
+        "wait": {
+          "description": "Why it waits, in the Go runtime's words (`sync.Mutex.Lock`, `chan receive`, ...).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "waits_on": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "frames": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StackFrame"
+          }
+        }
+      },
+      "required": [
+        "pid",
+        "goid",
+        "status"
+      ]
+    },
+    "StackLock": {
+      "description": "A lock some thread or goroutine waits on.",
+      "type": "object",
+      "properties": {
+        "addr": {
+          "description": "The lock's address in its process, in hexadecimal.",
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "`futex` (a thread in the futex system call) or `go-mutex` (a goroutine in\n`sync.Mutex.Lock` or `sync.RWMutex`).",
+          "type": "string"
+        },
+        "name": {
+          "description": "What the address is: a global variable of the program (`main.accountsMu`), with an\noffset when it is inside one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "waiters": {
+          "description": "The threads (`tid 812 (worker)`) or goroutines (`goroutine 7`) that wait on it.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "holders": {
+          "description": "Who likely holds it: another thread or goroutine whose stack keeps the lock's address.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StackHolder"
+          }
+        }
+      },
+      "required": [
+        "addr",
+        "pid",
+        "kind",
+        "waiters"
+      ]
+    },
+    "StackHolder": {
+      "description": "A likely holder of a lock.",
+      "type": "object",
+      "properties": {
+        "who": {
+          "type": "string"
+        },
+        "frame": {
+          "description": "The frame whose stack slot keeps the lock's address.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "why": {
+          "description": "Why hydo thinks so.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "who",
+        "why"
+      ]
+    },
+    "StackCycle": {
+      "description": "A cycle of waits: each member waits on a lock that the next one holds.",
+      "type": "object",
+      "properties": {
+        "waits": {
+          "description": "`tid 812 (worker) waits on accounts (0x4c1a40), held by tid 813 (watchdog)`, one line per\nwait.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "waits"
       ]
     },
     "InspectError": {

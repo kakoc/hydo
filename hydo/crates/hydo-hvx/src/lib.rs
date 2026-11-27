@@ -47,6 +47,8 @@ pub mod sched;
 pub mod text;
 
 #[cfg(target_os = "linux")]
+pub mod dump;
+#[cfg(target_os = "linux")]
 pub mod engine;
 #[cfg(target_os = "linux")]
 pub mod vm;

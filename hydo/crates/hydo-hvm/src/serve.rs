@@ -720,6 +720,11 @@ impl Host {
                 HostCmd::Snap { name, retype } => self.ctl_snap_cmd(vm, &name, retype),
                 HostCmd::Time(tokens) => self.ctl_time_cmd(vm, &tokens),
                 HostCmd::Disk(tokens) => self.ctl_disk_cmd(vm, &tokens),
+                // Milestone 383 (docs/design/inspect-stacks.md): the state dump is built on hvx;
+                // this engine's guest kernel carries no type information for the stacks' reading
+                HostCmd::Dump(_) => {
+                    self.answer(Answer::Refused("dump not on the Mac engine yet".into()))
+                }
                 HostCmd::Reboot => {
                     let no = if !matches!(self.c.phase, Phase::Workload | Phase::Recovery) {
                         Some("only in the workload and recovery phases")

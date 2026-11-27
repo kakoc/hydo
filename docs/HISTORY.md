@@ -25129,3 +25129,139 @@ schema. In two runs of `hydo --test it` four and six of the `update::` tests fai
   placeholders.
 - The warning for a `storage:` file system names the user as the image gives it; a name needs its
   number from the image's `/etc/passwd`, which hydo does not read for it.
+
+## Milestone 383 (tentative number): every guest thread's stack at any stop, read without a change of the run
+
+Status: a first version on hvx, done on 2026-11-27 on the bare-metal machine from this Mac. The
+design is `docs/design/inspect-stacks.md`. The use case is a service hang where the logs stop: the
+run replays the same way each time, the guest has no debugger, and the question is which lock the
+threads wait on, held by which function. Nothing recorded moved: the new engine command only reads
+the VM, and nothing else of a run changed. So the fingerprint epoch does not change.
+
+**What was built.**
+
+- The engines' lock-step protocol has the command `DUMP <path>` (`HostCmd::Dump`, answer `OK dump
+  at=<n> bytes=<n>`). The hvx engine (`hydo_hvx::dump`) writes every vCPU's registers
+  (`HVX_GET_SNAPSHOT`) and the guest RAM it maps to the file, a page of zeros as a hole. No module
+  change and no new ioctl. The Mac and KVM engines answer `ERR dump not on ... yet`. The host's
+  side is `Lockstep::dump` and `EngineAction::Dump`.
+- `hydo_contracts::stacks` reads the file on the host: the page tables (x86_64 and arm64), the
+  kernel's BTF from its image, its symbols from the `System.map` beside the kernel, the task list,
+  each thread's saved registers, the kernel stacks through ORC, the user stacks (Go's table of
+  frame sizes, `.eh_frame`, frame pointers), the frames' names (symbols with Rust's names
+  demangled, DWARF lines, Go's `.gopclntab`), a Go program's goroutines from its runtime, the
+  locks, their likely holders and the cycles of waits. It reuses the contracts' ELF reader and
+  gimli.
+- `hydo inspect stacks <session | run dir> [--at P] [--pid P] [--kernel-threads] [--frames N]
+  [--program GUEST=HOST] [--kernel-map FILE] [--text]`, `--follow [--steps N] [--ms MS]`, and
+  `--check-run [--every N]`. The answer is `Inspect.stacks` (a results addition, `InspectStacks`
+  and its parts). In a live session a stacks call costs one more stop: the engine writes the dump
+  when the stop's actions run, so the call ends at the next stop.
+- The example `hydo/onboard/examples/deadlock`: a Go and a Rust service whose worker and watchdog
+  take two locks in opposite orders after a pause, and its RESULTS.md.
+
+**Design decisions** (`docs/design/inspect-stacks.md`, "Decisions"). The engine only writes the
+stop's state, and the host reads it, so a new engine needs only the dump and the reading is tested
+with memory images made in the tests. The kernel's layouts come from its own BTF in its image,
+and its symbols from nixpkgs's `System.map` of the same build, kept beside the kernel: reading
+`kallsyms` from guest memory needs a search of the image by pattern, which a new kernel version
+can break. The map is checked against the guest (`init_task`'s name reads `swapper/0`). A likely
+holder is a frame whose function refers to the lock's global variable (a 32-bit `rip`-relative
+displacement into it) and has not returned, or a stack slot with the lock's address; the answer
+says which and why, because no lock here records its owner.
+
+**What hvx needs.** No module change and no new ioctl: `HVX_GET_SNAPSHOT` and `HVX_SET_VCPU`
+read each vCPU's registers, and the engine already maps the guest's RAM. The module was not
+loaded or reloaded; it stayed `91D86B693F4D4035C368F9B`.
+
+**How the proofs ran.** On the bare-metal machine, in this round's own tree, with the 0.6.0 Linux
+release's guest files and this tree's `hydo` and `hydo-hvx`. The guest kernel's `System.map`
+(161,287 lines, `ee14553c…`) was copied from the nixpkgs output whose `bzImage` is the release's
+(`0a9ede35…`, compared byte for byte) to `guest/bzImage.System.map`. Every VM ran through
+`~/bin/hvx-run` under umask 022, one at a time. The example's image is `712ae9a3…` (fingerprint
+epoch 6, guest RAM 512 MiB); the Go program was built on this Mac with Go 1.27.3, the Rust one
+on the bare-metal machine with Rust 1.90.0 and the musl target.
+
+| Schedule | Verdict | Fingerprint (twice) |
+|---|---|---|
+| `disk=none \| run` | OK, both services count on | `79ada02759c5cdbb` |
+| `disk=none \| run P=bank_go@3+2` | VIOLATION `[bank_go.progress]`, the count stays at 93 | `c81b3f5264c80d56` |
+| `disk=none \| run P=bank_rs@3+2` | VIOLATION `[bank_rs.progress]`, the count stays at 61 | `c315abec6fffde94` |
+
+`hydo inspect stacks <run> --at end` named both locks and both frames of each deadlock and the
+cycle (the example's RESULTS.md has the answers):
+
+- Go: goroutine 6 waits on `main.journalMu`, likely held by goroutine 7 in `main.checkJournal`;
+  goroutine 7 waits on `main.accountsMu`, likely held by goroutine 6 in `main.transfer
+  (main.go:35)`. The goroutines' frames came from Go's table of frame sizes, with file and line.
+- Rust: tid 85 (`worker`) waits on `bank::JOURNAL`, likely held by tid 86 (`watchdog`) in
+  `bank::check_journal`; tid 86 waits on `bank::ACCOUNTS`, likely held by tid 85 in
+  `bank::transfer (main.rs:23)`. Both threads are in `futex`, with their kernel stacks from
+  `__schedule` to `entry_SYSCALL_64_after_hwframe` through ORC, and their user stacks through
+  `.eh_frame` and frame pointers.
+
+A replay to the end and the reading took 20 to 60 s on the loaded machine. At `run:186100`,
+before the pause, no lock was waited on. A session at `run:186452`, right after the pause, read
+with `--follow --steps 4 --ms 20`, showed the worker inside `main.transfer` at step 0 and the
+cycle from step 1 on. `--check-run --every 2000` replayed the Go run with 93 dumps over 187,778
+stops (198 s) and the Rust run with 94 dumps over 189,359 stops (266 s); each ended with the
+recorded fingerprint and workload fingerprint.
+
+**A known case: ClickHouse Keeper's loop** (Milestone 325; case C8 of
+`docs/design/debug-benchmark.md`). M325 found the loop by hand: sessions at three stops, 100
+samples of each busy thread's kernel stack, then the code. `hydo inspect stacks` read the
+recorded hvx run of M325 (`runs/k20a`, `VIOLATION [converge]`, `fp=2be840e3c29f36dd`, recorded
+with a tree of the 0.4 era, image of epoch 4, 4,096 MiB) at M325's stop `run:364112`. The replay
+followed the recording over 364,117 stops in 626 s, and the answer named 391 threads of six
+processes, each with its service. In `keeper2` the two `KeeperHandler` threads 333 and 338 were
+the only runnable threads of the Keeper, with `exit_to_user_mode_prepare` under `schedule` on
+their kernel stacks, as all 100 of M325's samples had it. Its other two handlers slept in
+`futex`, and so did its 30 other threads. That is M325's answer in one call, by the same thread
+ids.
+
+**An open case: Garnet's replica that answers nothing** (Milestone 371, candidate A; case A of
+`docs/design/debug-benchmark.md`). The Garnet onboarding's recorded hvx run of
+`replica-hangs-after-a-kill-during-a-checkpoint` (`runs/a1`, recorded with hydo 0.6.0, image of
+epoch 6, guest RAM 3,072 MiB) was read at its verdict's stop with this tree's hydo. The replay
+followed the recording over 6,315,089 stops in 696 s. The answer had 181 threads in six
+GarnetServer processes. A second call (`hydo inspect exec`) read each process's `HYDO_SVC`, which
+the reading now takes itself (`StackThread.service`). The replica `g4` (pid 368) had 90 threads
+against 16 to 19 in each other node: 78 `.NET TP Worker` threads of the thread pool, and 85
+threads asleep in `futex`, each on its own address. No lock is shared and no cycle shows. A
+thread pool that keeps adding workers while every worker waits is what .NET does when its
+workers block, which fits a replica whose background recovery task never completes. The frames
+are .NET's runtime and JIT code, which hydo does not name: the image's root tree is not kept
+beside that image, and JIT code has no file. So the place where the workers wait is not traced.
+The Garnet example's RESULTS.md has the paragraph.
+
+**Bugs found on the way.** The first real reading took no Go frame from Go's table: Go 1.27
+leaves the table's own start of the text at 0, and it is then `.text`'s address. A first live
+call never ended: the work of a dump waited for its next stop in a loop that did not stop. A
+position-independent program's load bias now comes from its first executable segment, which
+`mm->start_code` names. A `--program GUEST=HOST` pair also names a program by the end of its path,
+because an image service's program is in the service's own root (`/oci/<service>/usr/bin/...`).
+
+**A known case on KVM: Typesense's crash at its start** (Milestone 373; case C9 of the
+benchmark). It is not handled. The KVM engine refuses `DUMP` in this version, and its guest
+kernels of epoch 6 carry no BTF. The crash also needs a stop at the signal, before the process
+ends; a stop of the lock-step protocol comes at the engine's cadence, not at a fault of the guest.
+`docs/design/inspect-stacks.md`, "What each engine needs", says what KVM lacks.
+
+**Tests.** On the bare-metal machine, in this round's tree, `cargo fmt` and `cargo clippy
+--workspace --all-targets -- -D warnings` passed after two rounds of fixes. The tests of
+hydo-engine-proto, hydo-engine, hydo-hvx, hydo-contracts, hydo-hvm, hydo-kvm, `hydo --test it`
+and `hydo-agents --test it` passed. hydo-results passed after its schema was recorded again with
+`HYDO_BLESS=1`. Two tests failed there, and one set did not run:
+
+- hydo-control's `the_core_controllers_transcripts_on_the_identity_corpus` failed. Its golden was
+  not recorded again, and whether the new example `deadlock` is the cause was not checked.
+- `hydo --bins`'s `skillupdate::tests::each_agent_gets_its_folder` failed. It reads the folders of
+  the repository's checkout, and this round changed nothing that it runs.
+- The tests of hydo-explore did not run.
+
+On this Mac, before the commit, `cargo fmt --all --check`, `sh ci/vale.sh`, and the tests of
+hydo-contracts, hydo-engine-proto, hydo-engine, hydo-results and hydo-schema-compat passed.
+hydo-results's schema test failed first: `StackThread.service`, added after the Garnet reading,
+was not in `hydo/schema/results-v1.json`. The schema was recorded again with `HYDO_BLESS=1`. The
+workspace's clippy, the `docs::`, `equivalence::` and `agents_equivalence::` tests of `hydo
+--test it`, and `hydo-agents --test it` did not run on this Mac: its disk had about 13 GB free.
