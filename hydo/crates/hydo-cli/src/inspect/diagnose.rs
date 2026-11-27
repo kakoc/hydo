@@ -111,14 +111,16 @@ fn process_ends(rec: &Recorded, evs: &[AgentEv]) -> Vec<ProcessEnd> {
             .unwrap_or_else(|| format!("command {id}"));
         let sig = u("sig");
         // did the host send that signal to this handle (a kill, the end of a check)?
+        let h = a.json.get("h").and_then(Value::as_str);
         let by_hydo = sig.map(|s| {
             let name = signal_name(s);
             cmds.values().any(|c| {
                 c.op == "signal"
-                    && c.h.as_deref() == a.json.get("h").and_then(Value::as_str)
+                    && c.h.as_deref() == h
                     && c.json.get("sig").and_then(Value::as_str) == Some(name)
             }) || (a.kind == "done"
                 && a.json.get("timed_out").and_then(Value::as_bool) == Some(true))
+                || (s == 9 && h.is_some_and(|h| killed_by_hydo(rec, a.conv, h)))
         });
         out.push(ProcessEnd {
             handle,
@@ -138,6 +140,22 @@ fn process_ends(rec: &Recorded, evs: &[AgentEv]) -> Vec<ProcessEnd> {
         });
     }
     out
+}
+
+/// Milestone 374: whether the controller's notes say that hydo killed the service `h` itself
+/// without a signal command of the host: a `kill-now-<svc>` reaction kills from a relay in the
+/// guest, and a pause or kill of threads from a script there. Each such kill leaves a note
+/// `hydo-ob: KILLED <svc> ...` (the K=, X=, G= and reaction kills too). Before this, the diagnosis
+/// called the relay's SIGKILL the kernel's out-of-memory killer (Garnet, open item 192).
+fn killed_by_hydo(rec: &Recorded, conv: Conv, h: &str) -> bool {
+    let Some(t) = rec.transcript(conv) else {
+        return false;
+    };
+    let head = format!("hydo-ob: KILLED {h} ");
+    t.records.iter().any(|r| {
+        matches!(r, hydo_control::transcript::Record::Note { line, .. }
+            if line.starts_with(&head) || line.trim_end() == head.trim_end())
+    })
 }
 
 fn likely_of(p: &ProcessEnd, ram: u64) -> Option<String> {
@@ -2103,6 +2121,42 @@ mod fixtures {
             g.likely
         );
         assert_eq!(files(&d), before);
+    }
+
+    /// Milestone 374: a SIGKILL that hydo sent from the guest (a `kill-now-<svc>` reaction's relay,
+    /// which leaves the note `KILLED <svc> ...`) is hydo's, not the out-of-memory killer's (Garnet,
+    /// open item 192).
+    #[test]
+    fn a_sigkill_of_a_reaction_relay_is_hydos() {
+        let dir = std::env::temp_dir().join(format!("hydo-diag-relay-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (name, bytes) in files(&fixture("oom")) {
+            let bytes = if name == "control.boot.jsonl" {
+                let text = String::from_utf8(bytes).unwrap();
+                let note = "{\"by\":\"main\",\"line\":\"hydo-ob: KILLED provision at the event (reaction A=x.y:kill-now-provision, 1 processes)\",\"n\":23329,\"t\":\"note\"}\n";
+                let at = text
+                    .find("{\"by\":\"main\",\"line\":\"HYDO-ORACLE")
+                    .unwrap();
+                format!("{}{note}{}", &text[..at], &text[at..]).into_bytes()
+            } else {
+                bytes
+            };
+            std::fs::write(dir.join(name), bytes).unwrap();
+        }
+        let rec = Recorded::load(&dir).unwrap();
+        let g = host(&rec).unwrap();
+        let p = g.process.as_ref().unwrap();
+        assert_eq!(
+            (p.signal_name.as_deref(), p.signal_by_hydo),
+            (Some("KILL"), Some(true))
+        );
+        assert!(
+            !g.likely.iter().any(|l| l.contains("out-of-memory killer")),
+            "{:?}",
+            g.likely
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
