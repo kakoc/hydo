@@ -242,25 +242,11 @@ pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
     // the record of what the shell image's init declares and reads back (M127: on the composed
     // Redis history example the agent image printed no HYDO-CHECK line and ran no `final:`
     // read-back, so every history check was skipped).
-    if plan.history.is_empty() {
-        if let Ok(sh) = hydo_engine::image::embedded_file(image, "etc/hydo/manifest.sh") {
-            plan.history = history_of_manifest_sh(&sh);
-        }
-    } else if plan
-        .history
-        .iter()
-        .any(|c| c.json.contains("\"type\":\"messages\""))
-    {
-        // a messages check's include: bundles are not in the image: the compiled manifest has
-        // the declaration hydo build resolved (docs/design/messaging.md "Bundles")
-        if let Ok(sh) = hydo_engine::image::embedded_file(image, "etc/hydo/manifest.sh") {
-            let built = history_of_manifest_sh(&sh);
-            for c in plan.history.iter_mut() {
-                if let Some(b) = built.iter().find(|b| b.id == c.id) {
-                    c.json = b.json.clone();
-                }
-            }
-        }
+    if let Ok(sh) = hydo_engine::image::embedded_file(image, "etc/hydo/manifest.sh") {
+        plan.history = merge_history(
+            std::mem::take(&mut plan.history),
+            history_of_manifest_sh(&sh),
+        );
     }
     Ok(plan)
 }
@@ -306,6 +292,39 @@ pub fn regressions_of_image(image: &Path) -> Result<ImageRegressions, String> {
         regressions,
         file,
     })
+}
+
+/// The history checks a run declares: those of the embedded `hydo.yaml` (`declared`) and those
+/// hydo-build compiled into the image's `manifest.sh` (`built`).
+///
+/// - Without a check in `hydo.yaml`, the built list is the plan: a `hydo/` folder's
+///   `checks/list_append_*` and `linearizable_*` files are only there (M127).
+/// - A messages check takes the built declaration, whose `include:` bundles hydo build resolved
+///   (docs/design/messaging.md "Bundles").
+/// - A built check that `hydo.yaml` does not name is added after the declared ones. Before
+///   Milestone 374 a `checks/` file beside a `checks:` section in `hydo.yaml` was dropped without
+///   a word (open item 189); an image without such a pair keeps its list, so no run moves.
+pub fn merge_history(
+    declared: Vec<crate::schedule::history::HistCheck>,
+    built: Vec<crate::schedule::history::HistCheck>,
+) -> Vec<crate::schedule::history::HistCheck> {
+    if declared.is_empty() {
+        return built;
+    }
+    let mut out = declared;
+    for c in out.iter_mut() {
+        if c.json.contains("\"type\":\"messages\"") {
+            if let Some(b) = built.iter().find(|b| b.id == c.id) {
+                c.json = b.json.clone();
+            }
+        }
+    }
+    for b in built {
+        if !out.iter().any(|c| c.id == b.id) {
+            out.push(b);
+        }
+    }
+    out
 }
 
 /// The history checks a manifest.sh carries (hydo-build's compile_checks: `HYDO_CHECKS` names
@@ -1389,6 +1408,48 @@ mod tests {
         assert_eq!(h[1].final_, "");
         assert!(history_of_manifest_sh("HYDO_CHECKS=''\n").is_empty());
         assert!(history_of_manifest_sh("").is_empty());
+    }
+
+    #[test]
+    fn a_checks_file_beside_a_checks_section_is_kept() {
+        use crate::schedule::history::HistCheck;
+        let hc = |id: &str, json: &str, f: &str| HistCheck {
+            id: id.into(),
+            json: json.into(),
+            final_: f.into(),
+        };
+        // rqlite's first images (open item 189): the messages check `writes` in hydo.yaml, and
+        // `checks/list_append_la` in the folder; manifest.sh has both
+        let declared = vec![hc(
+            "writes",
+            "{\"id\":\"writes\",\"type\":\"messages\"}",
+            "drain",
+        )];
+        let built = vec![
+            hc(
+                "writes",
+                "{\"claims\":[\"no-loss\"],\"id\":\"writes\",\"type\":\"messages\"}",
+                "drain",
+            ),
+            hc(
+                "la",
+                "{\"history\":\"la\",\"id\":\"la\",\"type\":\"list-append\"}",
+                "exec '/hydo/checks/list_append_la'",
+            ),
+        ];
+        let h = merge_history(declared, built.clone());
+        assert_eq!(h.len(), 2);
+        assert_eq!(h[0].id, "writes");
+        assert!(h[0].json.contains("no-loss"), "the built declaration");
+        assert_eq!(h[1].id, "la");
+        assert_eq!(h[1].final_, "exec '/hydo/checks/list_append_la'");
+        // without a check in hydo.yaml the built list is the plan, as before
+        assert_eq!(merge_history(vec![], built.clone()).len(), 2);
+        // a declared list that names every built check stays as it was
+        let only = vec![hc("la", "{\"id\":\"la\"}", "")];
+        let h = merge_history(only.clone(), vec![built[1].clone()]);
+        assert_eq!(h.len(), 1);
+        assert_eq!(h[0].json, "{\"id\":\"la\"}");
     }
 
     #[test]
