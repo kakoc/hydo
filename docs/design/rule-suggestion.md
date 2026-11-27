@@ -503,6 +503,184 @@ Prometheus, GreptimeDB, Hatchet, Memos and Garage are the same as before, byte f
   subcommand (`CONFIG SET`) is listed under its own name. A table that registers commands
   through a function call per command, without a flag argument, is not read.
 
+## The sync audit (Milestone 381, tentative number)
+
+About a third of hydo's findings up to Milestone 374 had one cause. The system answered a write,
+or finished a transfer of state, before the data or a rename was on the disk. A power cut of the
+guest, or one node's power loss, then lost it. Examples are NSQ's disk queue, Kvrocks's fetched
+checkpoint, RabbitMQ's stream segments, Garnet's default device, Meilisearch's payloads and
+dumps, Vikunja's SQLite, SWUpdate's raw images, Mender's version file, and Garage's peer list.
+`hydo rules scan --kind sync` finds such code and aims power cuts at it, as the clock audit aims
+clock steps.
+
+### How it reads the code
+
+The audit is in `hydo/crates/hydo-cli/src/syncscan.rs`. It reads text with the clock audit's
+rules: the same languages, plus Erlang, without comments, test files, test code inside a source
+file, examples, vendored code, and generated code. It also leaves out build scripts
+(`magefile.go`, `build.rs`), benchmarks, samples, and the tool folders at the top of a
+repository (`utils/`, `tools/`, `scripts/`). Each function becomes a list of events in line
+order:
+
+- an open for writing: `os.OpenFile` with `O_CREATE`, `File::create`, `OpenOptions` with
+  `.write(true)`, `open(2)` with `O_WRONLY`, `fopen` with `"w"`, `std::ofstream`,
+  `new FileOutputStream`, `file:open` with `write`, RocksDB's `NewWritableFile`, or a project's
+  function that opens a file and whose name says so (`NewTmpFile`). The variable that takes the
+  file is a handle, and so is a field of the file that one takes (`d.writeFile`);
+- a write: a handle's write method (`Write`, `write_all`, `->Append`, `<<`), the handle given to a
+  call whose first or last word writes (`copyimage(&fdout, ...)`, `io.Copy(f, ...)`,
+  `BufWriter::new(file)`), or a whole-file write (`os.WriteFile`, `fs::write`, `file:write`). A
+  handle wrapped into a writer that is stored or returned (`db.journal = journal.NewWriter(w)`)
+  is no write there, because its writes and its sync come later in the wrapper;
+- a sync: `Sync()`, `sync_all`, `sync_data`, `fsync`, `fdatasync`, `sync_file_range`,
+  `F_FULLFSYNC`, `O_SYNC` and `O_DSYNC`, `FileChannel.force`, `file:sync`, `Flush(true)`, or a
+  project's function whose name says sync or flush and that syncs;
+- a rename: `os.Rename`, `fs::rename`, `rename(2)` and `renameat2`, `Files.move`, `File.Move`,
+  tempfile's `persist` in a file that uses tempfile, `file:rename`, or a project's function that
+  renames and whose name says so (`SwapTmpFile`);
+- an answer: a line with a reply, a response, an ack, a confirm, a commit, a task marked
+  succeeded, or an HTTP success (`WriteHeader`, `StatusOK`, `HttpResponse::Ok`), and a removal
+  of old data (`DestroyDB`, `RemoveAll`, `unlink`).
+
+A sync covers a write when it comes after it at the write's depth or outside the write's block.
+A sync inside a condition that the write is not in does not cover it, and the place says so.
+SWUpdate's raw handler, for example, syncs only when it turned an eMMC's write protection off. Go's `defer
+f.Sync()` covers the whole function. A write is also covered when every caller of its function
+syncs after the call, and a rename when every caller syncs after it. A rename needs a sync after
+it, of the folder. The answer is searched after the write, then in the callers by name, three
+calls deep. A name called from more than 40 places is followed only within its own folder.
+
+Four shapes are read line by line:
+
+- `stream`: a C++ stream written and then synced (by a primitive or a helper) before the stream
+  is flushed or closed. Mender's version file is the case.
+- `direct`: `O_DIRECT` set in a file that opens files for writing, with no `O_DSYNC`, `O_SYNC`,
+  or sync anywhere in the file. A reader's code (a function or file named for reading) is left
+  out.
+- `setting`: a setting whose name speaks of syncing, with a value that turns it off: a
+  `DECLARE(Bool, fsync_after_insert, false, ...)` table, a `{"rocksdb.write_options.sync", false,
+  ...}` table, a flag's default, a field with a literal, or a Rust `bool` with
+  `#[serde(default)]`. SQLite's WAL mode is a place when no line of the tree sets `synchronous`
+  to `FULL` or `EXTRA`, and so is a line that sets it to `NORMAL` or `OFF`. Names about
+  replication, threads, locks, contexts, queries, or formats are left out, so `repl-diskless-sync`
+  and `ast_drop_query.sync` are no settings.
+- `interval`: a setting that syncs every so often (`SyncEvery: 2500`, `SyncTimeout: 2 *
+  time.Second`), with its window when the value is a time.
+
+A function that saves or syncs in a loop with a timer (`time.NewTicker`, `tokio::time::interval`,
+`scheduleAtFixedRate`, or a sleep inside a loop) is a `periodic` place.
+
+A place is `high` in three cases:
+
+- an answer follows it;
+- the code shows that the author meant the data to be durable, by a write renamed into place or
+  a sync under a condition;
+- the names of its function or file speak of stored data (`wal`, `segment`, `meta`,
+  `checkpoint`, `queue`, `store`).
+
+A `stream`, `direct`, `setting`, or `interval` place is always `high`. Only `high`
+places get schedules.
+
+### The ranking and the schedules
+
+The report shows one place per function, or per line for a setting, the 5 most likely first. The
+rank adds points:
+
+| what | points |
+|---|---|
+| the shape: `stream`, `direct`, `setting`, `interval`, `periodic` or `rename`, `write` | 6, 5, 4, 3, 2, 0 |
+| an answer in the same function; through the callers; a removal of old data | 5; 4; 3 |
+| a word of stored data in the function's or the file's name | 3 |
+| a word of the function's or the file's name in the commands of hydo.yaml | 3 |
+| a minor language of the repository | -5 |
+| code that logs, caches, tests, or benchmarks, or a path of a tool | -6 |
+
+With `hydo/hydo.yaml` the places in the code that its services or its workload run come first,
+by the clock audit's map of programs. Each place gets these schedules:
+
+| name | schedule | what it tests |
+|---|---|---|
+| `powerloss-after` | `disk=cut \| run A=<event>+10:powerloss-<svc>`, or `L=<svc>@<middle>+3` | one service loses its power 10 ms after the answer, before the kernel writes the data back |
+| `cut-after` | `disk=cut \| run A=<event>+10:cut`, or `C=<middle>` | the whole guest loses its power there |
+| `cut-in-window` | `disk=cut \| run A=<event>+<half the window>:cut` | a periodic sync: the power goes inside the window between two syncs |
+
+The event is an id of the workload's SDK records in the folder of `hydo.yaml`. Its words say that
+a write was answered (`acked`, `ok`, `committed`, `saved`), and of those events the audit takes
+the one that shares most words with the place. The service is the one that runs the place's code, else the only service with
+`storage:`. `powerloss-after` is left out when hydo.yaml has services and the place's service
+has no `storage:`.
+
+### What the proof runs measured
+
+The audit read each project's tagged sources, fetched into an empty folder and not run, without a
+`hydo.yaml`. A rank counts the `high` places, one per function or setting line, as the report
+orders them. The known places are the causes in the examples' RESULTS.md pages.
+
+| project | source files | places | high | the known place, and its rank |
+|---|---|---|---|---|
+| go-diskqueue v1.1.0 (NSQ's finding 1) | 1 | 4 | 4 | `ioLoop`'s sync on a timer: 1; `persistMetaData`'s rename without a sync of the folder: 2; `writeOne`'s write: 4 |
+| Kvrocks v2.17.0 (finding 1) | 244 | 11 | 9 | `RestoreFromCheckpoint`: 3; `SwapTmpFile`: 5; `fetchFile`: 8 |
+| osiris v1.14.1 (RabbitMQ's findings 1 and 2) | 20 | 3 | 3 | `open_new_segment`: 1; `write_chunk`: 2 |
+| Garnet v2.2.14 (#2281) | 986 | 4 | 3 | `O_DIRECT` in `file_linux.cc` line 327: 2 |
+| Meilisearch v1.57.0 (findings 2 and 3) | 570 | 30 | 14 | the payload's `persist`: 1; `process_dump_creation`: 2 |
+| Vikunja v2.8.0 (finding 1) | 991 | 14 | 6 | WAL without `synchronous=FULL` in `pkg/db/db.go`: 1 |
+| SWUpdate 2026.05.1 | 174 | 16 | 4 | `install_raw_image`, the sync under a condition: 3 |
+| Mender 5.2.0 (finding 1) | 158 | 5 | 3 | the version file's stream in `Parse`: 1 |
+| Garage v2.5.0 (finding 3) | 204 | 13 | 11 | `Persister::save`: 5; `metadata_fsync`: 8; the peer list's loop: 10 |
+| ClickHouse v26.10.6.18 (finding 1) | 9,964 | 40 | 20 | `min_rows_to_fsync_after_merge`: 4; `fsync_after_insert`: 7 |
+| the fuzz-vm example's `save` (tempfile 3.27.0) | 1 | 1 | 1 | `save`: 1; `save_synced` is no place |
+| goleveldb `c3a204f8e965` (TiKV's finding 2, PD's MANIFEST) | 54 | 7 | 7 | `newManifest`: 5 |
+
+Every known place is listed and `high`, and in each project the first known place is among the
+first 5. On ClickHouse's 9,964 files the audit took 47 to 207 s in three runs on the shared
+machine, and 790 MB. Each other project took less than 16 s. NSQ v1.3.0 itself gave 5 `high`
+places. The first is `PersistMetadata`'s rename of `nsqd.dat` without a sync of the folder; the
+others are nsq_to_file's sync interval of 30 s, and nsqd's `SyncEvery` and `SyncTimeout`. bbolt
+v1.4.0, which syncs its pages and its meta page, gave no `high` place; its 3 medium places are in
+its command-line tools. tempfile 3.27.0 gave none.
+
+Garage's first 3 places are its SQLite adapter: WAL mode, with `synchronous` set to `NORMAL` when
+`metadata_fsync` is on and to `OFF` when it is off. In WAL mode `NORMAL` does not sync at a
+commit. The Garage example runs LMDB, so no run met it.
+
+A hand review read 30 `high` places drawn with a fixed seed from the 84 that the run before
+the last change ranked in these 14 projects. That change counts each setting of one function on
+its own line, which makes 90; the 30 places are in the final report too. A
+place counted as correct when the code leaves data unsynced that the program answered for or
+needs after a restart. A setting counted as correct when it turns such a sync off by default.
+25 of 30 were correct. The 5 others:
+
+- goleveldb's `recoverTable` syncs unless the option `NoSync` is set, the documented switch;
+- goleveldb's `printDay` writes the diagnostic `LOG` file;
+- Meilisearch's `import_dump` writes the analytics id `instance-uid`;
+- Meilisearch's dump writer writes files into a temporary folder that the dump archives;
+- `meilitool`'s `compact_index` renames a compacted copy, and the old file stays valid.
+
+The 25 include places that no finding had named. None of them ran in a VM:
+
+- ClickHouse's `renameExchange` of a table's metadata, which syncs no folder;
+- the conditional publish of ClickHouse's local object storage;
+- Kvrocks's `CreateBackup`;
+- SWUpdate's delta handler and its GRUB environment's write;
+- Vikunja's file attachments;
+- Meilisearch's `VERSION` file.
+
+The clock audit's and the write scan's tests pass unchanged, so their reports are the same.
+
+### What the sync audit does not do
+
+- It reads text. A write through an interface or a trait object is not followed, and neither is
+  a sync in another thread or process. A library that the project only links is not read, such
+  as RocksDB, rclone, or a driver's build flags (go-sqlite3's `SQLITE_DEFAULT_WAL_SYNCHRONOUS`).
+- The answer is found by words. A line that names `commit` or `response` without answering
+  counts, and an answer through a channel of another function is found only when that function
+  calls the place by name.
+- A setting is read where it is declared with a literal. A default computed in code, or set in
+  a configuration file of the project, is not read.
+- Without hydo.yaml the schedules cut before the middle step of 20, and `<service>` stays.
+- The proposed schedules did not run in a VM in this milestone. The known places' own regressions
+  are the examples' saved schedules.
+
 ## What is not built
 
 - The candidates file has no JSON schema yet. A change of its format raises its `format:` number.

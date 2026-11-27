@@ -438,6 +438,94 @@ steps it back after a restart of the service that runs the code. In the Garage e
 copy's place is second of 4, and its saved regression `disk=none | run T=17:-3600` loses a copy.
 `--json` lists these places as `clock_orders`.
 
+## Find the writes acknowledged before they are synced
+
+A write is on the disk only after a sync: `fsync` or `fdatasync` of the file, and after a rename
+also a sync of the folder that holds it. Until then the data is in the kernel's page cache, which
+the kernel writes back about 30 seconds later. A system that answers a write before the sync
+loses the answered write at a power cut of the guest (`C=`) or at one service's power loss
+(`L=`). The sync audit reads the project's source code and lists each place where that can
+happen. For each place it proposes power cuts right after the answer. Run it in the repository:
+
+```sh
+hydo rules scan --kind sync                  # the 5 most likely places, with their schedules
+hydo rules scan --kind sync --all            # every place
+hydo rules scan --kind sync --json           # every place as JSON, each with its rank
+```
+
+The audit reads Go, C and C++, Rust, Java and Kotlin, Python, JavaScript and TypeScript, Ruby,
+C#, and Erlang. It leaves out tests, examples, and vendored code, as the clock audit does, and
+also build scripts, benchmarks, and the folders of tools at the repository's top. A place is one
+of these shapes:
+
+| shape | what the code does | example |
+|---|---|---|
+| `write` | writes a file and does not sync it before it returns or answers | `d.writeFile.Write(buf)` in NSQ's disk queue |
+| `rename` | renames a file into place and does not sync the folder | `os.Rename(tmpFileName, fileName)` |
+| `stream` | syncs a file while a stream that wrote to it still holds bytes in its buffer | Mender's `myfile << version` before `DataSyncRecursively` |
+| `direct` | opens a file with `O_DIRECT`, and the file has no `O_DSYNC` and no sync | Garnet's default device on Linux |
+| `setting` | a setting that turns syncing off by default | SQLite's WAL mode without `synchronous=FULL`, `fsync_after_insert = false` |
+| `interval` | a setting that syncs every so often | NSQ's `SyncTimeout: 2 * time.Second` |
+| `periodic` | a loop that syncs or saves on a timer | Garage's peer list, saved once a minute |
+
+A sync covers a write when it comes later in the same function, at the write's own depth or
+outside the block that holds the write. A sync inside a condition that the write is not in does
+not cover it, and the place says so. A write is covered too when every caller of its function
+syncs after the call. The audit follows three kinds of a project's own helpers by name:
+
+- a function whose name says sync or flush, and that syncs;
+- a function that renames, and whose name says so;
+- a function that opens a file for writing.
+
+Each place names what is missing, and the answer that follows the write when the audit finds
+one. The answer is a line with a reply, a response, an ack, a confirm, a commit, a task marked
+succeeded, or an HTTP success. The audit looks for it after the write, then in the callers, up to
+three calls away:
+
+```text
+4. diskqueue.go:419, in writeOne [write, high]
+     _, err = d.writeFile.Write(d.writeBuf.Bytes())
+   It writes to a file opened at line 390 and does not sync it, ...
+   Missing: a sync of the file and a sync before the answer.
+   The answer: through ioLoop (diskqueue.go:696), line 696: d.writeResponseChan <- d.writeOne(dataWrite)
+   Note: its caller ioLoop syncs on a timer (diskqueue.go:652: syncTicker := time.NewTicker(d.syncTimeout)).
+```
+
+That is NSQ's disk queue, go-diskqueue v1.1.0. Its place 1 is the sync on a timer in `ioLoop`.
+Its place 2 is the metadata's rename without a sync of the folder, the cause of the NSQ example's
+finding 1.
+
+A place is `high` in three cases:
+
+- an answer follows it;
+- the code shows that the author meant the data to be durable: a write renamed into place, or a
+  sync under a condition;
+- the names of its function or file say that it holds stored data (`wal`, `segment`, `meta`,
+  `checkpoint`, `queue`).
+
+Only `high` places get schedules. The report shows one place per function, the most likely first, and the code that
+the services of `hydo/hydo.yaml` run before all other code, as the clock audit does. Code that
+logs, caches, or benchmarks comes last.
+
+Each place gets two schedules, three for a periodic sync with a stated interval:
+
+- `powerloss-after`: one service loses its power right after the answer, before the kernel writes
+  the data back. It needs `storage:` on that service.
+- `cut-after`: the whole guest loses its power at the same moment.
+- `cut-in-window`: the power goes half an interval after the answer, inside the window between
+  two syncs.
+
+When the workload prints an event for an answered write, such as `nsq.pub_acked`, the schedules
+aim at it: `disk=cut | run A=nsq.pub_acked+10:powerloss-nsqd`. The audit reads the events from
+the SDK calls in the folder of `hydo.yaml`. It keeps the events whose names say that a write was
+acknowledged (`acked`, `ok`, `committed`, `saved`). It takes the event that shares most words
+with the place. Without such an event the schedules cut before the middle step, `L=<service>@10+3` and
+`C=10`. Try a schedule with `hydo explore --schedule "<schedule>"`.
+
+A setting's place is a fact of the system, not always a bug: a project that documents a relaxed
+default trades durability for speed on purpose. Make such a setting a build parameter and run its
+values with `hydo explore --configs` (`hydo guide workflow`, "Which settings break a promise").
+
 ## Clock after a power cut
 
 Every boot starts its clock at `guest.clock_start`. Without `guest.clock_after_cut`, the recovery
