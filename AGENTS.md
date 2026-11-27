@@ -1436,6 +1436,36 @@ The released hydo 0.7.0 replayed findings 1 and 2 on hvx with their recorded fin
 twice, and the default image's contrast of finding 1 gave OK `179ac0194c742e8d`. Open item 192
 has what is left.
 
+**CockroachDB (M377, tentative number).** CockroachDB v26.4.1 runs as a cluster of three nodes
+from the official image in one hvx guest of 3,072 MiB, in `hydo/onboard/examples/cockroachdb`
+(RESULTS.md), imported with `hydo compose`. Each node's store is a file system of its own. The
+emergency ballast file is off, and the image needs `guest.cpu: v3`. The workload starts after
+every range has three replicas. A Go client on pgx writes a register table, explicit
+transactions, list appends and reads at SERIALIZABLE, and bank transfers. The checks are a
+messages check with `acked_outcome` and a list-append check at `serializable`. Reads at one past
+timestamp through every node must agree, and follower reads keep the bank's total. CockroachDB's
+own replica consistency check runs at the end, and so does a count of the nodes that stopped
+for the clock. `skew/hydo.yaml` gives roach3 `clock:
+own` (M372). The public repository has no code of v26.3 or v26.4; its `master` ends at
+`d30c905f`. Nothing was posted:
+- New, a clock effect past the documented bound: with roach3's clock 1 s ahead or behind, or 5 %
+  fast, roach1 and roach2 stop themselves too, with `clock synchronization error ... (1 of 2 are
+  within the offset)`. `VerifyClockOffset` stops a node when `healthyOffsetCount <=
+  numClocks/2`, and a healthy node of three counts two clocks. The cluster acknowledged 5 of 23
+  writes sent. At 300 ms either way every rule held. On the final image the clock 1 s behind
+  stopped no node, roach3 included, which was not traced.
+- Known (#25109), a clock effect by design: after a step back of 300 s and a kill of every node,
+  no node serves for longer than 180 s. Each new process starts its hybrid logical clock 300 s
+  before the cluster's data. Steps of 20 to 120 s passed. With
+  `server.clock.persist_upper_bound_interval` (off by default) the nodes wait at their start, and
+  the schedule fails the same way.
+- Not traced: in one schedule roach1's store kept nine WAL files of its first two minutes and
+  wrote no SST. Each has about 70 MiB preallocated, so its file system of 640 MiB was full, and it
+  did not start after a power cut. The first clean run showed it too, without faults.
+
+Every acknowledged write, transaction, transfer and past-timestamp read held in every run. Open
+item 193 has what is left.
+
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
 Without clock steps every rule held. One new candidate is not reported upstream: the SQL handle
@@ -4371,6 +4401,33 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Not run: the Mac engine, and the settings exploration over the five parameters. Neither
       ran the parallel replication, diskless replication, a log on disk, or several replicas
       per shard. No slot moved back to its first shard after a failure.
+193. What the example `cockroachdb` left (M377, tentative number):
+    - Finding 1 is not reported upstream. The code of v26.4.1 is not public, so a report would
+      cite `master` at `d30c905f`. A native run with a clock offset (for example libfaketime on
+      one node) was not made.
+    - hydo's gaps: a run's diagnosis replay was killed by the host's out-of-memory killer, which
+      counted the mapped disk images against `hydo run`, and the run kept no `logs/`. A node
+      that stops itself and is started again by its restart policy leaves no trace in the
+      verdict or the report; only `one.log` names its exits. The diagnosis of a glibc that needs
+      x86-64-v3 said that a program it runs was not found, and of a full disk (exit status 10) it
+      said nothing. `hydo compose` kept a one-shot `cockroach init` as a service and took the
+      port 8080 from the image's `EXPOSE`.
+    - The services' own log files reach `logs/` only with `services[].logs`, which the
+      onboarding guide does not name; CockroachDB's `cockroach.log` is a link to the newest
+      process's file.
+    - Candidate 3 (a store that kept nine unflushed WAL files) has no traced cause, and its
+      schedule's faults were not separated. The comment of `hydo.yaml` names the ballast file
+      as the cause of the first full disk; it stays, because it is in the image's bytes.
+    - With roach3's clock 1 s behind, the final skew image stopped no node, roach3 included.
+      An earlier build stopped all three. Why the offset check did not fire was not traced.
+    - Steps back of a day and of 30 days with a kill of one node left no node serving within
+      180 s, in three blind seeds. They were not separated from their other faults.
+    - The explorations were short: one worker on a loaded machine, without shrinks. They ran
+      seeds 1-4 of the skew image with `--service-clocks` and seeds 1-6 of the default image.
+      These were not run: shrinks, power cuts at disk flushes (`cf=`), and the reactive grid.
+      Neither KVM nor the Mac engine ran it (the image has an arm64 build). More than three
+      nodes, several regions, epoch leases, and a `--max-offset` other than 500 ms were not
+      tried.
 
 ## Milestone index
 
@@ -5611,6 +5668,12 @@ build machine, before 2026-10-13.
   (docs/REBASELINE.md section 33), and no KVM image. Release step 6a fixed two sentences. Both
   releases were built twice to the same bytes, and the Mac one is signed and notarized. They were
   verified on hvx, the Mac and KVM, where a runner rebuilt the Linux tarball byte for byte
+- M377 (tentative number): the onboarding of CockroachDB v26.4.1 on hvx, three nodes, with one
+  node's own clock (`clock: own`). New: one node's clock 1 s off, ahead or behind, stops the two
+  healthy nodes too. A healthy node of three counts two clocks, and one bad clock of two stops
+  it. At 300 ms every rule held. Known (#25109): a step back of 300 s and a restart of every node
+  leave the cluster unavailable for longer than 180 s. Not traced: a store full of unflushed
+  WAL files. Nothing recorded moved
 
 ## Where to look
 
