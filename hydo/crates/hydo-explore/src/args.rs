@@ -9,7 +9,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--no-faults]
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--shrink-causes N]
-       [--shrink-detected-damage] [--rerun-repeats]
+       [--shrink-detected-damage] [--rerun-repeats] [--shrink-later]
        [--shrink-from-snapshots | --shrink-from-s1] [--check-continued]
        [--reactive fault|heal|both [--react-events ID,...] [--heal-events ID,...] [--kill-now]]
        [--reactive-at EVENT[#K][@STEP][,...] [--react-delays A..B[/STEP]] [--react-actions kill-now,kill,cut,...]]
@@ -153,6 +153,10 @@ pub struct Args {
     /// again after hydo damaged its files or its disk's blocks, the system's detection of the
     /// damage ([`crate::report::shrinks`]).
     pub shrink_detected_damage: bool,
+    /// `--shrink-later` (Milestone 387): write the report after the first runs and their
+    /// re-runs, and shrink nothing; `hydo shrink <explore dir> --problem N` shrinks one problem
+    /// later. Without it the explorer writes the same first report and then shrinks.
+    pub shrink_later: bool,
     /// `--shrink-from-snapshots` (Some(true)) or `--shrink-from-s1` (Some(false)), Milestone 340
     /// (docs/design/shrink-snapshots.md): shrink candidates continue from snapshots that earlier
     /// runs of their worker took at their step ranges, or every one runs from S1. None: the
@@ -285,6 +289,7 @@ impl Default for Args {
             seeds_given: false,
             rerun_repeats: false,
             shrink_detected_damage: false,
+            shrink_later: false,
             shrink_snapshots: None,
             check_continued: false,
             steer: None,
@@ -306,7 +311,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 33] = [
+const FLAGS: [&str; 34] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -337,6 +342,7 @@ const FLAGS: [&str; 33] = [
     "kill-now",
     "rerun-repeats",
     "shrink-detected-damage",
+    "shrink-later",
     "shrink-from-snapshots",
     "shrink-from-s1",
     "check-continued",
@@ -492,6 +498,7 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "kill-now" => a.kill_now = true,
             "rerun-repeats" => a.rerun_repeats = true,
             "shrink-detected-damage" => a.shrink_detected_damage = true,
+            "shrink-later" => a.shrink_later = true,
             "shrink-from-snapshots" => a.shrink_snapshots = Some(true),
             "shrink-from-s1" => a.shrink_snapshots = Some(false),
             "check-continued" => a.check_continued = true,

@@ -2434,6 +2434,29 @@ It ran on the scripted engine and on the Mac engine with the Redis quickstart ex
 reference is `hydo guide workflow`, "Keep the findings of your runs"; the details are in
 `docs/HISTORY.md` Milestone 365 (open item 187).
 
+**The report before the shrinks (M387, tentative number).** `hydo explore` writes
+`exploration.json`, `report.md` and `stats.json` once its first runs and the re-runs of each
+failure are done, before any shrink ends, and writes them again as each shrink ends. Each write
+replaces the file as a whole. The shrinks' runs wait in a last queue of the pool, after every
+first run and re-run. Results additions: a failure's `shrink_state` (`pending`, `shrinking`,
+`done`, `skipped`) and, until its problem has a minimal schedule, its `repro_command`; the
+summary's `first_report_s`; a CI finding's `not_shrunk`. The other parts:
+
+- A problem without its minimal schedule shows its failing run, its command and "not shrunk
+  yet" in report.md, `hydo report` and its page. In a terminal, `hydo explore` prints the counts
+  at the first report. A stopped exploration keeps that report.
+- `hydo explore --shrink-later` shrinks nothing. `hydo shrink <explore dir> --problem N | --all`
+  shrinks later in the same folder, from `unshrunk.json`, with the exploration's command line.
+- `hydo save`, `hydo stats`, `hydo explore --merge` and the CI comment name what is not shrunk
+  yet. A CI decision uses the minimal schedule when there is one, else the failing run's.
+
+On the scripted engine the 32 scenarios' outputs differ from the goldens only by the added
+fields. Both on the scripted engine and on hvx, shrinks made later give the files of shrinks
+made as the exploration went. On hvx, 60 seeds of the Redis example on one worker gave their
+first report after 1.1 minutes and their final report after 2.1 minutes. Nothing recorded
+moved. The reference is `hydo guide workflow`, "The report comes before the shrinks"; the
+details are in `docs/HISTORY.md` Milestone 387 (open item 195).
+
 **The fixes of the 0.4.0 trial (M301, tentative number).** What hydo tells a user is true again
 where M297's trial found it false (`docs/design/0.4.0-user-trial.md`, "After the fixes of M301"):
 
@@ -4572,6 +4595,25 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - A live session's stacks call costs one stop. A dump writes the guest's whole RAM, so a
       reading of a guest of several GiB writes that much to the session's folder.
     - Several vCPUs on hvx were not run.
+195. The report before the shrinks (M387, tentative number). What is left:
+    - The ten explorations of the ledger that record their later runs were not run again with
+      and without shrinks, as `docs/design/time-to-first-bug.md` proposes. Two hvx explorations
+      of the Redis example, whose runs take half a second, measured the minutes; no onboarding
+      used it yet, and neither the Mac engine nor KVM ran it.
+    - The error kinds of the services' logs have no shrink state: the report shows each one's
+      first new run and says nothing about a shrink that has not ended. `hydo shrink --all` and the
+      error-lines problem's number shrink the kinds that wait.
+    - `hydo shrink` writes the minimal schedules into exploration.json, report.md and
+      events.jsonl, but not into stats.json: its cost of shrinks counts only those that the
+      exploration made. Shrinks made in several calls put their runs into events.jsonl in the
+      order of the calls.
+    - `hydo shrink` runs with the exploration's command line, so a relative `--image` path or
+      `--manifest` path needs the folder where the exploration ran. It refuses a merged
+      exploration; its parts are shrunk in their own folders and merged again.
+    - The steered search, the state search and the freeze points write their first report after
+      their own rounds, which run before the first runs end.
+    - An exploration that a `--time-limit` cut writes its first report after the cut, and its
+      shrinks then run past the limit, as before.
 
 ## Milestone index
 
@@ -5876,6 +5918,11 @@ build machine, before 2026-10-13.
   and both frames of a Go and a Rust deadlock, and `--check-run` proves the fingerprint
   unchanged. It gave M325's Keeper loop in one call, and the Garnet replica's 78 blocked
   workers. Nothing recorded moved
+- M387 (tentative number): the report before the shrinks. `hydo explore` writes its report once
+  the first runs and the re-runs are done. Each problem shows its failing run and command until
+  its shrink ends, and the report is written again as each shrink ends. `--shrink-later` shrinks nothing,
+  and `hydo shrink <explore dir> --problem N` shrinks one problem later in the same folder.
+  Shrinks made later give the files of shrinks made as it went. Nothing recorded moved
 
 ## Where to look
 

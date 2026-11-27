@@ -337,6 +337,46 @@ then named by the faults it keeps. And a reaction's delay (`A=<event>+<ms>:...`)
 every number left out. A shorter delay can reach another cause's window and fail the same check
 with other words; the shrink then keeps the longer delay.
 
+### The report comes before the shrinks
+
+A shrink runs a failing schedule many times with fewer or smaller faults, so it takes most of an
+exploration's time. `hydo explore` therefore writes its report as soon as its first runs and the
+re-runs of each failure are done, before any shrink ends. Then it shrinks, and writes the report
+again as each shrink ends.
+
+- Until its shrink ends, a problem shows its failing run's schedule and the command that runs
+  it, and `hydo report` marks it as not shrunk yet. A failing run replays exactly as a minimal
+  schedule does; it only has more faults.
+- In a terminal, `hydo explore` prints the number of failed runs and problems at the first
+  report. `hydo report <explore dir>` shows them while the shrinks run.
+- `exploration.json`, `report.md` and `stats.json` are replaced as a whole at each write, so you
+  can read them at any time. If you stop the exploration during its shrinks, the report keeps
+  every problem with its failing run and its command.
+- `hydo explore --shrink-later` writes the report and shrinks nothing. `hydo shrink <explore dir>
+  --problem N` shrinks problem N later, as `hydo report` numbers it, and `--all` shrinks every
+  problem that waits. It uses the exploration's engine and options, so run it in the folder where
+  the exploration ran. The minimal schedule goes into the same folder, as if the exploration had
+  shrunk it.
+- The first runs and the re-runs take the workers first; the shrinks' runs wait until no first
+  run waits. The verdicts, fingerprints and minimal schedules are those of an exploration that
+  shrinks as it goes.
+
+Each failure in `exploration.json` has `shrink_state`: `pending` (it waits for `hydo shrink`),
+`shrinking` (the explorer was shrinking it when it wrote the file), `done`, or `skipped` (hydo
+does not shrink it). A failure that is not `done` also has `repro_command`. The summary's
+`first_report_s` is the number of seconds from the start to the first report. The shrinks that
+have not ended are listed in the folder's `unshrunk.json`, which `hydo shrink` reads.
+
+What reads an exploration reads one that is not shrunk yet:
+
+- `hydo save` saves the minimal schedules that exist and names the problems that are not shrunk
+  yet.
+- `hydo stats` says that its cost of shrinks counts only the shrinks that ended.
+- `hydo explore --merge` keeps a part's problem that is not shrunk yet with its failing run; shrink
+  it in the part's folder and merge again.
+- `hydo ci run` decides a finding against the base with its minimal schedule when there is one,
+  and with the failing run's schedule otherwise. Its comment says that such a schedule is not shrunk.
+
 ### Shrinks that continue from snapshots
 
 A shrink candidate keeps the faults before the one it changes. So it runs again what an earlier

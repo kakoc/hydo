@@ -108,7 +108,16 @@ fn changed_key(f: &CiFinding) -> Option<String> {
 
 fn item(o: &mut String, r: &CiRun, n: usize, f: &CiFinding, state: &str) {
     let _ = writeln!(o, "**{n}.** {}\n", span(&f.title));
-    let _ = writeln!(o, "- Minimal schedule: {}", span(&f.minimal));
+    // Milestone 387: a finding that the exploration had not shrunk shows its failing run
+    if f.not_shrunk == Some(true) {
+        let _ = writeln!(
+            o,
+            "- Schedule (not shrunk: the failing run's): {}",
+            span(&f.minimal)
+        );
+    } else {
+        let _ = writeln!(o, "- Minimal schedule: {}", span(&f.minimal));
+    }
     match state {
         ci_state::FIXED => {
             let _ = writeln!(

@@ -11,8 +11,8 @@
 //! Each scenario runs hydo-explore with its options and compares its outputs file by file —
 //! events.jsonl, exploration.json (the results format, M115), report.md and the printed summary
 //! — with `tests/golden/fake/<scenario>/`, after normalising only what is not a function of the
-//! schedules: the wall times (sweep_wall_s, runs_per_hour, total_wall_s, stage1/2_wall_s, a
-//! stage-2 round's secs), the worker that ran a schedule and the worker count, the loaded hvx
+//! schedules: the wall times (sweep_wall_s, runs_per_hour, total_wall_s, first_report_s,
+//! stage1/2_wall_s, a stage-2 round's secs), the worker that ran a schedule and the worker count, the loaded hvx
 //! module, and the output and scratch paths (`<out>`, `<dir>`). The goldens were explore.py's
 //! outputs at commit 2a58c4b on fake_engine.py (recorded in M107); in M115 they were re-recorded
 //! in the results format after hydo/crates/hydo-explore/examples/legacy_check.rs found every
@@ -215,7 +215,7 @@ fn run(prog: &mut Command, dir: &Path, out: &Path) -> String {
 fn norm(text: &str) -> String {
     // pretty JSON and report.md tables ("key": 1.5, | key | 1.5 |) and compact JSON ("key":1.5)
     let re = regex::Regex::new(
-        r#"("?(?:sweep_wall_s|runs_per_hour|total_wall_s|stage1_wall_s|stage2_wall_s|workers|worker)"?(?:: | \| |:))[0-9.]+"#,
+        r#"("?(?:sweep_wall_s|runs_per_hour|total_wall_s|first_report_s|stage1_wall_s|stage2_wall_s|workers|worker)"?(?:: | \| |:))[0-9.]+"#,
     )
     .unwrap();
     let t = re.replace_all(text, "${1}N").into_owned();
@@ -326,6 +326,12 @@ fn scenario(name: &str, args: &[&str]) {
     }
     if name == GUARD_SCENARIO {
         return guard_scenario();
+    }
+    if name == SHRINK_LATER_SCENARIO {
+        return shrink_later_scenario();
+    }
+    if name == SHRINK_STOP_SCENARIO {
+        return shrink_stop_scenario();
     }
     let dir = scratch(name);
     let out = dir.join("out");
@@ -696,6 +702,11 @@ const SCENARIOS: &[(&str, &[&str])] = &[
     (RESTART_SCENARIO, &[]),
     // no golden: guard_scenario() checks a shrunk reaction delay and a left-out G=
     (GUARD_SCENARIO, &[]),
+    // no golden: shrink_later_scenario() compares shrinks made later with shrinks made as the
+    // exploration went (Milestone 387)
+    (SHRINK_LATER_SCENARIO, &[]),
+    // no golden: shrink_stop_scenario() stops an exploration after its first report
+    (SHRINK_STOP_SCENARIO, &[]),
 ];
 
 const GUARD_SCENARIO: &str = "guard_shrinks_keep_the_cause";
@@ -820,6 +831,8 @@ const TIME_LIMIT_SCENARIO: &str = "time_limit_cuts_at_a_seed_boundary";
 const MERGE_SCENARIO: &str = "merge_equals_one_exploration";
 const REPEATS_SCENARIO: &str = "repeats_take_the_earlier_result";
 const RESTART_SCENARIO: &str = "restart_errors_are_shrunk";
+const SHRINK_LATER_SCENARIO: &str = "shrink_later_equals_shrinking_as_it_goes";
+const SHRINK_STOP_SCENARIO: &str = "a_stopped_exploration_keeps_its_report";
 
 /// Milestone 339: an error of the system is shrunk like a violation, by its signature. On the
 /// RAUC example's manifest the scripted engine ends a run whose service was killed for 3 steps
@@ -1092,6 +1105,188 @@ fn repeats_scenario() {
             assert!(!snaps.join("shrink-snapshots.json").exists());
         }
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Milestone 387: the report before the shrinks. An exploration with `--shrink-later` reports
+/// every failure with its failing run, its replay command and its shrink state, and shrinks
+/// nothing; `hydo-explore shrink` (the engine of `hydo shrink`) then shrinks every problem that
+/// waits, and the folder's exploration.json, events.jsonl and report.md are those of the same
+/// exploration that shrank as it went, apart from the option on the command line.
+fn shrink_later_scenario() {
+    let dir = scratch(SHRINK_LATER_SCENARIO);
+    let args: &[&str] = &[
+        "--seeds",
+        "1-40",
+        "--new-faults",
+        "--more-faults",
+        "--shrink-causes",
+        "3",
+    ];
+    let explore = |name: &str, extra: &[&str]| -> PathBuf {
+        let out = dir.join(name);
+        let mut c = Command::new(env!("CARGO_BIN_EXE_hydo-explore"));
+        c.args(args)
+            .args(extra)
+            .args(IMAGE)
+            .args(["--workers", "3", "--out"])
+            .arg(&out);
+        run(&mut c, &dir, &out);
+        out
+    };
+    let now = explore("now", &[]);
+    let later = explore("later", &["--shrink-later"]);
+    let doc = |out: &Path| -> serde_json::Value {
+        serde_json::from_str(&std::fs::read_to_string(out.join("exploration.json")).unwrap())
+            .unwrap()
+    };
+    let d = doc(&later);
+    let fails = d["failures"].as_array().unwrap();
+    assert!(!fails.is_empty(), "the scenario has failures");
+    assert!(
+        d["shrinks"].as_array().unwrap().is_empty(),
+        "{}",
+        d["shrinks"]
+    );
+    let mut pending = 0;
+    for f in fails {
+        let st = f["shrink_state"].as_str().unwrap();
+        assert!(st == "pending" || st == "skipped", "{f}");
+        if st == "pending" {
+            pending += 1;
+            let c = f["repro_command"].as_str().unwrap();
+            assert!(c.contains(f["run"]["schedule"].as_str().unwrap()), "{c}");
+        }
+    }
+    assert!(pending > 0, "some failures wait for their shrink");
+    assert!(d["summary"]["first_report_s"].as_f64().is_some());
+    assert!(later.join("unshrunk.json").is_file());
+    let md = std::fs::read_to_string(later.join("report.md")).unwrap();
+    assert!(md.contains("## Not shrunk yet"), "{md}");
+    assert!(md.contains("- by hand: `hydo run"), "{md}");
+    // every problem shrunk later
+    let o = Command::new(env!("CARGO_BIN_EXE_hydo-explore"))
+        .arg("shrink")
+        .arg(&later)
+        .env("HYDO_FAKE_ENGINE", "1")
+        .env("HYDO_SCRIPTED_ENGINE", engine_path())
+        .env("HYDO_BUILD", &*dir)
+        .env_remove("HYDO_EXPLORE_CACHE")
+        .env_remove("HYDO_QUIET_FILE")
+        .current_dir(top())
+        .output()
+        .expect("run");
+    assert!(
+        o.status.success(),
+        "hydo-explore shrink: {}",
+        String::from_utf8_lossy(&o.stderr)
+    );
+    assert!(!later.join("unshrunk.json").exists());
+    let opt = regex::Regex::new(r#"\s*"--shrink-later","#).unwrap();
+    for f in ["exploration.json", "events.jsonl", "report.md"] {
+        let clean = |out: &Path| {
+            let t = std::fs::read_to_string(out.join(f)).unwrap();
+            let t = opt.replace_all(&t, "").into_owned();
+            norm(&t.replace(&out.display().to_string(), "<out>"))
+        };
+        let (a, b) = (clean(&now), clean(&later));
+        if a != b {
+            let (la, lb): (Vec<&str>, Vec<&str>) = (a.lines().collect(), b.lines().collect());
+            let i = la
+                .iter()
+                .zip(&lb)
+                .position(|(x, y)| x != y)
+                .unwrap_or(la.len().min(lb.len()));
+            panic!(
+                "{f}: shrunk later differs from shrunk as it went at line {}:\n  as it went: {}\n  later:      {}",
+                i + 1,
+                la.get(i).unwrap_or(&"<end>"),
+                lb.get(i).unwrap_or(&"<end>")
+            );
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Milestone 387: an exploration stopped during its shrinks keeps its first report. The scripted
+/// engine answers the shrinks' runs slowly (`HYDO_FAKE_SLOW_SHRINKS`), the explorer is killed
+/// once exploration.json is there, and every failure is in the report with its failing run and
+/// its replay command; `hydo-explore shrink` then shrinks them in the same folder.
+fn shrink_stop_scenario() {
+    let dir = scratch(SHRINK_STOP_SCENARIO);
+    let out = dir.join("out");
+    let mut c = Command::new(env!("CARGO_BIN_EXE_hydo-explore"));
+    c.args(["--seeds", "1-30", "--new-faults", "--more-faults"])
+        .args(IMAGE)
+        .args(["--workers", "3", "--out"])
+        .arg(&out)
+        .env("HYDO_FAKE_ENGINE", "1")
+        .env("HYDO_SCRIPTED_ENGINE", engine_path())
+        .env("HYDO_FAKE_SLOW_SHRINKS", "1")
+        .env("HYDO_BUILD", &*dir)
+        .env_remove("HYDO_EXPLORE_CACHE")
+        .env_remove("HYDO_QUIET_FILE")
+        .current_dir(top())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    let mut child = c.spawn().expect("spawn");
+    let doc_path = out.join("exploration.json");
+    // unshrunk.json is the first report's last file (after exploration.json and report.md)
+    let last = out.join("unshrunk.json");
+    let t0 = std::time::Instant::now();
+    while !last.is_file() {
+        assert!(t0.elapsed().as_secs() < 300, "no first report within 300 s");
+        if let Ok(Some(st)) = child.try_wait() {
+            panic!("the explorer ended before its first report: {st}");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    child.kill().expect("kill");
+    let _ = child.wait();
+    let d: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&doc_path).unwrap()).unwrap();
+    let fails = d["failures"].as_array().unwrap();
+    assert!(!fails.is_empty(), "the scenario has failures");
+    let shrinking: Vec<&serde_json::Value> = fails
+        .iter()
+        .filter(|f| f["shrink_state"] == "shrinking")
+        .collect();
+    assert!(!shrinking.is_empty(), "{fails:?}");
+    for f in fails {
+        if f["shrink_state"] != "done" {
+            assert!(f["repro_command"].as_str().is_some(), "{f}");
+        }
+    }
+    let md = std::fs::read_to_string(out.join("report.md")).unwrap();
+    assert!(md.contains("## Not shrunk yet"), "{md}");
+    // each problem once, with its first failing run
+    for f in &shrinking {
+        assert!(md.contains(f["signature"].as_str().unwrap()), "{md}");
+    }
+    assert!(out.join("unshrunk.json").is_file());
+    let o = Command::new(env!("CARGO_BIN_EXE_hydo-explore"))
+        .arg("shrink")
+        .arg(&out)
+        .env("HYDO_FAKE_ENGINE", "1")
+        .env("HYDO_SCRIPTED_ENGINE", engine_path())
+        .env("HYDO_BUILD", &*dir)
+        .env_remove("HYDO_EXPLORE_CACHE")
+        .env_remove("HYDO_QUIET_FILE")
+        .current_dir(top())
+        .output()
+        .expect("run");
+    assert!(
+        o.status.success(),
+        "hydo-explore shrink: {}",
+        String::from_utf8_lossy(&o.stderr)
+    );
+    let d: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&doc_path).unwrap()).unwrap();
+    for f in d["failures"].as_array().unwrap() {
+        let st = f["shrink_state"].as_str().unwrap();
+        assert!(st == "done" || st == "skipped", "{f}");
+    }
+    assert!(!d["shrinks"].as_array().unwrap().is_empty());
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -1901,6 +2096,13 @@ mod engine {
             }
             let line = buf.strip_suffix('\n').unwrap_or(&buf);
             let (tag, sched) = line.split_once(' ').unwrap();
+            // Milestone 387: shrinks that take their time, so that a test stops the explorer
+            // during them (the answer stays a function of the schedule)
+            if std::env::var_os("HYDO_FAKE_SLOW_SHRINKS").is_some_and(|v| v == "1")
+                && (tag.starts_with("shrink") || tag.starts_with("min"))
+            {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
             writeln!(out, "{}", answer(consoles, tag, sched)).unwrap();
             out.flush().unwrap();
         }

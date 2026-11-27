@@ -43,7 +43,11 @@ pub fn of(cmd: &str, linux: bool) -> Option<String> {
   In a terminal it ends with how many runs failed and in how many ways. When its output is not a
   terminal, or with --json, it ends with the summary as one JSON line and the report's path
   instead. `hydo report` prints the problems it found, `hydo repro hydo-out/explore` runs every failure again, and
-  `hydo save hydo-out/explore` keeps the minimal schedules as regressions. `hydo guide faults`
+  `hydo save hydo-out/explore` keeps the minimal schedules as regressions.
+  It writes its report as soon as the first runs and their re-runs are done, before it shrinks:
+  each problem then shows its failing run and is marked not shrunk yet. It writes the report again
+  as each shrink ends, so a stopped exploration keeps a complete report. --shrink-later shrinks
+  nothing; `hydo shrink <explore dir> --problem N` shrinks one problem later. `hydo guide faults`
   lists the fault kinds. --record-findings records the findings in the findings store at the
   end ($HYDO_FINDINGS_STORE or ~/.hydo/findings; `hydo findings --help`).
   With --reactive-at a seed is one cell of its grid: seed k runs cell k, and without --seeds the
@@ -86,6 +90,15 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
   image was built with, the defaults too, so that `hydo repro --regressions` leaves it out on an
   image built with other values (`hydo build --set`). A finding whose file name is taken by another
   finding gets the next free name (`<name>-2.schedule`); a finding saved before is kept."
+            .to_string(),
+        "shrink" => "usage: hydo shrink <explore dir> --problem N
+       hydo shrink <explore dir> --all
+  shrinks a problem that the exploration reported before its shrink: one explored with
+  `hydo explore --shrink-later`, or one stopped while it shrank. N is the problem's number in
+  `hydo report`. It uses the explorer's shrinker with the engine and the options of the
+  exploration's command line, so run it where the exploration ran. The minimal schedule goes
+  into the same folder: exploration.json, report.md and events.jsonl. --all shrinks every
+  problem that waits. `hydo save` then keeps the minimal schedule as a regression."
             .to_string(),
         "report" => "usage: hydo report [DIR] [--details]
        hydo report DIR DIR... [--html [-o FILE]]

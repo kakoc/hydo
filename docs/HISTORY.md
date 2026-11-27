@@ -26257,3 +26257,103 @@ and the sync audit keeps reading Erlang through its own type and leaves Elixir o
 explorer's corpus and identity goldens and hydo-control's identity corpus were recorded again
 with `HYDO_BLESS=1`. Each diff added only the example `deadlock` (its input line, and the
 controller's boot, counts and one more refused schedule).
+
+## Milestone 387 (tentative number): the report before the shrinks
+
+Status: done on 2026-11-27, on the bare-metal machine (the builds, the tests, and the runs on the
+scripted engine and on hvx) from this Mac. Nothing recorded moved: the explorer writes its report
+earlier and orders its runs otherwise, and every run, verdict, fingerprint and minimal schedule
+is the same. No engine, image, agent, or guest program changed, and the fingerprint epoch stays
+as it was.
+
+**Why.** Milestone 385 measured that re-runs and shrinks took 85 % to 94 % of an exploration's
+runs before its report, because `hydo explore` wrote `exploration.json` and `report.md` only after
+its last shrink (`docs/design/time-to-first-bug.md`, "Report first, shrink later"). A failing run
+replays exactly, so its schedule is a usable report before the shrink. Eleven examples explored
+with `--no-shrink` for that reason, and the playbook says to shrink only the failure you report.
+
+**What was built.**
+
+- `hydo explore` writes `exploration.json`, `report.md` and `stats.json` once its first runs and
+  the re-runs of each failure are done, and before any shrink ends. It writes them again as each
+  shrink ends, each file replaced at once (`run.rs`, `assemble` and `write_reports`). The
+  shrinks' candidates and confirmations wait in a third queue of the pool (`pool::Prio::Later`),
+  after the re-runs and the first runs, so a shrink no longer takes a worker from a first run.
+  The shrinks still start as soon as their failure is in and a worker is free.
+- Results additions (`hydo/schema/results-v1.json`): a failure's `shrink_state` (`pending`,
+  `shrinking`, `done`, `skipped`; the state of its class group and signature) and, while it is
+  not `done`, its `repro_command`; the summary's `first_report_s`, the seconds from the start to
+  the first report (a merge takes the latest of its parts'); a CI finding's `not_shrunk`.
+- report.md has a section "Not shrunk yet" with each such problem's first failing run, its
+  verdict and its command. `hydo report` marks the problem as not shrunk yet and prints `Not
+  shrunk yet: hydo shrink <dir> --problem N`; the web page says so in the problem's card and in
+  the table of failures. In a terminal, `hydo explore` prints the counts at the first report and
+  the command that shows them.
+- `hydo explore --shrink-later` writes the report and shrinks nothing. The folder's
+  `unshrunk.json` keeps what each shrink that has not ended starts from: the failing run's
+  record, its chain number and its fault kinds, and each new error kind's first new run.
+  `hydo shrink <explore dir> --problem N | --all` (`hydo_explore::run::shrinks::shrink_main`)
+  shrinks from it with the explorer's shrinker and the exploration's command line. It puts the
+  minimal schedule into the same folder: exploration.json, report.md, and events.jsonl before
+  the stream's end record. `hydo-explore shrink <dir> [--seed N] [--errors]` is the same for
+  the tests.
+- `hydo save` names the problems not shrunk yet and saves the others. `hydo stats` says that
+  its cost of shrinks counts only those that ended. `hydo explore --merge` keeps a part's open
+  problem with its failing run and says to shrink it in the part's folder. `hydo ci run` decides
+  a finding with its minimal schedule when there is one and with the failing run's otherwise, as
+  before, and its comment calls such a schedule not shrunk.
+
+**The proof on the scripted engine.**
+
+- With the added fields left out, all 32 recorded scenarios of `fake_engine` gave their goldens
+  file for file (events.jsonl, exploration.json, report.md and the summary line). The goldens
+  were then recorded again with `HYDO_BLESS=1` for the added fields only: `first_report_s` in
+  every exploration.json and end record (normalised like the other wall times), and
+  `shrink_state` and `repro_command` in each failure. No report.md and no summary line changed.
+- `shrink_later_equals_shrinking_as_it_goes` explores 40 seeds with `--shrink-later` and with
+  shrinks as it goes. The first report has every failure `pending` or `skipped`, each `pending`
+  one with its command, no shrink, `unshrunk.json`, and the section "Not shrunk yet".
+  `hydo-explore shrink` then makes exploration.json, events.jsonl and report.md equal to the
+  other exploration's, apart from the option on the command line.
+- `a_stopped_exploration_keeps_its_report` slows the scripted engine's shrink runs, kills the
+  explorer once exploration.json is there, and finds every problem with its failing run and its
+  command, `shrinking`, and `unshrunk.json`. `hydo-explore shrink` then shrinks them in the same
+  folder.
+
+**The minutes on hvx.** The tree's `hydo` and `hydo-hvx` (release builds) ran the Redis example
+`hydo/onboard/examples/redis/hydo.yaml` on the bare-metal machine with one worker, over the guest
+files of a 0.6.0 release tree (`HYDO_RELEASE_DIR`). The image was built at epoch 7 and is in no
+list. The guest's runs take about half a second, so the shrinks are short; a system whose runs
+take minutes keeps the ratio and multiplies the minutes.
+
+| exploration | first runs | failures, shrinks | first report | final report |
+|---|---|---|---|---|
+| seeds 1-20 (random) | 20 | 4, 3 shrinks (15 runs) | 21.0 s | 27.2 s |
+| seeds 1-60, swarm, `--new-faults`, `--shrink-causes 3` | 60 | 26, 13 shrinks (97 runs) | 68.3 s (1.1 min) | 123.7 s (2.1 min) |
+
+The times are the explorer's own (`first_report_s` and `total_wall_s`); from the shell, with the
+command's setup, the second gave its first report after 88 s and ended after 142 s. In the
+second, shrinks took 64.5 % of the engine's seconds (`stats.json`). In a terminal, `hydo explore`
+printed at the first report: `hydo: the first report: 4 of 20 runs failed, in 2 ways. hydo
+shrinks them now ...`.
+
+The same 20 seeds with `--shrink-later` wrote their report after 20.2 s and ended at 21.3 s.
+`hydo shrink <dir> --all` then shrank the three problems in 19 s, with the command's setup.
+Its exploration.json had the shrinks of the exploration that shrank as it went: the same
+minimal schedules, tries and confirmation fingerprints, and the same failures. Its events.jsonl
+was the same line for line, apart from the start and end records, the run seconds and the
+workers.
+
+**Checks.** On the bare-metal machine: `cargo clippy --workspace --all-targets -- -D warnings`
+passed, and `cargo fmt` was run. The tests of hydo-results, hydo-explore (all 34 scenarios of
+`fake_engine`), hydo-agents, hydo-schema-compat and hydo-release passed. `equivalence::` of `-p
+hydo --test it` was recorded again with `HYDO_BLESS=1` for the new line of `hydo --help` (`hydo
+shrink`), and the rest of that test program passed. Three tests fail on the bare-metal tree
+without this change too. The tree is a copy of the tracked files, not a git checkout, and one
+count is older than its list: `identity::local_outputs_are_no_inputs` reads git's ignored files,
+`skillupdate::tests::each_agent_gets_its_folder` looks for the repository's root, and
+`setup::tests::the_built_in_lists_parse_and_map_into_the_release` expects 44 Linux assets, where
+`hydo/dist/linux/assets.sha256` has 48 since Milestone 376. `sh ci/vale.sh` found nothing. No
+recorded value moved: the scripted engine's runs, verdicts and minimal schedules are the
+goldens', and the pinned reproducers did not run, because no engine, image or guest program
+changed.

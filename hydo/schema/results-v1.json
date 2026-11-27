@@ -2438,6 +2438,14 @@
               "type": "null"
             }
           ]
+        },
+        "first_report_s": {
+          "description": "Seconds from the explorer's start to its first report, written once the first runs and\nthe re-runs of each failure were done and before any shrink ended (added in Milestone\n387). A merge of parts has the latest of its parts' values. Absent: an exploration made\nbefore Milestone 387, and a merge of a part made before it.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
         }
       },
       "required": [
@@ -2856,6 +2864,20 @@
         "run": {
           "description": "The failing run.",
           "$ref": "#/$defs/Run"
+        },
+        "shrink_state": {
+          "description": "Where the shrink of this failure's problem (its class group and signature) stands, one\nof [`shrink_state`] (added in Milestone 387). The explorer writes its report before it\nshrinks, so a problem may be in a report without its minimal schedule. Absent: an\nexploration made before Milestone 387, which wrote its report after its shrinks.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "repro_command": {
+          "description": "The command line that runs this failure's schedule once, while its problem has no\nminimal schedule (its shrink state is not `done`; added in Milestone 387).",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -5751,6 +5773,13 @@
           "description": "The whole verdict line of the run that showed it, as the guest printed it (`hydo findings\nrecord`; added in Milestone 365). `title` is its normalized form.",
           "type": [
             "string",
+            "null"
+          ]
+        },
+        "not_shrunk": {
+          "description": "`minimal` is a failing run's schedule, not a shrunk one: the exploration did not shrink\nthe failure, or had not shrunk it yet (added in Milestone 387).",
+          "type": [
+            "boolean",
             "null"
           ]
         }
