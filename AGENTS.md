@@ -473,8 +473,21 @@ manifest gives the nodes `clock: own`, so the recorded images stay. They ran on 
 - Prometheus: a sender more than 10 minutes ahead of the server loses every sample
   (`maxAheadTime`), by design; an exploration of 20 seeds with the option found nothing.
 
-The KVM and Mac engines lack `CONFIG_CROSS_MEMORY_ATTACH` besides seccomp (the design page). The
-details are in `docs/HISTORY.md` Milestone 375 (open item 190).
+The details are in `docs/HISTORY.md` Milestone 375 (open item 190).
+
+**One service's own clock on KVM (M379, tentative number).** The KVM engine runs `clock: own` for
+an image of `guest.kernel: containers`, whose kernels have seccomp filters, and refuses any other
+image with the key before any VM. No KVM kernel has `process_vm_readv`, so `hydo build` stages for
+such an image the build of hydo-clock with the cargo feature `words` (`hydo-clock-words`,
+`5ac4dcdc…`, from `HYDO_CLOCKBIN_WORDS`). It falls back to `PTRACE_PEEKDATA` and `PTRACE_POKEDATA`
+when the calls answer `ENOSYS`. The default build keeps Milestone 372's bytes (`de24fd93…`), so
+every other image keeps its bytes. On hvx the example's nine schedules gave Milestone 372's
+fingerprints, and Typesense's finding 4 Milestone 375's. On GitHub's KVM runners, four Intel and
+two AMD hosts, the example's `hydo-kvm.yaml` gave hvx's verdicts with one fingerprint per vendor:
+`T=n2@3:5` gives two leaders, `T=3:5` does not. Prometheus's `skew/` with the kernels for
+containers gave its by-design loss at 15 minutes ahead. A read costs 21.2 µs of guest time on KVM.
+The Mac engine needs an arm64 port (the design page). The details are in `docs/HISTORY.md`
+Milestone 379 (open item 190).
 
 **The cgroup2 mount (M283, tentative number).** From the fingerprint epoch 4 the host controller
 mounts the cgroup2 file system on `/sys/fs/cgroup` at the start of every boot, before the S0
@@ -4326,13 +4339,15 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       option found no failure of a node's own clock. Their drawn steps did not put one node 30 s
       or more behind, which finding 4 needs. TiKV's effect needs a kill of PD's leader after the
       step, which the explorer draws apart from it.
-    - Only hvx ran it. The KVM and Mac guest kernels have seccomp only in their `containers`
-      variants, and none has `CONFIG_CROSS_MEMORY_ATTACH`, which hydo-clock's
-      `process_vm_readv` and `process_vm_writev` need; a fallback to `PTRACE_PEEKDATA` would need
-      no kernel. The Mac needs an arm64 build of hydo-clock; `clock: own` is refused for
-      `--arch arm64`.
-    - A read of the wall clock costs 40.5 µs of guest time under hydo-clock against 4.4 µs. A
-      guest kernel variant with a realtime offset per time namespace would cost nothing per read.
+    - hvx runs it, and KVM since M379 for an image of `guest.kernel: containers` (the service-clocks
+      example and Prometheus's `skew/`). No exploration with `--service-clocks` ran on KVM.
+      Typesense's finding 4 did not run there, because Typesense needs the KVM kernels with
+      `/proc/<pid>/io` (M376, not on `main`). TiKV did not either, because its guest does not fit
+      a runner. The Mac
+      needs an arm64 port of hydo-clock (the design page lists its parts); `clock: own` is
+      refused for `--arch arm64`.
+    - A read of the wall clock costs 40.5 µs of guest time under hydo-clock against 4.4 µs on
+      hvx, and 21.2 µs against 5.2 µs on KVM. A guest kernel variant with a realtime offset per time namespace would cost nothing per read.
     - Not covered: programs that read the TSC for the wall clock or find the vDSO in
       `/proc/self/maps`, 32-bit programs, and a debugger inside the service. `timerfd` and POSIX
       timers with an absolute realtime deadline are not moved, and the kernel's own times (file
@@ -5648,6 +5663,12 @@ build machine, before 2026-10-13.
   writers (known tidb#44822). One Typesense node 30 s behind loses a document for good after a
   delete by a filter (new). A Prometheus sender 10 minutes ahead loses its samples (by design).
   Nothing recorded moved
+- M379 (tentative number): one service's own clock on the KVM engine, for an image of
+  `guest.kernel: containers`. hydo-clock's feature `words` reaches the traced memory with
+  `PTRACE_PEEKDATA` where `process_vm_readv` answers `ENOSYS`, and its default build keeps its
+  bytes. The KVM engine refuses other images with `clock: own`. On four Intel and two AMD runners
+  the lease example gave hvx's verdicts, one fingerprint per vendor, and Prometheus's `skew/` its
+  by-design loss. Nothing recorded moved
 
 ## Where to look
 
