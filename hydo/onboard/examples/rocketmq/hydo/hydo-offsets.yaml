@@ -203,6 +203,11 @@ test:
   round_ms: 1000
   command_timeout: 60
   drain_timeout: 45
+  # Finding 2 (RESULTS.md), known as apache/rocketmq#7790: a kill of the master moves the
+  # groups' committed offsets back to the new master's last copy, up to 10 s old, and the
+  # consumers get acknowledged messages again (after-ack).
+  regressions:
+    - {name: offsets-move-back-at-failover, schedule: "disk=none | run K=brokers.primary@10+3", expect: violation}
 
 checks:
   # The topic j and the group w. The drain takes every message left of j, of the retry topic and

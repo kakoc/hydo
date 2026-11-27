@@ -1,0 +1,8 @@
+# Finding 3a (RESULTS.md), new, a clock effect. The wall clock steps back by an hour before step
+# 10. The broker writes the commit and rollback records of transactions in batches, 3 s after its
+# last write by the wall clock, so after the step it writes none. The transaction check then finds
+# the transactions it had committed without their records, asks the producer group again at every
+# check interval, and stores the message again each time: VIOLATION [jobs.duplicates] u17 is
+# stored twice: it carries the system ids 1000000 and 1000005.
+# expect: violation      (new, a clock effect: TransactionalMessageServiceImpl measures with the wall clock)
+disk=none | run T=10:-3600

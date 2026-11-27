@@ -195,8 +195,99 @@ every 10 seconds, ... in theory, repeated consumption will occur as long as a ma
 occurs." Label: known, and RocketMQ promises at-least-once delivery. The task's promise that an
 offset is not moved back after a failover does not hold; the documentation does not make it.
 
-### 3. New, a clock effect: after a backward clock step, a committed transaction is delivered again at every check
+### 3. New, a clock effect: after a backward clock step, the transaction check stores committed transactions again, or checks none
 
-TBD3
+The broker writes the end of each transaction, its commit or rollback, as an operation record
+of the topic `RMQ_SYS_TRANS_OP_HALF_TOPIC`. It does not write each one at once: it collects them
+per queue and writes the batch when `transactionOpBatchInterval` (3 s) has passed since the last
+write, measured with `System.currentTimeMillis()` (`TransactionalMessageServiceImpl.
+batchSendOpMessage`, `startTime - mqContext.getLastWriteTimestamp() < interval`). After a step
+back of the wall clock that difference is negative, so the records of every transaction that
+ends after the step stay in memory until the clock passes the last write again: for the size of
+the step, or until 4,096 bytes of them collect (`transactionOpMsgMaxSize`). The check
+(`TransactionalMessageServiceImpl.check`) decides from those records which half messages still
+need a question to the producer. Two schedules show the two outcomes.
+
+**3a. A committed transaction is stored again at every check.** `disk=none | run T=10:-3600`:
+the wall clock steps back by an hour before step 10, and nothing else. `VIOLATION
+[jobs.duplicates] u17 is stored twice: it carries the system ids 1000000 and 1000005`. `u17`,
+`u20` and `u44` are transactional messages whose producer answered "unknown", so the broker's
+check committed them. Their commit records stayed in memory, so the next check found them
+without one and asked again. The check also puts each half message back into the half queue
+(`putBackHalfMsgQueue`). The drain's producer answered "commit" each time from the decisions
+file, and the broker stored the message again: the drain received `u17` at the offsets 1000000
+and 1000005 to 1000009, and `u20` and `u44` six times each, in the last 50 s of the run, once per
+check interval of 10 s. In the clean run the broker checks each of them once. The check is
+eager here for a second reason: it asks about a half message without a record when the last
+operation record it read was born more than the transaction timeout after the check began
+(lines 295 to 297), and the records of the transactions that ended before the step were born an
+hour ahead.
+
+**3b. No transaction is checked, and an acknowledged one is never delivered.** `disk=none |
+run T=2:-2592000`: the wall clock steps back by 30 days before step 2. `VIOLATION [jobs.no-loss]
+u17 was acknowledged to process 17 at 46.316 s and never delivered in group w of channel j,
+which was drained`. The client's notes show no check at all in the run. `r3`, rolled back in
+the round before the step, is the only transaction before it; the code gives the rest. Unless its
+record was written in the 3 s before the step, it waited in the batch. The check reads the half
+queue in order, finds `r3` without a record, and `r3` was stored 30 days "after" the check began,
+so the check stops there as at a fresh message (`if (msgExt.getStoreTimestamp() >= startTime)
+break;`, line 269). It stops there at every round, so
+no later transaction is checked either: `u17`, `u20` and `u44`, whose producers answered
+"unknown", are never committed. With a step back of 30 s the stop lasts 30 s, and in e2 five
+schedules with steps back of 30 s to a day ended with such a message not delivered when the
+drain ended.
+
+A committed transaction then becomes several messages (3a), or an acknowledged one waits for
+the size of the step (3b). RocketMQ's promise for transactions is that a committed message is
+delivered once to each group, and a rolled-back one never.
+
+**The duplicate search.** Issue #9640 (closed) reports checks of transactions that the producer
+had committed, under load, from the gap between the birth times of a half message and of its
+operation record; it names no clock step and no message stored twice. No issue or pull request
+names a clock step, `batchSendOpMessage`, or `transactionOpBatchInterval` together with a lost
+or repeated transaction (the section "The duplicate searches"). Label: new as far as the search
+found, a clock effect.
+
+**Native run.** None: the cause is plain in the code, and the client's notes show which checks
+came.
 
 RESULTS_REST
+
+## What hydo lacked
+
+In the order of the time each cost:
+
+1. **On AMD EPYC 7763 runners the image does not boot on KVM, and the parts count it as
+   failures.** Every part of e1 on an EPYC 7763 host (parts 12, 16, 18 and 19) stopped in the
+   boot before S1: `ERROR boot: SPIN (guest loops without exits; run invalid)` after 12,695 to
+   18,135 stops. So 8 of e1's 40 seeds never ran. The part's job passed, its `exploration.json`
+   counted both seeds as failures with the signature `ERROR worker: ''`, and its `explore.txt`
+   alone said why. The EPYC 9V45 and the Intel hosts booted the same image.
+2. **The drain filled hvx's console.** hvx keeps 64 KiB of console per boot. The first drain
+   recorded every empty receive of 10 queues once a second, 1,111 history records in a clean run,
+   and the console reached 65,673 bytes. The drain now records a receive only when it got
+   messages, and writes its invocation after the pull; the clean run's console is 24 KB. Nothing
+   warns while a run's records are cut off (as open item 181 says for Pulsar).
+2. **`L=` takes no group selector.** `K=brokers.primary@10+3` and `P=brokers.primary@...` aim at
+   the master, but `L=brokers.primary@10+3` stopped with `"brokers.primary" is not a service name`
+   before any VM. One broker's power loss has to name the broker, which depends on the image.
+3. **A claim cannot be a build parameter.** Every failover breaks `after_ack: no-redelivery` by
+   design (finding 2), which would hide every other failure of a failover. The example keeps the
+   claim in a second manifest, `hydo-offsets.yaml`, built as an image of its own (as open items
+   140 and 181 say for `faults:` and claims).
+4. **`hydo build --check` passes a disk that `hydo build` refuses.** With 1,792 MiB of data disk
+   and four storage file systems of 1,664 MiB, `--check` printed OK, and the build stopped after
+   about 2 minutes: `the disk with the services' own file systems is 4101 MiB, more than the 4096
+   MiB an engine maps`.
+5. **The import moved every address by one.** The Compose file gives the NameServer
+   `10.89.0.10` and the brokers `.11` to `.13`. `hydo compose` warned `ipv4_address 10.89.0.10
+   ignored; the service is at 10.89.0.11` for each, and wrote addresses one higher. The brokers'
+   configuration names the NameServer's and the controller's address, so the example sets each
+   `addr:` back by hand.
+6. **The import took the first port of `EXPOSE`.** The image exposes 9876, 10909, 10911 and
+   10912, and every broker got `port: 9876` and a readiness check on it, the NameServer's port.
+7. **`ci/remote-explore.sh --ref` with a short commit fails on the runner.** The build's
+   checkout fetched `refs/heads/4b28431b*` and stopped after a minute; a branch name works.
+8. **A routine run replays itself.** `hydo run` makes a diagnosis replay after every failing
+   run, which doubles the time of a directed run of 5 to 10 minutes; the directed runs used
+   `--no-diagnose`.

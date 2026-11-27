@@ -1,0 +1,8 @@
+# Finding 3b (RESULTS.md), new, a clock effect. The wall clock steps back by 30 days before step
+# 2, right after the rollback of r3. The check finds r3's half message without its record (the
+# batch of records waits by the wall clock) and stored 30 days "after" the check began, so it
+# stops there at every round. No later transaction is checked: u17, u20 and u44, whose producers
+# answered "unknown", are never committed: VIOLATION [jobs.no-loss] u17 was acknowledged to
+# process 17 at 46.316 s and never delivered in group w of channel j, which was drained.
+# expect: violation      (new, a clock effect: TransactionalMessageServiceImpl measures with the wall clock)
+disk=none | run T=2:-2592000
