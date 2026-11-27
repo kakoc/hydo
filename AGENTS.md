@@ -1518,8 +1518,8 @@ has what is left.
 image, runs in controller mode in one hvx guest of 3,072 MiB. The example is
 `hydo/onboard/examples/rocketmq` (RESULTS.md), imported with `hydo compose`. A NameServer with the
 controller embedded and one replica group of three brokers run with `allAckInSyncStateSet` and
-`SYNC_FLUSH`. Each node's store is on a file system of its own. A Go client sends plain, delayed,
-ordered, and transactional messages with rocketmq-client-go v2.1.2. A small remoting client of its
+`SYNC_FLUSH`. Each node's store is on a file system of its own. With rocketmq-client-go, a Go
+client sends plain, delayed, ordered, and transactional messages. A small remoting client of its
 own pulls at exact offsets, commits offsets synchronously, and gives poison messages back. Two
 messages checks judge them, and `hydo-offsets.yaml` also claims `after_ack`. The directed runs used
 hvx, and the explorations GitHub's KVM runners. No message acknowledged with `SEND_OK` was lost to
@@ -5981,11 +5981,11 @@ build machine, before 2026-10-13.
   its shrink ends, and the report is written again as each shrink ends. `--shrink-later` shrinks nothing,
   and `hydo shrink <explore dir> --problem N` shrinks one problem later in the same folder.
   Shrinks made later give the files of shrinks made as it went. Nothing recorded moved
-- M378 (tentative number): the onboarding of Apache RocketMQ 5.5.0 in controller mode, a
-  NameServer with the controller and three brokers, on hvx and KVM. New, a clock effect: after a
-  backward step the broker writes no commit or rollback records of transactions. So the check
-  stores a committed transaction again at every interval, or checks none. Known in its parts: a
-  power cut leaves the slaves' epoch files empty, and they never start again. Known: a failover
+- M378 (tentative number): the onboarding of Apache RocketMQ 5.5.0 in controller mode: a
+  NameServer with the controller and three brokers. It ran on hvx and on KVM. New, a clock effect:
+  after a backward step the broker writes no commit or rollback records of transactions. So the
+  check stores a committed transaction again at every interval, or checks none. Known in its parts:
+  a power cut leaves the slaves' epoch files empty, and they never start again. Known: a failover
   moves consumer offsets back by up to 10 s. Nothing posted, nothing recorded moved
 
 ## Where to look
