@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# 2 or 3 writes of other rows of kv in one explicit transaction
+exec /bin/crc op tx

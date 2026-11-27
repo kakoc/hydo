@@ -1,0 +1,11 @@
+# A new candidate in CockroachDB v26.4.1 (RESULTS.md, finding 1), a clock effect past the
+# documented bound. roach3's own wall clock jumps 1 s ahead before step 5, past 80 % of
+# --max-offset (400 ms). roach3 stops itself, as documented, and so do roach1 and roach2, whose
+# clocks agree: "clock synchronization error: this node is more than 400ms away from at least
+# half of the known nodes (1 of 2 are within the offset)". A healthy node of three counts two
+# clocks, and VerifyClockOffset (pkg/rpc/clock_offset.go) stops it when healthyOffsetCount <=
+# numClocks/2. hydo starts the stopped nodes again, so the rules over the data hold; the check
+# clockstops, which counts the nodes that stopped for the clock in their own logs, fails.
+# Build it with: HYDO_CLOCKBIN=<hydo-clock> hydo build hydo.yaml   (skew/, hvx only)
+# expect: violation      (change to ok when the bug is fixed)
+disk=none | run T=roach3@5:1

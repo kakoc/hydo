@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# UPSERT of a known row of kv, deleted ones too
+exec /bin/crc op upsert

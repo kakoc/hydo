@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# UPDATE of an existing row of kv
+exec /bin/crc op update

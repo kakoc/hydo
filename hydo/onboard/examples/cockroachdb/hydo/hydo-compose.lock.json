@@ -1,0 +1,67 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "cockroachdb/cockroach:v26.4.1": {
+   "index_digest": "sha256:13331054ac7b815bcf7d4396e3416d3ef53522be308b5c4a8155079f35fe58a1",
+   "name": "cockroachdb/cockroach",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/cockroach/cockroach.sh"
+      ],
+      "Env": [
+       "PATH=/cockroach:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "container=oci",
+       "COCKROACH_CHANNEL=official-docker"
+      ],
+      "ExposedPorts": {
+       "26257/tcp": {},
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/cockroach/"
+     },
+     "digest": "sha256:de1c2ef57bc2b5b7e553ab68e0cd4217a948ab26eae471b63ffea00127f8e0f6",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/cockroach/cockroach.sh"
+      ],
+      "Env": [
+       "PATH=/cockroach:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "container=oci",
+       "COCKROACH_CHANNEL=official-docker"
+      ],
+      "ExposedPorts": {
+       "26257/tcp": {},
+       "8080/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": null,
+      "Volumes": null,
+      "WorkingDir": "/cockroach/"
+     },
+     "digest": "sha256:a1bde0884057cd9edd9cfccf2c88d943e4e8bdbcacc9558167067bc7bb72d53f",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "cockroachdb/cockroach:v26.4.1",
+   "registry": "docker.io",
+   "repo": "cockroachdb/cockroach",
+   "tag": "v26.4.1"
+  }
+ }
+}

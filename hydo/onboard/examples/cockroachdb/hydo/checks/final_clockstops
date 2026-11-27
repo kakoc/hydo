@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: at most one of the three nodes stopped itself for clock synchronization: one node's clock that is off stops that node alone
+exec /bin/crc check clockstops

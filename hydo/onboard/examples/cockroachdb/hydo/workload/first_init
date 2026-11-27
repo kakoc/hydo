@@ -1,0 +1,7 @@
+#!/bin/sh
+# hydo: timeout=400
+# initialize the cluster once (cockroach init with roach1's image), wait until every node serves SQL,
+# create the tables kv, la, acct and sv,
+# and wait until every range has three replicas
+hydo-oci roach1 /cockroach/cockroach init --insecure --host=10.89.0.11:26357 2>&1 | tail -2
+exec /bin/crc init

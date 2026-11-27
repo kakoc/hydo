@@ -1,0 +1,11 @@
+# A candidate in CockroachDB v26.4.1 whose cause was not traced (RESULTS.md, candidate 3). Seed 1
+# of the exploration e2 on the skew image. In its first two minutes roach1's Pebble store kept
+# nine WAL files and wrote no SST: MANIFEST-000001 stayed 33 bytes. Pebble preallocates each WAL
+# file to about 70 MiB, so the nine took 576 MiB of roach1's own file system of 640 MiB while
+# roach2 and roach3 flushed and used 147 MiB. The first flush (000012.sst) then failed with a
+# full disk, and in the recovery boot after the power cut roach1 stops at every start with exit
+# status 6 (the log file cannot be written): VIOLATION service cannot recover (roach1). The other
+# faults of the schedule were not separated. Build it with: HYDO_CLOCKBIN=<hydo-clock> hydo build
+# hydo.yaml   (skew/, hvx only)
+# expect: violation      (change to ok when the store flushes, or with a larger file system)
+disk=cut dseed=0 | run K=roach2@1+8 N=roach2-*@34-39:loss,72% C=40 P=roach1@12+1 T=20:30 W=3e71cf9e,p1,q3,r2000
