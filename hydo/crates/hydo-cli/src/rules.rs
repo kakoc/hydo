@@ -33,7 +33,7 @@ pub const HELP: &str = "usage: hydo rules scan [DIR] [--kind K] [--json] [--max 
   constraints and state columns, API contracts, promise words in its documentation, and test
   assertions about refusals and limits, and the code that measures a duration with the wall
   clock, and the routes of its API that write. It writes no rule. --kind K shows one kind
-  (schema, state, api, docs, tests, clock, writes).
+  (schema, state, api, docs, tests, clock, writes, sync).
   --kind clock is the clock audit: each place where a lease, a timeout, a throttle, a lag or a
   delay is measured on the wall clock instead of a monotonic clock, with the limit when the code
   states it, and three clock-step schedules aimed at it (a step back before and after the fault
@@ -50,6 +50,15 @@ pub const HELP: &str = "usage: hydo rules scan [DIR] [--kind K] [--json] [--max 
   the system's data), admin (a snapshot, a dump, a compaction), session (a sign-in or a token),
   runtime (health, metrics, a reload). A POST route whose name says that it reads is left out
   (--all lists them; --json has them all).
+  --kind sync is the sync audit: each place where the code can answer a write before it is on
+  the disk. A file written and not synced (fsync, fdatasync, sync_all, FileChannel.force,
+  file:sync), a rename without a sync of its folder, a stream synced before its buffer is
+  flushed, O_DIRECT without O_DSYNC, a setting that turns syncing off by default or syncs on an
+  interval (SQLite's WAL mode without synchronous=FULL), and a loop that syncs on a timer. Each
+  place names what is missing and the answer that follows it, in the function or in its callers,
+  with a power cut and one service's power loss aimed right after that answer (at the
+  workload's event of an answered write when hydo.yaml's folder has one). It shows one place per
+  function, the most likely 5 first (--all shows every place; --json has them all).
   check: validates candidate rules (format: hydo guide rules). It runs the image's workload
   without faults, `disk=none | run W=<seed>` for the seeds 00000001..N (--runs, default 3; one run of
   `disk=none | run` for an image without composed commands, `disk=none | run I=<seed>` for a walk
@@ -1390,10 +1399,14 @@ fn cmd_scan(argv: &[String]) -> i32 {
     let only = take(&mut args, "--kind");
     let manifest = take(&mut args, "--manifest");
     if let Some(k) = &only {
-        if k != "clock" && k != "writes" && !EVIDENCE_KINDS.iter().any(|(n, _)| n == k) {
+        if k != "clock"
+            && k != "writes"
+            && k != "sync"
+            && !EVIDENCE_KINDS.iter().any(|(n, _)| n == k)
+        {
             let names: Vec<&str> = EVIDENCE_KINDS.iter().map(|x| x.0).collect();
             die(&format!(
-                "--kind {k}: one of {}, clock, writes",
+                "--kind {k}: one of {}, clock, writes, sync",
                 names.join(", ")
             ));
         }
@@ -1421,6 +1434,20 @@ fn cmd_scan(argv: &[String]) -> i32 {
             print!(
                 "{}",
                 crate::clockscan::text_report(&dir, &a, &svcs, max, all)
+            );
+        }
+        return 0;
+    }
+    if only.as_deref() == Some("sync") {
+        let svcs = crate::clockscan::services_near(root, manifest.as_deref());
+        let wl = crate::syncscan::workload_near(root, manifest.as_deref());
+        let a = crate::syncscan::audit(root);
+        if as_json {
+            println!("{}", crate::syncscan::json_report(&dir, &a, &svcs, &wl));
+        } else {
+            print!(
+                "{}",
+                crate::syncscan::text_report(&dir, &a, &svcs, &wl, max, all)
             );
         }
         return 0;
