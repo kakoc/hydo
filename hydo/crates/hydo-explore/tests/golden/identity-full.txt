@@ -49,6 +49,7 @@ input	hydo/onboard/examples/redis/hydo-proxy.yaml	7a3da7d13479918d735f09797cabca
 input	hydo/onboard/examples/redis/hydo.yaml	c34c172a137dd89e266d8e4e73288f9d9dc73dadf952d5b9c4a03f3547d5e443
 input	hydo/onboard/examples/restate-oci/hydo.yaml	e538bbdc96d793f567287dd0dd8c2d26c35ba669a2d7631653fa6c6afd9e6509
 input	hydo/onboard/examples/rust-kv/hydo.yaml	417a6848bf266242b33f2191e4eb173ad8e3187d53c444c03dcc7c7b68615bea
+input	hydo/onboard/examples/service-clocks/hydo-kvm.yaml	f436a9141925bb08e402188f8ae04aab6e3fbef86e459f30f2fa9129d3edd51d
 input	hydo/onboard/examples/service-clocks/hydo.yaml	c69afc21d3128e7d67de9de2fbe3e421c9040a825cbb4cd12f0d0ad2f1ff40da
 input	hydo/onboard/examples/shop/hydo.yaml	eaacf3830712aae4e796373238760925ec2a4eb282f51c21002d3da8a58d31f8
 input	hydo/onboard/examples/stack-grpc/hydo.yaml	9bb05f0cbaf593b685f2ff6d6dff6f362c76f31595397f30825567c78a0afa6d
@@ -2294,6 +2295,33 @@ chunk	hydo/onboard/examples/rust-kv/hydo.yaml/hvm/FalseFalse	7	256	585b076d20861
 chunk	hydo/onboard/examples/rust-kv/hydo.yaml/hvm/FalseFalse	8	256	453a775bb311e0cdb03111a0fa12d871491eda5e863ff6b0adf50d30ed160593
 chunk	hydo/onboard/examples/rust-kv/hydo.yaml/hvm/FalseFalse	9	256	954a935bdcf0ed8306a3f1ac392e9171ecb3d943a5e1210801328b6c7df99f50
 chunk	hydo/onboard/examples/rust-kv/hydo.yaml/hvm/FalseFalse	10	159	e8df8fea7eb40c12906374258f114f701f081befadd83c76aca6e99ff333ed9a
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvx	0	256	3f5b265d65564f11d5395f5ec91c370ffff0b40b5c86e621bafbb4bba6b6d2e5
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvx	1	256	ecf5ba99f32a8df04bde2240923caef3de7a8bb7250847fcd9d4cc6a3bc04423
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvx	2	256	1aa62d6217042e3b203c25f3e17ecb082193be36d897d7e68868bddb82e9a03e
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvx	3	256	1860cec8ea9fc0cfb7c708d9d47e4c83ae4b743a211b8641e3660578c6bc4074
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvx	4	256	21b1208c09b0f916a12ad674d601ce082b0a2d64148959241ce79b771798f990
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvx	5	256	51eb01947536c4ca0d82b25c97abcb8e2ad91c89a90e24aaadad3e1009cd4e1b
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvx	6	256	64d364063be23d5964df5729902d47af007eb00c90b1f7690e3c384e7b708ccf
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvx	7	256	67d9417c5fd48b0112508343a39dfd6842f828cd4076fb2a5de92842f87fe9d9
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvx	8	5	0af7ecb4f58ec799043f253a1eb3ec0e50989108aab2953eb14767a0d4d7d889
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/TrueTrue	0	256	b6a0ad8d65d585fca445e1b1ada2084e3869e2f2d29e7e6e51e21b51da4c05ef
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/TrueTrue	1	256	2100f34333f5ca845ca6d41202ffc69820379181cb90ce1a8bbc1c6150e1c76d
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/TrueTrue	2	256	bb2e45870a5a32a1f10664419c93311ab78d7352baaeccdfe85a1c8412fcb730
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/TrueTrue	3	256	df0f8e24cc8f689d035f673dcb857ae5563f9bdc937475dfafbf0d8997b65117
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/TrueTrue	4	256	ba5612116be255cd7d6b1032151f11f9c1ebcb1ed06fed6b57ad761e10c0ac81
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/TrueTrue	5	256	dbbd7d5f1ff92fa6fdb2700ba98103964181b138f462a1dbca6008664ed03ef0
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/TrueTrue	6	256	5e9d8e7248d77eeee047c1dca552a056801094b344e6faa5bbaebe61fbe2b18c
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/TrueTrue	7	256	6a85079d7b270882104ce9f73394a3c772da1d63bce4aceb012be7714bc64eea
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/TrueTrue	8	6	e67ddcf984de13f1f422828846c57dd928b773663b77c539ab37957f3219fe02
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/FalseFalse	0	256	6ff6137ed79278131563a37266110d8ec42ba9b89af37e4853107dd66708dfd6
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/FalseFalse	1	256	199fe4866755c122eaba8d1f61e27b0f14d3de3191d37ad1781c88370a0b749d
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/FalseFalse	2	256	72282a3ad6e2d91ff83f444a19dc3423863524c97204f37714752aef92e24fd0
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/FalseFalse	3	256	a783877931f4705313504fcd5948a404bbfc4efe0fcfc1f02f4984946ce427bb
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/FalseFalse	4	256	1aa69623d3f5fe162680840496ffe98d2aafb79ae3e023a1382b95a87abd2151
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/FalseFalse	5	256	07b3c55a264430c9d4c23331c38f5eb575e847a7ed8ab9ac3399262cfcc0dc8c
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/FalseFalse	6	256	e270de96e4216702c2f7e9fc987822a437955ef5e53c310a52d35487e22dda2b
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/FalseFalse	7	256	ee22dbabfa7ecdd8e67f542ff8c3818452573f2ff47044295f7612b39fbb2560
+chunk	hydo/onboard/examples/service-clocks/hydo-kvm.yaml/hvm/FalseFalse	8	2	cfe46dd61f00affdcea5b16fc767ec3efb7c66220c21cd382e9c96e5ca455221
 chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvx	0	256	857a26865e49777c110d15a48546cd9dfd667173a407685740694fc893f5ce90
 chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvx	1	256	7489b66cab9d10cc3df277552e7b21dbf3bc8b8c119ae373b8165fef11de8b7b
 chunk	hydo/onboard/examples/service-clocks/hydo.yaml/hvx	2	256	8fddd12d7822295435ad304d7e51c45492806d0e97cdb585b839fa763daf919b
