@@ -26467,7 +26467,7 @@ Retro: RocketMQ 5.5.0, hvx and KVM, 2026-11-27
 - What hydo lacked: KVM boots that spin on AMD EPYC 7763 and parts that count it as failures;
   the console of 64 KiB; `L=` without a group selector; claims that cannot be build parameters;
   a disk limit that `--check` does not see; the import's addresses and ports; `--ref` with a
-  short commit (open item 195).
+  short commit (open item 196).
 - Strategies: the RocketMQ evidence in "Power cuts of the whole guest", "Clock steps and the clock
   audit" and "The messages check's claims" of `hydo guide strategies`; the first table names
   RocketMQ.
