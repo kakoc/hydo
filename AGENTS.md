@@ -1391,14 +1391,16 @@ clock steps, and, with `--device-type FileStream`, power cuts. Nothing was poste
 - New: a `CLUSTER FAILOVER` right after a `MIGRATE ... SLOTS` into the same shard leaves the
   migrated slot without an owner on every node, for good. The new primary takes over only the
   slots that its own copy of the configuration gives its primary, and gossip had not brought the
-  migration yet (`ClusterConfig.TakeOverFromPrimary`). The bug needs no fault; the blind seed
-  96 of the exploration timed it so, and `native/` reproduces it with Docker. A wait of 6 s
-  avoids it.
+  migration yet (`ClusterConfig.TakeOverFromPrimary`). Gossip never repairs it: a primary's
+  message that does not claim the slot sets it `OFFLINE`, and a replica's message cannot give it
+  an owner (`MergeSlotMap`). The bug needs no fault; the blind seed 96 of the exploration timed
+  it so, and `native/` reproduces it with Docker. A wait of 6 s avoids it.
 - A deployment setting with a status that hides it: with Garnet's default
   `--cluster-replication-reestablishment-timeout 0`, a replica never replicates again after its
   primary restarts. It reports `master_link_status:up`, and lacks every write since the restart
   (`K=g1@15+3`, `# params: reest=0`). With `5` the schedule passes. `native/` reproduces it with
-  Docker. microsoft/garnet#2087 had the same status for another trigger.
+  Docker. microsoft/garnet#2087 had the same status for another trigger, a client's write on the
+  replica.
 - Known (microsoft/garnet#2281, open): with the default device a power cut loses writes
   acknowledged with `--aof-commit-wait` (`disk=cut | run C=10`, 5 of 20).
 - Three candidates whose cause was not traced, each with a regression. A kill of a primary 10 ms
@@ -1406,7 +1408,9 @@ clock steps, and, with `--device-type FileStream`, power cuts. Nothing was poste
   lose two acknowledged writes. After a kill and a power cut a replica holds other data at its
   primary's offset.
 
-Open item 192 has what is left.
+The released hydo 0.7.0 replayed findings 1 and 2 on hvx with their recorded fingerprints, each
+twice, and the default image's contrast of finding 1 gave OK `179ac0194c742e8d`. Open item 192
+has what is left.
 
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
@@ -4306,10 +4310,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Not run: the Mac engine and KVM, five nodes, AMQP 1.0, super streams, a stream's single
       active consumer, Khepri's own promises, and a native run of either candidate.
 192. What the example `garnet` left (M371, tentative number):
-    - Neither finding is reported upstream. The native script of finding 2 is ready. Finding 1
+    - Neither finding is reported upstream. The native script of finding 2 is ready; on this
+      Mac it gave two end states in three runs, both with the slot unserved for good. Finding 1
       is labeled a deployment setting, because Garnet's cluster is passive and has the option.
       A report would name the replica's link status, which says up without a stream, as
-      microsoft/garnet#2087 did for another trigger.
+      microsoft/garnet#2087 did for another trigger. It would also name the option's default 0:
+      its declaration has no help text, and the configuration page names no default.
     - Three candidates have no traced cause. Each has a regression on the image with the
       FileStream device, and none was reproduced without hydo. In the first, a replica answers
       nothing after a kill of its primary during a checkpoint. In the second, two writes are
