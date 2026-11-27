@@ -1309,7 +1309,7 @@ clock steps. No history of 95 schedules broke strict serializability. Nothing wa
 - New: a graceful stop (SIGTERM) of a node loses the queued writes that it has answered. The
   queue's goroutine returns at its close without writing the batch it holds, in a run without
   any fault (`--set qstop=yes`). The documentation names only a crash.
-- New: a follower removed while it was down never joins again after its restart. At its start it
+- New: a node removed while it was down never joins again after its restart. At its start it
   hears the leader, which still replicates the removal entry to it, and the bootstrapper marks
   its boot done before any join (`A=rq.write_acked@20+10:powerloss-rq2` with the client's
   removal). rqlite#1290, fixed in 7.20.1, was another cause of the same symptom.
@@ -5380,7 +5380,7 @@ build machine, before 2026-10-13.
   list-append check at strict serializability beside the messages check. One known bug was
   reached: a queued write with `wait` is answered 200 after the queue dropped it, at a kill or a
   slow link of the leader (rqlite#3027, open). Two new candidates, not posted. A graceful stop of
-  a node loses the queued writes that it has answered. A follower removed while it was down
+  a node loses the queued writes that it has answered. A node removed while it was down
   never joins again after its restart. A list-append check in a file is dropped when hydo.yaml
   has `checks:`. Nothing recorded moved
 - M372 (tentative number): one service's own wall clock, a prototype on hvx. `clock: own` starts

@@ -1,5 +1,5 @@
 # A new candidate in rqlite 10.8.0 (RESULTS.md, finding 3). 10 ms after an acknowledged write in
-# step 20, the follower rq2 loses its power and stays down. The removal driver then removes rq2
+# step 20, rq2 (the leader then) loses its power and stays down. The removal driver then removes rq2
 # with DELETE /remove (200). At the heal rq2 starts again with its own -bootstrap-expect 3 and
 # -join flags. Its first contact is an AppendEntries of the leader rq3, which still replicates
 # the removal entry to it, so the bootstrapper's done check (a known leader) passes at its first

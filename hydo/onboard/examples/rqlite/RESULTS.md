@@ -149,7 +149,10 @@ The final image `explore-ob-rqlite-disk.img` (`c4d29886…`, the fingerprint epo
 fingerprint, `943d6c299867d55d`, on two runs of `disk=none | run`, which ran 116 commands without
 a failure. The image of finding 2, a copy of `hydo.yaml` named `rqlite-qstop` and built with
 `--set qstop=yes` (`a3078a27…`), gives `7d26ebb2631121b3` on two runs of the same schedule, each
-with finding 2's violation. Each regression gave one fingerprint over two fresh runs:
+with finding 2's violation. A reader who builds `hydo.yaml` itself with `--set qstop=yes`, as the
+regression's comment says, gets the image `b90f3d7d…` and `bba19c6833f7b140`, with the same
+violation (the released hydo 0.6.0 from a fresh clone at `e3d16307`, two runs). Each regression
+gave one fingerprint over two fresh runs:
 
 | file | finding | image | fingerprint |
 |---|---|---|---|
@@ -247,7 +250,7 @@ kills at steps 12, 18 and 28 passed; why each one passed was not traced either.
   It has no line `execute queue write failed`: the batch was never sent.
 - **The cause.** At SIGTERM `rqlited` closes the HTTP service first (`cmd/rqlited/main.go`
   line 284). `Service.Close` (`http/service.go` line 421) closes the queue, and `Queue.Close`
-  (`queue/queue.go` line 166) stops the queue's goroutine. The goroutine returns at `case
+  (`queue/queue.go` line 167) stops the queue's goroutine. The goroutine returns at `case
   <-q.done` (line 236) with the statements it holds, without a last write, until the batch timer
   (`-write-queue-timeout`, 50 ms) or the batch size (128) sends them. `Service.Close` then closes
   `closeCh`, so `runQueue` also ends without the batch that it may have received. Nothing flushes
@@ -271,7 +274,7 @@ kills at steps 12, 18 and 28 passed; why each one passed was not traced either.
   [#1290](https://github.com/rqlite/rqlite/issues/1290) (a removed node with `-bootstrap-expect`
   that did not join again, fixed in 7.20.1) does not cover.
 - **The schedule.** `disk=none | run A=rq.write_acked@20+10:powerloss-rq2`: 10 ms after the first
-  acknowledged write of step 20, the follower `rq2` loses its power and stays down until the
+  acknowledged write of step 20, `rq2`, the leader then, loses its power and stays down until the
   heal. While it is down, the removal driver removes `rq2` through `rq3` (`DELETE /remove`, 200),
   as the clustering guide says to do for a failed node. At the heal hydo starts `rq2` again with
   its own flags, `-bootstrap-expect 3` and the three Raft addresses in `-join`.
@@ -294,9 +297,11 @@ kills at steps 12, 18 and 28 passed; why each one passed was not traced either.
 - **How it was found.** The aimed grid e3, `--reactive-at rq.write_acked@20 --react-delays
   0..40/10 --react-actions cut,powerloss,kill-now`, at cell 10 of 35. It is the grid's only
   failure, and the shrinker kept the whole schedule, the reaction alone.
-- **The cause.** hashicorp/raft's leader keeps replicating to a removed server until that
-  server holds the configuration entry that removes it. So the leader of this run sends
-  AppendEntries to `rq2` again as soon as `rq2` listens. At its start `rqlited` runs the
+- **The cause.** After the removal, hashicorp/raft v1.8.0's leader makes one last best-effort
+  replication to the removed server, after its failure backoff (up to 10.24 s,
+  `replication.go` lines 147 to 152 and 210 to 215), and heartbeats it until then: about 27 s in
+  this run. So the leader sends AppendEntries to `rq2` again as soon as `rq2` listens, when `rq2`
+  restarts inside that window; a later restart should hear no leader and join (not run). At its start `rqlited` runs the
   bootstrapper with `-bootstrap-expect` and `-join` (`cmd/rqlited/main.go` lines 673 to 677), and
   its done check is `leader != ""` (lines 643 to 646). The bootstrapper checks it before every
   join (`cluster/bootstrap.go` lines 151 to 156), and the leader that `rq2` has just heard from

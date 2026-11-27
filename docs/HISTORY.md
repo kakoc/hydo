@@ -23962,9 +23962,9 @@ only a crash as the risk.
 **Finding 3, new.** A node removed while it was down never joins again after its restart. The
 aimed grid e3 (`--reactive-at rq.write_acked@20 --react-delays 0..40/10 --react-actions
 cut,powerloss,kill-now`) failed at one cell of 35, `A=rq.write_acked@20+10:powerloss-rq2`. The
-follower `rq2` lost its power and stayed down, and the removal driver removed it (200). At the
-heal `rq2` started with `-bootstrap-expect 3` and `-join`. hashicorp/raft's leader keeps
-replicating to a removed server until it holds the entry that removes it, so `rq2` heard the
+node `rq2`, the leader then, lost its power and stayed down, and the removal driver removed it (200). At the
+heal `rq2` started with `-bootstrap-expect 3` and `-join`. hashicorp/raft's leader makes
+one last best-effort replication to a removed server and heartbeats it until then, so `rq2` heard the
 leader at once. The bootstrapper's done check is a known leader (`cmd/rqlited/main.go` lines 643
 to 646), checked before every join (`cluster/bootstrap.go` lines 151 to 156): `boot operation
 marked done`, no join, then `not part of stable configuration, aborting election`, and a failed
