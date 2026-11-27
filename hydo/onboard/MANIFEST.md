@@ -765,8 +765,13 @@ verdict rules are in `hydo/HISTORIES.md`.
   declares the claims (`claims:`, `acknowledgement:`, `retention_ms:`, `clock_steps:`,
   `measures:`, and `include:` bundles of the project, which `hydo build` resolves); hydo checks
   exactly those and measures the history. Each claim is reported as `<id>.<claim>`. Its `final:`
-  is the drain, which writes `drained <channel> <group>`. Keys, records and refused combinations:
-  `hydo guide messages`.
+  is the drain, which writes `drained <channel> <group>`. A messages check without `final:` takes
+  the drain of another messages check that has one, which writes its records too (Milestone 374).
+  Keys, records and refused combinations: `hydo guide messages`.
+- The end of a run: after the heal, hydo runs every check's `final:` in the order of `checks:`,
+  then the `eventually` checks and the composer's `eventually_` commands, then the `final` checks
+  and the `finally_` commands. A drain therefore runs before any `eventually_` command, and a probe
+  whose messages a check judges belongs in the drain.
 - Examples: `examples/redis/hydo-hist.yaml` (SET/GET as registers and RPUSH/LRANGE as
   list-append: `R=everysec` + a power cut loses an acknowledged write, both checks see it) and
   `examples/etcd/hydo-hist.yaml` (puts and gets with etcd's mod_revision, read back through every

@@ -1412,7 +1412,13 @@ fn validate_checks(m: &Value, inv_ids: &[String]) -> R<()> {
             )));
         }
         if t == messages::TYPE {
-            messages::validate(c, &wh)?;
+            // Milestone 374: another messages check's final: may be this check's drain
+            let shared_drain = list.iter().enumerate().any(|(j, o)| {
+                j != i
+                    && obj_get(o, "type").and_then(Value::as_str) == Some(messages::TYPE)
+                    && obj_get(o, "final").is_some_and(truthy)
+            });
+            messages::validate(c, &wh, shared_drain)?;
         } else if t == "linearizable" {
             let model = obj_get(c, "model")
                 .cloned()
