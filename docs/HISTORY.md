@@ -24077,10 +24077,10 @@ only research notes.
 built twice with the same bytes and all 76 schedules each run twice from fresh boots, every value
 as recorded (1,134 s, one image at a time, the signed tarball's own programs). The bare-metal
 machine: the same check with the second Linux build's tree and tarball started after the
-clean-prefix verification. Other sessions loaded the machine (load 10 to 15), and at the
-hand-off it had built 38 of 43 images twice with the same bytes and run no schedule yet. Its
-result is not recorded here. The hvx values of the moved images come from the write pass above,
-and the clean-prefix verification gave every quickstart value on hvx.
+clean-prefix verification. Other sessions loaded the machine (load 10 to 15). It
+built all 43 images twice with the same bytes and ran each of the 141 schedules twice from fresh
+boots: every value as recorded, verdicts unchanged, no failure (exit 0, 19,393 s). The
+clean-prefix verification gave every quickstart value on hvx too.
 
 **Content scans** (as 0.6.0's): the Linux tarball: the GitHub owner only in the project's public
 names (the skill, README.md, ASSERTIONS.md and the programs' release URLs), the hosting company's

@@ -225,8 +225,8 @@ formula and the release-index lines are in `prepared/` there. The files are
 `hydo-linux-0.7.0.tar.gz` `132c35ab…`, `hydo-mac-0.7.0.tar.gz` (signed and notarized) `9c84e011…`
 and `hydo-skill-0.7.0.tar.gz` `4b041655…`, each platform built twice to the same bytes. 0.7.0 holds
 Milestones 362 to 367 at the fingerprint epoch 6. The final files reproduce every recorded value on
-the Mac and on KVM (AMD hosts, the one-off workflow `tmp-rel070-kvm`), and the quickstart's values
-on hvx. The thorough hvx check of the final files had not finished at the hand-off. The record is the
+the Mac, on hvx (43 images and 141 schedules, each twice) and on KVM (AMD hosts, the one-off
+workflow `tmp-rel070-kvm`). The record is the
 section "The 0.7.0 release, prepared for publication" of `docs/HISTORY.md`.
 
 hydo 0.6.0 was published on 2026-11-26 from the release commit `58d443a6`. The
