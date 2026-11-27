@@ -51,8 +51,42 @@ per read. On the bare-metal machine itself, outside a VM, the same program took 
 ## Build and run
 
 ```sh
-hydo/crates/hydo-clock/build.sh build             # -> build/hydo-clock
+hydo/crates/hydo-clock/build.sh build             # -> build/hydo-clock (and build/hydo-clock-words)
 hydo/onboard/examples/service-clocks/build.sh      # -> clockprobe.bin (needs Go)
 HYDO_CLOCKBIN=$PWD/build/hydo-clock hydo build hydo/onboard/examples/service-clocks/hydo.yaml
 hydo run "disk=none | run T=n2@3:5"
+```
+
+## On the KVM engine
+
+Milestone 379 (tentative number). The KVM engine runs `clock: own` only for an image of
+`guest.kernel: containers`, because only those guest kernels have the seccomp filters that
+hydo-clock installs. `hydo-kvm.yaml` is `hydo.yaml` with that key. `hydo build` stages the build
+of hydo-clock that reaches the traced program's memory with `PTRACE_PEEKDATA`, because no KVM
+kernel has `process_vm_readv`. `hydo.yaml`'s image stops on KVM before any VM, with a message
+that names the key.
+
+The runs used GitHub's runners, with this tree's programs over the 0.7.0 Linux release's guest
+files. The image is `e4701af2…` (a `clockprobe.bin` of Go 1.26.5). Every schedule ran twice per
+host and gave one fingerprint per CPU vendor, and every verdict is hvx's:
+
+| Schedule | Verdict | Intel Xeon 6975P-C (four hosts) | AMD EPYC 7763 (two hosts) |
+|---|---|---|---|
+| `disk=none \| run` | OK, the lead changed 0 times | `082079041061e37c` | `2c43f47c27113fe1` |
+| `disk=none \| run T=3:5` | OK | `5e133c16434ed2dc` | `3621cb1014f82f13` |
+| `disk=none \| run T=n2@3:5` | VIOLATION `[lease.one_leader]`, 23 changes from uptime 11.91 s | `b9e4d42c9444690a` | `1ec986860f1f37e9` |
+| `disk=none \| run T=n2@3:-5` | OK | `27b7d766ff399b00` | `0a66fd05cff789fc` |
+| `disk=none \| run T=n2@0:500000ppm` | VIOLATION `[lease.one_leader]`, 23 changes from uptime 13.66 s | `28f253191301593f` | `eed3a446252de5c2` |
+| `disk=none \| run T=n1@3:1500ms T=n2@3:-1500ms` | OK | `8b1de1e33ffc8539` | `abe9ea76863f3374` |
+| `disk=none \| run T=n1@0:4 T=n2@0:4` | OK, 1 change | `5835d5942a9c69d7` | `226493112c25e058` |
+| `disk=none \| run P=n1@2+3` | OK, 1 change | `2f5f2de2b4e2b1c8` | `faf5aa38c187cd7a` |
+| `disk=none \| run K=n1@2+2 T=n1@1:2` | OK | `178fd94e317e22cf` | `343894aadee08a36` |
+
+A read of the wall clock took 5.2 µs of guest time as the guest's own program and 21.2 µs under
+hydo-clock.
+
+```sh
+hydo/crates/hydo-clock/build.sh build             # -> build/hydo-clock and build/hydo-clock-words
+HYDO_CLOCKBIN_WORDS=$PWD/build/hydo-clock-words hydo build hydo/onboard/examples/service-clocks/hydo-kvm.yaml
+hydo run --backend kvm "disk=none | run T=n2@3:5"
 ```

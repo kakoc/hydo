@@ -1,25 +1,19 @@
 {
   "docker --arch x86_64": {
     "meta": {
-      "oci/a/run/x": [
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/a/opt/deep/deep/deep/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/srv": [
+      "oci/a/etc/extra-hosts": [
         16384,
         493,
         0,
@@ -31,169 +25,19 @@
         0,
         0
       ],
-      "oci/a/usr/bin/tool": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/a/var": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/usr": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/home/app": [
-        16384,
-        448,
-        1000,
-        1000
-      ],
-      "oci/a/etc/extra-hosts": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
       "oci/a/var/lib/data/new": [
         32768,
         420,
         1000,
         1000
       ],
-      "oci/a/usr/bin/app": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/a/dev": [
         16384,
         493,
         0,
         0
       ],
-      "oci/a": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/a/etc/app.conf": [
-        32768,
-        384,
-        1000,
-        1000
-      ],
-      "oci": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/bin": [
-        40960,
-        511,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/var/lib": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/sys": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/a/run/x": [
         16384,
         493,
         0,
@@ -205,19 +49,31 @@
         0,
         0
       ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/a/run/b": [
         16384,
         493,
         0,
         0
       ],
-      "oci/a/usr/bin/app2": [
+      "oci/a/etc/passwd": [
         32768,
+        420,
+        0,
+        0
+      ],
+      "oci/a/srv/fifo": [
+        4096,
+        420,
+        0,
+        0
+      ],
+      "oci/a/var/lib": [
+        16384,
         493,
         0,
         0
       ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci": [
         16384,
         493,
         0,
@@ -229,19 +85,31 @@
         0,
         0
       ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/a/usr/bin/tool": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/a/.hydo": [
+      "oci/a/srv": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
@@ -253,25 +121,13 @@
         0,
         0
       ],
-      "oci/a/usr/bin/su": [
+      "oci/a/usr/bin/app": [
         32768,
-        2541,
-        0,
-        0
-      ],
-      "oci/a/opt/keep": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/a/var/lib/data": [
-        16384,
         493,
         0,
         0
       ],
-      "oci/a/proc": [
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
@@ -283,49 +139,73 @@
         0,
         0
       ],
+      "oci/a/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/a/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
       "oci/a/run": [
         16384,
         493,
         0,
         0
       ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/etc": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/srv/fifo": [
-        4096,
-        420,
-        0,
-        0
-      ],
-      "oci/a/var/run": [
+      "oci/a/bin": [
         40960,
         511,
         0,
         0
       ],
-      "oci/a/run/b": [
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/home/app": [
+        16384,
+        448,
+        1000,
+        1000
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
@@ -337,31 +217,31 @@
         0,
         0
       ],
+      "oci/a/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
       "oci/a/.hydo/tmp": [
         16384,
         493,
         0,
         0
       ],
-      "oci/a/.hydo/busybox": [
-        32768,
+      "oci/a/sys": [
+        16384,
         493,
         0,
         0
       ],
-      "oci/a/etc/passwd": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/a/tmp": [
+      "oci/a/home": [
         16384,
-        1023,
+        493,
         0,
         0
       ],
-      "oci/a/dev": [
+      "oci/a/opt": [
         16384,
         493,
         0,
@@ -373,15 +253,135 @@
         0,
         0
       ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/a/etc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a": [
+        16384,
+        493,
+        0,
+        0
+      ],
       "oci/a/usr/bin": [
         16384,
         493,
         0,
         0
       ],
-      "oci/a/home": [
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/a/usr": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/.hydo": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/a/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/tmp": [
+        16384,
+        1023,
         0,
         0
       ]
@@ -473,199 +473,13 @@
   },
   "docker --arch arm64": {
     "meta": {
-      "oci": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/proc": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/etc/hosts": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/a/opt": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/.hydo": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/home/app": [
-        16384,
-        448,
-        1000,
-        1000
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/srv/fifo": [
-        4096,
-        420,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/usr/bin/app2": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/a/var/run": [
-        40960,
-        511,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/etc/extra-hosts": [
-        16384,
-        493,
-        0,
-        0
-      ],
       "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/var/lib/data/new": [
-        32768,
-        420,
-        1000,
-        1000
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/cache": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/data": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/dev": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/.hydo/tmp": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/run/b": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/tmp": [
-        16384,
-        1023,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/etc": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci": [
         16384,
         493,
         0,
@@ -677,65 +491,17 @@
         0,
         0
       ],
-      "oci/a/var": [
+      "oci/a/opt": [
         16384,
         493,
         0,
         0
       ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/var/lib/data": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+      "oci/a/var/lib/data/new": [
         32768,
         420,
-        0,
-        0
-      ],
-      "oci/a/etc/passwd": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/a/etc/app.conf": [
-        32768,
-        384,
         1000,
         1000
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/usr/bin/app": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
       ],
       "oci/a/opt/deep/deep/deep": [
         16384,
@@ -743,49 +509,7 @@
         0,
         0
       ],
-      "oci/a/usr/bin/tool": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/a/srv": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/old": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/usr/bin": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/a/run/x": [
+      "oci/a/dev": [
         16384,
         493,
         0,
@@ -797,11 +521,95 @@
         0,
         0
       ],
-      "oci/a/.hydo/busybox": [
-        32768,
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
         493,
         0,
         0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/old": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/home": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/a/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/home/app": [
+        16384,
+        448,
+        1000,
+        1000
       ],
       "oci/a/bin": [
         40960,
@@ -815,13 +623,43 @@
         0,
         0
       ],
-      "oci/a/usr/bin/su": [
-        32768,
-        2541,
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
         0,
         0
       ],
-      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/a/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc/extra-hosts": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/srv/fifo": [
+        4096,
+        420,
+        0,
+        0
+      ],
+      "oci/a/etc/passwd": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep": [
         16384,
         493,
         0,
@@ -833,7 +671,67 @@
         0,
         0
       ],
-      "oci/a/var/lib": [
+      "oci/a/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/a/run/b": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/a/usr/bin/tool": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/a/usr/bin": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/.hydo/tmp": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/usr/bin/app": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc/hosts": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/a/cache": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc": [
         16384,
         493,
         0,
@@ -845,13 +743,115 @@
         0,
         0
       ],
+      "oci/a/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/srv": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/run/x": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/.hydo": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
       "oci/a/sys": [
         16384,
         493,
         0,
         0
       ],
-      "oci/a/home": [
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/a/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci/a/var/lib": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/a/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
@@ -945,61 +945,7 @@
   },
   "dockergz --arch x86_64": {
     "meta": {
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/run": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/etc/passwd": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/etc/hosts": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/b/usr/bin": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/tmp": [
-        16384,
-        1023,
-        0,
-        0
-      ],
-      "oci/b": [
+      "oci/b/opt/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
@@ -1011,33 +957,15 @@
         0,
         0
       ],
-      "oci/b/etc/app.conf": [
-        32768,
-        384,
+      "oci/b/home/app": [
+        16384,
+        448,
         1000,
         1000
       ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/usr/bin/su": [
-        32768,
-        2541,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
+      "oci/b/bin": [
+        40960,
+        511,
         0,
         0
       ],
@@ -1047,73 +975,13 @@
         0,
         0
       ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/b/home": [
         16384,
         493,
         0,
         0
       ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/keep": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/dev": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/old": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/.hydo": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/srv": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep": [
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
@@ -1125,13 +993,37 @@
         0,
         0
       ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/b/opt": [
+      "oci/b/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
@@ -1143,50 +1035,110 @@
         0,
         0
       ],
-      "oci/b/home": [
+      "oci/b/srv": [
         16384,
         493,
         0,
         0
       ],
-      "oci/b/var/lib": [
+      "oci/b/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci/b/.hydo": [
         16384,
         493,
         0,
         0
       ],
-      "oci/b/usr/bin/app": [
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/var/lib/data/new": [
         32768,
-        493,
-        0,
-        0
+        420,
+        1000,
+        1000
       ],
-      "oci/b/opt/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/var/run": [
-        40960,
-        511,
-        0,
-        0
-      ],
-      "oci/b/etc": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/.hydo/busybox": [
+      "oci/b/etc/app.conf": [
         32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/b/dev": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/b/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/old": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/etc/passwd": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/b/run": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci": [
+        16384,
         493,
         0,
         0
@@ -1209,55 +1161,49 @@
         0,
         0
       ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/b/opt/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/b/home/app": [
-        16384,
-        448,
-        1000,
-        1000
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep": [
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/b": [
         16384,
         493,
         0,
         0
       ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/etc/hosts": [
         32768,
         420,
         0,
         0
       ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/b/var/lib/data/new": [
-        32768,
-        420,
-        1000,
-        1000
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
+      "oci/b/var/run": [
+        40960,
+        511,
         0,
         0
       ],
-      "oci/b/var/lib/data": [
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
@@ -1269,19 +1215,55 @@
         0,
         0
       ],
-      "oci/b/proc": [
+      "oci/b/opt": [
         16384,
         493,
         0,
         0
       ],
-      "oci/b/bin": [
-        40960,
-        511,
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
         0,
         0
       ],
       "oci/b/sys": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/usr/bin/app": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/data": [
         16384,
         493,
         0,
@@ -1293,13 +1275,31 @@
         0,
         0
       ],
-      "oci/b/opt/deep": [
+      "oci/b/var/lib": [
         16384,
         493,
         0,
         0
       ],
-      "oci/b/data": [
+      "oci/b/etc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/b/usr/bin": [
         16384,
         493,
         0,
@@ -1389,217 +1389,7 @@
   },
   "dockergz --arch arm64": {
     "meta": {
-      "oci/b/usr/bin/app": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/b/usr": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/var/run": [
-        40960,
-        511,
-        0,
-        0
-      ],
-      "oci/b": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/etc/passwd": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/b/opt/old": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/etc/app.conf": [
-        32768,
-        384,
-        1000,
-        1000
-      ],
-      "oci/b/usr/bin": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/usr/bin/app2": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/b/bin": [
-        40960,
-        511,
-        0,
-        0
-      ],
-      "oci/b/sys": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/.hydo/busybox": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/home/app": [
-        16384,
-        448,
-        1000,
-        1000
-      ],
-      "oci/b/opt/keep": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/.hydo": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/srv/fifo": [
-        4096,
-        420,
-        0,
-        0
-      ],
-      "oci/b/etc/hosts": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
       "oci/b/home": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/etc": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/var/lib": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt": [
         16384,
         493,
         0,
@@ -1611,47 +1401,11 @@
         0,
         0
       ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/usr/bin/tool": [
+      "oci/b/var/lib/data/new": [
         32768,
-        493,
-        0,
-        0
-      ],
-      "oci/b/data": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/.hydo/tmp": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/proc": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
+        420,
+        1000,
+        1000
       ],
       "oci/b/var/lib/data": [
         16384,
@@ -1659,23 +1413,17 @@
         0,
         0
       ],
-      "oci/b/srv": [
+      "oci/b/etc": [
         16384,
         493,
         0,
         0
       ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/b/home/app": [
         16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/tmp": [
-        16384,
-        1023,
-        0,
-        0
+        448,
+        1000,
+        1000
       ],
       "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
@@ -1683,43 +1431,13 @@
         0,
         0
       ],
-      "oci/b/usr/bin/su": [
-        32768,
-        2541,
+      "oci/b/usr/bin": [
+        16384,
+        493,
         0,
         0
-      ],
-      "oci/b/var/lib/data/new": [
-        32768,
-        420,
-        1000,
-        1000
       ],
       "oci/b/dev": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/b/opt/deep/deep/deep/deep": [
         16384,
         493,
         0,
@@ -1731,7 +1449,181 @@
         0,
         0
       ],
-      "oci/b/var": [
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/usr": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/etc/hosts": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/b/.hydo": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/etc/passwd": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/b/usr/bin/app": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/b/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/b/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/sys": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/.hydo/tmp": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/srv": [
         16384,
         493,
         0,
@@ -1743,7 +1635,115 @@
         0,
         0
       ],
-      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/b/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/var/lib": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/bin": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/usr/bin/tool": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/b/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/old": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/srv/fifo": [
+        4096,
+        420,
+        0,
+        0
+      ],
+      "oci/b/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/b/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
@@ -1833,458 +1833,8 @@
   },
   "oci --arch x86_64": {
     "meta": {
-      "oci/c/usr/bin/tool": [
+      "oci/d/usr/bin/app": [
         32768,
-        493,
-        0,
-        0
-      ],
-      "oci/d/usr": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/var/lib/data/new": [
-        32768,
-        420,
-        1000,
-        1000
-      ],
-      "oci/c/opt/old": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/.hydo/tmp": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/home": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/usr/bin/app2": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/c": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/.hydo/busybox": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/bin": [
-        40960,
-        511,
-        0,
-        0
-      ],
-      "oci/c/home/app": [
-        16384,
-        448,
-        1000,
-        1000
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/var/lib": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/sys": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/run": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/usr/bin/app2": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/usr/bin": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/run": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/c/usr/bin/su": [
-        32768,
-        2541,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/.hydo/tmp": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/.hydo/busybox": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/home": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/tmp": [
-        16384,
-        1023,
-        0,
-        0
-      ],
-      "oci/c/data": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/.hydo": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/tmp": [
-        16384,
-        1023,
-        0,
-        0
-      ],
-      "oci/c/etc/passwd": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/d/etc": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/etc/hosts": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/d/usr/bin/su": [
-        32768,
-        2541,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/srv/fifo": [
-        4096,
-        420,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/usr/bin/tool": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/d/home/app": [
-        16384,
-        448,
-        1000,
-        1000
-      ],
-      "oci/d/.hydo": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/etc/hosts": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/var/lib": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/sys": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/proc": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/etc/passwd": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/usr": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/usr/bin/app": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/d/bin": [
-        40960,
-        511,
-        0,
-        0
-      ],
-      "oci/c/opt/keep": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/c/usr/bin": [
-        16384,
         493,
         0,
         0
@@ -2301,151 +1851,7 @@
         0,
         0
       ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/var": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/srv": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/usr/bin/app": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/srv": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/var/lib/data": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/var/lib/data/new": [
-        32768,
-        420,
-        1000,
-        1000
-      ],
-      "oci/d/proc": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/dev": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/dev": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/etc/app.conf": [
-        32768,
-        384,
-        1000,
-        1000
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/etc": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/var/run": [
-        40960,
-        511,
-        0,
-        0
-      ],
-      "oci/d/opt/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/var/lib/data": [
+      "oci/d/opt/deep/deep/deep": [
         16384,
         493,
         0,
@@ -2457,73 +1863,31 @@
         0,
         0
       ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/d/var": [
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/c/srv/fifo": [
-        4096,
-        420,
-        0,
-        0
-      ],
-      "oci/d/etc/app.conf": [
-        32768,
-        384,
-        1000,
-        1000
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/c/srv": [
         16384,
         493,
         0,
         0
       ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/data": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/keep": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/var/run": [
-        40960,
-        511,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
@@ -2535,15 +1899,651 @@
         0,
         0
       ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/sys": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/var/lib": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var/lib/data/new": [
+        32768,
+        420,
+        1000,
+        1000
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/etc/hosts": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/srv/fifo": [
+        4096,
+        420,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/dev": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/d/home/app": [
+        16384,
+        448,
+        1000,
+        1000
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/home/app": [
+        16384,
+        448,
+        1000,
+        1000
+      ],
+      "oci": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc/passwd": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/var/lib": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/run": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/old": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/home": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/home": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/bin": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/d/.hydo/tmp": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/usr": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/.hydo": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr/bin/tool": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/c": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/d/sys": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/srv": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/c/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/run": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr/bin/app": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/usr/bin/tool": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/c/.hydo": [
+        16384,
+        493,
+        0,
+        0
+      ],
       "oci/c/opt/deep/deep/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/c/opt/deep/deep/deep/deep/deep": [
         16384,
         493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/d/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr/bin": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/srv/fifo": [
+        4096,
+        420,
+        0,
+        0
+      ],
+      "oci/d/etc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/usr/bin": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/c/.hydo/tmp": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/var/lib/data/new": [
+        32768,
+        420,
+        1000,
+        1000
+      ],
+      "oci/c/bin": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/c/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/c/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/c/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc/hosts": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/dev": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/etc/passwd": [
+        32768,
+        420,
         0,
         0
       ]
@@ -2699,493 +2699,13 @@
   },
   "oci --arch arm64": {
     "meta": {
-      "oci/c/bin": [
-        40960,
-        511,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/srv/fifo": [
+      "oci/c/srv/fifo": [
         4096,
         420,
         0,
         0
       ],
-      "oci/c/usr/bin": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/.hydo/tmp": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/home/app": [
-        16384,
-        448,
-        1000,
-        1000
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/usr/bin/tool": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/proc": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/keep": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/d/etc/app.conf": [
-        32768,
-        384,
-        1000,
-        1000
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/run": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/var": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/usr/bin/app": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/c/usr/bin/su": [
-        32768,
-        2541,
-        0,
-        0
-      ],
-      "oci/d/etc/hosts": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/var/run": [
-        40960,
-        511,
-        0,
-        0
-      ],
-      "oci/d/home/app": [
-        16384,
-        448,
-        1000,
-        1000
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/home": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/data": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/etc": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/run": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/.hydo/busybox": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/d/var/lib/data": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/etc/app.conf": [
-        32768,
-        384,
-        1000,
-        1000
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/var": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/etc/hosts": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/d/usr/bin/tool": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/c/dev": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/old": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/.hydo/busybox": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/old": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/usr/bin": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/tmp": [
-        16384,
-        1023,
-        0,
-        0
-      ],
-      "oci/d/var/lib": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/var/run": [
-        40960,
-        511,
-        0,
-        0
-      ],
-      "oci/d/bin": [
-        40960,
-        511,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/usr/bin/app2": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/keep": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/d/usr/bin/su": [
-        32768,
-        2541,
-        0,
-        0
-      ],
-      "oci/d/dev": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/etc/passwd": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/var/lib/data/new": [
-        32768,
-        420,
-        1000,
-        1000
-      ],
-      "oci/d/etc/passwd": [
-        32768,
-        420,
-        0,
-        0
-      ],
-      "oci/d/usr": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/tmp": [
-        16384,
-        1023,
-        0,
-        0
-      ],
-      "oci/d/.hydo": [
+      "oci/c/opt/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
@@ -3197,8 +2717,50 @@
         0,
         0
       ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/.hydo": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/usr/bin/tool": [
         32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/srv/fifo": [
+        4096,
         420,
         0,
         0
@@ -3209,31 +2771,13 @@
         0,
         0
       ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/c/opt/deep/deep/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/d/opt/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/srv": [
+      "oci/d/run": [
         16384,
         493,
         0,
@@ -3245,127 +2789,25 @@
         0,
         0
       ],
-      "oci/c/var/lib/data": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/.hydo/tmp": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/var/lib": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/data": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/usr/bin/app2": [
-        32768,
-        493,
-        0,
-        0
-      ],
-      "oci/c/srv/fifo": [
-        4096,
-        420,
-        0,
-        0
-      ],
-      "oci/d/sys": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/home": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/srv": [
-        16384,
-        493,
-        0,
-        0
-      ],
       "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/c/opt": [
+      "oci/d/opt/old": [
         16384,
         493,
         0,
         0
       ],
-      "oci/d/opt/deep": [
-        16384,
-        493,
+      "oci/d/usr/bin/su": [
+        32768,
+        2541,
         0,
         0
       ],
-      "oci/c/opt/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/d/opt/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
-        16384,
-        493,
-        0,
-        0
-      ],
-      "oci/c/usr": [
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
@@ -3377,13 +2819,397 @@
         0,
         0
       ],
-      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+      "oci/d/opt/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
         0
       ],
-      "oci/d/proc": [
+      "oci/c/usr/bin/su": [
+        32768,
+        2541,
+        0,
+        0
+      ],
+      "oci/c/bin": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var/lib/data/new": [
+        32768,
+        420,
+        1000,
+        1000
+      ],
+      "oci/c/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/c/usr/bin": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/dev": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/c/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/c/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr/bin/app": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/home/app": [
+        16384,
+        448,
+        1000,
+        1000
+      ],
+      "oci/c/usr/bin/tool": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var/lib": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var/lib/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc/hosts": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/var/run": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/srv": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/keep": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/c/home": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/home": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/etc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/.hydo/tmp": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/sys": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/long-file-name-that-needs-an-extension.txt": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc/passwd": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/srv": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/etc/passwd": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/bin": [
+        40960,
+        511,
+        0,
+        0
+      ],
+      "oci/d/etc/hosts": [
+        32768,
+        420,
+        0,
+        0
+      ],
+      "oci/d/usr": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/old": [
         16384,
         493,
         0,
@@ -3395,7 +3221,7 @@
         1000,
         1000
       ],
-      "oci/c/opt/deep/deep/deep/deep/deep": [
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
         16384,
         493,
         0,
@@ -3407,7 +3233,181 @@
         0,
         0
       ],
-      "oci/d/etc": [
+      "oci/c/var": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/var/lib": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/dev": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/usr/bin/app2": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/.hydo/busybox": [
+        32768,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/proc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/.hydo/tmp": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/home/app": [
+        16384,
+        448,
+        1000,
+        1000
+      ],
+      "oci/d/data": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/etc": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/tmp": [
+        16384,
+        1023,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/c/run": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/opt/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep/deep": [
+        16384,
+        493,
+        0,
+        0
+      ],
+      "oci/d/etc/app.conf": [
+        32768,
+        384,
+        1000,
+        1000
+      ],
+      "oci/d/usr/bin": [
         16384,
         493,
         0,

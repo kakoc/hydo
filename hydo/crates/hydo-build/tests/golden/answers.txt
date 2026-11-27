@@ -331,6 +331,7 @@ I	hydo/onboard/examples/seaweedfs/config/s3.json	8181823efd1fc85c5dcdfd674c052fa
 I	hydo/onboard/examples/seaweedfs/docker-compose.yaml	2f72909624896a43f41cd4b004aeba85722f64c994c2310e5af0fbb9ef3389d3
 I	hydo/onboard/examples/seaweedfs/hydo/hydo-compose.lock.json	1ef520ec4e4a4ea4584b400f8eb31e005d684a709a73e771efc3dab57371ffa0
 I	hydo/onboard/examples/seaweedfs/hydo/hydo.yaml	ef0c6c0ebd2335ddaaee98c4a45cc81e1547a152c96297cc47b8a6141c70919c
+I	hydo/onboard/examples/service-clocks/hydo-kvm.yaml	f436a9141925bb08e402188f8ae04aab6e3fbef86e459f30f2fa9129d3edd51d
 I	hydo/onboard/examples/service-clocks/hydo.yaml	c69afc21d3128e7d67de9de2fbe3e421c9040a825cbb4cd12f0d0ad2f1ff40da
 I	hydo/onboard/examples/shop/hydo.yaml	eaacf3830712aae4e796373238760925ec2a4eb282f51c21002d3da8a58d31f8
 I	hydo/onboard/examples/stack-grpc/hydo.yaml	9bb05f0cbaf593b685f2ff6d6dff6f362c76f31595397f30825567c78a0afa6d
@@ -1102,6 +1103,8 @@ R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed 
 R	^	<root>/hydo/onboard/examples/seaweedfs/hydo/hydo-compose.lock.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/seaweedfs/hydo/hydo.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#593fe36002b874f1"
+R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
+R	^	<root>/hydo/onboard/examples/service-clocks/hydo-kvm.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/service-clocks/hydo.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
@@ -10363,400 +10366,400 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant319.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[2]: start_after: ready or started (got None)\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.0.json --arch arm64 --check	run	1	""	"hydo-build: services: n1: clock: own is an x86_64 option for…#7f852f080fa9d7a5"
+R	^	<tmp>/mutant320.0.json --arch arm64 --check	run	1	""	"hydo-build: services[1]: must be a mapping\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.1.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[1]: unknown field(s) bogus (known: af…#6dcb78a6f79e4190"
+R	^	<tmp>/mutant320.1.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].mode: a string (or a whole number)…#ad0591ca57789b3f"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.2.json --arch x86_64 --check	run	1	""	"hydo-build: workload: unknown field(s) bogus (known: descrip…#5ebeb26e7909b622"
+R	^	<tmp>/mutant320.2.json --arch x86_64 --check	run	0	#0855e4604446870b/253	""
+R	^	^ --arch x86_64 --print-shell	run	0	#6e16fd4437e33bd5/2117	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant320.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: missing required field 'cmd'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.3.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[2]: duplicate id 'clocks.offset'\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.4.json --arch arm64 --check	run	1	""	"hydo-build: services[0]: field 'name' must be a str\n"
+R	^	<tmp>/mutant320.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: required (steps + run)\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.5.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].src: a string (or a whole number),…#eabbf481b8b8e3f6"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.6.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant320.5.json --arch x86_64 --check	run	0	#119805ba01eb3c8f/253	""
+R	^	^ --arch x86_64 --print-shell	run	0	#4cab73113c4ac286/2184	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant320.6.json --arch x86_64 --check	run	0	#07c2e68da59d9db9/253	^
+R	^	^ --arch x86_64 --print-shell	run	0	#34845f623f7c3452/1969	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant320.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: field 'steps' must be a int\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.8.json --arch arm64 --check	run	1	""	"hydo-build: services: n1: clock: own is an x86_64 option for…#7f852f080fa9d7a5"
+R	^	<tmp>/mutant320.8.json --arch arm64 --check	run	1	""	"hydo-build: guest.kernel: containers (a guest kernel with wh…#1d7d835a7d10ed6b"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.9.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) i, k, l (known: descripti…#9889756081b6c664"
+R	^	<tmp>/mutant320.9.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) bogus (known: af…#0044df4d46759703"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.10.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: field 'cmd' must be a str\n"
+R	^	<tmp>/mutant320.10.json --arch x86_64 --check	run	1	""	"hydo-build: name: use lowercase letters, digits and '-' (got '1')\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.11.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: field 'cmd' must be a str\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.12.json --arch arm64 --check	run	1	""	"hydo-build: services[0]: clock: own is the only value (the s…#d403b3852c017ed3"
+R	^	<tmp>/mutant320.11.json --arch x86_64 --check	run	0	#5e634f2a6a61d920/254	""
+R	^	^ --arch x86_64 --print-shell	run	0	#4cab73113c4ac286/2184	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant320.12.json --arch arm64 --check	run	1	""	"hydo-build: services: n1: clock: own is an x86_64 option for…#7f852f080fa9d7a5"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.13.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[1]: invalid type: boolean `false`, ex…#fd0148f2b0d5b8de"
+R	^	<tmp>/mutant320.13.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: missing required field 'cmd'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.14.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: field 'ready' must be a str\n"
+R	^	<tmp>/mutant320.14.json --arch x86_64 --check	run	1	""	"hydo-build: workload: unknown field(s) x (known: description…#e3bb2e8801e1f06a"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant320.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: must be a mapping\n"
+R	^	<tmp>/mutant320.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: missing required field 'ready'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant321.0.json --arch arm64 --check	run	1	""	"hydo-build: fakes[0]: field 'name' must be a str\n"
+R	^	<tmp>/mutant321.0.json --arch arm64 --check	run	1	""	"hydo-build: services: n1: clock: own is an x86_64 option for…#7f852f080fa9d7a5"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant321.1.json --arch x86_64 --check	run	0	#afc05bf8795d80a2/245	""
+R	^	<tmp>/mutant321.1.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[1]: unknown field(s) bogus (known: af…#6dcb78a6f79e4190"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant321.2.json --arch x86_64 --check	run	1	""	"hydo-build: workload: unknown field(s) bogus (known: descrip…#5ebeb26e7909b622"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant321.3.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[2]: duplicate id 'clocks.offset'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant321.4.json --arch arm64 --check	run	1	""	"hydo-build: services[0]: field 'name' must be a str\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant321.5.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].src: a string (or a whole number),…#eabbf481b8b8e3f6"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant321.6.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant321.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: field 'steps' must be a int\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant321.8.json --arch arm64 --check	run	1	""	"hydo-build: services: n1: clock: own is an x86_64 option for…#7f852f080fa9d7a5"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant321.9.json --arch x86_64 --check	run	1	""	"hydo-build: root: unknown field(s) i, k, l (known: descripti…#9889756081b6c664"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant321.10.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: field 'cmd' must be a str\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant321.11.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: field 'cmd' must be a str\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant321.12.json --arch arm64 --check	run	1	""	"hydo-build: services[0]: clock: own is the only value (the s…#d403b3852c017ed3"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant321.13.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[1]: invalid type: boolean `false`, ex…#fd0148f2b0d5b8de"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant321.14.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: field 'ready' must be a str\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant321.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: must be a mapping\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant322.0.json --arch arm64 --check	run	1	""	"hydo-build: fakes[0]: field 'name' must be a str\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant322.1.json --arch x86_64 --check	run	0	#253844727ec69a1d/245	""
 R	^	^ --arch x86_64 --print-shell	run	0	#9bb13f63e6581ad7/3267	^
 R	^	^ --arch x86_64 --print-world	run	0	#a8f649e85d0999a9/1186	^
-R	^	<tmp>/mutant321.2.json --arch x86_64 --check	run	1	""	"hydo-build: fakes[0].routes[1]: unknown field(s) bogus (know…#cb79f2415a6e29c3"
+R	^	<tmp>/mutant322.2.json --arch x86_64 --check	run	1	""	"hydo-build: fakes[0].routes[1]: unknown field(s) bogus (know…#cb79f2415a6e29c3"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant321.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: missing required field 'ready'\n"
+R	^	<tmp>/mutant322.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: missing required field 'ready'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant321.4.json --arch arm64 --check	run	1	""	"hydo-build: fakes[0].routes[2]: name 'charge': [a-z][a-z0-9_…#dbd988d426118504"
+R	^	<tmp>/mutant322.4.json --arch arm64 --check	run	1	""	"hydo-build: fakes[0].routes[2]: name 'charge': [a-z][a-z0-9_…#dbd988d426118504"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant321.5.json --arch x86_64 --check	run	0	#a04d97ebdc2e7494/84	""
+R	^	<tmp>/mutant322.5.json --arch x86_64 --check	run	0	#11555e104e08d7cf/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#9bb13f63e6581ad7/3267	^
 R	^	^ --arch x86_64 --print-world	run	0	#a8f649e85d0999a9/1186	^
-R	^	<tmp>/mutant321.6.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[5].msg: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant322.6.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[5].msg: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant321.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: unknown field(s) bogus (known: descrip…#5ebeb26e7909b622"
+R	^	<tmp>/mutant322.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: unknown field(s) bogus (known: descrip…#5ebeb26e7909b622"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant321.8.json --arch arm64 --check	run	1	""	"hydo-build: faults: unknown kind '127.0.0.1' (known: clock, …#8e103d0864baec10"
+R	^	<tmp>/mutant322.8.json --arch arm64 --check	run	1	""	"hydo-build: faults: unknown kind '127.0.0.1' (known: clock, …#8e103d0864baec10"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant321.9.json --arch x86_64 --check	run	1	""	"hydo-build: fakes[0].routes[1]: unknown field(s) bogus (know…#cb79f2415a6e29c3"
+R	^	<tmp>/mutant322.9.json --arch x86_64 --check	run	1	""	"hydo-build: fakes[0].routes[1]: unknown field(s) bogus (know…#cb79f2415a6e29c3"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant321.10.json --arch x86_64 --check	run	0	#25934c4680952432/85	""
+R	^	<tmp>/mutant322.10.json --arch x86_64 --check	run	0	#693e1e24158690a2/85	""
 R	^	^ --arch x86_64 --print-shell	run	0	#9bb13f63e6581ad7/3267	^
 R	^	^ --arch x86_64 --print-world	run	0	#a8f649e85d0999a9/1186	^
-R	^	<tmp>/mutant321.11.json --arch x86_64 --check	run	1	""	"hydo-build: fakes[0].routes[0]: unknown field(s) bogus (know…#4327e35309e121ed"
+R	^	<tmp>/mutant322.11.json --arch x86_64 --check	run	1	""	"hydo-build: fakes[0].routes[0]: unknown field(s) bogus (know…#4327e35309e121ed"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant321.12.json --arch arm64 --check	run	1	""	"hydo-build: fakes[1].routes[0]: idempotent is true or false\n"
+R	^	<tmp>/mutant322.12.json --arch arm64 --check	run	1	""	"hydo-build: fakes[1].routes[0]: idempotent is true or false\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant321.13.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[5]: field 'cmd' must be a str\n"
+R	^	<tmp>/mutant322.13.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[5]: field 'cmd' must be a str\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant321.14.json --arch x86_64 --check	run	1	""	"hydo-build: data: unknown field(s) bogus (known: description…#f4a88f234b0c8e9e"
+R	^	<tmp>/mutant322.14.json --arch x86_64 --check	run	1	""	"hydo-build: data: unknown field(s) bogus (known: description…#f4a88f234b0c8e9e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant321.15.json --arch x86_64 --check	run	0	#7af60fb3fb06f917/85	""
+R	^	<tmp>/mutant322.15.json --arch x86_64 --check	run	0	#069f1d9cd3cb5ae1/85	""
 R	^	^ --arch x86_64 --print-shell	run	0	#1b60354c73eed64f/2981	^
 R	^	^ --arch x86_64 --print-world	run	0	#a8f649e85d0999a9/1186	^
-R	^	<tmp>/mutant322.0.json --arch arm64 --check	run	1	""	"hydo-build: services[2]: depends_on names unknown service 'mysql'\n"
+R	^	<tmp>/mutant323.0.json --arch arm64 --check	run	1	""	"hydo-build: services[2]: depends_on names unknown service 'mysql'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant322.1.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]: unknown field(s) a (known: default, de…#d2ab492c6ac2ff2b"
+R	^	<tmp>/mutant323.1.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]: unknown field(s) a (known: default, de…#d2ab492c6ac2ff2b"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant322.2.json --arch x86_64 --check	run	0	#744fff6455ed89fb/84	""
+R	^	<tmp>/mutant323.2.json --arch x86_64 --check	run	0	#fdbe3729f4a99489/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#19ac186e36d36d32/4694	^
 R	^	^ --arch x86_64 --print-world	run	0	#d1f698326c9c1e7b/333	^
-R	^	<tmp>/mutant322.3.json --arch x86_64 --check	run	0	#e92c99676a8c8c18/84	^
+R	^	<tmp>/mutant323.3.json --arch x86_64 --check	run	0	#242dc04b6069c100/84	^
 R	^	^ --arch x86_64 --print-shell	run	0	#daa92cae1f7c09d1/4636	^
 R	^	^ --arch x86_64 --print-world	run	0	#d1f698326c9c1e7b/333	^
-R	^	<tmp>/mutant322.4.json --arch arm64 --check	run	1	""	"hydo-build: knobs[0].default: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant323.4.json --arch arm64 --check	run	1	""	"hydo-build: knobs[0].default: {{p}} is not a declared parameter\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant322.5.json --arch x86_64 --check	run	0	#34added504ee4336/84	""
+R	^	<tmp>/mutant323.5.json --arch x86_64 --check	run	0	#6813f1e75fb334e0/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#2dc103cff6f7f5e0/4704	^
 R	^	^ --arch x86_64 --print-world	run	0	#d1f698326c9c1e7b/333	^
-R	^	<tmp>/mutant322.6.json --arch x86_64 --check	run	0	#e378b41546f76b14/84	^
+R	^	<tmp>/mutant323.6.json --arch x86_64 --check	run	0	#6d94b491bc5f91e6/84	^
 R	^	^ --arch x86_64 --print-shell	run	0	#ea41428d777ea15a/4696	^
 R	^	^ --arch x86_64 --print-world	run	0	#d1f698326c9c1e7b/333	^
-R	^	<tmp>/mutant322.7.json --arch x86_64 --check	run	0	#8100a91cf6519c7c/84	^
+R	^	<tmp>/mutant323.7.json --arch x86_64 --check	run	0	#2eaefe093a6cbcee/84	^
 R	^	^ --arch x86_64 --print-shell	run	0	#ea41428d777ea15a/4696	^
 R	^	^ --arch x86_64 --print-world	run	0	#d1f698326c9c1e7b/333	^
-R	^	<tmp>/mutant322.8.json --arch arm64 --check	run	1	""	"hydo-build: services[3]: depends_on names unknown service 'x'\n"
+R	^	<tmp>/mutant323.8.json --arch arm64 --check	run	1	""	"hydo-build: services[3]: depends_on names unknown service 'x'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant322.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[4]: duplicate service name 'mysql'\n"
+R	^	<tmp>/mutant323.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[4]: duplicate service name 'mysql'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant322.10.json --arch x86_64 --check	run	0	#aa9688cf03e38078/85	""
+R	^	<tmp>/mutant323.10.json --arch x86_64 --check	run	0	#fa8cd9b91ce8459d/85	""
 R	^	^ --arch x86_64 --print-shell	run	0	#ea41428d777ea15a/4696	^
 R	^	^ --arch x86_64 --print-world	run	0	#d1f698326c9c1e7b/333	^
-R	^	<tmp>/mutant322.11.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
+R	^	<tmp>/mutant323.11.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant322.12.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant323.12.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant322.13.json --arch x86_64 --check	run	1	""	"hydo-build: services[2].ready_timeout: invalid type: string …#5205a43c6f36dc97"
+R	^	<tmp>/mutant323.13.json --arch x86_64 --check	run	1	""	"hydo-build: services[2].ready_timeout: invalid type: string …#5205a43c6f36dc97"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant322.14.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind 'eventually' (known: clock,…#347b9e5389c99079"
+R	^	<tmp>/mutant323.14.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind 'eventually' (known: clock,…#347b9e5389c99079"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant322.15.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
+R	^	<tmp>/mutant323.15.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant323.0.json --arch arm64 --check	run	1	""	"hydo-build: knobs[0]: missing required field 'default'\n"
+R	^	<tmp>/mutant324.0.json --arch arm64 --check	run	1	""	"hydo-build: knobs[0]: missing required field 'default'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant323.1.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[2]: missing required field 'id'\n"
+R	^	<tmp>/mutant324.1.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[2]: missing required field 'id'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant323.2.json --arch x86_64 --check	run	0	#702cae40284fb784/84	""
+R	^	<tmp>/mutant324.2.json --arch x86_64 --check	run	0	#60f47ab52426f0fe/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#3516109b769de65a/6106	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant323.3.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: branch_tic…#fe2228c5e24dc40f"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant323.4.json --arch arm64 --check	run	0	#9a2176189a0f20e0/84	""
-R	^	^ --arch arm64 --print-shell	run	0	#bd38d726396db161/6039	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant323.5.json --arch x86_64 --check	run	0	#7c89b41660fcaa36/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#3516109b769de65a/6106	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant323.6.json --arch x86_64 --check	run	0	#90f03a031b6b7df9/84	^
-R	^	^ --arch x86_64 --print-shell	run	0	#a4a799e90e998f74/6087	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant323.7.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: type must be always, always_or_un…#6ab097eef607ada1"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant323.8.json --arch arm64 --check	run	1	""	"hydo-build: root.files[1].mode: a string (or a whole number)…#444f14ffb3d3efe3"
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant323.9.json --arch x86_64 --check	run	1	""	"hydo-build: workload.run: a string (or a whole number), not …#bb27806df374f294"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant323.10.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: float object is not iterable\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant323.11.json --arch x86_64 --check	run	0	#3682e64b4cd402bf/85	""
-R	^	^ --arch x86_64 --print-shell	run	0	#3516109b769de65a/6106	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant323.12.json --arch arm64 --check	run	0	#c99cf92b3e9c0296/85	^
-R	^	^ --arch arm64 --print-shell	run	0	#e0b9ae388e5b14fe/6101	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant323.13.json --arch x86_64 --check	run	1	""	"hydo-build: services[1].errors.files: absolute paths of log …#8b7c2bf68488f9c0"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant323.14.json --arch x86_64 --check	run	0	#2ec3789c2e70bdda/85	""
-R	^	^ --arch x86_64 --print-shell	run	0	#739d749f6efcb7d3/6029	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant323.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: must be a mapping\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant324.0.json --arch arm64 --check	run	1	""	"hydo-build: root.files[6].bogus: unknown field `bogus`, expe…#1cc58e0e5e8c0869"
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant324.1.json --arch x86_64 --check	run	1	""	"hydo-build: services[4]: duplicate service name 'redis'\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant324.2.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant324.3.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[1]: unknown field(s) bogus (known: default…#bd39a71c77d341d0"
+R	^	<tmp>/mutant324.3.json --arch x86_64 --check	run	1	""	"hydo-build: guest: unknown field(s) bogus (known: branch_tic…#fe2228c5e24dc40f"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant324.4.json --arch arm64 --check	run	0	#52ac2380d173769f/84	""
+R	^	^ --arch arm64 --print-shell	run	0	#bd38d726396db161/6039	^
+R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant324.5.json --arch x86_64 --check	run	0	#560559cc0e9885a2/84	^
+R	^	^ --arch x86_64 --print-shell	run	0	#3516109b769de65a/6106	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant324.6.json --arch x86_64 --check	run	0	#5724f090599ff66c/84	^
+R	^	^ --arch x86_64 --print-shell	run	0	#a4a799e90e998f74/6087	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant324.7.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: type must be always, always_or_un…#6ab097eef607ada1"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant324.8.json --arch arm64 --check	run	1	""	"hydo-build: root.files[1].mode: a string (or a whole number)…#444f14ffb3d3efe3"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant324.9.json --arch x86_64 --check	run	1	""	"hydo-build: workload.run: a string (or a whole number), not …#bb27806df374f294"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant324.10.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: float object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant324.11.json --arch x86_64 --check	run	0	#6b47a7ca572a8c5a/85	""
+R	^	^ --arch x86_64 --print-shell	run	0	#3516109b769de65a/6106	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant324.12.json --arch arm64 --check	run	0	#a0a9e6587b29c83d/85	^
+R	^	^ --arch arm64 --print-shell	run	0	#e0b9ae388e5b14fe/6101	^
+R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant324.13.json --arch x86_64 --check	run	1	""	"hydo-build: services[1].errors.files: absolute paths of log …#8b7c2bf68488f9c0"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant324.14.json --arch x86_64 --check	run	0	#b94b353ae2db0014/85	""
+R	^	^ --arch x86_64 --print-shell	run	0	#739d749f6efcb7d3/6029	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant324.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: must be a mapping\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant325.0.json --arch arm64 --check	run	1	""	"hydo-build: root.files[6].bogus: unknown field `bogus`, expe…#1cc58e0e5e8c0869"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant325.1.json --arch x86_64 --check	run	1	""	"hydo-build: services[4]: duplicate service name 'redis'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant325.2.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant325.3.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[1]: unknown field(s) bogus (known: default…#bd39a71c77d341d0"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant325.4.json --arch arm64 --check	run	0	#35134a00391ab912/84	""
 R	^	^ --arch arm64 --print-shell	run	0	#026d449457153d8a/4274	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant324.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[3].depends_on: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant325.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[3].depends_on: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant324.6.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[1].safe: a string, a number or true/false,…#7915cd7dccff4b4b"
+R	^	<tmp>/mutant325.6.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[1].safe: a string, a number or true/false,…#7915cd7dccff4b4b"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant324.7.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0].values[2]: a string, a number or true/f…#1540b067b02d1882"
+R	^	<tmp>/mutant325.7.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0].values[2]: a string, a number or true/f…#1540b067b02d1882"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant324.8.json --arch arm64 --check	run	1	""	"hydo-build: faults: unknown kind True (known: clock, corrupt…#8494862c496b9359"
+R	^	<tmp>/mutant325.8.json --arch arm64 --check	run	1	""	"hydo-build: faults: unknown kind True (known: clock, corrupt…#8494862c496b9359"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant324.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[2].ready_timeout: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant325.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[2].ready_timeout: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant324.10.json --arch x86_64 --check	run	1	""	"hydo-build: top level: missing required field 'name'\n"
+R	^	<tmp>/mutant325.10.json --arch x86_64 --check	run	1	""	"hydo-build: top level: missing required field 'name'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant324.11.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0].values[1]: a string, a number or true/f…#3892623e13d750e1"
+R	^	<tmp>/mutant325.11.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0].values[1]: a string, a number or true/f…#3892623e13d750e1"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant324.12.json --arch arm64 --check	run	1	""	"hydo-build: knobs[0]: token must be one capital letter other…#cfff9015b16210d0"
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant324.13.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: missing required field 'name'\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant324.14.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[1].values: {{p}} is not a declared parameter\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant324.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[2]: field 'name' must be a str\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant325.0.json --arch arm64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant325.1.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[1]: unknown field(s) 1, 2 (known: default,…#75c1385d6f6389db"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant325.2.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[5]: id ' 7 ': letters, digits, '.', '_' and '-' only\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant325.3.json --arch x86_64 --check	run	0	#54014100297cec31/84	""
-R	^	^ --arch x86_64 --print-shell	run	0	#3179f3c9f51d32f3/6157	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant325.4.json --arch arm64 --check	run	1	""	"hydo-build: invariants[0]: every is a whole number of seconds >= 1\n"
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant325.5.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].bogus: unknown field `bogus`, expe…#fd9a461e72675b71"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant325.6.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[5].msg: {{p}} is not a declared parameter\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant325.7.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0]: invalid type: integer `-1`, expec…#044f1b8163fbc3b9"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant325.8.json --arch arm64 --check	run	0	#110738223d84c24d/84	""
-R	^	^ --arch arm64 --print-shell	run	0	#e946f01b3bb4b28c/6213	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant325.9.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[3]: {{p}} is not a declared parameter\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant325.10.json --arch x86_64 --check	run	0	#a3e18bd5f0df29f7/85	""
-R	^	^ --arch x86_64 --print-shell	run	0	#e946f01b3bb4b28c/6213	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant325.11.json --arch x86_64 --check	run	0	#d2a9c01c586867eb/85	^
-R	^	^ --arch x86_64 --print-shell	run	0	#5a325916db0dadd9/6191	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
 R	^	<tmp>/mutant325.12.json --arch arm64 --check	run	1	""	"hydo-build: knobs[0]: token must be one capital letter other…#cfff9015b16210d0"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant325.13.json --arch x86_64 --check	run	0	#12076036fca887d0/85	""
+R	^	<tmp>/mutant325.13.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: missing required field 'name'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant325.14.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[1].values: {{p}} is not a declared parameter\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant325.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[2]: field 'name' must be a str\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant326.0.json --arch arm64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant326.1.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[1]: unknown field(s) 1, 2 (known: default,…#75c1385d6f6389db"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant326.2.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[5]: id ' 7 ': letters, digits, '.', '_' and '-' only\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant326.3.json --arch x86_64 --check	run	0	#25499842b8c557b5/84	""
+R	^	^ --arch x86_64 --print-shell	run	0	#3179f3c9f51d32f3/6157	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant326.4.json --arch arm64 --check	run	1	""	"hydo-build: invariants[0]: every is a whole number of seconds >= 1\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant326.5.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].bogus: unknown field `bogus`, expe…#fd9a461e72675b71"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant326.6.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[5].msg: {{p}} is not a declared parameter\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant326.7.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0]: invalid type: integer `-1`, expec…#044f1b8163fbc3b9"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant326.8.json --arch arm64 --check	run	0	#b419d2cd516eead8/84	""
+R	^	^ --arch arm64 --print-shell	run	0	#e946f01b3bb4b28c/6213	^
+R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant326.9.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[3]: {{p}} is not a declared parameter\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant326.10.json --arch x86_64 --check	run	0	#4d0dd27b854557f2/85	""
 R	^	^ --arch x86_64 --print-shell	run	0	#e946f01b3bb4b28c/6213	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant325.14.json --arch x86_64 --check	run	1	""	"hydo-build: services[3].description: a string, a number or t…#ec74492ec40f902c"
+R	^	<tmp>/mutant326.11.json --arch x86_64 --check	run	0	#d0731d54f562b19e/85	^
+R	^	^ --arch x86_64 --print-shell	run	0	#5a325916db0dadd9/6191	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant326.12.json --arch arm64 --check	run	1	""	"hydo-build: knobs[0]: token must be one capital letter other…#cfff9015b16210d0"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant326.13.json --arch x86_64 --check	run	0	#2353e010acfd7f0c/85	""
+R	^	^ --arch x86_64 --print-shell	run	0	#e946f01b3bb4b28c/6213	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant326.14.json --arch x86_64 --check	run	1	""	"hydo-build: services[3].description: a string, a number or t…#ec74492ec40f902c"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant325.15.json --arch x86_64 --check	run	0	#cead60d07b634d34/85	""
+R	^	<tmp>/mutant326.15.json --arch x86_64 --check	run	0	#7df57998a7c2f4f0/85	""
 R	^	^ --arch x86_64 --print-shell	run	0	#57be027ba720b9c6/5006	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant326.0.json --arch arm64 --check	run	0	#dd48a59c58e9bb6a/84	^
+R	^	<tmp>/mutant327.0.json --arch arm64 --check	run	0	#96904a639750cd68/84	^
 R	^	^ --arch arm64 --print-shell	run	0	#6c949f7860eb9c0f/4215	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant326.1.json --arch x86_64 --check	run	0	#ef431cb629e9b491/84	^
+R	^	<tmp>/mutant327.1.json --arch x86_64 --check	run	0	#163243f65c5cd4fe/84	^
 R	^	^ --arch x86_64 --print-shell	run	0	#60a1bc16323467ee/4265	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant326.2.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) bogus (known: af…#0044df4d46759703"
+R	^	<tmp>/mutant327.2.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) bogus (known: af…#0044df4d46759703"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant326.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: field 'ready' must be a str\n"
+R	^	<tmp>/mutant327.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: field 'ready' must be a str\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant326.4.json --arch arm64 --check	run	1	""	"hydo-build: env.GOMAXPROCS: a string, a number or true/false…#544eac4578b98601"
+R	^	<tmp>/mutant327.4.json --arch arm64 --check	run	1	""	"hydo-build: env.GOMAXPROCS: a string, a number or true/false…#544eac4578b98601"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant326.5.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0].default: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant327.5.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0].default: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant326.6.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0].safe: a string, a number or true/false,…#c980df68d54373a1"
+R	^	<tmp>/mutant327.6.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0].safe: a string, a number or true/false,…#c980df68d54373a1"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant326.7.json --arch x86_64 --check	run	0	#af9bb20bc5c21674/84	""
+R	^	<tmp>/mutant327.7.json --arch x86_64 --check	run	0	#be3c7d5409bd3695/84	""
 R	^	^ --arch x86_64 --print-shell	run	0	#5e8892f048a1fee8/4306	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant326.8.json --arch arm64 --check	run	1	""	"hydo-build: services[1]: name '4096' must match [a-z][a-z0-9…#b708a769318de74e"
+R	^	<tmp>/mutant327.8.json --arch arm64 --check	run	1	""	"hydo-build: services[1]: name '4096' must match [a-z][a-z0-9…#b708a769318de74e"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant326.9.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]: unknown field(s) b (known: default, de…#b67489c861912fd0"
+R	^	<tmp>/mutant327.9.json --arch x86_64 --check	run	1	""	"hydo-build: knobs[0]: unknown field(s) b (known: default, de…#b67489c861912fd0"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant326.10.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: unknown field(s) bogus (known: addr…#9609f256dfc96b92"
+R	^	<tmp>/mutant327.10.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: unknown field(s) bogus (known: addr…#9609f256dfc96b92"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant326.11.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	<tmp>/mutant327.11.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant326.12.json --arch arm64 --check	run	0	#a5c613db6abd15e3/85	""
+R	^	<tmp>/mutant327.12.json --arch arm64 --check	run	0	#ea811778a2999c94/85	""
 R	^	^ --arch arm64 --print-shell	run	0	#df48f64a04b757de/4306	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant326.13.json --arch x86_64 --check	run	1	""	"hydo-build: root.nix[1]: a string (or a whole number), not […#65c922e4aa88ca8a"
+R	^	<tmp>/mutant327.13.json --arch x86_64 --check	run	1	""	"hydo-build: root.nix[1]: a string (or a whole number), not […#65c922e4aa88ca8a"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant326.14.json --arch x86_64 --check	run	1	""	"hydo-build: services[2]: unknown field(s) bogus (known: addr…#92ec80caf4b812f5"
+R	^	<tmp>/mutant327.14.json --arch x86_64 --check	run	1	""	"hydo-build: services[2]: unknown field(s) bogus (known: addr…#92ec80caf4b812f5"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant326.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: must be a mapping\n"
+R	^	<tmp>/mutant327.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: must be a mapping\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.0.json --arch arm64 --check	run	1	""	"hydo-build: env.SDB_FEEDS: {{feeds}} is not a declared parameter\n"
+R	^	<tmp>/mutant331.0.json --arch arm64 --check	run	1	""	"hydo-build: env.SDB_FEEDS: {{feeds}} is not a declared parameter\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.1.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: storage: unknown key \"bogus\" (dir, …#72e5bdc22a9c2f1b"
+R	^	<tmp>/mutant331.1.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: storage: unknown key \"bogus\" (dir, …#72e5bdc22a9c2f1b"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.2.json --arch x86_64 --check	run	1	""	"hydo-build: services[0].mounts[3]: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant331.2.json --arch x86_64 --check	run	1	""	"hydo-build: services[0].mounts[3]: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: must be a mapping\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.5.json --arch x86_64 --check	run	1	""	^
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.6.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].src: {{arch}} is not a declared parameter\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.8.json --arch arm64 --check	run	1	""	^
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.9.json --arch x86_64 --check	run	1	""	^
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.10.json --arch x86_64 --check	run	1	""	^
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.11.json --arch x86_64 --check	run	1	""	^
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.12.json --arch arm64 --check	run	1	""	^
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.13.json --arch x86_64 --check	run	1	""	^
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.14.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant330.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant331.0.json --arch arm64 --check	run	1	""	"hydo-build: params: must be a mapping of name: default value\n"
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant331.1.json --arch x86_64 --check	run	1	""	"hydo-build: test.round_ms: a whole number in [10, 60000] (got '')\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant331.2.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant331.3.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].src: {{arch}} is not a declared parameter\n"
+R	^	<tmp>/mutant331.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: must be a mapping\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant331.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
@@ -10774,10 +10777,10 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant331.8.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant331.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: unknown field(s) bogus (known: addr…#9609f256dfc96b92"
+R	^	<tmp>/mutant331.9.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant331.10.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant331.10.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant331.11.json --arch x86_64 --check	run	1	""	^
@@ -10789,160 +10792,160 @@ R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant331.13.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant331.14.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant331.14.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant331.15.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant331.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant332.0.json --arch arm64 --check	run	1	""	"hydo-build: top level: missing required field 'name'\n"
+R	^	<tmp>/mutant332.0.json --arch arm64 --check	run	1	""	"hydo-build: params: must be a mapping of name: default value\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant332.1.json --arch x86_64 --check	run	0	#39d0adf3eebff6ae/286	""
+R	^	<tmp>/mutant332.1.json --arch x86_64 --check	run	1	""	"hydo-build: test.round_ms: a whole number in [10, 60000] (got '')\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant332.2.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant332.3.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].src: {{arch}} is not a declared parameter\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant332.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant332.5.json --arch x86_64 --check	run	1	""	^
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant332.6.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].src: {{arch}} is not a declared parameter\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant332.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant332.8.json --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant332.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: unknown field(s) bogus (known: addr…#9609f256dfc96b92"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant332.10.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant332.11.json --arch x86_64 --check	run	1	""	^
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant332.12.json --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant332.13.json --arch x86_64 --check	run	1	""	^
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant332.14.json --arch x86_64 --check	run	1	""	^
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant332.15.json --arch x86_64 --check	run	1	""	^
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant333.0.json --arch arm64 --check	run	1	""	"hydo-build: top level: missing required field 'name'\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant333.1.json --arch x86_64 --check	run	0	#cd2744703eb2f47e/286	""
 R	^	^ --arch x86_64 --print-shell	run	0	#41f7fd93ad12d965/2095	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant332.2.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[3]: invalid type: integer `5000`, exp…#a00e4785b6d3edfa"
+R	^	<tmp>/mutant333.2.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[3]: invalid type: integer `5000`, exp…#a00e4785b6d3edfa"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant332.3.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind 'v3' (known: clock, corrupt…#a6e81c4c5c9edf41"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant332.4.json --arch arm64 --check	run	0	#edb24f675c42362b/286	""
-R	^	^ --arch arm64 --print-shell	run	0	#bdf926554e7ba060/2100	^
-R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant332.5.json --arch x86_64 --check	run	0	#d1cd590ed7136569/286	^
-R	^	^ --arch x86_64 --print-shell	run	0	#bdf926554e7ba060/2100	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant332.6.json --arch x86_64 --check	run	1	""	"hydo-build: guest.disks[0].size_mib: whole MiB in [1, 4096] (got None)\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant332.7.json --arch x86_64 --check	run	0	#6833c0d03fb4c4eb/286	""
-R	^	^ --arch x86_64 --print-shell	run	0	#bdf926554e7ba060/2100	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant332.8.json --arch arm64 --check	run	1	""	"hydo-build: invariants[0]: field 'id' must be a str\n"
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant332.9.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].bogus: unknown field `bogus`, expe…#fd9a461e72675b71"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant332.10.json --arch x86_64 --check	run	1	""	^
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant332.11.json --arch x86_64 --check	run	1	""	"hydo-build: workload.retry: a string (or a whole number), no…#efcafc07b882a3a3"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant332.12.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'steps'\n"
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant332.13.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[2]: invalid type: null, expected a ma…#eb0aa829ff42e892"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant332.14.json --arch x86_64 --check	run	0	#d8b8e64041b6b8e3/287	""
-R	^	^ --arch x86_64 --print-shell	run	0	#be76b60cbcf9c902/2076	^
-R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant332.15.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[4]: unknown field(s) bogus (known: af…#b558dd75d1d362d2"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant333.0.json --arch arm64 --check	run	1	""	"hydo-build: data: unknown field(s) ., 0, 1, 2, 7 (known: des…#755e306903c51666"
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant333.1.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant333.2.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: restart: no, always, on-failure, on…#e63c8323c854fb1b"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant333.3.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	<tmp>/mutant333.3.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind 'v3' (known: clock, corrupt…#a6e81c4c5c9edf41"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant333.4.json --arch arm64 --check	run	0	#98e88b3569d526b4/286	""
+R	^	^ --arch arm64 --print-shell	run	0	#bdf926554e7ba060/2100	^
+R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant333.5.json --arch x86_64 --check	run	0	#9db46ec11db787bc/286	^
+R	^	^ --arch x86_64 --print-shell	run	0	#bdf926554e7ba060/2100	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant333.6.json --arch x86_64 --check	run	1	""	"hydo-build: guest.disks[0].size_mib: whole MiB in [1, 4096] (got None)\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant333.7.json --arch x86_64 --check	run	0	#c68d48d59018bffe/286	""
+R	^	^ --arch x86_64 --print-shell	run	0	#bdf926554e7ba060/2100	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant333.8.json --arch arm64 --check	run	1	""	"hydo-build: invariants[0]: field 'id' must be a str\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant333.9.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].bogus: unknown field `bogus`, expe…#fd9a461e72675b71"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant333.10.json --arch x86_64 --check	run	1	""	^
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant333.11.json --arch x86_64 --check	run	1	""	"hydo-build: workload.retry: a string (or a whole number), no…#efcafc07b882a3a3"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant333.12.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'steps'\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant333.13.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[2]: invalid type: null, expected a ma…#eb0aa829ff42e892"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant333.14.json --arch x86_64 --check	run	0	#2c5c88f73a7ee5b6/287	""
+R	^	^ --arch x86_64 --print-shell	run	0	#be76b60cbcf9c902/2076	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	<tmp>/mutant333.15.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[4]: unknown field(s) bogus (known: af…#b558dd75d1d362d2"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant334.0.json --arch arm64 --check	run	1	""	"hydo-build: data: unknown field(s) ., 0, 1, 2, 7 (known: des…#755e306903c51666"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant334.1.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant334.2.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: restart: no, always, on-failure, on…#e63c8323c854fb1b"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant334.3.json --arch x86_64 --check	run	1	""	"hydo-build: the manifest cannot be read: int object is not iterable\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant334.4.json --arch arm64 --check	run	0	#ab05dd0e7ade2898/286	""
 R	^	^ --arch arm64 --print-shell	run	0	#d1d1923a66e98c1b/2092	^
 R	^	^ --arch arm64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant333.5.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[7].bogus: unknown field `bogus`, expe…#9902f12bc3f2427c"
+R	^	<tmp>/mutant334.5.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[7].bogus: unknown field `bogus`, expe…#9902f12bc3f2427c"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant333.6.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
+R	^	<tmp>/mutant334.6.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant333.7.json --arch x86_64 --check	run	0	#9f1fc4a6cc43fd5f/286	""
+R	^	<tmp>/mutant334.7.json --arch x86_64 --check	run	0	#347ee57b29e56e40/286	""
 R	^	^ --arch x86_64 --print-shell	run	0	#d1d1923a66e98c1b/2092	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant333.8.json --arch arm64 --check	run	1	""	"hydo-build: guest.ram_mib: a whole number of MiB in [256, 8192] (got [])\n"
+R	^	<tmp>/mutant334.8.json --arch arm64 --check	run	1	""	"hydo-build: guest.ram_mib: a whole number of MiB in [256, 8192] (got [])\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant333.9.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[2]: unknown field(s) bogus (known: af…#d966b129a98c03b4"
+R	^	<tmp>/mutant334.9.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[2]: unknown field(s) bogus (known: af…#d966b129a98c03b4"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant333.10.json --arch x86_64 --check	run	0	#68b2d1b8285d10c3/287	""
+R	^	<tmp>/mutant334.10.json --arch x86_64 --check	run	0	#87e11ad882fd8426/287	""
 R	^	^ --arch x86_64 --print-shell	run	0	#a901ecdea27edbcf/1859	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant333.11.json --arch x86_64 --check	run	0	#7298a1dca4aa100d/287	^
+R	^	<tmp>/mutant334.11.json --arch x86_64 --check	run	0	#68a2707b22f5c085/287	^
 R	^	^ --arch x86_64 --print-shell	run	0	#d1d1923a66e98c1b/2092	^
 R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
-R	^	<tmp>/mutant333.12.json --arch arm64 --check	run	1	""	"hydo-build: invariants[3]: unknown field(s) a (known: after,…#14a6d10e348d7258"
+R	^	<tmp>/mutant334.12.json --arch arm64 --check	run	1	""	"hydo-build: invariants[3]: unknown field(s) a (known: after,…#14a6d10e348d7258"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant333.13.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) v (known: after,…#336a62bf388b7e81"
+R	^	<tmp>/mutant334.13.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) v (known: after,…#336a62bf388b7e81"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant333.14.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: restart: no, always, on-failure, on…#3dff8454fd8cb665"
+R	^	<tmp>/mutant334.14.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: restart: no, always, on-failure, on…#3dff8454fd8cb665"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant333.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
+R	^	<tmp>/mutant334.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.0.json --arch arm64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#5ed9cdd5b2bc6623"
+R	^	<tmp>/mutant338.0.json --arch arm64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#5ed9cdd5b2bc6623"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.1.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#7b4eb7099182b226"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.2.json --arch x86_64 --check	run	1	""	^
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.3.json --arch x86_64 --check	run	1	""	^
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.4.json --arch arm64 --check	run	1	""	"hydo-build: services[1]: field 'ready' must be a str\n"
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#7b4eb7099182b226"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.6.json --arch x86_64 --check	run	1	""	"hydo-build: faults[4]: {{p}} is not a declared parameter\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.7.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: must be a mapping\n"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.8.json --arch arm64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#5ed9cdd5b2bc6623"
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#7b4eb7099182b226"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.10.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind ' 7 ' (known: clock, corrup…#c14366d51a257a64"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.11.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#7b4eb7099182b226"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.12.json --arch arm64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#5ed9cdd5b2bc6623"
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.13.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) v (known: after,…#336a62bf388b7e81"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.14.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#7b4eb7099182b226"
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant337.15.json --arch x86_64 --check	run	1	""	^
-R	^	^ --arch x86_64 --print-shell	run	1	""	^
-R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant338.0.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
-R	^	^ --arch arm64 --print-shell	run	1	""	^
-R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant338.1.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant338.1.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#7b4eb7099182b226"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant338.2.json --arch x86_64 --check	run	1	""	^
@@ -10951,175 +10954,175 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant338.3.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant338.4.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant338.4.json --arch arm64 --check	run	1	""	"hydo-build: services[1]: field 'ready' must be a str\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant338.5.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant338.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#7b4eb7099182b226"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant338.6.json --arch x86_64 --check	run	1	""	"hydo-build: test: unknown field(s) bogus (known: budget_ms, …#fb03673609370df6"
+R	^	<tmp>/mutant338.6.json --arch x86_64 --check	run	1	""	"hydo-build: faults[4]: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant338.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant338.7.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: must be a mapping\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant338.8.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant338.8.json --arch arm64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#5ed9cdd5b2bc6623"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant338.9.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant338.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#7b4eb7099182b226"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant338.10.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: depends_on names unknown service '12'\n"
+R	^	<tmp>/mutant338.10.json --arch x86_64 --check	run	1	""	"hydo-build: faults: unknown kind ' 7 ' (known: clock, corrup…#c14366d51a257a64"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant338.11.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant338.11.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#7b4eb7099182b226"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant338.12.json --arch arm64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'str' object has no attribute 'get'\n"
+R	^	<tmp>/mutant338.12.json --arch arm64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#5ed9cdd5b2bc6623"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant338.13.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant338.13.json --arch x86_64 --check	run	1	""	"hydo-build: invariants[0]: unknown field(s) v (known: after,…#336a62bf388b7e81"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant338.14.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant338.14.json --arch x86_64 --check	run	1	""	"hydo-build: services[0] (postgresql): image <tmp>/images/pos…#7b4eb7099182b226"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant338.15.json --arch x86_64 --check	run	1	""	"hydo-build: workload: required (steps + run)\n"
+R	^	<tmp>/mutant338.15.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.0.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant339.0.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.1.json --arch x86_64 --check	run	1	""	"hydo-build: top level: missing required field 'name'\n"
+R	^	<tmp>/mutant339.1.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.2.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
+R	^	<tmp>/mutant339.2.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.3.json --arch x86_64 --check	run	1	""	"hydo-build: test.per_round: a whole number in [1, 8] (got '')\n"
+R	^	<tmp>/mutant339.3.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant339.4.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.5.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant339.5.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.6.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
+R	^	<tmp>/mutant339.6.json --arch x86_64 --check	run	1	""	"hydo-build: test: unknown field(s) bogus (known: budget_ms, …#fb03673609370df6"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant339.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.8.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0].src: {{tb}} is not a declared parameter\n"
+R	^	<tmp>/mutant339.8.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: storage: a directory under /data, o…#1c11fc304f89249e"
+R	^	<tmp>/mutant339.9.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.10.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant339.10.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: depends_on names unknown service '12'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.11.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: storage: dir: required, a directory under /data\n"
+R	^	<tmp>/mutant339.11.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.12.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0].src: {{tb}} is not a declared parameter\n"
+R	^	<tmp>/mutant339.12.json --arch arm64 --check	run	1	""	"hydo-build: the manifest cannot be read: 'str' object has no attribute 'get'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.13.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant339.13.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.14.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant339.14.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant342.15.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
+R	^	<tmp>/mutant339.15.json --arch x86_64 --check	run	1	""	"hydo-build: workload: required (steps + run)\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant343.0.json --arch arm64 --check	run	1	""	"hydo-build: services[0]: missing required field 'ready'\n"
+R	^	<tmp>/mutant343.0.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant343.1.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant343.1.json --arch x86_64 --check	run	1	""	"hydo-build: top level: missing required field 'name'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant343.2.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant343.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: field 'name' must be a str\n"
+R	^	<tmp>/mutant343.3.json --arch x86_64 --check	run	1	""	"hydo-build: test.per_round: a whole number in [1, 8] (got '')\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant343.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: required (steps + run)\n"
+R	^	<tmp>/mutant343.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant343.5.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant343.5.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant343.6.json --arch x86_64 --check	run	1	""	"hydo-build: hydo_version: \"0.1\", \"0.1.0\" or \">=0.1\" (got 'bridge')\n"
+R	^	<tmp>/mutant343.6.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant343.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant343.8.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant343.8.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0].src: {{tb}} is not a declared parameter\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant343.9.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant343.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: storage: a directory under /data, o…#1c11fc304f89249e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant343.10.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: name 'False' must match [a-z][a-z0-…#b4078661c300a999"
+R	^	<tmp>/mutant343.10.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant343.11.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant343.11.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: storage: dir: required, a directory under /data\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant343.12.json --arch arm64 --check	run	1	""	"hydo-build: services[0]: must be a mapping\n"
+R	^	<tmp>/mutant343.12.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0].src: {{tb}} is not a declared parameter\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant343.13.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant343.13.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant343.14.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant343.14.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant343.15.json --arch x86_64 --check	run	1	""	"hydo-build: workload.steps: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant343.15.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant344.0.json --arch arm64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
+R	^	<tmp>/mutant344.0.json --arch arm64 --check	run	1	""	"hydo-build: services[0]: missing required field 'ready'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant344.1.json --arch x86_64 --check	run	1	""	"hydo-build: name: use lowercase letters, digits and '-' (got '-1')\n"
+R	^	<tmp>/mutant344.1.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant344.2.json --arch x86_64 --check	run	1	""	"hydo-build: test.round_ms: a whole number in [10, 60000] (got 'v3')\n"
+R	^	<tmp>/mutant344.2.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant344.3.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant344.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: field 'name' must be a str\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant344.4.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant344.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: required (steps + run)\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant344.5.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant344.5.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant344.6.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
+R	^	<tmp>/mutant344.6.json --arch x86_64 --check	run	1	""	"hydo-build: hydo_version: \"0.1\", \"0.1.0\" or \">=0.1\" (got 'bridge')\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant344.7.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
+R	^	<tmp>/mutant344.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant344.8.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant344.8.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant344.9.json --arch x86_64 --check	run	1	""	"hydo-build: workload: unknown field(s) bogus (known: descrip…#5ebeb26e7909b622"
+R	^	<tmp>/mutant344.9.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant344.10.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: field 'name' must be a str\n"
+R	^	<tmp>/mutant344.10.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: name 'False' must match [a-z][a-z0-…#b4078661c300a999"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant344.11.json --arch x86_64 --check	run	1	""	"hydo-build: test: unknown field(s) bogus (known: budget_ms, …#fb03673609370df6"
+R	^	<tmp>/mutant344.11.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant344.12.json --arch arm64 --check	run	1	""	"hydo-build: workload: required (steps + run)\n"
+R	^	<tmp>/mutant344.12.json --arch arm64 --check	run	1	""	"hydo-build: services[0]: must be a mapping\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant344.13.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
@@ -11128,16 +11131,16 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant344.14.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant344.15.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant344.15.json --arch x86_64 --check	run	1	""	"hydo-build: workload.steps: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant345.0.json --arch arm64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant345.1.json --arch x86_64 --check	run	1	""	"hydo-build: test.per_round: a whole number in [1, 8] (got 5000)\n"
+R	^	<tmp>/mutant345.1.json --arch x86_64 --check	run	1	""	"hydo-build: name: use lowercase letters, digits and '-' (got '-1')\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant345.2.json --arch x86_64 --check	run	1	""	"hydo-build: workload: field 'steps' must be a int\n"
+R	^	<tmp>/mutant345.2.json --arch x86_64 --check	run	1	""	"hydo-build: test.round_ms: a whole number in [10, 60000] (got 'v3')\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant345.3.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
@@ -11149,100 +11152,100 @@ R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant345.5.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant345.6.json --arch x86_64 --check	run	1	""	"hydo-build: guest.cpu: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant345.6.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant345.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant345.7.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant345.8.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0].src: {{tb}} is not a declared parameter\n"
+R	^	<tmp>/mutant345.8.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant345.9.json --arch x86_64 --check	run	1	""	"hydo-build: params: must be a mapping of name: default value\n"
+R	^	<tmp>/mutant345.9.json --arch x86_64 --check	run	1	""	"hydo-build: workload: unknown field(s) bogus (known: descrip…#5ebeb26e7909b622"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant345.10.json --arch x86_64 --check	run	1	""	"hydo-build: test.command_timeout: a whole number in [1, 3600] (got [])\n"
+R	^	<tmp>/mutant345.10.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: field 'name' must be a str\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant345.11.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'steps'\n"
+R	^	<tmp>/mutant345.11.json --arch x86_64 --check	run	1	""	"hydo-build: test: unknown field(s) bogus (known: budget_ms, …#fb03673609370df6"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant345.12.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0].src: {{tb}} is not a declared parameter\n"
+R	^	<tmp>/mutant345.12.json --arch arm64 --check	run	1	""	"hydo-build: workload: required (steps + run)\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant345.13.json --arch x86_64 --check	run	1	""	"hydo-build: workload: unknown field(s) bogus (known: descrip…#5ebeb26e7909b622"
+R	^	<tmp>/mutant345.13.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant345.14.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
+R	^	<tmp>/mutant345.14.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant345.15.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].src: {{tb}} is not a declared parameter\n"
+R	^	<tmp>/mutant345.15.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.0.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant346.0.json --arch arm64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.1.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant346.1.json --arch x86_64 --check	run	1	""	"hydo-build: test.per_round: a whole number in [1, 8] (got 5000)\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.2.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant346.2.json --arch x86_64 --check	run	1	""	"hydo-build: workload: field 'steps' must be a int\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: field 'ready' must be a str\n"
+R	^	<tmp>/mutant346.3.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant346.4.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.5.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant346.5.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.6.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant346.6.json --arch x86_64 --check	run	1	""	"hydo-build: guest.cpu: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.7.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant346.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.8.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant346.8.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0].src: {{tb}} is not a declared parameter\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: storage: size_mib: a number from 16 to 3072\n"
+R	^	<tmp>/mutant346.9.json --arch x86_64 --check	run	1	""	"hydo-build: params: must be a mapping of name: default value\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.10.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: field 'cmd' must be a str\n"
+R	^	<tmp>/mutant346.10.json --arch x86_64 --check	run	1	""	"hydo-build: test.command_timeout: a whole number in [1, 3600] (got [])\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.11.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant346.11.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'steps'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.12.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant346.12.json --arch arm64 --check	run	1	""	"hydo-build: root.files[0].src: {{tb}} is not a declared parameter\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.13.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant346.13.json --arch x86_64 --check	run	1	""	"hydo-build: workload: unknown field(s) bogus (known: descrip…#5ebeb26e7909b622"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.14.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant346.14.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant348.15.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant346.15.json --arch x86_64 --check	run	1	""	"hydo-build: root.files[0].src: {{tb}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant349.0.json --arch arm64 --check	run	1	""	"hydo-build: services[3].mounts[4].src: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant349.0.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant349.1.json --arch x86_64 --check	run	1	""	"hydo-build: services[2]: port must be a number\n"
+R	^	<tmp>/mutant349.1.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant349.2.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant349.2.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant349.3.json --arch x86_64 --check	run	1	""	"hydo-build: workload: field 'steps' must be a int\n"
+R	^	<tmp>/mutant349.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: field 'ready' must be a str\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant349.4.json --arch arm64 --check	run	1	""	"hydo-build: services[4]: storage: unknown key \"bogus\" (dir, …#2d00bafd1111a886"
+R	^	<tmp>/mutant349.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant349.5.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant349.5.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant349.6.json --arch x86_64 --check	run	1	""	^
@@ -11251,13 +11254,13 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant349.7.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant349.8.json --arch arm64 --check	run	1	""	"hydo-build: services[2]: restart: no, always, on-failure, on…#799165f0f32f1c21"
+R	^	<tmp>/mutant349.8.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant349.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: unknown field(s) bogus (known: addr…#338cf733b27b0703"
+R	^	<tmp>/mutant349.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: storage: size_mib: a number from 16 to 3072\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant349.10.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: depends_on names unknown service ' 7 '\n"
+R	^	<tmp>/mutant349.10.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: field 'cmd' must be a str\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant349.11.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
@@ -11275,61 +11278,61 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant349.15.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.0.json --arch arm64 --check	run	1	""	"hydo-build: workload: field 'steps' must be a int\n"
+R	^	<tmp>/mutant350.0.json --arch arm64 --check	run	1	""	"hydo-build: services[3].mounts[4].src: {{p}} is not a declared parameter\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.1.json --arch x86_64 --check	run	1	""	"hydo-build: services[2]: missing required field 'ready'\n"
+R	^	<tmp>/mutant350.1.json --arch x86_64 --check	run	1	""	"hydo-build: services[2]: port must be a number\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.2.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant350.2.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.3.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant350.3.json --arch x86_64 --check	run	1	""	"hydo-build: workload: field 'steps' must be a int\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.4.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant350.4.json --arch arm64 --check	run	1	""	"hydo-build: services[4]: storage: unknown key \"bogus\" (dir, …#2d00bafd1111a886"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.5.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant350.5.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.6.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant350.6.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.7.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant350.7.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.8.json --arch arm64 --check	run	1	""	"hydo-build: test.command_timeout: a whole number in [1, 3600] (got '127.0.0.1')\n"
+R	^	<tmp>/mutant350.8.json --arch arm64 --check	run	1	""	"hydo-build: services[2]: restart: no, always, on-failure, on…#799165f0f32f1c21"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: storage: a directory under /data, o…#1c11fc304f89249e"
+R	^	<tmp>/mutant350.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: unknown field(s) bogus (known: addr…#338cf733b27b0703"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.10.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant350.10.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: depends_on names unknown service ' 7 '\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.11.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant350.11.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.12.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant350.12.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.13.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant350.13.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.14.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant350.14.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant352.15.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant350.15.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant353.0.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant353.0.json --arch arm64 --check	run	1	""	"hydo-build: workload: field 'steps' must be a int\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant353.1.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant353.1.json --arch x86_64 --check	run	1	""	"hydo-build: services[2]: missing required field 'ready'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant353.2.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant353.2.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant353.3.json --arch x86_64 --check	run	1	""	^
@@ -11338,28 +11341,28 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant353.4.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant353.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[2]: unknown field(s) bogus (known: addr…#92ec80caf4b812f5"
+R	^	<tmp>/mutant353.5.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant353.6.json --arch x86_64 --check	run	1	""	"hydo-build: services[2].mounts[3].dst: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant353.6.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant353.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant353.7.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant353.8.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant353.8.json --arch arm64 --check	run	1	""	"hydo-build: test.command_timeout: a whole number in [1, 3600] (got '127.0.0.1')\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant353.9.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant353.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: storage: a directory under /data, o…#1c11fc304f89249e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant353.10.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant353.10.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant353.11.json --arch x86_64 --check	run	1	""	"hydo-build: params: must be a mapping of name: default value\n"
+R	^	<tmp>/mutant353.11.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant353.12.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant353.12.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<tmp>/mutant353.13.json --arch x86_64 --check	run	1	""	^
@@ -11371,244 +11374,292 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant353.15.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.0.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant354.0.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.1.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant354.1.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.2.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant354.2.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.3.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant354.3.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.4.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant354.4.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.5.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant354.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[2]: unknown field(s) bogus (known: addr…#92ec80caf4b812f5"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.6.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant354.6.json --arch x86_64 --check	run	1	""	"hydo-build: services[2].mounts[3].dst: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.7.json --arch x86_64 --check	run	1	""	"hydo-build: test: unknown field(s) bogus (known: budget_ms, …#fb03673609370df6"
+R	^	<tmp>/mutant354.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.8.json --arch arm64 --check	run	1	""	"hydo-build: test: must be a mapping\n"
+R	^	<tmp>/mutant354.8.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.9.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant354.9.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.10.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant354.10.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.11.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant354.11.json --arch x86_64 --check	run	1	""	"hydo-build: params: must be a mapping of name: default value\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.12.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant354.12.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.13.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant354.13.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.14.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
+R	^	<tmp>/mutant354.14.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant356.15.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant354.15.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.0.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant357.0.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.1.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant357.1.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.2.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant357.2.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.3.json --arch x86_64 --check	run	1	""	"hydo-build: format: the project format, a whole number; this…#01291e7419ac8d75"
+R	^	<tmp>/mutant357.3.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant357.4.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: restart: no, always, on-failure, on…#d36dcc87254bde8e"
+R	^	<tmp>/mutant357.5.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.6.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: start_after: ready or started (got 'eventually')\n"
+R	^	<tmp>/mutant357.6.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant357.7.json --arch x86_64 --check	run	1	""	"hydo-build: test: unknown field(s) bogus (known: budget_ms, …#fb03673609370df6"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.8.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant357.8.json --arch arm64 --check	run	1	""	"hydo-build: test: must be a mapping\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
+R	^	<tmp>/mutant357.9.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.10.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant357.10.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.11.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
+R	^	<tmp>/mutant357.11.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.12.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant357.12.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.13.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant357.13.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.14.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant357.14.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant359.15.json --arch x86_64 --check	run	1	""	"hydo-build: test: must be a mapping\n"
+R	^	<tmp>/mutant357.15.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.0.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant360.0.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.1.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant360.1.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.2.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant360.2.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.3.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant360.3.json --arch x86_64 --check	run	1	""	"hydo-build: format: the project format, a whole number; this…#01291e7419ac8d75"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.4.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant360.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: port must be a number\n"
+R	^	<tmp>/mutant360.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: restart: no, always, on-failure, on…#d36dcc87254bde8e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.6.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant360.6.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: start_after: ready or started (got 'eventually')\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.7.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant360.7.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.8.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant360.8.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.9.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant360.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: unknown field(s) bogus (known: addr…#6e7acaefbc965ea1"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.10.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant360.10.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.11.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant360.11.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.12.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant360.12.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.13.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant360.13.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.14.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant360.14.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant361.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: storage: a directory under /data, o…#646f80d6731ef8a9"
+R	^	<tmp>/mutant360.15.json --arch x86_64 --check	run	1	""	"hydo-build: test: must be a mapping\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.0.json --arch arm64 --check	run	1	""	"hydo-build: services[2]: unknown field(s) bogus (known: addr…#92ec80caf4b812f5"
+R	^	<tmp>/mutant362.0.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.1.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant362.1.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.2.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant362.2.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.3.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant362.3.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.4.json --arch arm64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
+R	^	<tmp>/mutant362.4.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.5.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant362.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: port must be a number\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.6.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant362.6.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.7.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant362.7.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.8.json --arch arm64 --check	run	1	""	"hydo-build: services[2]: storage: size_mib: a number from 16 to 3072\n"
+R	^	<tmp>/mutant362.8.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: storage: size_mib: a number from 16 to 3072\n"
+R	^	<tmp>/mutant362.9.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.10.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant362.10.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.11.json --arch x86_64 --check	run	1	""	"hydo-build: services[5].image_ref: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant362.11.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.12.json --arch arm64 --check	run	1	""	"hydo-build: services[3]: addr 10.89.0.14 is used by two services\n"
+R	^	<tmp>/mutant362.12.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.13.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant362.13.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.14.json --arch x86_64 --check	run	1	""	"hydo-build: format: the project format, a whole number; this…#82f68f2f3a5c3a1e"
+R	^	<tmp>/mutant362.14.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant372.15.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant362.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: storage: a directory under /data, o…#646f80d6731ef8a9"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.0.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant373.0.json --arch arm64 --check	run	1	""	"hydo-build: services[2]: unknown field(s) bogus (known: addr…#92ec80caf4b812f5"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.1.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant373.1.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.2.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant373.2.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[0].cmd[4]: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant373.3.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant373.4.json --arch arm64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: missing required field 'ready'\n"
+R	^	<tmp>/mutant373.5.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.6.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant373.6.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.7.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant373.7.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.8.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant373.8.json --arch arm64 --check	run	1	""	"hydo-build: services[2]: storage: size_mib: a number from 16 to 3072\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.9.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant373.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: storage: size_mib: a number from 16 to 3072\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.10.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant373.10.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.11.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant373.11.json --arch x86_64 --check	run	1	""	"hydo-build: services[5].image_ref: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.12.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant373.12.json --arch arm64 --check	run	1	""	"hydo-build: services[3]: addr 10.89.0.14 is used by two services\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.13.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant373.13.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.14.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: unknown field(s) bogus (known: addr…#338cf733b27b0703"
+R	^	<tmp>/mutant373.14.json --arch x86_64 --check	run	1	""	"hydo-build: format: the project format, a whole number; this…#82f68f2f3a5c3a1e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant375.15.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant373.15.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.0.json --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.1.json --arch x86_64 --check	run	1	""	^
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.2.json --arch x86_64 --check	run	1	""	^
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[0].cmd[4]: {{p}} is not a declared parameter\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: missing required field 'ready'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.6.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.7.json --arch x86_64 --check	run	1	""	^
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.8.json --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.9.json --arch x86_64 --check	run	1	""	^
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.10.json --arch x86_64 --check	run	1	""	^
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.11.json --arch x86_64 --check	run	1	""	^
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.12.json --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.13.json --arch x86_64 --check	run	1	""	^
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.14.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: unknown field(s) bogus (known: addr…#338cf733b27b0703"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	<tmp>/mutant376.15.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	tracked manifest candidates	<root>/.claude-plugin/marketplace.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) owner, plugins (know…#17954ba947fef49c"
@@ -13529,6 +13580,12 @@ R	^	<root>/hydo/onboard/examples/seaweedfs/hydo/hydo.yaml --arch x86_64 --check	
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	"hydo-build: services[0] (master1): image <root>/hydo/onboard…#1a33014ea3a31b8f"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<root>/hydo/onboard/examples/service-clocks/hydo-kvm.yaml --arch x86_64 --check	run	0	#7c1cce49081101ad/278	""
+R	^	^ --arch x86_64 --print-shell	run	0	#4cab73113c4ac286/2184	^
+R	^	^ --arch x86_64 --print-world	run	0	"{}\n"	^
+R	^	^ --arch arm64 --check	run	1	""	"hydo-build: services: n1: clock: own is an x86_64 option for…#7f852f080fa9d7a5"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<root>/hydo/onboard/examples/service-clocks/hydo.yaml --arch x86_64 --check	run	0	#1709c88d30ed82ef/274	""

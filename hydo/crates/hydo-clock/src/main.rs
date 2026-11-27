@@ -189,7 +189,7 @@ fn peek(pid: Pid, addr: u64, buf: &mut [u8]) -> bool {
             0u64,
         )
     };
-    n == buf.len() as libc::c_long
+    n == buf.len() as libc::c_long || words::peek(pid, addr, buf, n)
 }
 
 /// Writes `buf` into the traced process at `addr`.
@@ -214,7 +214,7 @@ fn poke(pid: Pid, addr: u64, buf: &[u8]) -> bool {
             0u64,
         )
     };
-    n == buf.len() as libc::c_long
+    n == buf.len() as libc::c_long || words::poke(pid, addr, buf, n)
 }
 
 fn peek_u64(pid: Pid, addr: u64) -> Option<u64> {
@@ -774,7 +774,9 @@ mod tests {
         );
         std::thread::sleep(std::time::Duration::from_millis(20));
         let d = o.now();
-        assert!(d >= 10_000_000 && d < 1_000_000_000, "drift {d}");
+        assert!((10_000_000..1_000_000_000).contains(&d), "drift {d}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
+
+mod words;

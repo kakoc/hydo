@@ -25731,3 +25731,156 @@ topic, playbook or skill changed; the lead decides.
 
 **Checks.** Vale on the page and `sh ci/vale.sh` found nothing. A `git grep` of each value of the
 list of `AGENTS.local.md` found none in the changed files.
+
+## Milestone 379 (tentative number): one service's own clock on the KVM engine
+
+Status: done on 2026-11-27 on the bare-metal machine (hvx and the tests) and on GitHub's KVM
+runners, from this Mac. Milestones 372 and 375 ran `clock: own` on hvx only. The KVM guest kernels
+lacked two things that hydo-clock uses (open item 190): seccomp filters, which only their kernels
+for containers have, and `process_vm_readv` and `process_vm_writev`, which no KVM kernel has
+(`CONFIG_CROSS_MEMORY_ATTACH`). This milestone makes `clock: own` run on KVM without a change of a
+kernel. Nothing recorded moved, `clock: own` stays opt-in, and the fingerprint epoch stays 6:
+`main` has no epoch 7 yet (Milestone 376 is on its own branch).
+
+**What was built.** Four parts, each in the commit `1da7dd75`:
+
+- hydo-clock's cargo feature `words` (`src/words.rs`). When `process_vm_readv` or
+  `process_vm_writev` answers `ENOSYS`, `peek` and `poke` fall back to `PTRACE_PEEKDATA` and
+  `PTRACE_POKEDATA`, one aligned 8-byte word per call. A write of part of a word reads the word
+  first. Without the feature the two calls into the module are constant `false`, which the
+  compiler removes, and the new code sits after every line of `main.rs` that a panic location
+  names. So the default build keeps Milestone 372's bytes: 414,624 bytes, `de24fd93…`.
+- `build.sh` makes both builds: `hydo-clock` in the target folder of before, and
+  `hydo-clock-words` (414,976 bytes, `5ac4dcdc…`) with `--features words` in a folder of its own.
+  Two builds from clean target folders on the bare-metal machine gave both values, and so did
+  every one of GitHub's runners below, twice each.
+- `hydo build` stages `hydo-clock-words` as `/bin/hydo-clock` for an image of `guest.kernel:
+  containers`, from `HYDO_CLOCKBIN_WORDS` (default `<build dir>/hydo-clock-words`, a new variable
+  of `hydo-config`). Every other image of `clock: own` gets Milestone 372's build, so it keeps its
+  bytes.
+- The KVM engine refuses an image with a service of `clock: own` whose record names no kernel for
+  containers, before any VM (`hydo_control::agent::kvm_own_clock_refusal`, called from
+  `AgentEngine::for_image`): `services: n1, n2: clock: own on the KVM engine needs guest.kernel:
+  containers, whose guest kernels have the seccomp filters that hydo-clock installs; add
+  `kernel: containers` under guest: and build the image again, or run it on hvx`. hvx boots its
+  own kernel, which has both, so it runs either image.
+
+The example `service-clocks` got `hydo-kvm.yaml`: its `hydo.yaml` with `guest.kernel: containers`
+and the name `service-clocks-kvm`, so `hydo.yaml`'s image stays.
+
+**The tests of hydo-clock.** With the feature, `a_child_read_and_written_word_by_word` reads and
+writes a range that starts and ends inside words in a traced child, and checks the bytes around
+it. `peek_and_poke_fall_back_when_the_kernel_lacks_the_calls` runs `main.rs`'s `peek` and `poke`
+in a child whose seccomp filter answers both calls with `ENOSYS`, against a traced grandchild.
+Both passed on the bare-metal machine, with clippy `-D warnings` and `cargo fmt --check` on both
+feature sets. Clippy found one test line of Milestone 372 (a manual range check), which is now
+`contains`.
+
+**hvx: nothing moved.** This tree's `hydo`, `hydo-hvx` and `hydo-build` over the 0.6.0 Linux
+release's guest files, every VM through `~/bin/hvx-run` under umask 022. The example's
+`hydo.yaml` built to `6d3430c3…`, Milestone 372's image, and its nine schedules gave Milestone
+372's fingerprints, twice each:
+
+| Schedule | Verdict | Fingerprint |
+|---|---|---|
+| `disk=none \| run` | OK | `57d19bbc77f8360b` |
+| `disk=none \| run T=3:5` | OK | `1ff65322865695d5` |
+| `disk=none \| run T=n2@3:5` | VIOLATION `[lease.one_leader]` | `9feba06d7a2b47c3` |
+| `disk=none \| run T=n2@3:-5` | OK | `fad0820e66206c18` |
+| `disk=none \| run T=n2@0:500000ppm` | VIOLATION `[lease.one_leader]` | `bd68cd0ff4c2b957` |
+| `disk=none \| run T=n1@3:1500ms T=n2@3:-1500ms` | OK | `1df85a95a9dee374` |
+| `disk=none \| run T=n1@0:4 T=n2@0:4` | OK | `beeb8a7a0e432b60` |
+| `disk=none \| run P=n1@2+3` | OK | `61ccc82fa554b277` |
+| `disk=none \| run K=n1@2+2 T=n1@1:2` | OK | `07c13db36f21324b` |
+
+Milestone 375's Typesense image (`84f22e51…`, hydo-clock `de24fd93…`) gave finding 4's
+`b1761b4adaaa1c6c` for `T=ts3@20:-60` with this tree's `hydo`, twice. `hydo-kvm.yaml`'s
+image (`a9dcbca3…`, the build with the feature) ran on hvx too, where `process_vm_readv` works:
+`T=3:5` passed (`8b4c0efe7c5f3f4c`) and `T=n2@3:5` failed `[lease.one_leader]` with 23 changes
+from uptime 7.78 s (`6048db5b03c97c70`), Milestone 372's verdicts, twice each.
+
+A first try of the images gave `b06df3cd…` and other fingerprints, because the copy of this tree
+on the bare-metal machine had its files with mode 600: the image carries the manifest with the
+checkout's mode (open item 78). With the modes of a git checkout (644 and 755) the image was
+Milestone 372's.
+
+**KVM.** The one-off workflow on the branch `tmp-m379-kvm` (deleted after the runs) built this
+tree's `hydo`, `hydo-kvm` and `hydo-build`, and hydo-clock twice, and checked both hydo-clock
+builds against the values above. It took the 0.7.0 Linux release's guest files (`132c35ab…`),
+whose `bzImage-kvm-containers` is `0c9c1c95…`. Each job built the example's `clockprobe` with
+Go 1.26.5 (`0c328b69…`, another Go than the bare-metal machine's copy, so the images differ from
+hvx's) and both images: `hydo.yaml` to `39cdedaa…` and `hydo-kvm.yaml` to `e4701af2…`, the same
+on every runner. Each job failed when a run wrote no `RESULT` line, when a verdict was not the
+expected one, when the two runs of a schedule gave two fingerprints, or when a check did not run,
+and it wrote every check into its artifact. The artifacts were read.
+
+Run 46027433331, six jobs of the example: four on Xeon 6975P-C hosts and two on AMD EPYC 7763
+hosts. On each, `hydo run --backend kvm` of `hydo.yaml`'s image stopped before any VM with the
+refusal above (exit 1), and `hydo-kvm.yaml`'s image ran the nine schedules twice each with one
+fingerprint per vendor:
+
+| Schedule | Verdict | Intel (four hosts) | AMD (two hosts) |
+|---|---|---|---|
+| `disk=none \| run` | OK, the lead changed 0 times | `082079041061e37c` | `2c43f47c27113fe1` |
+| `disk=none \| run T=3:5` | OK | `5e133c16434ed2dc` | `3621cb1014f82f13` |
+| `disk=none \| run T=n2@3:5` | VIOLATION `[lease.one_leader]`, 23 changes from uptime 11.91 s | `b9e4d42c9444690a` | `1ec986860f1f37e9` |
+| `disk=none \| run T=n2@3:-5` | OK | `27b7d766ff399b00` | `0a66fd05cff789fc` |
+| `disk=none \| run T=n2@0:500000ppm` | VIOLATION `[lease.one_leader]`, 23 changes from uptime 13.66 s | `28f253191301593f` | `eed3a446252de5c2` |
+| `disk=none \| run T=n1@3:1500ms T=n2@3:-1500ms` | OK | `8b1de1e33ffc8539` | `abe9ea76863f3374` |
+| `disk=none \| run T=n1@0:4 T=n2@0:4` | OK, 1 change | `5835d5942a9c69d7` | `226493112c25e058` |
+| `disk=none \| run P=n1@2+3` | OK, 1 change | `2f5f2de2b4e2b1c8` | `faf5aa38c187cd7a` |
+| `disk=none \| run K=n1@2+2 T=n1@1:2` | OK | `178fd94e317e22cf` | `343894aadee08a36` |
+
+The verdicts are hvx's: one node's clock 5 s ahead gives two leaders at once, and the step of
+the guest's clock does not. A read of the wall clock took 5.2 µs of guest time as the guest's
+own program and 21.2 µs under hydo-clock (20,000 reads of `clockprobe bench`), against 4.4 µs
+and 40.5 µs on hvx.
+
+**A real system on KVM: Prometheus.** The job copied the Prometheus example's `skew/hydo.yaml`
+with `kernel: containers` added under `guest:` (a `sed` line of the workflow; no tracked file),
+built it with `--set ooo_snapshots=skip --set scrape_times=skip` (`71721cfc…`, the build with the
+feature staged), and ran three schedules twice each. The workflow's runs 46027433331,
+46030402280 and 46033601015 ran it on eight runners; the two later runs changed only the jobs'
+names, to get an AMD host. Seven were Intel hosts (a Xeon Platinum 8370C, three Xeon Platinum
+8573C and three Xeon 6975P-C), and one an AMD EPYC 9V74. The image was the same on all of them, and each schedule gave one fingerprint per vendor:
+
+| Schedule | Verdict | Intel (seven hosts, three models) | AMD (one host) |
+|---|---|---|---|
+| `disk=none \| run` | OK, 228 commands | `dcb06883074bcf99` | `eb4099f2b6d7ed00` |
+| `disk=none \| run T=agent@10:300` | OK | `5206d94aa005c6cf` | `6a93a5c3cdd9e106` |
+| `disk=none \| run T=agent@10:900` | VIOLATION `[scrape]`: none of the 35 scrapes served 10 to 45 s ago is in the server | `1caa3a4fbc2c94fc` | `6bb69d4b3d037262` |
+
+The verdicts are hvx's (Milestone 375): the agent's own clock 15 minutes ahead loses its samples
+by the server's `maxAheadTime`, by design, and 5 minutes ahead passes. Typesense's finding 4 and
+TiKV did not run on KVM. Typesense stops with SIGSEGV at every start on the KVM kernels of epoch
+6, which have no `/proc/<pid>/io` (Milestone 373); Milestone 376's kernels have it and are not on
+`main`. TiKV's guest has 7,680 MiB, and one of its VMs held about 19 GB of the bare-metal machine,
+more than a runner's 16 GB.
+
+**CI.** The push of the branch also ran `ci.yml`, whose `cargo fmt --check` found four files
+unformatted: the staging choice of this milestone and three files of Milestone 375
+(`hydo-explore`'s `src/gen.rs` and `tests/service_clocks.rs`, `hydo-cli`'s `tests/rules.rs`).
+The commit `44fefacd` formats them.
+
+**The tests.** On the bare-metal machine, in a copy of the tree with a git index: `cargo fmt
+--check`, clippy with `-D warnings` on the workspace, the tests of hydo-config, hydo-control (its
+unit tests, with the new `own_clocks_on_kvm_need_the_kernels_for_containers`, and `--test it`),
+hydo-build, hydo-manifest and hydo-explore (`--test it`, 67), `cargo test -p hydo-agents --test
+it` (16) and `cargo test -p hydo --test it` (79) passed. hydo-clock's own tests, clippy and
+`cargo fmt --check` passed with and without the feature. Re-recorded with `HYDO_BLESS=1`:
+
+- the equivalence corpora of hydo-build and hydo-manifest. They did not hold Milestone 375's
+  `skew/` manifests of TiKV, Typesense and Prometheus either, so the numbers of their mutants
+  moved;
+- the explorer's corpus and identity goldens, quick and full, and the controller's quick corpus,
+  with `hydo-kvm.yaml`;
+- the CLI golden's length of `hydo guide manifest`, the agents recording's hash of the skill
+  folder, and hydo-config's `INVENTORY.md` (`HYDO_CLOCKBIN_WORDS`).
+
+The copy has no `AGENTS.local.md`, so `public_content::` checked the generic patterns; a `grep`
+of the listed values in the new text found none. `sh ci/vale.sh` finds nothing.
+
+**What is left** (open item 190): the Mac engine, which needs an arm64 port of hydo-clock and
+`guest.kernel: containers` (the design page lists the port's parts); the KVM explorations with
+`--service-clocks`; Typesense's finding 4 on KVM, which waits for kernels with `/proc/<pid>/io`;
+and a read's cost, 21.2 µs of guest time on KVM.

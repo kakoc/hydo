@@ -79,6 +79,8 @@ pub struct Build {
     pub worldbin_tls_arm64: Input,
     /// `HYDO_CLOCKBIN` (Milestone 372).
     pub clockbin: Input,
+    /// `HYDO_CLOCKBIN_WORDS` (Milestone 379).
+    pub clockbin_words: Input,
     /// `HYDO_READ_BIN`.
     pub read_bin: Input,
     /// `HYDO_READ_BIN_ARM64`.
@@ -133,6 +135,7 @@ impl Build {
             worldbin_tls: Input::read(e, HYDO_WORLDBIN_TLS),
             worldbin_tls_arm64: Input::read(e, HYDO_WORLDBIN_TLS_ARM64),
             clockbin: Input::read(e, HYDO_CLOCKBIN),
+            clockbin_words: Input::read(e, HYDO_CLOCKBIN_WORDS),
             read_bin: Input::read(e, HYDO_READ_BIN),
             read_bin_arm64: Input::read(e, HYDO_READ_BIN_ARM64),
             sql_bin: Input::read(e, HYDO_SQL_BIN),
