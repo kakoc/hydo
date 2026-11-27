@@ -1562,6 +1562,18 @@
           ],
           "default": "one-by-one"
         },
+        "links": {
+          "description": "Which links between the members the explorer may cut with `network: bridge` (Milestone\n374): depends_on (only those that name each other there, the default) or all (every two\nmembers, for a cluster whose nodes talk to each other).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupLinks"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "depends_on"
+        },
         "description": {
           "anyOf": [
             {
@@ -1585,6 +1597,14 @@
       "enum": [
         "one-by-one",
         "together"
+      ]
+    },
+    "GroupLinks": {
+      "description": "Which links between a group's members the explorer draws network faults on.",
+      "type": "string",
+      "enum": [
+        "depends_on",
+        "all"
       ]
     },
     "Workload": {

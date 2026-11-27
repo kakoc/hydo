@@ -242,7 +242,13 @@ impl Space {
             }
         }
         if m.get("network").and_then(Value::as_str) == Some("bridge") {
-            links = bridge_links(&services);
+            // Milestone 374: the members of a group with `links: all` talk to each other
+            let meshes: Vec<Vec<String>> = arr(m.get("groups"))
+                .iter()
+                .filter(|g| get(g, "links").and_then(Value::as_str) == Some("all"))
+                .map(|g| arr(g.get("services")).iter().map(str_of).collect())
+                .collect();
+            links = bridge_links(&services, &meshes);
         }
         let fc_pairs = fc_pairs(&services);
         let pf_targets = pf_targets(&m);
@@ -990,7 +996,9 @@ fn is_single_upper(t: &str) -> bool {
 }
 
 /// network: bridge: links only between services that talk (depends_on), see manifest_space._links.
-fn bridge_links(services: &[Value]) -> Vec<String> {
+/// `meshes`: the members of each group with `links: all` (Milestone 374), which talk to each other
+/// without naming each other in depends_on; none for a manifest without the key.
+fn bridge_links(services: &[Value], meshes: &[Vec<String>]) -> Vec<String> {
     let names: Vec<String> = services
         .iter()
         .filter(|s| get(s, "addr").is_some_and(truthy))
@@ -1003,7 +1011,14 @@ fn bridge_links(services: &[Value]) -> Vec<String> {
             .map(|s| arr(s.get("depends_on")).iter().map(str_of).collect())
             .unwrap_or_default()
     };
-    let talk = |a: &str, b: &str| deps(a).iter().any(|x| x == b) || deps(b).iter().any(|x| x == a);
+    let mesh = |a: &str, b: &str| {
+        meshes
+            .iter()
+            .any(|g| g.iter().any(|x| x == a) && g.iter().any(|x| x == b))
+    };
+    let talk = |a: &str, b: &str| {
+        deps(a).iter().any(|x| x == b) || deps(b).iter().any(|x| x == a) || mesh(a, b)
+    };
     let mut pairs: Vec<(String, String)> = Vec::new();
     for (i, a) in names.iter().enumerate() {
         for b in &names[i + 1..] {

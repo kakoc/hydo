@@ -1577,6 +1577,7 @@ groups:
       done
       exit 1
     restart: together           # optional (Milestone 374): one-by-one (the default) or together
+    links: all                  # optional (Milestone 374): depends_on (the default) or all
 ```
 
 `K=`, `P=` and `X=` take a list or a selector in place of the service:
@@ -1613,6 +1614,16 @@ ERROR <service> restart failed`, as before. It acts at the end of a `K=` whose s
 members of the group, and in the heal's restart pass after the faults, for the members that are
 down then (kills of `X=` and of reactions among them). The restarts of `G=` and `L=` stay one by
 one. Without the key nothing changes, so a run without it keeps its fingerprint.
+
+`links:` says which links between the members the explorer cuts with `network: bridge`. With
+`depends_on`, the default, it draws a link fault only between two services where one names the
+other in `depends_on`, as for every service. The nodes of a cluster talk to each other although
+none names another there, so their links got no fault: Garnet's six nodes, imported from Compose,
+had none. With `all` the explorer counts every two members as linked. On one loopback network
+every two services with `addr:` are linked anyway. `hydo compose` writes a group with `links:
+all` for the services of one image that run one command (the nodes of one cluster), named after
+the image, and prints a line that names them. A converted Kubernetes StatefulSet's group gets
+the key too.
 
 The host controller writes each resolution to the guest's log and to the control transcript,
 for example `K: nodes.primary = n2`. The schedule keeps the selector's text, and the transcript

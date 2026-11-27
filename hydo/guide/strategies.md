@@ -805,7 +805,8 @@ These findings hold for every type of system:
     which lost 5 of 34 acknowledged messages.
   - Redpanda (finding 3): the explorer shrank seed 24 to `K=nodes.primary@66+1 P=n2@42+11`.
 - **What it misses.** With `network: bridge` the explorer draws links only between services that
-  list each other in `depends_on`.
+  list each other in `depends_on`, unless the group has `links: all`, which `hydo
+  compose` writes for the services of one image and one command.
 - **Cost.** `network: bridge` for partitions.
 
 ### Reactions at console events (`A=`)

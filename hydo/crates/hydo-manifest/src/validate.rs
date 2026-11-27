@@ -58,7 +58,14 @@ pub const KNOWN_TOP: &[&str] = &[
     "configs",
 ];
 /// The keys of a `groups:` entry (Milestone 195).
-pub const KNOWN_GROUP: &[&str] = &["name", "services", "primary", "restart", "description"];
+pub const KNOWN_GROUP: &[&str] = &[
+    "name",
+    "services",
+    "primary",
+    "restart",
+    "links",
+    "description",
+];
 pub const KNOWN_SVC: &[&str] = &[
     "name",
     "cmd",
@@ -1326,6 +1333,14 @@ fn validate_groups(m: &Value) -> R<()> {
                     "{wh} ({n}): restart: one-by-one (each member after the one before is \
                      ready, the default) or together (every killed member started, then each \
                      one's readiness checked)"
+                )));
+            }
+        }
+        if let Some(r) = obj_get(g, "links") {
+            if !matches!(r.as_str(), Some("depends_on" | "all")) {
+                return Err(err(format!(
+                    "{wh} ({n}): links: depends_on (the explorer cuts the links between members \
+                     that name each other in depends_on, the default) or all (every two members)"
                 )));
             }
         }

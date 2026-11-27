@@ -277,6 +277,7 @@ groups:
   # StatefulSet kv: its 3 pods
   - name: kv
     services: [kv_0, kv_1, kv_2]
+    links: all
 
 # TODO(workload): one step = one client operation against the system (an HTTP request, a
 # query), appended to $HYDO_ACKED only when the system acknowledged it. Faults are placed

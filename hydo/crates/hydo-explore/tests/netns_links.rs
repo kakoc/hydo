@@ -54,3 +54,18 @@ fn loopback_keeps_every_pair() {
         ["db-api", "db-web", "api-web", "db-*", "api-*", "web-*"]
     );
 }
+
+/// Milestone 374: a cluster whose nodes name no depends_on between them (Garnet's import, open
+/// item 192) gets the links between its nodes from a group with `links: all`; without the key
+/// the group changes nothing.
+#[test]
+fn a_group_with_links_all_talks_inside() {
+    let mut m = base();
+    m["services"].as_array_mut().unwrap().push(
+        json!({"name": "db2", "cmd": "db", "ready": "true", "port": 5432, "addr": "10.89.0.14"}),
+    );
+    m["groups"] = json!([{"name": "dbs", "services": ["db", "db2"]}]);
+    assert_eq!(links(&m), ["db-api", "api-web", "api-*"]);
+    m["groups"][0]["links"] = json!("all");
+    assert_eq!(links(&m), ["db-api", "db-db2", "api-web", "db-*", "api-*"]);
+}
