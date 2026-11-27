@@ -22,10 +22,10 @@ rules 14931
 schema 130576
 sdks 5438
 services 8451
-skill 14668
-strategies 92798
+skill 15749
+strategies 110182
 update 8550
 values 8665
 web-apps 19285
-workflow 42013
+workflow 47509
 workloads 7295

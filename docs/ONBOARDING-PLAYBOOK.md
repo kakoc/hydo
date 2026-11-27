@@ -5,7 +5,9 @@ outside project under hydo, explores it with faults, judges what breaks, and rep
 the project. A maintainer of hydo or a coding agent follows the page from top to bottom.
 
 The page comes from about 15 onboardings, Milestones 215 to 275 of `docs/HISTORY.md`. Each
-example's `RESULTS.md` under `hydo/onboard/examples/` has the evidence. The skill
+example's `RESULTS.md` under `hydo/onboard/examples/` has the evidence. The order of the
+exploration (phase 3) comes from the findings ledger of 47 onboardings and their 105 bugs
+(`docs/design/findings-ledger.md`, Milestone 380). The skill
 `plugin/skills/onboard/SKILL.md` writes the project's `hydo/` folder, and `hydo guide` holds the
 facts of the installed hydo. This page adds what comes before and after the folder: the choice of
 a target, the time limits, the judgment of a finding, and the report.
@@ -50,7 +52,26 @@ one promise of the system in its own terms.
 The generic rule found more than any other rule. In Lago it failed in all 11 runs that broke a
 business result, and the billing rules failed in 8 of them. In Formance and Blnk it was the only
 rule that saw an acknowledged operation lost, because a lost transaction leaves a valid ledger.
-Write it first, and write the domain rules beside it.
+Write it first, with the other default checks of phase 3.
+
+Write a domain rule where it pays. Over the ledger's 105 bugs, a check of the project's own was
+the only one to catch 19. Each of them broke one of these promises:
+
+- at most once, or once per period (River's periodic run, Hatchet's scheduled run, Saleor's
+  refunds);
+- a money limit or books that must match (Blnk's overdraft, Saleor's single-use code);
+- a device's version (Mender, SWUpdate);
+- a listing, an expiry, or a retention (Garage's listing, Valkey's expiry, Iggy's retention).
+
+Business rules also made 21 of the 30 false findings of the ledger. Review each rule on two points
+before the first exploration:
+
+- **The wait.** A rule that waits for the system must wait out the system's own recovery: its
+  leases, its retry timers, a failover, and the recovery boot after a power cut.
+- **The clock.** Under a clock step the rule must expect what the system promises, not what the
+  new time of the wall clock implies.
+
+Most of the 21 false findings failed one of these two points.
 
 ### Queues and job runners
 
@@ -170,9 +191,12 @@ showed without a fault.
 
 What the table shows:
 
-- **Clock steps gave the most new reports.** Valkey, Temporal, and River each measured a duration
-  on the wall clock. Run the clock audit, `hydo rules scan --kind clock`, before the exploration,
-  and keep `clock` in `faults:` (`hydo guide faults`).
+- **Kills, clock steps, and power cuts found the most.** Over the ledger's 105 bugs, a kill was
+  needed in 40, a clock step in 33, and a power cut of the whole guest in 24. Keep all three in
+  `faults:`. Valkey, Temporal, and River each measured a duration on the wall clock.
+- **The audits found no bug first.** The clock audit, `hydo rules scan --kind clock`, missed the
+  clock bugs of 6 examples and named no place in 4 more. The sync audit came after the findings
+  it names. Read both for directed schedules after the first exploration (phase 3).
 - **A long pause of a service finds what a kill hides.** In Hatchet a pause of an engine for
   15 s broke nothing, and a kill at the same step lost acknowledged runs. A user onboarded a
   distributed query engine on 2026-11-20. There a pause of one worker for 8 s, past the failure
@@ -197,7 +221,7 @@ judgment of findings.
 |---|---|---|
 | 1. Scouting | 45 minutes | none |
 | 2. Setup to a first clean run | 3 hours | one at a time |
-| 3. Exploration and shrinking | 4 to 5 hours | the explorer's workers |
+| 3. Exploration: the first hour, then later rounds | 4 to 5 hours | the explorer's workers |
 | 4. Judging the findings | inside phase 3 | directed runs |
 | 5. Duplicate search and write-up | 1 hour | none |
 
@@ -225,7 +249,9 @@ promise that a fault can break. Otherwise stop, and write one paragraph with the
 1. Run `hydo onboard` in the project's folder. With several Compose files, name one with
    `hydo onboard --compose FILE`.
 2. Run `sh hydo/fetch-images.sh`, which copies the images in once.
-3. Write the folder with the skill (`plugin/skills/onboard/SKILL.md`, step 3).
+3. Write the folder with the skill (`plugin/skills/onboard/SKILL.md`, step 3). Give it
+   production's shape and durable settings, and declare the default checks of phase 3 before
+   the first run.
 4. Run `hydo build hydo/hydo.yaml --check` after every file, until it prints `OK`. Fix every
    warning that the image services' roots do not fit in the guest's RAM or disk before the first
    run. A root that does not fit stops the guest at boot with an error that names another cause
@@ -240,41 +266,88 @@ section 10 for the common causes before you change the folder.
 **Checkpoint after setup.** Go on when the clean run passes twice with one fingerprint within 3
 hours. Otherwise stop. Record each blocker as a gap of hydo in the example's `RESULTS.md`.
 
-### Phase 3: exploration and shrinking
+### Phase 3: the first hour of exploring, then later rounds
 
-1. Give each type of outcome that the workload records as unknown an `eventually_` check of
-   how it must end. Add a check that a completed operation's result stays readable after the
-   heal (`hydo guide strategies`, "How each unknown outcome ends"). The user's query engine
-   passed every run until these two checks were written.
-2. Validate the proposed rules on clean runs:
+The first hour follows the measured yields of the findings ledger. The section "The first hour of
+exploring" of `hydo guide workflow` gives the same steps for a user who does not read this page.
+
+1. **Production's shape, with its durable settings.** Phase 2 built it. Under a relaxed setting
+   every power cut gives the documented loss, as in Kvrocks, Garage, SeaweedFS, Iggy, and
+   ClickHouse. Make such a setting a build parameter, and run its durable value.
+2. **The default checks, declared before the first run.** Then the run without faults judges
+   something: 11 of the 105 bugs needed no fault, and 3 showed in the first run (Pulsar,
+   Prometheus, Ghost). The default checks are these:
+   - a read-back of every acknowledged write with its final outcome: the generic rule, or the
+     claim `acked_outcome` of a messages check (`hydo guide messages`);
+   - every replica compared with the leader after the heal, for a system with replicas;
+   - an `eventually_` check that the system serves writes after the heal;
+   - the error-log scan (`hydo guide error-logs`);
+   - a history checker where the workload has transactions (`hydo guide checks`).
+
+   With hydo's own verdicts, these would have caught 63 of the 105 bugs. Also give each type of
+   outcome that the workload records as unknown an `eventually_` check of how it must end (`hydo
+   guide strategies`, "How each unknown outcome ends"). The user's query engine passed every run
+   until such checks were written.
+3. **The business rules that pay, reviewed.** Write them where section 2 says they pay. Validate
+   them on clean runs, then review each rule's wait and its result under a clock step (section
+   2):
 
    ```sh
    hydo rules check hydo/rules.yaml --mutate
    ```
 
-3. Run the clock audit and the schedules of its first three places:
+   Where a value must reach a decision unchanged across functions or processes, add a value
+   property (`hydo guide values`). Blnk's broke in 9 of 30 blind schedules, and the business rule
+   in 1.
+4. **20 seeds of the process strategy, without shrinks.** Keep `clock`, `kill`, and `cut` in
+   `faults:`. Leave out `--cluster-faults` for a system without `groups:`. For nodes with
+   `storage:` of their own, add `--storage-faults`, with `powerloss` in `faults:` and `corrupt`
+   left out:
 
    ```sh
+   hydo explore --seeds 1-20 --strategy process --cluster-faults --no-shrink
+   ```
+
+   This mode found 60 of the 105 bugs first, in 30 of the 40 examples where it ran. Of the 43
+   blind first finds with a recorded place, 35 came within the first 20 schedules.
+5. **Judge each failure by directed runs, and shrink only the one that you report.** Read the
+   failing schedules with `hydo report --details`, and run each with `hydo run`, once with each
+   fault left out (section 5). Explorations ran a median of 6.9 re-runs and shrink candidates per
+   first run, and Lago's first exploration ran 318 for 20 schedules. RabbitMQ, Typesense, and
+   Pulsar judged their failures by directed runs instead. To shrink the failure that you report, explore its seed
+   alone with the same options and without `--no-shrink` (`--seeds 7-7`).
+6. **The operator's actions in the workload.** Add failovers, slot migrations, the removal of a
+   node, graceful stops, and upgrades, each as a command of the workload. Then explore the next
+   20 seeds. 14 of the 105 bugs needed such an action. Examples are Garnet's failover after a
+   migration, rqlite's removed node and graceful stop, Kvrocks's failover, and etcd's upgrade.
+7. **Aimed reaction grids, where a crash window is plausible.** A window is plausible when the
+   code answers before a second commit or a sync. Give the client an event at the answer, and run
+   `hydo explore --reactive-at <event>@<step>`. The grids found 4 bugs first in 8 examples:
+   rqlite's removed node, Kvrocks's full synchronization, Garage's lost peers, and Meilisearch's
+   index deletion. They found nothing in RabbitMQ (24 cells), SeaweedFS (125), and Pulsar (15).
+8. **The sync and clock audits, as reading aids.** Neither found a bug first. The clock audit ran
+   in 12 examples, and the sync audit came after the findings that it names. Read their first
+   places, and turn the plausible ones into directed schedules:
+
+   ```sh
+   hydo rules scan --kind sync
    hydo rules scan --kind clock
    hydo explore --schedule "<schedule from the audit>"
    ```
 
-4. Explore with the process strategy, which draws pauses, clock steps and one-way losses
-   too:
+Move these to the rounds after the first hour, in this order:
 
-   ```sh
-   hydo explore --seeds 1-20 --strategy process
-   ```
-
-5. Read the problems with `hydo report`, and the minimal schedules with `hydo report --details`.
-6. Fix each failure that is a mistake of the rules, rebuild, and explore the next seeds.
-7. Add the options that fit the project. `hydo guide strategies` says which ones found bugs in
-   systems of the same type:
-   - `--cluster-faults` for the services of `groups:`;
-   - `--more-faults` on hvx;
-   - `--storage-faults` for services with `storage:`;
-   - `--protocol-faults` for fakes and emulators.
-8. Run a swarm exploration last, with `--strategy swarm --new-faults`.
+- `--protocol-faults` for fakes and emulators, and `--more-faults` on hvx.
+- Damaged files: `corrupt` in `faults:`, and `--corrupt-several`. 16 of their 22 failures in the
+  ledger were the environment: the system detected the damage and refused to start.
+- `--strategy swarm --new-faults`: 2 bugs first in 620 schedules of 19 examples, and most of its
+  failures were disk faults. Add `--durable-only` once such failures show.
+- The timing explorations on services: nothing first in 90 schedules of 3 examples. Keep them for
+  flaky tests.
+- Contracts in a whole-system run: nothing new in 24 schedules on Blnk.
+- `hydo explore --configs`: no bug first in 245 schedules of 8 examples. Run it to label a
+  documented loss of a relaxed setting, which it did in 5 examples.
+- The steered and the state searches: no gain over the plain exploration.
 
 A first exploration that finds nothing is not the answer. Run a second round with more seeds (60
 or more), the techniques of `hydo guide strategies` for the system's type, and production's shape
@@ -288,7 +361,8 @@ Linux. Keep this Mac and the bare-metal machine for the directed runs, such as `
 
 ```sh
 sh ci/remote-explore.sh --example hydo/onboard/examples/<name> --manifest hydo/hydo.yaml \
-  --ref <branch> --seeds 1-60 --shards 20 --explore "--strategy process" \
+  --ref <branch> --seeds 1-60 --shards 20 \
+  --explore "--strategy process --cluster-faults --no-shrink" \
   --prepare "sh hydo/fetch-images.sh x86_64"
 ```
 
@@ -299,14 +373,14 @@ reported every acknowledged write lost, which cost an hour. Read a failure's cau
 call it a finding.
 
 Stop an exploration when its failures are understood. The shrinker spends hours on clock steps
-and on disk faults: in Saleor each shrink candidate took four minutes. Use `--no-shrink` or
-`--time-limit` when the machine is shared.
+and on disk faults: in Saleor each shrink candidate took four minutes. Use `--time-limit` when the
+machine is shared.
 
 ### Phase 4: judging the findings
 
 Judge each failure with section 5, during the exploration. Run directed schedules on the image
-for each candidate: the minimal schedule, each fault alone, and the neighbours of the failing
-step.
+for each candidate: the failing schedule, the schedule with each fault left out, and the
+neighbours of the failing step. Shrink only the failure that you report (phase 3, step 5).
 
 ### Phase 5: duplicate search and write-up
 
@@ -495,7 +569,9 @@ Retro: <project> <version>, <engine>, <date>
 Add the onboarding's evidence to `hydo/guide/strategies.md`, the text of `hydo guide
 strategies`. Update the entry of each technique that found a finding or missed one, with the
 example's name, the section of its `RESULTS.md`, and the numbers. Add an entry for a new
-technique in the same shape. The next onboarding chooses its techniques from that page.
+technique in the same shape. The next onboarding chooses its techniques from that page. Add a
+row per finding to `docs/design/findings-ledger.csv`, with the check that noticed it, and update
+the counts of the strategies page and of the ledger's page that the new rows change.
 
 Turn each gap into one of three fixes:
 
