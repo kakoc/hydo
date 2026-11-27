@@ -50,6 +50,10 @@ pub enum Lang {
     Ruby,
     CSharp,
     Sql,
+    /// Erlang (Milestone 382): read by the clock audit only, not by the route scan
+    Erlang,
+    /// Elixir (Milestone 382): read by the clock audit only
+    Elixir,
 }
 
 impl Lang {
@@ -64,10 +68,15 @@ impl Lang {
             Lang::Ruby => "ruby",
             Lang::CSharp => "csharp",
             Lang::Sql => "sql",
+            Lang::Erlang => "erlang",
+            Lang::Elixir => "elixir",
         }
     }
     fn braces(self) -> bool {
-        !matches!(self, Lang::Python | Lang::Ruby | Lang::Sql)
+        !matches!(
+            self,
+            Lang::Python | Lang::Ruby | Lang::Sql | Lang::Erlang | Lang::Elixir
+        )
     }
 }
 
@@ -87,6 +96,21 @@ pub fn lang_of(rel: &str) -> Option<Lang> {
         "sql" => Lang::Sql,
         _ => return None,
     })
+}
+
+/// The language of a file as the clock audit reads it: the languages of `lang_of`, and Erlang
+/// and Elixir (Milestone 382), which the route scan does not read.
+pub fn clock_lang_of(rel: &str) -> Option<Lang> {
+    if let Some(l) = lang_of(rel) {
+        return Some(l);
+    }
+    let name = rel.rsplit('/').next()?;
+    let ext = name.rsplit_once('.')?.1.to_ascii_lowercase();
+    match ext.as_str() {
+        "erl" | "hrl" => Some(Lang::Erlang),
+        "ex" | "exs" => Some(Lang::Elixir),
+        _ => None,
+    }
 }
 
 /// Whether a file is a test, a test helper, an example or vendored code, by its path (lower
@@ -173,9 +197,14 @@ pub(crate) fn clean_with(lang: Lang, text: &str, keep: bool) -> Vec<String> {
         Triple(char),
     }
     let chars: Vec<char> = text.chars().collect();
-    let slash = !matches!(lang, Lang::Python | Lang::Ruby | Lang::Sql);
-    let hash = matches!(lang, Lang::Python | Lang::Ruby);
+    let slash = !matches!(
+        lang,
+        Lang::Python | Lang::Ruby | Lang::Sql | Lang::Erlang | Lang::Elixir
+    );
+    let hash = matches!(lang, Lang::Python | Lang::Ruby | Lang::Elixir);
     let sql = lang == Lang::Sql;
+    // Erlang (Milestone 382): `%` starts a comment, and `$c` is a character, also `$"`
+    let erl = lang == Lang::Erlang;
     let mut out = Vec::new();
     let mut cur = String::new();
     let mut st = St::Code;
@@ -195,8 +224,20 @@ pub(crate) fn clean_with(lang: Lang, text: &str, keep: bool) -> Vec<String> {
         }
         match st {
             St::Code => {
+                if erl && c == '$' && n.is_some_and(|x| x != '\n') {
+                    // a character literal: `$a`, `$"`, `$\n`
+                    cur.push_str("$c");
+                    i += if n == Some('\\') { 3 } else { 2 };
+                    continue;
+                }
+                if lang == Lang::Elixir && c == '?' && matches!(n, Some('"' | '\'')) {
+                    cur.push_str("?c");
+                    i += 2;
+                    continue;
+                }
                 if (slash && c == '/' && n == Some('/'))
                     || (hash && c == '#')
+                    || (erl && c == '%')
                     || (sql && c == '-' && n == Some('-'))
                 {
                     while i < chars.len() && chars[i] != '\n' {
@@ -539,6 +580,84 @@ const SOURCES: &[Source] = &[
         langs: &[Lang::CSharp],
         unit: "-",
     },
+    // Erlang (Milestone 382): the system time follows the OS clock (with time warp, at its next
+    // check); `erlang:monotonic_time` does not
+    Source {
+        pat: "erlang:system_time(",
+        langs: &[Lang::Erlang],
+        unit: "-",
+    },
+    Source {
+        pat: "os:system_time(",
+        langs: &[Lang::Erlang],
+        unit: "-",
+    },
+    Source {
+        pat: "erlang:now()",
+        langs: &[Lang::Erlang],
+        unit: "-",
+    },
+    Source {
+        pat: "os:timestamp()",
+        langs: &[Lang::Erlang],
+        unit: "-",
+    },
+    Source {
+        pat: "erlang:timestamp()",
+        langs: &[Lang::Erlang],
+        unit: "-",
+    },
+    Source {
+        pat: "calendar:universal_time()",
+        langs: &[Lang::Erlang],
+        unit: "-",
+    },
+    Source {
+        pat: "calendar:local_time()",
+        langs: &[Lang::Erlang],
+        unit: "-",
+    },
+    Source {
+        pat: "erlang:universaltime()",
+        langs: &[Lang::Erlang],
+        unit: "-",
+    },
+    Source {
+        pat: "erlang:localtime()",
+        langs: &[Lang::Erlang],
+        unit: "-",
+    },
+    // Elixir
+    Source {
+        pat: "System.system_time(",
+        langs: &[Lang::Elixir],
+        unit: "-",
+    },
+    Source {
+        pat: "System.os_time(",
+        langs: &[Lang::Elixir],
+        unit: "-",
+    },
+    Source {
+        pat: "DateTime.utc_now(",
+        langs: &[Lang::Elixir],
+        unit: "-",
+    },
+    Source {
+        pat: "NaiveDateTime.utc_now(",
+        langs: &[Lang::Elixir],
+        unit: "-",
+    },
+    Source {
+        pat: ":os.system_time(",
+        langs: &[Lang::Elixir],
+        unit: "-",
+    },
+    Source {
+        pat: ":erlang.system_time(",
+        langs: &[Lang::Elixir],
+        unit: "-",
+    },
 ];
 
 /// Go's readings that keep the monotonic clock: a wall clock reading only against a value
@@ -564,6 +683,8 @@ const MONOTONIC: &[&str] = &[
     "Stopwatch",
     "Environment.TickCount",
     "monotime",
+    "erlang:monotonic_time",
+    "System.monotonic_time",
 ];
 
 /// SQL's readings of the database server's clock (lower case).
@@ -614,6 +735,8 @@ const DURATION_WORDS: &[&str] = &[
     "keepalive",
     "cooldown",
     "duration",
+    // Milestone 382: how long data is kept (VictoriaMetrics's `retentionMsecs`)
+    "retention",
 ];
 
 /// Words of a name that holds a point in time after which something ends.
@@ -640,6 +763,16 @@ const EXPIRY_WORDS: &[&str] = &[
     "cutoff",
     "stale",
     "available",
+    // Milestone 382: the due time of a timer (brpc's `run_time`, braft's `_next_duetime`) and
+    // a retention's horizon
+    "run_time",
+    "duetime",
+    "due_time",
+    "due_at",
+    "next_run",
+    "wake_at",
+    "fire_at",
+    "retention",
 ];
 
 /// The words that make a deadline check high: a lease, a lock, a timeout.
@@ -656,6 +789,14 @@ const LEASE_WORDS: &[&str] = &[
     "timeout",
     "deadline",
     "until",
+    // Milestone 382
+    "run_at",
+    "runat",
+    "run_time",
+    "duetime",
+    "due_time",
+    "due_at",
+    "retention",
 ];
 
 /// Lines that only report a time (logs, metrics, formatted output).
@@ -846,7 +987,8 @@ fn operand_right(code: &str, p: usize) -> usize {
 /// as `Vec<String>` and shifts are not taken for them), and the comparing methods.
 fn comparisons(code: &str) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
-    for op in [" <= ", " >= ", " < ", " > "] {
+    // Erlang writes `=<` (Milestone 382)
+    for op in [" <= ", " >= ", " < ", " > ", " =< "] {
         for (i, _) in code.match_indices(op) {
             out.push((i + 1, i + op.len() - 1));
         }
@@ -883,7 +1025,12 @@ struct Func {
 /// The parameter names of a function whose header is in `lines` (its first lines).
 fn params_of(lang: Lang, lines: &[String]) -> Vec<String> {
     let text = lines.join(" ");
-    let Some(open) = text.find('(') else {
+    // Milestone 382: a Rust function's parameters follow its name, not `pub(crate)`
+    let base = match (lang, text.find("fn ")) {
+        (Lang::Rust, Some(p)) => p + 3,
+        _ => 0,
+    };
+    let Some(open) = text[base..].find('(').map(|o| base + o) else {
         return Vec::new();
     };
     // Go's receiver comes first: take the parentheses after the name
@@ -919,6 +1066,16 @@ fn params_of(lang: Lang, lines: &[String]) -> Vec<String> {
         cur.push(c);
     }
     parts.push(cur);
+    // Milestone 382: a Rust method's receiver is no argument of its calls (`x.is_available(t)`)
+    if lang == Lang::Rust
+        && parts.first().is_some_and(|p| {
+            let p = p.split(':').next().unwrap_or("").trim();
+            matches!(p, "self" | "&self" | "&mut self" | "mut self")
+                || p.starts_with("&'") && p.ends_with("self")
+        })
+    {
+        parts.remove(0);
+    }
     let last_first = matches!(lang, Lang::C | Lang::Jvm | Lang::CSharp);
     parts
         .iter()
@@ -951,6 +1108,8 @@ struct SrcFile {
     funcs: Vec<Func>,
     /// the test functions and modules inside the file, whose lines are left out of `code`
     tests: TestItems,
+    /// Milestone 382: the bundled third-party library the file belongs to
+    bundled: Option<String>,
 }
 
 const CONTROL: &[&str] = &[
@@ -1015,10 +1174,21 @@ fn func_header(lang: Lang, code: &str) -> Option<String> {
             }
             ident_before_paren(&t[i + 3..])
         }
-        Lang::Python | Lang::Ruby => {
+        Lang::Erlang => {
+            // a clause's head starts a line: `name(Args) ->`, not an attribute (`-spec`)
+            if code.starts_with(|c: char| c.is_whitespace())
+                || !t.starts_with(|c: char| c.is_ascii_lowercase())
+            {
+                return None;
+            }
+            let name: String = t.chars().take_while(|c| is_ident(*c)).collect();
+            (t[name.len()..].starts_with('(') && !CONTROL.contains(&name.as_str())).then_some(name)
+        }
+        Lang::Python | Lang::Ruby | Lang::Elixir => {
             let rest = t
                 .strip_prefix("def ")
-                .or_else(|| t.strip_prefix("async def "))?;
+                .or_else(|| t.strip_prefix("async def "))
+                .or_else(|| t.strip_prefix("defp "))?;
             let name: String = rest
                 .chars()
                 .take_while(|c| is_ident(*c) || *c == '.')
@@ -1084,6 +1254,36 @@ fn scopes(lang: Lang, code: &[String]) -> (Vec<Option<usize>>, Vec<Func>) {
     if lang == Lang::Sql {
         return (scope, funcs);
     }
+    if lang == Lang::Erlang {
+        // Milestone 382: a function is its clauses, from the first head to the `.` that ends
+        // the form
+        let mut cur: Option<usize> = None;
+        for (i, l) in code.iter().enumerate() {
+            if cur.is_none() {
+                if let Some(name) = func_header(lang, l) {
+                    let params = params_of(lang, &code[i..(i + 4).min(code.len())]);
+                    funcs.push(Func {
+                        name,
+                        start: i,
+                        end: i,
+                        params,
+                    });
+                    cur = Some(funcs.len() - 1);
+                }
+            }
+            scope[i] = cur;
+            if let Some(f) = cur {
+                let t = l.trim_end();
+                if t.ends_with('.') && !t.ends_with("..") {
+                    funcs[f].end = i;
+                    cur = None;
+                } else {
+                    funcs[f].end = i;
+                }
+            }
+        }
+        return (scope, funcs);
+    }
     if !lang.braces() {
         // Python and Ruby: a function holds the lines indented deeper than its `def`
         let mut stack: Vec<(usize, usize)> = Vec::new(); // (func, indent)
@@ -1092,7 +1292,11 @@ fn scopes(lang: Lang, code: &[String]) -> (Vec<Option<usize>>, Vec<Func>) {
             if !blank {
                 let ind = indent_of(l);
                 while let Some(&(f, fi)) = stack.last() {
-                    if ind <= fi && !(lang == Lang::Ruby && l.trim() == "end" && ind == fi) {
+                    if ind <= fi
+                        && !(matches!(lang, Lang::Ruby | Lang::Elixir)
+                            && l.trim() == "end"
+                            && ind == fi)
+                    {
                         funcs[f].end = i.saturating_sub(1);
                         stack.pop();
                     } else {
@@ -1458,6 +1662,10 @@ struct Origin {
     line: usize,
     /// the reading it was set from: a source pattern, or another key
     from: Result<&'static str, Key>,
+    /// Milestone 382: Go's `time.Time` with its monotonic reading (a ticker's tick, a
+    /// `time.Now()` passed on): a wall-clock reading only after `.Unix()`, `.UTC()` or
+    /// `timestamp.FromTime(...)`
+    weak: bool,
 }
 
 #[derive(Default)]
@@ -1465,6 +1673,53 @@ struct Taint {
     map: HashMap<Key, Origin>,
     /// fields that are also set from a monotonic clock: not taken for readings
     mixed: HashSet<String>,
+    /// Milestone 382: functions that return a reading plus a duration, a deadline
+    /// (`butil::milliseconds_from_now(ms)`)
+    deadline_calls: HashSet<String>,
+    /// Milestone 382: cells that an atomic store sets from a reading, a cached clock
+    /// (VictoriaMetrics's `fasttime`, Restate's `RECENT_UNIX_TIMESTAMP_US`)
+    cells: HashSet<String>,
+}
+
+/// Milestone 382: the mark of the names of keys that bundled code sets. The project's code
+/// never takes a reading from them, so a library's own `Now()` or `timestamp` field changes no
+/// place of the project; bundled code takes readings from both.
+const BUNDLED_MARK: char = '\u{1}';
+
+/// The name under which a key set in `f` is kept.
+fn group_name(f: &SrcFile, name: &str) -> String {
+    if f.bundled.is_some() {
+        format!("{BUNDLED_MARK}{name}")
+    } else {
+        name.to_string()
+    }
+}
+
+/// The names a line of `f` looks a key up by: the project's, and in bundled code its own too.
+fn lookup_names(f: &SrcFile, name: &str) -> Vec<String> {
+    let mut v = vec![name.to_string()];
+    // an Erlang key of a map or a record is a library's interface: Ra's command meta carries
+    // `system_time` into RabbitMQ's own code
+    if f.bundled.is_some() || name.starts_with('#') {
+        v.push(format!("{BUNDLED_MARK}{name}"));
+    }
+    v
+}
+
+/// A key's name without the mark of bundled code and without the file of a field that only
+/// its own file reads.
+fn plain(n: &str) -> &str {
+    let n = n.trim_start_matches(BUNDLED_MARK);
+    n.split(FILE_MARK).next().unwrap_or(n)
+}
+
+/// Milestone 382: the mark of a field that only its own file reads: one set from Go's
+/// `time.Time` once converted (`w.startTimestamp = timestamp.FromTime(t)`). Its name alone is
+/// too common to follow through a whole project.
+const FILE_MARK: char = '\u{2}';
+
+fn file_field(name: &str, fi: usize) -> String {
+    format!("{name}{FILE_MARK}{fi}")
 }
 
 /// A wall-clock reading on a line: its span, and how it reads the clock.
@@ -1477,6 +1732,9 @@ struct Span {
     weak: bool,
     from: Result<&'static str, Key>,
     unit: &'static str,
+    /// Milestone 382: the span adds a duration to the reading itself, a deadline: Go's
+    /// `time.Now().Add(d).UnixMilli()`, a call of a function that returns now plus a duration
+    adds: bool,
 }
 
 const TIME_NAME_WORDS: &[&str] = &[
@@ -1532,7 +1790,12 @@ fn template_end(code: &str, lt: usize) -> Option<usize> {
 }
 
 fn spans(f: &SrcFile, fi: usize, i: usize, t: &Taint) -> Vec<Span> {
-    let code = &f.code[i];
+    spans_in(f, fi, i, &f.code[i], t)
+}
+
+/// The readings of `code`, a text of the scope of line `i` of `f`: the line itself, or a
+/// statement over several lines (Milestone 382).
+fn spans_in(f: &SrcFile, fi: usize, i: usize, code: &str, t: &Taint) -> Vec<Span> {
     let mut out = Vec::new();
     for s in SOURCES.iter().filter(|s| s.langs.contains(&f.lang)) {
         for p in find_all(code, s.pat, false) {
@@ -1540,7 +1803,9 @@ fn spans(f: &SrcFile, fi: usize, i: usize, t: &Taint) -> Vec<Span> {
             if s.pat.ends_with('(') {
                 end = call_end(code, end - 1);
             }
-            let start = if f.lang == Lang::C {
+            // Milestone 382: a Rust path starts at its crates and modules too
+            // (`chrono::Utc::now()`, `std::time::SystemTime::now()`)
+            let start = if matches!(f.lang, Lang::C | Lang::Rust) {
                 qualified_start(code, p)
             } else {
                 p
@@ -1551,6 +1816,7 @@ fn spans(f: &SrcFile, fi: usize, i: usize, t: &Taint) -> Vec<Span> {
                 weak: false,
                 from: Ok(s.pat),
                 unit: s.unit,
+                adds: false,
             });
         }
     }
@@ -1565,12 +1831,58 @@ fn spans(f: &SrcFile, fi: usize, i: usize, t: &Taint) -> Vec<Span> {
                 } else {
                     p + w.len()
                 };
+                // Milestone 382: `time.Now().Add(d).UnixMilli()` drops the monotonic reading
+                // at its end: a wall-clock deadline
+                if *w == "time.Now()" {
+                    if let Some((e, unit, adds)) = go_wall_chain(code, end) {
+                        out.push(Span {
+                            start: p,
+                            end: e,
+                            weak: false,
+                            from: Ok("time.Now()"),
+                            unit,
+                            adds,
+                        });
+                        continue;
+                    }
+                }
                 out.push(Span {
                     start: p,
                     end,
                     weak: true,
                     from: Ok(w),
                     unit: "-",
+                    adds: false,
+                });
+            }
+        }
+        // Milestone 382: an atomic load of a cell that holds a reading, `atomic.LoadInt64(&x.ts)`
+        for (p, _) in code.match_indices("atomic.Load") {
+            let open = match code[p..].find('(') {
+                Some(o) => p + o,
+                None => continue,
+            };
+            let close = call_end(code, open);
+            let arg = code[open + 1..close.saturating_sub(1).max(open + 1)].trim();
+            let cell: String = arg
+                .chars()
+                .rev()
+                .take_while(|c| is_ident(*c))
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            let found = lookup_names(f, &cell)
+                .into_iter()
+                .find(|c| t.cells.contains(c));
+            if let (true, Some(cell)) = (arg.starts_with('&'), found) {
+                out.push(Span {
+                    start: p,
+                    end: close,
+                    weak: false,
+                    from: Err(Key::Field(cell)),
+                    unit: "-",
+                    adds: false,
                 });
             }
         }
@@ -1590,6 +1902,13 @@ fn spans(f: &SrcFile, fi: usize, i: usize, t: &Taint) -> Vec<Span> {
         let name = &code[j..k];
         let before = if j > 0 { b[j - 1] } else { b' ' };
         let dotted = before == b'.' || (before == b'>' && j >= 2 && b[j - 2] == b'-');
+        // where the receiver ends: before the `.`, or before the `-` of `->` (Milestone 382:
+        // `loop->_now_millisec` starts at `loop`)
+        let dot = if before == b'>' {
+            j.saturating_sub(2)
+        } else {
+            j.saturating_sub(1)
+        };
         let mut next = code[k..].chars().next();
         // Milestone 355: a C++ call with template arguments, `GetTimeStamp<std::chrono::milliseconds>()`
         let mut open = k;
@@ -1602,29 +1921,92 @@ fn spans(f: &SrcFile, fi: usize, i: usize, t: &Taint) -> Vec<Span> {
             }
         }
         let mut hit: Option<(Key, usize, usize)> = None;
-        if next == Some('(') {
-            let key = Key::Call(name.to_string());
-            if t.map.contains_key(&key) {
+        // Milestone 382: a load of a cell that an atomic store set from a reading, a cached
+        // clock (`currentTimestamp.Load()`, `RECENT_UNIX_TIMESTAMP_US.load(Ordering::Relaxed)`)
+        let load = [".Load()", ".load("]
+            .iter()
+            .find(|l| code[k..].starts_with(**l))
+            .copied();
+        let cell = lookup_names(f, name)
+            .into_iter()
+            .find(|c| t.cells.contains(c));
+        if let (Some(l), Some(cell)) = (load, cell) {
+            let s0 = if dotted {
+                operand_left(code, dot)
+            } else {
+                qualified_start(code, j)
+            };
+            let e = call_end(code, k + l.find('(').unwrap_or(0));
+            hit = Some((Key::Field(cell), s0, e));
+        } else if f.lang == Lang::Erlang && name == "get" && code[..j].ends_with("maps:") {
+            // Milestone 382: `maps:get(system_time, Meta)` reads a map's key
+            if next == Some('(') {
+                let arg: String = code[k + 1..]
+                    .trim_start()
+                    .chars()
+                    .take_while(|c| is_ident(*c))
+                    .collect();
+                if let Some(key) = lookup_names(f, &format!("#{arg}"))
+                    .into_iter()
+                    .map(Key::Field)
+                    .find(|k| t.map.contains_key(k))
+                {
+                    hit = Some((key, j - 5, call_end(code, k)));
+                }
+            }
+        } else if next == Some('(') {
+            let key = lookup_names(f, name)
+                .into_iter()
+                .map(Key::Call)
+                .find(|k| t.map.contains_key(k));
+            if let Some(key) = key {
                 let recv_start = if dotted {
-                    operand_left(code, j - 1)
-                } else if f.lang == Lang::C {
+                    operand_left(code, dot)
+                } else if matches!(f.lang, Lang::C | Lang::Rust) {
                     qualified_start(code, j)
+                } else if f.lang == Lang::Erlang {
+                    erl_qualified_start(code, j)
                 } else {
                     j
                 };
                 let recv = code[recv_start..j].trim_end_matches(['.', '>', '-']);
+                // Milestone 382: a path's last name, `Instant` of `tokio::time::Instant::now()`
+                let last = recv
+                    .trim_end_matches(':')
+                    .rsplit([':', '.'])
+                    .next()
+                    .unwrap_or(recv);
                 let monotonic_recv = matches!(
                     recv,
                     "time" | "performance" | "Instant" | "process" | "loop"
-                );
+                ) || matches!(last, "Instant" | "steady_clock" | "Stopwatch");
                 if !monotonic_recv {
                     hit = Some((key, recv_start, call_end(code, open)));
                 }
             }
         } else if dotted {
-            let key = Key::Field(name.to_string());
-            if t.map.contains_key(&key) && !t.mixed.contains(name) {
-                hit = Some((key, operand_left(code, j - 1), k));
+            // an Erlang record's field: `S#state.last_run`
+            let fname = if f.lang == Lang::Erlang {
+                format!("#{name}")
+            } else {
+                name.to_string()
+            };
+            let key = lookup_names(f, &fname)
+                .into_iter()
+                .flat_map(|n| [file_field(&n, fi), n])
+                .map(Key::Field)
+                .find(|k| t.map.contains_key(k));
+            if let Some(key) = key.filter(|_| !t.mixed.contains(name)) {
+                let s0 = if f.lang == Lang::Erlang {
+                    let r = code[..j - 1]
+                        .trim_end_matches(is_ident)
+                        .trim_end_matches('?');
+                    let r = r.strip_suffix('#').unwrap_or(r);
+                    r.trim_end_matches(is_ident).len()
+                } else {
+                    operand_left(code, dot)
+                };
+                hit = Some((key, s0, k));
             }
         } else {
             for key in [
@@ -1637,7 +2019,22 @@ fn spans(f: &SrcFile, fi: usize, i: usize, t: &Taint) -> Vec<Span> {
                 }
             }
         }
-        if let Some((key, s, e)) = hit {
+        if let Some((key, mut s, mut e)) = hit {
+            let adds = matches!(&key, Key::Call(n) if t.deadline_calls.contains(n));
+            // Milestone 382: Go's `time.Time` with its monotonic reading is a wall-clock
+            // reading only once converted: `tm.Unix()`, `timestamp.FromTime(t)`
+            if t.map.get(&key).is_some_and(|o| o.weak) {
+                match go_weak_converted(code, s, e) {
+                    Some((s1, e1)) => {
+                        s = s1;
+                        e = e1;
+                    }
+                    None => {
+                        j = k;
+                        continue;
+                    }
+                }
+            }
             if !out.iter().any(|x| x.start <= s && e <= x.end) {
                 out.push(Span {
                     start: s,
@@ -1645,6 +2042,7 @@ fn spans(f: &SrcFile, fi: usize, i: usize, t: &Taint) -> Vec<Span> {
                     weak: false,
                     from: Err(key),
                     unit: "-",
+                    adds,
                 });
             }
         }
@@ -1653,9 +2051,256 @@ fn spans(f: &SrcFile, fi: usize, i: usize, t: &Taint) -> Vec<Span> {
     out
 }
 
+/// Milestone 382: the end of a chain after Go's `time.Now()` (from `at`) that drops the
+/// monotonic reading, with its unit and whether it adds a duration: `.Add(d).UnixMilli()`,
+/// `.Add(d).UTC()`. None for a chain that keeps it, or one that a source of the table covers.
+fn go_wall_chain(code: &str, at: usize) -> Option<(usize, &'static str, bool)> {
+    let mut e = at;
+    let mut adds = false;
+    loop {
+        let rest = &code[e..];
+        if rest.starts_with(".Add(") || rest.starts_with(".Truncate(") {
+            adds |= rest.starts_with(".Add(");
+            e = call_end(code, e + rest.find('(').unwrap_or(0));
+            continue;
+        }
+        for (m, unit) in [
+            (".UnixMilli()", "ms"),
+            (".UnixMicro()", "us"),
+            (".UnixNano()", "ns"),
+            (".Unix()", "s"),
+            (".UTC()", "-"),
+            (".Round(0)", "-"),
+        ] {
+            if rest.starts_with(m) {
+                // the plain forms are sources of the table
+                return adds.then_some((e + m.len(), unit, adds));
+            }
+        }
+        return None;
+    }
+}
+
+/// Milestone 382: the span of a Go `time.Time` with its monotonic reading at `s..e` once a
+/// conversion drops it: `tm.Unix()` and its kin after it, or `FromTime(...)` around it.
+fn go_weak_converted(code: &str, s: usize, e: usize) -> Option<(usize, usize)> {
+    for m in [
+        ".UnixMilli()",
+        ".UnixMicro()",
+        ".UnixNano()",
+        ".Unix()",
+        ".UTC()",
+        ".Round(0)",
+    ] {
+        if code[e..].starts_with(m) {
+            return Some((s, e + m.len()));
+        }
+    }
+    let before = code[..s].trim_end();
+    if let Some(head) = before.strip_suffix("FromTime(") {
+        if code[e..].trim_start().starts_with(')') {
+            let start = operand_left(code, head.len() + "FromTime".len());
+            return Some((start, e + code[e..].find(')').unwrap_or(0) + 1));
+        }
+    }
+    None
+}
+
+/// Milestone 382: an Erlang match `Var = Expr`: the variable and where `Expr` starts. Not
+/// `=:=`, `=/=`, `==`, `=<`, `>=`, `:=` or `=>`, and not a record's field (`#r{f = V}`).
+fn erl_assignment(code: &str) -> Option<(String, bool, bool, usize)> {
+    let b = code.as_bytes();
+    for i in 0..b.len() {
+        if b[i] != b'=' {
+            continue;
+        }
+        let prev = if i > 0 { b[i - 1] } else { b' ' };
+        let next = b.get(i + 1).copied().unwrap_or(b' ');
+        if matches!(next, b'=' | b':' | b'/' | b'<' | b'>')
+            || matches!(prev, b'=' | b':' | b'/' | b'<' | b'>' | b'!')
+        {
+            continue;
+        }
+        let lhs = code[..i].trim_end();
+        let name: String = lhs
+            .chars()
+            .rev()
+            .take_while(|c| is_ident(*c))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        let head = lhs[..lhs.len() - name.len()].trim_end();
+        let var = name.starts_with(|c: char| c.is_ascii_uppercase());
+        if !var || !(head.is_empty() || head.ends_with([',', '(', '>'])) {
+            return None;
+        }
+        return Some((name, false, true, i + 1));
+    }
+    None
+}
+
+/// Milestone 382: the keys of Erlang maps and records that a line sets, each with where its
+/// value starts: `#{ts => Ts}`, `M#{system_time := V}`, `#state{last_run = Now}`. A key
+/// is kept as `#<key>`, apart from the fields of other languages.
+fn erl_sets(code: &str) -> Vec<(String, usize)> {
+    let mut out = Vec::new();
+    for (k, v) in erl_pairs(code) {
+        if v.set {
+            out.push((format!("#{k}"), v.value));
+        }
+    }
+    out
+}
+
+/// Milestone 382: the variables that an Erlang pattern binds from a key: `#{system_time :=
+/// Now} = Meta` binds `Now` from `#system_time`, and a fold's clause `fun (ts, V, Acc) ->`
+/// binds `V` from `#ts`.
+fn erl_binds(code: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for (k, v) in erl_pairs(code) {
+        if v.bind {
+            out.push((v.var, format!("#{k}")));
+        }
+    }
+    for (p, _) in code.match_indices("fun (") {
+        let rest = &code[p + 5..];
+        let atom: String = rest.chars().take_while(|c| is_ident(*c)).collect();
+        if !atom.starts_with(|c: char| c.is_ascii_lowercase()) {
+            continue;
+        }
+        let rest = rest[atom.len()..].trim_start();
+        let Some(rest) = rest.strip_prefix(',') else {
+            continue;
+        };
+        let var: String = rest
+            .trim_start()
+            .chars()
+            .take_while(|c| is_ident(*c))
+            .collect();
+        if var.starts_with(|c: char| c.is_ascii_uppercase()) {
+            out.push((var, format!("#{atom}")));
+        }
+    }
+    out
+}
+
+struct ErlPair {
+    /// where the value starts
+    value: usize,
+    /// the value is set under the key
+    set: bool,
+    /// a pattern that may bind the bare variable `var` from the key
+    bind: bool,
+    var: String,
+}
+
+/// The `key => value`, `key := value` and record `field = value` pairs of an Erlang line.
+fn erl_pairs(code: &str) -> Vec<(String, ErlPair)> {
+    let b = code.as_bytes();
+    let mut out = Vec::new();
+    // the `#` that opens each brace: `#{` or `#name{`, and whether an expression comes before
+    // it (an update) or not (a construction or a pattern)
+    let mut opens: Vec<(bool, bool)> = Vec::new(); // (is a map or record, an update)
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'{' => {
+                let before = code[..i].trim_end_matches(is_ident).trim_end_matches('?');
+                let rec = before.ends_with('#');
+                let upd = rec && {
+                    let pre = before[..before.len() - 1].trim_end();
+                    pre.ends_with(|c: char| is_ident(c) || c == ')')
+                };
+                opens.push((rec, upd));
+            }
+            b'}' => {
+                opens.pop();
+            }
+            b'=' | b':' if opens.last().is_some_and(|o| o.0) => {
+                let op_len = match (b[i], b.get(i + 1)) {
+                    (b'=', Some(b'>')) | (b':', Some(b'=')) => 2,
+                    (b'=', _)
+                        if !matches!(b.get(i + 1), Some(b'=' | b':' | b'/' | b'<'))
+                            && !matches!(
+                                code[..i].chars().next_back(),
+                                Some('=' | '<' | '>' | '/' | ':' | '!')
+                            ) =>
+                    {
+                        1
+                    }
+                    _ => {
+                        i += 1;
+                        continue;
+                    }
+                };
+                let key_text = code[..i].trim_end();
+                let key: String = key_text
+                    .chars()
+                    .rev()
+                    .take_while(|c| is_ident(*c))
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect();
+                let head = key_text[..key_text.len() - key.len()].trim_end();
+                if key.len() >= 2
+                    && key.starts_with(|c: char| c.is_ascii_lowercase())
+                    && head.ends_with(['{', ','])
+                {
+                    let value = i + op_len;
+                    let v = code[value..].trim_start();
+                    let var: String = v.chars().take_while(|c| is_ident(*c)).collect();
+                    let bare = var.starts_with(|c: char| c.is_ascii_uppercase())
+                        && v[var.len()..].trim_start().starts_with([',', '}']);
+                    // a construction or an update sets the key; a pattern (`#{k := V} = M`, a
+                    // record in a head) binds a bare variable, and `#r{f = V}` may be either
+                    let upd = opens.last().is_some_and(|o| o.1);
+                    let arrow = b[i] == b'=' && op_len == 2;
+                    let bind = bare && !upd && !arrow;
+                    let set = arrow || upd || b[i] == b'=';
+                    out.push((
+                        key,
+                        ErlPair {
+                            value,
+                            set,
+                            bind,
+                            var,
+                        },
+                    ));
+                }
+                i += op_len;
+                continue;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    out
+}
+
+/// Milestone 382: the start of an Erlang call's module before `at`: `erlang:` of
+/// `erlang:system_time(...)`, `?MODULE:`.
+fn erl_qualified_start(code: &str, at: usize) -> usize {
+    let b = code.as_bytes();
+    if at >= 2 && b[at - 1] == b':' && b[at - 2] != b':' {
+        let mut k = at - 1;
+        while k > 0 && (is_ident(b[k - 1] as char) || b[k - 1] == b'?') {
+            k -= 1;
+        }
+        if k < at - 1 {
+            return k;
+        }
+    }
+    at
+}
+
 /// The name an assignment on `code` sets, whether it is a field, whether it declares a new
 /// variable, and where its right-hand side starts.
 fn assignment(lang: Lang, code: &str) -> Option<(String, bool, bool, usize)> {
+    if lang == Lang::Erlang {
+        return erl_assignment(code);
+    }
     let b = code.as_bytes();
     let mut eq = None;
     for i in 0..b.len() {
@@ -1968,13 +2613,44 @@ fn starts_with_span<'a>(code: &str, from: usize, sp: &'a [Span]) -> Option<&'a S
                 continue;
             }
         }
+        // Milestone 382: a time's own type made from a reading, as Restate's
+        // `MillisSinceEpoch::new(SystemTime::now()...)`
+        if let Some(n) = time_constructor(code, i) {
+            if !sp.iter().any(|s| s.start == i) {
+                i += n;
+                continue;
+            }
+        }
         break;
     }
     sp.iter().find(|s| s.start == i && !s.weak)
 }
 
-/// Out-parameters that receive a reading: `gettimeofday(&tv, ...)`.
-fn out_param(code: &str) -> Option<String> {
+/// Milestone 382: the length of a constructor of a time's own type at `at`, up to its `(`:
+/// `MillisSinceEpoch::new(`, `Timestamp::from_millis(`, a type whose name speaks of time.
+fn time_constructor(code: &str, at: usize) -> Option<usize> {
+    let rest = &code[at..];
+    let ty: String = rest.chars().take_while(|c| is_ident(*c)).collect();
+    if ty.is_empty() || !ty.starts_with(|c: char| c.is_ascii_uppercase()) {
+        return None;
+    }
+    let after = rest[ty.len()..].strip_prefix("::")?;
+    let ctor: String = after.chars().take_while(|c| is_ident(*c)).collect();
+    if !(ctor == "new" || ctor == "from" || ctor.starts_with("from_")) {
+        return None;
+    }
+    if !after[ctor.len()..].starts_with('(') {
+        return None;
+    }
+    let lty = ty.to_ascii_lowercase();
+    has_any(&lty, TIME_NAME_WORDS).then_some(ty.len() + 2 + ctor.len() + 1)
+}
+
+/// Out-parameters that receive a reading: `gettimeofday(&tv, ...)`. Each is a name and whether
+/// it is a field: `gettimeofday(&loop->_tv_at, NULL)` also sets the field `_tv_at` (Milestone
+/// 382, h2o's event loop).
+fn out_param(code: &str) -> Vec<(String, bool)> {
+    let mut out = Vec::new();
     for pat in [
         "gettimeofday(&",
         "clock_gettime(CLOCK_REALTIME, &",
@@ -1985,56 +2661,297 @@ fn out_param(code: &str) -> Option<String> {
             let rest = &code[p + pat.len()..];
             let name: String = rest.chars().take_while(|c| is_ident(*c)).collect();
             if !name.is_empty() {
-                return Some(name);
+                out.push((name.clone(), false));
+                let path: String = rest
+                    .chars()
+                    .take_while(|c| is_ident(*c) || matches!(c, '.' | '-' | '>'))
+                    .collect();
+                let last = path.rsplit(['.', '>']).next().unwrap_or("");
+                if path.len() > name.len() && !last.is_empty() && last != name {
+                    out.push((last.to_string(), true));
+                }
+                return out;
+            }
+        }
+    }
+    out
+}
+
+/// Milestone 382: the cell and the value of an atomic store on a line: Go's
+/// `atomic.StoreInt64(&x.ts, v)` and `x.Store(v)`, Rust's and C++'s `x.store(v, ...)`.
+fn atomic_store(code: &str) -> Option<(String, usize)> {
+    if let Some(p) = code.find("atomic.Store") {
+        let open = p + code[p..].find('(')?;
+        let rest = &code[open + 1..];
+        let comma = rest.find(',')?;
+        let path = rest[..comma].trim();
+        let cell: String = path
+            .chars()
+            .rev()
+            .take_while(|c| is_ident(*c))
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        if path.starts_with('&') && !cell.is_empty() {
+            return Some((cell, open + 1 + comma + 1));
+        }
+    }
+    for m in [".Store(", ".store("] {
+        if let Some(p) = code.find(m) {
+            let cell: String = code[..p]
+                .chars()
+                .rev()
+                .take_while(|c| is_ident(*c))
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            if !cell.is_empty() {
+                return Some((cell, p + m.len()));
             }
         }
     }
     None
 }
 
-fn propagate(files: &[SrcFile], t: &mut Taint) {
-    // the functions of the project by name, to follow a reading into a parameter
-    let mut defs: HashMap<&str, Vec<(usize, usize)>> = HashMap::new();
-    for (fi, f) in files.iter().enumerate() {
-        for (k, fu) in f.funcs.iter().enumerate() {
-            defs.entry(fu.name.as_str()).or_default().push((fi, k));
+/// Milestone 382: the variable that a Go loop or receive takes from a ticker's or a timer's
+/// channel: `for tm := range ticker.C`, `case now := <-t.C:`. The tick is `time.Now()` with
+/// its monotonic reading.
+fn go_tick(code: &str) -> Option<String> {
+    let t = code.trim();
+    let (lhs, rhs) = if let Some(r) = t.strip_prefix("for ") {
+        let (l, r) = r.split_once(":= range ")?;
+        (l, r)
+    } else {
+        let t = t.strip_prefix("case ").unwrap_or(t);
+        let (l, r) = t.split_once(":= <-")?;
+        (l, r)
+    };
+    let var = lhs.trim();
+    let chan = rhs.trim_end_matches(['{', ':', ' ']).trim();
+    let owner = chan.strip_suffix(".C")?;
+    let last = owner
+        .rsplit('.')
+        .next()
+        .unwrap_or(owner)
+        .to_ascii_lowercase();
+    (var.chars().all(is_ident)
+        && !var.is_empty()
+        && var != "_"
+        && (last.contains("tick") || last.contains("timer")))
+    .then(|| var.to_string())
+}
+
+/// Words of a function's name that say it formats, logs or tests a time rather than reading
+/// the clock: such a function is followed only when its name speaks of time.
+const NOT_CLOCK_FUNCTION_WORDS: &[&str] = &[
+    "format",
+    "string",
+    "str",
+    "display",
+    "fmt",
+    "log",
+    "print",
+    "debug",
+    "serialize",
+    "encode",
+    "test",
+    "mock",
+    "fake",
+    "main",
+    "new",
+    "default",
+];
+
+/// Milestone 382: whether a reading comes from Go's `time.Time` with its monotonic reading, once
+/// converted: a ticker's tick, or `time.Now()` given to a function.
+fn weak_chain(t: &Taint, from: &Result<&'static str, Key>) -> bool {
+    let mut cur = from.clone();
+    for _ in 0..4 {
+        match cur {
+            Err(ref k) => match t.map.get(k) {
+                Some(o) if o.weak => return true,
+                Some(o) => cur = o.from.clone(),
+                None => return false,
+            },
+            Ok(_) => return false,
         }
     }
-    let mut monotonic_twin: HashSet<&str> = HashSet::new();
-    for (name, ds) in &defs {
-        let monotonic_only = |(fi, k): &(usize, usize)| {
-            let f = &files[*fi];
-            let fu = &f.funcs[*k];
-            let body = &f.code[fu.start..=fu.end.min(f.code.len() - 1)];
-            body.iter().any(|l| has_any(l, MONOTONIC))
-                && !body.iter().any(|l| {
-                    SOURCES
-                        .iter()
-                        .any(|s| s.langs.contains(&f.lang) && l.contains(s.pat))
-                })
-        };
-        if ds.len() >= 2 && ds.iter().any(monotonic_only) {
-            monotonic_twin.insert(name);
+    false
+}
+
+/// Milestone 382: whether a reading comes from inside function `fk` of file `fi` without a hop
+/// through another name: the clock, a cached clock's cell, or a variable of the function set
+/// from one of them.
+fn direct_reading(
+    t: &Taint,
+    from: &Result<&'static str, Key>,
+    fi: usize,
+    fk: usize,
+    params: &[String],
+) -> bool {
+    let mut cur = from.clone();
+    for _ in 0..4 {
+        match cur {
+            Ok(_) => return true,
+            Err(Key::Field(c)) => return t.cells.contains(&c),
+            // a parameter holds the caller's reading: the function converts, it reads no clock
+            Err(Key::Local(_, _, ref n)) if params.contains(n) => return false,
+            Err(ref key @ Key::Local(lfi, Some(lk), _)) if lfi == fi && lk == fk => {
+                match t.map.get(key) {
+                    Some(o) if !o.weak => cur = o.from.clone(),
+                    _ => return false,
+                }
+            }
+            Err(_) => return false,
+        }
+    }
+    false
+}
+
+/// Words of a call that adds a duration to a time it is given (`nanoseconds_from(t, ns)`,
+/// `timespec_add`, `plus`).
+const ADDS_WORDS: &[&str] = &["from", "add", "plus", "after"];
+
+fn propagate(files: &[SrcFile], t: &mut Taint) {
+    // the functions of the project by name, to follow a reading into a parameter
+    // Milestone 382: the project's own functions and the bundled code's apart, so that bundled
+    // code changes neither the calls nor the twins of the project's code
+    let mut groups: [HashMap<&str, Vec<(usize, usize)>>; 2] = [HashMap::new(), HashMap::new()];
+    for (fi, f) in files.iter().enumerate() {
+        for (k, fu) in f.funcs.iter().enumerate() {
+            groups[usize::from(f.bundled.is_some())]
+                .entry(fu.name.as_str())
+                .or_default()
+                .push((fi, k));
+        }
+    }
+    let mut twins: [HashSet<&str>; 2] = [HashSet::new(), HashSet::new()];
+    for (g, defs) in groups.iter().enumerate() {
+        let monotonic_twin = &mut twins[g];
+        for (name, ds) in defs {
+            let monotonic_only = |(fi, k): &(usize, usize)| {
+                let f = &files[*fi];
+                let fu = &f.funcs[*k];
+                let body = &f.code[fu.start..=fu.end.min(f.code.len() - 1)];
+                body.iter().any(|l| has_any(l, MONOTONIC))
+                    && !body.iter().any(|l| {
+                        SOURCES
+                            .iter()
+                            .any(|s| s.langs.contains(&f.lang) && l.contains(s.pat))
+                    })
+            };
+            if ds.len() >= 2 && ds.iter().any(monotonic_only) {
+                monotonic_twin.insert(name);
+            }
         }
     }
     for _round in 0..8 {
-        let before = t.map.len() + t.mixed.len();
+        let before = t.map.len() + t.mixed.len() + t.cells.len();
         for (fi, f) in files.iter().enumerate() {
             if f.lang == Lang::Sql {
                 continue;
             }
+            let group = usize::from(f.bundled.is_some());
+            let defs = &groups[group];
+            let monotonic_twin = &twins[group];
             for i in 0..f.code.len() {
                 let code = &f.code[i];
                 if code.trim().is_empty() {
                     continue;
                 }
-                if let Some(name) = out_param(code) {
-                    let key = Key::Local(fi, f.scope[i], name);
+                for (name, field) in out_param(code) {
+                    let key = if field {
+                        if name.len() < 3 || GENERIC_FIELDS.contains(&name.as_str()) {
+                            continue;
+                        }
+                        Key::Field(group_name(f, &name))
+                    } else {
+                        Key::Local(fi, f.scope[i], name)
+                    };
                     t.map.entry(key).or_insert(Origin {
                         file: fi,
                         line: i,
                         from: Ok("gettimeofday("),
+                        weak: false,
                     });
+                }
+                // Milestone 382: a Go ticker's tick, a reading once converted
+                if f.lang == Lang::Go {
+                    if let Some(v) = go_tick(code) {
+                        t.map
+                            .entry(Key::Local(fi, f.scope[i], v))
+                            .or_insert(Origin {
+                                file: fi,
+                                line: i,
+                                from: Ok("time.Now()"),
+                                weak: true,
+                            });
+                    }
+                }
+                // Milestone 382: Erlang's maps and records carry a reading under a key (Ra's
+                // command meta `#{ts => Ts}`), and a pattern takes it out again
+                if f.lang == Lang::Erlang {
+                    for (var, key) in erl_binds(code) {
+                        let found = lookup_names(f, &key)
+                            .into_iter()
+                            .map(Key::Field)
+                            .find(|k| t.map.contains_key(k));
+                        if let Some(k) = found {
+                            let weak = t.map.get(&k).is_some_and(|o| o.weak);
+                            t.map
+                                .entry(Key::Local(fi, f.scope[i], var))
+                                .or_insert(Origin {
+                                    file: fi,
+                                    line: i,
+                                    from: Err(k),
+                                    weak,
+                                });
+                        }
+                    }
+                    let sets = erl_sets(code);
+                    if !sets.is_empty() {
+                        let sp = spans(f, fi, i, t);
+                        for (key, at) in sets {
+                            let Some(s) = starts_with_span(code, at, &sp) else {
+                                continue;
+                            };
+                            if has_any(&code[at..s.end], MONOTONIC) || !hop_ok(t, &s.from, &key) {
+                                continue;
+                            }
+                            t.map
+                                .entry(Key::Field(group_name(f, &key)))
+                                .or_insert(Origin {
+                                    file: fi,
+                                    line: i,
+                                    from: s.from.clone(),
+                                    weak: false,
+                                });
+                        }
+                    }
+                }
+                // Milestone 382: an atomic store of a reading makes a cached clock
+                if let Some((cell0, at)) = atomic_store(code) {
+                    let cell = group_name(f, &cell0);
+                    if cell0.len() >= 3
+                        && !GENERIC_FIELDS.contains(&cell0.as_str())
+                        && !t.cells.contains(&cell)
+                    {
+                        let sp = spans(f, fi, i, t);
+                        if let Some(s) = starts_with_span(code, at, &sp) {
+                            if !has_any(&code[at..], MONOTONIC) && hop_ok(t, &s.from, &cell0) {
+                                let from = s.from.clone();
+                                t.cells.insert(cell.clone());
+                                t.map.entry(Key::Field(cell)).or_insert(Origin {
+                                    file: fi,
+                                    line: i,
+                                    from,
+                                    weak: false,
+                                });
+                            }
+                        }
+                    }
                 }
                 // a reading passed as an argument: the parameter holds it in the called function
                 let mut sp_cache: Option<Vec<Span>> = None;
@@ -2077,23 +2994,32 @@ fn propagate(files: &[SrcFile], t: &mut Taint) {
                     args.push((s0, last.max(s0)));
                     let sp = sp_cache.get_or_insert_with(|| spans(f, fi, i, t));
                     for (k, (a0, a1)) in args.iter().enumerate() {
-                        let Some(s) = starts_with_span(code, *a0, sp) else {
-                            continue;
+                        // Milestone 382: Go's `time.Now()` passed on keeps its monotonic
+                        // reading until the function converts it; only into a function whose
+                        // name speaks of time (`SetStartTime`), since most functions that take
+                        // the time of a call stamp data with it
+                        let go_now = f.lang == Lang::Go
+                            && code[*a0..*a1].trim() == "time.Now()"
+                            && timeish(name);
+                        let (from, weak) = match starts_with_span(code, *a0, sp) {
+                            Some(s) if s.end <= *a1 && !has_any(&code[*a0..*a1], MONOTONIC) => {
+                                (s.from.clone(), false)
+                            }
+                            _ if go_now => (Ok("time.Now()"), true),
+                            _ => continue,
                         };
-                        if s.end > *a1 || has_any(&code[*a0..*a1], MONOTONIC) {
-                            continue;
-                        }
                         for (dfi, dk) in ds {
                             let fu = &files[*dfi].funcs[*dk];
                             if fu.params.len() == args.len()
-                                && fu.params[k].len() >= 2
-                                && hop_ok(t, &s.from, &fu.params[k])
+                                && (fu.params[k].len() >= 2 || weak && !fu.params[k].is_empty())
+                                && hop_ok(t, &from, &fu.params[k])
                             {
                                 let key = Key::Local(*dfi, Some(*dk), fu.params[k].clone());
                                 t.map.entry(key).or_insert(Origin {
                                     file: fi,
                                     line: i,
-                                    from: s.from.clone(),
+                                    from: from.clone(),
+                                    weak,
                                 });
                             }
                         }
@@ -2102,10 +3028,10 @@ fn propagate(files: &[SrcFile], t: &mut Taint) {
                 let Some((name, field, decl, rhs)) = assignment(f.lang, code) else {
                     continue;
                 };
-                if name.len() < 2 {
+                if name.is_empty() {
                     continue;
                 }
-                if field && has_any(&code[rhs..], MONOTONIC) {
+                if field && name.len() >= 2 && has_any(&code[rhs..], MONOTONIC) {
                     t.mixed.insert(name.clone());
                     continue;
                 }
@@ -2113,10 +3039,18 @@ fn propagate(files: &[SrcFile], t: &mut Taint) {
                 let Some(s) = rhs_reading(code, rhs, &sp) else {
                     continue;
                 };
+                // a name of one letter is too common to follow, but for a Go ticker's tick once
+                // converted (Milestone 382: `t := uint64(tm.Unix())` of VictoriaMetrics's
+                // `fasttime`)
+                let tick = matches!(&s.from, Err(k) if t.map.get(k).is_some_and(|o| o.weak));
+                if name.len() < 2 && (field || !tick) {
+                    continue;
+                }
                 let origin = Origin {
                     file: fi,
                     line: i,
                     from: s.from.clone(),
+                    weak: false,
                 };
                 let _ = decl;
                 if !hop_ok(t, &s.from, &name) {
@@ -2124,7 +3058,13 @@ fn propagate(files: &[SrcFile], t: &mut Taint) {
                 }
                 if field {
                     if name.len() >= 3 && !GENERIC_FIELDS.contains(&name.as_str()) {
-                        t.map.entry(Key::Field(name)).or_insert(origin);
+                        let g = group_name(f, &name);
+                        let key = if weak_chain(t, &s.from) {
+                            file_field(&g, fi)
+                        } else {
+                            g
+                        };
+                        t.map.entry(Key::Field(key)).or_insert(origin);
                     }
                 } else {
                     t.map
@@ -2132,14 +3072,34 @@ fn propagate(files: &[SrcFile], t: &mut Taint) {
                         .or_insert(origin);
                 }
             }
-            // small functions whose name speaks of time and that return a reading
-            for fu in &f.funcs {
+            // small functions that return a reading: by data flow inside the function, and
+            // with a looser reading when their name speaks of time
+            for (fk, fu) in f.funcs.iter().enumerate() {
                 if fu.end < fu.start || fu.end - fu.start > 30 || fu.name.len() < 3 {
                     continue;
                 }
                 let lname = fu.name.to_ascii_lowercase();
-                if !has_any(&lname, TIME_NAME_WORDS)
-                    || t.map.contains_key(&Key::Call(fu.name.clone()))
+                let words = name_words(&fu.name);
+                let time_named = has_any(&lname, TIME_NAME_WORDS);
+                if lookup_names(f, &fu.name)
+                    .into_iter()
+                    .any(|n| t.map.contains_key(&Key::Call(n)))
+                {
+                    continue;
+                }
+                // Milestone 382: a function whose name does not speak of time is a wrapper of
+                // the clock when the value it returns comes from a reading inside it; its name
+                // must not say that it formats, logs or tests
+                if !time_named
+                    && (words
+                        .iter()
+                        .any(|w| NOT_CLOCK_FUNCTION_WORDS.contains(&w.as_str()))
+                        || fu.name.len() < 4
+                        || GENERIC_CALLS.contains(&fu.name.as_str())
+                        || !matches!(
+                            f.lang,
+                            Lang::Go | Lang::Rust | Lang::C | Lang::Erlang | Lang::Elixir
+                        ))
                 {
                     continue;
                 }
@@ -2151,7 +3111,7 @@ fn propagate(files: &[SrcFile], t: &mut Taint) {
                 let last = (fu.start..=fu.end.min(f.code.len() - 1)).rev().find(|k| {
                     !f.code[*k]
                         .trim()
-                        .trim_matches(['{', '}', ';'])
+                        .trim_matches(['{', '}', ';', '.'])
                         .trim()
                         .is_empty()
                         && f.code[*k].trim() != "end"
@@ -2170,38 +3130,127 @@ fn propagate(files: &[SrcFile], t: &mut Taint) {
                         || chain.contains(".duration_since(") && !chain.contains("UNIX_EPOCH");
                     (!duration).then_some(k)
                 });
+                // Erlang's and Elixir's last expression is the value, as Rust's and Ruby's
+                let tail_lang = matches!(
+                    f.lang,
+                    Lang::Rust | Lang::Ruby | Lang::Erlang | Lang::Elixir
+                );
                 let mut found = None;
+                let mut adds = false;
                 for i in fu.start..=fu.end.min(f.code.len() - 1) {
                     let code = &f.code[i];
-                    let sp = spans(f, fi, i, t);
-                    // `return <reading>`, or a last expression that is one (Rust, Ruby)
+                    // `return <reading>`, or a last expression that is one (Rust, Ruby,
+                    // Erlang, Elixir)
                     let at = match code.find("return ") {
                         Some(p) => Some(p + 7),
                         None if (Some(i) == last || Some(i) == tail)
-                            && i > fu.start
-                            && matches!(f.lang, Lang::Rust | Lang::Ruby) =>
+                            && (i > fu.start || f.lang == Lang::Erlang)
+                            && tail_lang =>
                         {
-                            Some(code.len() - code.trim_start().len())
+                            // an Erlang one-line function: the body after its `->`
+                            match code.find("->") {
+                                Some(p) if f.lang == Lang::Erlang && i == fu.start => Some(
+                                    p + 2 + code[p + 2..].len() - code[p + 2..].trim_start().len(),
+                                ),
+                                _ => Some(code.len() - code.trim_start().len()),
+                            }
                         }
                         None => None,
                     };
-                    if let Some(s) = at.and_then(|p| starts_with_span(code, p, &sp)) {
-                        if s.from != Err(Key::Call(fu.name.clone())) {
+                    let Some(at) = at else { continue };
+                    let mut sp = spans(f, fi, i, t);
+                    // Milestone 382: a tail that closes a call opened on earlier lines
+                    // (`MillisSinceEpoch::new(` over `SystemTime::now()` and `)`) is read as
+                    // one statement, from its first line
+                    let joined;
+                    let mut code = code;
+                    let mut at = at;
+                    if f.lang == Lang::Rust
+                        && Some(i) == last
+                        && code.trim().starts_with(')')
+                        && !code.contains("return ")
+                    {
+                        let mut k = i;
+                        while k > fu.start + 1 {
+                            let prev = f.code[k - 1].trim_end();
+                            if prev.ends_with([';', '{', '}'])
+                                || prev.is_empty() && k - 1 == fu.start
+                            {
+                                break;
+                            }
+                            k -= 1;
+                        }
+                        if k < i {
+                            joined = f.code[k..=i]
+                                .iter()
+                                .map(|l| l.trim())
+                                .collect::<Vec<_>>()
+                                .join(" ");
+                            sp = spans_in(f, fi, k, &joined, t);
+                            code = &joined;
+                            at = 0;
+                        }
+                    }
+                    if let Some(s) = starts_with_span(code, at, &sp) {
+                        if matches!(&s.from, Err(Key::Call(n)) if plain(n) == fu.name) {
+                            continue;
+                        }
+                        // without a name about time, the reading must come from inside the
+                        // function: the clock itself, a cached clock, or a variable of this
+                        // function that holds one of them
+                        let inside = direct_reading(t, &s.from, fi, fk, &fu.params);
+                        // Milestone 382: Go's `time.Time` given to the function and converted
+                        // there (`FromTime(t)` returns `t.UnixMilli()`) makes no clock of it
+                        let weak_param = matches!(&s.from, Err(k @ Key::Local(..))
+                            if t.map.get(k).is_some_and(|o| o.weak));
+                        if (time_named || inside) && !weak_param {
+                            adds = s.adds;
                             found = Some(Origin {
                                 file: fi,
                                 line: i,
                                 from: s.from.clone(),
+                                weak: false,
                             });
                             break;
                         }
                     }
+                    // Milestone 382: a function named for time that returns a call adding a
+                    // duration to a reading, `return nanoseconds_from(time, ns);`
+                    if time_named {
+                        let rest = &code[at..];
+                        let callee: String = rest.chars().take_while(|c| is_ident(*c)).collect();
+                        let cw = name_words(&callee);
+                        if !callee.is_empty()
+                            && rest[callee.len()..].starts_with('(')
+                            && cw.iter().any(|w| ADDS_WORDS.contains(&w.as_str()))
+                        {
+                            let a0 = at + callee.len() + 1;
+                            if let Some(s) = starts_with_span(code, a0, &sp) {
+                                adds = true;
+                                found = Some(Origin {
+                                    file: fi,
+                                    line: i,
+                                    from: s.from.clone(),
+                                    weak: false,
+                                });
+                                break;
+                            }
+                        }
+                    }
                 }
                 if let Some(o) = found {
-                    t.map.insert(Key::Call(fu.name.clone()), o);
+                    // a function that returns now plus a duration: `milliseconds_from_now(ms)`
+                    let from_now = (words.iter().any(|w| w == "from" || w == "after")
+                        && words.iter().any(|w| w == "now"))
+                        || adds;
+                    if from_now && f.lang != Lang::Sql {
+                        t.deadline_calls.insert(group_name(f, &fu.name));
+                    }
+                    t.map.insert(Key::Call(group_name(f, &fu.name)), o);
                 }
             }
         }
-        if t.map.len() + t.mixed.len() == before {
+        if t.map.len() + t.mixed.len() + t.cells.len() == before {
             break;
         }
     }
@@ -2235,6 +3284,12 @@ pub struct ClockMatch {
     /// for a place of the shape `order` (Milestone 350): the name that keeps the reading as an
     /// order or a version of data, and where the code compares two values of it
     pub order: Option<Order>,
+    /// Milestone 382: for a place of the shape `rewind`, the name of the earlier reading that the
+    /// code stored and compares
+    pub stored: Option<String>,
+    /// Milestone 382: the bundled third-party library that holds the place (`h2o`, a Go module
+    /// of `vendor/`), None for the project's own code
+    pub bundled: Option<String>,
 }
 
 /// How a wall-clock reading orders data: the field or variable that keeps it, and the line
@@ -2271,7 +3326,9 @@ fn reading_unit(t: &Taint, span: &Span) -> &'static str {
             }
             Err(key) => {
                 let n = match &key {
-                    Key::Call(n) | Key::Field(n) | Key::Local(_, _, n) => n.to_ascii_lowercase(),
+                    Key::Call(n) | Key::Field(n) | Key::Local(_, _, n) => {
+                        plain(n).to_ascii_lowercase()
+                    }
                 };
                 if n.contains("mstime")
                     || n.ends_with("ms")
@@ -2324,8 +3381,9 @@ fn describe_origin(files: &[SrcFile], t: &Taint, from: &Result<&'static str, Key
                 let Some(o) = t.map.get(&key) else { break };
                 let at = format!("{}:{}", files[o.file].rel, o.line + 1);
                 out.push(match &key {
-                    Key::Call(n) => format!("{n}() returns a wall-clock reading ({at})"),
+                    Key::Call(n) => format!("{}() returns a wall-clock reading ({at})", plain(n)),
                     Key::Field(n) => {
+                        let n = plain(n).trim_start_matches('#');
                         format!("the field {n} is set from a wall-clock reading ({at})")
                     }
                     Key::Local(_, _, n) => format!("{n} is set from a wall-clock reading ({at})"),
@@ -2654,6 +3712,135 @@ fn code_line(
             continue;
         }
         return Some(("check", conf, s, names));
+    }
+    // Milestone 382: a reading that adds a duration itself, a deadline: Go's
+    // `time.Now().Add(d).UnixMilli()`, braft's `butil::milliseconds_from_now(timeout)`
+    if let Some(s) = sp.iter().find(|s| s.adds && !s.weak) {
+        let conf = if has_any(&low, EXPIRY_WORDS) {
+            "high"
+        } else {
+            "medium"
+        };
+        return Some(("deadline", conf, s.clone(), names));
+    }
+    // Milestone 382: a time compared with a wall-clock reading that the code stored earlier
+    rewind_line(f, i, t, &sp).map(|s| ("rewind", "high", s, names))
+}
+
+/// Words of a timer's code: a timer wheel, a timer thread, an event loop, a scheduler.
+const TIMER_WORDS: &[&str] = &[
+    "timer",
+    "timers",
+    "timerwheel",
+    "wheel",
+    "tick",
+    "ticker",
+    "ticks",
+    "evloop",
+    "loop",
+    "schedule",
+    "scheduler",
+    "sched",
+    "cron",
+    "clock",
+    "expire",
+    "expired",
+    "timeout",
+    "timeouts",
+    "wake",
+    "alarm",
+    "deadline",
+    "due",
+];
+
+/// Words of a stored reading that marks where accepted data starts: `startTimestamp`,
+/// `minTime`, a watermark.
+const HORIZON_WORDS: &[&str] = &[
+    "start",
+    "started",
+    "min",
+    "oldest",
+    "horizon",
+    "cutoff",
+    "watermark",
+    "since",
+    "boundary",
+    "begin",
+];
+
+/// Milestone 382: the stored side of a comparison of a time with a wall-clock reading that the
+/// code stored earlier, a field set from a reading in another line:
+///
+/// - a new reading against it, in a timer's code: h2o's `if (now < ctx->last_run)`, which
+///   finds no expired timer after a step back until the clock catches up;
+/// - a timestamp of data against a stored reading that marks where accepted data starts:
+///   Prometheus's `if s.T > w.startTimestamp`.
+fn rewind_line(f: &SrcFile, i: usize, t: &Taint, sp: &[Span]) -> Option<Span> {
+    let code = &f.code[i];
+    let stored = |s: &Span| match &s.from {
+        Err(Key::Field(n)) if !t.cells.contains(n) && !s.weak => {
+            Some(plain(n).trim_start_matches('#').to_string())
+        }
+        _ => None,
+    };
+    let fresh = |s: &Span| {
+        !s.weak
+            && match &s.from {
+                Ok(_) | Err(Key::Call(_)) | Err(Key::Local(..)) => true,
+                Err(Key::Field(c)) => t.cells.contains(c),
+            }
+    };
+    let any = |a: usize, b: usize| sp.iter().find(|s| s.start < b && a < s.end).cloned();
+    let context: HashSet<String> = name_words(&format!(
+        "{} {}",
+        f.scope[i]
+            .map(|s| f.funcs[s].name.clone())
+            .unwrap_or_default(),
+        f.rel
+    ))
+    .into_iter()
+    .collect();
+    let timer = context.iter().any(|w| TIMER_WORDS.contains(&w.as_str()));
+    for (a, e) in comparisons(code) {
+        if code[a..e].starts_with('.') {
+            continue;
+        }
+        let (ls, le, rs, re) = (operand_left(code, a), a, e, operand_right(code, e));
+        match (any(ls, le), any(rs, re)) {
+            (Some(x), Some(y)) if timer => {
+                if stored(&x).is_some() && fresh(&y) {
+                    return Some(x);
+                }
+                if stored(&y).is_some() && fresh(&x) {
+                    return Some(y);
+                }
+            }
+            (Some(x), None) | (None, Some(x)) => {
+                let Some(n) = stored(&x) else { continue };
+                let other = if x.start >= rs {
+                    &code[ls..le]
+                } else {
+                    &code[rs..re]
+                };
+                let last: String = other
+                    .trim()
+                    .chars()
+                    .rev()
+                    .take_while(|c| is_ident(*c))
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect();
+                let data_time = other.contains('.') && (last == "T" || order_name(&last));
+                let horizon = name_words(&n)
+                    .iter()
+                    .any(|w| HORIZON_WORDS.contains(&w.as_str()));
+                if data_time && horizon {
+                    return Some(x);
+                }
+            }
+            _ => {}
+        }
     }
     None
 }
@@ -3158,7 +4345,7 @@ fn dotted_fields(code: &str) -> Vec<String> {
 /// (`.map(|v| v.timestamp).max()`, `sort_by_key(|v| v.ts)`), and the fields of `self` in a
 /// function named for an order or a sort key (`fn cmp_key(&self) { (self.timestamp, self.uuid)
 /// }`).
-fn ordered_names(files: &[SrcFile]) -> HashMap<String, String> {
+fn ordered_names<'a>(files: impl Iterator<Item = &'a SrcFile>) -> HashMap<String, String> {
     let mut out: HashMap<String, String> = HashMap::new();
     let ordering = [
         "max(",
@@ -3367,29 +4554,204 @@ pub struct Audit {
     pub orders: Vec<ClockMatch>,
     /// The test code left out of those files (Milestone 324).
     pub tests: TestItems,
+    /// Milestone 382: the places of the bundled third-party code, both kinds
+    pub bundled: Vec<ClockMatch>,
+    /// the files of bundled code read, and their libraries
+    pub bundled_read: usize,
+    pub bundled_libs: Vec<String>,
+}
+
+/// Folders of bundled third-party code (Milestone 382): Go's and Rust's `vendor/`, C and C++'s
+/// `third_party/`, and `deps/` (Valkey's libraries, the dependencies that erlang.mk fetches).
+const BUNDLED_DIRS: &[&str] = &[
+    "vendor",
+    "third_party",
+    "third-party",
+    "thirdparty",
+    "3rdparty",
+    "deps",
+];
+
+/// Folders that the clock audit never reads: a build's outputs and caches.
+const CLOCK_SKIP_DIRS: &[&str] = &[
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".hydo",
+    "hydo-out",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".next",
+    "coverage",
+    ".cache",
+];
+
+/// One file the clock audit reads: its path from the root, the path that decides whether it is
+/// a test or an example (from the library's root for bundled code), and its library.
+struct ClockFile {
+    path: std::path::PathBuf,
+    rel: String,
+    judged: String,
+    bundled: Option<String>,
+}
+
+/// The folders under `deps/` that the root's `.gitignore` keeps although it ignores `deps/*`:
+/// RabbitMQ's own applications beside the ones that erlang.mk fetches.
+fn kept_deps(root: &Path) -> HashSet<String> {
+    let mut out = HashSet::new();
+    let Ok(text) = std::fs::read_to_string(root.join(".gitignore")) else {
+        return out;
+    };
+    let ignores = text
+        .lines()
+        .any(|l| matches!(l.trim(), "/deps/*" | "deps/*" | "/deps/" | "deps/"));
+    if !ignores {
+        return out;
+    }
+    for l in text.lines() {
+        if let Some(rest) = l
+            .trim()
+            .strip_prefix("!/deps/")
+            .or_else(|| l.trim().strip_prefix("!deps/"))
+        {
+            let name = rest.trim_end_matches('/');
+            if !name.is_empty() && !name.contains('/') {
+                out.insert(name.to_string());
+            }
+        }
+    }
+    out
+}
+
+fn sorted_entries(dir: &Path) -> Vec<std::fs::DirEntry> {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut ents: Vec<_> = rd.filter_map(|e| e.ok()).collect();
+    ents.sort_by_key(|e| e.file_name());
+    ents
+}
+
+/// Every file the clock audit reads under `root`, in path order: the project's own code, and
+/// (Milestone 382) the bundled code of `vendor/`, `third_party/`, `deps/` and of Bazel's
+/// `bazel-<name>/external/`, each library by its name.
+fn clock_files(root: &Path) -> Vec<ClockFile> {
+    let kept = kept_deps(root);
+    let mut out = Vec::new();
+    clock_walk(root, root, root, None, &kept, &mut out);
+    out
+}
+
+fn clock_walk(
+    root: &Path,
+    dir: &Path,
+    judge_root: &Path,
+    lib: Option<&str>,
+    kept: &HashSet<String>,
+    out: &mut Vec<ClockFile>,
+) {
+    for e in sorted_entries(dir) {
+        let p = e.path();
+        let name = e.file_name().to_string_lossy().into_owned();
+        let Ok(ft) = e.file_type() else { continue };
+        if ft.is_file() {
+            let rel = p
+                .strip_prefix(root)
+                .unwrap_or(&p)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let judged = p
+                .strip_prefix(judge_root)
+                .unwrap_or(&p)
+                .to_string_lossy()
+                .replace('\\', "/");
+            out.push(ClockFile {
+                path: p,
+                rel,
+                judged,
+                bundled: lib.map(String::from),
+            });
+            continue;
+        }
+        // Bazel's output folder at the root is a link: its `external/` holds the fetched
+        // repositories, each a library
+        if dir == root && lib.is_none() && name.starts_with("bazel-") {
+            let ext = p.join("external");
+            if ext.is_dir() {
+                for c in sorted_entries(&ext) {
+                    let cp = c.path();
+                    if cp.is_dir() {
+                        let cname = c.file_name().to_string_lossy().into_owned();
+                        clock_walk(root, &cp, &cp, Some(&cname), kept, out);
+                    }
+                }
+            }
+            continue;
+        }
+        if !ft.is_dir() || CLOCK_SKIP_DIRS.contains(&name.as_str()) {
+            continue;
+        }
+        if lib.is_none() && BUNDLED_DIRS.contains(&name.as_str()) {
+            for c in sorted_entries(&p) {
+                let cp = c.path();
+                if !c.file_type().is_ok_and(|t| t.is_dir()) {
+                    continue;
+                }
+                let cname = c.file_name().to_string_lossy().into_owned();
+                if name == "deps" && kept.contains(&cname) {
+                    // the project's own application under `deps/`
+                    clock_walk(root, &cp, &p, None, kept, out);
+                    continue;
+                }
+                // Go's `vendor/github.com/org/module`: the module's path names the library
+                if cname.contains('.') {
+                    for org in sorted_entries(&cp) {
+                        if !org.file_type().is_ok_and(|t| t.is_dir()) {
+                            continue;
+                        }
+                        for m in sorted_entries(&org.path()) {
+                            if !m.file_type().is_ok_and(|t| t.is_dir()) {
+                                continue;
+                            }
+                            let lname = format!(
+                                "{cname}/{}/{}",
+                                org.file_name().to_string_lossy(),
+                                m.file_name().to_string_lossy()
+                            );
+                            let mp = m.path();
+                            clock_walk(root, &mp, &mp, Some(&lname), kept, out);
+                        }
+                    }
+                    continue;
+                }
+                clock_walk(root, &cp, &cp, Some(&cname), kept, out);
+            }
+            continue;
+        }
+        clock_walk(root, &p, judge_root, lib, kept, out);
+    }
 }
 
 pub fn audit(root: &Path) -> Audit {
-    let mut paths = Vec::new();
-    crate::rules::walk(root, &mut paths);
-    let mut files: Vec<SrcFile> = Vec::new();
-    for p in paths {
-        let rel = p
-            .strip_prefix(root)
-            .unwrap_or(&p)
-            .to_string_lossy()
-            .replace('\\', "/");
-        let Some(lang) = lang_of(&rel) else { continue };
-        if skipped(&rel.to_ascii_lowercase()) {
+    let mut own: Vec<SrcFile> = Vec::new();
+    let mut bundled: Vec<SrcFile> = Vec::new();
+    for cf in clock_files(root) {
+        let Some(lang) = clock_lang_of(&cf.rel) else {
+            continue;
+        };
+        if skipped(&cf.judged.to_ascii_lowercase()) {
             continue;
         }
-        let Ok(meta) = std::fs::metadata(&p) else {
+        let Ok(meta) = std::fs::metadata(&cf.path) else {
             continue;
         };
         if meta.len() > 1_500_000 {
             continue;
         }
-        let Ok(bytes) = std::fs::read(&p) else {
+        let Ok(bytes) = std::fs::read(&cf.path) else {
             continue;
         };
         if bytes.iter().take(8192).any(|b| *b == 0) {
@@ -3399,19 +4761,56 @@ pub fn audit(root: &Path) -> Audit {
         if generated(&text) {
             continue;
         }
-        files.push(source_file(rel, lang, &text));
+        let mut sf = source_file(cf.rel, lang, &text);
+        if cf.bundled.is_some() {
+            sf.bundled = cf.bundled;
+            bundled.push(sf);
+        } else {
+            own.push(sf);
+        }
     }
     let mut tests = TestItems::default();
-    for f in &files {
+    for f in &own {
         tests.functions += f.tests.functions;
         tests.modules += f.tests.modules;
     }
-    let (matches, orders) = audit_files(&files);
+    let read = own.len();
+    let bundled_read = bundled.len();
+    let mut bundled_libs: Vec<String> = Vec::new();
+    for f in &bundled {
+        if let Some(l) = &f.bundled {
+            if !bundled_libs.contains(l) {
+                bundled_libs.push(l.clone());
+            }
+        }
+    }
+    // the project's own files first, so that their readings keep their origins
+    let mut files = own;
+    files.extend(bundled);
+    let (all, all_orders) = audit_files(&files);
+    let (mut matches, mut orders, mut bundled) = (Vec::new(), Vec::new(), Vec::new());
+    for m in all {
+        if m.bundled.is_some() {
+            bundled.push(m);
+        } else {
+            matches.push(m);
+        }
+    }
+    for m in all_orders {
+        if m.bundled.is_some() {
+            bundled.push(m);
+        } else {
+            orders.push(m);
+        }
+    }
     Audit {
-        read: files.len(),
+        read,
         matches,
         orders,
         tests,
+        bundled,
+        bundled_read,
+        bundled_libs,
     }
 }
 
@@ -3437,6 +4836,7 @@ fn source_file(rel: String, lang: Lang, text: &str) -> SrcFile {
         scope,
         funcs,
         tests,
+        bundled: None,
     }
 }
 
@@ -3451,7 +4851,7 @@ pub fn audit_texts(texts: &[(&str, &str)]) -> Vec<ClockMatch> {
 pub fn audit_both(texts: &[(&str, &str)]) -> (Vec<ClockMatch>, Vec<ClockMatch>) {
     let files: Vec<SrcFile> = texts
         .iter()
-        .filter_map(|(rel, text)| lang_of(rel).map(|l| source_file(rel.to_string(), l, text)))
+        .filter_map(|(rel, text)| clock_lang_of(rel).map(|l| source_file(rel.to_string(), l, text)))
         .collect();
     audit_files(&files)
 }
@@ -3460,16 +4860,20 @@ pub fn audit_both(texts: &[(&str, &str)]) -> (Vec<ClockMatch>, Vec<ClockMatch>) 
 fn audit_files(files: &[SrcFile]) -> (Vec<ClockMatch>, Vec<ClockMatch>) {
     let mut t = Taint::default();
     propagate(files, &mut t);
-    let ordered = ordered_names(files);
+    // the project's own files decide its main languages and the names it orders by; bundled
+    // code (Milestone 382) changes neither
+    let own: Vec<&SrcFile> = files.iter().filter(|f| f.bundled.is_none()).collect();
+    let ordered = ordered_names(files.iter().filter(|f| f.bundled.is_none()));
+    let ordered_all = ordered_names(files.iter());
     let mut out = Vec::new();
     let mut orders = Vec::new();
     // the main languages: at least a fifth of the source files that are not SQL
-    let code_files = files.iter().filter(|f| f.lang != Lang::Sql).count().max(1);
-    let main: HashSet<Lang> = files
+    let code_files = own.iter().filter(|f| f.lang != Lang::Sql).count().max(1);
+    let main: HashSet<Lang> = own
         .iter()
         .map(|f| f.lang)
         .filter(|l| {
-            *l != Lang::Sql && files.iter().filter(|f| f.lang == *l).count() * 5 >= code_files
+            *l != Lang::Sql && own.iter().filter(|f| f.lang == *l).count() * 5 >= code_files
         })
         .collect();
     for (fi, f) in files.iter().enumerate() {
@@ -3515,6 +4919,8 @@ fn audit_files(files: &[SrcFile]) -> (Vec<ClockMatch>, Vec<ClockMatch>) {
                         function,
                         main_lang: f.lang == Lang::Sql || main.contains(&f.lang),
                         order: None,
+                        stored: None,
+                        bundled: f.bundled.clone(),
                         origin: vec![format!(
                             "{} reads the database server's wall clock",
                             n.trim_end_matches('(')
@@ -3529,6 +4935,12 @@ fn audit_files(files: &[SrcFile]) -> (Vec<ClockMatch>, Vec<ClockMatch>) {
             }
             if let Some((shape, conf, span, names)) = code_line(files, fi, i, &t) {
                 let limit = find_limit(files, fi, i, &names, reading_unit(&t, &span), &t);
+                let stored = match (&span.from, shape) {
+                    (Err(Key::Field(n)), "rewind") => {
+                        Some(plain(n).trim_start_matches('#').to_string())
+                    }
+                    _ => None,
+                };
                 out.push(ClockMatch {
                     file: f.rel.clone(),
                     line: i + 1,
@@ -3541,8 +4953,20 @@ fn audit_files(files: &[SrcFile]) -> (Vec<ClockMatch>, Vec<ClockMatch>) {
                     main_lang: main.contains(&f.lang),
                     limit,
                     order: None,
+                    stored,
+                    bundled: f.bundled.clone(),
                 });
-            } else if let Some((span, order)) = order_line(files, fi, i, &t, &ordered) {
+            } else if let Some((span, order)) = order_line(
+                files,
+                fi,
+                i,
+                &t,
+                if f.bundled.is_some() {
+                    &ordered_all
+                } else {
+                    &ordered
+                },
+            ) {
                 orders.push(ClockMatch {
                     file: f.rel.clone(),
                     line: i + 1,
@@ -3559,6 +4983,8 @@ fn audit_files(files: &[SrcFile]) -> (Vec<ClockMatch>, Vec<ClockMatch>) {
                     main_lang: main.contains(&f.lang),
                     limit: None,
                     order: Some(order),
+                    stored: None,
+                    bundled: f.bundled.clone(),
                 });
             }
         }
@@ -4098,6 +5524,11 @@ pub fn what_it_does(m: &ClockMatch) -> String {
         "deadline" => format!(
             "It adds {lim} to a wall-clock reading and keeps the sum as a deadline or a lease."
         ),
+        // Milestone 382
+        "rewind" => format!(
+            "It compares a time with {}, a wall-clock reading that the code stored earlier. After a step back, new readings and new data are older than it, so the comparison goes the other way until the clock catches up.",
+            m.stored.as_deref().unwrap_or("an earlier reading")
+        ),
         _ => "It compares a wall-clock reading with a stored deadline or lease.".into(),
     }
 }
@@ -4241,10 +5672,28 @@ fn targets<'a>(matches: &'a [ClockMatch], svcs: &Services) -> Vec<&'a ClockMatch
     // the sort is stable: equal scores keep the path order. With a map of what the services
     // run, the places in that code come first (Milestone 324)
     out.sort_by_key(|m| {
+        if m.bundled.is_some() {
+            return (false, -rank_score(m, svcs) - timer_bonus(m));
+        }
         let none = svcs.map.run_by(&m.file).is_some_and(|w| w.is_empty());
         (none, -rank_score(m, svcs))
     });
     out
+}
+
+/// Milestone 382: among the places of bundled code, a library's timers come first: a timer
+/// wheel, a timer thread, an event loop or a scheduler, whose every timer a step moves.
+fn timer_bonus(m: &ClockMatch) -> i32 {
+    let words = name_words(&format!(
+        "{} {}",
+        m.function.clone().unwrap_or_default(),
+        m.file
+    ));
+    if words.iter().any(|w| TIMER_WORDS.contains(&w.as_str())) {
+        4
+    } else {
+        0
+    }
 }
 
 /// How many places the text report shows without `--all`.
@@ -4264,6 +5713,12 @@ pub fn match_json(m: &ClockMatch) -> serde_json::Value {
     });
     if let Some(o) = &m.order {
         v["order"] = serde_json::json!({"name": o.name, "compared_at": o.compared_at});
+    }
+    if let Some(n) = &m.stored {
+        v["stored"] = n.clone().into();
+    }
+    if let Some(l) = &m.bundled {
+        v["bundled"] = l.clone().into();
     }
     v
 }
@@ -4308,7 +5763,69 @@ pub fn json_report(dir: &str, a: &Audit, svcs: &Services) -> String {
     if !svcs.names.is_empty() {
         doc["services_run"] = svcs.map.words().into();
     }
+    // Milestone 382: the bundled code, and the fallback schedules
+    if a.bundled_read > 0 {
+        doc["bundled_files_read"] = a.bundled_read.into();
+        doc["bundled_libraries"] = a.bundled_libs.clone().into();
+        doc["clock_bundled"] = places_json(&a.bundled, svcs).into();
+    }
+    if targets(&a.matches, svcs).is_empty() && targets(&a.orders, svcs).is_empty() {
+        doc["fallback"] = fallback(svcs)
+            .iter()
+            .map(|p| serde_json::json!({"name": p.name, "schedule": p.schedule, "says": p.says}))
+            .collect();
+    }
     serde_json::to_string_pretty(&doc).unwrap_or_default()
+}
+
+/// Milestone 382: the schedules for a project in whose own code the audit found no place.
+/// They aim at no place: at the paths that most systems time with the wall clock, a restart's
+/// retries and leases, data kept for a time, sessions and timeouts, and an election.
+pub fn fallback(svcs: &Services) -> Vec<Proposal> {
+    let steps = svcs.steps.unwrap_or(20).max(4);
+    let (a, n) = if steps >= 8 { (2, 3) } else { (1, 1) };
+    let after = (a + n + 5).min(steps - 1).max(a + n);
+    let mid = steps / 2;
+    let mut out = Vec::new();
+    let names: Vec<String> = if svcs.names.is_empty() {
+        vec!["<service>".into()]
+    } else {
+        svcs.names.iter().take(8).cloned().collect()
+    };
+    for svc in &names {
+        out.push(Proposal {
+            name: "restart-back",
+            schedule: format!("disk=none | run K={svc}@{a}+{n} T={after}:-300"),
+            says: format!(
+                "{svc} is killed before step {a} and starts again before step {}; the clock goes back by 5 minutes before step {after}, while its retries, leases and timers run",
+                a + n
+            ),
+        });
+    }
+    for g in &svcs.primary_groups {
+        out.push(Proposal {
+            name: "back-failover",
+            schedule: format!("disk=none | run T={after}:-300 K={g}.primary@{}+{n}", after + 1),
+            says: format!(
+                "the clock goes back by 5 minutes before step {after}; then the primary of {g} is killed, so that an election timer on the wall clock waits the step"
+            ),
+        });
+    }
+    out.push(Proposal {
+        name: "back-long",
+        schedule: format!("disk=none | run T={mid}:-86400"),
+        says: format!(
+            "the clock goes back by 1 day before step {mid}: data kept for a time, expiries, and work scheduled at a time"
+        ),
+    });
+    out.push(Proposal {
+        name: "forward",
+        schedule: format!("disk=none | run T={a}:3600"),
+        says: format!(
+            "the clock goes forward by 1 hour before step {a}: leases, sessions and timeouts end at once"
+        ),
+    });
+    out
 }
 
 /// One place of the text report, with its schedules; `same` holds the places of its kind.
@@ -4328,7 +5845,13 @@ fn place_text(o: &mut String, k: usize, m: &ClockMatch, same: &[ClockMatch], svc
     );
     let _ = writeln!(o, "     {}", m.text);
     let _ = writeln!(o, "   {}", what_it_does(m));
-    match svcs.map.run_by(&m.file) {
+    let run_by = if let Some(l) = &m.bundled {
+        let _ = writeln!(o, "   Bundled code of {l}.");
+        None
+    } else {
+        svcs.map.run_by(&m.file)
+    };
+    match run_by {
         Some(v) if v.is_empty() => {
             let _ = writeln!(
                 o,
@@ -4515,6 +6038,56 @@ pub fn text_report(dir: &str, a: &Audit, svcs: &Services, max: usize, all: bool)
             all,
             "the name speaks of a version, but no comparison of two of its values was found",
         ));
+    }
+    // Milestone 382: the bundled third-party code, after the project's own places
+    let bts = targets(&a.bundled, svcs);
+    if a.bundled_read > 0 {
+        let libs = and_words(&a.bundled_libs.iter().take(6).cloned().collect::<Vec<_>>());
+        let more = a.bundled_libs.len().saturating_sub(6);
+        let _ = writeln!(
+            o,
+            "\nThe audit also read {} files of bundled code: {libs}{}.",
+            a.bundled_read,
+            if more > 0 {
+                format!(" and {more} more")
+            } else {
+                String::new()
+            }
+        );
+        if !bts.is_empty() {
+            let _ = writeln!(
+                o,
+                "{} {} of the bundled code {} the wall clock. The services run this code too; its places\ncome after the project's own, a library's timers first:",
+                bts.len(),
+                if bts.len() == 1 { "function" } else { "functions" },
+                if bts.len() == 1 { "times with" } else { "time with" }
+            );
+            shown.extend(kind_text(
+                &mut o,
+                &a.bundled,
+                svcs,
+                max,
+                all,
+                "the words suggest a deadline",
+            ));
+        }
+    }
+    if ts.is_empty() && ords.is_empty() {
+        let fb = fallback(svcs);
+        let _ = writeln!(
+            o,
+            "\nThe audit found no place in the project's own code. These schedules are a fallback, aimed at\nno place: at the paths that most systems time with the wall clock."
+        );
+        for p in &fb {
+            let _ = writeln!(o, "     {:<14} {}", p.name, p.schedule);
+            let _ = writeln!(o, "     {:<14} {}", "", p.says);
+        }
+        if fb.iter().any(|p| p.schedule.contains('<')) {
+            let _ = writeln!(
+                o,
+                "Replace <service> with a service of hydo.yaml, or pass --manifest FILE."
+            );
+        }
     }
     if shown.is_empty() {
         return o;
@@ -4817,6 +6390,8 @@ mod tests {
             origin: vec![],
             main_lang: true,
             order: None,
+            stored: None,
+            bundled: None,
             limit: Some(Limit {
                 name: "repl_diskless_sync_delay".into(),
                 seconds: Some(5.0),
@@ -4912,5 +6487,314 @@ mod tests {
         assert!(distinctive("TIMEOUT"));
         assert!(!distinctive("timeout"));
         assert!(!distinctive("idle"));
+    }
+
+    fn shapes(m: &[ClockMatch]) -> Vec<(&str, usize, &str, &str)> {
+        m.iter()
+            .map(|x| (x.file.as_str(), x.line, x.shape, x.confidence))
+            .collect()
+    }
+
+    /// Milestone 382: the timers of C libraries that Typesense bundles. h2o's event loop reads
+    /// `gettimeofday` into a field of its loop, and its timer wheel finds no expired timer
+    /// while the clock is before its last run; brpc's `butil` returns now plus a duration, and
+    /// its timer thread compares a task's run time with `gettimeofday_us()`.
+    #[test]
+    fn c_library_timers_on_the_wall_clock_are_places() {
+        let evloop = "void update_now(h2o_evloop_t *loop)\n{\n    gettimeofday(&loop->_tv_at, NULL);\n    loop->_now_nanosec = ((uint64_t)loop->_tv_at.tv_sec * 1000000 + loop->_tv_at.tv_usec) * 1000;\n    loop->_now_millisec = loop->_now_nanosec / 1000000;\n}\n\nint run_timers(h2o_evloop_t *loop)\n{\n    h2o_timerwheel_get_expired(loop->_timeouts, loop->_now_millisec, &expired);\n    return 0;\n}\n";
+        let wheel = "void h2o_timerwheel_get_expired(h2o_timerwheel_t *ctx, uint64_t now, h2o_linklist_t *expired)\n{\n    if (now < ctx->last_run) {\n        return;\n    }\n    ctx->last_run = now;\n}\n";
+        let time_h = "inline timespec nanoseconds_from_now(int64_t nanoseconds) {\n    timespec time;\n    clock_gettime(CLOCK_REALTIME, &time);\n    return nanoseconds_from(time, nanoseconds);\n}\n\ninline timespec milliseconds_from_now(int64_t milliseconds) {\n    return nanoseconds_from_now(milliseconds * 1000000L);\n}\n\ninline int64_t gettimeofday_us() {\n    timeval now;\n    gettimeofday(&now, NULL);\n    return now.tv_sec * 1000000L + now.tv_usec;\n}\n";
+        let task = "void RepeatedTimerTask::schedule(std::unique_lock<raft_mutex_t>& lck) {\n    _next_duetime =\n            butil::milliseconds_from_now(adjust_timeout_ms(_timeout_ms));\n}\n";
+        let thread = "void TimerThread::run() {\n    while (!tasks.empty()) {\n        Task* task1 = tasks[0];\n        if (butil::gettimeofday_us() < task1->run_time) {\n            break;\n        }\n    }\n}\n";
+        let m = audit_texts(&[
+            ("lib/common/socket/evloop.c.h", evloop),
+            ("lib/common/timerwheel.c", wheel),
+            ("src/butil/time.h", time_h),
+            ("src/braft/repeated_timer_task.cpp", task),
+            ("src/bthread/timer_thread.cpp", thread),
+        ]);
+        let s = shapes(&m);
+        for want in [
+            ("lib/common/timerwheel.c", 3, "rewind", "high"),
+            ("src/braft/repeated_timer_task.cpp", 3, "deadline", "high"),
+            ("src/bthread/timer_thread.cpp", 4, "check", "high"),
+        ] {
+            assert!(s.contains(&want), "{want:?} in {m:#?}");
+        }
+        let rewind = m.iter().find(|x| x.shape == "rewind").unwrap();
+        assert_eq!(rewind.stored.as_deref(), Some("last_run"));
+        assert!(
+            what_it_does(rewind).contains("last_run"),
+            "{}",
+            what_it_does(rewind)
+        );
+    }
+
+    /// Milestone 382: VictoriaMetrics's places. `fasttime` caches a ticker's tick in an atomic,
+    /// a flush deadline is `time.Now().Add(d).UnixMilli()`, the retention watcher keeps
+    /// partitions between now minus and plus a retention, and a connection's deadline is
+    /// compared with the cached clock in a function of its own.
+    #[test]
+    fn go_cached_clocks_ticks_and_deadline_chains_are_followed() {
+        let fasttime = "package fasttime\n\nfunc init() {\n\tgo func() {\n\t\tticker := time.NewTicker(time.Second)\n\t\tfor tm := range ticker.C {\n\t\t\tt := uint64(tm.Unix())\n\t\t\tcurrentTimestamp.Store(t)\n\t\t}\n\t}()\n}\n\nfunc UnixTimestamp() uint64 {\n\treturn currentTimestamp.Load()\n}\n";
+        let conn = "package handshake\n\nfunc (bc *BufferedConn) Read(p []byte) (int, error) {\n\tstartTime := fasttime.UnixTimestamp()\n\tif deadlineExceeded(bc.readDeadline, startTime) {\n\t\treturn 0, os.ErrDeadlineExceeded\n\t}\n\treturn bc.br.Read(p)\n}\n\nfunc deadlineExceeded(deadline time.Time, currentTimestamp uint64) bool {\n\tif deadline.IsZero() {\n\t\treturn false\n\t}\n\treturn currentTimestamp > uint64(deadline.Unix())\n}\n";
+        let rows = "package storage\n\nfunc (rrs *rawRowsShard) updateFlushDeadline() {\n\trrs.flushDeadlineMs.Store(time.Now().Add(pendingRowsFlushInterval).UnixMilli())\n}\n";
+        let table = "package storage\n\nfunc (tb *table) retentionWatcher() {\n\tfor {\n\t\tnowMsecs := int64(fasttime.UnixTimestamp() * 1000)\n\t\tminTimestamp := nowMsecs - tb.s.retentionMsecs\n\t\tmaxTimestamp := nowMsecs + tb.s.futureRetentionMsecs\n\t\tif ptw.pt.tr.MaxTimestamp < minTimestamp || ptw.pt.tr.MinTimestamp > maxTimestamp {\n\t\t\tdrop(ptw)\n\t\t}\n\t}\n}\n";
+        let m = audit_texts(&[
+            ("lib/fasttime/fasttime_normal.go", fasttime),
+            ("lib/handshake/buffered_conn.go", conn),
+            ("lib/storage/raw_row.go", rows),
+            ("lib/storage/table.go", table),
+        ]);
+        let s = shapes(&m);
+        for want in [
+            ("lib/handshake/buffered_conn.go", 15, "check", "high"),
+            ("lib/storage/raw_row.go", 4, "deadline", "high"),
+            ("lib/storage/table.go", 6, "deadline", "high"),
+            ("lib/storage/table.go", 7, "deadline", "high"),
+        ] {
+            assert!(s.contains(&want), "{want:?} in {m:#?}");
+        }
+        let conn = m.iter().find(|x| x.line == 15).unwrap();
+        assert!(
+            conn.origin.iter().any(|o| o.contains("UnixTimestamp()")),
+            "{:?}",
+            conn.origin
+        );
+        // a plain `time.Now()` stays Go's monotonic reading
+        let plain = "package x\n\nfunc f() {\n\tdeadline := time.Now().Add(timeout)\n\tif time.Now().After(deadline) {\n\t\treturn\n\t}\n}\n";
+        assert!(one("x/x.go", plain).is_empty());
+    }
+
+    /// Milestone 382: Restate's wall clock is a cached atomic behind functions whose names do not
+    /// all speak of time (`recent_us`), and GreptimeDB's is `chrono::Utc::now()` behind
+    /// `current_time_millis()`; a Rust path is read from its first segment, and a method's
+    /// receiver is no argument.
+    #[test]
+    fn rust_wrappers_of_the_clock_are_followed_by_data_flow() {
+        let wall = "static RECENT_UNIX_TIMESTAMP_US: AtomicU64 = AtomicU64::new(0);\npub struct WallClock;\nimpl WallClock {\n    pub(crate) fn update_recent() {\n        RECENT_UNIX_TIMESTAMP_US.store(Self::now_us(), Ordering::Relaxed);\n    }\n    pub fn now_ms() -> MillisSinceEpoch {\n        MillisSinceEpoch::new(\n            SystemTime::now()\n                .duration_since(SystemTime::UNIX_EPOCH)\n                .unwrap()\n                .as_millis() as u64,\n        )\n    }\n    pub fn now_us() -> u64 {\n        SystemTime::now()\n            .duration_since(SystemTime::UNIX_EPOCH)\n            .unwrap()\n            .as_micros() as u64\n    }\n    pub fn recent_us() -> u64 {\n        RECENT_UNIX_TIMESTAMP_US.load(Ordering::Relaxed)\n    }\n}\n";
+        let clock = "impl SchedulerClock {\n    pub fn now_millis(&self) -> MillisSinceEpoch {\n        let recent_us = WallClock::recent_us();\n        if recent_us > 0 {\n            MillisSinceEpoch::new(recent_us / 1_000)\n        } else {\n            WallClock::now_ms()\n        }\n    }\n}\n";
+        let queue = "impl VQueueState {\n    fn eligibility(&self) -> Eligibility {\n        if inbox_head_key.run_at() > SchedulerClock.now_millis() {\n            return Eligibility::Scheduled;\n        }\n        Eligibility::Inbox\n    }\n}\n";
+        let util =
+            "pub fn current_time_millis() -> i64 {\n    chrono::Utc::now().timestamp_millis()\n}\n";
+        let detector = "impl PhiAccrualFailureDetector {\n    pub(crate) fn is_available(&self, ts_millis: i64) -> bool {\n        self.phi(ts_millis) < self.threshold as _\n    }\n    pub(crate) fn phi(&self, ts_millis: i64) -> f64 {\n        if let Some(last_heartbeat_millis) = self.last_heartbeat_millis {\n            let time_diff = ts_millis - last_heartbeat_millis;\n            time_diff as f64\n        } else {\n            0.0\n        }\n    }\n}\nfn supervise(e: &Entry) -> bool {\n    e.failure_detector().is_available(current_time_millis())\n}\n";
+        let m = audit_texts(&[
+            ("crates/clock/src/wall_clock.rs", wall),
+            ("crates/vqueues/src/scheduler/clock.rs", clock),
+            ("crates/vqueues/src/scheduler/vqueue_state.rs", queue),
+            ("src/common/time/src/util.rs", util),
+            ("src/meta-srv/src/failure_detector.rs", detector),
+        ]);
+        let s = shapes(&m);
+        assert!(
+            s.contains(&(
+                "crates/vqueues/src/scheduler/vqueue_state.rs",
+                3,
+                "check",
+                "high"
+            )),
+            "{m:#?}"
+        );
+        assert!(
+            s.iter()
+                .any(|x| x.0 == "src/meta-srv/src/failure_detector.rs" && x.1 == 7),
+            "{m:#?}"
+        );
+        // `Instant::now()` stays monotonic, also behind a path, when a `now` reads the wall clock
+        let mono = "pub fn now() -> u64 {\n    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()\n}\nfn wait() {\n    let deadline = tokio::time::Instant::now() + timeout;\n}\n";
+        assert!(
+            one("src/m.rs", mono).is_empty(),
+            "{:#?}",
+            one("src/m.rs", mono)
+        );
+    }
+
+    /// Milestone 382: Erlang. Ra stamps each command with `erlang:system_time(millisecond)`
+    /// under `ts`, renames it `system_time` in the command's meta, and RabbitMQ's stream
+    /// coordinator parks a retry at that time plus a backoff and arms a timer for the
+    /// difference.
+    #[test]
+    fn erlang_follows_a_timestamp_through_ras_command_meta() {
+        let proc_ = "make_command(Type, {call, From}, Data, Mode) ->\n    Ts = erlang:system_time(millisecond),\n    {Type, #{from => From, ts => Ts}, Data, Mode};\nmake_command(Type, _, Data, Mode) ->\n    Ts = erlang:system_time(millisecond),\n    {Type, #{ts => Ts}, Data, Mode}.\n";
+        let server = "augment_command_meta(Idx, Term, MacVer, CmdMeta) ->\n    maps:fold(fun (ts, V, Acc) ->\n                      %% rename from compact key name\n                      Acc#{system_time => V};\n                  (K, V, Acc) ->\n                      Acc#{K => V}\n              end, #{index => Idx, term => Term}, CmdMeta).\n";
+        let coord = "retry_reconcile_delay(Parked, Now) ->\n    {{RetryAt, _StreamId, _Node}, _} = gb_trees:smallest(Parked),\n    max(0, RetryAt - Now).\n\npark_action(short, Node, StreamId, M, Members, Meta, Stream1, Parked) ->\n    RetryAt = maps:get(system_time, Meta) + backoff_ms(short)\n              + retry_jitter(StreamId, Node),\n    Parked1 = gb_trees:enter({RetryAt, StreamId, Node}, [], Parked),\n    Effs = [{timer, retry_reconcile,\n             retry_reconcile_delay(Parked1, maps:get(system_time, Meta))}],\n    {Stream1, Parked1, Effs}.\n";
+        let m = audit_texts(&[
+            ("deps/ra/src/ra_server_proc.erl", proc_),
+            ("deps/ra/src/ra_server.erl", server),
+            ("deps/rabbit/src/rabbit_stream_coordinator.erl", coord),
+        ]);
+        let s = shapes(&m);
+        for want in [
+            (
+                "deps/rabbit/src/rabbit_stream_coordinator.erl",
+                3,
+                "elapsed",
+                "high",
+            ),
+            (
+                "deps/rabbit/src/rabbit_stream_coordinator.erl",
+                6,
+                "deadline",
+                "high",
+            ),
+        ] {
+            assert!(s.contains(&want), "{want:?} in {m:#?}");
+        }
+        let park = m.iter().find(|x| x.line == 6).unwrap();
+        assert_eq!(park.lang, "erlang");
+        assert_eq!(park.function.as_deref(), Some("park_action"));
+        assert!(
+            park.origin.iter().any(|o| o.contains("system_time")),
+            "{:?}",
+            park.origin
+        );
+        // a monotonic time and a comment are no readings
+        let mono = "f() ->\n    %% erlang:system_time(millisecond)\n    T0 = erlang:monotonic_time(millisecond),\n    Deadline = T0 + timeout_ms(),\n    Deadline.\n";
+        assert!(one("src/m.erl", mono).is_empty());
+    }
+
+    /// Milestone 382: Prometheus's WAL watcher keeps the start time it was given, `time.Now()`,
+    /// as a timestamp, and sends only the samples after it: the comparison of a sample's time
+    /// with a stored reading that marks where accepted data starts.
+    #[test]
+    fn go_a_stored_start_time_compared_with_datas_timestamps() {
+        let watcher = "package wlog\n\nfunc (w *Watcher) loop() {\n\tw.SetStartTime(time.Now())\n}\n\nfunc (w *Watcher) SetStartTime(t time.Time) {\n\tw.startTime = t\n\tw.startTimestamp = timestamp.FromTime(t)\n}\n\nfunc (w *Watcher) readSegment() {\n\tfor _, s := range samples {\n\t\tif s.T > w.startTimestamp {\n\t\t\tsend(s)\n\t\t}\n\t}\n}\n";
+        let m = one("tsdb/wlog/watcher.go", watcher);
+        assert_eq!(
+            shapes(&m),
+            vec![("tsdb/wlog/watcher.go", 14, "rewind", "high")],
+            "{m:#?}"
+        );
+        assert_eq!(m[0].stored.as_deref(), Some("startTimestamp"));
+    }
+
+    fn tree(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("hydo-clockscan-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        for (rel, text) in files {
+            let p = d.join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        }
+        d
+    }
+
+    /// Milestone 382: bundled code is read apart from the project's own: Go's `vendor/`, C's
+    /// `third_party/`, Bazel's `bazel-<name>/external/`, and `deps/`, where a folder that the
+    /// root's `.gitignore` keeps is the project's own (RabbitMQ's applications). Its places
+    /// have a section of their own after the project's, and its names make no reading of the
+    /// project's code.
+    #[test]
+    fn bundled_code_is_read_after_the_projects_own() {
+        let lease = "package store\n\nfunc (s *Store) renew() {\n\tif Now() > s.leaseUntil {\n\t\treturn\n\t}\n}\n";
+        let lib = "package wheel\n\nfunc Now() int64 {\n\treturn time.Now().UnixMilli()\n}\n\nfunc (w *Wheel) expire() {\n\tif Now() > w.timerDeadline {\n\t\tw.fire()\n\t}\n}\n";
+        let c_lib = "void h2o_timer_link(h2o_loop_t *loop, uint64_t delay_ticks, h2o_timer_t *timer)\n{\n    struct timeval tv;\n    gettimeofday(&tv, NULL);\n    uint64_t now = tv.tv_sec * 1000;\n    timer->expire_at = now + delay_ticks;\n}\n";
+        let own_erl = "now_ms() ->\n    erlang:system_time(millisecond).\nrenew(D) ->\n    Until = now_ms() + lease_timeout_ms(),\n    D#lease{until = Until}.\n";
+        let d = tree(
+            "bundled",
+            &[
+                ("src/store.go", lease),
+                ("vendor/github.com/acme/wheel/wheel.go", lib),
+                ("third_party/h2o/lib/timer.c", c_lib),
+                ("bazel-proj/external/h2o2/lib/timer.c", c_lib),
+                (".gitignore", "/deps/*\n!/deps/app/\n"),
+                ("deps/app/src/lease.erl", own_erl),
+                ("deps/app/src/coord.erl", "park(Meta) ->\n    RetryAt = maps:get(system_time, Meta) + backoff_ms(short),\n    RetryAt.\n"),
+                ("deps/ra/src/lease.erl", own_erl),
+                ("deps/ra/src/ra_proc.erl", "make_command(Type, Data) ->\n    Ts = erlang:system_time(millisecond),\n    {Type, #{system_time => Ts}, Data}.\n"),
+                ("deps/ra/test/lease_SUITE.erl", own_erl),
+            ],
+        );
+        let a = audit(&d);
+        let _ = std::fs::remove_dir_all(&d);
+        // the vendored `Now()` is no reading of the project's code
+        assert!(
+            a.matches.iter().all(|m| m.file != "src/store.go"),
+            "{:#?}",
+            a.matches
+        );
+        assert!(a.matches.iter().all(|m| m.bundled.is_none()));
+        assert!(
+            a.matches.iter().any(|m| m.file == "deps/app/src/lease.erl"),
+            "{:#?}",
+            a.matches
+        );
+        // a key of Ra's command meta reaches the project's own Erlang
+        assert!(
+            a.matches
+                .iter()
+                .any(|m| m.file == "deps/app/src/coord.erl" && m.line == 2),
+            "{:#?}",
+            a.matches
+        );
+        assert_eq!(a.read, 3, "src/store.go and deps/app/src/");
+        assert_eq!(
+            a.bundled_libs,
+            vec!["h2o2", "ra", "h2o", "github.com/acme/wheel"],
+            "{:?}",
+            a.bundled_libs
+        );
+        assert_eq!(a.bundled_read, 5, "the test suite of ra is left out");
+        let libs: HashSet<&str> = a
+            .bundled
+            .iter()
+            .filter_map(|m| m.bundled.as_deref())
+            .collect();
+        for l in ["h2o", "h2o2", "ra", "github.com/acme/wheel"] {
+            assert!(libs.contains(l), "{l} in {:#?}", a.bundled);
+        }
+        let text = text_report("proj", &a, &Services::default(), 5, false);
+        assert!(
+            text.contains("\nThe audit also read 5 files of bundled code: h2o2, ra, h2o and github.com/acme/wheel.\n"),
+            "{text}"
+        );
+        assert!(
+            text.contains("   Bundled code of github.com/acme/wheel.\n"),
+            "{text}"
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&json_report("proj", &a, &Services::default())).unwrap();
+        assert_eq!(json["bundled_files_read"], 5);
+        assert!(json["clock_bundled"]
+            .as_array()
+            .is_some_and(|v| !v.is_empty()));
+        assert!(json["clock_bundled"][0]["bundled"].is_string());
+    }
+
+    /// Milestone 382: without a place in the project's own code the report says so and gives
+    /// fallback schedules for each service, aimed at no place.
+    #[test]
+    fn no_place_gives_fallback_schedules() {
+        let svcs = services_of(
+            "format: 1\nname: q\nservices:\n  - name: broker\n    cmd: \"/bin/broker\"\n  - name: db\n    image_ref: postgres:16\ngroups:\n  - name: nodes\n    members: [broker]\n    primary: \"cat /tmp/p\"\nworkload:\n  steps: 20\n  run: \"true\"\n",
+            "hydo.yaml",
+        );
+        let a = Audit::default();
+        let text = text_report("q", &a, &svcs, 5, false);
+        assert!(
+            text.contains("The audit found no place in the project's own code. These schedules are a fallback"),
+            "{text}"
+        );
+        for s in [
+            "disk=none | run K=broker@2+3 T=10:-300",
+            "disk=none | run K=db@2+3 T=10:-300",
+            "disk=none | run T=10:-300 K=nodes.primary@11+3",
+            "disk=none | run T=10:-86400",
+            "disk=none | run T=2:3600",
+        ] {
+            assert!(text.contains(s), "{s} in {text}");
+        }
+        let json: serde_json::Value = serde_json::from_str(&json_report("q", &a, &svcs)).unwrap();
+        assert_eq!(json["fallback"].as_array().map(|v| v.len()), Some(5));
+        // a project with a place gets none
+        let m = one(
+            "src/a.go",
+            "package a\n\nfunc f() {\n\tif time.Now().UTC().Sub(last) > leaseTimeout {\n\t}\n}\n",
+        );
+        let b = Audit {
+            matches: m,
+            ..Default::default()
+        };
+        assert!(!text_report("q", &b, &svcs, 5, false).contains("fallback"));
     }
 }
