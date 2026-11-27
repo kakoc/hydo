@@ -385,34 +385,41 @@ In the order of the time each cost:
    although the read-back had written 1,813 status items. `hydo guide hazards` says that `hydo
    run` warns when a run writes more, and no run warned; `engine.log` said nothing either. An
    inspect session showed the read-back's output. The client now writes short ids and one record
-   per import (open item 181 has the same gap of the Pulsar example).
+   per import (open item 181 has the same gap of the Pulsar example). Since Milestone 368 a cut
+   console warns in `hydo run`, `result.json` and `hydo report`, and a messages claim that the
+   missing records break is an ERROR that names the cut.
 2. **One history record per process at a time.** An import recorded one `send` per document
    from one process. The check counted 337 of 352 sends as unknown, because a process has one
    operation in flight. `hydo guide messages` says so for consumers; it does not say that a batch
-   is one `send` with several items. The client now writes one record per import.
+   is one `send` with several items. The client now writes one record per import. Since Milestone
+   368 a process token `<process>#<op>` gives each operation of one process its own completion.
 3. **A group's primary during an election.** hydo asks the `primary:` command 10 times, a second
    apart (`PROBE_TRIES`), and ends the run in an ERROR when no member is named. A Raft election
-   after a kill of the leader took longer. The example's command waits 15 s itself.
+   after a kill of the leader took longer. The example's command waits 15 s itself. Since
+   Milestone 368 hydo asks 30 times, and the ERROR names the likely cause.
 4. **The shrinker kept a damage that the failure did not need.** Seed 3's minimal schedule was
    `T=35:-21600 W=... G=ts3@8+3:zero,len=512,seed=951ce4e8`, and its class `corrupted-files`. The
    shrinker tried to leave out `T=`, which passed, and never tried to leave out `G=`. Without it
-   the step alone fails (the regression of finding 2).
+   the step alone fails (the regression of finding 2). Since Milestone 368 the shrinker tries to
+   leave out each storage fault after its rounds.
 5. **The scan of write routes found none of Typesense's 57.** `hydo rules scan --kind writes`
    read 24 files and listed 0 routes. Typesense registers its routes in C++ with
    `server->post("/collections/:collection/documents", post_add_document)` and its kin
    `get`, `put`, `patch` and `del` (`src/main/typesense_server.cpp`). The routes were listed by
-   hand.
+   hand. Since Milestone 368 the scan reads them: 54 routes that write, and 3 `POST` routes whose
+   names say that they read.
 6. **The clock audit named none of the findings' places.** It named 14 functions of Typesense,
    search cutoffs and rate limits. The two clock effects are in h2o and braft, built from their
    sources by Bazel, outside the project's folder.
 7. **Two images in one folder.** A copy of `hydo.yaml` built with `--set batch=1000000000` wrote
    a second image beside the first, and `hydo run` and `hydo repro --regressions` then stopped:
    `no image given, and there are 2 images ...; pass one with --image`. A build parameter has no
-   image name of its own.
+   image name of its own. Since Milestone 368 the commands take the image built from `hydo.yaml`,
+   else the newest, and say which.
 8. **A Compose file's fixed address reads as ignored.** `hydo compose` printed `service ts1:
    ipv4_address 10.89.0.11 ignored; the service is at 10.89.0.11` for each node. The services got
    the same addresses, from hydo's own order of `addr:`, so the warning names a difference that
-   is not there.
+   is not there. Since Milestone 368 a kept address gives no warning.
 
 ## Time
 
