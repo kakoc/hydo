@@ -1363,10 +1363,13 @@ an offset that the server keeps. Three messages checks judge them (`lease`, `dea
 per key, `duplicates`, `order: log`, `after_ack`). The quorum queues kept every confirmed message
 under kills, pauses past the net tick time, partitions, one node's power loss or damaged files,
 power cuts, and clock steps. Nothing was posted:
-- New: one node's power loss loses a confirmed message of the stream for good. A stream confirms
-  once a majority wrote a chunk and never syncs. With a third node paused, that majority was the
-  leader and one replica. The leader lost its power, and the stream went on without the message,
-  although the replica had written it (`K=rabbit2@1+3 ... P=rabbit1@16+11 ... L=rabbit3@21+3`).
+- New: a power loss of one node while a second node is away loses a confirmed message of the
+  stream for good (`K=rabbit2@1+3 ... P=rabbit1@16+11 ... L=rabbit3@21+3`). A stream confirms
+  once a majority wrote a chunk and never syncs, as documented. With `rabbit1` paused for about
+  100 s, past the net tick time, the writer `rabbit3` and the replica `rabbit2` confirmed it, and
+  `rabbit3` lost its power. The coordinator then elected `rabbit1` from the stopped quorum
+  `rabbit1` and `rabbit3`, while `rabbit2` waited on a retry timer. Then `rabbit2` deleted its
+  copy. hydo 0.7.0 replayed it with one fingerprint twice, and traced it from the nodes' logs.
 - Documented: a power cut of the whole guest loses confirmed messages of the stream, and a new
   message can take a lost one's offset (Data Safety when using Streams).
 - New, a clock effect: a backward clock step, a node's restart, and a kill of the stream's leader
@@ -4282,9 +4285,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       hydo-clock.
 191. What the example `rabbitmq` left (M370, tentative number):
     - The two candidates are not reported upstream. Finding 1's window is narrow: on the final
-      image each run without one of its five faults passes, and which members formed the
-      election's quorum was not traced. Finding 3's cause (a retry parked on a clock that a node
-      restarted after the step keeps a day behind) was not shown in a run.
+      image each run without one of its five faults passes, and why it needs the kill of
+      `rabbit2` before step 1 was not traced. Its quorum and its deletion are traced (the
+      replay with hydo 0.7.0 in RESULTS.md). Finding 3's cause (a retry parked on a clock that a
+      node restarted after the step keeps a day behind) was not shown in a run.
     - After a kill of a group, hydo restarts its members one at a time and waits for each one's
       readiness (as open item 147). A RabbitMQ node that restarts with data opens AMQP only after
       its peers answer, so the example's readiness is the Erlang distribution port.
@@ -5531,8 +5535,9 @@ build machine, before 2026-10-13.
   never joins again after its restart. A list-append check in a file is dropped when hydo.yaml
   has `checks:`. Nothing recorded moved
 - M370 (tentative number): the onboarding of RabbitMQ 4.4.1 on hvx, three nodes with quorum
-  queues and a stream. Two new candidates, not posted. One node's power loss loses a confirmed
-  message of the stream for good, after a kill and a pause of the two other nodes. After a
+  queues and a stream. Two new candidates, not posted. A power loss of one node while a second
+  node is paused loses a confirmed message of the stream for good. The election leaves out the
+  third node, which holds it, and that node deletes its copy. After a
   backward clock step, a kill of the stream's leader leaves the stream without a leader. A power
   cut of the whole guest loses unsynced stream data, as documented. Nothing recorded moved
 - M371 (tentative number): the onboarding of Microsoft Garnet 2.2.14 in cluster mode, three

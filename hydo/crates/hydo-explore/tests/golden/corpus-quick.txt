@@ -458,7 +458,7 @@ input	hydo/onboard/examples/rabbitmq/hydo/hydo-compose.lock.json	5bf61021fa901ad
 input	hydo/onboard/examples/rabbitmq/hydo/regressions/README.md	12626dbf5d05271968e602d2f27283b99d4e2df749d5cc83d8e4678a5ddf7664
 input	hydo/onboard/examples/rabbitmq/hydo/regressions/stream-keeps-no-leader-after-backward-clock-step.schedule	c921ec20a8168e6d57aedf5fe50212cf653e3c0c6a923625161ddbfcca53b06e
 input	hydo/onboard/examples/rabbitmq/hydo/regressions/stream-loses-confirmed-messages-at-power-cut.schedule	054f401eedcae6b83c03d84c65d3e13ab3333506db020988cd74d5a8be0914cc
-input	hydo/onboard/examples/rabbitmq/hydo/regressions/stream-message-lost-after-one-node-power-loss.schedule	0ca48fa38072da35017fe3a8b370653e5db7f904273f500e20de454300934370
+input	hydo/onboard/examples/rabbitmq/hydo/regressions/stream-message-lost-after-one-node-power-loss.schedule	e450feb7bff31f735c9679780d793df0e93d873d8d889431f44383327d954869
 input	hydo/onboard/examples/rabbitmq/hydo/workload/eventually_probe	8477708ff3093287f1c6eff8a48e622ff2e6e62360836c691a7f3e596b9de5c0
 input	hydo/onboard/examples/rabbitmq/hydo/workload/parallel_driver_consume	5f50c07d18e0b3c1e9c8387653cebc6d18fb821edca62b6f953fd6ef88f4e44d
 input	hydo/onboard/examples/rabbitmq/hydo/workload/parallel_driver_kpub	b5670ee338bd01653ca804faf3423444c8c705a53a194192e9422f5b82fb38c8

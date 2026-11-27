@@ -1,12 +1,15 @@
 # Finding 1 (RESULTS.md), a new candidate: the stream s loses s29, which its publisher confirm
-# acknowledged, for good after one node's power loss. rabbit2 is killed before step 1 and back
-# before step 4; rabbit1 is paused from step 16 to step 27; rabbit3 loses its power before step
-# 21 and starts again before step 24. A stream confirms a chunk once a majority of its members
-# wrote it, and never syncs (osiris). With rabbit1 paused, that majority was rabbit2 and rabbit3,
-# and rabbit3's copy was in its page cache. The stream went on without s29, although rabbit2 had
-# written it. The window is narrow: on this image the run passes without any one of its faults;
-# N= and G= (a bit of a classic queue's transient store, which the workload does not use) move
-# the moment of the confirm. On e2's image K=, P= and L= alone were enough. Found blind by `hydo
-# explore` (e2's seed 2).
+# acknowledged, for good after rabbit3's power loss while rabbit1 is away. rabbit2 is killed
+# before step 1 and back before step 4; rabbit1 is paused from step 16 to step 27 (about 100 s,
+# past the net tick time); rabbit3 loses its power before step 21 and starts again before step
+# 24. A stream confirms a chunk once a majority of its members wrote it, and never syncs
+# (osiris, as documented). Epoch 2's writer rabbit3 and its replica rabbit2 confirmed s29, and
+# rabbit3's copy was in its page cache. After the power loss the stream coordinator elected
+# rabbit1 from the quorum rabbit1 and rabbit3, while rabbit2's replica waited on a retry timer.
+# rabbit2 then deleted its whole log, s29 with it, and copied the log again from rabbit1. The
+# window is narrow: on this image the run passes without any one of its faults; N= and G= (a bit
+# of a classic queue's transient store, which the workload does not use) move the moment of the
+# confirm. On e2's image K=, P= and L= alone were enough. Found blind by `hydo explore` (e2's
+# seed 2).
 # expect: violation      (change to ok when the bug is fixed)
 disk=none dseed=0 | run K=rabbit2@1+3 N=nodes.bridge.6@21-23:loss,100% P=rabbit1@16+11 W=5764a73c,p3,q2,r1000 G=rabbit3@20:flip,n=4,seed=4979bdc4 L=rabbit3@21+3
