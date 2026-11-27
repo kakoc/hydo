@@ -1874,6 +1874,15 @@ impl Core {
                 HostCmd::Time(_) => refuse(self, "time not on hvx".into()),
                 // Milestone 313: the block faults are the Mac and KVM engines'
                 HostCmd::Disk(_) => refuse(self, "disk not on hvx".into()),
+                // Milestone 383 (docs/design/inspect-stacks.md): the stop's state for `hydo
+                // inspect stacks`; it only reads the VM
+                HostCmd::Dump(path) => match crate::dump::write(b.vm(), self.o.vcpus, &path) {
+                    Ok(bytes) => {
+                        let at = self.c.at;
+                        self.emit(EngineMsg::Answer(Answer::Dump { at, bytes }));
+                    }
+                    Err(e) => refuse(self, format!("dump {e}")),
+                },
                 HostCmd::Reboot => {
                     let sc = &self.c.sc;
                     let no = if self.c.phase != "workload" && self.c.phase != "recovery" {

@@ -5,7 +5,7 @@
 //! branch.
 
 use hydo_agent_proto::msg::{Command, ErrCode, Event, Read, Reply, Run};
-use hydo_control::{Out, Seen};
+use hydo_control::{EngineAction, Out, Seen};
 
 /// The agent's largest read.
 pub const READ_MAX: u64 = 3000;
@@ -71,6 +71,12 @@ pub struct Work {
     /// Why the work could not be done (an agent refusal).
     pub failed: Option<String>,
     pub stops: u64,
+    /// Milestone 383: write the stop's state to this file first (`DUMP`, which only reads the
+    /// guest), for `hydo inspect stacks`.
+    dump: Option<String>,
+    /// The dump was asked for at this stop: the engine writes it when the stop's actions run,
+    /// so the work is done at the next stop.
+    dump_wait: bool,
 }
 
 impl Work {
@@ -87,7 +93,16 @@ impl Work {
             got: Vec::new(),
             failed: None,
             stops: 0,
+            dump: None,
+            dump_wait: false,
         }
+    }
+
+    /// The stop's state written to `path` by the engine, and nothing in the guest.
+    pub fn dump(path: String) -> Work {
+        let mut w = Work::new(None, Vec::new());
+        w.dump = Some(path);
+        w
     }
 
     /// Read files only.
@@ -133,19 +148,29 @@ impl Work {
     }
 
     pub fn finished(&self) -> bool {
+        !self.dump_wait && self.done()
+    }
+
+    /// The guest's part is done (a dump asked for at this stop may still be written).
+    fn done(&self) -> bool {
         self.failed.is_some() || (self.stage > self.files.len() && self.pending.is_none())
     }
 
     /// Take what this stop saw, then send the next command when the last one is answered.
     pub fn step(&mut self, seen: &[Seen], out: &mut Out) {
         self.stops += 1;
+        self.dump_wait = false;
+        if let Some(p) = self.dump.take() {
+            out.engine(EngineAction::Dump(p));
+            self.dump_wait = true;
+        }
         for s in seen {
             self.see(s);
             if self.failed.is_some() {
                 return;
             }
         }
-        while self.pending.is_none() && self.run_id.is_none() && !self.finished() {
+        while self.pending.is_none() && self.run_id.is_none() && !self.done() {
             self.next(out);
         }
     }
@@ -331,6 +356,26 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    /// Milestone 383: a dump is asked for at the first stop and the work ends at the next one,
+    /// after the engine wrote it; nothing is typed into the guest.
+    #[test]
+    fn a_dump_is_one_engine_action_and_ends_at_the_next_stop() {
+        let mut w = Work::dump("/tmp/x/stacks.dump".into());
+        let mut out = Out::new(1);
+        w.step(&[], &mut out);
+        assert!(!w.finished());
+        let acts = out.into_actions();
+        assert_eq!(acts.len(), 1);
+        assert!(matches!(
+            &acts[0],
+            hydo_control::Action::Engine(hydo_control::EngineAction::Dump(p)) if p == "/tmp/x/stacks.dump"
+        ));
+        let mut out = Out::new(1);
+        w.step(&[], &mut out);
+        assert!(w.finished());
+        assert!(out.into_actions().is_empty());
     }
 
     #[test]

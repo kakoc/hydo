@@ -430,6 +430,16 @@ transaction that straddles a checkpoint stops the AOF's recovery) may explain th
 does not explain a replica that stops answering.
 Regression: `regressions/replica-hangs-after-a-kill-during-a-checkpoint.schedule`.
 
+Milestone 383 read every guest thread's stack at the verdict's stop of the recorded hvx run with
+`hydo inspect stacks` (6,315,089 stops replayed in 696 s, with no divergence). The replica `g4`
+(pid 368, its service told apart by its `HYDO_SVC`) had 90 threads, against 16 to 19 in each
+other node. 78 of them were `.NET TP Worker` threads of the thread pool, and 85 of its threads
+slept in `futex`, each on its own address, so no lock is shared and no cycle shows. A thread pool
+that keeps adding workers while every worker waits is what .NET does when its workers block. That
+fits a replica whose background recovery task never completes and whose commands get no worker.
+The frames are the runtime's and the JIT's code, which hydo does not name, so the place where the
+workers wait is not traced yet.
+
 **B. A pause of a migration's target and failovers of both shards after the migration lose
 acknowledged writes.** Seed 89 of e2 shrank to `disk=none dseed=0 | run P=g1@12+3
 W=0a39fa3d,p1,q2,r500` (KVM `00af90d009683f21` twice). The client moved slot 13404 from `g3` to `g1`,

@@ -882,6 +882,163 @@ impl Machine {
     }
 }
 
+/// Milestone 383 (docs/design/inspect-stacks.md): a controller that has the engine write the
+/// stop's state (`DUMP`) at every `every`-th stop, and otherwise does what `inner` does.
+pub struct DumpEvery<'a> {
+    pub inner: &'a mut dyn Controller,
+    pub every: u64,
+    pub path: String,
+    pub dumps: u64,
+}
+
+impl Controller for DumpEvery<'_> {
+    fn name(&self) -> &str {
+        self.inner.name()
+    }
+    fn step(&mut self, stop: &StopInfo, seen: &[Seen], out: &mut Out) {
+        if self.every > 0 && stop.n.is_multiple_of(self.every) {
+            out.engine(EngineAction::Dump(self.path.clone()));
+            self.dumps += 1;
+        }
+        self.inner.step(stop, seen, out)
+    }
+}
+
+/// What a replay with dumps gave: each conversation's RESULT line, and the dumps taken.
+pub struct Checked {
+    pub results: Vec<(Conv, String)>,
+    pub dumps: u64,
+    pub stops: u64,
+}
+
+impl Machine {
+    /// Replay the whole run, the boot, the run and a recovery boot, with a dump at every
+    /// `every`-th stop of each: a proof that reading a stop leaves the run as it was, since
+    /// each conversation's RESULT line (its fingerprint) can be compared with the recorded run's.
+    pub fn check_run(
+        &self,
+        rec: &Recorded,
+        every: u64,
+        path: &str,
+        errlog: &Path,
+    ) -> Result<Checked, Problem> {
+        let mut out = Checked {
+            results: Vec::new(),
+            dumps: 0,
+            stops: 0,
+        };
+        let boot_s = Schedule {
+            host: vec![HostToken::Rb(self.cadence)],
+            guest: Vec::new(),
+        };
+        let (_, eng_sched) = engine_schedule(&rec.schedule, self.cadence)
+            .map_err(|e| Problem::new("refused", e, vec![]))?;
+        let boot_t = rec
+            .transcript(Conv::Boot)
+            .ok_or_else(|| Problem::new("no-run", "the run has no boot transcript", vec![]))?;
+        let run_t = rec
+            .transcript(Conv::Run)
+            .ok_or_else(|| Problem::new("no-run", "the run has no run transcript", vec![]))?;
+        let mut cb = self
+            .eng
+            .start_controlled(&self.spec, &boot_s, errlog)
+            .map_err(link_err)?;
+        let boot_fin = {
+            let mut ls = cb.session(None);
+            let mut link = InspectLink::new(&mut ls);
+            let mut rp = ReplayController::new(boot_t);
+            let mut de = DumpEvery {
+                inner: &mut rp,
+                every,
+                path: path.into(),
+                dumps: 0,
+            };
+            let f = run_conv(
+                &mut link,
+                &mut de,
+                Start::Boot,
+                header(Conv::Boot, &rec.schedule, "boot"),
+            )?;
+            out.dumps += de.dumps;
+            f
+        };
+        out.stops += stops_of(&boot_fin, None);
+        if let Some(v) = diverged(&boot_fin) {
+            let _ = cb.ready().map(|w| w.close());
+            return Err(divergence(rec, &v));
+        }
+        let mut worker = cb.ready().map_err(link_err)?;
+        let point = |name: &str| -> Result<AgentPoint, Problem> {
+            boot_fin
+                .snapshots
+                .iter()
+                .rev()
+                .find(|p| p.snapshot == name)
+                .cloned()
+                .ok_or_else(|| {
+                    Problem::new(
+                        "engine",
+                        format!("the replayed boot took no snapshot {name}"),
+                        vec![],
+                    )
+                })
+        };
+        let (s0, s1) = (point("S0")?, point("S1")?);
+        let start = LockstepStart::Run {
+            tag: "inspect".into(),
+            schedule: eng_sched,
+        };
+        {
+            let mut ls = worker.lockstep(&start, None).map_err(link_err)?;
+            let mut link = InspectLink::new(&mut ls);
+            let mut rp = ReplayController::new(run_t);
+            let mut de = DumpEvery {
+                inner: &mut rp,
+                every,
+                path: path.into(),
+                dumps: 0,
+            };
+            let f = run_conv(
+                &mut link,
+                &mut de,
+                Start::Resume(s1),
+                header(Conv::Run, &rec.schedule, "resume S1"),
+            )?;
+            out.dumps += de.dumps;
+            out.stops += stops_of(&f, Some(s_first(&f)));
+            if let Some(v) = diverged(&f) {
+                return Err(divergence(rec, &v));
+            }
+            out.results.push((Conv::Run, f.result.clone()));
+            if matches!(f.ending, Some(Ending::PowerCut { .. })) {
+                if let Some(rec_t) = rec.transcript(Conv::Recovery) {
+                    let mut rp = ReplayController::new(rec_t);
+                    let mut de = DumpEvery {
+                        inner: &mut rp,
+                        every,
+                        path: path.into(),
+                        dumps: 0,
+                    };
+                    let f2 = run_conv(
+                        &mut link,
+                        &mut de,
+                        Start::Resume(s0),
+                        header(Conv::Recovery, &rec.schedule, "resume S0"),
+                    )?;
+                    out.dumps += de.dumps;
+                    out.stops += stops_of(&f2, Some(s_first(&f2)));
+                    if let Some(v) = diverged(&f2) {
+                        return Err(divergence(rec, &v));
+                    }
+                    out.results.push((Conv::Recovery, f2.result.clone()));
+                }
+            }
+        }
+        let _ = worker.close();
+        Ok(out)
+    }
+}
+
 /// What one call left.
 pub struct Called {
     /// The agent's position at the kept snapshot (`keep_as`).

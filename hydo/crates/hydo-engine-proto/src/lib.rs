@@ -264,6 +264,11 @@ pub enum HostCmd {
     /// service's storage (`G=...:bad`). The Mac and KVM engines; hvx refuses it. Answer `OK
     /// disk at=<n>`.
     Disk(String),
+    /// `DUMP <path>` (Milestone 383, docs/design/inspect-stacks.md): write every vCPU's registers
+    /// and the guest's RAM, as they are at this stop, to the file `path` (the rest of the line).
+    /// It only reads: the guest, its clock and the run's stops stay as they were. Answer `OK
+    /// dump at=<n> bytes=<n>`; an engine without it answers `ERR dump ...`.
+    Dump(String),
     Cont,
     End(Option<String>),
 }
@@ -283,6 +288,7 @@ impl HostCmd {
             HostCmd::Time(t) if t.is_empty() => "TIME".into(),
             HostCmd::Time(t) => format!("TIME {t}"),
             HostCmd::Disk(t) => format!("DISK {t}"),
+            HostCmd::Dump(p) => format!("DUMP {p}"),
             HostCmd::Cont => "CONT".into(),
             HostCmd::End(None) => "END".into(),
             HostCmd::End(Some(v)) => format!("END {v}"),
@@ -309,6 +315,9 @@ impl HostCmd {
         }
         if let Some(v) = line.strip_prefix("DISK ") {
             return Some(HostCmd::Disk(v.to_string()));
+        }
+        if let Some(v) = line.strip_prefix("DUMP ") {
+            return Some(HostCmd::Dump(v.to_string()));
         }
         if let Some(r) = line.strip_prefix("SEND at=") {
             let (at, text) = r.split_once(' ')?;
@@ -450,6 +459,12 @@ pub enum Answer {
     Disk {
         at: u64,
     },
+    /// `OK dump at=<n> bytes=<n>` (Milestone 383): the state of the stop at `at` is in the file,
+    /// `bytes` long.
+    Dump {
+        at: u64,
+        bytes: u64,
+    },
     /// `ERR <reason>`: the command was refused (the reason starts with the command's word, for
     /// example `snap s unacked=1,2`).
     Refused(String),
@@ -469,6 +484,7 @@ impl Answer {
             Answer::Reboot { at } => format!("OK reboot at={at}"),
             Answer::Time { at } => format!("OK time at={at}"),
             Answer::Disk { at } => format!("OK disk at={at}"),
+            Answer::Dump { at, bytes } => format!("OK dump at={at} bytes={bytes}"),
             Answer::Refused(r) => format!("ERR {r}"),
         }
     }
@@ -532,6 +548,10 @@ impl Answer {
             },
             "disk" => Answer::Disk {
                 at: kv(w.next(), "at=")?,
+            },
+            "dump" => Answer::Dump {
+                at: kv(w.next(), "at=")?,
+                bytes: kv(w.next(), "bytes=")?,
             },
             _ => return None,
         };
@@ -902,6 +922,7 @@ mod tests {
             HostCmd::Time(String::new()),
             HostCmd::Time("pct=5 pctn=3 pctk=100".into()),
             HostCmd::Disk("lse=2048+8:rot".into()),
+            HostCmd::Dump("/tmp/hydo inspect/state.dump".into()),
             HostCmd::Cont,
             HostCmd::End(None),
             HostCmd::End(Some("HYDO-ORACLE: OK".into())),

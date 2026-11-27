@@ -11,12 +11,15 @@
 //!   writes the same into `result.json`);
 //! - [`drive`]: the run replayed to a stop on a fresh engine and held there;
 //! - [`work`]: one call's guest work as agent commands;
+//! - [`stacks`]: `hydo inspect stacks`, every guest thread's stack at the stop, read by the
+//!   engine without a change of the run (Milestone 383, docs/design/inspect-stacks.md);
 //! - [`session`]: `hydo inspect start` keeps the held stop in a background process, so that
 //!   later calls cost a restore and a few stops instead of a replay.
 
 pub mod diagnose;
 pub mod drive;
 pub mod session;
+pub mod stacks;
 pub mod timeline;
 pub mod values;
 pub mod work;
@@ -75,6 +78,8 @@ pub const MAX_BYTES: u64 = 16 * 1024;
 pub const MAX_BYTES_LIMIT: u64 = 1024 * 1024;
 /// A command's default time limit, guest milliseconds.
 pub const TIMEOUT_MS: u64 = 10_000;
+/// The most frames of one stack `hydo inspect stacks` shows by default (`--frames`).
+pub const STACK_FRAMES: u64 = 48;
 
 /// A named branch of a snapshot session (docs/design/agent-environments.md): a call on it
 /// starts from the branch's state (or, for a new branch, from `from`: another branch, or the
@@ -127,6 +132,8 @@ pub enum Req {
     Advance {
         ms: u64,
     },
+    /// Milestone 383: every guest thread's stack and the locks they wait on.
+    Stacks(stacks::Opts),
     Status,
     Stop,
 }
@@ -141,6 +148,7 @@ impl Req {
             Req::Ps { .. } => "ps",
             Req::Sockets { .. } => "sockets",
             Req::Advance { .. } => "advance",
+            Req::Stacks(_) => "stacks",
             Req::Status => "status",
             Req::Stop => "stop",
         }
@@ -187,6 +195,10 @@ impl Req {
                 json!({"op": "sockets", "service": service, "limit": limit})
             }
             Req::Advance { ms } => json!({"op": "advance", "ms": ms}),
+            Req::Stacks(o) => json!({"op": "stacks", "pid": o.pid,
+                "kernel_threads": o.kernel_threads, "kernel_map": o.kernel_map,
+                "programs": o.programs.iter().map(|(g, h)| format!("{g}={h}")).collect::<Vec<_>>(),
+                "max_frames": o.max_frames}),
             Req::Status => json!({"op": "status"}),
             Req::Stop => json!({"op": "stop"}),
         }
@@ -244,6 +256,23 @@ impl Req {
                 limit: u("limit", 200),
             },
             "advance" => Req::Advance { ms: u("ms", 1000) },
+            "stacks" => Req::Stacks(stacks::Opts {
+                pid: v.get("pid").and_then(Value::as_u64),
+                kernel_threads: v.get("kernel_threads").and_then(Value::as_bool) == Some(true),
+                kernel_map: s("kernel_map"),
+                programs: v
+                    .get("programs")
+                    .and_then(Value::as_array)
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(Value::as_str)
+                            .filter_map(|x| x.split_once('='))
+                            .map(|(g, h)| (g.to_string(), h.to_string()))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                max_frames: u("max_frames", STACK_FRAMES),
+            }),
             "status" => Req::Status,
             "stop" => Req::Stop,
             o => {
@@ -350,6 +379,33 @@ impl Req {
             "advance" => Req::Advance {
                 ms: a.num("--ms")?.unwrap_or(1000),
             },
+            "stacks" => {
+                let pid = a.num("--pid")?;
+                let kernel_threads = a.flag("--kernel-threads");
+                let kernel_map = a.val("--kernel-map")?;
+                let max_frames = a.num("--frames")?.unwrap_or(STACK_FRAMES).clamp(1, 256);
+                let mut programs = Vec::new();
+                while let Some(p) = a.val("--program")? {
+                    let Some((g, h)) = p.split_once('=') else {
+                        return Err(Problem::new(
+                            "usage",
+                            format!("--program {p}: GUEST=HOST, the program's path in the guest and its copy on this host"),
+                            vec!["hydo inspect stacks <session> --program /usr/local/bin/bank=./bank".into()],
+                        ));
+                    };
+                    let h = std::fs::canonicalize(h)
+                        .map(|x| x.display().to_string())
+                        .unwrap_or_else(|_| h.to_string());
+                    programs.push((g.to_string(), h));
+                }
+                Req::Stacks(stacks::Opts {
+                    pid,
+                    kernel_threads,
+                    kernel_map,
+                    programs,
+                    max_frames,
+                })
+            }
             "status" => Req::Status,
             "stop" => Req::Stop,
             _ => {
@@ -586,6 +642,7 @@ pub fn work_for(req: &Req, plan: &Plan) -> Result<Work, Problem> {
             ms + TIMEOUT_MS,
             1024,
         ),
+        Req::Stacks(_) => Work::dump(stacks::dump_path().display().to_string()),
         Req::Status | Req::Stop => Work::read(Vec::new()),
     })
 }
@@ -764,6 +821,7 @@ pub fn answer(
                 "the guest ran {ms} ms of guest time further; later calls start from here"
             ));
         }
+        Req::Stacks(o) => a.stacks = Some(stacks::read(o)?),
         Req::Status | Req::Stop => {}
     }
     Ok(a)
@@ -1055,6 +1113,16 @@ second to a few seconds each):
   hydo inspect ps      <id> [--all] [--limit N]
   hydo inspect sockets <id> [--service S]
   hydo inspect advance <id> [--ms N]            let the guest run N ms further; later calls start there
+  hydo inspect stacks  <id> [--pid P] [--kernel-threads] [--frames N] [--program GUEST=HOST]
+                       [--kernel-map FILE]       every guest thread's user and kernel stack, the
+                                                 goroutines of Go programs, the locks they wait on
+                                                 and the cycles of waits, read by the engine
+                                                 without a change of the run (hvx)
+  hydo inspect stacks  <id> --follow [--steps N] [--ms MS]
+                                                 the stacks, then advance, N times (default 5)
+  hydo inspect stacks  <run dir> --check-run [--every N]
+                                                 replay the run with the state read at every N-th
+                                                 stop and compare its fingerprint with the run's
 
 Branches (a snapshot session only; docs/design/agent-environments.md):
   hydo inspect exec <id> --branch NAME [--from OTHER] ... -- <program> <args...>
@@ -1114,6 +1182,11 @@ fn view(v: &Value) -> String {
             return diagnose::text(&d);
         }
     }
+    if let Some(s) = v.get("stacks") {
+        if let Ok(s) = serde_json::from_value::<hydo_results::InspectStacks>(s.clone()) {
+            return hydo_contracts::stacks::text(&s);
+        }
+    }
     if v.get("type").and_then(Value::as_str) == Some("values") {
         if let Ok(d) = serde_json::from_value::<hydo_results::ValueHistory>(v.clone()) {
             return values::text(&d);
@@ -1164,9 +1237,9 @@ pub fn cmd_inspect(ctx: &Ctx, argv: &[String]) -> i32 {
                 ))
             }
         }
-        "status" | "stop" | "exec" | "read" | "ls" | "logs" | "ps" | "sockets" | "advance" => {
-            call(ctx, &op, &rest)
-        }
+        "stacks" if rest.iter().any(|a| a == "--follow") => return follow(ctx, &rest, text),
+        "status" | "stop" | "exec" | "read" | "ls" | "logs" | "ps" | "sockets" | "advance"
+        | "stacks" => call(ctx, &op, &rest),
         o => Err(Problem::new(
             "usage",
             format!("unknown inspect command {o:?}"),
@@ -1177,6 +1250,64 @@ pub fn cmd_inspect(ctx: &Ctx, argv: &[String]) -> i32 {
         Ok(v) => print_doc(&v, text),
         Err(p) => print_doc(&err_doc(if op.is_empty() { "?" } else { &op }, &p), text),
     }
+}
+
+/// `hydo inspect stacks <session> --follow N [--ms MS]`: the stacks, then `advance`, N times,
+/// each answer printed as it comes (Milestone 383).
+fn follow(ctx: &Ctx, rest: &[String], text: bool) -> i32 {
+    let mut a = Args::new(rest);
+    let _ = a.flag("--follow");
+    let n = match (a.num("--steps"), a.num("--ms")) {
+        (Ok(n), Ok(ms)) => (n.unwrap_or(5), ms.unwrap_or(1000)),
+        (Err(p), _) | (_, Err(p)) => return print_doc(&err_doc("stacks", &p), text),
+    };
+    let words: Vec<String> = a.v.clone();
+    let Some(id) = words.first().cloned() else {
+        return print_doc(
+            &err_doc(
+                "stacks",
+                &Problem::new("usage", "stacks --follow needs a session id", vec![]),
+            ),
+            text,
+        );
+    };
+    if Path::new(&id).join(hydo_results::RUN_DOC).is_file() {
+        return print_doc(
+            &err_doc(
+                "stacks",
+                &Problem::new(
+                    "usage",
+                    "--follow moves a session's state forward, so it takes a session id, not a run directory",
+                    vec![format!("hydo inspect start {id} --at <point>")],
+                ),
+            ),
+            text,
+        );
+    }
+    let req = match Req::from_args("stacks", &words[1..]) {
+        Ok(r) => r,
+        Err(p) => return print_doc(&err_doc("stacks", &p), text),
+    };
+    let mut status = 0;
+    for i in 0..n.0 {
+        if i > 0 {
+            if let Err(p) = session::call(ctx, &id, Req::Advance { ms: n.1 }) {
+                return print_doc(&err_doc("advance", &p), text);
+            }
+        }
+        let v = session::call(ctx, &id, req.clone());
+        if text {
+            println!("=== step {i} (after {} ms)", i * n.1);
+        }
+        status = match v {
+            Ok(v) => print_doc(&v, text),
+            Err(p) => print_doc(&err_doc("stacks", &p), text),
+        };
+        if status != 0 {
+            break;
+        }
+    }
+    status
 }
 
 /// A call on a session, or (with a run directory instead of a session id) a one-shot call.
@@ -1192,6 +1323,20 @@ fn call(ctx: &Ctx, op: &str, rest: &[String]) -> Result<Value, Problem> {
         ));
     };
     let p = Path::new(first);
+    if op == "stacks" && rest.iter().any(|a| a == "--check-run") {
+        if !p.join(hydo_results::RUN_DOC).is_file() {
+            return Err(Problem::new(
+                "usage",
+                "--check-run replays a recorded run, so it takes a run directory",
+                vec!["hydo inspect stacks <run dir> --check-run --every 50".into()],
+            ));
+        }
+        let mut a = Args::new(&rest[1..]);
+        let _ = a.flag("--check-run");
+        let every = a.num("--every")?.unwrap_or(1).max(1);
+        a.done()?;
+        return session::check_run(ctx, p, every);
+    }
     if p.join(hydo_results::RUN_DOC).is_file() {
         let mut a = Args::new(&rest[1..]);
         let at = a.val("--at")?.unwrap_or_else(|| "end".into());

@@ -51,33 +51,33 @@ pub struct Source {
 }
 
 /// The ELF file: its machine and sections.
-struct Elf {
-    data: Vec<u8>,
-    machine: u16,
-    sections: Vec<Sect>,
+pub(crate) struct Elf {
+    pub(crate) data: Vec<u8>,
+    pub(crate) machine: u16,
+    pub(crate) sections: Vec<Sect>,
 }
 
-struct Sect {
-    name: String,
-    flags: u64,
-    addr: u64,
-    offset: u64,
-    size: u64,
-    nobits: bool,
+pub(crate) struct Sect {
+    pub(crate) name: String,
+    pub(crate) flags: u64,
+    pub(crate) addr: u64,
+    pub(crate) offset: u64,
+    pub(crate) size: u64,
+    pub(crate) nobits: bool,
 }
 
-fn rd16(b: &[u8], o: usize) -> Option<u16> {
+pub(crate) fn rd16(b: &[u8], o: usize) -> Option<u16> {
     Some(u16::from_le_bytes(b.get(o..o + 2)?.try_into().ok()?))
 }
-fn rd32(b: &[u8], o: usize) -> Option<u32> {
+pub(crate) fn rd32(b: &[u8], o: usize) -> Option<u32> {
     Some(u32::from_le_bytes(b.get(o..o + 4)?.try_into().ok()?))
 }
-fn rd64(b: &[u8], o: usize) -> Option<u64> {
+pub(crate) fn rd64(b: &[u8], o: usize) -> Option<u64> {
     Some(u64::from_le_bytes(b.get(o..o + 8)?.try_into().ok()?))
 }
 
 impl Elf {
-    fn parse(data: Vec<u8>) -> Result<Elf, String> {
+    pub(crate) fn parse(data: Vec<u8>) -> Result<Elf, String> {
         let b = &data;
         if b.get(0..4) != Some(b"\x7fELF") || b.get(4) != Some(&2) || b.get(5) != Some(&1) {
             return Err("not a 64-bit little-endian ELF file".into());
@@ -126,7 +126,7 @@ impl Elf {
         })
     }
 
-    fn arch(&self) -> Result<&'static str, String> {
+    pub(crate) fn arch(&self) -> Result<&'static str, String> {
         match self.machine {
             0xb7 => Ok("arm64"),
             0x3e => Ok("x86_64"),
@@ -138,7 +138,7 @@ impl Elf {
 
     /// A section's bytes, inflated when it is compressed (SHF_COMPRESSED with zlib, as Go
     /// writes its debug information).
-    fn section(&self, name: &str) -> Result<Vec<u8>, String> {
+    pub(crate) fn section(&self, name: &str) -> Result<Vec<u8>, String> {
         let Some(s) = self.sections.iter().find(|s| s.name == name) else {
             return Ok(Vec::new());
         };

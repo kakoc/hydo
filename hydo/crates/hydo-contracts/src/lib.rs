@@ -14,6 +14,8 @@
 //! - [`eval`]: the records judged on the host after the run.
 //! - [`paths`]: the error-handling places a run watches, and which of them ran (Milestone 306,
 //!   docs/design/error-paths.md).
+//! - [`stacks`] (feature `compile`): every guest thread's stack and the locks they wait on, read
+//!   from a stop's state (Milestone 383, docs/design/inspect-stacks.md).
 //! - [`fuzz`]: one function at a time, tested natively with inputs generated from its
 //!   `requires` and `input` lines and judged by its `ensures` (Milestone 275,
 //!   docs/design/function-fuzzing.md).
@@ -25,4 +27,6 @@ pub mod fuzz;
 pub mod lang;
 pub mod paths;
 pub mod plan;
+#[cfg(feature = "compile")]
+pub mod stacks;
 pub mod values;
