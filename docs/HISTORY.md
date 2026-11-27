@@ -25445,3 +25445,44 @@ link instead of the copy, as `tests/equivalence.rs` makes, is left.
 with the new kernels: `/proc/self/io` in the guest, one fingerprint per schedule, and an epoch-6
 image's recorded values. The release lines of the new kernels in `hydo/dist/releases.txt`, with
 the first release that ships them. Open item 188's other lines.
+
+## Milestone 385 (tentative number): the time to a first real run and to a first bug, measured
+
+A user meets two clocks. The first runs from a repository with a Compose file to a first real
+run, an exploration whose checks judge the system's promises. The second runs from the first
+exploration to a first failure with its replay command. The page
+`docs/design/time-to-first-bug.md` measures both from the records: the examples' `RESULTS.md`
+pages, the trials of Milestones 297 and 359, the findings ledger of Milestone 380, the playbook,
+and Milestone 304. It estimates five changes and proposes a target for each clock. No code, guide
+topic, playbook or skill changed; the lead decides.
+
+**Clock 1.** hydo's own steps take seconds to minutes: the import under 1 s, a fetch 3 to 17 s,
+a build 5 s to 4 minutes, a run 4 s to 14 minutes. The agent writes the rest by hand. The 17
+onboardings from Milestone 287 on wrote a client of a median 1,229 lines, 7 workload commands
+and 3 check files. The first clean run came at a median of 23 minutes in 9 records timed from the
+start, and of 68 minutes of scouting and setup in 16 phase tables. Fixes of the checks' own
+mistakes took 17 minutes to 2 hours after it, each with a new image.
+
+**Clock 2.** The first blind bug came at a median of the seventh schedule. Re-runs and shrinks
+then took 85 % to 94 % of an exploration's runs or busy time, and `hydo explore` writes its report
+only after the last shrink. Judging took as long as exploring, or longer. On 20 KVM runners
+Dragonfly's 60 seeds took 31 minutes against 75 on one; the 6-minute build and the slowest part
+set the time.
+
+**The estimates.**
+
+- A client generated from the import, with the generic checks, reaches 37 of the 105 bugs with
+  drivers for HTTP and common protocols, and 47 with operator actions. It would make clock 1 the
+  import, the fetch, the build and two runs: 5 to 15 minutes.
+- Reporting before shrinking cuts the time to a report by a factor of 4 to 6. Lago's first
+  exploration would report after about 4 of its 66 minutes.
+- Runners by default cut Dragonfly's time by a factor of 2.4, and with the report first,
+  Redpanda's 2 hours 53 minutes to about 40.
+- The ledger's first hour gives a first bug in about 6 of 10 examples within 20 seeds.
+
+The targets are a first real run in 3 commands and 15 minutes with no hand-written file, and a
+first reported failure within 20 minutes of the exploration's start. The first two things to
+build are the report before the shrinks, then the generated client with the generic checks.
+
+**Checks.** Vale on the page and `sh ci/vale.sh` found nothing. No VM ran and nothing was built.
+A `git grep` of each value of the list of `AGENTS.local.md` found none in the changed files.

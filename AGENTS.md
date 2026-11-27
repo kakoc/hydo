@@ -5685,6 +5685,12 @@ build machine, before 2026-10-13.
   kernels of epoch 6, and an image built before keeps its kernels and values. On KVM Typesense's
   clean run passes and its three regressions fail as on hvx; the Mac kernels have no run yet.
   Every value of the list waits for the 0.8.0 pass
+- M385 (tentative number): the time to a first real run and to a first bug, measured from the
+  records (`docs/design/time-to-first-bug.md`). An agent writes a client of about 1,200 lines,
+  and a first clean run comes after a median of 23 to 68 minutes. Re-runs and shrinks take 85 %
+  to 94 % of an exploration before its report. A generated client with the generic checks would
+  reach 37 of the 105 bugs. The page proposes the report before the shrinks, then that client.
+  Nothing recorded moved
 
 ## Where to look
 
