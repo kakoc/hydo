@@ -7,7 +7,7 @@
 //
 // Commands:
 //
-//	rmq provision        wait for a master, create the topics j, o, %RETRY%w and %DLQ%w
+//	rmq provision        wait for a master, create the topics j, o, %RETRY%w, %DLQ%w and tk (transactions that keep a producer known)
 //	rmq pub <id>         send one message to j with SendSync (m<n> plain, x<n> poison, d<n>
 //	                     delayed by 5 s)
 //	rmq tx <id>          send one transactional message to j: t<n> commits, r<n> rolls back, u<n>
@@ -173,7 +173,7 @@ func provision() int {
 					name string
 					q    int
 					perm int
-				}{{topicJ, queues, 6}, {topicO, queues, 6}, {retryW, 1, 6}, {dlqW, 1, 6}} {
+				}{{topicJ, queues, 6}, {topicO, queues, 6}, {retryW, 1, 6}, {dlqW, 1, 6}, {"tk", 1, 6}} {
 					if err := createTopic(a, t.name, t.q, t.perm); err != nil {
 						say("provision: %s on %s: %v", t.name, a, err)
 						if a == addrs[0] {
@@ -183,33 +183,18 @@ func provision() int {
 				}
 			}
 			if ok {
-				// the producers find j and o through the NameServer's routes
+				// a send to the master: the producers find broker-a through the NameServer
 				p, err := newProducer("provision")
 				if err == nil {
-					for _, t := range []string{topicJ, topicO} {
-						for uptime() < deadline {
-							if _, err := p.SendSync(context.Background(), withQueue(primitive.NewMessage(t, []byte("p")), 0)); err == nil {
-								break
-							} else {
-								say("provision: send to %s: %v", t, err)
-							}
-							time.Sleep(time.Second)
+					for uptime() < deadline {
+						if _, err := p.SendSync(context.Background(), withQueue(primitive.NewMessage("tk", []byte("p")), 0)); err == nil {
+							break
+						} else {
+							say("provision: send to tk: %v", err)
 						}
+						time.Sleep(time.Second)
 					}
 					p.Shutdown()
-				}
-				// the provisioning messages are consumed now, so that the workload starts after them
-				for _, t := range []string{topicJ, topicO} {
-					g := groupW
-					if t == topicO {
-						g = groupO
-					}
-					for q := 0; q < queues; q++ {
-						r, err := pull(addrs[0], g, t, q, 0, 32)
-						if err == nil && r.code == resSuccess {
-							updateOffset(addrs[0], g, t, q, r.next)
-						}
-					}
 				}
 				say("provision: master %s, brokers %v", addrs[0], addrs)
 				return 0
@@ -409,7 +394,7 @@ func item(m *msgExt, withKey bool) string {
 	if !strings.HasPrefix(m.topic, "%") {
 		s += ";o=" + sysID(m.queueID, m.queueOffset)
 	}
-	return s + ";n=" + strconv.Itoa(m.reconsume+1)
+	return s
 }
 
 // quietRecv: the drain records a receive only when it got messages, and then writes its

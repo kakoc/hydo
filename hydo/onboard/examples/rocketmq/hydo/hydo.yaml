@@ -199,16 +199,17 @@ test:
 checks:
   # The topic j and the group w. The drain takes every message left of j, of the retry topic and
   # of the dead-letter topic, and answers the broker's transaction checks, until a quiet window of
-  # 45 s; then it writes the drained records of both histories.
+  # 45 s; then it writes the drained records of both histories. No check claims after_ack:
+  # every failover moves the committed offsets back by up to 10 s (RESULTS.md, finding 2, known
+  # as apache/rocketmq#7790); hydo-offsets.yaml claims it.
   - id: jobs
     type: messages
     history: q
-    msg: every message that SendSync acknowledged reaches the group w, a committed transaction too and a rolled-back one never, a delayed message not before its delay, a poison message the dead-letter topic after 3 deliveries, and no message comes again after its offset was committed
+    msg: every message that SendSync acknowledged reaches the group w, a committed transaction too and a rolled-back one never, a delayed message not before its delay, and a poison message the dead-letter topic after 3 deliveries
     final: /bin/rmq drain
     acknowledgement: explicit
     claims:
       delivery: at-least-once
-      after_ack: no-redelivery        # a committed offset holds, also across a failover
       dead_letter: {after: 3, to: dlq}  # maxReconsumeTimes 2: two retries, then %DLQ%w
       delay: per-message              # d<id>: delay level 2, 5 s
   # The topic o: one queue per key, consumed by the group og.
@@ -216,11 +217,10 @@ checks:
     type: messages
     history: o
     final: "true"   # the drain of the check jobs (rmq drain) takes o too
-    msg: the group og gets every acknowledged message of o, each key's in the order they were sent, and none again after its offset was committed
+    msg: the group og gets every acknowledged message of o, each key's in the order they were sent
     acknowledgement: explicit
     claims:
       delivery: at-least-once
       order: {kind: fifo, scope: key}
-      after_ack: no-redelivery
 
 faults: [kill, pause, network, oneway, cut, clock, corrupt, powerloss]
