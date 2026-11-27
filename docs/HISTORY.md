@@ -25191,6 +25191,27 @@ next. The clock audit and the scan of write routes stay as reading aids. `--conf
 documented loss. Damaged files, the swarm strategy, timing, contracts, and version pairs come
 later.
 
+**The oracles (a second commit).** The CSV gained the columns `oracle`, `oracle_check`,
+`generic_would_catch` and `generic_note`. They name the check that noticed each finding first,
+and whether a check of the generic set would have caught it. The generic set has five checks:
+
+- a read-back of every acknowledged write, and the replicas compared after the heal;
+- a check that the system serves writes after the heal, and the error-log scan;
+- a history checker where there are transactions.
+
+- Business rules noticed 32 bugs first, the read-back of acknowledged writes 29, liveness checks
+  10, and the comparison of replicas 10.
+- The generic set would have caught 63 of the 105 bugs and 29 of the 40 recent ones. Only a
+  project-specific oracle caught 19 bugs in 13 examples. They break promises of at most once, of
+  a limit, of a device's version, of a listing, or of an expiry.
+- Business rules made 21 of the 30 false findings, a false share of 36 %. The read-back made 2,
+  a share of 6 %.
+- On Blnk the value property broke in 9 of 30 blind schedules and the overdraft rule in 1. The
+  contracts broke only where the rules did, and found nothing new.
+
+The page proposes the generic set as every onboarding's default oracles, business rules for
+promises that the generic set cannot state, and contracts for function fuzzing only.
+
 **Checks.** `sh ci/vale.sh` and Vale on the new page found nothing. On the bare-metal machine,
 in a copy of the tracked files, `cargo test -p hydo-agents --test it` (16 passed) and `cargo test
 -p hydo --test it -- docs::` (14 passed) passed. The copy has no `AGENTS.local.md`, so a `grep` of

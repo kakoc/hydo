@@ -5616,7 +5616,9 @@ build machine, before 2026-10-13.
   cost. A blind process
   exploration found 60 of the 105 bugs first, most within 20 schedules; the clock audit, the
   scan of write routes and explored settings found none. Clock steps were needed in a third of
-  the bugs. The page proposes a first hour for every onboarding. Nothing recorded moved
+  the bugs. A second commit adds the check that noticed each finding. The generic set of checks
+  would have caught 63 of the 105 bugs. Business rules alone caught 19, and made 21 of the 30
+  false findings. The page proposes a first hour and default oracles. Nothing recorded moved
 
 ## Where to look
 

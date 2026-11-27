@@ -1,7 +1,8 @@
 # The findings ledger: which techniques found what
 
 An onboarding chooses its checks and faults from `hydo guide strategies` by judgement. This page
-counts what every onboarding example found, how it found it, and what it cost. It then checks
+counts what every onboarding example found, how it found it, which check noticed it, and what it
+cost. It then checks
 five impressions of the lead against the numbers, and proposes a first hour for every
 onboarding. The proposal changes nothing yet: `hydo/guide/strategies.md`, the playbook, and the
 skill stay as they are until the lead decides.
@@ -49,6 +50,8 @@ The examples without findings of a system, such as `redis`, `compose-voting`, `p
 | `corrected` | what a later run or check changed in the record |
 | `cause`, `operator_action` | the cause's kind (below), and `yes` when an operator's action in the workload was needed |
 | `first_mode`, `also_blind` | the way the finding came first (below), and `yes` when a blind exploration found it later |
+| `oracle`, `oracle_check` | the class of check that noticed the finding first, and the check |
+| `generic_would_catch`, `generic_note` | `yes`, `no` or `unknown`: whether a check of the generic set would catch it, and why |
 | `milestone`, `sources` | the onboarding's milestone and the record's sections |
 
 The classes are those of the playbook:
@@ -379,6 +382,133 @@ Move these later, after the first hour:
   found a bug first.
 - Damaged files (`G=`): 16 of their 22 failures were the environment. Draw them after the first
   blind round, without shrinks.
+
+## The oracles: which check noticed each finding
+
+A finding needs a trigger, the faults of the preceding sections, and an oracle, the check that
+noticed it. The column `oracle` of the CSV names the class of check that failed first in the
+finding's record, and `oracle_check` names the check itself. The column `generic_would_catch`
+says whether a check of the generic set would have caught the finding too: `yes`, `no`, or
+`unknown`, with the reason in `generic_note`. The generic set is these checks:
+
+- a read-back of every acknowledged write with its final outcome (`acked_outcome`, or the
+  generic rule over the client's records);
+- every replica compared with the leader after the heal;
+- a check that the system serves writes after the heal;
+- the error-log scan;
+- a history checker where the workload has transactions.
+
+hydo's own verdicts count with the generic set: a service that does not start again, a
+`TIMEOUT`, and an `ERROR` need no check of the project.
+
+| oracle | new | known | clock effect | trade-off | environment | false findings | examples that declare it, at least | false share |
+|---|---|---|---|---|---|---|---|---|
+| business rule over stored state | 14 | 8 | 10 | 4 | 1 | 21 | 22 | 36 % |
+| acknowledged writes read back (the generic rule) | 7 | 7 | 5 | 11 | 1 | 2 | 32 | 6 % |
+| liveness: an `eventually_` check or serves writes | 4 | 0 | 6 | 0 | 1 | 1 | 20 | 8 % |
+| replicas compared with the leader | 5 | 4 | 1 | 1 | 0 | 1 | 11 | 8 % |
+| hydo's verdict without a check | 4 | 3 | 2 | 0 | 23 | 1 | every run | 3 % |
+| messages check, `no-loss` | 4 | 0 | 2 | 3 | 0 | 0 | 19 (any claim) | 0 % |
+| messages check, `acked-outcome` | 2 | 2 | 0 | 3 | 0 | 2 | 19 (any claim) | 22 % |
+| messages check, `duplicates` or another claim | 1 | 0 | 0 | 1 | 0 | 1 | 19 (any claim) | 33 % |
+| history checker | 1 | 1 | 1 | 2 | 0 | 0 | 7 | 0 % |
+| page invariant | 3 | 0 | 0 | 0 | 0 | 0 | 2 | 0 % |
+| the test's own assertion (flaky tests) | 0 | 3 | 0 | 0 | 0 | 0 | 3 | 0 % |
+| a backup or snapshot read back | 2 | 0 | 0 | 0 | 1 | 0 | 2 | 0 % |
+| error-log scan | 1 | 0 | 0 | 0 | 0 | 0 | 15 | 0 % |
+| the workload's own assertion | 0 | 1 | 0 | 0 | 0 | 1 | 2 | 50 % |
+| none: reading or a native probe | 1 | 0 | 0 | 2 | 0 | 0 | | |
+| value property (`keep`) | 0 | 0 | 0 | 0 | 0 | 0 | 1 (Blnk) | 0 % |
+| contract | 0 | 0 | 0 | 0 | 0 | 0 | 1 (Blnk) | |
+
+The column of declarations comes from a search of each example's folder for the check's marks,
+such as `type: messages`, `errors: true` or a file `eventually_*`. A rule inside a client program
+does not show there, so the counts are lower bounds; the business rules count the examples with a
+row instead. The false share is the false findings divided by all rows of the oracle.
+
+### What the generic set would have caught
+
+- Of the 105 bugs, a generic check would have caught 63 (60 %), and missed 33. For 9 the record
+  does not say.
+- Of the 40 recent bugs (Milestones 311 to 371), it would have caught 29 (73 %), and missed 9.
+- By class it would have caught 29 of 49 new bugs, 19 of 29 known bugs, and 15 of 27 clock
+  effects.
+
+Only a project-specific oracle, a business rule, a value property or a contract, caught 19 bugs
+in 13 examples: 8 new bugs, 6 known bugs, and 5 clock effects. For 8 more the record does not say
+whether a generic check would have seen them. The 19 break promises that are not "an
+acknowledged write stays":
+
+- at most once, or once per period, in River's periodic run, Hatchet's scheduled run, Ghost's
+  donation, Saleor's two refunds, and Medusa's two refunds;
+- a limit or a book that must match, in Blnk's overdraft, Saleor's single-use code, and Medusa's
+  capture;
+- a device that boots an allowed version, in Mender's two findings and SWUpdate's;
+- a listing, an expiry, a retention, or a version order. These are Garage's listing, Valkey's
+  expiry, Iggy's retention, and SurrealDB's changefeed. They are also Prometheus's scrape times,
+  River's two leaders and skipped runs, and Hatchet's cancelled run.
+
+14 more bugs needed another check outside the generic set and the project's rules:
+
+- availability during the faults (Typesense, twice), `WAIT` (Kvrocks), and a query that never
+  ends (the query engine);
+- two snapshot read-backs (Prometheus, Meilisearch) and three page invariants (Memos, Vikunja);
+- three flaky tests' own assertions;
+- the Keeper loop that only CPU use showed, and two builds of mender-artifact that differ.
+
+### The false findings
+
+The examples recorded 30 false findings. Business rules made 21 of them (70 %), in Blnk, Lago,
+River, Restate, Valkey, Dragonfly, Medusa, Ghost, Iggy, GreptimeDB, and Meilisearch. By the records, most were a
+wait that did not cover the system's own recovery, or a rule stricter than the system's promise
+after a clock step. The read-back of acknowledged writes made 2, and the messages check's claims
+3.
+
+### Blnk: rules, contracts, and value properties side by side
+
+Blnk ran every class of oracle against one system (Milestones 224, 260, 285 and 291).
+
+| oracle | finding 1, overdraft | finding 2, atomic bulk | finding 3, lost commit | finding 4, clock | runs and false findings |
+|---|---|---|---|---|---|
+| seven domain rules (1.1 to 1.7) | rule 1.6 alone; blind in 2 of 45 hvx schedules | rule 1.7 | no | no | 85 explored schedules; 4 false findings of the rules and the wait |
+| the generic rule (rule 2) | no: it cannot know a draw should be refused | yes | yes, alone | yes, alone | the same runs |
+| the error-log scan | no | its lines, beside the rules | no | no | the same runs |
+| contracts on three functions | the overdraft contract broke in the same 3 of 24 schedules as the periodic rule; the end-state rule saw 1 | the bulk contract broke on the fixed build too, so no oracle | no | no | 24 schedules; nothing new |
+| a value property (`keep`) | fails the run without faults; broke in 9 of 30 blind schedules, first at seed 4 | no | no | no | the overdraft rule broke in 1 of the same 30, at seed 21; the fixed build holds |
+
+The value history of Milestone 285 named the cause of finding 1, the limit lost in the worker's
+copy, but it is not an oracle. The value property found finding 1 nine times as often as the
+rule, and with no fault. The contracts found nothing that the rules missed, and no contract could
+state finding 2 or the cause of finding 1.
+
+### Proposal: the default oracles
+
+Make these the default of every onboarding, before any project-specific rule:
+
+1. **A read-back of every acknowledged write with its final outcome** (`acked_outcome`, or the
+   generic rule). It caught 29 bugs first, with a false share of 6 to 22 %.
+2. **Every replica compared with the leader after the heal**, for a system with replicas. It
+   caught 10 bugs first, with 1 false finding.
+3. **An `eventually_` check that the system serves writes after the heal.** The liveness checks
+   caught 10 bugs first, 6 of them clock effects; 4 of the 10 needed a narrower check.
+4. **The error-log scan.** It caught Formance's bug alone, and it costs one line of `hydo.yaml`.
+5. **A history checker where the workload has transactions.** It caught 3 bugs first, with no
+   false finding.
+
+Together with hydo's own verdicts, these would have caught 63 of 105 bugs, and 29 of the 40
+recent ones.
+
+Write project-specific oracles when they pay:
+
+- **Business rules** pay when the promise is at most once, once per period, a money limit, a
+  device's version, or a listing. They caught 19 bugs that no generic check would see. They also
+  made 70 % of the false findings, so review each rule's wait and its behaviour under a clock
+  step before an exploration.
+- **A value property** pays when a value must reach a decision unchanged across functions or
+  processes, as Blnk's limit. It found the bug with no fault, nine times as often as the rule.
+- **Contracts in a whole-system run** did not pay on Blnk. Keep contracts for function fuzzing,
+  which found 8 candidates in 25 crates.
+- **A page invariant** pays for a web app: it caught 3 bugs that no server-side check saw.
 
 ## What the ledger cannot say
 
