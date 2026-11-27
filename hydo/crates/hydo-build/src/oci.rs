@@ -1946,6 +1946,71 @@ pub fn tmpfs_mib(root: &Path) -> Result<u64, Fail> {
     Ok(mib_of(bytes))
 }
 
+/// Milestone 374: an image service that runs as another user than root and keeps its data on a
+/// file system of its own (`storage:` with `size_mib:`). hydo makes that file system empty and
+/// owned by root, so the service cannot write to it: every rqlite node (uid 1000) stopped with
+/// `mkdir /rqlite/file/data: permission denied` (open item 189). One warning per such service
+/// whose `setup:` has no `chown`, naming the fix.
+pub fn storage_owner_warnings(oci: &[OciService], m: &Value) -> Vec<String> {
+    let st = hydo_manifest::storage::of_manifest(m);
+    let mut out = Vec::new();
+    for o in oci.iter().filter(|o| !o.user.is_empty()) {
+        let Some((_, s)) = st.iter().find(|(n, s)| *n == o.svc && s.size_mib.is_some()) else {
+            continue;
+        };
+        let setup = m
+            .get("services")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .find(|x| x.get("name").and_then(Value::as_str) == Some(o.svc.as_str()))
+            .and_then(|x| x.get("setup"))
+            .map(|v| match v {
+                Value::Array(a) => a.iter().map(py::str_of).collect::<Vec<_>>().join(" "),
+                v => py::str_of(v),
+            })
+            .unwrap_or_default();
+        if setup
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|w| w == "chown")
+        {
+            continue;
+        }
+        let dir = format!("/data/{}", s.dir);
+        let place = o
+            .mounts
+            .iter()
+            .find(|mt| {
+                mt.src
+                    .as_deref()
+                    .is_some_and(|x| x.trim_end_matches('/') == dir)
+            })
+            .map(|mt| format!(" (the service's {})", mt.dst))
+            .unwrap_or_default();
+        // the guest's busybox runs setup: and knows no user name of the image
+        let numeric = o
+            .user
+            .split(':')
+            .all(|p| p.bytes().all(|b| b.is_ascii_digit()));
+        let how = if numeric {
+            format!("`setup: chown {} {dir}`", o.user)
+        } else {
+            format!(
+                "`setup: chown <uid>:<gid> {dir}`, with the numbers of the user {} in the \
+                 image's /etc/passwd (setup: runs in the guest, which does not know the name)",
+                o.user
+            )
+        };
+        out.push(format!(
+            "{}: the image runs as the user {}. Its storage {dir}{place} is a file system of its \
+             own, which starts empty and owned by root, so the service cannot write to it. Give \
+             the service {how}",
+            o.svc, o.user
+        ));
+    }
+    out
+}
+
 /// Milestone 338: the warning for an initramfs root of `unpacked` MiB with an archive of
 /// `zipped` MiB in `ram` MiB of guest RAM, or None when it fits. `what` names the root's parts.
 pub fn initramfs_warning(unpacked: u64, zipped: u64, ram: u64, what: &str) -> Option<String> {

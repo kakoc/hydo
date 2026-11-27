@@ -24919,3 +24919,213 @@ RELEASING.md's tap name and a GitHub Actions run link of BUILD-PINS.md.
 and the release index's lines (`prepared/releases-0.7.0.lines`). The branch with the release
 commit comes to `main` with step 7, because Claude Code's marketplace reads the skill's version
 from `main`. The one-off branch `tmp-rel070-kvm` is to be deleted.
+
+## Milestone 374 (tentative number): the gaps of the rqlite, RabbitMQ and Garnet onboardings
+
+Status: done on 2026-11-27, on the bare-metal machine (hvx and the tests) from this Mac. Each fix
+below is its own commit with its tests. The gaps are the "What hydo lacked" sections of the
+rqlite, RabbitMQ and Garnet examples' RESULTS.md (open items 189, 191 and 192). Nothing recorded
+moved: the two keys of `groups:` are opt-in and change nothing without them, and the other fixes
+are in the controller's reading of an image, the explorer, the importer, the diagnosis, the
+parser, the build's warnings, the input key and the words. No engine's guest behaviour, agent,
+image or fingerprint changed, and the fingerprint epoch stays 6.
+
+**How the proofs ran.** On the bare-metal machine in this round's own tree, with the 0.6.0 Linux
+release's guest files and this tree's `hydo`, `hydo-build`, `hydo-fetch-image` and `hydo-hvx`.
+The examples were copied, inputs only, from the trees of the rqlite, RabbitMQ and Garnet sessions,
+which were only read. "Before" is the programs of the rqlite or RabbitMQ session (built from
+`main` before this round) on the same image.
+
+**1. A history check file beside a `checks:` section.** The host controller took the history
+checks from the embedded `hydo.yaml`, and read the image's `manifest.sh` only when that list was
+empty, or to replace a messages check's declaration with the built one. So a
+`checks/list_append_*` or `linearizable_*` file was dropped without a word when `hydo.yaml` had a
+`checks:` section, although `hydo build` compiled it and said `+ 2 history checks`. Now
+`hydo_control::agent::merge_history` keeps the declared checks, takes a messages check's built
+declaration as before, and adds every built check that `hydo.yaml` does not name. An image
+without such a pair gets the list it got before; no example has one, so no recorded run moves.
+The other way, refusing at `hydo build`, was not needed: both kinds run together.
+
+The proof is a copy of the rqlite example whose list-append check `la` is the file
+`checks/list_append_la` (`# hydo: history=la consistency=strict-serializable`, `exec /bin/rqc
+lafinal`) beside the messages check `writes` of `hydo.yaml`, as its first images had it. The
+image `cc9693a0…` has both checks in its `manifest.sh` (`HYDO_CHECK_c0_id='writes'`,
+`HYDO_CHECK_c1_id='la'`). One clean run each:
+
+| programs | `HYDO-CHECK` lines | final read-backs | checks | fp | wfp |
+|---|---|---|---|---|---|
+| before | 1 (`writes`) | `writes` | `checks=2 held` (`writes.no-phantom`, `writes.acked-outcome`) | `422b6fc2dfc83cc0` | `0c59c193e97c8665` |
+| this tree | 2 (`writes`, `la`) | `writes`, `la` | `checks=3 held`, `la` PASS | `1dfdc81cd750869a` | `0c59c193e97c8665` |
+
+The workload's fingerprint is the same; the run's fingerprint differs by the declaration line of
+`la` and its read-back, which the run did not have before. The test
+`a_checks_file_beside_a_checks_section_is_kept` (hydo-control) covers the merge.
+
+**2. A group's killed members restart together (`restart: together`).** After a `K=` that killed
+several services, the controller started each one and waited for its readiness check before it
+started the next (`start_svc`), and the heal's restart pass did the same. A member whose
+readiness needs a quorum then never gets ready: a RabbitMQ node that restarts with data opens
+AMQP only after its peers answer, and 3 of the onboarding's 20 schedules ended `ERROR rabbit1
+restart failed` (open items 147 and 157 have the same for TiKV's PD and ClickHouse's Keepers).
+
+`groups[].restart` (a format-1 addition, `one-by-one` by default, or `together`) says how a
+group's members come back. With `together`, the controller starts the setup and the process of
+every killed member first (`launch_tracked`, as `start_after: started` does at the first start),
+and then runs each one's readiness check in the order of `services:` (`start_together` in
+`hydo-control/src/schedule.rs`). It does so at the end of a `K=` whose services are all members of
+the group, and in the heal's restart pass for the members that are down then, so also after `X=`
+and the reactions' kills. A check that fails ends the run with `ERROR <service> restart failed`,
+as before. The restarts of `G=` and `L=` stay one by one. Without the key the code takes the
+paths it took before, command for command. MANIFEST.md ("Groups of services and partitions" and
+"Starting services together") says so.
+
+The proof is two copies of the RabbitMQ example whose readiness is AMQP (`ready: "tcp:5672"`), as
+its first images had it: `rabbitmq-amqp` (image `3828aa4a…`) without the key, and
+`rabbitmq-together` (`ebe80987…`) with `restart: together` on the group `nodes`. The schedule
+`disk=none | run K=nodes.all@10+2` kills the three nodes before step 10 and starts them again
+before step 12:
+
+| image | programs | what the controller did | verdict | fp | ctl |
+|---|---|---|---|---|---|
+| `rabbitmq-amqp` | before | `restarting rabbit1 before step 12` | `ERROR rabbit1 restart failed` | `0f45ddf6d366629f` | `5dc13f225e88e839` |
+| `rabbitmq-amqp` | this tree | the same | the same | `0f45ddf6d366629f` | `5dc13f225e88e839` |
+| `rabbitmq-together` | this tree, twice | `restarting rabbit1 rabbit2 rabbit3 together before step 12` | `OK`, `checks=14 held` | `08574ee52da3936d` both | `4e7942b717d3f76f` both |
+
+The run without the key gave the old programs' fingerprint and control transcript, so the
+change is inert there. With the key the three nodes came back, the drain and the checks ran, and
+two fresh boots gave one fingerprint. A clean run of the `together` image gave `OK` (`checks=14
+held`, `4cd28b60387e8707`). The example itself keeps its readiness on the Erlang distribution
+port and has no key, so its recorded runs are unchanged.
+
+**3. The links between a cluster's nodes (`links: all`).** With `network: bridge` the explorer
+draws a link fault only between two services where one names the other in `depends_on`. When no
+service names any, it draws every pair (`hydo_explore::space`, `bridge_links`). The probe below
+shows that this was the case of Garnet's import: its six nodes name no `depends_on`, and the
+explorer had all 15 links of them. The Garnet onboarding's "What hydo lacked" item 4 read the rule
+as "no links", which holds only once any service names a dependency. A usual Compose file names
+some: a replica on its primary, an application on its database, a job's dependents. Then the
+nodes that do not name each other get no link fault, as in open items 97 and 111.
+
+`groups[].links` (a format-1 addition, `depends_on` by default, or `all`) makes every two members
+of the group linked for the explorer. `hydo compose` writes a group with `links: all` for the
+services of one image that run one command and are no one-shot job: the nodes of one cluster.
+It names the group after the image (`garnet`, `rabbitmq`), prints a line that names its
+services, and adds the key to a converted Kubernetes StatefulSet's group too. A manifest
+without the key gets the links it got before. On one loopback network every two services with
+`addr:` are linked anyway.
+
+The probe asks the explorer's fault space (`Space::links`) of five manifests:
+
+| manifest | `depends_on` | group | links of the nodes |
+|---|---|---|---|
+| Garnet's import with this tree, the group taken out | none | none | all 15 pairs and each node against the rest |
+| Garnet's import with this tree | none | `garnet`, `links: all` | the same |
+| `garnet-deps`: the example with each replica on its primary | `g4` on `g1`, `g5` on `g2`, `g6` on `g3` | the shards' groups | `g1-g4`, `g2-g5`, `g3-g6` only |
+| `garnet-links`: the same with a group `cluster` of the six | the same | `cluster`, `links: all` | all 15 pairs and each node against the rest |
+| the RabbitMQ example | none | `nodes` | all 3 pairs and each node against the rest |
+
+The import of Garnet's Compose file with this tree's `hydo compose` printed `g1, g2, g3, g4, g5 and
+g6 run one image with one command: the group garnet (groups:) with links: all, ...` and wrote
+the group with a comment.
+
+On hvx `hydo explore --seeds 1-6 --workers 1 --no-shrink` of `garnet-links` (image
+`fae5f7db…`) wrote those links into its `fault-space.json`. Two of its six schedules cut a node
+from all its peers, `N=g6-*@23-29:duplicate,36%,loss,57%` (seed 2, after `K=g1@13+2`) and
+`N=g2-*@20-27:duplicate,27%` (seed 3), links that `garnet-deps` does not have. All six passed:
+the faults ran, and Garnet's checks held.
+
+The goldens of the importer moved with the new group, and were recorded again with `HYDO_BLESS=1`:
+`hydo-compose`'s `tests/golden.json` (the hashes and answers of the imports whose
+services share an image and a command) and `tests/golden/k8s-cluster.yaml` (`links: all` on the
+StatefulSet's group).
+
+**4. A kill that hydo sent from the guest is hydo's.** The diagnosis called a SIGKILL the kernel's
+out-of-memory killer when the host had sent no `signal` command to the process. A
+`kill-now-<svc>` reaction kills from a relay in the guest, and a kill of threads from a script
+there, so in the Garnet onboarding `hydo inspect diagnose --evidence` blamed the memory for
+`A=garnet.bgsave+10:kill-now-g1`. Every kill of hydo leaves the controller's note `KILLED <svc>
+...` in the control transcript: `K=`, `X=`, `G=`, and the reactions. The diagnosis now counts a
+SIGKILL of a process whose conversation has such a note for its handle as sent by hydo
+(`hydo_cli::inspect::diagnose`, `killed_by_hydo`), and says nothing of memory then. The test
+`a_sigkill_of_a_reaction_relay_is_hydos` adds the relay's note to the recorded out-of-memory
+run of the fixtures; `a_sigkill_nobody_sent_in_provisioning` keeps its words. The note names the
+service, not the moment, so a second SIGKILL of the same service by the kernel later in the same
+conversation would be counted as hydo's too.
+
+**5. Which Go SDK has `Drained`.** The module's tag `sdk/go/v0.7.0`, published with 0.7.0, has
+`History.Drained`; `sdk/go/v0.6.0` lacks it, as the RabbitMQ onboarding found (`git grep` of both
+tags). `hydo guide messages` and the Go SDK's README now name v0.7.0, and the guide gives the
+generic record for an older module: `q.Record(9, "ok", "drained", hydohist.Enc("jobs"),
+hydohist.Enc("-"))`. No SDK code changed, and the frozen copy in `hydo/stack` stays.
+
+**6. The end of a run, and one drain for several histories.** After the heal hydo runs every
+check's `final:` in the order of `checks:`, then the `eventually` checks and the composer's
+`eventually_` commands, then the `final` checks and `finally_` commands (`finish` in
+`hydo-control`). No guide said so, and the RabbitMQ onboarding's probe after the faults was an
+`eventually_` command whose messages the drain had not waited for. `hydo guide messages` ("Write
+the drain") and MANIFEST.md now give the order. A messages check without `final:` is no longer
+refused for a claim that reads the end of its history when another messages check of the
+manifest has a `final:`: that drain writes its `drained` records too (`hydo_manifest::messages`,
+`validate`'s `shared_drain`). A claim the drain leaves undecided stays an ERROR that names it, so
+nothing passes unjudged. A list-append check's `final:` is a read-back, not a drain, and does not
+count. The test `a_check_without_final_shares_another_checks_drain` (hydo-manifest).
+
+**7. `T=<step>:+<secs>`.** The parser takes a forward clock step with its sign: `T=10:+120` is
+`T=10:120`, and it prints so (`hydo_schedule`, the `T=` arm; `++`, `+-` and `+0` are refused). The
+guest sees the printed text, so a schedule with the sign is the run of the one without it.
+`hydo run` and `hydo explore --schedule` take the canonical text (`Schedule::canonical`), and
+`hydo run` prints it when it differs. The service clock's `T=<svc>@` form is not touched. The
+test `a_forward_clock_step_takes_its_plus_sign` (hydo-schedule).
+
+**8. A file system of `storage:` that the image's user cannot write.** An image service that
+runs as another user than root and has `storage:` with `size_mib:` gets a warning at `hydo build
+--check` and at `hydo build`. hydo makes that file system empty and owned by root, so the rqlite
+nodes (uid 1000) stopped with `permission denied`. The warning names the user, the folder and
+where the service sees it, and the fix: `setup: chown <uid>:<gid> /data/<dir>`, with the user's
+numbers when the image names the user by name, because `setup:` runs in the guest
+(`hydo_build::oci::storage_owner_warnings`). A `setup:` with `chown`, root, or a storage folder
+without a file system of its own gives none. `hydo build --check` of a copy of the rqlite
+example without its three `chown` lines gave one warning per node, for example `rq1: the image
+runs as the user rqlite. Its storage /data/vol/rq1 (the service's /rqlite/file) is a file system
+of its own, which starts empty and owned by root, so the service cannot write to it. ...`; the
+example as it is gave none. The test `a_storage_file_system_its_user_cannot_write_is_named`
+(hydo-build). `hydo compose` writes no `storage:`, so its import is unchanged.
+
+**9. The input key reads no output of hydo.** `hydo explore --configs` builds its images through
+the image cache of `hydo versions`, keyed by the image's input key
+(`hydo_cli::ci::inputkey`). The key hashed every file of the `hydo/` folder. The RabbitMQ
+example's folder held, beside its 173 input files (0.13 GiB), the build folder `.hydo` with the
+copies' unpacked roots and disk images, the runs and the explorations: 46,359 files and 37 GiB
+as the key's walk counts them, following links. Hashing the 173 files took 2.5 s on the
+bare-metal machine; at that rate the 37 GiB take about 12 minutes for each key, and `--configs`
+makes one key per combination, which matches the 23 minutes. The key now leaves out `.hydo`,
+`hydo-out`, and every folder with a `result.json` or an `exploration.json` (`is_output_dir`). A
+folder without such outputs keeps its key; one with them gets a new key once, so an image cache
+builds that image again, with the same bytes. The test `the_key_leaves_out_hydos_outputs`.
+
+**Tests.** On the bare-metal machine: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D
+warnings`, and the tests of hydo-schedule, hydo-manifest, hydo-control, hydo-compose, hydo-build,
+hydo-explore, hydo-config, `hydo --bins`, `hydo --test it` and `hydo-agents --test it` passed. Two
+goldens moved on purpose and were recorded again with `HYDO_BLESS=1`: the importer's (fix 3) and
+the `hydo guide manifest` answers of `hydo`'s `tests/golden/cli.jsonl`, which hash MANIFEST.md.
+The schema `hydo/schema/project-v1.json` (regenerated with `HYDO_BLESS=1 cargo test -p
+hydo-manifest --test it format::`) gained the two keys of `groups:`, an addition to the released
+schema. In two runs of `hydo --test it` four and six of the `update::` tests failed at the spawn of a fake program (`update.rs` line
+388); they pass alone and with `--test-threads=1`, and this round changed nothing they run.
+
+**What is left.**
+
+- `restart: together` acts at the end of a `K=` and in the heal. The restarts of `G=`, `L=` and a
+  recovery boot's start stay as they were; a recovery boot starts its services as the first boot
+  does, where `start_after: started` already starts a cluster together. The TiKV and ClickHouse
+  examples did not run with the key.
+- `hydo compose` groups the services of one image by their entrypoint and command. Nodes of one
+  cluster whose commands differ, such as a primary and its replicas started with other flags, get
+  no group; nodes built from several images neither.
+- The diagnosis counts a SIGKILL as hydo's when the conversation has a `KILLED <svc>` note for
+  the service, wherever it is. A later kill of the same service by the kernel in the same
+  conversation would count as hydo's too.
+- No example sets a messages check without `final:` yet; the RabbitMQ example keeps its
+  placeholders.
+- The warning for a `storage:` file system names the user as the image gives it; a name needs its
+  number from the image's `/etc/passwd`, which hydo does not read for it.

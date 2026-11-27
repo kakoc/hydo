@@ -58,7 +58,14 @@ pub const KNOWN_TOP: &[&str] = &[
     "configs",
 ];
 /// The keys of a `groups:` entry (Milestone 195).
-pub const KNOWN_GROUP: &[&str] = &["name", "services", "primary", "description"];
+pub const KNOWN_GROUP: &[&str] = &[
+    "name",
+    "services",
+    "primary",
+    "restart",
+    "links",
+    "description",
+];
 pub const KNOWN_SVC: &[&str] = &[
     "name",
     "cmd",
@@ -1320,6 +1327,23 @@ fn validate_groups(m: &Value) -> R<()> {
                 )));
             }
         }
+        if let Some(r) = obj_get(g, "restart") {
+            if !matches!(r.as_str(), Some("one-by-one" | "together")) {
+                return Err(err(format!(
+                    "{wh} ({n}): restart: one-by-one (each member after the one before is \
+                     ready, the default) or together (every killed member started, then each \
+                     one's readiness checked)"
+                )));
+            }
+        }
+        if let Some(r) = obj_get(g, "links") {
+            if !matches!(r.as_str(), Some("depends_on" | "all")) {
+                return Err(err(format!(
+                    "{wh} ({n}): links: depends_on (the explorer cuts the links between members \
+                     that name each other in depends_on, the default) or all (every two members)"
+                )));
+            }
+        }
     }
     Ok(())
 }
@@ -1388,7 +1412,13 @@ fn validate_checks(m: &Value, inv_ids: &[String]) -> R<()> {
             )));
         }
         if t == messages::TYPE {
-            messages::validate(c, &wh)?;
+            // Milestone 374: another messages check's final: may be this check's drain
+            let shared_drain = list.iter().enumerate().any(|(j, o)| {
+                j != i
+                    && obj_get(o, "type").and_then(Value::as_str) == Some(messages::TYPE)
+                    && obj_get(o, "final").is_some_and(truthy)
+            });
+            messages::validate(c, &wh, shared_drain)?;
         } else if t == "linearizable" {
             let model = obj_get(c, "model")
                 .cloned()

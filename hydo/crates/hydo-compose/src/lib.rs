@@ -609,6 +609,28 @@ fn opt_y(v: Option<String>) -> Y {
 
 // ---------------------------------------------------------------- the conversion
 
+/// A group's name from an image reference (Milestone 374): the last part of its repository, in
+/// the manifest's alphabet (`ghcr.io/microsoft/garnet:2.2.14` gives `garnet`), else `nodes`.
+fn group_name_of_image(image: &str) -> String {
+    let repo = image.split('@').next().unwrap_or_default();
+    let last = repo.rsplit('/').next().unwrap_or_default();
+    let last = last.split(':').next().unwrap_or_default();
+    let mut n: String = last
+        .to_ascii_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect();
+    n = n.trim_matches('_').to_string();
+    if !n.starts_with(|c: char| c.is_ascii_lowercase()) {
+        n = if n.is_empty() {
+            "nodes".into()
+        } else {
+            format!("g_{n}")
+        };
+    }
+    n
+}
+
 /// `svc_name(n)`: a valid hydo service name for a Compose service name.
 fn svc_name(n: &str) -> String {
     let s: String = n
@@ -1249,6 +1271,65 @@ impl<'a> Importer<'a> {
         }
         groups.retain(|g| g.1.len() > 1);
         groups
+    }
+
+    /// Milestone 374: the services of one image and one role (the same entrypoint and command; no
+    /// one-shot job), two or more, in service order, each with a group name made from the image's
+    /// name. They are the nodes of a cluster, which talk to each other although Compose names no
+    /// `depends_on` between them: Garnet's six nodes got no network fault between them (open item
+    /// 192). Services that a converted document's `x-hydo-groups` already groups are left out.
+    fn role_groups(&self) -> Vec<(String, Vec<String>)> {
+        let grouped: Vec<String> = as_list(self.doc.get("x-hydo-groups"))
+            .iter()
+            .flat_map(|g| as_list(g.get("services")))
+            .filter_map(|m| self.name_of(&pstr(&m)).cloned())
+            .collect();
+        let mut roles: Vec<(String, Vec<String>)> = Vec::new();
+        for s in &self.svcs {
+            if s.job.is_some() || s.job_kind.is_some() || grouped.contains(&s.name) {
+                continue;
+            }
+            let key = format!("{}\0{:?}\0{:?}", s.image_ref, s.entrypoint, s.cmd);
+            match roles.iter_mut().find(|g| g.0 == key) {
+                Some(g) => g.1.push(s.name.clone()),
+                None => roles.push((key, vec![s.name.clone()])),
+            }
+        }
+        roles.retain(|g| g.1.len() > 1);
+        let mut used: Vec<String> = as_list(self.doc.get("x-hydo-groups"))
+            .iter()
+            .map(|g| svc_name(&pstr(g.getn("name"))))
+            .collect();
+        let mut out = Vec::new();
+        for (key, names) in roles {
+            let image = key.split('\0').next().unwrap_or_default();
+            let base = group_name_of_image(image);
+            let mut name = base.clone();
+            let mut k = 2;
+            while used.contains(&name) {
+                name = format!("{base}_{k}");
+                k += 1;
+            }
+            used.push(name.clone());
+            out.push((name, names));
+        }
+        out
+    }
+
+    /// One line per group that the import wrote (Milestone 374), for the printed summary.
+    pub fn group_lines(&self) -> Vec<String> {
+        self.role_groups()
+            .into_iter()
+            .map(|(g, names)| {
+                format!(
+                    "{} run one image with one command: the group {g} (groups:) with links: all, \
+                     so the explorer cuts the links between them (with network: bridge it cuts \
+                     only the links that depends_on names) and the tokens can aim at the group \
+                     (K={g}.majority@...)",
+                    and_words(&names)
+                )
+            })
+            .collect()
     }
 
     /// Milestone 367: services of one image whose port and readiness check both came from the
@@ -3487,8 +3568,22 @@ impl<'a> Importer<'a> {
                 gtext.push_str(&comment(&pstr(d), 2));
             }
             gtext.push_str(&format!(
-                "  - name: {}\n    services: {}\n",
+                "  - name: {}\n    services: {}\n    links: all\n",
                 svc_name(&pstr(g.getn("name"))),
+                flow_list(&members)
+            ));
+        }
+        for (g, members) in self.role_groups() {
+            gtext.push_str(&comment(
+                &format!(
+                    "{}: one image, one command, the nodes of one cluster; the explorer cuts the \
+                     links between them",
+                    and_words(&members)
+                ),
+                2,
+            ));
+            gtext.push_str(&format!(
+                "  - name: {g}\n    services: {}\n    links: all\n",
                 flow_list(&members)
             ));
         }
@@ -3940,6 +4035,9 @@ pub(crate) fn write_outputs(imp: &mut Importer, text: &str, out: &str, p: &str) 
     for l in imp.start_lines(&order) {
         eprintln!("{p}: {l}");
     }
+    for l in imp.group_lines() {
+        eprintln!("{p}: {l}");
+    }
     for (_, t) in &imp.w.list {
         eprintln!("{p}: warning: {t}");
     }
@@ -3974,6 +4072,19 @@ mod tests {
     /// The header's commands name the output's folder as `--out` gave it (0.3.1): from a
     /// repository's root `--out hydo/hydo.yaml` gives `hydo build hydo/hydo.yaml`; an absolute or
     /// upward `--out` keeps the bare name, so no machine path goes into the file.
+    #[test]
+    fn group_names_from_images() {
+        assert_eq!(
+            group_name_of_image("ghcr.io/microsoft/garnet:2.2.14"),
+            "garnet"
+        );
+        assert_eq!(group_name_of_image("rabbitmq:4.2-management"), "rabbitmq");
+        assert_eq!(group_name_of_image("rqlite/rqlite@sha256:ab"), "rqlite");
+        assert_eq!(group_name_of_image("./build/My-Node.tar"), "my_node_tar");
+        assert_eq!(group_name_of_image("3fs"), "g_3fs");
+        assert_eq!(group_name_of_image(""), "nodes");
+    }
+
     #[test]
     fn header_commands_name_the_output_folder() {
         assert_eq!(in_out_dir("hydo/hydo.yaml", "hydo.yaml"), "hydo/hydo.yaml");

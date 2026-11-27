@@ -389,6 +389,12 @@ impl Schedule {
         out
     }
 
+    /// The canonical text of a schedule written by a person (Milestone 374): `T=10:+120` becomes
+    /// `T=10:120`. None when `text` is no schedule; the caller then reports the parse error.
+    pub fn canonical(text: &str) -> Option<String> {
+        Schedule::parse(text).ok().map(|s| s.to_string())
+    }
+
     /// True when `text` is a schedule in its canonical form (`parse(text)` prints it back).
     pub fn is_canonical(text: &str) -> bool {
         Schedule::parse(text).is_ok_and(|s| s.to_string() == text)

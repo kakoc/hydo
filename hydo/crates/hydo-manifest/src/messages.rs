@@ -206,8 +206,12 @@ struct Facts {
 }
 
 /// Validates a messages check (after `include:` is resolved, or with it unresolved: then only
-/// the entry's own keys are checked, and the combinations are not).
-pub fn validate(c: &Value, wh: &str) -> R<()> {
+/// the entry's own keys are checked, and the combinations are not). `shared_drain`: another
+/// messages check of the manifest has a `final:` (Milestone 374): a check without one may then
+/// claim what reads the end of its history, because hydo runs every check's `final:` before it
+/// judges any check, and one drain may write the `drained` records of several histories. A
+/// claim that the drain leaves undecided ends the run in an ERROR that names it.
+pub fn validate(c: &Value, wh: &str, shared_drain: bool) -> R<()> {
     for k in ["model", "initial", "consistency"] {
         if c.get(k).is_some() {
             let t = if k == "consistency" {
@@ -283,7 +287,7 @@ pub fn validate(c: &Value, wh: &str) -> R<()> {
     if unresolved {
         return Ok(());
     }
-    let has_final = c.get("final").is_some_and(py::truthy);
+    let has_final = shared_drain || c.get("final").is_some_and(py::truthy);
     if let Some(e) = conflicts(&f, has_final).first() {
         return Err(err(format!("{wh}: {e}")));
     }

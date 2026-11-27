@@ -45,7 +45,8 @@ checks:
   acknowledgements;
 - `delivery: at-most-once` or `exactly-once` together with a `lease`;
 - `delivery` with loss, `fan_out`, `processing`, `dead_letter` with `to:`, or `acked_outcome`,
-  without a `final:`.
+  without a `final:`, when no other messages check of the manifest has one (see "One drain for
+  several histories").
 
 Unknown keys are errors, so a misspelled claim stops the build.
 
@@ -182,12 +183,16 @@ q.drained(9, "jobs", "-");
 ```
 
 Clients in other languages write the same lines with their history recorder's generic records.
-The Go SDK's `hydohist` also has a call for the drain's last record:
+The Go SDK's `hydohist` also has a call for the drain's last record, from the module's version
+v0.7.0 on (`github.com/kakoc/hydo/sdk/go`, the tag `sdk/go/v0.7.0`):
 
 ```go
 q := hydohist.New("jobs")
 q.Drained(9, "jobs", "-") // drained jobs -: the drain read every message of the group
 ```
+
+v0.6.0 and older lack `Drained`. With them, write the same line with the generic record:
+`q.Record(9, "ok", "drained", hydohist.Enc("jobs"), hydohist.Enc("-"))`.
 
 ## Write the drain
 
@@ -195,6 +200,28 @@ The drain is the check's `final:` command. hydo runs it after the heal, and in t
 after a power cut. It receives from every group until the group is empty and acknowledges what it
 receives. Then it writes `drained <channel> <group>`. A claim that reads the end of the history
 without a drained group is undecided, and the run's verdict is an ERROR.
+
+The end of a run comes in this order:
+
+1. The heal: the faults end, and the services that are down start again.
+2. The `final:` command of every check, in the order of `checks:`.
+3. The `eventually` checks and the composer's `eventually_` commands.
+4. The `final` checks and the composer's `finally_` commands, then the verdict.
+
+So a drain cannot wait for an `eventually_` command: the command runs after the drain has
+ended. A probe that sends messages after the faults, and whose messages the check judges, is the
+first part of the drain itself. In the RabbitMQ example an `eventually_` probe published
+recorded messages after the drain had ended, and every clean run failed `no-loss`.
+
+### One drain for several histories
+
+One drain may read the groups of several checks, for example in parallel with one quiet window
+for all of them. Give that drain to one messages check as its `final:`, and leave out `final:`
+on the others. For each other check the drain writes a `drained` record of
+every channel and group into that check's own history (`hydohist.New("<history>")` in Go). A
+claim of a check whose groups the drain did not write is undecided, and the run ends in an ERROR
+that names it. Without another messages check that has a `final:`, `hydo build` refuses a check
+without one.
 
 A drain that stops too early reports acknowledged messages as lost, or writes no `drained`
 record. Write it to these three rules:

@@ -259,3 +259,59 @@ fn the_services_own_file_systems_count_against_the_disk() {
         assert!(r.contains(part), "{part}\n{r}");
     }
 }
+
+/// Milestone 374: an image service that runs as another user and keeps its data on a file system
+/// of its own gets a warning that names the `chown` fix (rqlite, open item 189); root, a
+/// `setup:` with `chown`, and a storage directory without its own file system get none.
+#[test]
+fn a_storage_file_system_its_user_cannot_write_is_named() {
+    let tmp = TmpDir::fresh(
+        std::env::temp_dir().join(format!("hydo-build-storage-owner-{}", std::process::id())),
+    );
+    big_image(&tmp, 1);
+    let owners = |svc: Value| -> Vec<String> {
+        let mut m = json!({"name": "own", "services": [svc]});
+        let mpath = tmp.join("own.json");
+        std::fs::write(&mpath, m.to_string()).unwrap();
+        let (mut o, mut e) = (Vec::new(), Vec::new());
+        let mut io = hydo_build::Io {
+            out: &mut o,
+            err: &mut e,
+        };
+        let svcs =
+            hydo_build::oci::prepare(&mut m, &mpath.to_string_lossy(), "x86_64", &mut io).unwrap();
+        hydo_build::oci::storage_owner_warnings(&svcs, &m)
+    };
+    let mut rq = service("rq1");
+    rq["user"] = json!("1000:1000");
+    rq["storage"] = json!({"dir": "vol/rq1", "size_mib": 256});
+    rq["mounts"] = json!([{"src": "/data/vol/rq1", "dst": "/rqlite/file"}]);
+    let w = owners(rq.clone());
+    assert_eq!(w.len(), 1, "{w:?}");
+    for part in [
+        "rq1: the image runs as the user 1000:1000.",
+        "Its storage /data/vol/rq1 (the service's /rqlite/file) is a file system of its own, \
+         which starts empty and owned by root",
+        "`setup: chown 1000:1000 /data/vol/rq1`",
+    ] {
+        assert!(w[0].contains(part), "{part:?} not in {:?}", w[0]);
+    }
+    let mut named = rq.clone();
+    named["user"] = json!("rqlite");
+    let w = owners(named);
+    assert!(
+        w[0].contains(
+            "`setup: chown <uid>:<gid> /data/vol/rq1`, with the numbers of the user rqlite"
+        ),
+        "{w:?}"
+    );
+    let mut fixed = rq.clone();
+    fixed["setup"] = json!("chown 1000:1000 /data/vol/rq1");
+    assert!(owners(fixed).is_empty());
+    let mut root = rq.clone();
+    root["user"] = json!("root");
+    assert!(owners(root).is_empty());
+    let mut plain = rq;
+    plain["storage"] = json!("vol/rq1");
+    assert!(owners(plain).is_empty());
+}

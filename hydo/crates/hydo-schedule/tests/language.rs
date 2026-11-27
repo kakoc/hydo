@@ -1334,3 +1334,23 @@ fn service_clocks() {
         "a service's clock takes a step",
     );
 }
+
+/// Milestone 374: a forward clock step written with its sign (RabbitMQ, open item 191) reads as
+/// the step without it and prints without it, so the guest sees one text for one step.
+#[test]
+fn a_forward_clock_step_takes_its_plus_sign() {
+    let p = Schedule::parse("disk=none | run T=10:+120").unwrap();
+    assert_eq!(p, Schedule::parse("disk=none | run T=10:120").unwrap());
+    assert_eq!(p.to_string(), "disk=none | run T=10:120");
+    assert_eq!(p.guest_text(), "run T=10:120");
+    assert_eq!(
+        Schedule::canonical("disk=none | run T=10:+120 C=12").as_deref(),
+        Some("disk=none | run T=10:120 C=12")
+    );
+    assert!(!Schedule::is_canonical("disk=none | run T=10:+120"));
+    refused("disk=none | run T=10:++120", "a forward step is +<seconds>");
+    refused("disk=none | run T=10:+-120", "a forward step is +<seconds>");
+    refused("disk=none | run T=10:+0", "a forward step is +<seconds>");
+    round_trip("disk=none | run T=10:-120");
+    assert_eq!(Schedule::canonical("no bar"), None);
+}

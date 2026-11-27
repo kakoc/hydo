@@ -1119,7 +1119,15 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     if args.len() != 1 {
         die("usage: hydo run [IMG] \"<schedule>\" [--image IMG] [--out DIR] [--known-errors FILE] [--memory] [--vcpus N] [--turn-margin N]   e.g. hydo run \"disk=cut | run C=12 R=everysec\"");
     }
-    let sched = args[0].clone();
+    // Milestone 374: the schedule in its canonical text (`T=10:+120` is `T=10:120`), which the
+    // guest sees and result.json records
+    let sched = match hydo_schedule::Schedule::canonical(&args[0]) {
+        Some(c) if c != args[0] => {
+            println!("hydo: the schedule as hydo writes it: {c}");
+            c
+        }
+        _ => args[0].clone(),
+    };
     let outdir = outdir.map(PathBuf::from).unwrap_or_else(new_run_dir);
     let eargs = opts.eargs(&image);
     // Milestone 339: a guest that does not fit into this machine's memory is a refusal, exit

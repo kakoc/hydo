@@ -128,3 +128,23 @@ fn the_manifest_an_image_carries_is_read_without_its_bundles() {
     let text = manifest("  - id: jobs\n    type: messages\n    history: jobs\n    final: d\n    include: [bundles/x.yaml]\n");
     hydo_manifest::from_embedded(&text, None).unwrap();
 }
+
+/// Milestone 374: one drain for several histories (RabbitMQ, open item 191). A messages check
+/// without `final:` takes another messages check's drain, because every check's `final:` runs
+/// before any check is judged; without such a check it is refused as before.
+#[test]
+fn a_check_without_final_shares_another_checks_drain() {
+    let d = dir("shared-drain");
+    let drain = "  - id: queues\n    type: messages\n    history: queues\n    final: /bin/c drain-all\n    claims:\n      delivery: at-least-once\n";
+    let order = "  - id: order\n    type: messages\n    history: order\n    claims:\n      delivery: at-least-once\n";
+    load(&d, &manifest(&format!("{drain}{order}"))).unwrap();
+    load(&d, &manifest(&format!("{order}{drain}"))).unwrap();
+    let e = load(&d, &manifest(order)).unwrap_err();
+    assert!(
+        e.contains("claims.delivery reads the end of the history, and the check has no final:"),
+        "{e}"
+    );
+    // a list-append check's final: is a read-back, not a drain
+    let la = "  - id: la\n    type: list-append\n    history: la\n    final: /bin/c read\n";
+    assert!(load(&d, &manifest(&format!("{la}{order}"))).is_err());
+}

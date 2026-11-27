@@ -281,7 +281,7 @@ I	hydo/onboard/examples/python-kv/hydo-mac.yaml	19ae1d6b5ec2705e9583e9d81d211586
 I	hydo/onboard/examples/qdrant-flaky-10200/hydo.yaml	7a0715a35c8a4209da18621151fa894f1796efde4ae2742014f82f62d5c07667
 I	hydo/onboard/examples/rabbitmq/docker-compose.yaml	38fb533b8db96c2f6ed3c57d8b131bdb3adf064c84278b1c363b2f3522f7ff10
 I	hydo/onboard/examples/rabbitmq/hydo/hydo-compose.lock.json	5bf61021fa901ad1f48504be473b586955fac4ef49317c9f11c022801e66bcf0
-I	hydo/onboard/examples/rabbitmq/hydo/hydo.yaml	e65ede83b1f571d04aba63b4904493a7be5a356665eed4667388b108f40c5abc
+I	hydo/onboard/examples/rabbitmq/hydo/hydo.yaml	04cab2ea92cc1b15c2a17b8786d68921c31b8150e0daf103551fa50e12428c9d
 I	hydo/onboard/examples/rauc/hydo.yaml	4ce15eaa8337453ab5315f73d2a8978fec897f77a86c63e04166762ec0b16111
 I	hydo/onboard/examples/redis-bridge/hydo.yaml	30da2c5ff1a49e0399e076cbda5bb3d62df316dcdc337a81077b3b24fc4003f6
 I	hydo/onboard/examples/redis-composed-hist/hydo/hydo.yaml	4b6b8b1a93f59f5591de4a3e1a52329853a4d12ddc0d78d24238de5eaee0835d

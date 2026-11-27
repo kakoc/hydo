@@ -1550,6 +1550,30 @@
             }
           ]
         },
+        "restart": {
+          "description": "How the members come back after a fault killed two or more of them (Milestone 374):\none-by-one (each after the one before is ready), or together (all started, then each\none's readiness checked), for a cluster whose members get ready only with a quorum.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupRestart"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "one-by-one"
+        },
+        "links": {
+          "description": "Which links between the members the explorer may cut with `network: bridge` (Milestone\n374): depends_on (only those that name each other there, the default) or all (every two\nmembers, for a cluster whose nodes talk to each other).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupLinks"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "depends_on"
+        },
         "description": {
           "anyOf": [
             {
@@ -1565,6 +1589,22 @@
       "required": [
         "name",
         "services"
+      ]
+    },
+    "GroupRestart": {
+      "description": "How a group's killed members are started again.",
+      "type": "string",
+      "enum": [
+        "one-by-one",
+        "together"
+      ]
+    },
+    "GroupLinks": {
+      "description": "Which links between a group's members the explorer draws network faults on.",
+      "type": "string",
+      "enum": [
+        "depends_on",
+        "all"
       ]
     },
     "Workload": {

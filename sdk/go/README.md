@@ -193,7 +193,7 @@ checks:
 `hydo guide checks` describes the checks and their options.
 
 A messages check (`hydo guide messages`) reads the same records. Its drain ends each group with
-the record `drained`:
+the record `drained`, which `Drained` writes from v0.7.0 on (v0.6.0 and older lack it):
 
 ```go
 q := hydohist.New("orders")

@@ -1830,6 +1830,57 @@ fn await_launched(
     Ok(())
 }
 
+/// Milestone 374: whether the services that one fault killed come back together: two or more of
+/// them, all members of one group with `restart: together`. Without that key a group's members
+/// come back one by one, each after the one before is ready, as before.
+fn restart_together(ctx: &Ctx, svcs: &[String]) -> bool {
+    svcs.len() > 1
+        && ctx
+            .plan
+            .groups
+            .iter()
+            .any(|g| g.together && svcs.iter().all(|s| g.services.contains(s)))
+}
+
+/// [`restart_together`]'s restart: every service's setup and process first, then each one's
+/// readiness check in the same order, so that a member whose readiness needs a quorum sees its
+/// peers started. Each service with whether it came up, in `svcs`' order.
+fn start_together(
+    fx: &mut F<'_>,
+    ctx: &Ctx,
+    svcs: &[String],
+    when: &str,
+) -> Step<Vec<(String, bool)>> {
+    log(
+        fx,
+        format!(
+            "restarting {} together {when} (restart: together)",
+            svcs.join(" ")
+        ),
+    );
+    let mut launched: Vec<(String, Option<Vec<String>>)> = Vec::new();
+    for s in svcs {
+        let e = launch_tracked(fx, ctx, s)?;
+        launched.push((s.clone(), e));
+    }
+    let mut out = Vec::new();
+    for (s, e) in launched {
+        let up = match e {
+            Some(e) => {
+                let up = await_ready(fx, ctx, &s, e)?;
+                fx.effect(|h, _| {
+                    h.starting.remove(&s);
+                    Memo::Unit
+                });
+                up
+            }
+            None => false,
+        };
+        out.push((s, up));
+    }
+    Ok(out)
+}
+
 /// A service's setup and its process (the first half of `start_svc`): Some(the environment of
 /// its commands) when the process was started, None when setup failed or the spawn was refused.
 fn launch_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<Option<Vec<String>>> {
@@ -2142,15 +2193,41 @@ fn restart_dead(fx: &mut F<'_>, ctx: &Ctx, verdict: &str, may_fail: bool) -> Ste
         })
     })?;
     let mut down = Vec::new();
-    for s in &ctx.plan.services {
-        // a restart policy's restart in progress ends first (M134; never waits without a policy)
-        fx.until(|h, _| !h.starting.contains(&s.name))?;
-        let alive = fx.effect_bool(|h, f| running(h, f, &s.name));
-        if alive {
-            continue;
+    // Milestone 374: the members of a group with `restart: together` that are down here start
+    // together, before the other services are looked at; without the key nothing changes
+    let mut ups: Vec<(String, bool)> = Vec::new();
+    for g in ctx.plan.groups.iter().filter(|g| g.together) {
+        let mut gdown = Vec::new();
+        for m in &g.services {
+            if ups.iter().any(|(s, _)| s == m) {
+                continue;
+            }
+            fx.until(|h, _| !h.starting.contains(m))?;
+            if !fx.effect_bool(|h, f| running(h, f, m)) {
+                gdown.push(m.clone());
+            }
         }
-        log(fx, format!("{} is down; restarting it", s.name));
-        if !start_svc(fx, ctx, &s.name)? {
+        if gdown.len() > 1 {
+            ups.extend(start_together(fx, ctx, &gdown, "after the faults")?);
+        }
+    }
+    for s in &ctx.plan.services {
+        let started = ups.iter().find(|(n, _)| *n == s.name).map(|(_, up)| *up);
+        let up = match started {
+            Some(up) => up,
+            None => {
+                // a restart policy's restart in progress ends first (M134; never waits without
+                // a policy)
+                fx.until(|h, _| !h.starting.contains(&s.name))?;
+                let alive = fx.effect_bool(|h, f| running(h, f, &s.name));
+                if alive {
+                    continue;
+                }
+                log(fx, format!("{} is down; restarting it", s.name));
+                start_svc(fx, ctx, &s.name)?
+            }
+        };
+        if !up {
             if ctx.run.no_faults {
                 // open item 86: nothing stopped it, so it stopped on its own; the checks still
                 // run, and the verdict names it (stopped_without_faults)
@@ -3318,9 +3395,23 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         // SEAM(NetFaults): `p == nto && netup`: net_off, "network healed before step p".
         net.heal_n_at(fx, ctx, p)?;
         if p == kup {
-            for ksvc in std::mem::take(&mut kdown) {
-                log(fx, format!("restarting {ksvc} before step {p}"));
-                if !start_svc(fx, ctx, &ksvc)? {
+            let down = std::mem::take(&mut kdown);
+            // Milestone 374: a group with `restart: together` starts its killed members at once
+            let together = restart_together(ctx, &down);
+            let mut ups = if together {
+                start_together(fx, ctx, &down, &format!("before step {p}"))?
+            } else {
+                Vec::new()
+            };
+            for ksvc in down {
+                let up = if together {
+                    let i = ups.iter().position(|(s, _)| *s == ksvc).expect("started");
+                    ups.remove(i).1
+                } else {
+                    log(fx, format!("restarting {ksvc} before step {p}"));
+                    start_svc(fx, ctx, &ksvc)?
+                };
+                if !up {
                     // M136: a K= restart that falls after the workload's last step is a restart
                     // after the faults; with restart_may_fail the service stays down and the
                     // heal's restart pass decides (restart_dead), as for any service down then

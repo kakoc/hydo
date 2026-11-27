@@ -590,7 +590,9 @@ services:
 ```
 
 The recovery boot after a power cut starts the services the same way. The heal's restart pass
-(after the faults) restarts dead services one at a time, each with its readiness check. `hydo
+(after the faults) restarts dead services one at a time, each with its readiness check, and so
+does the end of a `K=` that killed several services. A group with `restart: together` starts
+its killed members at once (see "Groups of services and partitions"). `hydo
 compose` writes `start_after: started` as Compose means `depends_on`: for its short form (a list
 of names, which Compose reads as `condition: service_started`) and for its long form with
 `condition: service_started` for every dependency (Milestone 204; before it the short form kept
@@ -763,8 +765,13 @@ verdict rules are in `hydo/HISTORIES.md`.
   declares the claims (`claims:`, `acknowledgement:`, `retention_ms:`, `clock_steps:`,
   `measures:`, and `include:` bundles of the project, which `hydo build` resolves); hydo checks
   exactly those and measures the history. Each claim is reported as `<id>.<claim>`. Its `final:`
-  is the drain, which writes `drained <channel> <group>`. Keys, records and refused combinations:
-  `hydo guide messages`.
+  is the drain, which writes `drained <channel> <group>`. A messages check without `final:` takes
+  the drain of another messages check that has one, which writes its records too (Milestone 374).
+  Keys, records and refused combinations: `hydo guide messages`.
+- The end of a run: after the heal, hydo runs every check's `final:` in the order of `checks:`,
+  then the `eventually` checks and the composer's `eventually_` commands, then the `final` checks
+  and the `finally_` commands. A drain therefore runs before any `eventually_` command, and a probe
+  whose messages a check judges belongs in the drain.
 - Examples: `examples/redis/hydo-hist.yaml` (SET/GET as registers and RPUSH/LRANGE as
   list-append: `R=everysec` + a power cut loses an acknowledged write, both checks see it) and
   `examples/etcd/hydo-hist.yaml` (puts and gets with etcd's mod_revision, read back through every
@@ -786,7 +793,7 @@ verdict rules are in `hydo/HISTORIES.md`.
 | `N=<svc>@<from>-<to>:<netem>` | `tc netem` on traffic to the service's `port` for steps `[from,to)` |
 | `O=<svc>@<from>-<to>:req\|resp:<netem>` | one direction only |
 | `C=<at>` | power cut before step `at` |
-| `T=<at>:<delta>` | step the realtime clock by `delta` seconds |
+| `T=<at>:<delta>` | step the realtime clock by `delta` seconds (`-30` back; `+30` and `30` forward, printed `30`) |
 | `T=<at>:@<point>` | set the realtime clock to the next instant of a time of day or a calendar boundary, in UTC (`@00:10`, `@:10-2s`, `@month+10m`); see "Clock steps to a time" |
 | `T=<svc>@<at>:<change>` | step one service's own wall clock (`-30` seconds, `1500ms`) or make it drift (`200ppm`, `0ppm` stops it), while the other services keep the guest's clock (Milestone 372); the service needs `clock: own`; see "One service's own clock" |
 | `N=<a>-<b>@...`, `N=<a>-*@...` | netem on the link between two services with `addr:` (or between `a` and every other one); see "Link faults" |
@@ -1574,6 +1581,8 @@ groups:
         if [ -n "$l" ]; then echo "$l"; exit 0; fi
       done
       exit 1
+    restart: together           # optional (Milestone 374): one-by-one (the default) or together
+    links: all                  # optional (Milestone 374): depends_on (the default) or all
 ```
 
 `K=`, `P=` and `X=` take a list or a selector in place of the service:
@@ -1599,6 +1608,27 @@ the primary. If no answer names a member, the run ends with `HYDO-ORACLE: ERROR 
 the group's primary: command named no member`, and the message names the likely cause: no
 primary for that long, or a first line that is no member's name (a node id or an address instead
 of the service's name).
+
+`restart:` says how the members come back after a fault killed two or more of them. With
+`one-by-one`, the default, hydo starts each killed member and waits for its readiness check
+before it starts the next. A member whose readiness needs a quorum then never gets ready: a
+RabbitMQ node that restarts with data opens AMQP only after its peers answer. With `together`,
+hydo starts the setup and the process of every killed member first, and then runs each one's
+readiness check in the order of `services:`. A check that fails ends the run with `HYDO-ORACLE:
+ERROR <service> restart failed`, as before. It acts at the end of a `K=` whose services are all
+members of the group, and in the heal's restart pass after the faults, for the members that are
+down then (kills of `X=` and of reactions among them). The restarts of `G=` and `L=` stay one by
+one. Without the key nothing changes, so a run without it keeps its fingerprint.
+
+`links:` says which links between the members the explorer cuts with `network: bridge`. With
+`depends_on`, the default, it draws a link fault only between two services where one names the
+other in `depends_on`, as for every service. The nodes of a cluster talk to each other although
+none names another there, so their links got no fault: Garnet's six nodes, imported from Compose,
+had none. With `all` the explorer counts every two members as linked. On one loopback network
+every two services with `addr:` are linked anyway. `hydo compose` writes a group with `links:
+all` for the services of one image that run one command (the nodes of one cluster), named after
+the image, and prints a line that names them. A converted Kubernetes StatefulSet's group gets
+the key too.
 
 The host controller writes each resolution to the guest's log and to the control transcript,
 for example `K: nodes.primary = n2`. The schedule keeps the selector's text, and the transcript

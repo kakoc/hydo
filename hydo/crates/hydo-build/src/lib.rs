@@ -474,6 +474,8 @@ pub fn main_with(ctx: &Ctx, argv: &[String], io: &mut Io) -> i32 {
     // the image services' roots against the guest's RAM (the Mac) or the engine's disk (hvx),
     // before anything is unpacked (Milestone 324)
     let fit = oci::root_fit_warnings(&p.oci, m, &a.arch);
+    // an image service's own file system that its user cannot write (Milestone 374)
+    let owners = oci::storage_owner_warnings(&p.oci, m);
     // the disk that its assembly would refuse, before anything is unpacked (Milestone 367)
     if let Some(r) = image::disk_refusal(m) {
         errln(io, &r);
@@ -483,12 +485,12 @@ pub fn main_with(ctx: &Ctx, argv: &[String], io: &mut Io) -> i32 {
         for line in hydo_manifest::check_summary(&a.path, &p.loaded) {
             outln(io, &line);
         }
-        for w in &fit {
+        for w in fit.iter().chain(&owners) {
             outln(io, &format!("hydo-build: warning: {w}"));
         }
         return 0;
     }
-    for w in &fit {
+    for w in fit.iter().chain(&owners) {
         errln(io, &format!("hydo-build: warning: {w}"));
     }
     let out = a
