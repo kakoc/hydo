@@ -456,7 +456,7 @@ input	hydo/onboard/examples/rabbitmq/hydo/hydo.yaml	a60ba387fc0d2b4ca7c2f493c148
 input	hydo/onboard/examples/rabbitmq/hydo/fetch-images.sh	082173a3be9a9adae9c04a912b422463da63b5d7980c0f46fae10f21235bcce7
 input	hydo/onboard/examples/rabbitmq/hydo/hydo-compose.lock.json	5bf61021fa901ad1f48504be473b586955fac4ef49317c9f11c022801e66bcf0
 input	hydo/onboard/examples/rabbitmq/hydo/regressions/README.md	12626dbf5d05271968e602d2f27283b99d4e2df749d5cc83d8e4678a5ddf7664
-input	hydo/onboard/examples/rabbitmq/hydo/regressions/stream-keeps-no-leader-after-backward-clock-step.schedule	c921ec20a8168e6d57aedf5fe50212cf653e3c0c6a923625161ddbfcca53b06e
+input	hydo/onboard/examples/rabbitmq/hydo/regressions/stream-keeps-no-leader-after-backward-clock-step.schedule	4f2aebf6be1c4bf8428cac8bf9b00bebb57e756b829537e6dbdc1b7c3141f0da
 input	hydo/onboard/examples/rabbitmq/hydo/regressions/stream-loses-confirmed-messages-at-power-cut.schedule	054f401eedcae6b83c03d84c65d3e13ab3333506db020988cd74d5a8be0914cc
 input	hydo/onboard/examples/rabbitmq/hydo/regressions/stream-message-lost-after-one-node-power-loss.schedule	e450feb7bff31f735c9679780d793df0e93d873d8d889431f44383327d954869
 input	hydo/onboard/examples/rabbitmq/hydo/workload/eventually_probe	8477708ff3093287f1c6eff8a48e622ff2e6e62360836c691a7f3e596b9de5c0
@@ -563,6 +563,8 @@ input	hydo/onboard/examples/rqlite/hydo/checks/final_available	5d3de434be3a84a7e
 input	hydo/onboard/examples/rqlite/hydo/fetch-images.sh	07aa3cdcb3d865e63c5d52901c78f46d6bf1029e9d14db781eb9552239451ed3
 input	hydo/onboard/examples/rqlite/hydo/hydo-compose.lock.json	9636b89718b884488f5c270059feb1896358597694cd75c3d1dd284b770c4979
 input	hydo/onboard/examples/rqlite/hydo/regressions/README.md	12626dbf5d05271968e602d2f27283b99d4e2df749d5cc83d8e4678a5ddf7664
+input	hydo/onboard/examples/rqlite/hydo/regressions/node-removed-while-down-never-joins-again.schedule	0e282d4bc39b4504c9c2f3efbac4d31242574c6a9d4b647967d57ec95118c545
+input	hydo/onboard/examples/rqlite/hydo/regressions/queued-write-with-wait-acked-and-lost-behind-a-slow-leader.schedule	4ef3b86347e63b2a3fa0ea2f43c422d37957089b2b20ac3a8e4b0a53e3245e11
 input	hydo/onboard/examples/rqlite/hydo/regressions/queued-write-with-wait-acked-and-lost-when-the-leader-dies.schedule	def3b3daa8c2d7dc885faf77999d23e533af50faf9226d89880bdf12cbbc9048
 input	hydo/onboard/examples/rqlite/hydo/regressions/queued-writes-lost-at-a-graceful-stop.schedule	9c38e2f2bf50a1dc3af0e5bbaa250556ffe6fadb4538c056eb98208295ec04d1
 input	hydo/onboard/examples/rqlite/hydo/workload/anytime_backup	9d7dca877bdb1ba18556bd585faae65e212b9a4158644c47c82c556048151c74
@@ -715,7 +717,7 @@ input	hydo/onboard/examples/typesense/hydo/hydo-compose.lock.json	6692ccce3b9a3b
 input	hydo/onboard/examples/typesense/hydo/regressions/README.md	12626dbf5d05271968e602d2f27283b99d4e2df749d5cc83d8e4678a5ddf7664
 input	hydo/onboard/examples/typesense/hydo/regressions/export-and-batched-delete-stop-after-a-backward-clock-step.schedule	1facf4b42922787422c72edd639a1e9bcb9289f0021b2add68fd3a640bd18ae3
 input	hydo/onboard/examples/typesense/hydo/regressions/follower-lacks-documents-after-a-restart.schedule	3fe48e80ca36eda400d3370028218868c7fdc61d0a194cd52edb75a3e06ba9b2
-input	hydo/onboard/examples/typesense/hydo/regressions/no-election-after-a-backward-clock-step.schedule	3757aa70fe140e13714094251d9238aa5017ad8f2967787fdd8af97f892713b1
+input	hydo/onboard/examples/typesense/hydo/regressions/no-election-after-a-backward-clock-step.schedule	a4436445467dcc06a54a8162e23b3781ca64800970c8d2d1c97a28830bf8bc5d
 input	hydo/onboard/examples/typesense/hydo/workload/anytime_leader	c27a58d4ff8fc781fd90a85de490ebd28fa59f563e378f0b15d73eb1ebbad031
 input	hydo/onboard/examples/typesense/hydo/workload/anytime_read	1de65065f5d143fb78e232729fb64d5be8649c0abbc40b8c238f87056b0f1a03
 input	hydo/onboard/examples/typesense/hydo/workload/first_init	b5f5fafb5694039a76912986d1ee6ada7e3d25ce1378e243c917e37d2bba1eab

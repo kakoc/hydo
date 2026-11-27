@@ -24,10 +24,13 @@ consumer acknowledgements. It looks for bugs that nobody reported.
      three nodes shut down uncontrolled at once, and what the stream had not synced is gone. After
      a cut a new message can take the offset of a lost one
      (`regressions/stream-loses-confirmed-messages-at-power-cut.schedule`).
-  3. **New, a clock effect: after a backward clock step, a kill of the stream's leader leaves the
-     stream without a leader.** Every publish to it answers `Leader not Ready yet` for the rest of
-     the run, more than 100 s, while all three nodes run again. It needs the clock step, a
-     restart of a second node after the step, and the kill
+  3. **New, a clock effect: after a backward step of the wall clock by a day, a kill of the
+     stream's writer leaves the stream without a writer for the size of the step.** Every publish
+     to it answers `Leader not Ready yet` for the rest of the run, while all three nodes run
+     again. Every node runs with `multi_time_warp`, so a node keeps its system time a day ahead
+     until its next check of the OS clock. The stream coordinator's leader parked the failed
+     restarts of two replicas with a retry time from that system time, which was a day away after
+     the check, and the one member left was no quorum
      (`regressions/stream-keeps-no-leader-after-backward-clock-step.schedule`).
 - **What held?** The quorum queues kept every message that a publisher confirm acknowledged,
   under kills, pauses past the net tick time, partitions, one-way loss, one node's power loss,
@@ -53,8 +56,9 @@ consumer acknowledgements. It looks for bugs that nobody reported.
   v0.6.0 (`hydohist`).
 - hydo of `main` at `e2058be0` (0.6.0 and Milestones 364 to 367), with the guest files of the
   published 0.6.0 Linux release, on hvx.
-- The released hydo 0.7.0 replayed finding 1 on hvx again, from a fresh clone at `1c318f23`
-  (the paragraph "The replay with hydo 0.7.0" of finding 1).
+- The released hydo 0.7.0 replayed finding 1 on hvx again, from a fresh clone at `1c318f23`,
+  and finding 3, from a fresh clone at `4eb78297` (the paragraphs "The replay with hydo 0.7.0"
+  of findings 1 and 3).
 
 ## The promises
 
@@ -280,52 +284,103 @@ documentation advises quorum queues where more data safety is needed. A maintain
 discussion 18370 that powering off two of three nodes "explicitly violates" the requirement that
 a quorum of the stream's nodes be available. The regression keeps it as a documented loss.
 
-### 3. New, a clock effect: after a backward clock step, a kill of the stream's leader leaves the stream without a leader
+### 3. New, a clock effect: after a backward clock step, a kill of the stream's writer leaves the stream without a writer for the size of the step
 
 **The schedule.** `disk=none dseed=0 | run K=nodes.primary@12+2 N=rabbit1-*@14-20:delay,402ms
 P=rabbit3@2+3 T=7:-86400 W=a36fcf62,p3,q2,r2000 G=rabbit3@7+2:trunc,seed=8657d94c`, seed 10 of the
 exploration e3. Before step 7 `rabbit3` is killed, one file of its quorum queues' WAL is cut, and
 the wall clock steps back by a day; `rabbit3` starts again before step 9. Before step 12 the
-stream's leader `rabbit1`, also the stream coordinator's leader, is killed; it is back before
+stream's writer `rabbit1`, also the stream coordinator's leader, is killed; it is back before
 step 14.
 
 **What happens.** The stream coordinator's new leader on `rabbit2` logs `failed to stop member __s_…
 rabbit@rabbit1 Error: {{nodedown,rabbit@rabbit1},…}`, and the replicas on `rabbit2` and `rabbit3`
 fail to start again (`writer_unavailable`, `noproc`). Then no node logs anything of the stream
 again: no new writer starts, also after `rabbit1` is back and all three nodes run. Every publish to
-the stream answers `Leader not Ready yet`, for the more than 100 s left of the run and of the drain,
-and `eventually_probe` fails: `VIOLATION [eventually_probe] ... no publish was confirmed within 60 s
+the stream answers `Leader not Ready yet` for the rest of the run and of the drain, and
+`eventually_probe` fails: `VIOLATION [eventually_probe] ... no publish was confirmed within 60 s
 after the faults`. The quorum queues work.
 
 **Separating the faults.** On e3's image the schedule gave `33f9b1d69512cda5` twice. Without `T=`
 it passed, without `K=` it passed, and without `G=`, whose kill restarts `rabbit3` after the
-clock step, it passed. So the stream stays without a leader only when a node restarted after a
-backward step before the leader's kill. On the final image the same schedule passes; with the
-kill before step 13 instead of step 12 it fails, and that is the saved regression
-(`K=nodes.primary@13+2`). The kill before step 10, 11 or 12 passes there, and so does the kill
-before step 13 with the clock step before step 8. Seed 4 of e4 failed `eventually_probe` too,
-without a damaged file: `K=rabbit1@21+9 P=rabbit1@8+1 T=10:-2592000`, where `rabbit1` restarts
-after a step back of 30 days. Its probe's output was not read, and on the final image it passes.
+clock step, it passed. On the final image the same schedule passes; with the kill before step 13
+instead of step 12 it fails, and that is the saved regression (`K=nodes.primary@13+2`). The kill
+before step 10, 11 or 12 passes there, and so does the kill before step 13 with the clock step
+before step 8. Seed 4 of e4 failed `eventually_probe` too, without a damaged file:
+`K=rabbit1@21+9 P=rabbit1@8+1 T=10:-2592000`, a step back of 30 days. Its probe's output was not
+read, and on the final image it passes.
 
-**The likely cause, not traced.** Since 4.4.0 the stream coordinator parks a member whose action
-failed (pull requests 16515 and 17450), until a `nodeup` of its node or until a time `RetryAt` of
-the leader's clock
-(`rabbit_stream_coordinator.erl`, `park_action/8` at lines 2386 to 2397, `expire_parked/4` at
-line 2434). Erlang starts without a time warp, so the system time of a node keeps the offset it
-had at the node's start. A node that started after the step back runs a day behind the nodes
-that started before it. When the coordinator's leader moves between such nodes, a retry time of
-one node is a day away on another. That would match a stream that waits for good, but no run
-showed the parked member. Issue 18475 (2026-11-25, open) is another member parked as `{sleeping,
-nodeup}` for good, for a node that `forget_cluster_node` removed. The release notes of 4.4.0 name
-a fixed bug with this symptom ("could leave a stream without a writer and never recover it",
-16515); the runs here are on 4.4.1, after that fix, and need the clock step.
+**The replay with hydo 0.7.0.** The released hydo 0.7.0, from a fresh clone of `main` at
+`4eb78297`, ran the saved regression on hvx on the final image (`0f93b10463dfec99…`). It gave
+`VIOLATION [eventually_probe] ... no publish was confirmed within 60 s after the faults` with
+`efcd83d18848454a` twice, the value in the table of the regressions. Without `T=7:-86400` the run
+passed with `5c593130087afccd`, without `K=nodes.primary@13+2` with `056c67d4bc69ded8`, and
+without `G=`, so without the restart of `rabbit3`, with `af49e5ec61e49f53`. Held runs (`hydo
+inspect`) read each node's clocks and the coordinator's state at four points, and the run
+directory's `logs/` kept every node's log. The next paragraphs come from them and from the code of
+RabbitMQ 4.4.1, whose `rabbit_stream_coordinator.erl` is the same on `main`, and of Ra 3.2.0.
 
-**Is it a bug?** It needs a step back of the wall clock. Operators and NTP step a real machine's
-clock too, and the step leaves the stream unavailable while all three of its nodes run, although
-a stream needs only a quorum of them. It is a clock effect and a candidate.
+**What happened.**
 
-**Native reproduction.** None within the hour: it needs a clock step of one container's host and
-a kill in the order above.
+1. Every node runs with `multi_time_warp`, as each node reports. In that mode the Erlang runtime
+   keeps its system time when the OS clock steps. It moves its time offset only at its next check
+   of the OS clock, every 15 s at first and every 60 s later (`erl_time_sup.c` lines 316 to 318
+   and 497 to 505). 19 s after the step, `erlang:system_time` of `rabbit1` and `rabbit2` was
+   still 86,400,543 ms ahead of `os:system_time`. `rabbit3`, which started again after the step,
+   matched. 23 s after the step `rabbit2` matched too.
+2. The kill came between those two points. `rabbit2` became the coordinator's leader in term 2.
+   `rabbit1`'s member was parked as `{sleeping,nodeup}` (`backoff_class/1`, lines 1277 to 1282).
+   `rabbit2`'s replica (`writer_unavailable`) was parked as `{sleeping,1795651263161}` with the
+   target `stopped`, and `rabbit3`'s (`noproc`) as `{sleeping,1795651264168}`.
+3. A parked retry time is the system time of the command plus 5,000 ms and a jitter of up to
+   5,000 ms (`park_action/8` for `short`, lines 2392 to 2399, and the macros at lines 12 and 17 of
+   `rabbit_stream_coordinator.hrl`). That system time is the timestamp that the Ra leader puts on
+   each command with `erlang:system_time(millisecond)` (Ra's `ra_server_proc.erl` lines 2524 to
+   2529, renamed to `system_time` in `ra_server.erl` lines 3443 to 3447). `rabbit2` stamped the
+   commands before its check, so after the check both retry times were a day and a few seconds
+   away.
+4. The retry timer is a relative timeout of the retry time minus the system time
+   (`retry_reconcile_delay/2`, lines 2348 to 2350), 5 to 10 s here. Ra arms it as a timeout of its
+   process and turns it into a command (`ra_server_proc.erl` lines 1812 to 1813 and 628 to 629).
+   It fired. Its `{timeout, retry_reconcile}` command carried `rabbit2`'s system time after the
+   check. `expire_parked/4` found nothing due (lines 2440 to 2442), and `reconcile_retries/2`
+   armed the timer again for about 86,400 s (lines 765 to 766 and 2403 to 2430).
+5. When `rabbit1` came back, its `nodeup` woke its member, `{stopped,1,{1,1}}`. One stopped member
+   of three is no quorum (`is_quorum/2`, lines 1412 to 1415, and the election at lines 1744 to
+   1747), so no writer was elected. A member parked on a time is woken early only by
+   `wake_timed_sleep` (lines 2605 to 2615). The coordinator calls it when a writer goes down or
+   fails to start (lines 1797 and 1813), and with no writer neither can happen. `fail_action/3`
+   leaves such a member alone (lines 2307 to 2311). `state_enter(leader)` and `tick/2` only arm
+   the timer for the same time again (lines 784 to 806 and 820 to 831).
+6. The coordinator's commit index stayed at 27 for the rest of the held run, about 7 minutes. At
+   its end `rabbit2`'s retry was still 85,994,948 ms away. So the stream would wait about
+   86,406.6 s, the size of the step and the retry delay.
+
+**Without the restart.** In the run without `G=`, no node had started after the step. After the
+kill `rabbit3` led the coordinator, `rabbit2`'s replica stopped cleanly, and only `rabbit3`'s
+replica was parked. With `rabbit1` back, two members were stopped, a quorum, and the run ends in
+epoch 2 with `rabbit3` as the writer and all three members running. So the restart changes which
+node leads the coordinator and how many replicas are parked. The retry time a day ahead comes
+from the step alone.
+
+**The first version of this section was wrong** on two points. It said that Erlang starts
+without a time warp, so that a node keeps its offset from its start. It also said that the wait
+needs the coordinator's leader to move between nodes whose clocks differ. Both are false: every
+node warps, and one leader stamped the retry times and judged them.
+
+**Where the parking came from.** Pull request 16515 ("Stream coordinator: v8 optimisations and
+bug fixes", merged on 2026-08-19, commits `c5a668ef1f`, `f712c3d228` and `fd80774359`) brought
+the parked retries. It shipped in 4.4.0 (2026-10-19), whose notes say "Failed operations are now
+retried after a short randomised delay". The first version of this section also named pull
+request 17450, which has no part in it.
+
+**Is it a bug?** It needs a step back of the wall clock, which NTP or an operator makes after a
+clock ran fast. The step leaves the stream without a writer for the size of the step while all
+three of its nodes run, although a stream needs only a quorum of them. The cause is the
+coordinator's: a retry time from the system time of a command, judged later against a system
+time that the runtime's correction moved back. It is a clock effect and a candidate.
+
+**Native reproduction.** None: the cause is plain in the code and in the states above.
 
 ## The duplicate searches
 
@@ -343,11 +398,12 @@ issues (`gh search issues --include-prs`, and the GraphQL search of discussions)
 | osiris_writer; osiris_replica truncate; stream quorum confirm | nothing new |
 | Leader not Ready yet; failed to stop member; writer_unavailable | discussions 17703 and 17710 (classic queues on Kubernetes; quorum queues in their first 500 ms), issues 9159 and 5393 (closed in 2022 and 2023) |
 | retry_reconcile; sleeping nodeup; stream coordinator nodeup; park action stream coordinator | pull request 16515 (the coordinator's machine version 8, 2026-08), issue 18475 (a member parked as `{sleeping, nodeup}` for a forgotten node, open) |
+| (2026-11-27, after the trace of finding 3) the coordinator's system time, its retry time, Ra's command timestamp, time warp | pull requests 18314 and 18315 (the coordinator's determinism), Ra pull request 54 (2019, the command's timestamp); none names a retry time that a clock step moved |
 | stream leaderless; stream coordinator stuck; stream leader not elected; stream stuck stopped; stream unavailable after kill; stream leader election hangs | nothing |
 
 The release notes of 4.4.0 and 4.4.1 were read for streams. 4.4.0 changed the stream
-coordinator's retries (pull requests 16515 and 17450): "actions that failed because a node was
-down are retried when that node comes back". Its bug fixes name one with finding 3's symptom: "The
+coordinator's retries (pull request 16515): "actions that failed because a node was down are
+retried when that node comes back". Its bug fixes name one with finding 3's symptom: "The
 stream coordinator could leave a stream without a writer and never recover it" (16515). 4.4.1
 names nothing of the stream coordinator, and nothing of a confirmed message lost.
 
