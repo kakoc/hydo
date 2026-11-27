@@ -590,7 +590,9 @@ services:
 ```
 
 The recovery boot after a power cut starts the services the same way. The heal's restart pass
-(after the faults) restarts dead services one at a time, each with its readiness check. `hydo
+(after the faults) restarts dead services one at a time, each with its readiness check, and so
+does the end of a `K=` that killed several services. A group with `restart: together` starts
+its killed members at once (see "Groups of services and partitions"). `hydo
 compose` writes `start_after: started` as Compose means `depends_on`: for its short form (a list
 of names, which Compose reads as `condition: service_started`) and for its long form with
 `condition: service_started` for every dependency (Milestone 204; before it the short form kept
@@ -1574,6 +1576,7 @@ groups:
         if [ -n "$l" ]; then echo "$l"; exit 0; fi
       done
       exit 1
+    restart: together           # optional (Milestone 374): one-by-one (the default) or together
 ```
 
 `K=`, `P=` and `X=` take a list or a selector in place of the service:
@@ -1599,6 +1602,17 @@ the primary. If no answer names a member, the run ends with `HYDO-ORACLE: ERROR 
 the group's primary: command named no member`, and the message names the likely cause: no
 primary for that long, or a first line that is no member's name (a node id or an address instead
 of the service's name).
+
+`restart:` says how the members come back after a fault killed two or more of them. With
+`one-by-one`, the default, hydo starts each killed member and waits for its readiness check
+before it starts the next. A member whose readiness needs a quorum then never gets ready: a
+RabbitMQ node that restarts with data opens AMQP only after its peers answer. With `together`,
+hydo starts the setup and the process of every killed member first, and then runs each one's
+readiness check in the order of `services:`. A check that fails ends the run with `HYDO-ORACLE:
+ERROR <service> restart failed`, as before. It acts at the end of a `K=` whose services are all
+members of the group, and in the heal's restart pass after the faults, for the members that are
+down then (kills of `X=` and of reactions among them). The restarts of `G=` and `L=` stay one by
+one. Without the key nothing changes, so a run without it keeps its fingerprint.
 
 The host controller writes each resolution to the guest's log and to the control transcript,
 for example `K: nodes.primary = n2`. The schedule keeps the selector's text, and the transcript

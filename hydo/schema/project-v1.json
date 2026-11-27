@@ -1550,6 +1550,18 @@
             }
           ]
         },
+        "restart": {
+          "description": "How the members come back after a fault killed two or more of them (Milestone 374):\none-by-one (each after the one before is ready), or together (all started, then each\none's readiness checked), for a cluster whose members get ready only with a quorum.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupRestart"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "one-by-one"
+        },
         "description": {
           "anyOf": [
             {
@@ -1565,6 +1577,14 @@
       "required": [
         "name",
         "services"
+      ]
+    },
+    "GroupRestart": {
+      "description": "How a group's killed members are started again.",
+      "type": "string",
+      "enum": [
+        "one-by-one",
+        "together"
       ]
     },
     "Workload": {

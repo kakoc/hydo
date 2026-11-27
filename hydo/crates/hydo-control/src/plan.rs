@@ -385,6 +385,8 @@ pub struct PlanGroup {
     pub name: String,
     pub services: Vec<String>,
     pub primary: String,
+    /// `restart: together` (Milestone 374): members that one fault killed come back together.
+    pub together: bool,
 }
 
 impl PlanGroup {
@@ -403,6 +405,7 @@ impl PlanGroup {
                     .map(py::str_of)
                     .collect(),
                 primary: get(g, "primary").map(py::str_of).unwrap_or_default(),
+                together: get(g, "restart").and_then(Value::as_str) == Some("together"),
             })
             .collect()
     }

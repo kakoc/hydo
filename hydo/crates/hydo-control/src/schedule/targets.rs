@@ -147,6 +147,7 @@ pub(super) fn primary(fx: &mut F<'_>, ctx: &Ctx, group: &str) -> Step<String> {
             name: group.into(),
             services: Vec::new(),
             primary: String::new(),
+            together: false,
         }
     });
     if g.primary.is_empty() {

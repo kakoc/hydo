@@ -58,7 +58,7 @@ pub const KNOWN_TOP: &[&str] = &[
     "configs",
 ];
 /// The keys of a `groups:` entry (Milestone 195).
-pub const KNOWN_GROUP: &[&str] = &["name", "services", "primary", "description"];
+pub const KNOWN_GROUP: &[&str] = &["name", "services", "primary", "restart", "description"];
 pub const KNOWN_SVC: &[&str] = &[
     "name",
     "cmd",
@@ -1317,6 +1317,15 @@ fn validate_groups(m: &Value) -> R<()> {
                 return Err(err(format!(
                     "{wh} ({n}): primary: a shell command that prints the current primary's \
                      service name"
+                )));
+            }
+        }
+        if let Some(r) = obj_get(g, "restart") {
+            if !matches!(r.as_str(), Some("one-by-one" | "together")) {
+                return Err(err(format!(
+                    "{wh} ({n}): restart: one-by-one (each member after the one before is \
+                     ready, the default) or together (every killed member started, then each \
+                     one's readiness checked)"
                 )));
             }
         }

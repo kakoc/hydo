@@ -1634,9 +1634,20 @@ pub struct Group {
     /// first line and exits 0; run in the guest when a fault aims at <name>.primary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub primary: Option<Text>,
+    /// How the members come back after a fault killed two or more of them (Milestone 374):
+    /// one-by-one (each after the one before is ready), or together (all started, then each
+    /// one's readiness checked), for a cluster whose members get ready only with a quorum.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(extend("default" = "one-by-one"))]
+    pub restart: Option<GroupRestart>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }
+
+choice!(
+    /// How a group's killed members are started again.
+    GroupRestart { OneByOne = "one-by-one", Together = "together" }
+);
 
 /// A fake outside service (HTTP, or cleartext HTTP/2 gRPC).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
