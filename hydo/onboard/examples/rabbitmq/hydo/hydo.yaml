@@ -1,0 +1,208 @@
+# RabbitMQ 4.4.1 (the newest release, 2026-11-16) as a cluster of three nodes, as
+# ../docker-compose.yaml runs it: the nodes find each other from fixed names (classic peer
+# discovery), and each keeps its data on a file system of its own. RESULTS.md has the promises
+# under test and what was found.
+#
+#   sh ../build.sh            # bin/rmqc-<arch>, the test client (../client)
+#   sh fetch-images.sh        # the image by digest
+#   hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --new-faults --cluster-faults --storage-faults
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The services below are the importer's,
+# with these changes:
+# - each node's /var/lib/rabbitmq is a file system of its own (storage:), the target of L= and G=,
+#   instead of the importer's folder on the shared data disk;
+# - every node listens on 5672 (the importer took 4369, epmd's port, from the image's EXPOSE for
+#   rabbit2 and rabbit3); a node is ready when its Erlang distribution port (25672) answers. A node
+#   that restarts with data opens its AMQP port only after its peers answer, and hydo restarts the
+#   members of a killed group one at a time, each after the one before is ready;
+# - the three nodes start together (start_after: started), as Compose starts them;
+# - the Erlang distribution's net_ticktime is a build parameter, 15 s instead of 60 s, so that a
+#   pause of a node past it fits into the workload;
+# - the test client rmqc is in the image (../build.sh).
+format: 1
+name: rabbitmq
+description: "RabbitMQ 4.4.1, a cluster of three nodes with quorum queues and a stream: every publish that a publisher confirm acknowledged reaches a consumer that acknowledges it or the dead-letter queue, a consumer that dies gives its messages back, a poison message is dead-lettered after the delivery limit, a single active consumer gets each key's messages in order, the stream keeps every confirmed message once and in order, and a stored consumer offset holds, under kills, pauses past the net tick time, partitions, one node's power loss or damaged files, power cuts and clock steps"
+hydo_version: "0.6"
+
+params:
+  arch: amd64       # amd64 | arm64: the client's architecture, the same as the image's
+  ticktime: "15"    # the Erlang distribution's net_ticktime in seconds (RabbitMQ's default is 60)
+  limit: "2"        # x-delivery-limit of the quorum queue j (RabbitMQ's default is 20)
+  replicas: "3"     # replicas of each quorum queue and of the stream: 3 (one per node) | 1
+
+configs:
+  replicas:
+    values: ["3", "1"]
+    doc: "https://www.rabbitmq.com/docs/quorum-queues#replication-factor and https://www.rabbitmq.com/docs/streams#replication-factor"
+    tradeoff:
+      "1": "a quorum queue or a stream of one replica keeps its messages on one node: that node's loss makes them unavailable, and a stream's unsynced data is lost with the node's power (Data Safety when using Streams)"
+
+env:
+  RMQ_DELIVERY_LIMIT: "{{limit}}"   # rmqc provision declares j with it
+  RMQ_REPLICAS: "{{replicas}}"      # and every queue and the stream with this many replicas
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 3072
+  clock_start: 1795651200   # 2026-11-26 00:00 UTC, the day of the import
+  clock_after_cut: 60       # a real machine's clock runs on across a power cut
+
+data:
+  size_mib: 1536  # the data disk: the three nodes' own file systems of 384 MiB each, and the rest
+  dirs: [vol/rabbit1, vol/rabbit2, vol/rabbit3, client]
+
+root:
+  share_images: true   # the three nodes share one tree of the rabbitmq image
+  files:                 # bind-mount sources, copied into the read-only root
+    - {src: ../config, dst: /etc/hydo/compose/bind/0-config}
+    - {src: "../bin/rmqc-{{arch}}", dst: /bin/rmqc, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 rabbit1
+      10.89.0.12 rabbit2
+      10.89.0.13 rabbit3
+
+# K=nodes.primary and the like: the node that leads the stream s (the stream protocol's metadata)
+groups:
+  - name: nodes
+    services: [rabbit1, rabbit2, rabbit3]
+    primary: /bin/rmqc leader s
+
+services:
+  # Compose service rabbit1
+  # image rabbitmq:4.4.1 = docker.io/library/rabbitmq@sha256:aa82e78ca0dfa59f4eeb9e8086ac7b5c8e0b31a7bb978d948c6d32756802fb27
+  #   linux/amd64: sha256:ed358b7010f0a5d5cf75ddbe3394a8700b57936f2e80222224bc00b9d7d618ef
+  #   linux/arm64/v8: sha256:7ee112d5619240d5938d91024c67d246cecddb6d679dac5667e0420620d83431
+  - name: rabbit1
+    image: {x86_64: images/rabbitmq-4.4.1-amd64.docker.tar, arm64: images/rabbitmq-4.4.1-arm64-oci}
+    image_ref: "rabbitmq:4.4.1"
+    env:
+      RABBITMQ_NODENAME: "rabbit@rabbit1"
+      RABBITMQ_CONFIG_FILE: "/etc/rabbitmq-hydo/rabbit1.conf"
+      RABBITMQ_ENABLED_PLUGINS_FILE: "/etc/rabbitmq-hydo/enabled_plugins"
+      RABBITMQ_ERLANG_COOKIE: "hydo-rabbitmq-cookie"
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-kernel net_ticktime {{ticktime}}"
+    port: 5672
+    addr: 10.89.0.11
+    ready: "tcp:25672"   # the Erlang distribution port: open before the node waits for its peers
+    ready_timeout: 300
+    restart: "unless-stopped"
+    storage: {dir: vol/rabbit1, size_mib: 384}   # mnesia/: Khepri, the quorum queues' Ra logs, the stream's segments
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-config, dst: /etc/rabbitmq-hydo}
+      - {src: /data/vol/rabbit1, dst: /var/lib/rabbitmq}
+  # Compose service rabbit2
+  - name: rabbit2
+    image: {x86_64: images/rabbitmq-4.4.1-amd64.docker.tar, arm64: images/rabbitmq-4.4.1-arm64-oci}
+    image_ref: "rabbitmq:4.4.1"
+    env:
+      RABBITMQ_NODENAME: "rabbit@rabbit2"
+      RABBITMQ_CONFIG_FILE: "/etc/rabbitmq-hydo/rabbit2.conf"
+      RABBITMQ_ENABLED_PLUGINS_FILE: "/etc/rabbitmq-hydo/enabled_plugins"
+      RABBITMQ_ERLANG_COOKIE: "hydo-rabbitmq-cookie"
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-kernel net_ticktime {{ticktime}}"
+    port: 5672
+    addr: 10.89.0.12
+    start_after: started   # the nodes start together, as Compose starts them
+    ready: "tcp:25672"   # the Erlang distribution port: open before the node waits for its peers
+    ready_timeout: 300
+    restart: "unless-stopped"
+    storage: {dir: vol/rabbit2, size_mib: 384}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-config, dst: /etc/rabbitmq-hydo}
+      - {src: /data/vol/rabbit2, dst: /var/lib/rabbitmq}
+  # Compose service rabbit3
+  - name: rabbit3
+    image: {x86_64: images/rabbitmq-4.4.1-amd64.docker.tar, arm64: images/rabbitmq-4.4.1-arm64-oci}
+    image_ref: "rabbitmq:4.4.1"
+    env:
+      RABBITMQ_NODENAME: "rabbit@rabbit3"
+      RABBITMQ_CONFIG_FILE: "/etc/rabbitmq-hydo/rabbit3.conf"
+      RABBITMQ_ENABLED_PLUGINS_FILE: "/etc/rabbitmq-hydo/enabled_plugins"
+      RABBITMQ_ERLANG_COOKIE: "hydo-rabbitmq-cookie"
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-kernel net_ticktime {{ticktime}}"
+    port: 5672
+    addr: 10.89.0.13
+    start_after: started
+    ready: "tcp:25672"   # the Erlang distribution port: open before the node waits for its peers
+    ready_timeout: 300
+    restart: "unless-stopped"
+    storage: {dir: vol/rabbit3, size_mib: 384}
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /etc/hydo/compose/bind/0-config, dst: /etc/rabbitmq-hydo}
+      - {src: /data/vol/rabbit3, dst: /var/lib/rabbitmq}
+
+# the queues j, jd, k and pr and the stream s, before the window under test
+provision: /bin/rmqc provision
+
+# 30 rounds of 1 s with up to 2 commands each: about 60 commands, whose records fit hvx's 64 KiB
+# of console per boot. A pause of a node past the net tick time (15 s) fits.
+workload:
+  steps: 30
+  timeout: 330    # also the drain's limit: it gives up after 250 s
+
+test:
+  parallel: 4
+  per_round: 2
+  round_ms: 1000
+  command_timeout: 90
+  drain_timeout: 45
+
+checks:
+  # The quorum queue j: publisher confirms and consumer acknowledgements. A consumer takes a
+  # message, holds it 1 s and acknowledges it, or crashes on a poison message. The drain takes
+  # every message left of j and of its dead-letter queue jd, with a quiet window of 40 s, longer
+  # than consumer_timeout (30 s). Then it writes one status record per published id: s=ok and
+  # f=1 when a consumer acknowledged it or the drain took it from jd, s=info and f=0 otherwise.
+  - id: jobs
+    type: messages
+    history: q
+    msg: every publish that RabbitMQ confirmed reaches a consumer that acknowledges it, or the dead-letter queue after the delivery limit
+    final: /bin/rmqc drain
+    acknowledgement: explicit
+    claims:
+      delivery: at-least-once
+      lease: {ms: 30000}             # consumer_timeout: an unacknowledged message comes back
+      dead_letter: {after: 3, to: jd}   # x-delivery-limit 2: two returns, then the dead-letter queue
+      acked_outcome:
+        effect: recorded
+  # The quorum queue k with a single active consumer: each key's messages in publish order.
+  - id: order
+    type: messages
+    history: o
+    final: "true"   # the drain of the check jobs (rmqc drain) takes k and s too
+    msg: the single active consumer of k gets every confirmed message, each key's in the order they were published
+    acknowledgement: explicit
+    claims:
+      delivery: at-least-once
+      order: {kind: fifo, scope: key}
+  # The stream s: the reader r keeps its offset on the server, and the drain's group all reads
+  # the stream from its first offset.
+  - id: stream
+    type: messages
+    history: s
+    final: "true"   # the drain of the check jobs reads s for both groups
+    msg: the stream keeps every confirmed message once and in order, and a stored consumer offset holds
+    acknowledgement: explicit
+    claims:
+      delivery: at-least-once        # every confirmed message is in the stream, for r and for all
+      duplicates: forbidden          # a second send by the same producer name is deduplicated
+      order: {kind: log}             # offsets grow with the publish order of confirmed messages
+      after_ack: no-redelivery       # r never reads a message again after its offset was stored
+      fan_out: every-group
+
+faults: [kill, pause, network, oneway, cut, clock, corrupt, powerloss]

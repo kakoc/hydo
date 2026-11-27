@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=30
+# publish one keyed message to k, the quorum queue with a single active consumer
+exec /bin/rmqc kpub o$HYDO_CMD_ID

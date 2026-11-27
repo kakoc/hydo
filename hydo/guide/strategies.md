@@ -16,7 +16,7 @@ results page: new as far as the search found, known, by design, or a deployment 
 |---|---|---|---|
 | database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults; failovers by the client with a late write; replicas compared after a restart | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus, Kvrocks, Typesense |
 | object store | an acknowledged object stays as written; a listing shows what exists | a listing compared with a read of each key; kills and pauses of one node; clock steps | Garage |
-| log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults; a client that leaves transactions open, and power cuts and clock steps | Redpanda, NATS, Pulsar |
+| log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults; a client that leaves transactions open, and power cuts and clock steps | Redpanda, NATS, Pulsar, RabbitMQ |
 | job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate, NSQ |
 | distributed query or compute engine with schedulers and workers | an accepted query ends; a completed query's result stays readable | production's topology and features; checks of how each unknown outcome ends; pauses of a worker past its failure detector; kills of the worker that holds the results | a user's query engine |
 | ledger or billing system | the books match the acknowledged operations; a limit holds | the generic rule beside domain rules; concurrent clients without faults; value properties | Blnk, Lago, Formance Ledger |
@@ -470,6 +470,10 @@ These findings hold for every type of system:
     transaction after the heal shows the wait even when no acknowledged message is behind it.
     The recovery boot runs only the drain and the checks. A system whose recovery waits for a
     client of some kind meets no such client there, and then the wait is the finding.
+  - RabbitMQ (finding 2, documented): a stream does not sync its data, so a cut lost messages
+    that publisher confirms had acknowledged. After `C=12` a new message took offset 0, the
+    offset of a lost one, and `order: {kind: log}` broke: two messages shared offset 0. The quorum
+    queues, which sync before they confirm, lost nothing at any cut.
 - **What it misses.** hydo's S3 emulator writes its objects without an fsync, so a cut of the
   guest loses objects that it acknowledged. In GreptimeDB a query of the recovery boot read an
   SST object shorter than its manifest says. A system whose data lives in object storage needs
@@ -528,6 +532,11 @@ These findings hold for every type of system:
     copy is a cache, so the datanode could read the object again; with the default uncompressed
     manifests it does not notice the short copy. Six power losses of a datanode (`L=`, also
     `:strict`) lost cached copies whole and broke nothing.
+  - RabbitMQ (finding 1): a stream confirms once a majority wrote a chunk and never syncs. A
+    kill of one node, a pause of another, and then one node's power loss lost a confirmed message
+    for good, although another member had written it. Blind at seed 2 of e2, separated by hand: a
+    run without any one of the three passes. The quorum queues, which sync before they confirm,
+    held in the same runs.
 - **What it misses.** NATS's 3.3 and 3.5 need faults in a narrow order on chosen nodes, and the
   explorer did not draw them; they were written by hand. `G=` picks its file and offset from its
   seed, so one token damages other files on another image. The explorer never draws
@@ -675,6 +684,12 @@ These findings hold for every type of system:
     P=nodes.primary@30+25`). Blind in 5 of the first 30 schedules for the export, each shrunk to
     one step back of 150 s or more. A check that the client samples every node's Raft state once
     a second (`final_available`) showed the missing election; no check of the data did.
+  - RabbitMQ (finding 3, cause not traced). The step `T=7:-86400`, a restart of one node, and a
+    kill of the stream's leader left the stream without a leader for the rest of the run. Erlang
+    keeps the offset of its system time from the node's start, so a node that starts after a step
+    back runs a day behind the others. An `eventually_` command that publishes to every queue and
+    stream after the faults caught it; the checks of the data held. Blind at seed 10 of e3. The
+    audit reads no Erlang, so the step was the explorer's own draw.
 - **What it misses.** Many clock effects are by design. Examples are Temporal's delayed timers,
   and River's runs of every periodic job that a forward step skipped. The audit reads text. It
   found no place in Redpanda's 2,694 C++ files, whose transaction expiry uses Seastar's wall
@@ -777,7 +792,9 @@ These findings hold for every type of system:
   was journaled. On the bug benchmark the drawn reactions found no defect
   sooner. The sum of the runs to each defect's first detection grew from 154 to between 181
   and 187. A new event in the client changes the image, and with it the timing of every
-  schedule.
+  schedule. RabbitMQ held under a grid of 24 schedules: `kill-now` of each node and one node's
+  power loss, 0 and 200 ms after a quorum queue's and a stream's publisher confirm. Its finding 1
+  needs a second node paused at the confirm, which one reaction does not make.
 - **Cost.** The events in the client. It runs on every engine.
 
 ### A scan of a reaction's delay

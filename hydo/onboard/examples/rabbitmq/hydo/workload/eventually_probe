@@ -1,0 +1,5 @@
+#!/bin/sh
+# hydo: timeout=90
+# a publish to the quorum queue j and one to the stream s are confirmed again after the faults
+# (unrecorded; the drain before it starts with one recorded publish to each)
+exec /bin/rmqc probe

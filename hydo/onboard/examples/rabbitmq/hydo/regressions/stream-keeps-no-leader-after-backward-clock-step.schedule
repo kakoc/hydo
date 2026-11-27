@@ -1,0 +1,13 @@
+# Finding 3 (RESULTS.md), a new candidate and a clock effect: after a backward step of the wall
+# clock by a day before step 7, a kill of the stream's leader before step 13 leaves the stream s
+# without a leader for the rest of the run. rabbit3 is killed before step 7 (to cut a file of its
+# quorum queue WAL) and starts again before step 9, after the step; the stream's leader is killed
+# before step 13 and is back before step 15. The stream coordinator logs "failed to stop member
+# ... nodedown" for it and starts no new writer, also after the node is back. Every stream
+# publish then answers "Leader not Ready yet", and eventually_probe fails 60 s after the faults.
+# Found blind by `hydo explore` (e3's seed 10, with the kill before step 12 on that image). There,
+# without T=, without K= or without G= (and its restart of rabbit3) the run passed. On this image
+# the kill before step 10, 11 or 12 passes, and so does the kill before step 13 with the step
+# before step 8.
+# expect: violation      (change to ok when the bug is fixed)
+disk=none dseed=0 | run K=nodes.primary@13+2 N=rabbit1-*@14-20:delay,402ms P=rabbit3@2+3 T=7:-86400 W=a36fcf62,p3,q2,r2000 G=rabbit3@7+2:trunc,seed=8657d94c

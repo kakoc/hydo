@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=60
+# publish one message to the stream s with a confirm, once more without one (deduplicated)
+exec /bin/rmqc spub s$HYDO_CMD_ID

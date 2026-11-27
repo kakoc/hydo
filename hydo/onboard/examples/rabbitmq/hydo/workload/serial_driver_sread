@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=30
+# read up to 4 messages of s as the consumer r from its stored offset, then store the offset
+exec /bin/rmqc sread $HYDO_CMD_ID

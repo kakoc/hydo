@@ -1,0 +1,6 @@
+#!/bin/sh
+# hydo: timeout=30
+# publish one message to the quorum queue j with a publisher confirm; one in five is a poison
+# message (x<id>) that every consumer crashes on, so that the delivery limit dead-letters it
+case $((HYDO_CMD_ID % 5)) in 0) exec /bin/rmqc pub x$HYDO_CMD_ID ;; esac
+exec /bin/rmqc pub m$HYDO_CMD_ID
