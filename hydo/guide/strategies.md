@@ -543,11 +543,13 @@ These findings hold for every type of system:
     copy is a cache, so the datanode could read the object again; with the default uncompressed
     manifests it does not notice the short copy. Six power losses of a datanode (`L=`, also
     `:strict`) lost cached copies whole and broke nothing.
-  - RabbitMQ (finding 1): a stream confirms once a majority wrote a chunk and never syncs. A
-    kill of one node, a pause of another, and then one node's power loss lost a confirmed message
-    for good, although another member had written it. Blind at seed 2 of e2, separated by hand: a
-    run without any one of the three passes. The quorum queues, which sync before they confirm,
-    held in the same runs.
+  - RabbitMQ (finding 1): a stream confirms once a majority wrote a chunk and never syncs. After
+    a kill of `rabbit2`, a pause of `rabbit1` past the net tick time, and a power loss of the
+    writer `rabbit3`, a confirmed message was lost for good. The coordinator elected the new
+    writer from `rabbit1` and `rabbit3`, while `rabbit2`, which held the message, waited on a
+    retry timer. Then `rabbit2` deleted its copy. Blind at seed 2 of e2, separated by hand: a
+    run without any one of the three faults passes. The quorum queues, which sync before they
+    confirm, held in the same runs.
 - **What it misses.** NATS's 3.3 and 3.5 need faults in a narrow order on chosen nodes, and the
   explorer did not draw them; they were written by hand. `G=` picks its file and offset from its
   seed, so one token damages other files on another image. The explorer never draws

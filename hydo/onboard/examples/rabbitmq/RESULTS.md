@@ -10,12 +10,15 @@ consumer acknowledgements. It looks for bugs that nobody reported.
 
 - **What was found?** Two new candidates and one documented loss, all of the stream. Nothing
   was posted.
-  1. **New: one node's power loss loses a message of the stream that its publisher confirm
-     acknowledged, for good.** A stream confirms a chunk once a majority of its members wrote it,
-     and it never syncs. With a third node paused, that majority was the leader and one replica.
-     The leader lost its power, and the stream went on without the message, although the
-     replica had written it. RabbitMQ's documentation says that such a loss on a single node
-     "would typically just be re-replicated from the other nodes"
+  1. **New: a power loss of one node while a second node is away loses a message of the stream
+     that its publisher confirm acknowledged, for good.** A stream confirms a chunk once a
+     majority of its members wrote it, and it never syncs, as RabbitMQ documents. `rabbit1` was
+     paused for about 100 s, past the net tick time, so the writer `rabbit3` and the replica
+     `rabbit2` confirmed the message. Then `rabbit3` lost its power and its copy. When all three
+     nodes ran again, the stream coordinator chose a new writer from `rabbit1` and `rabbit3`,
+     while `rabbit2` waited on a retry timer. Then `rabbit2` deleted its own copy to follow the
+     new writer. RabbitMQ's documentation says that a loss on a single node "would typically just
+     be re-replicated from the other nodes"
      (`regressions/stream-message-lost-after-one-node-power-loss.schedule`).
   2. **Documented: a power cut of the whole guest loses confirmed messages of the stream.** All
      three nodes shut down uncontrolled at once, and what the stream had not synced is gone. After
@@ -50,6 +53,8 @@ consumer acknowledgements. It looks for bugs that nobody reported.
   v0.6.0 (`hydohist`).
 - hydo of `main` at `e2058be0` (0.6.0 and Milestones 364 to 367), with the guest files of the
   published 0.6.0 Linux release, on hvx.
+- The released hydo 0.7.0 replayed finding 1 on hvx again, from a fresh clone at `1c318f23`
+  (the paragraph "The replay with hydo 0.7.0" of finding 1).
 
 ## The promises
 
@@ -167,62 +172,97 @@ fingerprints.
 
 ## What was found
 
-### 1. New: one node's power loss loses a confirmed message of the stream for good
+### 1. New: a power loss of one node while a second node is away loses a confirmed message of the stream for good
 
 **The schedule.** `disk=none dseed=0 | run K=rabbit2@1+3 N=nodes.bridge.6@21-23:loss,100%
 P=rabbit1@16+11 W=5764a73c,p3,q2,r1000 G=rabbit3@20:flip,n=4,seed=4979bdc4 L=rabbit3@21+3`, seed
 2 of the exploration e2. `rabbit2` is killed before step 1 and starts again before step 4.
-`rabbit1` is paused from step 16 to step 27. `rabbit3` loses its power before step 21 and starts
-again before step 24. The publish of `s29` was confirmed while `rabbit1` was paused, and the
-drain's group `all`, which reads the stream from its first offset, never received it:
-`VIOLATION [stream.no-loss] s29 was acknowledged to process 29 at 84.029 s and never delivered in
-group all of channel s`. Every quorum queue claim held in the same run.
+`rabbit1` is paused from step 16 to step 27. That is 11 workload steps, about 100 s of guest time,
+and longer than the net tick time of 15 s: `rabbit2` logged `node rabbit@rabbit1 down:
+net_tick_timeout`. `rabbit3` loses its power before step 21 and starts again before step 24. The
+publish of `s29` was confirmed while `rabbit1` was paused, and the drain's group `all`, which
+reads the stream from its first offset, never received it: `VIOLATION [stream.no-loss] s29 was
+acknowledged to process 29 at 84.029 s and never delivered in group all of channel s`. Every
+quorum queue claim held in the same run.
 
 **Separating the faults.** On e2's image (`explore-ob-rabbitmq-nocut-disk.img` of that round) the
 schedule gave `83cc413c2d60d1ae` twice. Without `N=` and `G=` it failed too, and without `K=`,
 without `P=` or without `L=` it passed. So the loss needs the kill, the pause and the power loss.
 On the final image the window is narrower: the schedule fails twice with one fingerprint, and
 each run without one of its five faults passes. `G=` flips a bit of a classic queue's transient
-store, which the workload does not use, and with `N=` it moves the moment of the confirm.
+store, which the workload does not use, and with `N=` it moves the moment of the confirm. Why the
+loss also needs the kill of `rabbit2` before step 1 was not traced.
 
-**The state after it.** On e2's image a held run (`hydo inspect`) showed the stream in epoch 3,
-with `rabbit1` as its writer: the node that was paused when `s29` was confirmed. All three
-members were at offset 10, without `s29`.
+**The replay with hydo 0.7.0.** The released hydo 0.7.0, from a fresh clone of `main` at
+`1c318f23`, built the final image again on hvx with the same sha256 (`0f93b10463dfec99…`). The
+schedule gave `VIOLATION [stream.no-loss] s29 was acknowledged to process 29 at 84.029 s and never
+delivered ...` with `46d06ab61b82f53e` twice, the value in the table of the regressions. Without
+`L=rabbit3@21+3` the run passed with `30301878046ba223`, and without `P=rabbit1@16+11` it passed
+with `5f708bb378946198`. The run directory's `logs/` kept every node's log, also the log of each
+node before its restart. The next paragraphs come from those logs and from the code.
 
-**The cause in the code.** Three facts of RabbitMQ 4.4.1 and osiris 1.14.1 give the loss:
+**What happened.** RabbitMQ 4.4.1 runs osiris v1.14.1, and `main` of both has the same code:
 
-1. A stream's writer confirms a chunk when a majority of the members have written it:
-   `agreed_commit/1` takes the middle tail of the sorted tails (`osiris_writer.erl` line 653).
-2. No member syncs what it wrote. osiris 1.14.1 has no `file:sync` or `file:datasync` call, as
-   the documentation's section "Data Safety when using Streams" says.
-3. After a failure of the writer, the stream coordinator promotes a new writer from the members
-   stopped in the current epoch as soon as they are a quorum
-   (`rabbit_stream_coordinator.erl`, `recover_leaderless_stream/2` at line 1997, `promote_writer/3`
-   at line 2068, `select_leader/2` at line 2534). It takes the member with the newest tail among
-   those.
+1. `rabbit1` was the writer of epoch 1. During its pause the stream coordinator started epoch 2
+   with `rabbit3` as the writer and `rabbit2` as its replica: `started writer ... on
+   rabbit@rabbit3 in 2` at 00:01:05.88 of the guest's clock. It gave `rabbit1` the role
+   `{replica,2}`, but no member ran on `rabbit1` in epoch 2 (`rabbit_stream_coordinator.erl` line
+   2098).
+2. `rabbit3` and `rabbit2` wrote `s29`, so the writer confirmed it: a writer confirms the middle
+   tail of its members' sorted tails (`osiris_writer.erl` lines 321 and 653).
+3. `rabbit3` lost its power at about 00:01:21. No member syncs a segment file: osiris has no
+   `file:sync` call in `src/`, and osiris pull request 87 left fsync "to be implemented
+   separately". So `rabbit3` lost its two chunks of epoch 2, and its tail on disk was `{1,4}`,
+   offset 4 of epoch 1. `rabbit1` was still paused, so only `rabbit2` ran.
+4. `rabbit1` came back at 00:02:33.66, and all three nodes ran before the election. The writer of
+   epoch 1 on `rabbit1` wrote one more chunk, a tracking chunk at offset 5 in epoch 1. Then it
+   stopped with the tail `{1,5}`.
+5. The replica on `rabbit2` failed to start again (`writer_unavailable` at 00:02:33.088). The
+   coordinator parked that action for about 6 s (`park_action`, lines 2392 to 2398), so
+   `rabbit2` was not among the stopped members.
+6. The coordinator elects a writer as soon as a quorum of the members has stopped (lines 1414,
+   1744 to 1747 and 2056). It takes the newest tail among them (`select_leader/2`, lines 2534 to
+   2548). `rabbit1` and `rabbit3` were that quorum, and `rabbit1` had the newer tail: `started
+   writer ... on rabbit@rabbit1 in 3` at 00:02:33.706.
+7. At 00:02:39 `rabbit2` started as a replica of epoch 3. The writer named offset 5 as epoch 1,
+   but `rabbit2` held offset 5 in epoch 2. So `truncate_to` (`osiris_log.erl` lines 948 to 1022)
+   deleted every segment of `rabbit2`, and `rabbit2` copied the log again from offset 0.
 
-With `rabbit1` paused, the majority that confirmed `s29` was `rabbit2` and `rabbit3`, and the
-copy of `rabbit3` was in its page cache, which the power loss took. The stream ended in epoch 3,
-so it had two elections, after the kill and after the power loss: `rabbit3` was the writer when
-it lost its power (inferred from the epochs, not logged). A Raft-style quorum keeps a
-committed entry because every quorum meets the one that wrote it to disk. Here the copy of
-`rabbit3` was not on disk, so the new epoch could start from members without `s29`, and
-`rabbit2`, which had it, followed the new writer. Which members formed the quorum of the election
-was not traced: the logs of the restarted nodes start at their restart, and the stream
-coordinator logs no tails at the info level.
+After it all three nodes report `{{0,7},[{1,5},{3,7}]}`: offsets 0 to 7, the last of epoch 1 at
+offset 5 and the last of epoch 3 at offset 7. No node holds `s29`. On e2's image a held run
+(`hydo inspect`) had shown the same end: epoch 3 with `rabbit1` as its writer, and all three
+members at offset 10 without `s29`.
 
-**Is it a bug?** The documentation says that an uncontrolled shutdown "could result in data loss
-for replicas hosted on that node", that this "theoretically opens up the possibility of confirmed
-data loss", and that "the loss of data on a single node would typically just be re-replicated
-from the other nodes". Here one node lost its power, and the confirmed message was lost for
-good, while another node had it. A pause of a third node, shorter than the net tick time, is
-enough to make the majority of the confirm two nodes. It is a candidate at the edge of the
-documented choice not to sync; the report would say both.
+**Is it a bug?** The loss needs two conditions that RabbitMQ documents or accepts:
 
-**Duplicates.** No issue or discussion names the loss of a confirmed message after one node's
-power loss (the section "The duplicate searches"). Discussion 18370 (2026-11-16) is a replica that
-never restarts after a power loss of two nodes, on a torn index record; osiris pull request 246
-fixes it. Issue 16822 is a stream left stopped after two of three nodes are forgotten.
+- Streams do not sync: "they do not explicitly flush (fsync) the data" (rabbitmq.com/docs/streams,
+  "Data Safety"). An uncontrolled shutdown "could result in data loss for replicas hosted on that
+  node".
+- A second node was away during the power loss. While `rabbit3` had no power, `rabbit1` was down
+  too, and only one of the three nodes ran. A maintainer's answer to discussion 18370 says that a
+  power-off of two of three nodes is outside the stream's requirements. Here one node lost its
+  power, and the other was paused.
+
+The candidate is the part that no page documents. The coordinator elected from a quorum that left
+out the member with the confirmed chunk, because that member waited on a retry timer. Then that
+member deleted its copy. The documentation says that "the loss of data on a single node would
+typically just be re-replicated from the other nodes". Here one node lost data, all three nodes
+ran at the election, and the other node's copy was deleted, not copied back. A report would name
+both the documented trade-off and this part.
+
+**Duplicates.** No issue or discussion names this loss (the section "The duplicate searches").
+These are the closest:
+
+- rabbitmq-server issue 9457 (2023, closed): streams lose messages during a failover in which
+  the leader's pod is deleted.
+- osiris issue 145 (open): after an unclean shutdown that loses the page cache,
+  `last_epochs_offsets` can name offsets whose data is missing.
+- osiris pull request 87 (handle data loss in index and segment files) and issue 79 (a crash of
+  the operating system can leave a log unusable).
+- discussion 18370 (2026-11-16): a replica that never restarts after a power loss of two nodes,
+  on a torn index record. osiris pull request 246 fixes it.
+- rabbitmq-server issue 16822, a stream left stopped after two of three nodes are forgotten, and
+  issue 9275 (open), a faster response of streams to network partitions.
 
 **Native reproduction.** None: the window depends on the order of a pause, a confirm and a power
 loss within seconds, which Docker cannot reproduce without a power cut of one container's page
