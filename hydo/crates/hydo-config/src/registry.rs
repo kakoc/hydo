@@ -535,6 +535,9 @@ variables! {
     HYDO_WORLDBIN_TLS: Build, User, "path; empty = default", "<build dir>/hydo-world-tls", "hydo-build";
     /// The arm64 `hydo-world-tls`.
     HYDO_WORLDBIN_TLS_ARM64: Build, User, "path; empty = default", "<build dir>/hydo-world-tls-arm64", "hydo-build";
+    /// The x86_64 `hydo-clock` (one service's own wall clock, Milestone 372), staged only for
+    /// manifests with a service of `clock: own`.
+    HYDO_CLOCKBIN: Build, User, "path; empty = default", "<build dir>/hydo-clock", "hydo-build";
     /// The x86_64 `hydo-read`.
     HYDO_READ_BIN: Build, User, "path; empty = default", "<build dir>/hydo-read", "hydo-build";
     /// The arm64 `hydo-read`.

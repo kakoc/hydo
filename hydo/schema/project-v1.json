@@ -983,6 +983,17 @@
             }
           ]
         },
+        "clock": {
+          "description": "`own`: the service gets a wall clock of its own (Milestone 372). It starts under\n`/bin/hydo-clock`, and `T=<svc>@<at>:<change>` steps its clock (`T=n2@5:-30`,\n`T=n2@5:1500ms`) or makes it drift (`T=n2@0:200ppm`), while the other services and the\nchecks keep the guest's clock (MANIFEST.md \"One service's own clock\"). x86_64 images\nonly.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ServiceClock"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "description": {
           "anyOf": [
             {
@@ -1176,6 +1187,13 @@
       "enum": [
         "ready",
         "started"
+      ]
+    },
+    "ServiceClock": {
+      "description": "Whose wall clock a service reads (Milestone 372): `own` starts it under hydo-clock, so that\n`T=<svc>@<at>:<change>` steps it or makes it drift while the other services keep the\nguest's clock.",
+      "type": "string",
+      "enum": [
+        "own"
       ]
     },
     "ServiceErrors": {

@@ -24023,6 +24023,102 @@ Retro: rqlite 10.8.0, hvx, 2026-11-26
 
 **What is left.** Open item 189.
 
+## Milestone 372 (tentative number): one service's own wall clock
+
+Status: a prototype, done on 2026-11-26 on the bare-metal machine (hvx and the tests) from this
+Mac. Every service of a guest reads one wall clock, so `T=` moved every service's clock at once.
+The idea "Clocks per service" of `docs/USE-CASES.md` asked for one node's clock ahead of or
+behind the others, the cause of lease and timestamp bugs that the TiKV, Prometheus and Typesense
+onboardings could not test (open items 117, 147 and 170). The design and the options are
+`docs/design/service-clocks.md`. Nothing recorded moved, and the fingerprint epoch stays 6.
+
+**The options, checked.** The hvx guest kernel's configuration, extracted from `guest/bzImage`
+(`0a9ede35…`) with the kernel's own `scripts/extract-ikconfig`, has `CONFIG_TIME_NS=y`,
+`CONFIG_SECCOMP_FILTER=y` and `CONFIG_CROSS_MEMORY_ATTACH=y`. Linux 6.6's time namespaces do not
+help: `struct timens_offsets` has only `monotonic` and `boottime`, `proc_timens_set_offset`
+refuses every other clock with `EINVAL`, and the offsets are frozen once a process entered the
+namespace. A preloaded library reaches only programs that read the clock through a shared libc,
+not static Go, Rust or C programs. A realtime offset per time namespace in the guest kernels
+covers every program without a tracer, but it touches the timekeeping core of four kernels. The
+prototype takes the fourth option of the design page: seccomp and ptrace, with the vDSO hidden.
+
+**What was built.** Five parts, none of which changes the agent, a guest kernel, or an image
+without the new key:
+
+- `hydo/crates/hydo-clock`, a static x86_64 program with its own lock file (std and libc), built
+  by its `build.sh` with hydo-agent's recipe (414,624 bytes, `de24fd93…`). `hydo-clock <offset
+  file> <program>` installs a seccomp filter that sends the reads of the wall clock and the
+  waits until a wall-clock time to it, traces the program's whole tree, and hides the vDSO at
+  every `execve` (`AT_SYSINFO_EHDR` becomes `AT_IGNORE`). At a read it writes the guest's time
+  plus the offset and skips the call; at a wait it gives the kernel the deadline minus the
+  offset. Its unit tests check the filter's jumps, the time conversion, and the offset file.
+- `services[].clock: own` (a format-1 addition, x86_64 only): `hydo build` stages
+  `/bin/hydo-clock` from `HYDO_CLOCKBIN` (default `<build dir>/hydo-clock`), and the controller
+  starts the service as `hydo-clock /tmp/hydo/clock.<svc> <its command>`.
+- The token `T=<svc>@<at>:<change>` in `hydo-schedule` (`ServiceClockChange`): `<n>` seconds,
+  `<n>ms`, or a drift `<n>ppm`, each with one spelling (test `service_clocks`). Every such token
+  applies; the guest's own `T=` still replaces an earlier one.
+- The controller (`features/clock.rs`, `service_clock`) writes `<offset ns> <drift ppm>` into
+  the service's file before the step, logs `CLOCK of n2 5 before step 3 (offset 0 ms -> 5000 ms,
+  drift 0 ppm -> 0 ppm)`, and gives a step the records of a guest clock step. `hydo_control::names`
+  refuses the token for a service without `clock: own`, before any VM.
+- The example `hydo/onboard/examples/service-clocks`: two nodes that hold a lease by their own
+  wall clocks, read with a static Go program.
+
+**Outside a VM first.** On the bare-metal machine, hydo-clock with an offset of +5 s made the
+static Go program read 5.24 s ahead (the 0.24 s are the time between the two calls). An offset of
+-1 h moved glibc's `date` and Python's `time.time()` back by an hour. `clock_nanosleep` with
+`TIMER_ABSTIME` and `pthread_cond_timedwait` on a deadline of the program's clock plus 1 s each
+took 1.000 s with offsets of +1 h and -1 h, with a dynamic and a static glibc. Exit statuses
+passed through (7, and 143 after a SIGTERM).
+
+**The hvx runs.** This tree's `hydo` and `hydo-hvx` over the 0.6.0 Linux release's guest files,
+every VM through `~/bin/hvx-run` under umask 022. Every schedule ran twice with one fingerprint;
+the table is the example's RESULTS.md:
+
+| Schedule | Verdict | Fingerprint |
+|---|---|---|
+| `disk=none \| run` | OK, the lead changed 0 times | `57d19bbc77f8360b` |
+| `disk=none \| run T=3:5` | OK | `1ff65322865695d5` |
+| `disk=none \| run T=n2@3:5` | VIOLATION `[lease.one_leader]`, two leaders at once | `9feba06d7a2b47c3` |
+| `disk=none \| run T=n2@3:-5` | OK | `fad0820e66206c18` |
+| `disk=none \| run T=n2@0:500000ppm` | VIOLATION `[lease.one_leader]` | `bd68cd0ff4c2b957` |
+| `disk=none \| run T=n1@3:1500ms T=n2@3:-1500ms` | OK | `1df85a95a9dee374` |
+| `disk=none \| run T=n1@0:4 T=n2@0:4` | OK | `beeb8a7a0e432b60` |
+| `disk=none \| run P=n1@2+3` | OK, the pause of a traced service | `61ccc82fa554b277` |
+| `disk=none \| run K=n1@2+2 T=n1@1:2` | OK, the offset kept across a restart | `07c13db36f21324b` |
+
+The same lease passes a step of the guest's clock (`T=3:5`) and fails a step of one node's clock
+(`T=n2@3:5`), the case that `T=` could not make. At the end the nodes read 5,006 ms apart after
+`T=n2@3:5` and 4,411 ms apart after 8.8 s at 500,000 ppm.
+
+**The cost.** 20,000 reads of the wall clock by the static Go program took 4.4 µs of guest time
+each as the guest's own program and 40.5 µs each under hydo-clock. On the bare-metal machine
+outside a VM they took 0.12 µs and 21.9 µs.
+
+**Nothing recorded moved.** The pinned reproducers' epoch-6 images in `~/hydo/build/rel060` gave
+`db33d71069816103` (VIOLATION, order 11) and `c421af1ccb714225` (OK) with this tree, their
+recorded values. The release's Redis example built by the 0.6.0 release and by this tree gave one
+image, `8fae6946…`.
+
+**The tests.** On the bare-metal machine: the tests of hydo-schedule, hydo-manifest, hydo-config,
+hydo-build, hydo-control and hydo-explore, `cargo test -p hydo --test it -- equivalence::
+agents_equivalence::`, `cargo test -p hydo-agents --test it`, clippy with `-D warnings`, and
+`cargo fmt --check` passed. Re-recorded with `HYDO_BLESS=1`:
+
+- the project schema, with the key `clock`;
+- the answers of the hydo-build and hydo-manifest equivalence corpora, whose messages list the
+  known service keys;
+- the corpus and identity goldens of the explorer and the controller's corpus golden, with the
+  new example;
+- the CLI golden (the length of `hydo guide manifest`), the agents recording's hash of the skill
+  folder, and the inventory of environment variables (`HYDO_CLOCKBIN`).
+
+**What is left** (open item 190): the explorer does not draw the token, and the clock audit does
+not propose it. The KVM and Mac engines did not run it: their guest kernels have seccomp only in
+the `containers` variants, and the Mac needs an arm64 build of hydo-clock. The design page names
+the programs and the timers it does not cover.
+
 ## Milestone 373 (tentative number): the NSQ, SeaweedFS and Typesense examples on KVM
 
 The examples of Milestones 362, 364 and 366 ran on the KVM engine for the first time, on GitHub's

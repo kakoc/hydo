@@ -278,3 +278,84 @@ impl fmt::Display for ClockPoint {
         write_offset(f, self.offset)
     }
 }
+
+/// What `T=<svc>@<at>:<change>` does to one service's own wall clock (Milestone 372,
+/// `docs/design/service-clocks.md`). The service's processes read the guest's realtime clock
+/// plus an offset of their own; the other services and the checks keep the guest's clock.
+///
+/// - `<n>` (whole seconds) or `<n>ms`: the offset moves by that much (signed), as a step of
+///   that node's clock by NTP or by hand. Whole seconds are written without `ms`.
+/// - `<n>ppm`: from then on the offset grows by `n` millionths of the time that passes (signed),
+///   as the clock of a node whose oscillator runs fast or slow; `0ppm` stops the drift. The
+///   offset it built up stays.
+///
+/// The text is canonical: the guest logs it, so `2000ms` is refused with `2` in the message.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ServiceClockChange {
+    /// The offset moves by this many milliseconds.
+    Step(i64),
+    /// The offset drifts by this many millionths of the elapsed time.
+    Drift(i64),
+}
+
+/// The largest drift, in millionths either way (at -1,000,000 the clock would stand still).
+pub const MAX_DRIFT_PPM: i64 = 999_999;
+
+/// The largest step of one service's clock, in seconds either way (100 years).
+pub const MAX_SERVICE_STEP_S: i64 = 3_155_760_000;
+
+impl ServiceClockChange {
+    /// `<n>`, `<n>ms` or `<n>ppm`, `n` a signed canonical decimal.
+    pub fn parse(s: &str, what: &str) -> Result<ServiceClockChange, ParseError> {
+        let big = || {
+            err(format!(
+                "{what}: a step is at most {MAX_SERVICE_STEP_S} seconds either way"
+            ))
+        };
+        if let Some(n) = s.strip_suffix("ppm") {
+            let v = crate::num::sdec(n, what)?;
+            if v.abs() > MAX_DRIFT_PPM {
+                return Err(err(format!(
+                    "{what}: a drift is at most {MAX_DRIFT_PPM} ppm either way (got {v})"
+                )));
+            }
+            return Ok(ServiceClockChange::Drift(v));
+        }
+        if let Some(n) = s.strip_suffix("ms") {
+            let v = crate::num::sdec(n, what)?;
+            if v == 0 {
+                return Err(err(format!("{what}: write 0, not 0ms")));
+            }
+            if v % 1000 == 0 {
+                return Err(err(format!(
+                    "{what}: write whole seconds without ms: {}",
+                    v / 1000
+                )));
+            }
+            if v.abs() / 1000 > MAX_SERVICE_STEP_S {
+                return Err(big());
+            }
+            return Ok(ServiceClockChange::Step(v));
+        }
+        let v = crate::num::sdec(s, what).map_err(|_| {
+            err(format!(
+                "{what}: a service's clock takes a step in seconds (-30), in milliseconds \
+                 (-1500ms) or a drift (200ppm), not {s:?}"
+            ))
+        })?;
+        if v.abs() > MAX_SERVICE_STEP_S {
+            return Err(big());
+        }
+        Ok(ServiceClockChange::Step(v * 1000))
+    }
+}
+
+impl fmt::Display for ServiceClockChange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ServiceClockChange::Step(ms) if ms % 1000 == 0 => write!(f, "{}", ms / 1000),
+            ServiceClockChange::Step(ms) => write!(f, "{ms}ms"),
+            ServiceClockChange::Drift(p) => write!(f, "{p}ppm"),
+        }
+    }
+}

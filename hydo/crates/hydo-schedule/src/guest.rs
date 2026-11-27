@@ -7,7 +7,7 @@
 //! (leading zeros, upper-case hex, an empty field) is refused with a message, and every accepted
 //! token prints back byte for byte.
 
-use crate::clock::ClockPoint;
+use crate::clock::{ClockPoint, ServiceClockChange};
 use crate::compose::Compose;
 use crate::num::{dec, err, hex, name, sdec};
 use crate::storage::Corruption;
@@ -867,6 +867,15 @@ pub enum GuestToken {
     /// `T=<at>:@<point>[<offset>]`: the realtime clock set to the next instant of a time of day
     /// or a calendar boundary (UTC) before step at (Milestone 225; [`ClockPoint`]).
     ClockTo { at: u64, to: ClockPoint },
+    /// `T=<svc>@<at>:<change>` (Milestone 372): before step at, one service's own wall clock is
+    /// stepped (`<n>` seconds, `<n>ms`) or set to drift (`<n>ppm`) against the guest's clock,
+    /// which the other services and the checks keep. The service needs `clock: own` in the
+    /// manifest ([`ServiceClockChange`], `docs/design/service-clocks.md`).
+    ServiceClock {
+        svc: String,
+        at: u64,
+        change: ServiceClockChange,
+    },
     /// `Q=<n>[d]`: n concurrent requests; `d` = every request sent twice (the stack's client).
     Concurrency { n: u64, double: bool },
     /// `X=<target>@<at>~<off>`: a timer armed before step at kills the target after off ms.
@@ -960,7 +969,9 @@ impl GuestToken {
             GuestToken::Net { .. } => 'N',
             GuestToken::OneWay { .. } => 'O',
             GuestToken::Cut(_) => 'C',
-            GuestToken::Clock { .. } | GuestToken::ClockTo { .. } => 'T',
+            GuestToken::Clock { .. }
+            | GuestToken::ClockTo { .. }
+            | GuestToken::ServiceClock { .. } => 'T',
             GuestToken::Concurrency { .. } => 'Q',
             GuestToken::TimedKill { .. } => 'X',
             GuestToken::Buggify(_) => 'B',
@@ -1089,10 +1100,26 @@ impl GuestToken {
             'T' => {
                 let (a, d) = v.split_once(':').ok_or_else(|| {
                     err(format!(
-                        "{what}: T=<at>:<delta seconds> or T=<at>:@<point>[<offset>]"
+                        "{what}: T=<at>:<delta seconds>, T=<at>:@<point>[<offset>] or \
+                         T=<svc>@<at>:<step or drift>"
                     ))
                 })?;
-                if d.starts_with('@') {
+                if let Some((svc, at)) = a.split_once('@') {
+                    // Milestone 372: one service's own clock
+                    name(svc, what)?;
+                    if d.starts_with('@') {
+                        return Err(err(format!(
+                            "{what}: a service's clock takes a step (-30, -1500ms) or a drift \
+                             (200ppm), not a point; a point moves the guest's clock: \
+                             T=<at>:@<point>"
+                        )));
+                    }
+                    GuestToken::ServiceClock {
+                        svc: svc.to_string(),
+                        at: dec(at, what)?,
+                        change: ServiceClockChange::parse(d, what)?,
+                    }
+                } else if d.starts_with('@') {
                     GuestToken::ClockTo {
                         at: dec(a, what)?,
                         to: ClockPoint::parse(d, what)?,
@@ -1246,6 +1273,7 @@ impl fmt::Display for GuestToken {
             GuestToken::Cut(c) => write!(f, "C={c}"),
             GuestToken::Clock { at, delta } => write!(f, "T={at}:{delta}"),
             GuestToken::ClockTo { at, to } => write!(f, "T={at}:{to}"),
+            GuestToken::ServiceClock { svc, at, change } => write!(f, "T={svc}@{at}:{change}"),
             GuestToken::Concurrency { n, double } => {
                 write!(f, "Q={n}{}", if *double { "d" } else { "" })
             }

@@ -283,7 +283,9 @@ pub fn defaults_class(s: &Schedule) -> String {
             | GuestToken::TimedKill { .. }
             | GuestToken::Freeze(_) => had[0] = true,
             GuestToken::Net { .. } | GuestToken::OneWay { .. } => had[1] = true,
-            GuestToken::Clock { .. } | GuestToken::ClockTo { .. } => had[2] = true,
+            GuestToken::Clock { .. }
+            | GuestToken::ClockTo { .. }
+            | GuestToken::ServiceClock { .. } => had[2] = true,
             GuestToken::Protocol(_) => had[3] = true,
             GuestToken::Buggify(_) => had[5] = true,
             GuestToken::React(r) => match r.action {

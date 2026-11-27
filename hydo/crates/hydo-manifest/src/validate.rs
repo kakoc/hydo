@@ -89,6 +89,7 @@ pub const KNOWN_SVC: &[&str] = &[
     "version",
     "versions",
     "compare",
+    "clock",
 ];
 /// The keys of a `services[].versions` entry (Milestone 238).
 pub const KNOWN_VERSION: &[&str] = &["name", "cmd", "setup", "ready", "description"];
@@ -695,6 +696,14 @@ pub fn validate(m: &mut Value) -> R<()> {
             if c.as_str().is_none_or(|x| x.trim().is_empty()) {
                 return Err(err(format!(
                     "{wh}: compare: a command that prints the state the service stored, such as a SQL query or a scan of every key"
+                )));
+            }
+        }
+        // Milestone 372: the service's own wall clock
+        if let Some(c) = obj_get(s, "clock") {
+            if c.as_str() != Some("own") {
+                return Err(err(format!(
+                    "{wh}: clock: own is the only value (the service gets a wall clock of its own, which T=<svc>@<at>:<change> moves)"
                 )));
             }
         }
@@ -2132,6 +2141,18 @@ pub fn check_ram_arch(m: &Value, arch: &str) -> R<()> {
         return Err(err(format!(
             "guest.cpu: v3 (AVX/AVX2) is an x86_64 option; --arch {arch} cannot use it"
         )));
+    }
+    // Milestone 372: hydo-clock reads and writes x86_64 registers; the arm64 build is not made
+    if arch != "x86_64" {
+        for s in or_iter(obj_get(m, "services"))? {
+            if obj_get(&s, "clock").is_some() {
+                return Err(err(format!(
+                    "services: {}: clock: own is an x86_64 option for now; --arch {arch} cannot \
+                     use it",
+                    str_of(index(&s, "name")?)
+                )));
+            }
+        }
     }
     Ok(())
 }

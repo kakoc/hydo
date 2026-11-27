@@ -20,7 +20,7 @@
 
 use super::{call, die_oracle, log, utc, xassert, Ctx, Step, F};
 use hydo_agent_proto::msg::{ClockGet, ClockSet, Command, Reply};
-use hydo_schedule::ClockPoint;
+use hydo_schedule::{ClockPoint, ServiceClockChange};
 
 /// `$BB date +%s` (None when the agent cannot read the clock: the shell's empty output).
 fn date_now(fx: &mut F<'_>) -> Step<Option<i64>> {
@@ -132,6 +132,78 @@ fn jump(
             "fault.clock_fwd",
             "the realtime clock was stepped forwards",
         );
+    }
+    Ok(())
+}
+
+/// The program that gives one service its own wall clock (Milestone 372, `clock: own`); the
+/// image has it when a service asks for it (hydo-build stages `/bin/hydo-clock`).
+pub(super) const HYDO_CLOCK: &str = "/bin/hydo-clock";
+
+/// The file a service's own clock reads its offset from: `<offset ns> <drift ppm>` and a
+/// newline. hydo-clock reads it at each read of the wall clock; a missing file is offset 0. It
+/// is in the run directory, so a recovery boot and a reboot start every own clock at 0.
+pub(super) fn service_file(ctx: &Ctx, svc: &str) -> String {
+    format!("{}/clock.{svc}", ctx.plan.layout.dir)
+}
+
+/// The words put before a `clock: own` service's command: `hydo-clock <its file>`.
+pub(super) fn own_clock_argv(ctx: &Ctx, svc: &str) -> Vec<String> {
+    vec![HYDO_CLOCK.to_string(), service_file(ctx, svc)]
+}
+
+/// `T=<svc>@<at>:<change>` before step `p` (Milestone 372): the service's offset moves by a
+/// step, or its drift changes, and the new values are written to its clock file, which its
+/// processes read at their next read of the wall clock. `st` is the service's (offset in ms,
+/// drift in ppm) so far in this boot. A step backwards or forwards gives the records of a
+/// guest's clock step, so the explorer's and the report's counts of clock faults see it.
+pub(super) fn service_clock(
+    fx: &mut F<'_>,
+    ctx: &Ctx,
+    p: i64,
+    svc: &str,
+    st: &mut (i64, i64),
+    change: &ServiceClockChange,
+) -> Step<()> {
+    let old = *st;
+    match *change {
+        ServiceClockChange::Step(ms) => st.0 = st.0.saturating_add(ms),
+        ServiceClockChange::Drift(ppm) => st.1 = ppm,
+    }
+    let path = service_file(ctx, svc);
+    let line = format!("{} {}\n", st.0.saturating_mul(1_000_000), st.1);
+    let ok = matches!(
+        call(fx, super::write_cmd(&path, &line, false))?,
+        Ok(Reply::Write(_))
+    );
+    if !ok {
+        return die_oracle(
+            fx,
+            format!("HYDO-ORACLE: ERROR the clock of {svc} could not be set ({path})"),
+        );
+    }
+    log(
+        fx,
+        format!(
+            "CLOCK of {svc} {change} before step {p} (offset {} ms -> {} ms, drift {} ppm -> {} \
+             ppm)",
+            old.0, st.0, old.1, st.1
+        ),
+    );
+    match *change {
+        ServiceClockChange::Step(ms) if ms < 0 => xassert(
+            fx,
+            "reachable",
+            "fault.clock_back",
+            "the realtime clock was stepped backwards",
+        ),
+        ServiceClockChange::Step(_) => xassert(
+            fx,
+            "reachable",
+            "fault.clock_fwd",
+            "the realtime clock was stepped forwards",
+        ),
+        ServiceClockChange::Drift(_) => {}
     }
     Ok(())
 }

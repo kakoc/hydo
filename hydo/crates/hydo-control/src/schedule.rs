@@ -167,6 +167,9 @@ struct RunCfg {
     /// T=<at>:@<point>: the point the clock is set to (then `t`'s delta is 0); None for a step
     /// by a fixed amount.
     tto: Option<hydo_schedule::ClockPoint>,
+    /// T=<svc>@<at>:<change> (Milestone 372): the changes of single services' own clocks, in
+    /// token order (each applies; they do not replace each other or the guest's T=).
+    ts: Vec<(String, i64, hydo_schedule::ServiceClockChange)>,
     /// N= and O= (NET-FAULTS reads their typed fields).
     n: Option<netfault::NetTok>,
     o: Option<netfault::NetTok>,
@@ -877,6 +880,9 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
             GuestToken::ClockTo { at, to } => {
                 c.t = Some((*at as i64, 0));
                 c.tto = Some(*to);
+            }
+            GuestToken::ServiceClock { svc, at, change } => {
+                c.ts.push((svc.clone(), *at as i64, *change));
             }
             // M139: reactions (features/react.rs)
             GuestToken::React(r) => c.a.push(r.clone()),
@@ -1878,14 +1884,14 @@ fn launch_svc(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Step<Option<Vec<String>>> {
     // process has not exited, so the controller waits for the exit of a killed service first.
     fx.until(|h, f| !running(h, f, s))?;
     let e = env(fx, ctx, &vars);
+    let mut argv = sh(ctx, format!(". {}; exec {}", l.prelude, cmd));
+    // Milestone 372: `clock: own` starts the service under hydo-clock, which gives its processes
+    // the guest's wall clock plus the offset in their clock file (features/clock.rs)
+    if sv.own_clock {
+        argv.splice(0..0, clock::own_clock_argv(ctx, s));
+    }
     let id = fx.send(netns::put(
-        spawn_cmd(
-            s,
-            sh(ctx, format!(". {}; exec {}", l.prelude, cmd)),
-            e.clone(),
-            &log_file,
-            false,
-        ),
+        spawn_cmd(s, argv, e.clone(), &log_file, false),
         &ns,
     ))?;
     fx.effect(|h, f| {
@@ -3254,6 +3260,7 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         .chain(net.points())
         .chain(reactions.iter().map(|(_, r)| r.at as i64))
         .chain(cfg.u.iter().flat_map(|u| upgrade::steps(ctx, u)))
+        .chain(cfg.ts.iter().map(|(_, at, _)| *at))
         .filter(|p| *p >= from && *p <= steps)
         .collect();
     pts.sort();
@@ -3291,6 +3298,8 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     let mut rcut = false;
     // Milestone 238: the upgrades' switches, resolved at each token's first step
     let mut upgrades: upgrade::Pending = Vec::new();
+    // Milestone 372: each own clock's offset (ms) and drift (ppm) so far in this boot
+    let mut own_clocks: BTreeMap<String, (i64, i64)> = BTreeMap::new();
     for &p in &pts {
         if let Some(a) = prev {
             if a < p {
@@ -3488,6 +3497,13 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             match &cfg.tto {
                 Some(to) => clock::clock_to(fx, p, to)?,
                 None => clock::clock_jump(fx, p, tdelta)?,
+            }
+        }
+        // Milestone 372: T=<svc>@<at>:<change>, after the guest's own step, in token order
+        for (svc, at, change) in &cfg.ts {
+            if *at == p {
+                let st = own_clocks.entry(svc.clone()).or_insert((0, 0));
+                clock::service_clock(fx, ctx, p, svc, st, change)?;
             }
         }
         // M139: a reaction is armed before its step, after that step's faults

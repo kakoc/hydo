@@ -15,7 +15,7 @@
 //! `repro.spec.ts` do (Milestone 301: before, a window `@0-1` read "during step 1"); a count
 //! of steps ("after 12 steps") is a count, not a step's number.
 
-use crate::clock::{ClockPoint, Every};
+use crate::clock::{ClockPoint, Every, ServiceClockChange};
 use crate::compose::{Compose, ResolvedField, SeedField};
 use crate::guest::{
     Direction, FreezeDir, GuestToken, NetTarget, Netem, Pause, ReactAction, ResetKind, Rule,
@@ -471,6 +471,44 @@ fn net_target_words(t: &NetTarget) -> String {
                     format!("every link between the leader of the group {g} and the others")
                 }
             }
+        }
+    }
+}
+
+/// `T=<svc>@<at>:<change>` (Milestone 372) in words: the sentence after "after N steps, " and
+/// the short gloss.
+fn service_clock_words(svc: &str, change: &ServiceClockChange) -> (String, String) {
+    match *change {
+        ServiceClockChange::Step(msv) => {
+            let way = if msv < 0 { "back" } else { "forward" };
+            let by = if msv % 1000 == 0 {
+                duration(msv.unsigned_abs() / 1000)
+            } else {
+                ms(msv.unsigned_abs())
+            };
+            (
+                format!(
+                    "the clock of {} alone jumps {way} by {by}; the other services keep theirs",
+                    code(svc)
+                ),
+                format!("move the clock of {} {way} by {by}", code(svc)),
+            )
+        }
+        ServiceClockChange::Drift(0) => (
+            format!("the clock of {} stops drifting", code(svc)),
+            format!("stop the drift of the clock of {}", code(svc)),
+        ),
+        ServiceClockChange::Drift(p) => {
+            let way = if p < 0 { "slow" } else { "fast" };
+            (
+                format!(
+                    "the clock of {} alone runs {way} by {} millionths ({} ms a minute)",
+                    code(svc),
+                    p.unsigned_abs(),
+                    p.unsigned_abs() * 60 / 1000
+                ),
+                format!("make the clock of {} run {way}", code(svc)),
+            )
         }
     }
 }
@@ -959,6 +997,15 @@ fn guest_noun(t: &GuestToken, knobs: &[KnobInfo]) -> Option<String> {
         GuestToken::ClockTo { at, to } => {
             format!("a clock jump to {} {}", clock_point_words(to), after(*at))
         }
+        GuestToken::ServiceClock { svc, at, change } => format!(
+            "{} of the clock of {} alone {}",
+            match change {
+                ServiceClockChange::Step(_) => "a jump",
+                ServiceClockChange::Drift(_) => "a drift",
+            },
+            code(svc),
+            after(*at)
+        ),
         GuestToken::Protocol(h) => format!(
             "a fault of the outside service {}",
             code(h.target.split('.').next().unwrap_or(&h.target))
@@ -1167,6 +1214,15 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
         )
         .at(*at)
         .fault("clock jumps", "after a clock jump".into()),
+        GuestToken::ServiceClock { svc, at, change } => {
+            let (sentence, gloss) = service_clock_words(svc, change);
+            fault(
+                format!("{}, {sentence}.", cap(&after(*at))),
+                format!("{gloss} {}", after(*at)),
+            )
+            .at(*at)
+            .fault("clock jumps", "after a clock jump".into())
+        }
         GuestToken::Concurrency { n, double } => setup(
             format!(
                 "The workload sends {n} requests at once{}.",

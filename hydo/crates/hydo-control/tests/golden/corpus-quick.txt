@@ -49,6 +49,7 @@ input	hydo/onboard/examples/redis/hydo-proxy.yaml	7a3da7d13479918d735f09797cabca
 input	hydo/onboard/examples/redis/hydo.yaml	c34c172a137dd89e266d8e4e73288f9d9dc73dadf952d5b9c4a03f3547d5e443
 input	hydo/onboard/examples/restate-oci/hydo.yaml	e538bbdc96d793f567287dd0dd8c2d26c35ba669a2d7631653fa6c6afd9e6509
 input	hydo/onboard/examples/rust-kv/hydo.yaml	417a6848bf266242b33f2191e4eb173ad8e3187d53c444c03dcc7c7b68615bea
+input	hydo/onboard/examples/service-clocks/hydo.yaml	c69afc21d3128e7d67de9de2fbe3e421c9040a825cbb4cd12f0d0ad2f1ff40da
 input	hydo/onboard/examples/shop/hydo.yaml	eaacf3830712aae4e796373238760925ec2a4eb282f51c21002d3da8a58d31f8
 input	hydo/onboard/examples/stack-grpc/hydo.yaml	9bb05f0cbaf593b685f2ff6d6dff6f362c76f31595397f30825567c78a0afa6d
 input	hydo/onboard/examples/stack/hydo-errors.yaml	e72c82ce5173231f6f7cc425e23b8a6247b22b0db020a8a983aac4968dc302ba
@@ -2447,6 +2448,15 @@ chunk	hydo/onboard/examples/rust-kv/hydo.yaml	62	500	da89ffa152eb013f8125e1d06a9
 chunk	hydo/onboard/examples/rust-kv/hydo.yaml	63	500	97785961ba6337569e00d1251ba389c99d99371ae445fe3cacf88a9642dfedf0
 chunk	hydo/onboard/examples/rust-kv/hydo.yaml	64	500	2ac26dc7c807b763ccea633d55a6d5f8aa465eec3a4c03931dd2d55b1fd329f1
 chunk	hydo/onboard/examples/rust-kv/hydo.yaml	65	315	2ef5e094be719239d6a8eaecf57dd0b6c2c1d94397bd6501da6146df5668798f
+manifest	hydo/onboard/examples/service-clocks/hydo.yaml	core
+boot	hydo/onboard/examples/service-clocks/hydo.yaml	hydo/onboard/examples/service-clocks/hydo.yaml#0	snapshot	123c9f7d9b89f431
+counts	hydo/onboard/examples/service-clocks/hydo.yaml	identity=33 recovery:ok=4 refused=1 run:cut=4 run:error=3 run:ok=27 run:violation=10 token:C=4 token:K=3 token:P=4 token:Q=1 token:T=32 token:X=4 token:Z=1 written=11
+boot-transcript	hydo/onboard/examples/service-clocks/hydo.yaml	123c9f7d9b89f431
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml	0	500	e012564bbe5127485ec575ed52849237b21b462912e6512a5526c1963fd1426c
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml	1	500	2d9a9bfe6cbf8217e7f3301afdfbf043525d5d084557fd1a70edb6c2fc1d1965
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml	2	500	83a66f347cc82c027b5a83bf286e02c099adfab82a47217551529d7d5b7faca2
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml	3	500	e35df48e519cbbe139c467b7b34797a3a4f37fc143d2026fc3c1f98720d27704
+chunk	hydo/onboard/examples/service-clocks/hydo.yaml	4	376	a1269f8640d9914f713ff6a7b22c7444df28920c44f60af2387f518a06ce081f
 manifest	hydo/onboard/examples/shop/hydo.yaml	core
 boot	hydo/onboard/examples/shop/hydo.yaml	hydo/onboard/examples/shop/hydo.yaml#0	snapshot	594be9aedcdd87cf
 counts	hydo/onboard/examples/shop/hydo.yaml	identity=195 recovery:error=8 recovery:ok=21 recovery:violation=60 refused=1 run:cut=89 run:error=46 run:ok=99 run:violation=239 token:C=92 token:H=373 token:K=108 token:P=112 token:Q=1 token:T=89 token:X=4 token:Z=1 written=278
@@ -8938,4 +8948,4 @@ chunk	hydo/onboard/examples-mac/redis/hydo.yaml	51	500	e02ba73a9415c9ac4e7e25a04
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	52	500	8d00fac468029554551fba8d3992ca9d724791f31e8bf5eaa501ccc9186a8eba
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	53	500	e22eb348ab9122fa5e9f51a4e5178da4197e9b7a81f2ccfc684c8d4526a798bd
 chunk	hydo/onboard/examples-mac/redis/hydo.yaml	54	198	af95ed52789fee7243d56afd40ad8ad646c910c0e9ab9367d109dea204e4f5f0
-refused	other=70
+refused	other=71

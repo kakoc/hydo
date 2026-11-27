@@ -61,7 +61,10 @@ mod target;
 mod upgrade;
 mod walk;
 
-pub use clock::{civil_from_days, days_from_civil, ClockPoint, Every};
+pub use clock::{
+    civil_from_days, days_from_civil, ClockPoint, Every, ServiceClockChange, MAX_DRIFT_PPM,
+    MAX_SERVICE_STEP_S,
+};
 pub use compose::{Compose, Omit, RangeItem, RangeList, ResolvedField, SeedField, WORKLOAD_KINDS};
 pub use guest::{
     Buggify, Direction, Freeze, FreezeDir, GuestToken, NetTarget, Netem, Pause, ProtocolFault,

@@ -104,6 +104,7 @@ last line names the ideas that would answer more.
 | Does the storage engine survive a disk that tears or misplaces a write, cannot read a sector, or stops answering? | `torn=`, `mis=`, `lse=` and `hang=` on the data disk, and `G=<svc>@<at>:bad\|rot` under a file of a service's storage. `hydo explore --block-faults` draws them. | partly built; `disk-faults` on the Mac engine and on KVM (AMD and Intel); hvx refuses them (M313; open item 160) |
 | Do the guest's timeouts fire on time late in a long, busy run? | On hvx an x86_64 image built at the fingerprint epoch 5 keeps time with its TSC (`guest.exact_tick`). Its clocks follow the virtual TSC at every uptime and read in steps of 2 µs. The Mac and KVM guest kernels read one counter for the clock and the timer. | built; `clickhouse` seed 20 (M319, M323), `docs/design/guest-clock.md` |
 | Does a backward clock step break a lease or a timeout? | `T=` steps the guest's wall clock. `hydo rules scan --kind clock` proposes the steps. | built; `valkey`, `temporal`, `dragonfly`, `river`, `restate`, `iggy` (a topic's message expiry), `victoriametrics` (a step back deletes a month, holds new samples in memory, and leaves one copy), `prometheus` (scrape times freeze after a step back: prometheus#8312), `typesense` (M366) |
+| Does a lease hold when one node's clock runs ahead of the others? | `clock: own` gives a service a wall clock of its own, and `T=<svc>@<at>:<change>` steps it or makes it drift, while the other services keep the guest's clock. The explorer does not draw it yet. | partly built; `service-clocks` on hvx (M372; open item 190) |
 | Does an acknowledged job run, and run once? | A `type: messages` check declares the claims. Kills of the process that holds the work test them. A durable execution's journaled steps append to an effects file, and a rule finds a step that runs again. Since M360 `no-loss` with a `lease` counts a received message that no acknowledgement accepted and that never came back as lost. | built; `hatchet`, `river`, `redpanda`, `restate`, `iggy`; `nsq`, from the NSQ trial (M359, M360, M362: a kill of `nsqd` in a new topic's first seconds loses its messages) |
 | Does a crash between two commits of one operation run it twice? | `A=<event>+<ms>:kill-now-<svc>` kills the service at the moment the client writes an event, or a number of milliseconds later, before any thread of the service runs on. `A=<event>#<k>...` acts at the k-th record of the event. `hydo explore --reactive-at <event>` tries every delay from 0 to 50 ms, each with `kill-now-<svc>`, `kill-<svc>` and a power cut. It runs one schedule per seed. `hydo explore --reactive fault --kill-now` draws such kills at random. It draws them also on a project with one service. | built; `meilisearch` finding 1 on the Mac engine and hvx (M305). Found blind on the Mac engine (M309), and by the aimed grid at schedule 29 of 153 (M345; open items 154 and 173) |
 | Does a node start again after a power loss that follows a failover? | The client fails over as Sentinel does and writes once more to the old master. So the old master and its replicas rejoin by a full synchronization. `hydo explore --reactive-at <the failover's event> --react-actions cut` cuts the power seconds later. A `WAIT` check after the heal tells a replica that holds the data from one that acknowledged it. | built; `kvrocks` findings 1 and 2 on the Mac engine (M351; open item 179) |
@@ -416,9 +417,13 @@ that a milestone builds moves into the tables of this page with its new status.
 ### Clocks per service
 
 - **What it is.** A clock step for one service while the others keep the guest's clock.
-- **Why it matters.** Real clusters have clocks that differ between nodes. Today `T=` steps the
-  whole guest's clock.
-- **What it needs.** A time-namespace variant of the guest kernel, or a time offset per process.
+- **Why it matters.** Real clusters have clocks that differ between nodes. `T=<at>:<delta>` steps
+  the whole guest's clock.
+- **Status.** Partly built in Milestone 372, as a prototype on hvx: `clock: own` and
+  `T=<svc>@<at>:<change>` (`docs/design/service-clocks.md`, example `service-clocks`).
+- **What it still needs.** The explorer's draws, the KVM and Mac engines, and a guest kernel
+  variant with a realtime offset per time namespace when the tracer's cost matters (open item
+  189).
 - **Where it came from.** Item 9 of the section "Ranked plan" of `docs/design/jepsen-gaps.md`.
   The Prometheus example (M342) needed it too: its agent and its server share the guest's clock,
   so a server whose clock alone steps ahead of its senders cannot be tested.

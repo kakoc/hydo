@@ -23,6 +23,7 @@ __pycache__/
 /hydo/crates/hydo-read/target/
 /hydo/crates/hydo-sql/target/
 /hydo/crates/hydo-agent/target/
+/hydo/crates/hydo-clock/target/
 /hydo/COMMIT
 # the local compile cache of this repository and its worktrees (.cargo/rustc-wrapper.sh; docs/CI.md)
 /.sccache/

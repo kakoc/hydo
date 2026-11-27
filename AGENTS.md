@@ -428,6 +428,20 @@ before epoch 5 boots as before. The Mac and KVM guest kernels read one counter f
 the timer, so they have no gap. The reference is the section "The guest's timer tick on hvx" of
 MANIFEST.md; the comparison of the four ways is in `docs/HISTORY.md` Milestone 323.
 
+**One service's own wall clock (M372, tentative number; a prototype on hvx).** `services[].clock:
+own` (a format-1 addition, x86_64 images) starts the service under `/bin/hydo-clock`, which
+`hydo build` stages from `HYDO_CLOCKBIN` (`hydo/crates/hydo-clock/build.sh`, its own lock file).
+`T=<svc>@<at>:<change>` then steps that service's clock alone (`T=n2@3:5`, `1500ms`) or makes it
+drift (`200ppm`); the other services, the workload and the checks keep the guest's clock.
+hydo-clock traces the service's tree with ptrace and a seccomp filter. It hides the vDSO at
+every `execve`, so glibc, musl and Go read the clock by system calls, which it answers with the
+offset. It also moves absolute realtime waits. A read costs 40.5 µs of guest time against 4.4
+µs. The example `hydo/onboard/examples/service-clocks` holds a lease by each node's clock:
+`T=n2@3:5` gives two leaders at once, and `T=3:5` passes. Images without the key keep their
+bytes, and the pinned reproducers kept their values. The design and the options (time namespaces
+offset no wall clock; a kernel variant is the second step) are `docs/design/service-clocks.md`;
+the details are in `docs/HISTORY.md` Milestone 372 (open item 190).
+
 **The cgroup2 mount (M283, tentative number).** From the fingerprint epoch 4 the host controller
 mounts the cgroup2 file system on `/sys/fs/cgroup` at the start of every boot, before the S0
 snapshot, with the agent's existing `mount` primitive. So the agent and its pin stay, and an
@@ -4154,6 +4168,25 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       snapshot. A damaged Raft log of one node (`G=` on `raft.db`) left that node without an
       acknowledged delete for good, without an error. rqlite checks no checksum of its Raft log,
       and its page "Data Integrity" says that it checks "every on-disk data file" at a start.
+190. One service's own wall clock (M372, tentative number; `docs/design/service-clocks.md`).
+    What is left:
+    - `hydo explore` does not draw `T=<svc>@<at>:<change>`, and the clock audit does not propose
+      it. The design page says how the explorer would draw it, from a stream of its own.
+    - Only hvx ran it. The KVM and Mac guest kernels have seccomp only in their `containers`
+      variants, and the Mac needs an arm64 build of hydo-clock; `clock: own` is refused for
+      `--arch arm64`.
+    - A read of the wall clock costs 40.5 µs of guest time under hydo-clock against 4.4 µs. A
+      guest kernel variant with a realtime offset per time namespace would cost nothing per read.
+    - Not covered: programs that read the TSC for the wall clock or find the vDSO in
+      `/proc/self/maps`, 32-bit programs, and a debugger inside the service. `timerfd` and POSIX
+      timers with an absolute realtime deadline are not moved, and the kernel's own times (file
+      times, socket time stamps) stay the guest's. A wait keeps its deadline when the offset
+      changes during it.
+    - A recovery boot and a reboot start every own clock at the guest's clock, and a drift
+      restarts from 0 after a kill. No real project ran with it yet: the TiKV, Prometheus and
+      Typesense cases of open items 147 and 170 and of the Typesense example are next.
+    - The example is not in `hydo/onboard/recorded.json`, and the release does not ship
+      hydo-clock.
 
 ## Milestone index
 
@@ -5350,6 +5383,11 @@ build machine, before 2026-10-13.
   a node loses the queued writes that it has answered. A follower removed while it was down
   never joins again after its restart. A list-append check in a file is dropped when hydo.yaml
   has `checks:`. Nothing recorded moved
+- M372 (tentative number): one service's own wall clock, a prototype on hvx. `clock: own` starts
+  a service under hydo-clock, a tracer that hides the vDSO and answers its wall-clock reads with
+  an offset; `T=<svc>@<at>:<change>` steps or drifts that clock alone. Time namespaces offset no
+  wall clock. A lease example fails `T=n2@3:5` and passes `T=3:5`, twice with one fingerprint
+  each; a read costs 40.5 µs of guest time against 4.4 µs. Nothing recorded moved
 - M373 (tentative number): the NSQ, SeaweedFS and Typesense examples on KVM, on GitHub's AMD
   and Intel runners. NSQ (its first x86_64 run) and SeaweedFS gave the verdicts of the Mac
   engine and of hvx. Each schedule gave one fingerprint per CPU vendor. Typesense stops with SIGSEGV

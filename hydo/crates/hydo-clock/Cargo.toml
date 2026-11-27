@@ -1,0 +1,30 @@
+# hydo-clock: one service's own wall clock in the guest (Milestone 372, docs/design/service-clocks.md).
+# hydo starts a service of `clock: own` as `hydo-clock <offset file> <command>`; its processes then
+# read the guest's realtime clock plus the offset in the file.
+#
+# Not a member of the repository's workspace, on purpose, as hydo-agent: its bytes are inside
+# guest images, so it keeps its own lock file and the smallest dependency set (std and libc).
+# Build the static binary with build.sh.
+[package]
+name = "hydo-clock"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.90"
+publish = false
+
+[[bin]]
+name = "hydo-clock"
+path = "src/main.rs"
+
+[dependencies]
+libc = "0.2"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[workspace]

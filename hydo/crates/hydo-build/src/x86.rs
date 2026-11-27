@@ -223,6 +223,14 @@ pub fn uses_sql(m: &Value) -> Result<bool, Fail> {
     uses_program(m, &|b: &[u8]| words_search(b, &[&b"hydo-sql"[..]]))
 }
 
+/// `uses_own_clock(m)` (Milestone 372): a service has `clock: own`, so the image needs
+/// `/bin/hydo-clock`.
+pub fn uses_own_clock(m: &Value) -> bool {
+    m["services"]
+        .as_array()
+        .is_some_and(|a| a.iter().any(|s| s["clock"].as_str() == Some("own")))
+}
+
 fn uses_program(m: &Value, found: &dyn Fn(&[u8]) -> bool) -> Result<bool, Fail> {
     if walk_strings(m, found) {
         return Ok(true);
@@ -706,6 +714,23 @@ pub fn build(
             &format!(
                 "hydo-build: staged /bin/hydo-read and /bin/hydo-check (sha256 {})",
                 &fsx::sha(Path::new(&rb))?[..16]
+            ),
+        );
+    }
+    // Milestone 372: a service with `clock: own` starts under hydo-clock; an image without such
+    // a service has no new file
+    if uses_own_clock(&m) {
+        let cb = tool(
+            &ctx.inputs.clockbin,
+            &bdir.join("hydo-clock").to_string_lossy(),
+            isfile,
+        )?;
+        put_exec(&cb, &r.join("bin/hydo-clock"))?;
+        outln(
+            io,
+            &format!(
+                "hydo-build: staged /bin/hydo-clock (sha256 {})",
+                &fsx::sha(Path::new(&cb))?[..16]
             ),
         );
     }

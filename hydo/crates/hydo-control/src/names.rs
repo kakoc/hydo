@@ -272,6 +272,24 @@ fn check_token(plan: &Plan, t: &GuestToken) -> Result<(), String> {
             net_target(plan, t, target)
         }
         GuestToken::Cut(_) | GuestToken::Clock { .. } | GuestToken::ClockTo { .. } => Ok(()),
+        // Milestone 372: one service's own clock needs `clock: own`, which starts the service
+        // under hydo-clock
+        GuestToken::ServiceClock { svc, .. } => {
+            service(plan, t, svc)?;
+            if plan.service(svc).is_some_and(|s| s.own_clock) {
+                return Ok(());
+            }
+            Err(format!(
+                "{t} moves the clock of the service {svc}, which has no clock: own in the \
+                 manifest (services with clock: own: {})",
+                list(
+                    plan.services
+                        .iter()
+                        .filter(|s| s.own_clock)
+                        .map(|s| s.name.clone())
+                )
+            ))
+        }
         GuestToken::Corrupt { target: x, .. } => {
             // Milestone 245: a list or a group's selector too; every service it can name has
             // storage: (a group's every member, since the selector picks among them)
@@ -464,6 +482,7 @@ fn start_step(t: &GuestToken) -> Option<u64> {
         | GuestToken::Cut(at)
         | GuestToken::Clock { at, .. }
         | GuestToken::ClockTo { at, .. }
+        | GuestToken::ServiceClock { at, .. }
         | GuestToken::Corrupt { at, .. }
         | GuestToken::PowerLoss { at, .. } => Some(*at),
         GuestToken::Net { from, .. } | GuestToken::OneWay { from, .. } => Some(*from),
