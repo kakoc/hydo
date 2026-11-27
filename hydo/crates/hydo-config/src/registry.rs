@@ -623,6 +623,9 @@ variables! {
     /// The scripted engine: a `restart_` scenario's service does not start again after a kill
     /// (Milestone 339, the shrinks of ERROR runs).
     HYDO_FAKE_RESTART: Tests, Test, "flag: not empty", "", "hydo-explore tests";
+    /// `1`: the scripted engine answers the shrinks' runs slowly, so a test can stop the explorer
+    /// after its first report (M387).
+    HYDO_FAKE_SLOW_SHRINKS: Tests, Test, "flag", "", "hydo-explore tests";
     /// Not empty: the scripted engine prints a steered distance and fails only at distance 0 (M209).
     HYDO_FAKE_STEER: Tests, Test, "flag: not empty", "", "hydo-explore tests";
     /// The history checker's dump directory.
