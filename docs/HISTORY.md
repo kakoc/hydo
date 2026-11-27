@@ -25129,3 +25129,143 @@ schema. In two runs of `hydo --test it` four and six of the `update::` tests fai
   placeholders.
 - The warning for a `storage:` file system names the user as the image gives it; a name needs its
   number from the image's `/etc/passwd`, which hydo does not read for it.
+
+## Milestone 375 (tentative number): one service's own clock in the explorer and on real systems
+
+Status: done on 2026-11-27 on the bare-metal machine (hvx and the tests) from this Mac. Milestone
+372 built `clock: own` and `T=<svc>@<at>:<change>` as a prototype that the explorer did not draw
+and that no real project ran (open item 190). This milestone makes the explorer draw it, lets the
+clock audit propose it, and runs it on TiKV, Typesense and Prometheus. One node's clock ahead of
+or behind the others is a classic cause of bugs there. Nothing recorded moved, `clock: own`
+stays opt-in, and the fingerprint epoch stays 6.
+
+**The explorer draws it.** `hydo explore --service-clocks` (an option, not a default) draws one
+service's own clock for a manifest with services of `clock: own` and `clock` in `faults:`, from
+the stream `SERVICE_CLOCK_SALT` of `hydo-explore`'s `gen.rs`. Every other field of a seed's
+schedule stays as it was. Most drawn schedules get one service's change:
+
+- a schedule with a step of the guest's clock gives it up in half of the schedules, for one
+  service's change before the same step;
+- a schedule without one gets a service's change in 60 % of the schedules;
+- the change is a step of `±250ms`, `±1500ms`, `±5`, `±30` or `±300`, or a drift of `±200ppm`
+  or `±50000ppm`, of one service of `clock: own` at random;
+- with two or more such services a quarter of the changes put two of them apart: a second
+  service gets the opposite change before the same step.
+
+The shrinker removes each token, and halves a step longer than 250 ms and a drift larger than
+200 ppm, towards 0. The explorer's schedule struct keeps the tokens (`S::ts`), and its parser reads
+`T=<svc>@<at>:<change>`, which it refused before, so `hydo explore --schedule` takes such a
+schedule. A schedule with a service's clock is in the class of the clock faults. `stats.json`
+counts the token as a clock fault of its service. The fault-space line names the draws, and
+says `--service-clocks adds steps and drifts of one service's own clock` without the option.
+The explorer refuses the option before any run without a service of `clock: own` (exit status
+5, with the other option refusals of `run.rs`), and when it draws nothing because `faults:` has
+no `clock` (`refuse::nothing_drawn`).
+
+The option is opt-in, not the design page's default for manifests with `clock: own`: a default
+would change the draws of the manifests that have the key already, the `service-clocks` example
+among them. The explorer's corpus and identity goldens did not change. The new example manifests
+are in folders of their own (`<example>/skew/hydo.yaml`), which the goldens do not read, so not
+even their pinned inputs moved.
+
+**The clock audit proposes it.** For a place whose code a service of `clock: own` runs (the map
+of Milestone 324), `hydo rules scan --kind clock` adds two schedules: `own-ahead`, that service's
+clock alone forward by more than the place's limit, and `own-behind`, back by as much. A project
+without `clock: own` gets the report of before (the test
+`the_clock_audit_steps_the_own_clock_of_the_service_that_runs_a_place`).
+
+**How the real systems ran.** Each example got a folder `skew/` beside its `hydo/`:
+`skew/hydo.yaml` is `hydo/hydo.yaml` with `clock: own` on the nodes, another name, and the image
+files of `../hydo/images`. `skew/workload` and `skew/checks` are links to `hydo/`'s, and
+`skew/regressions/` holds the new regressions, so the recorded images and their regressions stay
+as they were. Every VM ran through `~/bin/hvx-run` under umask 022, with this tree's `hydo`,
+`hydo-hvx` and `hydo-build` over the 0.6.0 Linux release's guest files, hydo-clock `de24fd93…`
+(Milestone 372's bytes), and each onboarding's client and images. No other VM of this
+milestone ran beside TiKV's, and each waited for 20 GB of free memory. Directed
+schedules came first: one node ahead or behind by seconds and minutes, two nodes apart, and
+drifts. The final images were built from `skew/hydo.yaml`. Building them again with the
+regressions beside them gave the same sha256, and `hydo repro --regressions` replayed each.
+
+**TiKV (image `21ef8adf…`).** PD's leader was `pd3`. `T=pd3@10:300 K=pds.primary@30+4`, the
+leader 5 minutes ahead and then killed, failed `eventually_writable` twice with one fingerprint
+(`f04bf542d4fd5a11`). The new leader `pd1` logged `system time may be incorrect` with the saved
+window `last=00:05:39.728` against its clock's `00:00:47.006`, went on from the window, and kept
+the timestamps' physical part for 5 minutes. TiKV judges a lock's time to live by that part, so
+the locks of a client that crashed inside its commit blocked every writer. That is finding 1 of
+the example, known as pingcap/tidb#44822, through a failover instead of a step of every clock.
+These passed: the same step of a follower with the same kill, the leader's step without the
+kill, the leader 30 s ahead with the kill, a PD follower 5 minutes ahead (also killed), a
+follower's clock 5 % fast, and one store 5 minutes behind or ahead (tikv/tikv#17995's setting).
+The exploration `--seeds 1-8 --strategy process --new-faults --service-clocks --no-shrink` ran
+alone (133 s a run). Three schedules drew a node's own clock, one of them the leader 5 minutes
+ahead without a kill, and passed. Its two failures were finding 1 under steps of the guest's
+clock back by 30 days.
+
+**Typesense (image `84f22e51…`).** The leader was `ts1`. One new candidate, a clock effect:
+
+- `T=ts3@20:-60`, one follower's clock back by 60 s, failed `eventually_converge` twice with
+  `b1761b4adaaa1c6c`: `ts3 lacks i29x4, which the leader ts1 holds as w122`. Each node applies a
+  delete by a filter from its Raft log and runs the later batches from a timer of its own h2o
+  event loop. That loop fires nothing while the node's clock is behind its last run (finding 2).
+  The follower applies the writes after the delete first, and its late batch deletes their new
+  versions (finding 1's order, without a restart). `T=ts3@20:-30` lost another document
+  (`2e6ed47ae01bae13`), and `T=ts3@20:-5` passed (`67e4f101dedb6526`). `T=ts3@20:-3600` left
+  `ts3` with 64 documents that the delete removed on the other nodes (`e4c433aa042301fd`, two
+  runs).
+- Finding 3 needs the followers' own clocks. With both followers 120 s behind, a pause of the
+  leader left no leader for 69 s (`4d3093d8b68377e2`, two runs). With one follower behind, the
+  other took over (`4b63eff2c4e21276`).
+- Forward steps of 30 s and 5 minutes and drifts of 50,000 ppm either way held.
+- typesense/typesense#2626 (open) reports nodes that answer one search with different counts;
+  its cause is not known.
+
+The exploration `--seeds 1-20 --strategy process --new-faults --service-clocks` drew a node's
+own clock in 8 of 20 schedules (11 changes: steps of 1.5 s either way and 5 minutes forward, and
+drifts). None of them failed. Its 5 failures were finding 2 under steps of the guest's clock,
+shrunk to `T=28:-324000` and `K=ts3@0+13 T=18:-300`. No drawn step put one node 30 s or more
+behind, so finding 4 came from the directed schedules only.
+
+**Prometheus (image `bbb797c9…`, built with `ooo_snapshots=skip` and `scrape_times=skip`).** Two
+clock effects, both by design:
+
+- The agent 11 or 15 minutes ahead of the server failed `eventually_scrape` (`53ae7f9900601e58`,
+  three runs, one of them by `hydo repro --regressions`). The remote-write receiver refuses a
+  sample more than 10 minutes ahead of its clock (`maxAheadTime`, `out of bounds: timestamp is
+  too far in the future`), and the agent drops the refused batch as non-recoverable. Five minutes
+  ahead passed (`ec36af3d9534d723`).
+- The server 11 or 15 minutes ahead of its senders refused their samples as `Out of order sample
+  from remote write`. The example's check calls that by design (`not judged`,
+  `436888e860eea95a`). Five minutes passed.
+
+The exploration `--seeds 1-20 --strategy process --new-faults --service-clocks` drew a service's
+clock in 8 of 20 schedules and found no failure. Its three new error kinds came from steps of the
+guest's clock of 30 days back. The drawn steps stay below the two 10-minute limits.
+
+**Upstream.** Nothing was posted. The TiKV effect is pingcap/tidb#44822, accepted upstream. The
+Typesense candidate has no issue; the user's typesense/typesense#3203 is finding 3. Prometheus's
+limits are in its code (`maxAheadTime`, added after prometheus#13573) and in the field reports
+#10169 and #8243.
+
+**The KVM and Mac engines.** Read, not built (the section "The KVM and Mac engines" of
+`docs/design/service-clocks.md`). Only the `containers` kernel lists have
+`CONFIG_SECCOMP_FILTER`, and no list has `CONFIG_CROSS_MEMORY_ATTACH`, which hydo-clock's
+`process_vm_readv` and `process_vm_writev` need. So even the `containers` kernels would answer
+`ENOSYS`. A fallback to `PTRACE_PEEKDATA` and `PTRACE_POKEDATA` in hydo-clock needs no kernel
+change. The Mac needs an arm64 hydo-clock.
+
+**Nothing recorded moved.** No image of `hydo/onboard/recorded.json` has `clock: own`, and a
+schedule without the new form gives the controller's commands of before. The explorer's corpus
+and identity goldens passed unchanged.
+
+**The tests.** On the bare-metal machine: `cargo fmt --check`, clippy with `-D warnings`, the
+tests of hydo-explore (with the new `service_clocks::`), `cargo test -p hydo --test it` and the
+CLI's unit tests, `-p hydo-agents --test it`, `-p hydo-control --test it`, `-p hydo-config`,
+`-p hydo-schedule` and `-p hydo-manifest`. Re-recorded: the CLI golden's length of `hydo guide
+manifest`. Two tests read the tree through its version-control index
+(`identity::local_outputs_are_no_inputs`, `equivalence::same_as_hydo_build`); they passed once
+the synced tree had an index. The `update::` tests failed once with `Text file busy` beside other
+tests and passed when they ran alone.
+
+**What is left** (open item 190): the KVM and Mac engines, the cost of a read (40.5 µs of guest
+time), the programs and timers that hydo-clock does not cover, and the explorer's steps of at
+most 5 minutes, below limits such as Prometheus's 10 minutes.

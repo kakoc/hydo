@@ -759,6 +759,40 @@ These findings hold for every type of system:
 - **Cost.** The shrinker spends hours on clock steps; stop an exploration once its failures are
   understood. It runs on every engine.
 
+### One node's clock ahead of or behind the others (`clock: own`)
+
+- **What it is.** `clock: own` on a service gives it a wall clock of its own, and
+  `T=<svc>@<step>:<change>` steps it (`-60`, `1500ms`) or makes it drift (`50000ppm`). The other
+  services, the client and the checks keep the guest's clock. `hydo explore --service-clocks`
+  draws such changes (`hydo guide faults`, "One service's clock ahead of the others").
+- **What to write.** Give every node of a cluster `clock: own` in a copy of `hydo.yaml`. Step the
+  node that holds the lease, a follower, and two followers together, by seconds and by minutes,
+  each way. Keep the checks that a guest-wide clock step broke: they tell what one node's skew
+  changes.
+- **When it fits.** A cluster whose nodes compare their own clocks with each other's timestamps,
+  or run timers on the wall clock: leases, timestamp oracles, sample timestamps, and the timers
+  of replicated work.
+- **What it found.**
+  - Typesense (finding 4): one node's clock 60 s behind left that node without a document that
+    the leader holds, for good. The node runs the later batches of a delete by a filter from a
+    timer of its own HTTP loop, which waits while its clock is behind its last run. When the
+    timer fires, the node has applied later writes, and the batch deletes their documents. A
+    step of an hour left the node with 64 documents that the delete removed on the other nodes.
+    The cause is finding 2's, and the loss is finding 1's, without a restart.
+  - Typesense (finding 3 again): the election after a pause of the leader came late only when
+    both followers' clocks were behind. With one follower's clock behind, the other follower took
+    over at once.
+  - Prometheus (by design): a remote-write sender whose clock runs more than 10 minutes ahead
+    of the server loses every sample. The server refuses samples more than 10 minutes in its
+    future (`maxAheadTime`), and the sender drops a refused batch. A server more than its
+    out-of-order window ahead of its senders refuses theirs too. Five minutes either way held.
+- **What it misses.** It covers programs that read the clock through glibc, musl or Go, not the
+  kernel's own times (file times, socket time stamps). A read costs about 40 µs of guest time on
+  hvx. The explorer's largest drawn step is 5 minutes, so a limit of 10 minutes, as
+  Prometheus's, needs a directed schedule. It runs on hvx only.
+- **Cost.** One directed run takes the time of a run; an image of the example with `clock: own`
+  beside the recorded one, so that the recorded values stay.
+
 ### Failovers by the client, with a late write
 
 - **What it is.** The client fails a master over to a replica, as an operator's tool such as

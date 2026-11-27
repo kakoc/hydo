@@ -1,0 +1,10 @@
+# By design, a clock effect (RESULTS.md, "One node's own clock"). The agent's own clock goes 15
+# minutes ahead before step 10 (clock: own); the server keeps the guest's clock. The server's
+# remote-write receiver refuses every sample more than 10 minutes ahead of its own clock
+# (maxAheadTime, "out of bounds: timestamp is too far in the future"), and the agent drops each
+# refused batch as a non-recoverable error, so no scrape of the agent reaches the server:
+# eventually_scrape fails. Five minutes ahead (T=agent@10:300) passes. Built with --set
+# ooo_snapshots=skip --set scrape_times=skip. Two runs on hvx gave fp=53ae7f9900601e58.
+# params: ooo_snapshots=skip scrape_times=skip
+# expect: violation      (by design: the 10-minute limit guards the server against wrong clocks)
+disk=none | run T=agent@10:900

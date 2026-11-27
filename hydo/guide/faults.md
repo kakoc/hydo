@@ -302,8 +302,16 @@ hydo run "disk=none | run T=n2@0:200ppm"    # from step 0, n2's clock runs fast 
 ```
 
 The other services, the workload and the checks keep the guest's clock. A read of the clock costs
-the service about 40 µs of guest time on hvx. The explorer does not draw these steps yet.
-The section "One service's own clock" of MANIFEST.md says which programs it covers.
+the service about 40 µs of guest time on hvx. The section "One service's own clock" of
+MANIFEST.md says which programs it covers.
+
+`hydo explore --service-clocks` draws these steps and drifts for the services with `clock: own`,
+when `faults:` allows `clock`. Most drawn schedules then get one such change. It is a step of
+250 ms, 1.5 s, 5 s, 30 s or 5 minutes either way, or a drift of 200 or 50,000 millionths. A
+quarter of them put two services apart: one service ahead, and another behind. The shrinker
+removes them and halves a step longer than 250 ms or a drift larger than 200 ppm. Without the
+option the explorer draws what it drew before. `hydo rules scan --kind clock` proposes the
+schedules `own-ahead` and `own-behind` for a place whose code a service with `clock: own` runs.
 
 ## Clock steps and durations on the wall clock
 
