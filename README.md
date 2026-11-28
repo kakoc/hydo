@@ -29,7 +29,7 @@ makes the same failure happen again, tomorrow or on a colleague's laptop.
 
 ## Watch it break a system
 
-<p align="center"><img src="docs/img/live-map.gif" width="860" alt="hydo runs Blnk, a ledger, again and again with crashes, pauses, network cuts, and clock jumps. Each tile is one function of Blnk's code and lights up when a run first reaches it: green in a normal run, orange only when something broke. In the first run hydo finds a known Blnk bug: an all-or-nothing batch of transfers kept half of itself."></p>
+https://github.com/user-attachments/assets/ab903228-0ee6-454f-bf14-c29224d613ce
 
 hydo runs [Blnk](hydo/onboard/examples/blnk/), a ledger, again and again, each time with other
 crashes, pauses, network cuts, and clock jumps. Each tile is one function of Blnk's code. It lights
