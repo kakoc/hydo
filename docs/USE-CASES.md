@@ -150,6 +150,7 @@ Ideas that would answer more:
 | Is a saved object still saved after a crash? | A rule over the database, with power cuts of the whole guest. | built; `vikunja` finding 1 (M273) |
 | Did a page change visually? | `browser.screens: compare` compares each page with a recorded screenshot. | partly built; M254; the Mac engine ran no comparison (open item 145) |
 | Does the frontend behave when a payment API fails? | Fakes, emulators, and `hydo explore --protocol-cover`. | built; `web-shop`, `openapi-payouts` (M257) |
+| Do the open pages survive a deploy of the backend? | The backend's next version is a version of its image service, and `U=<svc>@<at>~<ms>:<version>` switches it while the walk's pages are open, so the old frontend talks to the new API; the page invariants and `browser.read_back` judge it. `hydo explore --upgrades` draws such switches for a manifest with `browser:`. | partly built; `vikunja/upgrade` (M392); open item 199 |
 
 Ideas that would answer more:
 
@@ -236,6 +237,7 @@ Ideas that would answer more:
 | Does the new version pass every saved regression? | `hydo repro --regressions` on an image of the new version, or `hydo ci run`. | built; M197 |
 | Is a known finding still there in the new version? | `hydo versions` with `--param`, `--git`, or `--images`. | built; M221 |
 | Does a rolling upgrade, or a rollback, keep the data? | `U=<target>@<at>:<version>`, with `+<back>` for a rollback. | built; `etcd-upgrade`, `surrealdb/upgrade` (M238, M277) |
+| Does an upgrade of a service from a Docker image keep its data? | Each version of an image service names its image, and `U=` starts the new image on the service's data and mounts. `hydo compose --upgrade-to` pins the second image. | built; `vikunja/upgrade` (M392) |
 | Does the new version answer as the old one did? | `hydo compare-versions` runs the same schedules on both versions and names the first difference. | built; Milestone 298 |
 | Does each operation cost more after the bump? | `perf:` and `hydo perf compare`, exact on hvx. | partly built; M237 |
 | Did the bump change a default setting that matters? | Not answered today. | idea; [Configuration as an explored dimension](#configuration-as-an-explored-dimension) |
@@ -565,15 +567,16 @@ that a milestone builds moves into the tables of this page with its new status.
   parameters.
 - **Where it came from.** Open items 140 and 141.
 
-### Upgrades of image services and several upgrades per schedule
+### Several upgrades per schedule
 
-- **What it is.** `U=` for a service that runs a Docker image, and more than one `U=` in a drawn
-  schedule.
-- **Why it matters.** Many teams run their services from images, and an upgrade often follows
-  another.
-- **What it needs.** Versions as images in the manifest, and an explorer that draws several `U=`.
-- **Where it came from.** Open item 109. Milestone 391 counted 8 upgrades that fail or damage data
-  among 343 random bugs of web apps, and 21 in targeted searches.
+- **What it is.** More than one `U=` in a drawn schedule, and upgrades across several releases in
+  one run. Since Milestone 392 a service from a Docker image has versions, each an image.
+- **Why it matters.** An upgrade often follows another, and a migration that a later release
+  adds can depend on what an earlier one wrote.
+- **What it needs.** An explorer that draws several `U=`, and versions that a manifest can list
+  as a chain.
+- **Where it came from.** Open items 109 and 199. Milestone 391 counted 8 upgrades that fail or
+  damage data among 343 random bugs of web apps, and 21 in targeted searches.
 
 ### Kubernetes beyond one pod
 
