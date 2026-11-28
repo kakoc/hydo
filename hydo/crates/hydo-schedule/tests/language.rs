@@ -598,6 +598,35 @@ fn workload_pauses() {
     refused("disk=none | run P=workload@0~10", "<svc>@<at>~<off>:<dur>");
 }
 
+/// Answers in another order, requests sent twice, and a cut of one service's link while a step
+/// runs (Milestone 393).
+#[test]
+fn answer_order_and_link_cuts() {
+    for s in [
+        "disk=none | run H=api.search@0-4:order=2",
+        "disk=none | run H=api.search@0-4:order=3,wait=5000,p=50 I=7",
+        "disk=none | run H=api.place_order@1-2:twice",
+        "disk=none | run N=browser@2~400:3000 I=3",
+    ] {
+        round_trip(s);
+    }
+    let s = Schedule::parse("disk=none | run N=browser@2~400:3000").unwrap();
+    assert_eq!(
+        s.guest,
+        vec![GuestToken::LinkCut {
+            svc: "browser".into(),
+            at: 2,
+            off_ms: 400,
+            dur_ms: 3000,
+        }]
+    );
+    refused("disk=none | run H=api@0-1:order=1", "2 to 8");
+    refused("disk=none | run H=api@0-1:order=9", "2 to 8");
+    refused("disk=none | run H=api@0-1:twice=2", "takes no value");
+    refused("disk=none | run N=browser@2~400", "N=<svc>@<at>~<off>:<dur>");
+    refused("disk=none | run N=browser@2~400:0", "1 ms or more");
+}
+
 /// A pause of threads of the workload (Milestone 226): `workload/<name>[#<k>]`, a thread name as
 /// Linux keeps it (15 bytes), with `*` and `?`, and the k-th thread of that name from 1.
 #[test]

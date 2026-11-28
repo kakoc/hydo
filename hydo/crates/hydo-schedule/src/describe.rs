@@ -623,6 +623,14 @@ fn rules_words(rules: &[Rule]) -> (String, String) {
             Rule::Hold(n) => acts.push(format!("holds the stream after {n} messages")),
             Rule::Dir(d) => dir = Some(*d),
             Rule::Seed(_) => {}
+            // Milestone 393
+            Rule::Order(k) => acts.push(format!(
+                "holds the answers of {k} requests and gives them in another order"
+            )),
+            Rule::Wait(n) => when.push(format!("holding an answer for at most {}", ms(*n))),
+            Rule::Twice => {
+                acts.push("gets each request twice, as a double submit sends it".into())
+            }
         }
     }
     if acts.is_empty() {
@@ -984,6 +992,14 @@ fn guest_noun(t: &GuestToken, knobs: &[KnobInfo]) -> Option<String> {
         GuestToken::Net { from, to, .. } => {
             format!("a network fault {}", during(*from, *to))
         }
+        GuestToken::LinkCut {
+            svc, at, off_ms, ..
+        } => format!(
+            "a cut of the network of {} {} into {}",
+            code(svc),
+            ms(*off_ms),
+            nth_step(*at)
+        ),
         GuestToken::OneWay { from, to, .. } => {
             format!("a one-way network fault {}", during(*from, *to))
         }
@@ -1152,6 +1168,24 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
                 .at(*from)
                 .fault(net_kind(netem), "during a network fault".into())
         }
+        GuestToken::LinkCut {
+            svc,
+            at,
+            off_ms,
+            dur_ms,
+        } => fault(
+            format!(
+                "{} after {} starts, hydo cuts the network of {} for {}: it reaches no other \
+                 service, and a browser there is offline. Then the link comes back.",
+                cap(&ms(*off_ms)),
+                nth_step(*at),
+                code(svc),
+                ms(*dur_ms)
+            ),
+            format!("cut the network of {} {} into {}", code(svc), ms(*off_ms), nth_step(*at)),
+        )
+        .at(*at)
+        .fault("network faults", "during a cut of the network".into()),
         GuestToken::OneWay {
             target,
             from,

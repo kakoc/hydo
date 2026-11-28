@@ -392,6 +392,16 @@ pub enum Rule {
     Dir(Direction),
     /// `seed=<value>`: the seeded share's seed (any non-empty value)
     Seed(String),
+    /// `order=<k>` (Milestone 393): the answers of k matching requests are held until all k
+    /// are ready and then given in another order, drawn from the token (two: the second
+    /// request's answer before the first's). 2 to 8.
+    Order(u64),
+    /// `wait=<ms>` (Milestone 393): how long `order=` holds an answer for the others at most,
+    /// from the first answer it holds (default 3000).
+    Wait(u64),
+    /// `twice` (Milestone 393): each matching request reaches the service (or the fake) twice,
+    /// as a double submit sends it, and the client gets the second one's answer.
+    Twice,
 }
 
 /// `reset=`'s value.
@@ -482,6 +492,17 @@ impl Rule {
                 _ => return Err(err(format!("{what}: dir=req or dir=resp"))),
             },
             "seed" => Rule::Seed(plain_value(need(v, &what)?, &what)?),
+            "order" => {
+                let k = dec(need(v, &what)?, &what)?;
+                if !(2..=8).contains(&k) {
+                    return Err(err(format!(
+                        "{what}: order=<k> holds the answers of 2 to 8 requests"
+                    )));
+                }
+                Rule::Order(k)
+            }
+            "wait" => Rule::Wait(dec(need(v, &what)?, &what)?),
+            "twice" => none(v, Rule::Twice)?,
             _ => {
                 // hydo-world refuses an unknown rule when the fault is switched on; an empty rule
                 // (a stray ',') is accepted there and refused here
@@ -517,6 +538,9 @@ impl fmt::Display for Rule {
             Rule::Dir(Direction::Req) => f.write_str("dir=req"),
             Rule::Dir(Direction::Resp) => f.write_str("dir=resp"),
             Rule::Seed(s) => write!(f, "seed={s}"),
+            Rule::Order(k) => write!(f, "order={k}"),
+            Rule::Wait(n) => write!(f, "wait={n}"),
+            Rule::Twice => f.write_str("twice"),
         }
     }
 }
@@ -852,6 +876,16 @@ pub enum GuestToken {
         to: u64,
         netem: Vec<Netem>,
     },
+    /// `N=<svc>@<at>~<off>:<dur>` (Milestone 393): the service's link to the bridge is cut
+    /// `off` ms of guest time after step `at` starts and healed `dur` ms later, while the step
+    /// runs. With `browser:` the service is the browser, whose page then is offline. Needs
+    /// `network: bridge`.
+    LinkCut {
+        svc: String,
+        at: u64,
+        off_ms: u64,
+        dur_ms: u64,
+    },
     /// `O=<target>@<from>-<to>:<req|resp>:<netem>`: one direction only.
     OneWay {
         target: NetTarget,
@@ -966,7 +1000,7 @@ impl GuestToken {
         match self {
             GuestToken::Kill { .. } => 'K',
             GuestToken::Pause(_) => 'P',
-            GuestToken::Net { .. } => 'N',
+            GuestToken::Net { .. } | GuestToken::LinkCut { .. } => 'N',
             GuestToken::OneWay { .. } => 'O',
             GuestToken::Cut(_) => 'C',
             GuestToken::Clock { .. }
@@ -1044,6 +1078,24 @@ impl GuestToken {
                 } else {
                     let (target, at, steps) = target_at_plus(v, what)?;
                     GuestToken::Pause(Pause::Steps { target, at, steps })
+                }
+            }
+            'N' if v.contains('~') => {
+                // Milestone 393: a timed cut of one service's link, `N=<svc>@<at>~<off>:<dur>`
+                let form = || err(format!("{what}: N=<svc>@<at>~<off>:<dur>"));
+                let (svc, r) = v.split_once('@').ok_or_else(form)?;
+                name(svc, what)?;
+                let (a, r) = r.split_once('~').ok_or_else(form)?;
+                let (o, d) = r.split_once(':').ok_or_else(form)?;
+                let dur_ms = dec(d, what)?;
+                if dur_ms == 0 {
+                    return Err(err(format!("{what}: the cut lasts 1 ms or more")));
+                }
+                GuestToken::LinkCut {
+                    svc: svc.to_string(),
+                    at: dec(a, what)?,
+                    off_ms: dec(o, what)?,
+                    dur_ms,
                 }
             }
             'N' => {
@@ -1268,6 +1320,12 @@ impl fmt::Display for GuestToken {
                 write!(f, "N={target}@{from}-{to}:")?;
                 write_netem(f, netem)
             }
+            GuestToken::LinkCut {
+                svc,
+                at,
+                off_ms,
+                dur_ms,
+            } => write!(f, "N={svc}@{at}~{off_ms}:{dur_ms}"),
             GuestToken::OneWay {
                 target,
                 from,
