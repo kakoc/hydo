@@ -642,6 +642,11 @@ pub fn expand(m: &mut Value) -> R<()> {
     );
     // a test program (M205): the explorer takes fewer than 4 steps, draws only the fault kinds
     // that `faults:` lists, and classes a failure test-failed
+    // a step of a walk: the walker in the browser's root, with the schedule's walk, its guest
+    // part and the file of acknowledged work
+    let walker = format!(
+        "hydo-oci {name} /bin/sh -c 'cd {WALK_DIR} && NODE_OPTIONS=\"--require {WEB_DIR}/hydo/hook.cjs\" exec node walk.mjs \"$1\" \"$2\" \"$3\" \"$4\"' sh $i \"$HYDO_WALK\" \"$HYDO_GUEST\" \"$HYDO_ACKED\""
+    );
     let workload = match &explore {
         None => json!({
             "kind": "test",
@@ -654,14 +659,24 @@ pub fn expand(m: &mut Value) -> R<()> {
         // schedule's I= value as $HYDO_WALK and the schedule's guest part as $HYDO_GUEST (for
         // repro.spec.ts); a schedule without I= walks seed 0. An ordinary workload: the explorer
         // draws every fault kind that `faults:` allows
+        //
+        // Milestone 390: with a reaction to the walk's records (`A=walk.`), each record goes to
+        // the console as the walker prints it, so that the reaction acts inside the step; every
+        // other run runs the walker as before
         Some(x) => json!({
             "steps": x.steps,
             "run": format!(
                 "mkdir -p {RECORD_DIR}/home\n\
                  i=$HYDO_FROM\n\
                  while [ $i -lt $HYDO_TO ]; do\n\
-                 \x20 hydo-oci {name} /bin/sh -c 'cd {WALK_DIR} && NODE_OPTIONS=\"--require {WEB_DIR}/hydo/hook.cjs\" exec node walk.mjs \"$1\" \"$2\" \"$3\" \"$4\"' sh $i \"$HYDO_WALK\" \"$HYDO_GUEST\" \"$HYDO_ACKED\" > {RECORD_DIR}/step-$i.log 2>&1\n\
-                 \x20 rc=$?\n\
+                 \x20 case \"$HYDO_GUEST\" in\n\
+                 \x20 *A=walk.*)\n\
+                 \x20   {{ {walker} 2>&1; echo $? > {RECORD_DIR}/rc-$i; }} | while IFS= read -r l; do case \"$l\" in 'HYDO-ASSERT '*) printf '%s\\n' \"$l\" > /dev/console;; *) printf '%s\\n' \"$l\";; esac; done > {RECORD_DIR}/step-$i.log\n\
+                 \x20   rc=$(cat {RECORD_DIR}/rc-$i);;\n\
+                 \x20 *)\n\
+                 \x20   {walker} > {RECORD_DIR}/step-$i.log 2>&1\n\
+                 \x20   rc=$?;;\n\
+                 \x20 esac\n\
                  \x20 grep '^hydo-web:' {RECORD_DIR}/step-$i.log > /dev/console\n\
                  \x20 echo \"hydo-web: step $i: the walker exited $rc\" > /dev/console\n\
                  \x20 i=$((i + 1))\n\
@@ -1572,6 +1587,15 @@ mod tests {
         );
         assert!(
             run.contains("sh $i \"$HYDO_WALK\" \"$HYDO_GUEST\" \"$HYDO_ACKED\""),
+            "{run}"
+        );
+        // Milestone 390: a schedule with a reaction to the walk gets its records on the console
+        // as they come; the others run the walker as before
+        assert!(
+            run.contains("*A=walk.*)\n")
+                && run.contains("'HYDO-ASSERT '*) printf '%s\\n' \"$l\" > /dev/console;;")
+                && run.contains("rc=$(cat /tmp/hydo/web/rc-$i);;")
+                && run.contains("\"$HYDO_ACKED\" > /tmp/hydo/web/step-$i.log 2>&1\n    rc=$?;;"),
             "{run}"
         );
         let ids: Vec<&str> = m["invariants"]

@@ -1431,12 +1431,24 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
             } else {
                 (String::new(), String::new())
             };
-            fault(
-                format!(
-                    "When your system reports {}{time}{from}, hydo{later} {act}.",
-                    code(&r.event)
+            // Milestone 390: the records of hydo's walk through the pages
+            let (when, short) = match r.event.as_str() {
+                "walk.action" => (
+                    format!("When the walk starts its {} action{from}", ordinal(r.nth.max(1))),
+                    format!("when the walk starts its {} action", ordinal(r.nth.max(1))),
                 ),
-                format!("when {} is reported{times}, {act}", code(&r.event)),
+                "walk.write_acked" => (
+                    format!("When the server answers a write of the walk{time}{from}"),
+                    format!("when the server answers a write of the walk{times}"),
+                ),
+                _ => (
+                    format!("When your system reports {}{time}{from}", code(&r.event)),
+                    format!("when {} is reported{times}", code(&r.event)),
+                ),
+            };
+            fault(
+                format!("{when}, hydo{later} {act}."),
+                format!("{short}, {act}"),
             )
             .at(r.at)
             .fault(kind, ctx)

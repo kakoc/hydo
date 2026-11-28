@@ -65,6 +65,9 @@ const avoid = (cfg.avoid || ['log ?out', 'sign ?out']).map((a) => new RegExp(a, 
 const signIn = Array.isArray(cfg.sign_in) && cfg.sign_in.length ? cfg.sign_in : null;
 const signedOut = new RegExp(cfg.signed_out || '(^|/)(login|log-in|signin|sign-in|sign_in)(/|$)', 'i');
 const drags = Array.isArray(cfg.drag) ? cfg.drag : [];
+// Milestone 390: a schedule with a reaction to the walk (A=walk.action..., A=walk.write_acked...)
+// gets the walk's records on the console as they happen; every other run prints what it printed
+const reacting = /(^|\s)A=walk\./.test(guest);
 const title = readingBack ? 'read back' : `walk step ${step}`;
 globalThis.__hydoWalkTest = title; // the stub @playwright/test hands it to hook.cjs
 const own = path.join(dir, 'walk');
@@ -126,6 +129,16 @@ const streamOf = (k) => mix(walk.seed ^ WALK_SALT ^ mix((BigInt(step) << 20n) | 
 
 // ------------------------------------------------------------------ records
 const log = (line) => process.stdout.write(`hydo-web: ${line}\n`);
+// Milestone 390: an assertion record of the walk, printed when it happens, so that a reaction
+// acts inside a step: `A=walk.action#<k>@<step>+<ms>:kill-<svc>` at the k-th action that the
+// walk starts from that step on, `A=walk.write_acked@<step>+<ms>:cut` after the first write that
+// the server answered 2xx. The workload's other output reaches the console only at the step's
+// end; in a run whose schedule has such a reaction the workload's shell writes each record to the
+// console as it comes (browser.rs, the walk's `run`).
+function record(id, msg, details) {
+  if (!reacting) return;
+  process.stdout.write(`HYDO-ASSERT ${JSON.stringify({ t: 'reachable', id, ok: true, msg, details })}\n`);
+}
 function event(ev) {
   fs.appendFileSync(path.join(dir, 'events.jsonl'), JSON.stringify({ t: Date.now(), ...ev }) + '\n');
 }
@@ -1206,6 +1219,7 @@ async function main() {
     const sent = printable(req.postDataBuffer());
     const names = [...new Set(`${sent} ${answer}`.match(/\b[a-z][a-z0-9_-]*\/[A-Za-z0-9_-]{6,}\b/g) || [])].slice(0, 6);
     fs.appendFileSync(path.join(own, 'acks.jsonl'), JSON.stringify({ t: Date.now(), step, method: req.method(), path: p, status: res.status(), names, ids, sent, answer }) + '\n');
+    record('walk.write_acked', 'the server answered a write of the walk', { step, method: req.method(), path: p });
     if (ackedFile) {
       try {
         const last = p.split('/').filter(Boolean).pop() || p;
@@ -1248,6 +1262,7 @@ async function main() {
   let missed = 0;
   for (let k = 0; k < actions; k++) {
     if (walk.skip.has(`${step}.${k}`)) continue;
+    record('walk.action', 'the walk starts an action', { step, k });
     let done;
     if (script) {
       const a = script.get(`${step}.${k}`);
