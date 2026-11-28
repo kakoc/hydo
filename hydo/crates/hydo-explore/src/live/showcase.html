@@ -66,6 +66,13 @@ h1 em{font-style:normal;background:linear-gradient(90deg,#fff 0%,#c8ffe9 55%,#ff
   box-shadow:0 calc(var(--s) * 20) calc(var(--s) * 70) rgba(0,0,0,.55),0 0 calc(var(--s) * 60) rgba(255,84,104,.12);
   padding:calc(var(--s) * 22) calc(var(--s) * 28)}
 .banner.on{opacity:1;transform:translate(-50%,0)}
+/* the tree of runs keeps the banner at its right, so the bushes stay in sight */
+.banner.side{left:auto;right:calc(var(--s) * 22);bottom:calc(var(--s) * 70);width:calc(var(--s) * 560);transform:translate(0,calc(var(--s) * 30))}
+.banner.side.on{transform:translate(0,0)}
+.banner.side .t{font-size:calc(var(--s) * 25)}
+.banner.side .w{font-size:calc(var(--s) * 17)}
+.banner.side .c{flex-direction:column;gap:calc(var(--s) * 6)}
+.banner.side .c code{width:100%}
 .banner .k{font-size:calc(var(--s) * 14);font-weight:650;letter-spacing:.12em;text-transform:uppercase;color:var(--bug);display:flex;align-items:center;gap:calc(var(--s) * 10)}
 .banner .k::before{content:"";width:calc(var(--s) * 10);height:calc(var(--s) * 10);border-radius:50%;background:var(--bug);box-shadow:0 0 0 calc(var(--s) * 5) rgba(255,84,104,.2)}
 .banner .t{font-size:calc(var(--s) * 29);font-weight:640;letter-spacing:-.01em;line-height:1.25;margin-top:calc(var(--s) * 10)}
@@ -967,7 +974,8 @@ function bushKind(o, parent) {
 let HIT = {hairs: [], dots: [], ticks: [], ends: []};
 function drawRuns(g, now) {
   const rc = $("cv").getBoundingClientRect(), W = rc.width, Hh = rc.height;
-  const top = px(150), bot = px(70), x0 = px(130), x1 = W - px(230);
+  // the right keeps the banner's room, so a bush never grows under the banner
+  const top = px(132), bot = px(70), x0 = px(130), x1 = W - px(560 + 22 + 190);
   const n = RUNS.length;
   const S0 = Math.max(1, ...RUNS.map(steps), ...OTHERS.map(steps));
   const sx = (s) => x0 + (x1 - x0) * Math.min(1, s / S0);
@@ -980,7 +988,7 @@ function drawRuns(g, now) {
   }
   const MW = 0.4;                // a bush's row, against a first run's
   const units = rows.reduce((a, w) => a + 1 + MW * w.members.length, 0) || 1;
-  const unit = Math.min(px(64), (Hh - top - bot) / units);
+  const unit = Math.min(px(48), (Hh - top - bot) / units);
   let y = top + Math.max(0, (Hh - top - bot - unit * units) / 2);
   const rootY = (Hh - bot + top) / 2;
   // the step grid
@@ -990,7 +998,7 @@ function drawRuns(g, now) {
     g.strokeStyle = "rgba(255,255,255,.05)"; g.lineWidth = 1;
     g.beginPath(); g.moveTo(sx(s), top - px(18)); g.lineTo(sx(s), Hh - bot + px(4)); g.stroke();
     g.fillStyle = "#5b6478"; g.textAlign = s + every > S0 ? "right" : s === 0 ? "left" : "center";
-    g.fillText(`step ${s}`, sx(s) + (s === 0 ? -px(4) : s + every > S0 ? px(4) : 0), Hh - bot + px(30));
+    g.fillText(`step ${s}`, sx(s) + (s === 0 ? -px(4) : s + every > S0 ? px(4) : 0), Hh - bot + px(26));
   }
   // the booted system
   g.fillStyle = "#e8ebf2"; g.beginPath(); g.arc(px(60), rootY, px(8), 0, 7); g.fill();
@@ -1324,6 +1332,7 @@ function setView(v) {
     $("tagS").textContent = "A failure's re-runs and shrink candidates fork off it where their faults first differ";
   }
   $("legRuns").style.display = v === "runs" ? "flex" : "none";
+  $("banner").classList.toggle("side", v === "runs");
   $("legMap").style.display = v === "runs" ? "none" : "flex";
   if (v === "flow") treeDirty = true;
 }
