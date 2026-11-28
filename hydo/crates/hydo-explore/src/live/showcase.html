@@ -1086,6 +1086,31 @@ function endMark(g, x, y, r, kind, rad, label) {
     g.fillStyle = r.verdict === "ok" ? "#5b6478" : "#facc15"; g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill();
   }
 }
+function runsTip(x, y) {
+  for (const d of HIT.ends) if (Math.hypot(d.x - x, d.y - y) < px(10) && d.r.verdict === "violation")
+    return `<b>${esc(ENDLABEL[d.kind] || "another failure")}</b><br>${md((d.r.what && (d.r.what.found || d.r.what.words)) || d.r.text || "")}<br>a click shows its banner`;
+  for (const d of HIT.dots) if (Math.hypot(d.x - x, d.y - y) < px(7)) return `<b>${esc(d.fa.kind)}</b><br>${md(d.fa.sentence)}`;
+  for (const t of HIT.ticks) if (Math.abs(t.x - x) < px(5) && Math.abs(t.y - y) < t.h + px(2)) {
+    const names = t.ids.map((i) => FN.get(i)).filter(Boolean).map((f) => f.short || f.name);
+    return `<b>new code in step ${t.s}</b>: ${t.ids.length} function${t.ids.length === 1 ? "" : "s"} no earlier run reached<br><span class="mono">${esc(names.slice(0, 8).join(", "))}${names.length > 8 ? ` and ${names.length - 8} more` : ""}</span>`;
+  }
+  let best = null;
+  for (const h of HIT.hairs) if (x >= h.xa && x <= h.xb + px(4) && Math.abs(h.y - y) < px(5) && (!best || Math.abs(h.y - y) < Math.abs(best.y - y))) best = h;
+  if (!best) return null;
+  const r = best.r, who = best.what === "run" ? `Run ${runNo(r, best.k)}` : best.what === "rerun" ? `A re-run of run ${runNo(RUNS[best.k], best.k)}, the same schedule` : `A ${best.what === "shrink" ? "shrink candidate" : best.what} of run ${runNo(RUNS[best.k], best.k)}`;
+  const fs = runFaults(r);
+  return `<b>${esc(who)}</b><br>${fs.length ? md(fs.map((x) => x.sentence).join(" ")) : "a normal run: no fault"}<br><span class="mono">${esc(command(r))}</span>`;
+}
+// a click on a red end: the banner of the failure it shows (a bush's run shows its first run's
+// banner when it breaks the same check; another failure has none)
+function runsClick(x, y) {
+  for (const d of HIT.ends) if (Math.hypot(d.x - x, d.y - y) < px(12) && d.r.verdict === "violation") {
+    if (d.kind === "other") return false;
+    banner(d.r === RUNS[d.k] ? d.r : RUNS[d.k], d.k); return true;
+  }
+  return false;
+}
+
 const pulses = [];             // [time, x, y, colour, label]
 function drawTimeline(now) {
   const c = $("tl"), r = c.getBoundingClientRect();
@@ -1304,7 +1329,13 @@ for (const b of document.querySelectorAll(".views button")) b.addEventListener("
 $("stage").addEventListener("mousemove", (ev) => {
   const r = $("cv").getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, tip = $("tip");
   let f = null;
-  if (view === "runs") { tip.style.display = "none"; return; }
+  if (view === "runs") {
+    const h = runsTip(x, y);
+    if (!h) { tip.style.display = "none"; return; }
+    tip.innerHTML = h; tip.style.display = "block";
+    tip.style.left = Math.min(x + 18, r.width - px(540)) + "px"; tip.style.top = Math.min(y + 18, r.height - px(150)) + "px";
+    return;
+  }
   if (view === "map") { for (const l of LEAVES) if (x >= l.x && x < l.x + l.w && y >= l.y && y < l.y + l.h) { f = l.f; break; } }
   else if (view === "graph") { if (G) for (const [k, n] of G.rect) if (x >= n.x - px(4) && x < n.x + n.w && y >= n.y && y < n.y + Math.max(n.h, 1)) { f = FN.get(k); break; } }
   else for (const [k, n] of NODES) if (!n.t.group && x >= n.c.x && x < n.c.x + n.c.w && y >= n.c.y && y < n.c.y + n.c.h) { f = FN.get(k); break; }
@@ -1318,6 +1349,11 @@ $("stage").addEventListener("mousemove", (ev) => {
   if (f.error_paths) h += `<br>${f.error_paths.length} error-handling place${f.error_paths.length === 1 ? "" : "s"}, ${f.error_paths.filter((e) => epRan.has(e[0])).length} of them ran`;
   tip.innerHTML = h; tip.style.display = "block";
   tip.style.left = Math.min(x + 18, r.width - px(540)) + "px"; tip.style.top = Math.min(y + 18, r.height - px(150)) + "px";
+});
+$("stage").addEventListener("click", (ev) => {
+  if (view !== "runs") return;
+  const r = $("cv").getBoundingClientRect();
+  runsClick(ev.clientX - r.left, ev.clientY - r.top);
 });
 $("stage").addEventListener("mouseleave", () => { $("tip").style.display = "none"; });
 window.showcase = {setView, runs: () => RUNS.length, shown: () => shown, busy: () => !!cur || shown < RUNS.length || performance.now() < holdUntil || bushBusy()};
