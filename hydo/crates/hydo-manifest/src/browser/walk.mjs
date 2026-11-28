@@ -276,16 +276,26 @@ function timeless(name) {
 // last (Milestone 267).
 const OVERLAY = new Set(['dialog', 'alertdialog', 'menu', 'listbox']);
 
+// The rows of a page (Milestone 390): a memo of Memos is an article with a link "now", a button
+// "More" and its text, and a list's entries are list items. A control whose role and name repeat
+// on the page, such as each memo's "More", is chosen by the text of its row, not by its place, so
+// that a fault that changes the order of the rows (a clock step reorders Memos's memos) changes
+// which row the walk takes only when the rows' texts change.
+const ROW = new Set(['article', 'listitem', 'row', 'treeitem']);
+// the words of a row that name it: the names and texts in it before a row inside it begins
+const ROW_WORDS = 12;
+const rowText = (words) => timeless(words.join(' ')).replace(/\s+/g, ' ').trim().slice(0, 120);
+
 // The controls of an ariaSnapshot, in document order: {role, name, m (place among the same role
-// and name), j (place among the same role), key and km (the name without its times, and the
-// place among the same role and key), url, disabled, over (the overlays it is in, numbered in
-// document order)}.
+// and name), j (place among the same role), key, item and km (the name without its times, for a
+// control whose role and key repeat the text of its row, and the place among the same role, key
+// and item), url, disabled, over (the overlays it is in, numbered in document order)}.
 function controls(snapshot) {
   const out = [];
-  const byKey = new Map();
   const byName = new Map();
   const byRole = new Map();
   const open = []; // the overlays around the line: {indent, id}
+  const rows = []; // the rows around the line: {indent, words, closed}
   let overlays = 0;
   let last = null;
   for (const raw of snapshot.split('\n')) {
@@ -295,10 +305,11 @@ function controls(snapshot) {
       last.url = u[1].trim().replace(/^"(.*)"$/, '$1');
       continue;
     }
-    const m = /^(\s*)- ([a-z]+)(?: "((?:[^"\\]|\\.)*)")?((?: \[[^\]]*\])*)(?::.*)?$/.exec(line);
+    const m = /^(\s*)- ([a-z]+)(?: "((?:[^"\\]|\\.)*)")?((?: \[[^\]]*\])*)(?::\s*(.*))?$/.exec(line);
     if (!m) continue;
     const indent = m[1].length;
     while (open.length && open[open.length - 1].indent >= indent) open.pop();
+    while (rows.length && rows[rows.length - 1].indent >= indent) rows.pop();
     const over = open.map((o) => o.id);
     if (OVERLAY.has(m[2])) open.push({ indent, id: ++overlays });
     const role = m[2];
@@ -308,18 +319,41 @@ function controls(snapshot) {
     } catch {
       name = m[3] || '';
     }
+    // the text after the colon: `- paragraph: beta memo`, `- text: "12.50"`
+    let said = (m[5] || '').trim();
+    if (/^".*"$/.test(said)) {
+      try {
+        said = JSON.parse(said);
+      } catch {
+        /* keep it as written */
+      }
+    }
+    const row = rows.length ? rows[rows.length - 1] : null;
+    if (row && !row.closed) for (const w of [name, said]) if (w && row.words.length < ROW_WORDS) row.words.push(w);
+    if (ROW.has(role)) {
+      for (const r of rows) r.closed = true;
+      rows.push({ indent, words: name ? [name] : [], closed: false });
+    }
     const j = byRole.get(role) || 0;
     byRole.set(role, j + 1);
     const key = `${role}\u0000${name}`;
     const n = byName.get(key) || 0;
     byName.set(key, n + 1);
     const tk = timeless(name);
-    const kk = `${role}\u0000${tk}`;
-    const km = byKey.get(kk) || 0;
-    byKey.set(kk, km + 1);
-    const c = { role, name, m: n, j, key: tk, km, url: undefined, disabled: /\[disabled/.test(m[4] || ''), over };
+    const c = { role, name, m: n, j, key: tk, item: '', km: 0, row, url: undefined, disabled: /\[disabled/.test(m[4] || ''), over };
     out.push(c);
     last = role === 'link' ? c : null;
+  }
+  // a role and key that repeat: the text of each one's row; then the place among the same three
+  const keys = new Map();
+  for (const c of out) keys.set(`${c.role}\u0000${c.key}`, (keys.get(`${c.role}\u0000${c.key}`) || 0) + 1);
+  const byItem = new Map();
+  for (const c of out) {
+    if (keys.get(`${c.role}\u0000${c.key}`) > 1 && c.row) c.item = rowText(c.row.words);
+    delete c.row;
+    const ik = `${c.role}\u0000${c.key}\u0000${c.item}`;
+    c.km = byItem.get(ik) || 0;
+    byItem.set(ik, c.km + 1);
   }
   return out;
 }
@@ -392,7 +426,7 @@ async function choose(list, r, s, ok) {
 // The controls by rendezvous hashing, the winner first.
 function ranked(list, s) {
   return list
-    .map((c) => [mix(s ^ fnv(`${c.role}\u0000${c.key}\u0000${c.km}`)), c])
+    .map((c) => [mix(s ^ fnv(`${c.role}\u0000${c.key}\u0000${c.item}\u0000${c.km}`)), c])
     .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
     .map(([, c]) => c);
 }
@@ -401,7 +435,7 @@ function pick(list, s) {
   let best;
   let bestH;
   for (const c of list) {
-    const h = mix(s ^ fnv(`${c.role}\u0000${c.key}\u0000${c.km}`));
+    const h = mix(s ^ fnv(`${c.role}\u0000${c.key}\u0000${c.item}\u0000${c.km}`));
     if (bestH === undefined || h < bestH) {
       best = c;
       bestH = h;
@@ -568,7 +602,7 @@ async function escape(page) {
 // A control as the script of a recording replay names it (Milestone 270): its role and accessible
 // name, its place among the controls of that role and name (m) or of that role (j, without a
 // name), and the name without its times with its place (key, km)
-const ctl = (c) => ({ role: c.role, name: c.name, m: c.m, j: c.j, key: c.key, km: c.km });
+const ctl = (c) => ({ role: c.role, name: c.name, m: c.m, j: c.j, key: c.key, ...(c.item ? { item: c.item } : {}), km: c.km });
 
 async function act(page, k) {
   const r = new Stream(streamOf(k));
@@ -823,6 +857,22 @@ const named = (c) => (c.name ? `${c.role} ${q(c.name)}${c.m ? ` (the ${ordinal(c
 // browser recorded; then the control with the same name without its times and the same place
 // among them is the same control, as the walk's own choice counts them (Milestone 264).
 async function findCtl(page, c) {
+  if (c.item) {
+    // Milestone 390: a control of a row is found by its row's text, as the walk chose it
+    const until = Date.now() + FIND_MS;
+    for (;;) {
+      let snap = '';
+      try {
+        snap = await page.locator('body').ariaSnapshot({ timeout: 5000 });
+      } catch {
+        snap = '';
+      }
+      const x = controls(snap).find((y) => y.role === c.role && y.key === c.key && y.item === c.item && y.km === c.km);
+      if (x) return x;
+      if (Date.now() >= until) return null;
+      await page.waitForTimeout(500);
+    }
+  }
   try {
     await locate(page, c).waitFor({ state: 'visible', timeout: FIND_MS });
     return c;
@@ -836,7 +886,7 @@ async function findCtl(page, c) {
   } catch {
     return null;
   }
-  return controls(snap).find((x) => x.role === c.role && x.key === c.key && x.km === c.km) || null;
+  return controls(snap).find((x) => x.role === c.role && x.key === c.key && x.item === (c.item || '') && x.km === c.km) || null;
 }
 
 const LEFT_OUT = `not on the page within ${FIND_MS / 1000} s; the run that this replays acted on it here, so the replay leaves the action out and takes no other control`;
