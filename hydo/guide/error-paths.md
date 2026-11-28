@@ -209,8 +209,8 @@ it. The page's address takes `#pace=SECONDS`, `#hold=SECONDS`, `#start=SECONDS`,
 and `#title=NAME`.
 
 The banner calls a failure a broken promise only when it is a bug. A setting that trades safety
-for speed, or a fault that no system survives, reads "A documented trade-off, shown". The runs
-cannot say which failure is a known bug or a documented limit, so a notes file says it:
+for speed, or a fault that no system survives, reads as a documented trade-off. The runs cannot
+say which failure is a known bug or a documented limit, so a notes file says it:
 
 ```yaml
 notes:
