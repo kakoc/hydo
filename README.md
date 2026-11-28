@@ -29,14 +29,23 @@ makes the same failure happen again, tomorrow or on a colleague's laptop.
 
 ## Watch it break a system
 
-https://github.com/user-attachments/assets/ab903228-0ee6-454f-bf14-c29224d613ce
+https://github.com/user-attachments/assets/a7d4f724-c105-425b-ae6f-a0e4382c50b2
 
-hydo runs [Blnk](hydo/onboard/examples/blnk/), a ledger, again and again, each time with other
-crashes, pauses, network cuts, and clock jumps. Each tile is one function of Blnk's code. It lights
-up the first time a run reaches it: green in a normal run, orange only when something broke. In the
-first run hydo finds a known Blnk bug, an all-or-nothing batch of transfers that kept half of
-itself ([#438](https://github.com/blnkfinance/blnk/issues/438)), and shows the one command that
-replays it.
+hydo runs [NSQ](hydo/onboard/examples/nsq/), a message queue, again and again under crashes,
+pauses, network cuts, and clock jumps.
+
+- **Tiles:** each is one function of NSQ. It lights up when a run first reaches it.
+- **Lines:** each is one run. Dots are faults, and a red end is a broken promise.
+- **Bushes:** hydo replays a failure with fewer faults to find its smallest cause.
+
+It finds three issues, each with the command that replays it:
+
+- a crash in a new topic's first seconds loses its messages
+  ([#1542](https://github.com/nsqio/nsq/issues/1542), reported by hydo);
+- after the clock is set back, every publish waits
+  ([#1124](https://github.com/nsqio/nsq/issues/1124), a known bug);
+- a crash loses the message a consumer holds
+  ([#1386](https://github.com/nsqio/nsq/issues/1386), a documented limit).
 
 ## Install
 
