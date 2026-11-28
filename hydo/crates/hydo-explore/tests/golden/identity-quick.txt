@@ -182,10 +182,10 @@ input	hydo/onboard/examples/garnet/hydo/checks/final_counters	5357d52703fa8f6f5d
 input	hydo/onboard/examples/garnet/hydo/fetch-images.sh	da042bb77e26f74fbfcfe501ba9e1ff18d0742a94e188535eaf673ee2b924288
 input	hydo/onboard/examples/garnet/hydo/hydo-compose.lock.json	2eabe5fc2aaebd712e94e2a3c7117d3e2a1b9d84d410641da6c22cb1597d07e2
 input	hydo/onboard/examples/garnet/hydo/regressions/README.md	12626dbf5d05271968e602d2f27283b99d4e2df749d5cc83d8e4678a5ddf7664
-input	hydo/onboard/examples/garnet/hydo/regressions/acked-writes-lost-after-failovers-on-both-sides-of-a-migration.schedule	1341f37979ca22fe071157d75530f61edf7ba604206488357a1b27be677b1b60
+input	hydo/onboard/examples/garnet/hydo/regressions/acked-writes-lost-after-failovers-on-both-sides-of-a-migration.schedule	dafe880063f67b2aa7325425b6feea62801d96e5007808f50a91f1b9f4cf097f
 input	hydo/onboard/examples/garnet/hydo/regressions/acked-writes-lost-at-a-power-cut-default-device.schedule	b05b1d240ed5eca0aefe737177e122a6c489b6971a44572bc5c2d5d8e7fa4b65
-input	hydo/onboard/examples/garnet/hydo/regressions/replica-differs-at-the-same-offset-after-a-power-cut.schedule	7edfb06c285b7cdba67b23f6241db28b95da94dff4a7b66ea477dc2759fa6ac5
-input	hydo/onboard/examples/garnet/hydo/regressions/replica-hangs-after-a-kill-during-a-checkpoint.schedule	6a000a1e16a8f202809d6494220498c79462ec9b8129b63fd7870dd1d7c250d5
+input	hydo/onboard/examples/garnet/hydo/regressions/replica-differs-at-the-same-offset-after-a-power-cut.schedule	9179dfce4794e05e4d0522cb219535623d4e53c8cdfc90021a132715365673ca
+input	hydo/onboard/examples/garnet/hydo/regressions/replica-hangs-after-a-kill-during-a-checkpoint.schedule	98f721c6319687f63c949316c2146872f1d0dc2cf7e8da5015fbff3bcd0d807d
 input	hydo/onboard/examples/garnet/hydo/regressions/replica-stops-after-its-primary-restarts.schedule	b7da3ce112a2aab697258bcd5da9b379941e047cc1c5b27bd6cc5b19c8eba857
 input	hydo/onboard/examples/garnet/hydo/regressions/slot-without-owner-after-a-failover-after-a-migration.schedule	1c7589ca19591cb4332e82a1a4daa6cbd8974453d03826492cb65dea31051c5d
 input	hydo/onboard/examples/garnet/hydo/workload/anytime_read	d60c70e6371b2cad5dede362b2bada83bbb13ab001b48b53041fbfd1530dde67

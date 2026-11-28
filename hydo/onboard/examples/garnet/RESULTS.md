@@ -11,9 +11,9 @@ client that plays the control plane, and looks for bugs that nobody reported.
 
 ## The short answers
 
-- **What was found?** One new candidate, one finding that needs Garnet's default of a setting,
-  and three candidates whose cause was not traced (section "Candidates whose cause was not
-  traced"). Nothing was posted.
+- **What was found?** Four new candidates and one finding that needs Garnet's default of a
+  setting. The last three were traced later (section "The three failures traced"). Findings 1
+  and 2 are reported as microsoft/garnet#2441 and #2440; nothing else was posted.
   1. **A deployment setting, with a status that hides it: a replica never replicates again after
      its primary restarts.** With Garnet's default `--cluster-replication-reestablishment-timeout
      0`, a kill of a primary and its start with `--recover` leave its replica without the AOF
@@ -28,10 +28,23 @@ client that plays the control plane, and looks for bugs that nobody reported.
      unavailable: `CLUSTERDOWN Hash slot not served`. The bug needs no fault, only a failover that
      comes before the gossip; Docker shows it without hydo
      (`regressions/slot-without-owner-after-a-failover-after-a-migration.schedule`).
+  3. **New: with `--aof-commit-wait`, a replica stops answering when its primary dies before a
+     commit (A).** The replica keeps an AOF tail that nothing commits, and every reply that waits
+     for the commit blocks its thread for good
+     (`regressions/replica-hangs-after-a-kill-during-a-checkpoint.schedule`).
+  4. **New: a failover of a migration's source gives the migrated slot two primaries (B).** The
+     source's replica takes over the slot from its old slot map with the epoch of the target's
+     claim, both nodes acknowledge writes of the slot, and the loser's writes are lost
+     (`regressions/acked-writes-lost-after-failovers-on-both-sides-of-a-migration.schedule`).
+     Finding 2's cause, on the other side of the migration.
+  5. **New: a replica that attaches after a failover damages its AOF file below the new tail (C).**
+     After a power cut it replays the damaged file, stops at the damage without an error, and
+     reports its primary's offset without the writes after it
+     (`regressions/replica-differs-at-the-same-offset-after-a-power-cut.schedule`).
 - **What held?** With the option at 5 s and the device of #2281's workaround, every write that
   Garnet acknowledged stayed on the owner of its slot, through failovers, slot migrations and
   checkpoints, under kills, pauses, partitions, one node's power loss, power cuts and clock steps,
-  but in finding 2 and candidate B. Transactions and scripts applied whole, counters stayed within
+  but in findings 2 and B. Transactions and scripts applied whole, counters stayed within
   their `INCR`s, expiries kept their deadlines, and no read returned a value that no write sent.
 - **What is the environment?** A damaged cluster file stops its node at every start. A damaged
   checkpoint or AOF segment lets the node start without the data, as Garnet's default
@@ -53,6 +66,8 @@ client that plays the control plane, and looks for bugs that nobody reported.
   hvx; this branch's hydo (0.6.0 and Milestones 363 to 367) on GitHub's KVM runners.
 - The released hydo 0.7.0 replayed findings 1 and 2 on hvx again, from a fresh clone at
   `67ccb6ee`. Each finding's paragraph "The replay with hydo 0.7.0" has the runs.
+- It traced findings A, B and C later, from `git archive` of `main` at `bdb403f4`: the section
+  "The three failures traced".
 
 ## The promises
 
@@ -281,8 +296,8 @@ default. None of them says that 0 turns it off, and `website/docs/cluster/replic
 checkpoint and replay their AOF before connecting to their primary and resuming
 synchronization". Garnet's cluster is passive by design (`cluster/overview.md`, "Control
 Plane"), so a control plane could attach the replica again with `CLUSTER REPLICATE`. It would
-need to know that it must: the replica's own status says that nothing is wrong. Nothing was
-posted.
+need to know that it must: the replica's own status says that nothing is wrong. It is reported
+as microsoft/garnet#2441 (2026-11-27).
 
 Regression: `regressions/replica-stops-after-its-primary-restarts.schedule`, on an image built
 with `--set reest=0`.
@@ -392,7 +407,8 @@ The documentation of `CLUSTER FAILOVER` asks a control plane to serialize failov
 that the reachable nodes agree on the new owner after a failover. It says nothing about a
 migration before it, and the control plane cannot repair the slot with a failover: every node but
 `g2` names no owner. `CLUSTER SETSLOT 8943 NODE <g4>` on the nodes would. No issue or pull request
-names it (section "The duplicate searches"). Nothing was posted.
+named it before (section "The duplicate searches"). It is reported as microsoft/garnet#2440
+(2026-11-27).
 
 Regression: `regressions/slot-without-owner-after-a-failover-after-a-migration.schedule`, seed
 96's schedule on the `fs` image. The race depends on the moment of the failover: on the final
@@ -410,25 +426,95 @@ cut, and `C=30` too. The explorations of the default image hit it with every pow
 seconds after a write (section "The explorations"). Regression:
 `regressions/acked-writes-lost-at-a-power-cut-default-device.schedule`.
 
-### Candidates whose cause was not traced
+### The three failures traced
 
 The last parts of the explorations gave three more failures on the `fs` image, each with one
-fingerprint over two runs on KVM and each failing again on hvx. Their causes were not traced
-before the end of this round, so they carry no label yet. Each has a saved regression.
+fingerprint over two runs on KVM. A later round traced them on hvx with the released hydo 0.7.0,
+from `git archive` of `main` at `bdb403f4`. It used the 0.7.0 Linux tarball, checked by its
+`SHA256SUMS` and installed with `install.sh --no-module`, and the client `f3951b59…` built on
+the Mac from the archive. It built the `fs` image again with the recorded sha256 (`57aaef25…`).
+Each regression gave its recorded value twice. Held runs (`hydo inspect start <run> --at <stop>`)
+read every node's `INFO`, `CLUSTER NODES`, keys, threads, and log at stops before and after each
+failure.
+All three are bugs of Garnet: A and C are new, and B has finding 2's cause.
 
-**A. A kill of a primary 10 ms after a `BGSAVE` leaves its replica without an answer.** Seed 144
-of e3 shrank to `disk=none dseed=0 | run W=69274d70,p3,q1,r500,oparallel_driver_del
-A=garnet.bgsave+10:kill-now-g1` (KVM `88ca1c0b695a75fb` twice). `kill-now-g1` stops `g1` 10 ms
-after a `BGSAVE` of the client and keeps it down until the heal. 120 s after the heal the replica
-`g4` still answered no command (`shard 1: the replica g4 does not answer: i/o timeout`), the nodes
-named different owners of a slot, and on hvx the read-back lacked one acknowledged `RPUSH`
-(`e12c7c93adf9d46c` twice). `hydo inspect diagnose --evidence` read the replica's log: it ends with `fail:
-ReplicationManager[0] Error background recovering task has not completed [ReadRole]` after the
-primary came back, and the primary's gossip to `g4` timed out from then on. The same message, with
-`[ClusterFailover]`, is in #1153 (closed in 2025), after a forced failover. Garnet's open #2437 (a
-transaction that straddles a checkpoint stops the AOF's recovery) may explain the lost write; it
-does not explain a replica that stops answering.
-Regression: `regressions/replica-hangs-after-a-kill-during-a-checkpoint.schedule`.
+The runs that separate the causes, on hvx with hydo 0.7.0, one run each unless two are named.
+The `nw` image is the `fs` image built with `--set wait=no` (`af1e228c…`), and `tr2` is the copy
+with Garnet's log level `Information` (`c2b9188f…`):
+
+| schedule | image | verdict | fingerprint |
+|---|---|---|---|
+| A: `disk=none dseed=0 \| run W=69274d70,p3,q1,r500,oparallel_driver_del A=garnet.bgsave+10:kill-now-g1` | `fs` | `converge`: `g4` does not answer (two runs) | `e12c7c93adf9d46c` |
+| A with the kill at the event, `+0` | `fs` | the same | `6efd2887a84c26ad` |
+| A with the kill 2 s after the event, `+2000` | `fs` | OK | `66518ef67d425f02` |
+| A without `--aof-commit-wait` | `nw` | OK | `8cf849360412507e` |
+| A | `tr2` | `converge`: `g4` does not answer | `bb0d392e801a000b` |
+| B: `disk=none dseed=0 \| run P=g1@12+3 W=0a39fa3d,p1,q2,r500` | `fs` | `converge` and `acked-outcome`: 2 of 45 lost (two runs) | `674c2b16f5e9438b` |
+| B without the failovers, `W=0a39fa3d,p1,q2,r500,oserial_driver_failover` | `fs` | OK: 44 judged, with the same migration of slot 13404 | `4e7ef3a4bc87e9db` |
+| C: `disk=cut dseed=0 \| run K=g4@22+1 C=40 W=a0075364,p1,q1,r500` | `fs` | `converge`: `g1` differs in 8 keys (two runs) | `012c520d5bb92ffc` |
+| C without the power cut, `disk=none` and no `C=` | `fs` | OK | `057b2b492432c418` |
+| C | `tr2` | the same as on `fs` | `3a8118d0f88895df` |
+| C without the kill of `g4`, `disk=cut dseed=0 \| run C=40 W=a0075364,p1,q1,r500` | `tr2` | OK: the failover of shard 1 and the power cut came too | `1123bb3544856201` |
+
+### A. New: with `--aof-commit-wait`, a replica stops answering when its primary dies before a commit
+
+**Label: a bug of the project, new as far as the search found.** The run holds a second failure,
+a lost `RPUSH`, which is finding B's.
+
+Seed 144 of e3 shrank to `disk=none dseed=0 | run W=69274d70,p3,q1,r500,oparallel_driver_del
+A=garnet.bgsave+10:kill-now-g1`
+(`regressions/replica-hangs-after-a-kill-during-a-checkpoint.schedule`). The released hydo 0.7.0
+replayed it twice on hvx with `e12c7c93adf9d46c`, the recorded value. `kill-now-g1` kills the
+primary `g1` of shard 1 10 ms after the client's `BGSAVE`, and `g1` stays down until the heal.
+120 s after the heal its replica `g4` still answered no command.
+
+The replays' held runs, and the same schedule on an image with Garnet's log level `Information`
+(a copy of the example with `--logger-level Information`, not committed), show this. The trace
+image failed the same way (`bb0d392e801a000b`).
+
+- `g4` received the checkpoint's end marker. At 12:00:25 of guest time it logged `Initiating
+  checkpoint; full = True` and `Completed checkpoint`, and then `ReplicaReplayTask - terminating`
+  when `g1` died. `g1` started again with its AOF at tail 404, and that checkpoint's `info.dat`
+  was empty: `Skipping unreadable HybridLog checkpoint ... Invalid metadata length 0`. So `g1`
+  died before it committed what `g4` had received.
+- `g4` stopped answering long before `g1` came back. In the replays every other node logged
+  `GOSSIP to remote node [g4] timeout` from 12:00:29 on, 4 s after `g1` died. At the stop
+  `run:1700000`, with `g1` still down, every node but `g4` answered `PING`.
+- `g4`'s process gathered threads that never ran. At `run:1700000` it had 31 threads, 19 of them
+  .NET thread-pool workers waiting in `futex_wait_queue`. The other nodes had 18 or 19 threads in
+  all. At the end of the trace run it had 93 threads. 80 of them were waiting workers, and 78 of
+  those had used no CPU time. The other nodes had 15 to 17 threads.
+
+What happens, at `v2.2.14` (unchanged on `main` at `ff769f86`):
+
+1. A primary streams its AOF to its replica before the AOF is committed
+   (`libs/cluster/Server/Replication/PrimaryOps/AofOperations/AofSyncTask.cs`, line 343,
+   `scanUncommitted: true`). The replica appends each record without a commit
+   (`ReplicaOps/AOFReplay/ReplicaReplaySession.cs`, line 104) and commits only when the primary's
+   commit record arrives (`ReplicaReplayDriver.cs`, line 193). A primary that dies between a
+   record and its commit leaves the replica's AOF tail past its commit point, and nothing commits
+   it later.
+2. With `--aof-commit-wait` a reply waits until the AOF has committed up to its tail. A client
+   session waits for every command that is not in a short list (`libs/server/Resp/Parser/
+   RespCommand.cs`, lines 468 to 523, which leaves out `CLUSTER`, `ROLE` and every data command),
+   in `RespServerSession.Send` (`libs/server/Resp/RespServerSession.cs`, lines 1566 to 1571). A
+   cluster session waits for every reply (`libs/cluster/Session/ClusterSession.cs`, lines 222 to
+   226). Both block their thread, as the code's comment says: `Must block, we're on the network
+   thread`.
+3. On `g4` the commit never comes, so each gossip message from a peer blocks one thread for good.
+   The peers connect again after each timeout, and the waiting workers grew: 19 at `run:1700000`
+   of the replay, 80 at the end of the trace run. The checks' `INFO`, which does not wait for
+   the AOF, got no answer either.
+
+The same schedule passes without `--aof-commit-wait`, and it passes with the kill 2 s after the
+`BGSAVE`. With the kill at the event itself it fails the same way. The table of the separating
+runs has the values.
+
+The 0.6.0 diagnosis and the replays at the example's level `Warning` also show one more line on
+`g4`, at 12:03:17, after `g1` came back: `Error background recovering task has not completed
+[ReadRole]`. A resync that `EnsureReplication` tried found another recovery in progress. Which
+one was not traced. The example sets `--aof-commit-wait` (`wait=yes`); Garnet's default leaves it
+off.
 
 Milestone 383 read every guest thread's stack at the verdict's stop of the recorded hvx run with
 `hydo inspect stacks` (6,315,089 stops replayed in 696 s, with no divergence). The replica `g4`
@@ -439,26 +525,131 @@ that keeps adding workers while every worker waits is what .NET does when its wo
 fits a replica whose background recovery task never completes and whose commands get no worker.
 The frames are the runtime's and the JIT's code, which hydo does not name, so the place where the
 workers wait is not traced yet.
+So step 3 rests on the thread counts, these stacks and the code.
 
-**B. A pause of a migration's target and failovers of both shards after the migration lose
-acknowledged writes.** Seed 89 of e2 shrank to `disk=none dseed=0 | run P=g1@12+3
-W=0a39fa3d,p1,q2,r500` (KVM `00af90d009683f21` twice). The client moved slot 13404 from `g3` to `g1`,
-failed shard 3 over to `g6`, and then shard 1 over to `g4`. After the heal `g6` and `g3` still
-held two keys of the slot, which shard 3 no longer owned, and the owner lacked both: the
-read-back found 2 of 45 acknowledged writes missing (`674c2b16f5e9438b` twice). The same
-composition without the pause passed (`4239689f3f3ff03e`). It is finding 2's race on both
-sides of a migration, as far as the logs show: each new primary took over the slots that its own
-copy of the configuration named. Regression:
-`regressions/acked-writes-lost-after-failovers-on-both-sides-of-a-migration.schedule`.
+**The lost `RPUSH` is finding B.** The client moved slot 12874 from `g6` to `g5` and then failed
+shard 3 over from `g6` to `g3`. `g3` took over the slot from its old map with a newer epoch, and
+the slot went back to shard 3. At the end of the trace run every node named `g3` the owner of
+slot 12874, and the list `{t4}l4`, which the migration had moved, stayed on `g5` and `g2`.
 
-**C. After a kill of a new primary and a power cut, its replica holds other data at the same
-offset.** Seed 115 of e2 shrank to `disk=cut dseed=0 | run K=g4@22+1 C=40 W=a0075364,p1,q1,r500`
-(KVM `8bb39f73a77bf0fb` twice). In the recovery boot the replica `g1` reported the primary's
-offset, 2,460, and held other data: it lacked keys, had an older list, and held an empty string
-for a counter that its primary holds as `1`: 8 keys differed (`012c520d5bb92ffc` twice). The same
-schedule without the kill passed (`23cd71d660070fd1`). The read-back from the primaries found
-every acknowledged write. A failover to `g1` would serve that data. Regression:
-`regressions/replica-differs-at-the-same-offset-after-a-power-cut.schedule`.
+### B. New: a failover of a migration's source gives one slot two primaries, and the loser's writes are lost
+
+**Label: a bug of the project, new as far as the search found. It has the cause of finding 2,
+on the source's side of the migration.**
+
+Seed 89 of e2 shrank to `disk=none dseed=0 | run P=g1@12+3 W=0a39fa3d,p1,q2,r500`
+(`regressions/acked-writes-lost-after-failovers-on-both-sides-of-a-migration.schedule`). The
+released hydo 0.7.0 replayed it twice on hvx with `674c2b16f5e9438b`, the recorded value. The
+client moved slot 13404, the slot of `{t13}`, from `g3` to `g1`, and failed shard 3 over from
+`g3` to `g6` right after. Two writes of the tag were acknowledged then: `zadd.q13` and
+`rpush.l13`. Then it failed shard 1 over from `g1` to `g4`. After the heal `g6` and its replica
+`g3` held both keys, which shard 3 no longer owned, and the owner lacked them:
+`writes.acked-outcome` broke with 2 of 45 acknowledged writes.
+
+Held runs (`hydo inspect start runs/B1 --at <stop>`) read every node's `CLUSTER NODES` at four
+stops:
+
+| stop | what the nodes said about slot 13404 |
+|---|---|
+| `run:2580000`, the migration done | `g1` and `g3` name `g1`, whose config epoch is 10. `g6`, the replica of the source, still gives `g3` the whole range 10923-16383 |
+| `run:2710000`, after the failover of shard 3 and the two writes | `g1` claims 13404 with config epoch 10, and `g6` claims 10923-16383, 13404 among them, also with config epoch 10. `g2` and `g3` name `g1`. `g6` holds `{t13}l13` and `{t13}q13`, and `g1` holds the migrated keys `{t13}t29a` to `t29d` |
+| `run:2805000`, after the failover of shard 1 | `g4` claims 13404 with config epoch 13, and `g6` still claims it, now also with 13. `g4` holds `{t13}z13`, which the client wrote at step 27 |
+| the end | every node names shard 1. `g6` and `g3` hold `l13` and `q13`, keys of a slot that their shard does not own |
+
+So two primaries served slot 13404 from the failover of shard 3 on, and both acknowledged
+writes of it. What happens, at `v2.2.14` (unchanged on `main` at `ff769f86`):
+
+1. The migration gives the slot to `g1` on `g1` and on `g3` and gossips with `g1` alone, as in
+   finding 2 (`MigrationDriver.cs`, lines 201, 210 and 219).
+2. `CLUSTER FAILOVER` on `g6` comes before gossip has told `g6` of the migration.
+   `ClusterManager.TryTakeOverForPrimary` (`libs/cluster/Server/ClusterManager.cs`, line 389)
+   calls `TakeOverFromPrimary`, which claims the slots that `g6`'s own slot map gives `g3`
+   (`ClusterConfig.cs`, lines 1393 and 1400). That map still holds 13404. The same line bumps
+   `g6`'s config epoch, here to 10, the epoch of `g1`'s claim.
+3. `MergeSlotMap` (line 1217) lets a primary's claim replace the current owner only when the
+   claim has a newer config epoch (lines 1262 to 1268). With equal epochs no node moves the slot
+   to the other claimant, so `g1` and `g6` both keep serving it. Clients that read the slot map
+   from `g6`, or from a node that still named shard 3, sent the slot's writes to `g6`.
+4. Gossip settles the epoch collision by bumping one node's epoch (`HandleConfigEpochCollision`,
+   line 1588). The failover of shard 1 bumps `g4`'s epoch past `g6`'s. `g4`'s map gives the slot
+   to its old primary, so `g4` claims it. The other nodes take `g4`'s claim, and the writes
+   that `g6` acknowledged stay on `g6` and `g3`.
+
+The pause of `g1` before steps 12 to 15 only moves the moment of the failover: the same composition
+without it passed (`4239689f3f3ff03e`), and so did the schedule without the failovers
+(`4e7ef3a4bc87e9db`). The documentation of `CLUSTER FAILOVER` (`website/docs/commands/cluster.md`,
+step 3 of the external coordination requirement) asks a control plane to verify the new primary's
+slot ownership and the reachable nodes' agreement. The example's client checks the role only. Such
+a check would have seen `g6` and the other nodes disagree at the stop `run:2710000`. But `g6` had
+answered the writes with `OK` by then, and the documentation names no command that takes the slot
+back from `g6`.
+
+Nothing was posted. Finding 2 is reported as microsoft/garnet#2440 (2026-11-27, open), with the
+target's side only. #2284 (closed) reports two promotions in one shard that lose the loser's
+writes; the maintainers answered that a control plane serializes failovers. Here the failovers
+are of two shards, one after the other.
+
+### C. New: a replica that attaches after a failover damages its AOF file below the new tail, and after a power cut it reports its primary's offset without the data
+
+**Label: a bug of the project, new as far as the search found.**
+
+Seed 115 of e2 shrank to `disk=cut dseed=0 | run K=g4@22+1 C=40 W=a0075364,p1,q1,r500`
+(`regressions/replica-differs-at-the-same-offset-after-a-power-cut.schedule`). The released
+hydo 0.7.0 replayed it twice on hvx with `012c520d5bb92ffc`, the recorded value. `g4`, then the
+replica of shard 1, was killed before step 22 and started again before step 23. At step 27 the
+client failed shard 1 over from `g1` to `g4`, and `g1` became `g4`'s replica. The power cut came
+before step 40. In the recovery boot `g1` reported `master_repl_offset:2460`, the offset of
+`g4`, and held 6 keys where `g4` held 12. It lacked every write after the failover, and it held
+an empty string for the counter `{t10}c10`, which `g4` holds as `1`.
+
+Held runs read both nodes and their AOF files (`/data/garnet/AOF/aof.log.0` of each node):
+
+- Before the power cut (`run:1290000`) `g1` and `g4` both held 12 keys, and both AOFs reported
+  `CommittedUntilAddress:2460`. The bytes of the two files matched except for 1536 to 1595. There
+  `g4` holds the end of the `INCR {t10}c10` record and a commit record. `g1` holds the 16 bytes
+  that start at 1520, copied three times, and then zeros. 1536 is the start of the 512-byte
+  sector that holds 1596, and 1596 is the tail at which `g1` began its AOF again at the failover:
+  its log says `ReplicaRecover: replay local AOF from 1372 until 1596`.
+- In the recovery boot `g1`'s log says `ReplicaRecover: replay local AOF from 1372 until 2460`,
+  with no error, and the node holds the 6 keys and the empty counter.
+
+What happens, at `v2.2.14` (unchanged on `main` at `ff769f86`):
+
+1. After the failover the old primary attaches to the new primary as a replica. Its checkpoint
+   has the new primary's history and version, so it recovers its own checkpoint, replays its own
+   AOF up to 1596, and calls `Log.Initialize(beginAddress, 1596)`
+   (`libs/cluster/Server/Replication/ReplicaOps/ReplicaDiskbasedSync.cs`, lines 334, 338 and
+   342).
+2. `TsavoriteLog.Initialize` calls `RestoreHybridLog(begin, 1596, 1596, 1596)`
+   (`libs/storage/Tsavorite/cs/src/core/TsavoriteLog/TsavoriteLog.cs`, line 589). With the head,
+   the start and the end at one address inside a page, the restore reads no page
+   (`libs/storage/Tsavorite/cs/src/core/Index/Recovery/Recovery.cs`, lines 1643 to 1680). So the
+   page in memory never holds the bytes below 1596.
+3. The primary's stream is appended at 1596. The log writes whole sectors
+   (`libs/storage/Tsavorite/cs/src/core/Allocator/AllocatorBase.cs`, lines 2369 to 2371), so its
+   first flush writes the sector from 1536 with whatever the page buffer held below 1596. The
+   node's memory is right; its file is not.
+4. After the power cut the replica recovers its checkpoint and replays its file from 1372 to
+   2460. The damaged record leaves `c10` empty, and the replay ends there without an error.
+   `AofProcessor.Recover` returns the address it was asked to reach, not the last record it
+   replayed (`libs/server/AOF/Recover/AofRecover.cs`, line 66). So the replica sets its offset to
+   2460 and takes the stream from there, and the writes between 1596 and 2460 never reach it.
+
+Without the power cut the schedule passes (`057b2b492432c418`): the damage lies in the file, and
+only a recovery reads it. Without the kill of `g4` before the failover it passes too
+(`1123bb3544856201`). That run had the same failover and the same power cut. Why the kill is needed
+was not separated.
+
+A failover to `g1` would serve that data. The read-back from the primaries found every
+acknowledged write, so the example's `acked_outcome` held; the check `eventually_converge`
+compares the replica key for key and failed. No issue names it. The closest are these:
+
+- #2299 and pull request #2373 (merged 2026-11-17, in 2.2.14) clear the stale data past a re-used
+  tail;
+- #2219 (closed) is a scan that ends inside a record;
+- #2437 (open) is a replay that stops on an exception.
+
+Nothing was posted.
 
 ### Not bugs
 
@@ -484,7 +675,8 @@ every acknowledged write. A failover to `g1` would serve that data. Regression:
 
 ## The duplicate searches
 
-`gh search issues --repo microsoft/garnet --include-prs`, open and closed, on 2026-11-27:
+`gh search issues --repo microsoft/garnet --include-prs`, open and closed, on 2026-11-27 (the rows
+of A, B and C later that day):
 
 | phrase | found |
 |---|---|
@@ -501,6 +693,12 @@ every acknowledged write. A failover to `g1` would serve that data. Regression:
 | `Hash slot not served` | #1999 (a flush that hung), not about slots |
 | `TakeOverAsPrimary` | #1670, #1671, #1674 (failover restore), #1694, #1080 (a cluster on Windows after a restart) |
 | titles with "migrat" or "slot" (400 newest issues) | #1912 (closed, a destination that fails to apply a migrated key), #1655 (closed, a migration that fails silently on a timeout of `SetSlotRange`), #1560, #494 (`CLUSTER FORGET` of the importing node mid-migration), #354, #350; none with a failover |
+| A: `background recovering task`, `recovering task has not completed`, `recoverLock`, `ReadRole` | #1153 (closed, the same message with `[ClusterFailover]` after a forced failover), #1319 (merged, a reset of the recovery state), #1670, #1671, #1674 (failover restore), #1305, #1080 |
+| A: `WaitForCommit`, `CommittedUntilAddress`, `replica commit`, `uncommitted AOF replica`, `replica unresponsive`, `replica hangs`, `replica not responding`, `gossip hang`, `replica deadlock`, `thread pool starvation`, `kill primary checkpoint` | #2253 (merged, write admission during a failover), #2093, #2065, #1958, #1730; none about a replica that stops answering |
+| titles with "replica" (all) | #226 (closed, 2024, a replica stuck in recovery after `CLUSTER REPLICATE` to a dead primary), #2284 (closed, two promotions in one shard), #2087, #2086, #2208, #2223, #931, #176, #1153, #2441 |
+| B: `migration keys left source`, `keys remain source migration`, `migrate slots lost keys`, `migration data loss`, `MIGRATE SLOTS keys not migrated` | nothing; with the queries of finding 2, #2440 only |
+| C: `sector`, `partial sector`, `tail sector`, `RestoreHybridLog`, `Initialize AOF replica`, `AOF corruption replica`, `torn`, `PrepareToAppend`, `aof-replay-clear-above-tail` | #2299 (closed) and pull request #2373 (merged): stale data above a re-used tail; #2303, #2239 (checkpoint sector alignment); #2219 (closed, a scan that ends inside a record); #1910 (a torn commit record); none below the tail |
+| C: `same version checkpoint replica`, `skipLocalMainStoreCheckpoint`, `replica divergence`, `replica data mismatch`, `replica local checkpoint`, `divergent history` | #1819 (`RI.SET` ordering), #1301 (closed, an out-of-band `CommitAOF`) |
 
 ## What held, and why
 
@@ -515,7 +713,8 @@ power cuts, and clock steps of an hour each way. Every transaction and script ha
 writes or none on every node, no counter went past its `INCR`s, and no read returned a value
 that no write sent. After the heal every replica held what its primary held, and every node named
 the same owner for every slot, but where a failover came right after a migration into its shard
-(finding 2). The aimed power cuts at the client's events (`A=garnet.bgsave+20:cut`,
+(finding 2) or out of it (finding B), or where a replica attached after a failover had a power cut
+(finding C) or lost its primary before a commit (finding A). The aimed power cuts at the client's events (`A=garnet.bgsave+20:cut`,
 `A=garnet.migrate_done:cut`, `A=garnet.failover_done:cut`) and the cuts at the 300th and the
 600th disk flush (`cf=`, hvx only) lost nothing with `device=FileStream`.
 
@@ -535,8 +734,8 @@ reports were read one by one.
 | exploration | image and options | seeds | first runs read | failures by cause |
 |---|---|---|---|---|
 | e1 | default; `--strategy process --new-faults --cluster-faults --storage-faults` | 1-60 | 9 (3 parts, the run was cancelled) | #2281, seed 57, shrunk to `disk=cut dseed=0 \| run C=40 O=g3@27-29:req:loss,82% W=8a737e4e,p4,q1,r250` in 81 runs |
-| e2 | `fs`; the same options | 61-120 | 51 (17 parts) | finding 2 in seeds 96, 99 and 120; candidate B in seed 89; candidate C in seed 115; damaged files: cluster files that stop a node in seeds 63, 66, 75 and 83, and a checkpoint or AOF segment after which a node starts without its data in seeds 82, 100, 104 and 105; a group's `primary:` that named no member in seed 90; a guest loop without VM exits in seed 103's recovery boot (`SPIN`, KVM) |
-| e3 | `fs`; `--strategy swarm --new-faults --cluster-faults --reactive fault --react-events` (the client's five events) `--kill-now` | 121-160 | 32 (16 parts) | candidate A in seed 144 |
+| e2 | `fs`; the same options | 61-120 | 51 (17 parts) | finding 2 in seeds 96, 99 and 120; finding B in seed 89; finding C in seed 115; damaged files: cluster files that stop a node in seeds 63, 66, 75 and 83, and a checkpoint or AOF segment after which a node starts without its data in seeds 82, 100, 104 and 105; a group's `primary:` that named no member in seed 90; a guest loop without VM exits in seed 103's recovery boot (`SPIN`, KVM) |
+| e3 | `fs`; `--strategy swarm --new-faults --cluster-faults --reactive fault --react-events` (the client's five events) `--kill-now` | 121-160 | 32 (16 parts) | finding A in seed 144 |
 
 Seed 120 shrank to `disk=none dseed=0 | run W=939b9c23,p2,q1,r500 G=g3@11:flip,n=32,seed=82b902c
 L=g3@13+3`: its composition moved slot 4748 into `g2` and failed shard 2 over right after, which
@@ -585,7 +784,7 @@ In the order of the time each cost:
 7. **hvx's console of 64 KiB.** go-redis prints a line for each failed dial, and the commands'
    output notes carried them to the console: a run with a node down for 25 steps wrote 30 such
    notes. The client now turns go-redis's log off, and its history records are short.
-8. **The diagnosis named a reaction's kill the out-of-memory killer.** In candidate A's run, `hydo
+8. **The diagnosis named a reaction's kill the out-of-memory killer.** In finding A's run, `hydo
    inspect diagnose --evidence` said `g1 was killed by SIGKILL, which hydo did not send: in a
    guest with 3072 MiB of RAM that is almost always the kernel's out-of-memory killer`. hydo had
    sent it: the reaction `A=garnet.bgsave+10:kill-now-g1` kills from a relay in the guest.
@@ -605,3 +804,4 @@ In the order of the time each cost:
 | directed runs on hvx, among them the separation of finding 2 and the final images | about 6 hours, most of it waiting for runs of 1 to 10 minutes on the loaded machine |
 | explorations on KVM | about 5 hours, beside the directed runs; the last parts of e2 and e3 ran past this round |
 | judging, the native runs with Docker, and the write-up | about 2 hours |
+| tracing findings A, B and C on hvx with hydo 0.7.0, and the write-up | about 6 hours, most of it waiting for runs and held runs on the loaded machine |

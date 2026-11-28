@@ -1,8 +1,9 @@
-# Candidate C in Garnet 2.2.14 (RESULTS.md, "Candidates whose cause was not traced"); seed 115 of
-# the second exploration. A kill of g4, by then the primary of shard 1, before step 22, and a power
-# cut before step 40. In the recovery boot the replica g1 reports the primary's replication offset
-# and holds other data: it lacks keys, has an older list, and holds an empty string for a counter.
-# The cause was not traced.
+# Finding C in Garnet 2.2.14 (RESULTS.md, "The three failures traced"); seed 115 of the second
+# exploration. A kill of the replica g4 before step 22, a failover of shard 1 from g1 to g4, and a
+# power cut before step 40. When g1 attaches to g4 as a replica it starts its AOF again at 1596
+# and overwrites the bytes 1536 to 1595 of its file. After the power cut it replays the damaged
+# file, stops at the damage without an error, and reports g4's offset: it lacks every write after
+# the failover and holds an empty string for a counter.
 # params: device=FileStream reest=5
 # commands: anytime_read first_init parallel_driver_del parallel_driver_hset parallel_driver_incr parallel_driver_lua parallel_driver_over parallel_driver_rpush parallel_driver_sadd parallel_driver_set parallel_driver_setex parallel_driver_txn parallel_driver_zadd serial_driver_failover serial_driver_migrate serial_driver_save
 # expect: violation      (change to ok when the bug is fixed)
