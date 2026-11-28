@@ -683,7 +683,66 @@ fn report_paths(argv: &[String]) -> i32 {
     0
 }
 
+/// `hydo report --live [DIR] [--port N] [--against DIR2]` (Milestone 394,
+/// docs/design/live-map.md): the live map of a finished exploration, or of one run, served on
+/// 127.0.0.1 until the process is stopped. What DIR2's runs reached (an exploration made with
+/// `--no-faults`) counts as reached without a fault.
+fn report_live(argv: &[String]) -> i32 {
+    let mut d = None;
+    let mut against = None;
+    let mut port = hydo_explore::live::PORT;
+    let mut it = argv.iter().filter(|a| *a != "--live");
+    while let Some(a) = it.next() {
+        if a == "--against" {
+            against = it.next().cloned();
+        } else if a == "--port" {
+            port = it.next().and_then(|v| v.parse().ok()).unwrap_or_else(|| {
+                die("hydo report --live: --port takes a TCP port (0: any free one)")
+            });
+        } else if d.is_none() {
+            d = Some(a.clone());
+        }
+    }
+    let d = std::path::PathBuf::from(d.unwrap_or_else(|| pjoin(OUT, "explore")));
+    if !d.is_dir() {
+        die(&format!(
+            "hydo report --live: {} is not a directory",
+            d.display()
+        ));
+    }
+    // a run directory has no map of its own: it is made from the plan next to its image
+    if !d.join(hydo_explore::funcs::MAP_FILE).is_file() {
+        if let Ok(hydo_results::Results::Run { run, .. }) = hydo_results::read_dir(&d) {
+            let img = run
+                .image
+                .as_ref()
+                .map(|i| i.resolved.clone().unwrap_or_else(|| i.path.clone()));
+            if let Some(Some(Ok(plan))) =
+                img.map(|i| hydo_contracts::plan::plan_of_image(Path::new(&i)))
+            {
+                let _ = hydo_explore::funcs::write_map(&plan, &d);
+            }
+        }
+    }
+    if !d.join(hydo_explore::funcs::MAP_FILE).is_file() {
+        eprintln!(
+            "hydo report --live: {} has no map of the code: build the image with \
+             `all_functions: true` in a `contracts:` entry of hydo.yaml (hydo guide error-paths); \
+             the page shows the runs only",
+            d.display()
+        );
+    }
+    match hydo_explore::live::serve_forever(&d, port, against.as_deref().map(Path::new)) {
+        Ok(()) => 0,
+        Err(e) => die(&format!("hydo report --live: {e}")),
+    }
+}
+
 pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {
+    // `--live`: the live map of the code the runs reached (Milestone 394)
+    if argv.iter().any(|a| a == "--live") {
+        return report_live(argv);
+    }
     // `--paths`: which error paths ran (Milestone 306)
     if argv.iter().any(|a| a == "--paths") {
         return report_paths(argv);
