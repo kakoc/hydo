@@ -364,6 +364,12 @@ variables! {
     /// Unset, it is off on macOS 27 and later, whose kernel panics on that private mapping
     /// (Milestone 395); `1` turns it on there.
     HVM_RAM_SHARE: Hvm, User, "flag: exactly `0` turns it off", "on; off on macOS 27 and later", "hydo-hvm";
+    /// `0`: the pages that hold the breakpoints of error paths and functions stay readable while
+    /// the guest runs. Otherwise each such page is execute-only, and a read or a write of it puts
+    /// its instructions back first (Milestone 394), so that a program that reads its own file
+    /// reads its own bytes. Unset, it is off on macOS 27 and later: whether `hv_vm_protect` there
+    /// takes part in the kernel's panic of Milestone 395 is not known; `1` turns it on there.
+    HVM_BRK_PROTECT: Hvm, User, "flag: exactly `0` turns it off", "on; off on macOS 27 and later", "hydo-hvm";
 
     // ------------------------------------------------------------------ Kvm
     /// Where the KVM engine runs: `process` as the program `hydo-kvm`; else on a thread of this

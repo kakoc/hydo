@@ -1376,6 +1376,18 @@ impl Vmm {
                 resume = true;
                 continue;
             }
+            if e.reason == hv::HV_EXIT_REASON_EXCEPTION
+                && e2 == 0x24
+                && in_ram
+                && self.ct_page_access(e.pa)
+            {
+                // a read or a write of a page that holds the breakpoints (Milestone 394): the
+                // guest reads its program's file, as a Go program's protobuf hashes samples of
+                // its own binary. The page's instructions go back and it is mapped as before,
+                // and the guest does the access again: not the guest's exit, no time passes
+                resume = true;
+                continue;
+            }
             if e.reason == hv::HV_EXIT_REASON_EXCEPTION && self.ct_exit(e2) {
                 // a contract's breakpoint or its step: not the guest's exit, no time passes
                 resume = true;
