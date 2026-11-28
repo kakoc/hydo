@@ -26816,3 +26816,87 @@ topic, playbook, or skill changed; the lead decides.
 it` passed (16 tests). Its content test first stopped on one issue title with a version number
 that reads as an IPv4 address, and the CSV now spells that number out. A `grep` of each value of
 the list of `AGENTS.local.md` found none in the new text.
+
+## Milestone 392 (tentative number): upgrades of image services, also while a walk's pages are open
+
+Milestone 238 switched a service built from files to another version during a run (`U=`). A
+service from a Docker image had no versions (open item 109). Milestone 391 counted upgrades that
+fail or damage data among the bugs of web apps: 8 of 343 drawn at random, and 21 in targeted
+searches. It also named a class that nobody had tested, an old frontend against a new backend.
+This milestone gives an image service versions, each an image of its own. An upgrade can also come
+while a step runs, so a walk keeps the pages of the old version open while the new version answers.
+
+**What was built.**
+
+- `services[].versions` of a service with `image:` (a format-1 addition). Each version names its
+  own `image:`, and may name `image_ref:`, `cmd:`, `entrypoint:`, `env:`, `setup:` and `ready:`.
+  hydo-build unpacks it into `/oci/<service>@<version>` and writes its launcher
+  `/etc/hydo/oci/<service>@<version>/run`, which the plan takes as the version's command. The
+  version keeps the service's mounts, `workdir:`, `user:`, `env_file:`, `env:` and its own `/tmp`.
+  Each root binds its own mounts once per boot. `writable: true` with versions is refused.
+- The launchers of a service with versions write the key of the root that runs into
+  `/tmp/hydo/oci-ver.<service>`, and `hydo-oci` runs there. The service's own `setup:` and
+  `ready:` take the root of `$HYDO_VERSION`. A one-service power loss also unmounts the versions'
+  roots. An image without such a service keeps its launchers and its `hydo-oci` byte for byte.
+- `U=<target>@<at>~<off>...`: each switch of the token comes `off` ms of guest time into its step,
+  from a thread of the controller of its own, while the step's workload runs. The next step's
+  faults wait for it, and a power cut cancels it. The shrinker tries the switch before the step.
+  For a manifest with `browser:`, `hydo explore --upgrades` draws half of its upgrades 3, 6, 9 or
+  12 s into their step. Those draws come after every earlier draw of the upgrades' stream, so
+  another manifest draws what it drew.
+- `hydo compose <file> --upgrade-to <service>=<image>:<tag>` pins the version's image by digest
+  in the lock file, fetches it in `fetch-images.sh`, and writes `version:` and `versions:`.
+- `hydo build` stops at an x86_64 disk larger than the 4,096 MiB that an engine maps. The first
+  build of the example made a disk of 4,225 MiB without a word, and hvx refused it at the boot
+  (`HVX_SET_DISK: Invalid argument`).
+
+**The example** `hydo/onboard/examples/vikunja/upgrade` imports Vikunja 2.7.1 with `hydo compose
+--upgrade-to vikunja=vikunja/vikunja:2.8.0`. It takes the example vikunja's walk, rules and
+read-back. 2.8.0 migrates the database at its start: it adds `deleted_at` to projects and tasks,
+because 2.8.0 keeps a deleted project or task and marks it. The example's rules over the database
+first failed on 2.7.1 with `no such column: p.deleted_at`, so the variant has its own copy, which
+reads the schema it finds. Its data disk has 256 MiB, so that the root with both Vikunja images and
+the Playwright image (3,712 MiB) fits hvx's 4 GiB.
+
+**The runs** (hvx, the image `822fe52d…`, each schedule twice from fresh boots with one
+fingerprint; the table is in the section "Upgrades during a walk" of the Vikunja example's
+RESULTS.md):
+
+- Without `U=` the walk passed (`4afa173eb515893a`), and so did the upgrade between steps 1 and 2
+  (`U=vikunja@2:2.8.0`, `6cde8fa517f6ec8e`). The upgrade 8 s and 12 s into step 2, with the page of
+  2.7.1 open across the switch, passed too (`a42af1d1b15fa97f`, `ac528bd552f0da8d`). The old
+  frontend went on with 2.8.0's API, every page check held, and the read-back found every
+  acknowledged task on 2.8.0's home page.
+- The rollback `+2` started 2.7.1 on the database that 2.8.0 had migrated.
+- 1.5 s into the step the switch stopped 2.7.1 before the walk had opened its page. The page
+  then opened against no server: it showed "Failed to fetch", and its refresh of the user left
+  the promise rejection `Error while refreshing user info` unhandled (`browser.no_page_errors`,
+  `5ee92a684aa53c60`; with the rollback `9db42de9179a05e4`). A kill of 2.7.1 at the same moment,
+  without an upgrade, gives the same violation (`X=vikunja@2~1500`, `5fc1602ff4019c5b`), and so
+  does 2.8.0 in the example vikunja, which has no versions (`3bb7a1adba79889a`). It is a small
+  candidate of a deploy's downtime, not of the versions; nothing was posted. For this reason the
+  explorer's offsets are 3 to 12 s.
+- With a power cut after the upgrade (`disk=cut | run I=1 U=vikunja@2~8000:2.8.0 C=4`,
+  `942b51d922e4a490`) the recovery boot started 2.8.0, the version of the cut. It lost task 3,
+  the example's finding 1.
+
+**What did not move.** An image without versions of an image service has the bytes it had. The
+Vikunja example (an image service and the browser), built with this hydo and with `main`'s hydo,
+gave `22dfd012…` both times. The redis-oci example gave `68506485…` both times. That image gave
+the same three runs under both hydos, each twice: `964643362e083cec` without faults,
+`1ccb0c7525498bdb` at `C=12 R=everysec`, and `8bb2d5b29ef18d61` at `K=redis@5+2`. The list's own
+redis-oci image of the 0.8.0 pass has other bytes, because the pass builds in its own staging.
+So these runs are compared between the two hydos. The pinned reproducers gave their recorded
+values under this hydo, twice each, with the recorded control hashes. The images of the
+fingerprint epoch 7 in `~/hydo/build/rel080` and of epoch 6 in `rel060` gave `db33d71069816103` (VIOLATION, order 11)
+and `c421af1ccb714225` (OK).
+
+**Checks.** On the bare-metal machine, in a copy of the tree with its own git index: `cargo fmt
+--check` and `cargo clippy --workspace --all-targets -- -D warnings` passed. So did the tests of
+hydo-schedule, hydo-manifest, hydo-build, hydo-control (its corpora of transcripts too),
+hydo-explore and hydo-compose, and `cargo test -p hydo-agents --test it` (16 tests). `cargo test
+-p hydo --test it` passed after `HYDO_BLESS=1` recorded the two answers of `hydo guide manifest`
+again, whose text grew. The new tests are `hydo-build`'s `oci_versions::` and `hydo-compose`'s
+`upgrade_to::`; the schedule language's corpus has the `~<off>` forms, and the project schema's
+additions passed its additions-only check. `sh ci/vale.sh` on the Mac found nothing. The open
+items are 109 and the new 199.
