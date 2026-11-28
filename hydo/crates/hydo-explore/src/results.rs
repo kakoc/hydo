@@ -619,6 +619,7 @@ pub fn run_of(tag: &str, text: &str, r: &Res, consoles: &[(String, String)]) -> 
         messages,
         upgrades: upgrades_of(&texts.concat()),
         paths: crate::paths::of_res(r),
+        functions: crate::funcs::of_res(r, text),
         schedule: text.to_string(),
         warnings,
         verdict,
@@ -800,6 +801,11 @@ pub fn explorer_consoles(outdir: &Path, tag: &str) -> Vec<(String, String)> {
 pub fn explorer_run(outdir: &Path, tag: &str, text: &str, r: &Res, role: &str) -> Run {
     let mut run = run_of(tag, text, r, &explorer_consoles(outdir, tag));
     run.role = Some(role.to_string());
+    // Milestone 394: the functions only on the first runs, which the live map reads; a shrink
+    // run's thousands of functions would make the stream ten times as large
+    if role != hydo_results::role::FIRST && role != hydo_results::role::MANUAL {
+        run.functions = None;
+    }
     // an agent image's run: its control transcripts (M126)
     run.control =
         hydo_control::agent::controls_in(&outdir.join("consoles"), &format!("{tag}."), "consoles/");

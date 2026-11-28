@@ -278,7 +278,16 @@ pub fn main_with(argv: &[String], env: &Env) -> i32 {
     crate::JSON_END.store(!env.plain_end, std::sync::atomic::Ordering::Relaxed);
     let mut cx = setup(a, env);
     cx.argv = argv.to_vec();
-    run(cx)
+    let live = cx.a.live.then(|| cx.out.clone());
+    let rc = run(cx);
+    if let Some(dir) = live {
+        eprintln!(
+            "hydo explore: the live map stopped with the exploration; `hydo report --live {}` \
+             serves it again",
+            dir.display()
+        );
+    }
+    rc
 }
 
 /// Schedules drawn as `hydo explore` draws them, and the shrinker's candidates of a schedule,
@@ -1522,6 +1531,25 @@ fn run(mut cx: Cx) -> i32 {
     let pool = make_pool(&cx);
     let image_sha = cx.image_sha_thread();
     cx.ev.write(&cx.start_record(pool.workers()));
+    // Milestone 394: the map of every function, and the live page while the runs go on
+    if let Some(plan) = pool.host.contracts.as_ref() {
+        if let Err(e) = crate::funcs::write_map(plan, &cx.out) {
+            eprintln!(
+                "hydo explore: {}: {e}",
+                cx.out.join(crate::funcs::MAP_FILE).display()
+            );
+        }
+    }
+    if cx.a.live {
+        let against = cx.a.live_against.as_deref().map(std::path::Path::new);
+        match crate::live::start(&cx.out, cx.a.port.unwrap_or(crate::live::PORT), against) {
+            Ok(url) => eprintln!(
+                "hydo explore: the live map of the code the runs reach is at {url} (it stops \
+                 with the exploration)"
+            ),
+            Err(e) => eprintln!("hydo explore: --live: {e}"),
+        }
+    }
     if let Some(sch) = cx.a.schedule.clone() {
         let res = pool.run_all(&[("manual".to_string(), sch.clone())], true);
         let r = &res["manual"].1;

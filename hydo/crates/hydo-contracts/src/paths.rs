@@ -36,6 +36,10 @@ pub mod kind {
     pub const RECOVERY: &str = "recovery";
     /// A line after `// hydo: error path`.
     pub const DECLARED: &str = "declared";
+    /// The first instruction of a function: the live map's watch of every function
+    /// (`all_functions: true`, Milestone 394, docs/design/live-map.md). Such places are in
+    /// [`crate::plan::Program::fn_places`], never among the error paths.
+    pub const FUNCTION: &str = "function";
 }
 
 /// The words of a kind in a report.
@@ -49,6 +53,7 @@ pub fn kind_words(k: &str) -> &'static str {
         kind::PANIC => "a panic",
         kind::RECOVERY => "a retry, recovery or rollback function",
         kind::DECLARED => "a line marked `// hydo: error path`",
+        kind::FUNCTION => "a function's first instruction",
         _ => "an error path",
     }
 }
@@ -69,6 +74,17 @@ pub struct PathPlace {
     /// The addresses of the place's first instruction: one for each copy of the code (a
     /// function the compiler copied into its callers has a copy in each).
     pub sites: Vec<PathSite>,
+    /// A function's place (kind `function`, Milestone 394): the size of its code in bytes.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub size: u64,
+    /// A function's place: its module (a Go package's import path, a Rust crate and module),
+    /// for the live map's grouping.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub module: String,
+    /// A function's place: the function is in the sources that the manifest names (the
+    /// project's own code), not in a dependency or the language's runtime.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub own: bool,
 }
 
 /// One address of a place, and where its instruction is in the program's file.
@@ -145,6 +161,14 @@ pub struct Hits {
     /// The places the engine could not watch: it found none of their code in guest memory.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unwatched: Vec<u32>,
+    /// The places the engine stopped watching before they ran (Milestone 394): the guest read
+    /// or wrote the page that holds their instruction, as a program does that reads its own
+    /// file, so the instruction went back for the rest of the boot.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dropped: Vec<u32>,
+    /// How many such reads of a page came.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub reads: u64,
     /// What watching cost the engine: its stops at a place (one per place and run, plus a
     /// place that a recovery boot runs again), and the wall time of its searches of guest
     /// memory, in microseconds.
@@ -161,6 +185,13 @@ fn is_zero(v: &u64) -> bool {
 #[derive(Serialize, Deserialize)]
 struct HitsLine {
     paths: Hits,
+}
+
+/// The functions' line (Milestone 394): the same shape, for the places of
+/// [`crate::plan::Program::fn_places`].
+#[derive(Serialize, Deserialize)]
+struct FnHitsLine {
+    functions: Hits,
 }
 
 impl Hits {
@@ -180,9 +211,40 @@ pub fn hits_line(h: &Hits) -> String {
     s
 }
 
-/// Whether a records line is the error paths' line.
+/// Whether a records line is the error paths' line, or the functions' line (Milestone 394).
 pub fn is_hits_line(l: &str) -> bool {
-    l.starts_with("{\"paths\"")
+    l.starts_with("{\"paths\"") || is_functions_line(l)
+}
+
+/// The line an engine writes into a run's records for the functions that ran (Milestone 394).
+pub fn functions_line(h: &Hits) -> String {
+    let mut s = serde_json::to_string(&FnHitsLine {
+        functions: h.clone(),
+    })
+    .expect("hits serialize");
+    s.push('\n');
+    s
+}
+
+/// Whether a records line is the functions' line.
+pub fn is_functions_line(l: &str) -> bool {
+    l.starts_with("{\"functions\"")
+}
+
+/// The functions that ran in a run, from its records: None when the file has no such line (no
+/// plan of every function, or an engine that does not watch them).
+pub fn read_function_hits(p: &Path) -> Result<Option<Hits>, String> {
+    let Ok(t) = std::fs::read_to_string(p) else {
+        return Ok(None);
+    };
+    match t.lines().find(|l| is_functions_line(l)) {
+        Some(l) => {
+            let h: FnHitsLine =
+                serde_json::from_str(l).map_err(|e| format!("{}: {e}", p.display()))?;
+            Ok(Some(h.functions))
+        }
+        None => Ok(None),
+    }
 }
 
 /// The error paths of a run's records: None when the file has no such line (no plan of error
@@ -191,7 +253,7 @@ pub fn read_hits(p: &Path) -> Result<Option<Hits>, String> {
     let Ok(t) = std::fs::read_to_string(p) else {
         return Ok(None);
     };
-    match t.lines().find(|l| is_hits_line(l)) {
+    match t.lines().find(|l| l.starts_with("{\"paths\"")) {
         Some(l) => {
             let h: HitsLine =
                 serde_json::from_str(l).map_err(|e| format!("{}: {e}", p.display()))?;
@@ -517,5 +579,43 @@ pub fn short_function(name: &str) -> &str {
             None => name,
         },
         None => name,
+    }
+}
+
+/// The module of a function for the live map (Milestone 394): a Go function's package import
+/// path (`github.com/blnkfinance/blnk/internal/metrics.Init` is
+/// `github.com/blnkfinance/blnk/internal/metrics`), a Rust function's path without its last
+/// part (`redb::tree_store::btree::Btree::get` is `redb::tree_store::btree::Btree`). A name of
+/// neither shape is its own module.
+pub fn module_of(name: &str, go: bool) -> String {
+    if go {
+        // generated helpers (`type:.eq.<T>`) and generic instances (`pkg.F[...]`)
+        let n = name.split('[').next().unwrap_or(name);
+        let after_slash = n.rfind('/').map_or(0, |i| i + 1);
+        return match n[after_slash..].find('.') {
+            Some(dot) => n[..after_slash + dot].to_string(),
+            None => n.to_string(),
+        };
+    }
+    // Rust: split at `::` outside of angle brackets
+    let mut depth = 0i32;
+    let b = name.as_bytes();
+    let mut last = None;
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'<' => depth += 1,
+            b'>' => depth -= 1,
+            b':' if depth == 0 && b.get(i + 1) == Some(&b':') => {
+                last = Some(i);
+                i += 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    match last {
+        Some(i) if i > 0 => name[..i].to_string(),
+        _ => name.to_string(),
     }
 }

@@ -156,6 +156,8 @@ pub fn fold(plan: &Plan, records: &Path, res: &mut Res) -> Result<Judged, String
     let (recs, end) = hydo_contracts::plan::read_run(records)?;
     // the error paths (Milestone 306): which places ran; they never change the verdict
     crate::paths::fold(plan, records, res)?;
+    // every function (Milestone 394): which functions ran, for the live map
+    crate::funcs::fold(plan, records, res)?;
     let mut rep = judge(plan, &recs);
     rep.not_recorded = end.not_recorded;
     let fs: Vec<Value> = findings(&rep)

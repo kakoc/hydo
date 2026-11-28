@@ -81,6 +81,7 @@ pub fn write_plan(m: &Value, manifest_path: &str, image: &Path, io: &mut Io) -> 
             binary: expand(src, &mdir),
             sources: dirs,
             error_paths: c.get("error_paths").and_then(Value::as_bool) == Some(true),
+            all_functions: c.get("all_functions").and_then(Value::as_bool) == Some(true),
         });
     }
     let plan = hydo_contracts::compile::compile(&sources)
@@ -114,11 +115,23 @@ pub fn write_plan(m: &Value, manifest_path: &str, image: &Path, io: &mut Io) -> 
             if keeps == 1 { "y" } else { "ies" }
         ));
     }
-    let paths_only = n == 0 && plan.programs.iter().any(|p| !p.paths.is_empty());
+    let paths_only = n == 0
+        && plan
+            .programs
+            .iter()
+            .any(|p| !p.paths.is_empty() || !p.fn_places.is_empty());
     outln(
         io,
         &if paths_only {
-            format!("hydo-build: {} (error paths)", plan_path.display())
+            let what = match (
+                plan.programs.iter().any(|p| !p.paths.is_empty()),
+                plan.programs.iter().any(|p| !p.fn_places.is_empty()),
+            ) {
+                (true, true) => "error paths and every function",
+                (false, true) => "every function",
+                _ => "error paths",
+            };
+            format!("hydo-build: {} ({what})", plan_path.display())
         } else {
             format!(
                 "hydo-build: {} (function contracts: {n} functions, {clauses} clauses{recorded})",
@@ -141,6 +154,22 @@ pub fn write_plan(m: &Value, manifest_path: &str, image: &Path, io: &mut Io) -> 
             ));
         }
         outln(io, &line);
+    }
+    // every function (Milestone 394, the live map); a plan without them prints as before
+    for p in plan.programs.iter().filter(|p| !p.fn_places.is_empty()) {
+        let own = p.fn_places.iter().filter(|x| x.own).count();
+        let bytes: u64 = p.fn_places.iter().map(|x| x.size).sum();
+        outln(
+            io,
+            &format!(
+                "hydo-build: functions of {}: {} functions with code of their own ({own} in the \
+                 sources, {} KiB of code), on {} pages of the program's file",
+                p.program,
+                p.fn_places.len(),
+                bytes / 1024,
+                p.path_pages.len()
+            ),
+        );
     }
     for p in &plan.programs {
         for u in &p.unchecked {

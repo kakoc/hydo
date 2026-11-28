@@ -116,6 +116,12 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
   true`): the places only runs with faults reached, the places the workload reaches by itself,
   and the places never reached, by function. --against DIR leaves out of the first list what
   another exploration reached, such as one made with `hydo explore --no-faults`.
+  --live serves a page on 127.0.0.1 (port 8394, or --port N) with the map of the programs' code
+  (an image built with `all_functions: true`): each function by module and file, coloured by
+  whether a run without a fault reached it, only runs under faults, or none, with the runs in
+  seed order and the curve of functions reached. --against DIR counts what the runs of DIR (an
+  exploration made with `hydo explore --no-faults`) reached as reached without a fault. `hydo
+  explore --live` serves it while the exploration runs. Ctrl-C stops it.
   --html writes it as one web page instead (FILE, default DIR/report.html), for a run, an
   exploration or a `hydo ci run` output directory: each failure with its minimal schedule and
   the command that replays it, the failing run's timeline, where it first differs from a

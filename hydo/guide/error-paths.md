@@ -102,7 +102,74 @@ error paths ran" to the page.
   second kind is counted among the places without code.
 - A function named for a recovery that runs at every start, such as a handler of panics, runs in
   every run that restarts the program.
-- A program that reads its own file while it runs reads the engine's breakpoint instructions.
-  Remove such a program's places with `// hydo: no error path`.
+- A program that reads its own file while it runs, as a Go program with protobuf does at its
+  start, reads the pages that hold the breakpoints. On macOS 26 such a read puts that
+  page's instructions back, and the guest reads its own bytes. The places of that page that had
+  not run yet are not watched for the rest of the boot.
 - Rust's `?` on an `Option`, and the closure of `map_err`, are no places.
 - The runs record from the workload's start. The services' start-up before it is not watched.
+
+## 6. Watch every function: the live map
+
+`all_functions: true` in the same `contracts:` entry records every function of the program that
+a run reached, besides its error paths. A function is one with code of its own in the debug
+information: the program's own, its dependencies' and the language's runtime. The engine puts a
+one-shot breakpoint at its first instruction, as it does at an error path, so a run keeps its
+fingerprint.
+
+```yaml
+contracts:
+  - program: /bin/blnk
+    sources: ["../work/blnk-paths"]
+    error_paths: true
+    all_functions: true
+```
+
+`hydo build` prints how many functions it watches. A function whose file is in `sources:` is
+the project's own:
+
+```text
+hydo-build: functions of /bin/blnk: 39038 functions with code of their own (1039 in the sources, 14792 KiB of code), on 3458 pages of the program's file
+```
+
+`hydo run` prints one line. `result.json` has the functions under `functions`: each function's
+first run, the workload's step range it first ran in, and whether that came before the
+schedule's first fault.
+
+```text
+hydo: functions: 2359 of 39038 functions ran, 2359 of them before the first fault (`hydo report --live <run dir>` shows them on a map)
+```
+
+`hydo explore --live` serves a page on `http://127.0.0.1:8394/` while the exploration runs
+(`--port N` names another port). `hydo report --live <dir>` serves it for a finished exploration
+or a run directory, until Ctrl-C. The page loads nothing from outside. It shows these parts:
+
+- A map of the program's code. Boxes are modules (a Go package, a Rust module), then files, and
+  each tile is a function, sized by its code. A tile stays dark until a run reaches it. Then it
+  is green when a run reached it before its first fault, and orange when only runs under faults
+  reached it. A red dot marks a function with error-handling places, and a ring marks one whose
+  error handling ran.
+- The runs in seed order, with their verdicts. Selecting a run shows only what it reached.
+- The curve of the functions reached so far: by any run, and before any fault.
+- Selecting a function names the first run that reached it, with its schedule, its step range
+  and the `hydo run` command that replays it.
+
+A schedule's part before its first fault counts as a run without faults. So the green tiles are
+what the workload reaches by itself, and the orange tiles are code that only the faults reached.
+The dark tiles are code that no run tested.
+
+The live map's limits are those of section 5, and four more:
+
+- On macOS 27 a program that reads its own file can read the breakpoints. A Go program with
+  protobuf does at every start, so a run that starts it again gives another fingerprint with the
+  watch than without it. On macOS 26 the engine makes each page with breakpoints execute-only
+  and puts its instructions back before such a read. On macOS 27 that is off, because the
+  kernel's panic of `HVM_RAM_SHARE` names a change of a page's permissions; `HVM_BRK_PROTECT=1`
+  turns it on, at that risk.
+
+- A function that the compiler copied into every caller has no first instruction of its own, and
+  it is no tile.
+- The first run on each engine reads all of guest RAM to find the program's pages: about half a
+  second for 1.5 GiB. Later runs from the same snapshot check the pages at the addresses found.
+- The step range comes from the control transcript. A function that first ran in a recovery boot
+  or after the workload has no step range.

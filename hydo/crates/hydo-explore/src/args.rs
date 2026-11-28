@@ -6,7 +6,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        --image IMG --out DIR [--schedule S] [--sweep KIND] [--manifest hydo.yaml] [--backend hvx|hvm|kvm]
        [--timing] [--new-faults] [--durable-only] [--concurrency] [--more-faults] [--preempt] [--buggify]
        [--freeze-call] [--protocol-faults] [--protocol-cover] [--grpc-faults] [--vcpus N --turns [--bursts]] [--cpu v2|v3]
-       [--no-faults]
+       [--no-faults] [--live [--port N] [--live-against DIR]]
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--shrink-causes N]
        [--shrink-detected-damage] [--rerun-repeats] [--shrink-later]
@@ -103,6 +103,14 @@ pub struct Args {
     /// `--no-faults` (Milestone 306): each seed's workload (its composition and walk) without a
     /// fault: what the workload reaches by itself, for `hydo report --paths --against`.
     pub no_faults: bool,
+    /// `--live` (Milestone 394, docs/design/live-map.md): serve the live map of which functions
+    /// the runs reach on 127.0.0.1 while the exploration runs, at `--port` (default
+    /// [`crate::live::PORT`]).
+    pub live: bool,
+    pub port: Option<u16>,
+    /// `--live-against DIR`: what a baseline exploration (one made with `--no-faults`) reached
+    /// counts as reached without a fault on the live map.
+    pub live_against: Option<String>,
     pub backend: String,
     pub hvm_kernel: Option<String>,
     pub manifest: Option<String>,
@@ -262,6 +270,9 @@ impl Default for Args {
             preempt: false,
             buggify: false,
             no_faults: false,
+            live: false,
+            port: None,
+            live_against: None,
             backend: "hvx".into(),
             hvm_kernel: None,
             manifest: None,
@@ -311,7 +322,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 34] = [
+const FLAGS: [&str; 35] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -334,6 +345,7 @@ const FLAGS: [&str; 34] = [
     "preempt",
     "buggify",
     "no-faults",
+    "live",
     "turns",
     "no-compose",
     "bursts",
@@ -348,8 +360,10 @@ const FLAGS: [&str; 34] = [
     "check-continued",
 ];
 
-const VALUED: [&str; 64] = [
+const VALUED: [&str; 66] = [
     "seeds",
+    "port",
+    "live-against",
     "shard",
     "workers",
     "image",
@@ -523,6 +537,15 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "preempt" => a.preempt = true,
             "buggify" => a.buggify = true,
             "no-faults" => a.no_faults = true,
+            "live" => a.live = true,
+            "live-against" => a.live_against = Some(val),
+            "port" => {
+                a.port = Some(v.parse().map_err(|_| {
+                    format!(
+                        "argument --port: invalid value: '{v}' (a TCP port, 0 for any free one)"
+                    )
+                })?)
+            }
             "turns" => a.turns = true,
             "no-compose" => a.no_compose = true,
             "bursts" => a.bursts = true,

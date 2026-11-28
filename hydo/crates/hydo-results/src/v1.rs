@@ -504,6 +504,60 @@ pub struct Run {
     /// `contracts:` entry, on an engine that watches them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paths: Option<RunPaths>,
+    /// Which functions of the image's programs ran, and when (added in Milestone 394,
+    /// docs/design/live-map.md): for an image whose manifest has `all_functions: true` in a
+    /// `contracts:` entry, on an engine that watches them. `hydo explore --live` shows them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub functions: Option<RunFunctions>,
+}
+
+/// The functions that ran in one run (added in Milestone 394, docs/design/live-map.md).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct RunFunctions {
+    /// The functions the image's plan watches (`fn_places` of `<image>.contracts.json`).
+    pub functions: u64,
+    /// The functions that ran, in the order of their first run.
+    #[serde(default)]
+    pub reached: Vec<FunctionReached>,
+    /// The functions the engine could not watch in this run: it found none of their code in
+    /// the guest's memory.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unwatched: Vec<u32>,
+    /// The workload's step ranges of the run's first boot, in order: `[first, end)`, as the
+    /// control transcript's `workload steps a..z` notes give them. A function's `range` is an
+    /// index here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ranges: Vec<(u64, u64)>,
+    /// The workload step of the schedule's first fault (none: a schedule without a fault).
+    /// A fault of the host part that holds from the start (a disk error, tick jitter) is
+    /// step 0.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_fault_step: Option<u64>,
+    /// False when the engine wrote no record of the functions (an engine that does not watch
+    /// them: hvx and KVM); then nothing is known about them.
+    pub watched: bool,
+}
+
+/// The first run of one function in a run (added in Milestone 394).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct FunctionReached {
+    /// The function's id in the image's plan (its place in `fn_places`).
+    pub function: u32,
+    /// The engine's clock at the first run (VM exits on the Mac engine).
+    pub at: u64,
+    /// The boot: 0 is the run's first, and each power cut or reboot starts the next.
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub boot: u32,
+    /// The workload's step range it first ran in (an index in [`RunFunctions::ranges`]);
+    /// absent after the workload's last step, in a recovery boot, or when the run recorded no
+    /// step.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub range: Option<u32>,
+    /// It ran before the schedule's first fault: in a range that ends at or before the first
+    /// fault's step, in the first boot (always, for a schedule without a fault). What ran
+    /// there is what the workload reaches by itself.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub before_faults: bool,
 }
 
 /// The error paths of one run (added in Milestone 306).

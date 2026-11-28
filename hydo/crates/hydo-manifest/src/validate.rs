@@ -1156,7 +1156,13 @@ fn validate_perf(m: &Value) -> R<()> {
 }
 
 /// The keys of a `contracts:` entry (Milestone 241).
-pub const KNOWN_CONTRACTS: &[&str] = &["program", "sources", "error_paths", "description"];
+pub const KNOWN_CONTRACTS: &[&str] = &[
+    "program",
+    "sources",
+    "error_paths",
+    "all_functions",
+    "description",
+];
 
 /// `contracts:` (Milestone 241): programs of `root.files` with `// hydo:` comments in their
 /// sources.
@@ -1196,12 +1202,14 @@ fn validate_contracts(m: &Value) -> R<()> {
                 )))
             }
         }
-        // Milestone 306: the program's error paths
-        if let Some(b) = obj_get(v, "error_paths") {
-            if !b.is_boolean() {
-                return Err(err(format!(
-                    "{wh} ({program}): error_paths: must be true or false"
-                )));
+        // Milestone 306: the program's error paths; Milestone 394: every function
+        for key in ["error_paths", "all_functions"] {
+            if let Some(b) = obj_get(v, key) {
+                if !b.is_boolean() {
+                    return Err(err(format!(
+                        "{wh} ({program}): {key}: must be true or false"
+                    )));
+                }
             }
         }
     }

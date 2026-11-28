@@ -26978,3 +26978,114 @@ schedules draw reactions to the walk, and the walk's `run` changed), and the Vik
 input line moved. The explorer's `corpus-quick.txt` and `identity-full.txt` did not change.
 
 **What is left** is in open items 129, 131, 134 and 137.
+
+## Milestone 394 (tentative number): the live map of the code an exploration reaches
+
+Status: a first version on the Mac engine, opt-in, done on 2026-11-28 on this Mac. The design
+is `docs/design/live-map.md`; open item 201 has what is left.
+
+**What a team asked.** During an exploration a team wants to see which code of its program the
+runs reached so far, what only the faults reached, and what no run tested. Milestone 306 answered
+that for the error-handling places of a program. This milestone watches every function, and shows
+the answer as a page that updates while the exploration runs.
+
+**What was built.**
+
+- `all_functions: true` in a `contracts:` entry (a format-1 addition) makes `hydo build` list
+  every function of the program with code of its own, from its debug information. Each is a place
+  at its first instruction, with the code's size, its module (a Go package, a Rust path) and
+  whether its file is one of the sources. The places are the plan's new list `fn_places`
+  (`hydo_contracts::plan::Program`), with ids of their own. `hydo build` prints one line per
+  program.
+- The Mac engine watches them with the error paths' one-shot `BRK #0x4859`, and writes their hits
+  on a records line of their own, `{"functions":...}`. A recovery function's error path and the
+  function's own place share one address; the engine keeps one breakpoint there, and its hit
+  records both. The first run on each engine searches all of guest RAM for the program's pages.
+  Later runs check the pages at the addresses found, by their hashes, and search again only when
+  one changed.
+- The host places each first run at a workload step range from the control transcript, and marks
+  it as before the schedule's first fault when that range ends at or before the first fault's
+  step, in the first boot (`hydo_explore::funcs`). `result.json` and the first runs' records of
+  `events.jsonl` get `functions` (`RunFunctions`, a results addition). `hydo run` prints one line.
+- `hydo explore --live [--port N] [--live-against DIR]` serves a page on 127.0.0.1 while the
+  exploration runs, and `hydo report --live [DIR] [--against DIR]` serves it for a finished
+  exploration or a run directory (`hydo_explore::live`). The page is one file that loads nothing.
+  It reads `function-map.json`, which the explorer writes from the plan, and the run records of
+  `events.jsonl`, from where it stopped. It has the map of the code by module, file and function,
+  the runs in seed order with their verdicts, the curve of functions reached, and a panel per
+  function with the run that reached it first and its `hydo run` command.
+
+**A program that reads its own file.** The first exploration of 30 seeds with every function
+watched gave, for 15 of the 30 schedules, another fingerprint than the same schedules without the
+watch. The verdicts and the control transcripts were the same, and each run with the watch gave
+its own fingerprint again when it ran twice. Every one of the 15 starts a Blnk process during the
+run: a kill of the worker or the server, or a power cut. A dump of guest RAM at the end of seed 11
+differed in 8 bytes of one page. A watch of that word at every exit named the function before it:
+`google.golang.org/protobuf/internal/detrand.binaryHash`. It hashes eight samples of 64 bytes of
+the program's own file at every start, and the guest's kernel serves the read from the pages
+that hold the breakpoints. Milestone 306's error paths have 210 such pages and its runs did not
+meet it; with every function there are 3,458.
+
+So the engine maps each 16 KiB page that holds a breakpoint execute-only while the guest runs. A
+read or a write of it is a data abort that comes to the engine: the page's instructions go back
+for the rest of the boot, the page is mapped as before, and the guest does the access again. The
+engine counts no exit. A place of that page that had not run yet is listed as dropped. On macOS
+26.4.1, seed 11 then gave `e3c41ea5056296db` with the watch, the fingerprint without it, after 5
+such reads that dropped 431 functions.
+
+On 2026-11-28 this Mac was updated to macOS 27.2.1, and its kernel panicked twice in the Mac
+engine (Milestone 395). The panic names a change of a page's permissions, and whether
+`hv_vm_protect` takes part in it was not separated. So `HVM_BRK_PROTECT` turns the execute-only
+pages on and off, and unset they are off on macOS 27 and later. Every run below used
+`HVM_RAM_SHARE=0`, on macOS 27.2.1, with the pages off.
+
+**The proof on Blnk.** Blnk is the Go ledger of `hydo/onboard/examples/blnk`. Its manifest
+`hydo/hydo-map.yaml` is `hydo-paths.yaml` with `all_functions: true` and `guest.proc_io: false`,
+because no release has the Mac kernels with `/proc/<pid>/io` yet. Its plan lists 39,038 functions,
+1,039 of them in Blnk's sources, on 3,458 pages of the program's file. The plan is 19.6 MB,
+against 570 KB with the error paths alone. Four explorations of the seeds 1-30 with the process
+strategy ran on one worker:
+
+| Exploration | The watch | Wall time | First runs' engine seconds |
+|---|---|---|---|
+| `--no-faults --no-shrink` | every function | 103 s | 49.2 |
+| `--no-faults --no-shrink` | none | 104 s | 49.0 |
+| `--live --live-against` the first, with shrinks | every function | 1,091 s | 174.6 |
+| `--no-shrink` | none | 317 s | 169.3 |
+
+- The 30 runs without a fault gave the 30 fingerprints of the same runs without the watch.
+- Of the 30 runs with faults, 15 gave the fingerprint of the run without the watch. The other 15
+  are the 15 schedules of the first exploration, each with a Blnk process that starts during the
+  run. Their verdicts and control transcripts were the same. With the execute-only pages, which
+  are off on macOS 27, the one such schedule that ran on macOS 26 gave the same fingerprint.
+- A run reached 2,148 to 4,641 functions, with one stop each. The search of guest RAM took 18 to
+  27 ms, and the engine's seconds of the first runs were 3 % more than without the watch. The
+  stream `events.jsonl` was 8.3 MB; it was 44 MB while shrink runs also carried their functions.
+- Of the 1,039 functions of Blnk's sources, 236 ran without a fault, 103 only under faults, and
+  700 never. Of all 39,038 functions, 2,447 ran without a fault, 2,301 only under faults, and
+  34,290 never. Of the 1,326 error-handling places, 85 ran in the runs with faults, 29 in the runs
+  without, and 56 only under faults.
+- The functions that only faults reached include the recovery of queued transactions
+  (`recoverWithThreshold`, `processStuckTransaction`, `GetStuckQueuedTransactions`), which the
+  power cuts reached. They also include `metrics.Init` and `main.runWorkers`. Those run at every
+  start of Blnk, before the snapshot that every run starts from, so only a restart during a run
+  reaches them.
+
+The page served the exploration while it ran. Its screenshots were taken with a headless browser
+at the first run, at the 15th, and at the 30th, and of a selected function's panel and of every
+function. The panel of `recoverWithThreshold` named the first run that reached it, seed 1, with
+its `hydo run` command, and listed its three error-handling places, two of which ran.
+
+**The proof on a Rust program.** The account server of `hydo/onboard/examples/contracts-ledger`
+has 806 functions with code of their own in `hydo-map.yaml`, 3 of them in its sources, on 62
+pages. Three schedules ran twice with the watch and twice without it, and each gave one
+fingerprint: `disk=none | run` (`520a77d0ae4a6e59`, 130 functions), `P=ledger@5+2`
+(`2a10b0218977be24`, 136), and `K=ledger@4+1` (`da3bb127716d7ab4`, 139, 9 of them after the
+kill). Each run took at most 0.1 s of the engine.
+
+**Checks.** `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, the tests of
+hydo-contracts, hydo-results, hydo-explore, hydo-build, hydo-hvm, hydo-config and hydo-manifest,
+`cargo test -p hydo --test it`, `cargo test -p hydo-agents --test it`, and `sh ci/vale.sh`. The
+goldens that the new manifests and the new key moved were recorded again with `HYDO_BLESS=1`: the
+equivalence answers of hydo-manifest and hydo-build, and the explorer's corpus and identity
+goldens. Each diff adds the two new manifests or names the new key. Nothing recorded moved.

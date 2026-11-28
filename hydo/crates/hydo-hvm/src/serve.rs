@@ -1816,6 +1816,7 @@ fn engine_main(
     // and RAM's tree hash from epoch 4 on (Milestone 294)
     vo.ram_tree = d.ram_tree;
     let o_contracts = o.contracts.clone();
+    let o_brk_protect = o.brk_protect;
     vo.ram_size = ram_mib << 20;
     if ram_mib != 1024 {
         say(&diag, &format!("hvmx: guest RAM {ram_mib} MiB"));
@@ -1855,8 +1856,12 @@ fn engine_main(
     if let Some(p) = &o_contracts {
         let plan = hydo_contracts::plan::read_plan(std::path::Path::new(p))
             .unwrap_or_else(|e| fatal(1, &format!("hvmx: contracts: {e}")));
-        let ct = crate::contracts::Ct::from_plan(&plan)
+        let mut ct = crate::contracts::Ct::from_plan(&plan)
             .unwrap_or_else(|e| fatal(1, &format!("hvmx: contracts: {e}")));
+        // Milestone 394: the breakpoints' pages execute-only (HVM_BRK_PROTECT)
+        if let Some(ep) = ct.ep.as_mut() {
+            ep.protect_allowed = o_brk_protect;
+        }
         vm.ct = Some(Box::new(ct));
     }
     drop(kernel);

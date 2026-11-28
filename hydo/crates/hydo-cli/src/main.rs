@@ -105,6 +105,8 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
                                                    generate, run, re-run and shrink schedules
     hydo report  [DIR]                             print the report of the last (or a given) exploration
     hydo report  --paths [DIR] [--against DIR]     which error paths of the programs ran (error_paths: true)
+    hydo report  --live [DIR] [--against DIR] [--port N]
+                                                   serve the map of the code the runs reached (all_functions: true)
     hydo report  --html [DIR] [-o FILE] [--against RUN_DIR] [--diff DIFF]
                                                    write it as one web page to share (a run, an
                                                    exploration or a CI run; it loads nothing)
@@ -186,6 +188,8 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
                                                    generate, run, re-run and shrink schedules
     hydo report  [DIR]                             print the report of the last (or a given) exploration
     hydo report  --paths [DIR] [--against DIR]     which error paths of the programs ran (error_paths: true)
+    hydo report  --live [DIR] [--against DIR] [--port N]
+                                                   serve the map of the code the runs reached (all_functions: true)
     hydo report  --html [DIR] [-o FILE] [--against RUN_DIR] [--diff DIFF]
                                                    write it as one web page to share (a run, an
                                                    exploration or a CI run; it loads nothing)

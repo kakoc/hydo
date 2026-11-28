@@ -199,11 +199,18 @@ impl Ct {
         }
         self.active = false;
         let p = outdir.join(format!("{tag}{}", plan::RECORDS_SUFFIX));
-        // the error paths' line first (Milestone 306): a plan without places writes as before
-        let mut text = match self.ep.as_mut() {
-            Some(ep) => hydo_contracts::paths::hits_line(&ep.finish()),
-            None => String::new(),
-        };
+        // the error paths' line first (Milestone 306): a plan without places writes as before;
+        // then the functions' line (Milestone 394), for a plan with `all_functions: true`
+        let mut text = String::new();
+        if let Some(ep) = self.ep.as_mut() {
+            let (paths, fns) = ep.finish();
+            if let Some(h) = paths {
+                text.push_str(&hydo_contracts::paths::hits_line(&h));
+            }
+            if let Some(h) = fns {
+                text.push_str(&hydo_contracts::paths::functions_line(&h));
+            }
+        }
         text.push_str(&plan::records_text(&self.recs, self.over));
         let _ = std::fs::write(p, text);
         self.recs.clear();
@@ -238,12 +245,27 @@ impl Vmm {
                 self.ct_set(bcr(n), 0);
             }
         }
-        // the error paths' breakpoint instructions (Milestone 306)
+        // the error paths' breakpoint instructions (Milestone 306); their pages execute-only,
+        // unless the rewind mode tracks writes with the pages' permissions (Milestone 394)
+        let protect = !self.sp.rw_on;
         if let Some(ep) = self.ct.as_mut().and_then(|c| c.ep.as_mut()) {
+            ep.protect = protect;
             ep.arm(self.ram.bytes_mut(), RAM_BASE, &|p| {
                 crate::hv::icache_invalidate(p, 4)
             });
         }
+    }
+
+    /// A data abort at `pa` in guest RAM while the guest ran (Milestone 394): a read or a write
+    /// of a page that the breakpoints made execute-only. True when it was one: the page's
+    /// instructions are the guest's again, and the guest goes on.
+    pub fn ct_page_access(&mut self, pa: u64) -> bool {
+        let Some(ep) = self.ct.as_mut().and_then(|c| c.ep.as_mut()) else {
+            return false;
+        };
+        ep.read_fault(pa, self.ram.bytes_mut(), RAM_BASE, &|p| {
+            crate::hv::icache_invalidate(p, 4)
+        })
     }
 
     /// The MDE bit the contracts add to MDSCR_EL1 while armed (0 when the guest set it

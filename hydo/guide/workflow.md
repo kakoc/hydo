@@ -420,6 +420,23 @@ explored one image: two images are refused, because a problem of one is not a pr
 other. `hydo explore --merge` is for the shards of one exploration, which share one command
 line; this list is for rounds with different options.
 
+### Watch the code an exploration reaches
+
+An image built with `all_functions: true` in a `contracts:` entry records which functions of the
+program each run reached. `--live` serves a page with them while the exploration runs:
+
+```sh
+hydo explore --seeds 1-30 --strategy process --live          # http://127.0.0.1:8394/
+hydo report --live hydo-out/explore                          # the same page, afterwards
+```
+
+The page is a map of the program's code by module, by file, and by function. A function is dark until
+a run reaches it, green when a run reached it before its first fault, and orange when only runs
+under faults reached it. The runs are listed in seed order with their verdicts, beside the curve
+of the functions reached so far. Selecting a function names the run that reached it first and
+the `hydo run` command that replays it. The page stops with the exploration; `hydo report
+--live` serves it again. `hydo guide error-paths`, section 6, has the details.
+
 ### Stop an exploration and its engines
 
 Each worker of an exploration runs a guest in an engine program. On hvx that program is

@@ -189,6 +189,7 @@ fn plan_with(values: Vec<Value>, entry: u64) -> Plan {
             paths: vec![],
             path_pages: vec![],
             paths_without_code: 0,
+            fn_places: Vec::new(),
             functions: vec![Function {
                 id: 0,
                 name: "github.com/x/y.createQueueCopy".into(),

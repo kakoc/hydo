@@ -48,6 +48,9 @@ pub struct Source {
     pub sources: Vec<PathBuf>,
     /// Watch the program's error paths too (`error_paths: true`, Milestone 306).
     pub error_paths: bool,
+    /// Watch every function of the program (`all_functions: true`, Milestone 394): the live
+    /// map's first hits.
+    pub all_functions: bool,
 }
 
 /// The ELF file: its machine and sections.
@@ -1382,11 +1385,18 @@ pub fn compile_program(src: &Source, first_id: u32) -> Result<Program, String> {
         }
     }
     // the error paths (Milestone 306): ids from 0 here, made unique in the plan by `compile`
+    let files = source_files(&src.sources);
+    let mut seen = std::collections::HashMap::new();
     if src.error_paths {
-        let found = paths::find(&elf, &d, &fns, arch, &source_files(&src.sources), 0);
+        let found = paths::find(&elf, &d, &fns, arch, &files, 0);
         prog.paths = found.places;
         prog.path_pages = found.pages;
         prog.paths_without_code = found.without_code;
+        seen = found.seen;
+    }
+    // every function (Milestone 394): ids from 0 here, made unique in the plan by `compile`
+    if src.all_functions {
+        prog.fn_places = paths::functions(&elf, &fns, &files, &mut seen, &mut prog.path_pages);
     }
     Ok(prog)
 }
@@ -1549,6 +1559,7 @@ pub fn compile(sources: &[Source]) -> Result<Plan, String> {
     };
     let mut id = 0;
     let mut path_id = 0;
+    let mut fn_id = 0;
     for s in sources {
         let p = compile_program(s, id)?;
         id += p.functions.len() as u32;
@@ -1557,6 +1568,10 @@ pub fn compile(sources: &[Source]) -> Result<Plan, String> {
             pl.id += path_id;
         }
         path_id += p.paths.len() as u32;
+        for pl in &mut p.fn_places {
+            pl.id += fn_id;
+        }
+        fn_id += p.fn_places.len() as u32;
         plan.programs.push(p);
     }
     Ok(plan)

@@ -148,7 +148,7 @@ I	hydo/onboard/examples/avx2/hydo.yaml	c0d18567ef65d9300820b8944ffcee57cd228512e
 I	hydo/onboard/examples/blnk/hydo/hydo-contracts.yaml	afcb0e17941e0c0e95be949e2356518be932c20d9506ea35f687852266edc831
 I	hydo/onboard/examples/blnk/hydo/hydo-paths.yaml	e9b16b593717945fac07e5a163e80bf035bf0dd17360ab8a6058c82254ab963f
 I	hydo/onboard/examples/blnk/hydo/hydo-values.yaml	fd49f164c7c21fd022b238f93425d5fbd8fa432ca2bce15de6e38545a1779772
-I	hydo/onboard/examples/blnk/hydo/hydo.yaml	52f4641f0eaf4769913218acd8dbccf42528f8963f03b9b54382966266bf0478
+I	hydo/onboard/examples/blnk/hydo/hydo.yaml	cd877c8baf418396b181393fd9c83e321118f727507d590602f3544135b25c58
 I	hydo/onboard/examples/blnk/hydo/known-errors.yaml	47c4cd8de5e4b031465407f2b242effddf3b14bd5f3354e37d14759f1e2ca4d0
 I	hydo/onboard/examples/checkout/hydo-s3-cut.yaml	499a137ed8211bc55b5b886fa4e84783d7515c62049d497375d8600e8ee04bd9
 I	hydo/onboard/examples/checkout/hydo-s3.yaml	531334f70c1b933df0167338aa5bfb2c0071b9b76188e7f47e8fdacde9abc906
@@ -4937,7 +4937,7 @@ R	^	<tmp>/mutants/m164.46.json --arch x86_64 []	err	"invariants[0]: unknown fiel
 R	^	<tmp>/mutants/m164.47.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m164.48.json --arch x86_64 []	err	"top level: missing required field 'name'"
 R	^	<tmp>/mutants/m164.49.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: int object is not iterable"
-R	^	<tmp>/mutants/m164.50.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, er…#57b15b67ec405722"
+R	^	<tmp>/mutants/m164.50.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: all_functions, …#25e4058f29c052a6"
 R	^	<tmp>/mutants/m164.51.json --arch x86_64 []	err	"contracts[0]: must be a mapping"
 R	^	<tmp>/mutants/m164.52.json --arch x86_64 []	err	"invariants[0]: unknown field(s) bogus (known: after, cmd, de…#cc796248e472a6a1"
 R	^	<tmp>/mutants/m164.53.json --arch x86_64 []	ok	d:26bb4427 w:4f53cda1 c:c6c98e64 m:74234e98
@@ -4959,7 +4959,7 @@ R	^	<tmp>/mutants/m165.8.json --arch x86_64 []	ok	d:823d201b w:4f53cda1 c:0305ae
 R	^	<tmp>/mutants/m165.9.json --arch x86_64 []	err	"invariants: at least one invariant (or one entry in checks:)…#2cc2f7924780106c"
 R	^	<tmp>/mutants/m165.10.json --arch x86_64 []	err	"invariants[0].id: {{p}} is not a declared parameter"
 R	^	<tmp>/mutants/m165.11.json --arch x86_64 []	ok	d:30e641eb w:4f53cda1 c:8f299f0f m:74234e98
-R	^	<tmp>/mutants/m165.12.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, er…#57b15b67ec405722"
+R	^	<tmp>/mutants/m165.12.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: all_functions, …#25e4058f29c052a6"
 R	^	<tmp>/mutants/m165.13.json --arch x86_64 []	ok	d:d5cce05d w:4f53cda1 c:105b1836 m:74234e98
 R	^	<tmp>/mutants/m165.14.json --arch x86_64 []	err	"invariants[0].msg: a string (or a whole number), not [] (pro…#7ee323d944f19ea7"
 R	^	<tmp>/mutants/m165.15.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
@@ -5029,7 +5029,7 @@ R	^	<tmp>/mutants/m166.18.json --arch x86_64 []	err	"workload: field 'steps' mus
 R	^	<tmp>/mutants/m166.19.json --arch x86_64 []	ok	d:3ad9e8a6 w:4f53cda1 c:5d9678dd m:74234e98
 R	^	<tmp>/mutants/m166.20.json --arch x86_64 []	err	"root.files[0]: missing field `dst` (project format 1; the sc…#b3b7d9292d1b6f48"
 R	^	<tmp>/mutants/m166.21.json --arch x86_64 []	err	"root: invalid type: string \"\", expected a mapping (project f…#46d82d46f8b38da8"
-R	^	<tmp>/mutants/m166.22.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, er…#57b15b67ec405722"
+R	^	<tmp>/mutants/m166.22.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: all_functions, …#25e4058f29c052a6"
 R	^	<tmp>/mutants/m166.23.json --arch x86_64 []	ok	d:aacfbdc0 w:4f53cda1 c:4c641977 m:74234e98
 R	^	<tmp>/mutants/m166.24.json --arch x86_64 []	err	"contracts[0]: must be a mapping"
 R	^	<tmp>/mutants/m166.25.json --arch x86_64 []	ok	d:ee01bad1 w:4f53cda1 c:03127ee5 m:74234e98
@@ -5106,7 +5106,7 @@ R	^	<tmp>/mutants/m167.35.json --arch x86_64 []	ok	d:a7abed18 w:4f53cda1 c:114f6
 R	^	<tmp>/mutants/m167.36.json --arch x86_64 []	err	"top level: unknown field(s) bogus (known: browser, buggify, …#5ec52cf4fdf7ac4b"
 R	^	<tmp>/mutants/m167.37.json --arch x86_64 []	err	"contracts[0]: field 'program' must be a str"
 R	^	<tmp>/mutants/m167.38.json --arch x86_64 []	ok	d:7c97df5d w:4f53cda1 c:274c7587 m:74234e98
-R	^	<tmp>/mutants/m167.39.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: description, er…#57b15b67ec405722"
+R	^	<tmp>/mutants/m167.39.json --arch x86_64 []	err	"contracts[0]: unknown field(s) bogus (known: all_functions, …#25e4058f29c052a6"
 R	^	<tmp>/mutants/m167.40.json --arch x86_64 []	err	"root.files: invalid type: boolean `true`, expected a list (p…#c006059f61776f8d"
 R	^	<tmp>/mutants/m167.41.json --arch x86_64 []	err	"root.files: invalid type: string \"\", expected a list (projec…#bc38596c665aafb6"
 R	^	<tmp>/mutants/m167.42.json --arch x86_64 []	crash	"hydo-build stops here with a Python exception: int object is not iterable"

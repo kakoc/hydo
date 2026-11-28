@@ -1479,6 +1479,7 @@ fn handler_plan(dir: &std::path::Path) -> std::path::PathBuf {
             paths: vec![],
             path_pages: vec![],
             paths_without_code: 0,
+            fn_places: Vec::new(),
             functions: vec![Function {
                 id: 0,
                 name: "tick".into(),

@@ -2,7 +2,7 @@
 
 Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::registry::inventory_markdown` (M144); `cargo test -p hydo-config` fails when this file differs, and `HYDO_BLESS=1` rewrites it. How to add an option: `hydo/crates/hydo-config/src/lib.rs`.
 
-68 user-facing and 97 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 40 test switches are read by test code; 32 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
+69 user-facing and 97 developer-only variables are read from hydo's environment, only by `hydo_config::Env::process` at a program's start; 40 test switches are read by test code; 32 names are the guest interface, 4 are variables of an image's manifest.sh and 10 are set for programs hydo starts. 8 variables were removed (M144, M145). Shell scripts (`hv/`, `hydo/dist/`, build scripts) and the C programs have their own variables, not listed here.
 
 ## Engine (`hydo_config::engine::Engine`)
 
@@ -130,6 +130,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HVMX_CHECK_RESTORE` | developer | flag: set | - | hydo-hvm | Set: read the registers back after every restore and report differences. |
 | `HVMX_NO_MLOCK` | developer | flag: set | - | hydo-hvm | Set: do not mlock guest RAM. |
 | `HVM_RAM_SHARE` | user | flag: exactly `0` turns it off | on; off on macOS 27 and later | hydo-hvm | `0`: each snapshot keeps its own copy of guest RAM, which a restore copies back (before Milestone 335). Otherwise a snapshot is a RAM base in `HVM_SNAP_DIR` that guest RAM is mapped from privately (the kernel copies a page at its first write), shared by the engines whose snapshot has the same bytes, such as the workers of one exploration; guest RAM is not locked. Unset, it is off on macOS 27 and later, whose kernel panics on that private mapping (Milestone 395); `1` turns it on there. |
+| `HVM_BRK_PROTECT` | user | flag: exactly `0` turns it off | on; off on macOS 27 and later | hydo-hvm | `0`: the pages that hold the breakpoints of error paths and functions stay readable while the guest runs. Otherwise each such page is execute-only, and a read or a write of it puts its instructions back first (Milestone 394), so that a program that reads its own file reads its own bytes. Unset, it is off on macOS 27 and later: whether `hv_vm_protect` there takes part in the kernel's panic of Milestone 395 is not known; `1` turns it on there. |
 
 ## The KVM engine (`hydo_config::kvm::Engine`, `hydo_config::kvm::Options`)
 

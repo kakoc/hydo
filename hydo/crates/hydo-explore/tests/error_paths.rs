@@ -2,7 +2,7 @@
 //! result's `paths`, it never changes the verdict, and an exploration's first runs give each
 //! place the runs that reached it, the first schedule, and whether only runs with faults did.
 
-use hydo_contracts::paths::{hits_line, Hits, PathPlace, PathSite};
+use hydo_contracts::paths::{functions_line, hits_line, Hits, PathPlace, PathSite};
 use hydo_contracts::plan::*;
 use hydo_results::RunPaths;
 use serde_json::{json, Map};
@@ -15,6 +15,7 @@ fn place(id: u32, kind: &str, file: &str, line: u32, function: &str) -> PathPlac
         line,
         function: function.into(),
         sites: vec![PathSite::default()],
+        ..PathPlace::default()
     }
 }
 
@@ -179,4 +180,90 @@ fn no_faults_keeps_each_seeds_workload_and_drops_its_faults() {
         assert!(!hydo_explore::paths::has_faults(&text), "{text}");
         assert_eq!(s.disk, "none");
     }
+}
+
+/// Milestone 394: a plan that watches every function, a run whose records have the functions'
+/// line, and its control transcript with two step ranges.
+#[test]
+fn a_runs_functions_have_their_step_range_and_their_place_before_the_faults() {
+    let mut pl = plan();
+    pl.programs[0].fn_places = (0..3)
+        .map(|i| PathPlace {
+            id: i,
+            kind: "function".into(),
+            function: format!("github.com/x/ledger.f{i}"),
+            size: 64,
+            module: "github.com/x/ledger".into(),
+            own: true,
+            sites: vec![PathSite::default()],
+            ..PathPlace::default()
+        })
+        .collect();
+    let d = std::env::temp_dir().join(format!("hydo-functions-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    let h = Hits {
+        hits: vec![(0, 50, 0), (1, 250, 0), (2, 20, 1)],
+        ..Hits::default()
+    };
+    let rec = d.join("seed-1.contracts.jsonl");
+    std::fs::write(
+        &rec,
+        format!(
+            "{}{}",
+            functions_line(&h),
+            hydo_contracts::plan::records_text(&[], 0)
+        ),
+    )
+    .unwrap();
+    // stops at the clocks 100 and 300, each followed by the note of its step range
+    std::fs::write(
+        d.join("seed-1.control.jsonl"),
+        concat!(
+            r#"{"cadence":"rb=64","control":1,"controller":"schedule","conversation":"run","schedule":"disk=none | run K=db@3+1","start":"resume S1"}"#,
+            "\n",
+            r#"{"at":100,"n":1,"seen":0,"t":"stop","why":"resume"}"#,
+            "\n",
+            r#"{"by":"main","line":"hydo-ob: workload steps 0..2 rc=0","n":1,"t":"note"}"#,
+            "\n",
+            r#"{"at":300,"n":2,"seen":0,"t":"stop","why":"cadence"}"#,
+            "\n",
+            r#"{"by":"main","line":"hydo-ob: workload steps 3..5 rc=0","n":2,"t":"note"}"#,
+            "\n",
+        ),
+    )
+    .unwrap();
+    let mut res = Map::new();
+    res.insert("verdict".into(), json!("HYDO-ORACLE: OK"));
+    hydo_explore::contracts::fold(&pl, &rec, &mut res).unwrap();
+    let r = hydo_explore::results::run_of("seed-1", "disk=none | run K=db@3+1", &res, &[]);
+    let f = r.functions.expect("the run's functions");
+    let _ = std::fs::remove_dir_all(&d);
+    assert!(f.watched);
+    assert_eq!(f.functions, 3);
+    assert_eq!(f.first_fault_step, Some(3));
+    assert_eq!(f.ranges, vec![(0, 3), (3, 6)]);
+    let got: Vec<(u32, Option<u32>, bool)> = f
+        .reached
+        .iter()
+        .map(|x| (x.function, x.range, x.before_faults))
+        .collect();
+    // f0 ran in steps 0..2, before the kill at step 3; f1 in the steps of the kill; f2 in a
+    // recovery boot
+    assert_eq!(
+        got,
+        vec![(0, Some(0), true), (1, Some(1), false), (2, None, false)]
+    );
+    assert!(hydo_explore::funcs::run_line(&f)
+        .starts_with("hydo: functions: 3 of 3 functions ran, 1 of them before the first fault"));
+    // the map groups them by module and file
+    let m = hydo_explore::funcs::map(&pl);
+    assert_eq!(m["programs"][0]["functions"], 3);
+    assert_eq!(
+        m["programs"][0]["modules"][0]["module"],
+        "github.com/x/ledger"
+    );
+    // a run without a fault: every function ran before the faults
+    let r = hydo_explore::results::run_of("seed-1", "disk=none | run", &res, &[]);
+    assert!(r.functions.unwrap().reached.iter().all(|x| x.before_faults));
 }

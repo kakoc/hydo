@@ -1594,6 +1594,13 @@ pub struct ContractProgram {
     /// Mac engine watches them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_paths: Option<bool>,
+    /// Watch every function of the program (Milestone 394, docs/design/live-map.md): each
+    /// function with code of its own, found in the debug information, gets a one-shot
+    /// breakpoint at its first instruction. Each run records which functions ran and when, and
+    /// `hydo explore --live` and `hydo report --live` show them as a map of the program's code.
+    /// The Mac engine watches them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub all_functions: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
 }

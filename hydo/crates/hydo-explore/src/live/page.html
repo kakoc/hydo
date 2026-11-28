@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hydo live map</title>
+<style>
+:root{--bg:#fbfbfa;--fg:#1d1d1f;--muted:#5f5f66;--card:#fff;--line:#e5e5e2;--code:#f3f3f1;
+--never:#3b404c;--clean:#2fa37a;--faults:#e8821e;--ep:#e5484d;--sel:#2457c5;--ok:#1e7a3c;--bad:#b3261e;--err:#8f5200;
+--tile-line:#fbfbfa;color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#141416;--fg:#ececee;--muted:#a0a0a8;
+--card:#1d1d20;--line:#2e2e33;--code:#26262a;--never:#2c3039;--clean:#3fc48f;--faults:#f59a3b;--ep:#ff6b6b;
+--sel:#8ab0ff;--ok:#5fd38a;--bad:#ff8a7a;--err:#ffb648;--tile-line:#141416}}
+:root[data-theme="dark"]{--bg:#141416;--fg:#ececee;--muted:#a0a0a8;--card:#1d1d20;--line:#2e2e33;--code:#26262a;
+--never:#2c3039;--clean:#3fc48f;--faults:#f59a3b;--ep:#ff6b6b;--sel:#8ab0ff;--ok:#5fd38a;--bad:#ff8a7a;--err:#ffb648;
+--tile-line:#141416}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+header{padding:14px 16px 8px;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:baseline}
+h1{font-size:20px;margin:0}
+.muted{color:var(--muted)}
+.mono,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+#status{font-size:13px}
+.stats{display:flex;flex-wrap:wrap;gap:10px;padding:0 16px 8px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:150px}
+.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.sw{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px;margin-right:5px}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:0 16px 8px}
+.controls label{cursor:pointer}
+input[type=search]{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:5px 9px;min-width:200px}
+button{background:var(--code);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:4px 10px;cursor:pointer;font:inherit}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px;padding:0 16px 16px}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-width:0}
+#mapwrap{position:relative;height:62vh;min-height:360px}
+#map{width:100%;height:100%;display:block;border-radius:8px;cursor:crosshair}
+#tip{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 8px;
+font-size:12.5px;max-width:420px;display:none;box-shadow:0 4px 14px rgba(0,0,0,.18);z-index:2}
+#panel h2{font-size:15px;margin:0 0 6px;overflow-wrap:anywhere}
+#panel .mono{overflow-wrap:anywhere}
+#panel .cmd{background:var(--code);border-radius:8px;padding:7px 9px;margin:6px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+#panel ul{margin:4px 0;padding-left:18px}
+#panel li{margin:2px 0}
+.tl{display:flex;flex-wrap:wrap;gap:3px;margin:6px 0 2px}
+.run{width:22px;height:22px;border-radius:5px;font-size:10px;line-height:22px;text-align:center;color:#fff;cursor:pointer;
+font-variant-numeric:tabular-nums;border:2px solid transparent}
+.run.ok{background:var(--ok)}.run.violation{background:var(--bad)}.run.error,.run.timeout{background:var(--err)}
+.run.other{background:var(--muted)}.run.sel{border-color:var(--fg)}
+#curve{width:100%;height:170px;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;margin:4px 0}
+h3{font-size:13.5px;margin:10px 0 4px}
+.dead{color:var(--bad)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Which code the runs reach</h1>
+  <span id="status" class="muted">Waiting for the exploration…</span>
+</header>
+<div class="stats" id="stats"></div>
+<div class="controls">
+  <span>Show:</span>
+  <label><input type="radio" name="scope" value="own" checked> the project's own code</label>
+  <label><input type="radio" name="scope" value="all"> every function, with the dependencies and the runtime</label>
+  <input type="search" id="find" placeholder="Find a function">
+  <button id="clearsel" hidden>Show every run again</button>
+</div>
+<div class="layout">
+  <div class="card">
+    <div class="legend">
+      <span><span class="sw" style="background:var(--never)"></span>never reached</span>
+      <span><span class="sw" style="background:var(--clean)"></span>reached without a fault</span>
+      <span><span class="sw" style="background:var(--faults)"></span>reached only under faults</span>
+      <span><span class="sw" style="background:var(--ep);border-radius:6px"></span>has error-handling code (ring: some of it ran)</span>
+    </div>
+    <div id="mapwrap"><canvas id="map"></canvas><div id="tip"></div></div>
+    <div class="muted" style="font-size:12.5px;margin-top:4px">Boxes are modules, then files; each tile is a
+      function, sized by its code. A tile flashes when a run reaches it for the first time. Click a tile to see
+      the runs that reached it.</div>
+  </div>
+  <div class="card" id="panel"><p class="muted">Click a function on the map.</p></div>
+  <div class="card">
+    <h3>The runs, in seed order</h3>
+    <div class="muted" style="font-size:12.5px">Green passed, red found a violation, amber ended in an error.
+      Click a run to show only what it reached.</div>
+    <div class="tl" id="timeline"></div>
+    <div id="runinfo" class="muted" style="font-size:12.5px"></div>
+  </div>
+  <div class="card">
+    <h3>Functions reached so far</h3>
+    <svg id="curve" role="img" aria-label="functions reached over the runs"></svg>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--fg)"></span>reached in any run</span>
+      <span><span class="sw" style="background:var(--clean)"></span>reached without a fault</span>
+    </div>
+  </div>
+</div>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let MAP = null;            // function-map.json
+const FN = new Map();      // id -> function
+const RUNS = [];           // the first runs in the stream's order
+let INFO = {};             // the server's last answer, without the runs
+let scope = "own", selRun = null, selFn = null, query = "";
+let LEAVES = [], BOXES = [];  // the laid-out tiles and boxes
+const flash = new Map();   // id -> time of its first reach
+const stat = new Map();    // id -> {runs:[[runIndex, step, before]], clean:bool}
+const epRan = new Set();   // error-path places that ran
+const BASE = new Set();    // functions the baseline exploration (--against) reached
+let baseRuns = 0, baseDir = null;
+
+function loadMap(m) {
+  MAP = m;
+  for (const p of m.programs) for (const mod of p.modules) for (const f of mod.files) for (const fn of f.functions) {
+    fn.module = mod.module; fn.file = f.file; fn.own = !!fn.own; fn.program = p.program;
+    FN.set(fn.id, fn);
+  }
+  const anyOwn = [...FN.values()].some((f) => f.own);
+  // the page's address can name the view: #scope=all&fn=<name>
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (!anyOwn || h.get("scope") === "all") { scope = "all"; document.querySelector('input[value=all]').checked = true; }
+  const want = h.get("fn");
+  if (want) {
+    const f = [...FN.values()].find((x) => x.name === want) || [...FN.values()].find((x) => x.short === want);
+    if (f) selFn = f.id;
+  }
+  layout();
+}
+
+function addRuns(rs) {
+  for (const r of rs) {
+    const k = RUNS.length;
+    RUNS.push(r);
+    for (const [id, step, before] of r.functions) {
+      let s = stat.get(id);
+      if (!s) { s = {runs: [], clean: false}; stat.set(id, s); flash.set(id, performance.now()); }
+      s.runs.push([k, step, before]);
+      if (before) s.clean = true;
+    }
+    for (const p of r.paths) epRan.add(p);
+  }
+}
+
+function status(id) {  // 0 never, 1 only under faults, 2 without a fault
+  const s = stat.get(id);
+  if (selRun === null && BASE.has(id)) return 2;
+  if (!s) return 0;
+  if (selRun !== null) {
+    const x = s.runs.find((q) => q[0] === selRun);
+    if (!x) return 0;
+    return x[2] ? 2 : 1;
+  }
+  return s.clean ? 2 : 1;
+}
+
+function visible() {
+  return [...FN.values()].filter((f) => scope === "all" || f.own);
+}
+
+// ---- the treemap: modules, then files, then functions, squarified by code size
+function squarify(items, x, y, w, h, out) {
+  // items: [{v, ...}] sorted by v descending; out gets {item, x, y, w, h}
+  let rest = items.slice(), total = rest.reduce((a, b) => a + b.v, 0);
+  while (rest.length) {
+    if (w <= 0 || h <= 0) { for (const it of rest) out.push({item: it, x, y, w: 0, h: 0}); return; }
+    const short = Math.min(w, h), scale = (w * h) / total;
+    let row = [], sum = 0, worst = Infinity;
+    for (const it of rest) {
+      const s2 = sum + it.v, rmax = Math.max(it.v, ...row.map((r) => r.v)), rmin = Math.min(it.v, ...row.map((r) => r.v));
+      const side = s2 * scale / short;
+      const wst = Math.max((rmax * scale) / (side * side), (side * side) / (rmin * scale));
+      if (row.length && wst > worst) break;
+      row.push(it); sum = s2; worst = wst;
+    }
+    const side = sum * scale / short;
+    let off = 0;
+    for (const it of row) {
+      const len = it.v * scale / side;
+      if (w >= h) out.push({item: it, x, y: y + off, w: side, h: len});
+      else out.push({item: it, x: x + off, y, w: len, h: side});
+      off += len;
+    }
+    if (w >= h) { x += side; w -= side; } else { y += side; h -= side; }
+    rest = rest.slice(row.length); total -= sum;
+  }
+}
+
+function layout() {
+  if (!MAP) return;
+  const c = $("map"), r = c.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  c.width = Math.max(1, r.width * dpr); c.height = Math.max(1, r.height * dpr);
+  const W = r.width, H = r.height;
+  const fns = visible();
+  const mods = new Map();
+  for (const f of fns) {
+    const key = f.program + "\u0000" + f.module;
+    if (!mods.has(key)) mods.set(key, {name: f.module, files: new Map(), v: 0});
+    const m = mods.get(key);
+    if (!m.files.has(f.file)) m.files.set(f.file, {name: f.file, fns: [], v: 0});
+    const v = Math.max(16, f.size);
+    m.files.get(f.file).fns.push({f, v}); m.files.get(f.file).v += v; m.v += v;
+  }
+  const top = [...mods.values()].sort((a, b) => b.v - a.v);
+  const placed = [];
+  squarify(top, 0, 0, W, H, placed);
+  LEAVES = []; BOXES = [];
+  for (const pm of placed) {
+    const m = pm.item;
+    BOXES.push({x: pm.x, y: pm.y, w: pm.w, h: pm.h, label: m.name, kind: "module"});
+    const head = pm.h > 34 && pm.w > 60 ? 15 : 0, pad = pm.w > 8 && pm.h > 8 ? 1.5 : 0;
+    const files = [...m.files.values()].sort((a, b) => b.v - a.v), pf = [];
+    squarify(files, pm.x + pad, pm.y + head + pad, pm.w - 2 * pad, pm.h - head - 2 * pad, pf);
+    for (const q of pf) {
+      if (q.w > 70 && q.h > 50) BOXES.push({x: q.x, y: q.y, w: q.w, h: q.h, label: q.item.name.split("/").pop(), kind: "file"});
+      const leaves = q.item.fns.sort((a, b) => b.v - a.v), pl = [];
+      squarify(leaves, q.x + 0.5, q.y + 0.5, q.w - 1, q.h - 1, pl);
+      for (const l of pl) LEAVES.push({f: l.item.f, x: l.x, y: l.y, w: l.w, h: l.h});
+    }
+  }
+  draw();
+}
+
+function draw() {
+  const c = $("map"), g = c.getContext("2d"), dpr = window.devicePixelRatio || 1;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, c.width, c.height);
+  const col = [css("--never"), css("--faults"), css("--clean")], line = css("--tile-line"), ep = css("--ep");
+  const now = performance.now(), q = query.toLowerCase();
+  let animating = false;
+  for (const l of LEAVES) {
+    if (l.w < 0.3 || l.h < 0.3) continue;
+    const st = status(l.f.id);
+    g.fillStyle = col[st];
+    let dim = (q && !l.f.name.toLowerCase().includes(q));
+    g.globalAlpha = dim ? 0.18 : 1;
+    g.fillRect(l.x, l.y, l.w, l.h);
+    const t = flash.get(l.f.id);
+    if (t !== undefined && now - t < 2500 && selRun === null) {
+      g.fillStyle = "#ffffff"; g.globalAlpha = (1 - (now - t) / 2500) * 0.85; g.fillRect(l.x, l.y, l.w, l.h); animating = true;
+    }
+    g.globalAlpha = dim ? 0.18 : 1;
+    if (l.w > 3 && l.h > 3) { g.strokeStyle = line; g.lineWidth = 0.6; g.strokeRect(l.x, l.y, l.w, l.h); }
+    if (l.f.error_paths && l.w > 5 && l.h > 5) {
+      const ran = l.f.error_paths.some((e) => epRan.has(e[0]));
+      const r = Math.min(3.2, l.w / 4, l.h / 4);
+      g.beginPath(); g.arc(l.x + r + 1.5, l.y + r + 1.5, r, 0, 7);
+      if (ran) { g.strokeStyle = ep; g.lineWidth = 1.6; g.stroke(); } else { g.fillStyle = ep; g.fill(); }
+    }
+    if (selFn === l.f.id) { g.globalAlpha = 1; g.strokeStyle = css("--sel"); g.lineWidth = 3; g.strokeRect(l.x + 1, l.y + 1, l.w - 2, l.h - 2); }
+  }
+  g.globalAlpha = 1;
+  g.font = "11px -apple-system,Segoe UI,sans-serif"; g.textBaseline = "top";
+  for (const b of BOXES) {
+    g.strokeStyle = css("--fg"); g.globalAlpha = b.kind === "module" ? 0.55 : 0.25; g.lineWidth = b.kind === "module" ? 1.2 : 0.8;
+    g.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+    if (b.kind === "module" && b.h > 34 && b.w > 60) {
+      g.globalAlpha = 1; g.fillStyle = css("--card"); g.fillRect(b.x + 1, b.y + 1, b.w - 2, 13);
+      g.fillStyle = css("--fg"); clipText(g, b.label, b.x + 4, b.y + 2, b.w - 8);
+    } else if (b.kind === "file") {
+      g.globalAlpha = 0.9; g.fillStyle = "#ffffff"; clipText(g, b.label, b.x + 3, b.y + b.h - 13, b.w - 6);
+    }
+  }
+  g.globalAlpha = 1;
+  if (animating) requestAnimationFrame(draw);
+}
+
+function clipText(g, s, x, y, w) {
+  if (w < 12) return;
+  let t = s;
+  if (g.measureText(t).width > w) {
+    t = "…" + s.slice(-Math.max(1, Math.floor(w / 6.2)));
+    while (t.length > 2 && g.measureText(t).width > w) t = "…" + t.slice(2);
+  }
+  g.fillText(t, x, y);
+}
+
+function leafAt(ev) {
+  const r = $("map").getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+  for (const l of LEAVES) if (x >= l.x && x < l.x + l.w && y >= l.y && y < l.y + l.h) return l;
+  return null;
+}
+
+const WORDS = ["never reached", "reached only under faults", "reached without a fault"];
+$("map").addEventListener("mousemove", (ev) => {
+  const l = leafAt(ev), tip = $("tip");
+  if (!l) { tip.style.display = "none"; return; }
+  const s = stat.get(l.f.id);
+  tip.innerHTML = `<b>${esc(l.f.short)}</b><br><span class="mono">${esc(l.f.file)}:${l.f.line}</span><br>` +
+    `${WORDS[status(l.f.id)]}${s ? `, in ${s.runs.length} run${s.runs.length === 1 ? "" : "s"}` : ""} · ${l.f.size} bytes` +
+    (l.f.error_paths ? `<br>${l.f.error_paths.length} error-handling place${l.f.error_paths.length === 1 ? "" : "s"}` : "");
+  const r = $("mapwrap").getBoundingClientRect();
+  tip.style.display = "block";
+  tip.style.left = Math.min(ev.clientX - r.left + 14, r.width - 300) + "px";
+  tip.style.top = (ev.clientY - r.top + 14) + "px";
+});
+$("map").addEventListener("mouseleave", () => { $("tip").style.display = "none"; });
+$("map").addEventListener("click", (ev) => {
+  const l = leafAt(ev);
+  if (l) { selFn = l.f.id; panel(); draw(); history.replaceState(null, "", `#${scope === "all" ? "scope=all&" : ""}fn=${encodeURIComponent(l.f.name)}`); }
+});
+
+function command(r) {
+  const img = INFO.image || "<image>";
+  const be = INFO.backend === "kvm" ? "--backend kvm " : "";
+  return `hydo run ${be}--image ${img} "${r.schedule}"`;
+}
+
+function stepWords(step) { return step < 0 ? "after the workload or in a recovery boot" : `in the steps from ${step}`; }
+
+function bySeed() {
+  return RUNS.map((r, k) => [r, k]).sort((a, b) => (a[0].seed ?? 0) - (b[0].seed ?? 0));
+}
+
+function panel() {
+  const f = FN.get(selFn);
+  if (!f) return;
+  const s = stat.get(f.id);
+  let h = `<h2>${esc(f.short)}</h2><div class="mono muted">${esc(f.name)}</div>` +
+    `<div class="mono">${esc(f.file)}:${f.line}</div><div class="muted">${esc(f.module)} · ${f.size} bytes of code · ${esc(f.program)}</div>` +
+    `<p><b>${WORDS[status(f.id)]}</b></p>`;
+  if (f.error_paths) {
+    h += `<h3>Error-handling code in it</h3><ul>` + f.error_paths.map((e) =>
+      `<li>line ${e[1]}, ${esc(e[2])}: ${epRan.has(e[0]) ? "<b>ran</b>" : "never ran"}</li>`).join("") + `</ul>`;
+  }
+  if (s) {
+    const list = s.runs.map((q) => [RUNS[q[0]], q[1], q[2]]).sort((a, b) => (a[0].seed ?? 0) - (b[0].seed ?? 0));
+    const first = list[0], firstClean = list.find((q) => q[2]);
+    h += `<h3>First reached</h3><p>in ${esc(first[0].tag || "the run")}, ${stepWords(first[1])}` +
+      `${first[2] ? ", before any fault" : ", after the schedule's first fault"}:</p><div class="cmd mono">${esc(command(first[0]))}</div>`;
+    if (firstClean && firstClean !== first) {
+      h += `<p>First reached without a fault in ${esc(firstClean[0].tag)}:</p><div class="cmd mono">${esc(command(firstClean[0]))}</div>`;
+    }
+    h += `<h3>Every run that reached it (${list.length})</h3><ul>` + list.slice(0, 60).map((q) =>
+      `<li><span class="mono">${esc(q[0].tag)}</span> ${esc(q[0].verdict)}, ${q[2] ? "before any fault" : "under faults"}: <span class="mono">${esc(q[0].schedule)}</span></li>`).join("") +
+      (list.length > 60 ? `<li>and ${list.length - 60} more</li>` : "") + `</ul>`;
+  } else {
+    h += `<p class="muted">No run of this exploration reached it yet.</p>`;
+  }
+  if (BASE.has(f.id)) h += `<p>A run of the baseline exploration without faults reached it too.</p>`;
+  $("panel").innerHTML = h;
+}
+
+function stats() {
+  const fns = visible();
+  let n = [0, 0, 0], size = [0, 0, 0];
+  for (const f of fns) { const s = status(f.id); n[s]++; size[s] += f.size; }
+  const eps = fns.filter((f) => f.error_paths);
+  const epIds = new Set();
+  for (const f of eps) for (const e of f.error_paths) epIds.add(e[0]);
+  const epTotal = epIds.size;
+  const epDone = [...epIds].filter((p) => epRan.has(p)).length;
+  const pct = (k) => fns.length ? Math.round(100 * k / fns.length) : 0;
+  const box = (label, v, sw, extra) => `<div class="stat">${sw ? `<span class="sw" style="background:var(${sw})"></span>` : ""}${label}<b>${v}</b>${extra ? `<span class="muted">${extra}</span>` : ""}</div>`;
+  $("stats").innerHTML =
+    box(scope === "own" ? "Functions of the project" : "Functions in the program", fns.length, null, `${Math.round(fns.reduce((a, f) => a + f.size, 0) / 1024)} KiB of code`) +
+    box("Reached without a fault", n[2], "--clean", `${pct(n[2])} %`) +
+    box("Reached only under faults", n[1], "--faults", `${pct(n[1])} %`) +
+    box("Never reached", n[0], "--never", `${pct(n[0])} %`) +
+    (epTotal ? box("Error-handling places that ran", `${epDone} of ${epTotal}`, "--ep", `in ${eps.length} functions`) : "");
+}
+
+function timeline() {
+  const sorted = bySeed();
+  $("timeline").innerHTML = sorted.map(([r, k]) => {
+    const v = ["ok", "violation", "error", "timeout"].includes(r.verdict) ? r.verdict : "other";
+    return `<div class="run ${v}${selRun === k ? " sel" : ""}" data-k="${k}" title="${esc(r.tag)}: ${esc(r.verdict)}\n${esc(r.schedule)}">${r.seed ?? ""}</div>`;
+  }).join("");
+  for (const el of $("timeline").children) el.addEventListener("click", () => {
+    const k = +el.dataset.k; selRun = selRun === k ? null : k; refresh();
+  });
+  if (selRun !== null) {
+    const r = RUNS[selRun];
+    $("runinfo").innerHTML = `Showing only <b>${esc(r.tag)}</b> (${esc(r.verdict)}${r.text ? ": " + esc(r.text) : ""}): ${r.functions.length} functions; ` +
+      `faults: ${esc(r.faults)}${r.first_fault_step != null ? `, the first before step ${r.first_fault_step}` : ""}.<div class="cmd mono" style="background:var(--code);border-radius:8px;padding:6px 8px;margin-top:4px">${esc(command(r))}</div>`;
+  } else $("runinfo").textContent = RUNS.length ? `${RUNS.length} run${RUNS.length === 1 ? "" : "s"}. Hover a run for its schedule.` : "";
+  $("clearsel").hidden = selRun === null;
+}
+
+function curve() {
+  const svg = $("curve"), W = svg.clientWidth || 300, H = 170, pad = 34;
+  const own = new Set(visible().map((f) => f.id));
+  const any = new Set(), clean = new Set(), pa = [], pc = [];
+  for (const [r] of bySeed()) {
+    for (const [id, , b] of r.functions) if (own.has(id)) { any.add(id); if (b) clean.add(id); }
+    pa.push(any.size); pc.push(clean.size);
+  }
+  const n = pa.length, top = Math.max(1, ...pa);
+  const X = (i) => pad + (n <= 1 ? 0 : (i * (W - pad - 8)) / (n - 1)), Y = (v) => H - 20 - (v * (H - 32)) / top;
+  const path = (ps) => ps.map((v, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join("");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = `<line x1="${pad}" y1="${H - 20}" x2="${W - 8}" y2="${H - 20}" stroke="currentColor" opacity=".3"/>` +
+    `<text x="${pad - 4}" y="${Y(top) + 4}" font-size="11" text-anchor="end" fill="currentColor">${top}</text>` +
+    `<text x="${pad - 4}" y="${H - 16}" font-size="11" text-anchor="end" fill="currentColor">0</text>` +
+    `<text x="${W - 8}" y="${H - 4}" font-size="11" text-anchor="end" fill="currentColor">${n} run${n === 1 ? "" : "s"}, in seed order</text>` +
+    (n ? `<path d="${path(pa)}" fill="none" stroke="currentColor" stroke-width="2"/>` +
+      `<path d="${path(pc)}" fill="none" stroke="${css("--clean")}" stroke-width="2"/>` : "");
+  svg.style.color = css("--fg");
+}
+
+function refresh() { stats(); timeline(); curve(); draw(); if (selFn !== null) panel(); }
+
+let from = 0, failures = 0;
+async function poll() {
+  try {
+    if (!MAP) {
+      const m = await (await fetch("map.json", {cache: "no-store"})).json();
+      if (m) loadMap(m);
+    }
+    const j = await (await fetch(`runs?from=${from}`, {cache: "no-store"})).json();
+    failures = 0;
+    INFO = j;
+    if (j.baseline && !baseDir) {
+      baseDir = j.baseline.dir; baseRuns = j.baseline.runs;
+      for (const id of j.baseline.functions) BASE.add(id);
+    }
+    addRuns(j.runs);
+    from = j.total;
+    const watched = RUNS.filter((r) => r.watched).length;
+    const one = j.done && RUNS.length === 1 && RUNS[0].seed == null;
+    $("status").innerHTML = (one ? "One run" : (j.done ? "The exploration finished: " : "The exploration runs: ") +
+      `${RUNS.length} run${RUNS.length === 1 ? "" : "s"}${j.done ? "" : " so far"}`) + `${RUNS.length && !watched ? ", none of them with its functions recorded (only the Mac engine watches them)" : ""}` +
+      (MAP ? "" : ". No map yet: the image's plan watches every function only with <code>all_functions: true</code> in a <code>contracts:</code> entry") +
+      (baseDir ? `. Without a fault also counts what the ${baseRuns} runs of <span class="mono">${esc(baseDir)}</span> reached` : "") +
+      ` · <span class="mono">${esc(j.dir)}</span>`;
+    if (j.runs.length || !MAP) refresh();
+    if (!j.done) setTimeout(poll, 1500);
+  } catch (e) {
+    failures++;
+    $("status").innerHTML = `<span class="dead">The page lost its server (${esc(e.message || e)}): the exploration ended or stopped. ` +
+      `<code>hydo report --live ${esc(INFO.dir || "<explore dir>")}</code> serves it again.</span>`;
+    if (failures < 3) setTimeout(poll, 3000);
+  }
+}
+
+for (const el of document.querySelectorAll("input[name=scope]")) el.addEventListener("change", () => { scope = el.value; layout(); refresh(); });
+$("find").addEventListener("input", () => { query = $("find").value.trim(); draw(); });
+$("clearsel").addEventListener("click", () => { selRun = null; refresh(); });
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { layout(); curve(); }, 150); });
+poll();
+</script>
+</body>
+</html>

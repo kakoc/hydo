@@ -122,6 +122,9 @@ pub struct Options {
     /// mapped from privately and that engines with the same bytes share. Unset, it is off on
     /// macOS 27 and later, whose kernel panics on the private mapping (Milestone 395).
     pub no_ram_share: bool,
+    /// `HVM_BRK_PROTECT`: the pages that hold breakpoints are execute-only while the guest runs
+    /// (Milestone 394). `0` off, any other value on; unset, off on macOS 27 and later.
+    pub brk_protect: bool,
     /// `HYDO_PREEMPT_RECORD`, set and not `0`: a record per forced preemption point.
     pub preempt_record: bool,
     /// `HYDO_CONTRACTS`: the function contracts' plan (Milestone 241).
@@ -175,6 +178,11 @@ impl Options {
                 Some("0") => true,
                 Some(_) => false,
                 None => macos_27_or_later(),
+            },
+            brk_protect: match t(HVM_BRK_PROTECT).as_deref() {
+                Some("0") => false,
+                Some(_) => true,
+                None => !macos_27_or_later(),
             },
             preempt_record: e.set_not_0(HYDO_PREEMPT_RECORD),
             contracts: t(HYDO_CONTRACTS).filter(|p| !p.is_empty()),

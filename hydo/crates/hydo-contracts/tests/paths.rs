@@ -223,6 +223,7 @@ fn a_rust_programs_try_unwrap_and_panic_places() {
         binary: b,
         sources: vec![dir],
         error_paths: true,
+        all_functions: false,
     }])
     .unwrap();
     let got: Vec<(u32, &str)> = plan.programs[0]
@@ -265,6 +266,7 @@ fn a_go_programs_places_have_their_addresses_and_pages() {
         binary: b.clone(),
         sources: vec![dir],
         error_paths: true,
+        all_functions: false,
     }])
     .unwrap();
     let p = &plan.programs[0];
@@ -307,4 +309,81 @@ fn a_go_programs_places_have_their_addresses_and_pages() {
     let text = hydo_contracts::plan::plan_text(&plan);
     let back: hydo_contracts::plan::Plan = serde_json::from_str(&text).unwrap();
     assert_eq!(back, plan);
+}
+
+#[test]
+fn every_function_of_a_go_program_is_a_place_at_its_first_instruction() {
+    let Some(b) = go_program() else { return };
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/go-paths");
+    let plan = compile(&[Source {
+        program: "/bin/paths".into(),
+        binary: b.clone(),
+        sources: vec![dir],
+        error_paths: true,
+        all_functions: true,
+    }])
+    .unwrap();
+    let p = &plan.programs[0];
+    let data = std::fs::read(&b).unwrap();
+    // the error paths stay as they were, and the functions are a list of their own: the
+    // program's own four, the runtime's and the packages' (each with code of its own)
+    assert_eq!(p.paths.len(), 4);
+    let own: Vec<&str> = p
+        .fn_places
+        .iter()
+        .filter(|f| f.own)
+        .map(|f| short_function(&f.function))
+        .collect();
+    assert_eq!(
+        own,
+        vec!["main.load", "main.retryLoad", "main.parse", "main.main"]
+    );
+    assert!(p.fn_places.len() > 500, "{}", p.fn_places.len());
+    let mut addrs = std::collections::HashSet::new();
+    for (i, f) in p.fn_places.iter().enumerate() {
+        assert_eq!(f.id, i as u32);
+        assert_eq!(f.kind, kind::FUNCTION);
+        assert!(f.size > 0);
+        assert_eq!(f.sites.len(), 1);
+        assert!(addrs.insert(f.sites[0].addr), "two places at one address");
+        // each function's first instruction is in its page of the file
+        let s = &f.sites[0];
+        let pg = &p.path_pages[s.page as usize];
+        let o = pg.index as usize * PAGE + s.off as usize;
+        assert_eq!(
+            u32::from_le_bytes(data[o..o + 4].try_into().unwrap()),
+            s.word
+        );
+    }
+    let m = |n: &str| p.fn_places.iter().find(|f| f.function == n).unwrap();
+    assert_eq!(m("main.load").module, "main");
+    assert_eq!(m("main.load").file, "main.go");
+    assert_eq!(m("runtime.main").module, "runtime");
+    assert!(!m("runtime.main").own);
+    // the recovery function's error path and its own place share one address
+    let rl = p.paths.iter().find(|x| x.kind == kind::RECOVERY).unwrap();
+    assert_eq!(rl.sites[0].addr, m("main.retryLoad").sites[0].addr);
+}
+
+#[test]
+fn a_functions_module_is_its_package_or_its_rust_path() {
+    assert_eq!(
+        module_of("github.com/blnkfinance/blnk/internal/metrics.Init", true),
+        "github.com/blnkfinance/blnk/internal/metrics"
+    );
+    assert_eq!(
+        module_of("github.com/blnkfinance/blnk.(*Blnk).validateTxn", true),
+        "github.com/blnkfinance/blnk"
+    );
+    assert_eq!(module_of("runtime.main", true), "runtime");
+    assert_eq!(module_of("slices.Sort[go.shape.string]", true), "slices");
+    assert_eq!(
+        module_of("redb::tree_store::btree::Btree::get", false),
+        "redb::tree_store::btree::Btree"
+    );
+    assert_eq!(
+        module_of("<alloc::vec::Vec<T> as core::ops::Drop>::drop", false),
+        "<alloc::vec::Vec<T> as core::ops::Drop>"
+    );
+    assert_eq!(module_of("main", false), "main");
 }

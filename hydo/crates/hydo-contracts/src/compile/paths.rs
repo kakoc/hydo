@@ -17,6 +17,8 @@ pub(super) struct Found {
     pub places: Vec<PathPlace>,
     pub pages: Vec<PathPage>,
     pub without_code: u32,
+    /// The file pages already in `pages`: file page index -> index in `pages`.
+    pub seen: HashMap<u64, u32>,
 }
 
 /// The core functions whose call is a Rust error path, with the kind: the failures of
@@ -381,8 +383,56 @@ pub(super) fn find(
             line,
             function: function_of(fi, line),
             sites,
+            ..PathPlace::default()
         });
         id += 1;
+    }
+    out.seen = pages;
+    out
+}
+
+/// Every function of the program with code of its own, each a place at its first instruction
+/// (kind `function`, Milestone 394, docs/design/live-map.md), ids from 0. `seen` and `pages` are
+/// the pages the error paths found; the functions' pages are added to them. A function the
+/// compiler copied into every caller has no first instruction of its own and is no place; two
+/// names at one address are one place, under the first name.
+pub(super) fn functions(
+    elf: &Elf,
+    fns: &[FnInfo],
+    files: &[(PathBuf, String)],
+    seen: &mut HashMap<u64, u32>,
+    pages: &mut Vec<PathPage>,
+) -> Vec<PathPlace> {
+    let mut all: Vec<String> = fns.iter().map(|f| f.file.clone()).collect();
+    all.sort();
+    all.dedup();
+    let names = Names::of(&all, files);
+    let mut list: Vec<&FnInfo> = fns
+        .iter()
+        .filter(|f| f.concrete && f.low_pc != 0 && f.high_pc > f.low_pc)
+        .collect();
+    list.sort_by(|a, b| a.low_pc.cmp(&b.low_pc).then(a.name.cmp(&b.name)));
+    list.dedup_by_key(|f| f.low_pc);
+    let mut out = Vec::with_capacity(list.len());
+    for f in list {
+        let Some(site) = site_of(elf, f.low_pc, seen, pages) else {
+            continue;
+        };
+        let own = names.file_of(&f.file, files);
+        out.push(PathPlace {
+            id: out.len() as u32,
+            kind: kind::FUNCTION.to_string(),
+            file: match own {
+                Some(i) => files[i].1.clone(),
+                None => f.file.clone(),
+            },
+            line: f.line,
+            function: f.name.clone(),
+            sites: vec![site],
+            size: f.high_pc - f.low_pc,
+            module: paths::module_of(&f.name, f.lang == Lang::Go),
+            own: own.is_some(),
+        });
     }
     out
 }

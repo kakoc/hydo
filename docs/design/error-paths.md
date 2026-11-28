@@ -156,9 +156,11 @@ out for a snapshot at a stop, gave the same fingerprints.
   the disk. The root is on a disk there, so the pages are not in RAM at the run's start. The
   engine would search at each system call, as the contracts' search for a program's header does.
 - hvx: the side module of the contracts' hvx design, with `#BP` exits.
-- A program that reads its own file (a checksum of `/proc/self/exe`) reads the breakpoints while
-  the guest runs. No example does. Such a program needs `// hydo: no error path` on its whole
-  sources, or the KVM design of the first item.
+- A program that reads its own file reads the pages that hold the breakpoints. Blnk does: the
+  protobuf package hashes eight samples of its own binary at every start. Since Milestone 394
+  the engine maps those pages execute-only, and a read puts the page's instructions back before
+  the guest does it again (docs/design/live-map.md, decision 3). Before that, a run whose Blnk
+  started again with a breakpoint in a sampled window gave another fingerprint.
 - A declaration that a place must run in at least one run of an exploration, as a property that
   fails the exploration.
 - Rust's `?` on an `Option`, and `map_err` closures, are not places.

@@ -1840,6 +1840,14 @@ the run. `result.json` and `exploration.json` get `paths`, and `hydo report --pa
 places that only runs with faults reached and the places never reached (`hydo guide
 error-paths`).
 
+`all_functions: true` in a `contracts:` entry records which functions of the program ran in each
+run, and when (Milestone 394, docs/design/live-map.md). It watches every function with code of
+its own in the program's debug information, those of the dependencies and the language's runtime
+too, with a one-shot breakpoint at its first instruction. The Mac engine records them without a
+change of the run. `result.json` gets `functions`: each function's first run, its workload step
+range, and whether it ran before the schedule's first fault. `hydo explore --live` and `hydo
+report --live` show them as a map of the program's code (`hydo guide error-paths`, section 6).
+
 ### Service networks (`network: bridge`)
 
 ```yaml
