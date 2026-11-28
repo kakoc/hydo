@@ -239,6 +239,20 @@ before Gitea answers, or `core.fsync`. #19551 mentions `core.fsyncObjectFiles` i
 configuration. The cause is plain in the code and in Git's documentation of `core.fsync`, so no
 reproduction without hydo was made.
 
+## The regressions
+
+`hydo repro --regressions .hydo/explore-ob-gitea-disk.img` on the final image (sha256
+`e580a1bb…`, the same bytes after the build that wrote the regressions beside it) gave both
+expected violations:
+
+| regression | verdict | fingerprint of the replay |
+|---|---|---|
+| `power-cut-after-a-new-repository-breaks-its-branch` | `VIOLATION [gitea.repository_readable]` | `b01d2ba42e565d0f` |
+| `timer-after-a-step-back-records-a-negative-time` | `VIOLATION [gitea.tracked_time_not_negative]` | `78b67edfff5a3337` |
+
+A replay of a saved regression gives other fingerprints than `hydo run` of the same schedule
+(`5a3e89f72094688c` and `62ea118806db865f`), with the same verdicts.
+
 ## The first failures: mistakes of the rules
 
 Each exploration's first failures were the rules' own:
