@@ -5946,6 +5946,12 @@ build machine, before 2026-10-13.
   ClickHouse reverts an acknowledged `ADD COLUMN` and `EXCHANGE TABLES` (#111348). A new Meilisearch
   database never starts again (#4584, which nobody had reproduced). New and minor: a Kvrocks
   backup that `BGSAVE` reported done is the older one after a power cut. Nothing recorded moved
+- M391 (tentative number): which web-app bugs 15 self-hosted web apps report on GitHub
+  (`docs/design/web-bug-benchmark.md`). Of 343 bugs drawn at random, 86 % need one user and no
+  fault. Stale pages and answers in another order are 12, outside services 9, upgrades 8, time
+  zones 7, two users 6, and backend crashes 0. The page proposes a reload check, then two
+  browsers, a browser time zone, upgrades of image services, reordered answers, and partitions.
+  Nothing recorded moved
 
 ## Where to look
 

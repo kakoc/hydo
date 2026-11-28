@@ -154,8 +154,12 @@ Ideas that would answer more:
 Ideas that would answer more:
 
 - [A walk that follows the page](#a-walk-that-follows-the-page);
-- [Faults inside a step](#faults-inside-a-step); and
-- [Stateful emulators](#stateful-emulators).
+- [Faults inside a step](#faults-inside-a-step);
+- [Stateful emulators](#stateful-emulators);
+- [A reload check for web pages](#a-reload-check-for-web-pages);
+- [Two browsers in one run](#two-browsers-in-one-run);
+- [A browser's own time zone](#a-browsers-own-time-zone); and
+- [Reordered answers and partitions between the browser and the server](#reordered-answers-and-partitions-between-the-browser-and-the-server).
 
 ### A library author in Rust
 
@@ -506,6 +510,51 @@ that a milestone builds moves into the tables of this page with its new status.
 - **What it needs.** A choice of action keyed by the control's role and name, not by its place.
 - **Where it came from.** Open items 129 and 131.
 
+### A reload check for web pages
+
+- **What it is.** After each action of a walk, the walker reloads the page and compares the
+  objects it shows before and after the reload, and with the server's answers.
+- **Why it matters.** In the bug benchmark of web apps, half of the random bugs of answers in
+  another order are pages that keep an old state until a reload. They are 6 of 343 random bugs
+  and 15 targeted ones. The check needs no fault, and the two ideas below need its comparison.
+- **What it needs.** A reload step and a comparison of the objects on a page, in the walker of
+  `browser.explore`, as `browser.read_back` reads the pages.
+- **Where it came from.** Milestone 391 (`docs/design/web-bug-benchmark.md`).
+
+### Two browsers in one run
+
+- **What it is.** Two Playwright contexts for two accounts, or for two tabs of one account. The
+  schedule interleaves their walks. Three checks judge them. One account never sees the other's
+  private ids, a change of one reaches the other within a time, and no saved edit vanishes.
+- **Why it matters.** Bugs of two users and live updates reached 8 of 343 random bugs and 37
+  targeted ones. They are lost updates, races of two writers, authorization leaks, and changes
+  that do not reach another session.
+- **What it needs.** A second browser context with its own sign-in, the ids that
+  `browser.read_back` already collects, and a replay of one account's requests with the other's
+  session.
+- **Where it came from.** Milestone 391 (`docs/design/web-bug-benchmark.md`).
+
+### A browser's own time zone
+
+- **What it is.** A time zone and locale per browser, apart from the guest's own zone, and one
+  walk run in two zones whose stored instants are compared.
+- **Why it matters.** Time-zone and daylight-saving bugs were 7 of 343 random bugs and 27
+  targeted ones. Most of them are in scheduling and signing apps.
+- **What it needs.** Playwright's `timezoneId` and `locale` per context, the clock steps to a
+  time of Milestone 225, and a comparison as in `hydo compare-versions`.
+- **Where it came from.** Milestone 391 (`docs/design/web-bug-benchmark.md`).
+
+### Reordered answers and partitions between the browser and the server
+
+- **What it is.** A proxy between the browser and the app's own backend. It holds one answer
+  until a later one, sends a request twice, refuses one write, or cuts the link and restores it.
+- **Why it matters.** Reporters call answers in another order hard to reproduce more often than
+  other bugs: 9 of 43, against 25 of 409. Reordered answers reach 5 random bugs and 10 targeted
+  ones, and a partition reaches 9 targeted ones.
+- **What it needs.** `H=` faults per request on the app's own routes, walk actions that
+  double-click and type fast, and a cut of the browser's link alone.
+- **Where it came from.** Milestone 391 (`docs/design/web-bug-benchmark.md`).
+
 ### Leaving a fault kind or a known bug out of an exploration
 
 - **What it is.** An option that leaves one fault kind out, and a way to keep a known finding
@@ -523,7 +572,8 @@ that a milestone builds moves into the tables of this page with its new status.
 - **Why it matters.** Many teams run their services from images, and an upgrade often follows
   another.
 - **What it needs.** Versions as images in the manifest, and an explorer that draws several `U=`.
-- **Where it came from.** Open item 109.
+- **Where it came from.** Open item 109. Milestone 391 counted 8 upgrades that fail or damage data
+  among 343 random bugs of web apps, and 21 in targeted searches.
 
 ### Kubernetes beyond one pod
 

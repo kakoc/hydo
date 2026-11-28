@@ -26452,3 +26452,45 @@ other new manifests are in folders of their own, which the corpora do not read. 
 controller's quick corpus test passed unchanged (2 tests, 47 minutes). No Rust code changed.
 
 **What is left** is in open item 193.
+
+## Milestone 391 (tentative number): which web-app bugs real projects report
+
+hydo's web-app side runs a team's Playwright tests (`browser:`) and walks through the pages itself
+(`browser.explore`), with page invariants and `browser.read_back`. The lead builds the next web-app
+features where real bugs are. The page `docs/design/web-bug-benchmark.md` counts the bug reports
+of 15 self-hosted web apps on GitHub, created 2024-01-01 to 2026-11-28. Its CSV
+`docs/design/web-bug-benchmark.csv` has one row per issue. No VM ran and nothing was built.
+
+**The samples.** The 15 projects are Gitea, Plane, Outline, Twenty, Cal.com (the repository
+`calcom/cal.diy`), Immich, Memos, Vikunja, AppFlowy, AFFiNE, Excalidraw, Penpot, Nextcloud
+server, Documenso, and Mattermost. Four of them are real-time collaborative or local-first. Each issue
+was read and classified by its text:
+
+- a random sample of 28 bug issues per project (seeds 391 and 3912), 420 in all, of which 343 are
+  correctness bugs;
+- 16 targeted searches over the candidate classes, 408 issues, of which 278 are correctness bugs.
+
+**The counts.** In the random sample, 296 of the 343 bugs (86.3 %) need one user and no fault.
+They are 136 bugs of the user interface, 91 of logic, 41 error pages or exceptions, 22 of
+formats, and 6 of security. The candidate classes hold 47 (13.7 %):
+
+- answers in another order or a stale page 12, an outside service 9, an upgrade that fails 8;
+- the time zone 7, two users 6, offline and sync 4, live updates 1, and backend crashes 0.
+
+No class passes 4 %. Reporters call answers in another order hard to reproduce more often than
+other bugs: 9 of 43 over both samples, against 25 of 409. The targeted searches found 37 bugs of
+two users and 31 of answers in another order. They found 27 of time zones, 21 of upgrades, and 23
+of offline and sync. 17 of those 23 are desktop or mobile clients that no browser runs.
+
+**The proposal.** Build first a reload check, which needs no new fault (random 6, targeted 15).
+It compares a page before and after a reload, and with the server. Then two browsers with two accounts
+and checks for leaks, live updates, and lost edits (random 8, targeted 37). Then a time zone and
+locale per browser, with a walk in two zones compared (random 7, targeted 27). Then `U=` for
+image services with a walk before and after (random 8, targeted 21). Then reordered answers
+(random 5, targeted 10), and last a browser partition (random 0, targeted 9). No code, guide
+topic, playbook, or skill changed; the lead decides.
+
+**Checks.** Vale on the page and `sh ci/vale.sh` found nothing. `cargo test -p hydo-agents --test
+it` passed (16 tests). Its content test first stopped on one issue title with a version number
+that reads as an IPv4 address, and the CSV now spells that number out. A `grep` of each value of
+the list of `AGENTS.local.md` found none in the new text.
