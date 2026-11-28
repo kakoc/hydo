@@ -17,6 +17,10 @@ guest:
   ram_mib: 4096             # the browser
   proc_io: false            # the KVM kernels of epoch 6 (the header)
   clock_start: 1795824000   # 2026-11-28 00:00 UTC, the day of the import
+  # the recovery boot after a power cut continues the first boot's clock, 60 s later, as a
+  # server's clock does; without it the clock starts at clock_start again, and a timer that ran
+  # at the cut would stop with a negative time (MANIFEST.md "Clock after a power cut")
+  clock_after_cut: 60
 
 data:
   size_mib: 384   # hvx maps at most 4 GiB of root and data disk; the root is 3,584 MiB. The data disk: Gitea's SQLite database, its Git repositories and its queues live here (the fault target)

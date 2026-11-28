@@ -54,7 +54,8 @@ What changed from the import:
 - The workload and the placeholder invariant of `hydo compose` gave way to `browser.explore`.
 - The walk's setup registers the account `hydo`, the first account and so the administrator. It
   creates the repository `hydo/demo` with a README ("Initialize Repository"), the default label
-  set, the milestone `v1`, and one issue. The walk then starts on `/hydo/demo/issues`, and
+  set, the milestone `v1`, and one issue, and it starts that issue's timer. The walk then starts
+  on `/hydo/demo/issues`, and
   `within: /hydo/demo/issues` keeps it on the repository's issues. It has 6 workload steps of 12
   actions.
 - `GITEA__server__ROOT_URL` names the server's address on the guest's bridge, which the guest's
@@ -75,8 +76,9 @@ What changed from the import:
 `gitea.mjs` runs in the browser's service, whose Node.js reads SQLite (`node:sqlite`), on a copy
 of the database and its rollback journal. Gitea's setting `SQLITE_JOURNAL_MODE` is empty by
 default (`modules/setting/database.go`, line 75), and its drivers then name no journal mode
-(`models/db/driver_sqlite_mattn.go` and `driver_sqlite_modernc.go`), so the database uses SQLite's default rollback journal
-with `synchronous=FULL`: a commit is on the disk when Gitea answers.
+(`models/db/driver_sqlite_mattn.go` and `driver_sqlite_modernc.go`). So the database uses
+SQLite's default rollback journal with `synchronous=FULL`, and a commit is on the disk when Gitea
+answers.
 
 The walk writes one word to `$HYDO_ACKED` for each write that Gitea answered 2xx, such as
 `POST:/hydo/demo/issues/new` or `POST:/hydo/demo/issues/2/comments`. Gitea's pages send their
@@ -86,7 +88,8 @@ word names the kind of write and, for a comment, its issue, but not the new obje
 - `gitea.saved_work_survives`: a repository has at least as many issues as the walk created there
   (the walk deletes no issue), and an issue has at least as many comments, closes and reopens as
   the acknowledged posts of its comment form. A post of that form makes a comment, a close or a
-  reopen, and the word does not say which.
+  reopen, and the word does not say which. When it fails, it prints the issue's state and every
+  event of its timeline on a line before its verdict.
 - `gitea.counters_match`: the numbers that Gitea keeps beside its rows agree with the rows. These
   are a repository's open and closed issues, an issue's comments, a label's and a milestone's open
   and closed issues, and the repository's last issue number. Gitea shows these numbers on its
@@ -97,6 +100,11 @@ word names the kind of write and, for a comment, its issue, but not the new obje
   (`GET /api/v1/repos/hydo/demo/issues?q=`) for up to 60 s.
 - `gitea.repository_readable`: the repository `hydo/demo` has its branch `main`, and `git fsck
   --connectivity-only` reaches every object from it. The rule runs `git` in the server's image.
+- `gitea.tracked_time_not_negative`: every time that Gitea tracked for an issue is zero or more.
+  The rule first stops every timer that still runs through the API (`POST
+  .../issues/<n>/stopwatch/stop`), as the user would, and then reads every tracked time back
+  (`GET /api/v1/repos/hydo/demo/times`). Gitea computes a stopped timer's time as the wall clock
+  minus the timer's start (`models/issues/stopwatch.go`, line 140).
 
 <!-- RUNS -->
 
