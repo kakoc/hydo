@@ -26,6 +26,7 @@ fn plan_of(bin: &str, src: &str) -> Option<Plan> {
             binary: b,
             sources: vec![example().join(src)],
             error_paths: false,
+            all_functions: false,
         }])
         .unwrap(),
     )

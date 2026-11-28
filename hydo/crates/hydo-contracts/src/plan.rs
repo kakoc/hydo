@@ -64,9 +64,16 @@ pub struct Program {
     /// `error_paths: true` in the manifest's `contracts:` entry.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub paths: Vec<crate::paths::PathPlace>,
-    /// The pages of the program's file that hold the places' instructions.
+    /// The pages of the program's file that hold the places' instructions (the error paths'
+    /// and the functions').
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub path_pages: Vec<crate::paths::PathPage>,
+    /// Every function of the program with code of its own, each a place at its first
+    /// instruction (kind `function`; Milestone 394, docs/design/live-map.md): `all_functions:
+    /// true` in the manifest's `contracts:` entry. Their ids are their own, apart from the
+    /// error paths' ids; the engine writes their hits on a line of their own.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fn_places: Vec<crate::paths::PathPlace>,
     /// Places of the sources whose line has no code in the program (the compiler removed it, or
     /// the program does not link the function).
     #[serde(default, skip_serializing_if = "is_zero32")]

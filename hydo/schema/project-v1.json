@@ -4406,6 +4406,13 @@
             "null"
           ]
         },
+        "all_functions": {
+          "description": "Watch every function of the program (Milestone 394, docs/design/live-map.md): each\nfunction with code of its own, found in the debug information, gets a one-shot\nbreakpoint at its first instruction. Each run records which functions ran and when, and\n`hydo explore --live` and `hydo report --live` show them as a map of the program's code.\nThe Mac engine watches them.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "description": {
           "anyOf": [
             {
