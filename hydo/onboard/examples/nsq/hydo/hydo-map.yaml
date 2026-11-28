@@ -1,0 +1,115 @@
+# The NSQ example (hydo.yaml) with every function of nsqd watched, for the live map (Milestone
+# 394) and its showcase page (Milestone 397): nsqd v1.3.0 built from NSQ's source with its debug
+# information (../build-map.sh), bound over the image's /usr/local/bin/nsqd. hydo records which
+# of its functions ran in each run, and when, and which function called each one first
+# (docs/design/live-map.md). The image, the services' commands, the workload and the rules are
+# hydo.yaml's. The Mac engine watches the functions, so this manifest is for arm64 only.
+#
+#   sh ../build.sh && sh ../build-map.sh   # bin/nsqc-<arch>, bin/nsqd-map-arm64, work/ (the sources)
+#   sh fetch-images.sh
+#   hydo build hydo-map.yaml --arch arm64
+#   hydo explore --manifest hydo-map.yaml --seeds 1-20 --strategy process --live --showcase
+#   hydo report --live hydo-out/explore --showcase --routes ../work/nsq
+format: 1
+name: nsq-map
+description: "NSQ v1.3.0 with --mem-queue-size=0, one nsqd and one nsqlookupd: every publish that nsqd answered OK reaches a consumer that acknowledges it with FIN, also after kills, pauses, network faults and clock steps, and a publish works again after the faults"
+hydo_version: "0.6"
+
+params:
+  arch: arm64       # amd64 | arm64: the client's architecture, the same as the image's
+  memq: "0"         # nsqd --mem-queue-size: 0 writes every message to disk; NSQ's default is 10000
+  sync_every: "2500"   # nsqd --sync-every: messages per fsync of a disk queue; 2500 is NSQ's default
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 1024
+  proc_io: false   # the Mac kernels of the epoch 6, as the Blnk map's image: nsqd reads no /proc/<pid>/io
+  clock_start: 1795564800   # 2026-11-25 00:00 UTC, the day of the import
+
+data:
+  size_mib: 512   # the data disk: nsqd's own file system of 256 MiB, and the client's folder
+  dirs: [client]
+
+root:
+  files:
+    - {src: "../bin/nsqc-{{arch}}", dst: /bin/nsqc, mode: "0755"}
+    - {src: "../bin/nsqd-map-arm64", dst: /bin/nsqd-map, mode: "0755"}   # nsqd with its debug information (../build-map.sh)
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 nsqlookupd
+      10.89.0.12 nsqd
+  share_images: true   # nsqlookupd and nsqd share one tree of the nsqio/nsq image
+
+services:
+  # Compose service nsqlookupd
+  # image nsqio/nsq:v1.3.0 = docker.io/nsqio/nsq@sha256:1a369c146af71bc95c25d54b375a2b98452478c1eaf4e85f8fcb01da20f2c78a
+  #   linux/amd64: sha256:1ceea517773270f5dd75f92777d4f7a49d8728b3884e28c749524ad6b031ca18
+  #   linux/arm64: sha256:7d09dcaf9f942d3c7440d75d8c84a6a4fc1289278c7bf2b6af7f8780c20e3ae6
+  - name: nsqlookupd
+    image: {x86_64: images/nsqio-nsq-v1.3.0-amd64.docker.tar, arm64: images/nsqio-nsq-v1.3.0-arm64-oci}
+    image_ref: "nsqio/nsq:v1.3.0"
+    cmd: [/nsqlookupd]
+    port: 4160
+    addr: 10.89.0.11
+    ready: "/bin/nsqc ready http://10.89.0.11:4161/ping"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+  # Compose service nsqd
+  - name: nsqd
+    image: {x86_64: images/nsqio-nsq-v1.3.0-amd64.docker.tar, arm64: images/nsqio-nsq-v1.3.0-arm64-oci}
+    image_ref: "nsqio/nsq:v1.3.0"
+    cmd: [/nsqd, "--lookupd-tcp-address=nsqlookupd:4160", "--broadcast-address=nsqd", "--data-path=/data/vol/nsqd-data", "--mem-queue-size={{memq}}", "--sync-every={{sync_every}}"]
+    storage: {dir: vol/nsqd-data, size_mib: 256}   # the topics' and channels' disk queues and nsqd.dat
+    port: 4150
+    addr: 10.89.0.12
+    depends_on: [nsqlookupd]
+    start_after: started   # Compose's service_started: no wait for readiness
+    ready: "/bin/nsqc ready http://10.89.0.12:4151/ping"
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {src: /bin/nsqd-map, dst: /usr/local/bin/nsqd}   # the image's /nsqd links there
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+
+# 20 rounds, each with up to 2 publishes or consumes: about 25 publishes and a few consumers that
+# hold their message 2.5 s before FIN.
+workload:
+  steps: 20
+  timeout: 300    # also the drain's limit
+
+test:
+  parallel: 4
+  per_round: 2
+
+checks:
+  # hydo's ready-made claims for a queue (hydo guide messages). The client records each publish as
+  # a send, each message a consumer takes as a receive, and each FIN as an acknowledgement. The
+  # drain takes every message left, with a quiet window of 70 s, longer than nsqd's message timeout
+  # of 60 s. Then it writes one status record per sent id: s=ok and f=1 when a consumer sent FIN
+  # for the message, s=info and f=0 when none did. NSQ reports no state per message, so "a consumer
+  # sent FIN" is the final state that acked_outcome judges.
+  - id: jobs
+    type: messages
+    history: jobs
+    msg: every publish that nsqd answered OK reaches a consumer that acknowledges it
+    final: /bin/nsqc drain
+    acknowledgement: explicit
+    claims:
+      delivery: at-least-once
+      lease: {ms: 60000}           # nsqd --msg-timeout: an unacknowledged message comes back
+      acked_outcome:
+        effect: recorded
+
+# Every function of nsqd, and which ran in each run (Milestone 394). The sources are NSQ's and its
+# disk queue's, so both count as NSQ's own code on the map.
+contracts:
+  - program: /bin/nsqd-map
+    sources: ["../work/nsq", "../work/go-diskqueue"]
+    all_functions: true
+
+faults: [kill, pause, network, oneway, cut, clock, disk, powerloss]

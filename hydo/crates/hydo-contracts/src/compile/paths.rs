@@ -55,44 +55,89 @@ struct Inl {
 /// How the paths of the debug information name the sources: the folder each source file's
 /// relative path follows (`github.com/blnkfinance/blnk/` for Go with `-trimpath`, a remapped
 /// folder for Rust). A dependency's file with the same relative path (`src/lib.rs`,
-/// `options.go`) has another folder, so it is not taken for a source file.
+/// `options.go`) has another folder, so it is not taken for a source file. Each folder of the
+/// manifest's `sources:` gets its own (a Go module and a module it requires, whose files
+/// `-trimpath` names `github.com/nsqio/go-diskqueue@v1.1.0/`), so a small second folder is not
+/// outvoted by the first.
 struct Names {
-    prefixes: Vec<String>,
+    /// The source folder (the part of a file's path before its relative path) and the folder
+    /// of the debug information's paths that names its files.
+    prefixes: Vec<(usize, String)>,
+    /// Each source file's folder, by its index in `files`.
+    roots: Vec<usize>,
+}
+
+/// The source folder of a file of `source_files`: its path without its relative path.
+fn root_of(file: &(PathBuf, String)) -> String {
+    let p = file.0.to_string_lossy().replace('\\', "/");
+    p.strip_suffix(file.1.as_str()).unwrap_or(&p).to_string()
 }
 
 impl Names {
-    /// The folders that most paths of the debug information share with the sources: the one
-    /// that names the most source files, and every other that names at least half as many.
+    /// The folders that most paths of the debug information share with the sources: for each
+    /// source folder, the one that names the most of its files, and every other that names at
+    /// least half as many.
     fn of(all: &[String], files: &[(PathBuf, String)]) -> Names {
-        let mut votes: HashMap<String, std::collections::HashSet<usize>> = HashMap::new();
+        // the folders as numbers, in the order of `files`
+        let mut folders: Vec<String> = Vec::new();
+        let roots: Vec<usize> = files
+            .iter()
+            .map(|f| {
+                let r = root_of(f);
+                match folders.iter().position(|x| *x == r) {
+                    Some(i) => i,
+                    None => {
+                        folders.push(r);
+                        folders.len() - 1
+                    }
+                }
+            })
+            .collect();
+        let mut votes: HashMap<(usize, String), std::collections::HashSet<usize>> = HashMap::new();
         for p in all {
             let p = p.replace('\\', "/");
             for (i, (_, rel)) in files.iter().enumerate() {
                 if p == *rel {
-                    votes.entry(String::new()).or_default().insert(i);
+                    votes
+                        .entry((roots[i], String::new()))
+                        .or_default()
+                        .insert(i);
                 } else if let Some(pre) = p.strip_suffix(rel.as_str()) {
                     if pre.ends_with('/') {
-                        votes.entry(pre.to_string()).or_default().insert(i);
+                        votes
+                            .entry((roots[i], pre.to_string()))
+                            .or_default()
+                            .insert(i);
                     }
                 }
             }
         }
-        let best = votes.values().map(|v| v.len()).max().unwrap_or(0);
-        let mut prefixes: Vec<String> = votes
-            .into_iter()
-            .filter(|(_, v)| best > 0 && 2 * v.len() >= best)
-            .map(|(k, _)| k)
+        let mut best: HashMap<usize, usize> = HashMap::new();
+        for ((root, _), v) in &votes {
+            let b = best.entry(*root).or_default();
+            *b = (*b).max(v.len());
+        }
+        let mut prefixes: Vec<(usize, String)> = votes
+            .iter()
+            .filter(|((root, _), v)| {
+                let b = best.get(root).copied().unwrap_or(0);
+                b > 0 && 2 * v.len() >= b
+            })
+            .map(|(k, _)| k.clone())
             .collect();
         prefixes.sort();
-        Names { prefixes }
+        Names { prefixes, roots }
     }
 
     /// The source file (an index in `files`) that a path of the debug information names.
     fn file_of(&self, p: &str, files: &[(PathBuf, String)]) -> Option<usize> {
         let p = p.replace('\\', "/");
-        self.prefixes.iter().find_map(|pre| {
+        self.prefixes.iter().find_map(|(root, pre)| {
             let rel = p.strip_prefix(pre.as_str())?;
-            files.iter().position(|(_, r)| r == rel)
+            files
+                .iter()
+                .enumerate()
+                .position(|(i, f)| f.1 == rel && self.roots[i] == *root)
         })
     }
 }
@@ -547,4 +592,42 @@ fn calls(elf: &Elf, arch: &str) -> Vec<(u64, u64)> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_source_folder_gets_its_own_folder_of_the_debug_information() {
+        // NSQ with -trimpath: its own files under github.com/nsqio/nsq/, and the one file of the
+        // disk queue it requires under the module's path with its version
+        let files: Vec<(PathBuf, String)> = ["nsqd/topic.go", "nsqd/channel.go", "nsqd/guid.go"]
+            .iter()
+            .map(|r| (PathBuf::from(format!("/w/nsq/{r}")), r.to_string()))
+            .chain([(
+                PathBuf::from("/w/go-diskqueue/diskqueue.go"),
+                "diskqueue.go".to_string(),
+            )])
+            .collect();
+        let all: Vec<String> = [
+            "github.com/nsqio/nsq/nsqd/topic.go",
+            "github.com/nsqio/nsq/nsqd/channel.go",
+            "github.com/nsqio/nsq/nsqd/guid.go",
+            "github.com/nsqio/go-diskqueue@v1.1.0/diskqueue.go",
+            "github.com/other/lib@v1.0.0/nsqd/topic.go",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+        let n = Names::of(&all, &files);
+        assert_eq!(n.file_of(&all[0], &files), Some(0));
+        assert_eq!(n.file_of(&all[3], &files), Some(3));
+        // a dependency's file with a source file's relative path is not that file
+        assert_eq!(n.file_of(&all[4], &files), None);
+        // one folder alone: the folder that names most files, as before
+        let one = Names::of(&all, &files[..3]);
+        assert_eq!(one.file_of(&all[3], &files[..3]), None);
+        assert_eq!(one.file_of(&all[1], &files[..3]), Some(1));
+    }
 }
