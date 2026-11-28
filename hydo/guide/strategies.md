@@ -1068,7 +1068,7 @@ is the exploration that drew most of them.
   - Memos: a share link's copy button throws over plain HTTP (memos#6575), one
     failure in seeds 21 to 60.
   - Gitea (finding 1): the setup starts an issue's timer, and a rule stops it through the API at
-    the end. A step back of the clock while it ran recorded a negative time in 3 of 60 KVM
+    the end. A step back of the clock while it ran recorded a negative time in 2 of 60 KVM
     schedules and 1 of 20 hvx schedules of the final manifest. `within:` kept the walk on the
     repository's issues.
 - **What it misses.** Memos's first 20 walks spent 216 actions in the editor without saving.

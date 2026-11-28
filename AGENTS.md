@@ -2162,8 +2162,9 @@ over the database and the API judge the saved issues and comments, Gitea's count
 the Git repository, and the tracked times. Two new candidates, not posted:
 
 - A timer that runs while the wall clock goes back records a negative time when it stops
-  (`models/issues/stopwatch.go`, line 140), which the form "Add Time" refuses. Blind on KVM in 3
-  of 60 schedules and on hvx in 1 of 20 (`disk=none | run T=2:-3600 I=1,x0.0-11,...`).
+  (`models/issues/stopwatch.go`, line 140), which the form "Add Time" refuses. Blind on KVM in 2
+  of 60 schedules of the final manifest and on hvx in 1 of 20 (`disk=none | run T=2:-3600
+  I=1,x0.0-11,...`).
 - A power cut within about half a minute after a repository is created with a README leaves its
   branch broken, while the database says it is not empty (`disk=none | run C=1 I=1`). Gitea runs
   Git with its default `core.fsync`, which syncs neither the loose objects nor the ref; with

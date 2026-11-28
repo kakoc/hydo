@@ -143,11 +143,12 @@ word names the write's path and, for a comment, its issue, but not the new objec
 
 ## Without faults
 
-`disk=none | run I=1` registers the account, creates the repository, its labels, its milestone
-and its first issue, and starts the issue's timer. Then the walk takes 72 actions in 6 steps. In
-them it creates two more issues, closes and comments on one, starts and stops a timer, sets a due
-date, and opens the labels, milestones, assignees, and dependencies of the sidebar. A run takes
-about 100 s of wall time. On the final image both runs gave `3b4c104284e793a1` and every invariant held.
+`disk=none | run I=1` registers the account and creates the repository, its labels, its
+milestone, and its first issue. It starts the issue's timer. Then the walk takes 72 actions in 6
+steps. In them it creates two more issues, closes and comments on one, starts and stops a timer,
+and sets a due date. It also opens the labels, milestones, assignees, and dependencies of the
+sidebar. A run takes about 100 s of wall time. On the final image both runs gave
+`3b4c104284e793a1`, and every invariant held.
 The first image gave `b8cd01e4d6f4acea` twice, the image with the search rule `990b215e5399e488`
 twice, and the image with the clock across a power cut `fd2cd864ae5628c2` twice.
 
@@ -156,16 +157,17 @@ twice, and the image with the clock across a power cut `fd2cd864ae5628c2` twice.
 **What a user meets.** A user starts the timer of an issue ("Start timer"). The server's wall
 clock then goes back, for example when NTP corrects a clock that ran fast, or a virtual machine
 is restored. When the user stops the timer, Gitea records a negative time. The issue's timeline
-says "hydo worked for now", and the issue's "Total Time Spent" counts the negative time against
-the times tracked before it: on this Mac, with 2 s tracked before, the total was empty. The
+then shows the entry "hydo worked for now" for it. The issue's "Total Time Spent" counts the
+negative time against the times tracked before it. On this Mac, with 2 s tracked before, the
+total was empty. The
 repository's times, the user's times, and the API (`GET /repos/{owner}/{repo}/times`) show the
 negative number. The form "Add Time" refuses a total of zero or less, so a user cannot enter
 such a time by hand.
 
 **How hydo found it.** Blind, on KVM in the second exploration (seeds 72 and 79, `T=2:-2592000`
-and `T=2:-300`), and on the final manifest in 3 of 60 KVM schedules (seeds 122 and 169, steps
-back of an hour) and in 1 of 20 hvx schedules (seed 37 of e2, `T=4:-300`: −286 s). The rule
-`gitea.tracked_time_not_negative` stops a timer that still runs at the end through the API, as
+and `T=2:-300`). On the final manifest it came in 2 of 60 KVM schedules (seeds 122 and 169, steps
+back of an hour). It came in 1 of 20 hvx schedules too (seed 37 of e2, `T=4:-300`, −286 s). The
+rule `gitea.tracked_time_not_negative` stops a timer that still runs at the end through the API, as
 the user would, and reads every tracked time back.
 
 **The regression.** `regressions/timer-after-a-step-back-records-a-negative-time.schedule`:
@@ -183,26 +185,29 @@ running timer the same way. Both stops of a timer reach it: "Stop timer"
 (`routers/web/repo/issue_stopwatch.go`, line 48) and a close of the issue, which stops the timer
 in the close's transaction (`services/issue/status.go`, line 32). The manual "Add Time" refuses
 `total <= 0` (`routers/web/repo/issue_timetrack.go`, line 39). The cause is plain in the code, so
-no reproduction without hydo was made. On this Mac a check of the page only set a running timer's
-start an hour ahead in the database of Gitea in Docker and stopped it: Gitea stored −3,586 s and
-showed the entry as "worked for now".
+no reproduction without hydo was made. One check of the page ran on this Mac, against Gitea in
+Docker. It set a running timer's start an hour ahead in the database and stopped the timer. Gitea
+stored −3,586 s, and the timeline showed the entry "worked for now" for it.
 
 **Duplicate search** (go-gitea/gitea, issues and pull requests, open and closed, 2026-11-28; the
 table below): no issue names a negative tracked time or a timer after a clock change.
 
 ## Finding 2 (new candidate): a power cut right after a repository is created leaves its branch broken
 
-**What a user meets.** A user creates a repository with "Initialize Repository", so Gitea commits
-a README, a license and a `.gitignore`, and shows the new repository. The machine loses its power
+**What a user meets.** A user creates a repository with the box "Initialize Repository" checked.
+Gitea commits a README into it and shows the new repository. The machine loses its power
 within about half a minute. After the restart Gitea's database says the repository has its
 branch `main`, and the Git repository is broken. In the run's end state (`hydo inspect start
 runs/h-cut1 --at end`) the file `refs/heads/main` is empty, and so are two of the push's loose
-objects. `git fsck` reports `badRefContent` and "object corrupt or missing", and `git log` says
-"fatal: your current branch appears to be broken". INSPECT_PAGE
+objects. `git fsck` reports `badRefContent` and an object that is corrupt or missing. `git log`
+ends with the line `fatal: your current branch appears to be broken`. The repository's page, its
+README, and its commits each answer with one error page: `The Git data underlying this repository
+cannot be read. Contact the administrator of this instance or delete this repository.` The API
+lists no branch (`GET /api/v1/repos/hydo/demo/branches` answers `null`).
 
 **How hydo found it.** Directed, by the rule `gitea.repository_readable` and the power cuts that
-the blind explorations did not draw: the process strategy put all 47 of its power cuts at the end
-of the walk (`C=6`), and no such cut came within half a minute of the setup. `disk=none | run C=1
+the blind explorations did not draw. The process strategy put all 47 of its power cuts at the end
+of the walk (`C=6`), so no cut came within half a minute of the setup. `disk=none | run C=1
 I=1` cuts the power after step 0, about 20 s of guest time after the setup's commit. It failed
 twice with `5a3e89f72094688c` on the final image. With a disk that keeps its write cache
 (`disk=cut`) it fails the same way (`dc0fa08f19c782ec`), and so does the walk without actions
@@ -225,9 +230,9 @@ keys), and its documentation names none. With Gitea's
 `[git.config]` section setting `core.fsync=committed` (`hydo/hydo-gitfsync.yaml`), the same cut
 passes: FSYNC_CONTRAST.
 
-**Duplicate search.** #31834 ("Power outage during merge request, causing the main branch to be
-unavailable", Gitea 1.21) has the same symptom after a merge. It was closed with "Power outage
-could cause any damage to your system". No issue names the missing sync of Git's refs and objects
+**Duplicate search.** #31834, a power outage during a merge in Gitea 1.21, has the same symptom
+after a merge. It was closed with a maintainer's answer that a power outage could cause any
+damage to a system. No issue names the missing sync of Git's refs and objects
 before Gitea answers, or `core.fsync`. #19551 mentions `core.fsyncObjectFiles` in a user's own
 configuration. The cause is plain in the code and in Git's documentation of `core.fsync`, so no
 reproduction without hydo was made.

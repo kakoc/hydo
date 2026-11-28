@@ -26898,7 +26898,8 @@ state `refs/heads/main` and two loose objects are empty files. Directed: `disk=n
 I=1` failed twice with `5a3e89f72094688c`, and with `disk=cut` too (`dc0fa08f19c782ec`); `C=2`
 passes (`f4cd928bbc981238`). With `core.fsync=committed` the same cut passes
 (FSYNC_CONTRAST). Gitea's #31834, the same symptom after a merge's power outage, was closed as a
-power outage's damage. INSPECT_PAGE
+power outage's damage. The repository's pages then say "The Git data underlying this repository
+cannot be read. Contact the administrator of this instance or delete this repository".
 
 **The rules' mistakes.** The first failures of e1 and of the first KVM exploration (seeds 16, 37,
 41, 57) were a close followed by a reopen, which the rule did not count: a reopen is comment type
@@ -26930,6 +26931,6 @@ Retro: Gitea 28.4.0, hvx and KVM, 2026-11-28
 - What took the most time: the builds beside another session's builds (15 to 40 minutes each),
   three restarts of the agent's process on the Mac, and the rule's comment types.
 - What hydo lacked: the five gaps of the walk above (open item 198), and `--check`'s disk limit.
-- Strategies: the page walk found finding 1 blind on KVM in 3 of 60 schedules; power cuts at a
+- Strategies: the page walk found finding 1 blind on KVM in 2 of 60 schedules of the final manifest; power cuts at a
   step found finding 2 only as directed runs, because the process strategy cut only at the end.
   "The page walk and its invariants" and "Power cuts of the whole guest" are updated.
