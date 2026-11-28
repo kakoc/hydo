@@ -38,9 +38,10 @@ try {
   process.exit(3);
 }
 
-// comment types that a comment form's POST makes: a comment, a close, a reopen
-// (models/issues/comment.go: CommentTypeComment 0, CommentTypeClose 2, CommentTypeReopen 3)
-const FORM_TYPES = '(0, 2, 3)';
+// comment types that a comment form's POST makes: a comment, a reopen, a close
+// (models/issues/comment.go, lines 68 to 71: CommentTypeComment 0, CommentTypeReopen 1,
+// CommentTypeClose 2)
+const FORM_TYPES = '(0, 1, 2)';
 
 if (rule === 'saved') {
   const made = new Map(); // owner/repo -> issues created
@@ -72,7 +73,15 @@ if (rule === 'saved') {
     const r = repoOf(repo);
     const i = r ? all('SELECT id FROM issue WHERE repo_id = ? AND "index" = ?', r.id, Number(index))[0] : undefined;
     const have = i ? all(`SELECT count(*) AS c FROM comment WHERE issue_id = ? AND type IN ${FORM_TYPES}`, i.id)[0].c : 0;
-    if (have < count) lost.push(`${count - have} of the ${count} comments, closes and reopens of ${k}`);
+    if (have < count) {
+      lost.push(`${count - have} of the ${count} comments, closes and reopens of ${k}`);
+      // the issue's own rows, for the judgment: its state and every event of its timeline
+      if (i) {
+        const st = all('SELECT is_closed, closed_unix, created_unix, updated_unix FROM issue WHERE id = ?', i.id)[0];
+        const ev = all('SELECT id, type, created_unix FROM comment WHERE issue_id = ? ORDER BY id', i.id);
+        console.log(`${k}: is_closed=${st.is_closed} closed_unix=${st.closed_unix} created_unix=${st.created_unix}; events ${ev.map((e) => `${e.id}:${e.type}@${e.created_unix}`).join(' ')}`);
+      }
+    }
   }
   if (lost.length) {
     // the list goes on a line of its own: the verdict is the last line, and its words stay the
@@ -175,6 +184,45 @@ if (rule === 'saved') {
     process.exit(1);
   }
   console.log(`the search finds every one of the ${judged.length} issues by a word of its title`);
+} else if (rule === 'times') {
+  // a timer of an issue ("Start timer") adds the time it ran when it stops: Gitea's own words
+  // are "Stop timer" and "time spent". The rule stops every timer that still runs, as the user
+  // would, through the API (POST .../issues/<n>/stopwatch/stop, as hydo, the only user), and
+  // then reads every tracked time back (GET /api/v1/repos/<owner>/<repo>/times): none may be
+  // below zero.
+  const base = process.env.GITEA_URL || 'http://10.89.0.11:3000';
+  const auth = { Authorization: `Basic ${Buffer.from('hydo:hydo-pass-1').toString('base64')}` };
+  const running = all(
+    `SELECT i."index" AS ix, r.owner_name AS owner, r.lower_name AS repo FROM stopwatch s
+     JOIN issue i ON i.id = s.issue_id JOIN repository r ON r.id = i.repo_id`,
+  );
+  const call = async (method, u) => {
+    const res = await fetch(`${base}${u}`, { method, headers: auth, signal: AbortSignal.timeout(15000) });
+    if (!res.ok && res.status !== 409) throw new Error(`${method} ${u}: HTTP ${res.status}`);
+    return res.status === 204 || res.status === 201 ? null : res.json().catch(() => null);
+  };
+  try {
+    for (const s of running) await call('POST', `/api/v1/repos/${s.owner}/${s.repo}/issues/${s.ix}/stopwatch/stop`);
+    const repos = all('SELECT owner_name AS owner, lower_name AS repo FROM repository');
+    const bad = [];
+    let n = 0;
+    for (const r of repos) {
+      const times = (await call('GET', `/api/v1/repos/${r.owner}/${r.repo}/times?limit=200`)) || [];
+      for (const t of times) {
+        n++;
+        if (t.time < 0) bad.push(`the issue #${t.issue?.number ?? t.issue_id} of ${r.owner}/${r.repo} has a tracked time of ${t.time} s`);
+      }
+    }
+    if (bad.length) {
+      console.log(`negative: ${bad.join('; ')}`);
+      console.log('A time that Gitea tracked for an issue is below zero.');
+      process.exit(1);
+    }
+    console.log(`every one of the ${n} tracked times is zero or more (${running.length} running timers stopped first)`);
+  } catch (e) {
+    console.log(`the API did not answer: ${e.message}`);
+    process.exit(2);
+  }
 } else {
   console.log(`unknown rule ${rule}`);
   process.exit(2);

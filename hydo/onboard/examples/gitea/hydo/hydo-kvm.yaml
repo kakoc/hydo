@@ -92,6 +92,8 @@ browser:
       - {fill: Title, with: first issue}
       - {click: Create Issue}
       - {see: first issue}
+      - {click: Start timer}    # the issue's timer runs until the walk or the rule stops it
+      - {see: Stop timer}
     avoid:
       - "sign ?out"
       - "log ?out"
@@ -173,5 +175,16 @@ invariants:
       out=$(hydo-oci server git -c safe.directory='*' -C $d rev-parse --verify -q 'refs/heads/main^{commit}' 2>&1) || { echo "refs/heads/main of hydo/demo does not name a commit: $out"; exit 1; }
       out=$(hydo-oci server git -c safe.directory='*' -C $d fsck --connectivity-only --no-progress 2>&1) || { echo "$out" | head -5; echo "git fsck of hydo/demo failed"; exit 1; }
       echo "hydo/demo has its branch main, and git fsck reaches every object"
+  - id: gitea.tracked_time_not_negative
+    msg: every time that Gitea tracked for an issue is zero or more, also of a timer that still ran at the end
+    # the rule stops each running timer through the API, as the user would, then reads every
+    # tracked time back through the API
+    cmd: |
+      rm -rf /tmp/hydo/rules-db4 && mkdir -p /tmp/hydo/rules-db4
+      cp /data/vol/bind-data/data/gitea.db /tmp/hydo/rules-db4/ && cp /data/vol/bind-data/data/gitea.db-journal /tmp/hydo/rules-db4/ 2>/dev/null
+      hydo-oci browser node --experimental-sqlite --no-warnings /opt/hydo/web/rules/gitea.mjs times /tmp/hydo/rules-db4/gitea.db "$HYDO_ACKED"
+      rc=$?
+      [ $rc -eq 3 ] && exit 2   # a torn copy of the database: cannot check now
+      exit $rc
 
 faults: [kill, pause, network, oneway, cut, clock, disk]
