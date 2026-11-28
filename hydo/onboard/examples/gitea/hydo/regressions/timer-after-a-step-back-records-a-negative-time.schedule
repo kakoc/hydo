@@ -1,0 +1,8 @@
+# A clock effect in Gitea 28.4.0 (RESULTS.md, finding 1). The walk's setup starts the first
+# issue's timer, and the walk leaves out every action, so the timer runs from step 0 to the end.
+# The guest's wall clock steps back an hour before step 2. The check gitea.tracked_time_not_negative
+# stops the timer through the API and finds a tracked time of about -3,600 s: Gitea computes it
+# as the wall clock minus the timer's start, without a lower bound (models/issues/stopwatch.go,
+# line 140). Without the step, or with a step forward, the schedule passes.
+# expect: violation      (change to ok if Gitea records no negative time)
+disk=none | run T=2:-3600 I=1,x0.0-11,x1.0-11,x2.0-11,x3.0-11,x4.0-11,x5.0-11

@@ -6,7 +6,20 @@ found (Milestone 389, tentative number). The design of the walk is
 pages", is the how-to. The earlier apps explored this way are Memos
 (`hydo/onboard/examples/memos/RESULTS.md`) and Vikunja (`hydo/onboard/examples/vikunja/RESULTS.md`).
 
-<!-- SHORT ANSWERS -->
+## The short answers
+
+- **Finding 1, new, a clock effect.** A timer of an issue that runs while the server's wall clock
+  goes back records a negative time when it stops. Found blind on KVM and on hvx; the regression
+  is `timer-after-a-step-back-records-a-negative-time.schedule`. Not posted.
+- **Finding 2, new.** A power cut within about half a minute after a repository is created with a
+  README leaves its branch broken, while Gitea's database says it is not empty. Found by directed
+  power cuts; the regression is `power-cut-after-a-new-repository-breaks-its-branch.schedule`. The
+  symptom is that of #31834, which was closed as a power outage's damage. Not posted.
+- **What held.** Every issue, comment, close and reopen that Gitea answered as saved stayed
+  saved, Gitea's counts matched its rows, and the search found every issue, in 200 schedules of
+  kills, pauses, network faults, clock steps and power cuts.
+- **What hydo lacked.** The section of that name: chiefly no console event at an acknowledged
+  write, no id in a redirect answer, and power cuts only at the end of the walk.
 
 ## The system
 
@@ -16,6 +29,11 @@ Git repositories, and keeps its data in SQLite by default (`gitea.db`). The exam
 image `docker.gitea.com/gitea:28.4.0-rootless` as the documentation's "Installation with
 Docker (rootless)" runs it: one container with a volume for the data and one for the
 configuration.
+
+The version is Gitea 28.4.0 (tag `v28.4.0`, commit `0b5dfde`, released 2026-11-15). The image is
+`docker.gitea.com/gitea:28.4.0-rootless`, index digest `sha256:15ab7fad…`, linux/amd64
+`sha256:0a28ed70…` (the lock file `hydo/hydo-compose.lock.json` has the full digests). The
+browser is Microsoft's Playwright image 1.65.1 that `hydo build` fetches.
 
 Gitea was chosen by a fit check of 30 minutes over the five candidates. It was the first that
 met every criterion:
@@ -310,3 +328,17 @@ The gaps are in the order of the time they cost. The ones of the walk go to open
 - **The sync audit misses writes of a program that the system runs.** `hydo rules scan --kind
   sync` listed 24 places of Gitea's Go code. Gitea's Git repositories are written by `git`, which
   it runs as a child process, and the audit cannot see those writes.
+
+## Time
+
+| phase | wall time |
+|---|---|
+| Scouting and the fit check | 30 minutes |
+| Setup to the first clean run, with native walks of Gitea in Docker on this Mac | 45 minutes |
+| The explorations e1 and e2 on hvx, and k1 to k3 on KVM | 2 hours of machine time, partly in parallel |
+| Judging: the rules' mistakes, the trace of KVM seed 41, the directed runs and the contrast | 3 hours, much of it builds of 15 to 40 minutes beside another session's builds |
+| Duplicate search and write-up | 1 hour |
+
+Three restarts of the agent's process on this Mac, two of them reboots, stopped the waits on this
+Mac. The jobs on the bare-metal machine ran on and were read from their logs.
+

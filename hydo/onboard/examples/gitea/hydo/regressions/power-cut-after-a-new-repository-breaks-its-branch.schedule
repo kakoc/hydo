@@ -1,0 +1,9 @@
+# Gitea 28.4.0 (RESULTS.md, finding 2). The walk's setup creates the repository hydo/demo with
+# "Initialize Repository", so Gitea pushes a first commit into it with git. The power is cut
+# after step 0, about 20 s of guest time later. In the recovery boot Gitea's database says the
+# repository has its branch main, and git says "warning: ignoring broken ref refs/heads/main":
+# the check gitea.repository_readable fails. Gitea runs git with Git's default core.fsync, which
+# syncs neither the loose objects nor the ref. A cut after step 1 passes, and so does this one
+# with core.fsync=committed (hydo-gitfsync.yaml).
+# expect: violation      (change to ok if the branch survives the cut)
+disk=none | run C=1 I=1

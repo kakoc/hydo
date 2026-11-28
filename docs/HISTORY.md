@@ -26925,7 +26925,7 @@ Retro: Gitea 28.4.0, hvx and KVM, 2026-11-28
   by the rules' mistakes.
 - The findings: 2 new (a clock effect, and a missing sync of Git's writes), 0 known.
 - What took the most time: the builds beside another session's builds (15 to 40 minutes each),
-  two restarts of the Mac, and the rule's comment types.
+  three restarts of the agent's process on the Mac, and the rule's comment types.
 - What hydo lacked: the five gaps of the walk above (open item 198), and `--check`'s disk limit.
 - Strategies: the page walk found finding 1 blind on KVM in 3 of 60 schedules; power cuts at a
   step found finding 2 only as directed runs, because the process strategy cut only at the end.
