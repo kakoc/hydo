@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=30
+# the bank at follower_read_timestamp() through a node that the seed picks: a total of 500
+exec /bin/crc follower

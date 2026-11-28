@@ -1,0 +1,3 @@
+#!/bin/sh
+# hydo-msg: CockroachDB's own consistency check finds no range whose replicas differ
+exec /bin/crc check replicas

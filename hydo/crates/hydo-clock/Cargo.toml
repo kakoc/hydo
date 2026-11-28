@@ -20,6 +20,13 @@ path = "src/main.rs"
 [dependencies]
 libc = "0.2"
 
+# `words` (Milestone 379): when process_vm_readv and process_vm_writev answer ENOSYS (a kernel
+# without CONFIG_CROSS_MEMORY_ATTACH, as the KVM and Mac guest kernels), reach the traced
+# process's memory one word at a time with PTRACE_PEEKDATA and PTRACE_POKEDATA. Off by default, so
+# that the default build keeps the bytes of Milestone 372; build.sh makes both.
+[features]
+words = []
+
 [profile.release]
 opt-level = "s"
 lto = true

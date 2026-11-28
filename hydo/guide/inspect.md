@@ -186,6 +186,52 @@ hydo inspect exec <session> --branch other --sh 'cd /data/ws && python -m pytest
 A session holds at most 61 branches on the KVM and Mac engines (5 on hvx), and a branch cannot be
 dropped yet.
 
+## 5. Which lock a hung service waits on (every thread's stack)
+
+Use this when a service stopped and its log just stops: no error, no exit. hydo reads every
+guest thread's stack at the stop from the guest's memory and its registers. It does not run
+anything in the guest and does not change the run. It works on hvx today.
+
+```sh
+hydo inspect start <run dir> --at end
+hydo inspect stacks <session> --text               # every thread, the locks, the cycles of waits
+hydo inspect stacks <session> --pid 312 --text     # one process
+hydo inspect stacks <run dir> --at run:400 --text  # one call at another stop (a replay)
+hydo inspect stacks <session> --follow --steps 4 --ms 500 --text   # stacks, then advance, 4 times
+```
+
+What the answer has (`stacks` in the JSON):
+
+- `threads`: each thread's pid, tid, name, service and state (`sleeping`, `stopped` or
+  `frozen`, for example), and the system call it is in with its first arguments. Then its kernel stack (for
+  example `futex_wait` or `do_epoll_wait`) and its user stack, each frame with its function,
+  file and line;
+- `goroutines`: for a Go program, each goroutine's status, its wait reason as the Go runtime
+  says it (`sync.Mutex.Lock`, `chan receive`), and its frames;
+- `locks`: each address a thread or a goroutine waits on, named by the program's globals
+  (`main.accountsMu`), with its waiters and its likely holders, and why hydo thinks so;
+- `cycles`: waits that close a cycle, which is a deadlock.
+
+A likely holder is a thread or goroutine with a frame whose function refers to the lock's
+variable and has not returned, or whose stack keeps the lock's address. A lock records no owner,
+so read it as a strong hint, not a fact.
+
+hydo names the frames from the programs in the image's root tree, which `hydo build` keeps beside
+the image. For a copy elsewhere, give `--program /guest/path=./host/file`. A Go program needs its
+DWARF for the goroutines (do not build it with `-ldflags=-w`); a Rust program needs line tables
+for file and line (`debug = "line-tables-only"`). The guest kernel's symbols are the file
+`<kernel>.System.map` beside the guest kernel; `--kernel-map FILE` names another.
+
+To check that reading changes nothing, replay the run with a read at one stop in every 25 and
+compare its fingerprint with the recorded one:
+
+```sh
+hydo inspect stacks <run dir> --check-run --every 25
+```
+
+The example `hydo/onboard/examples/deadlock` has a Go service and a Rust service that hang after a
+pause, and its RESULTS.md shows the answer.
+
 ## A worked example
 
 An image whose provisioning fills memory ends with `ERROR provision failed`:

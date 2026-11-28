@@ -42,68 +42,79 @@ cargo install hydo --locked
 hydo setup
 ```
 
-`hydo setup` downloads the Linux kernel and the tools that the virtual machine boots, and checks
-each file. hydo needs an Apple Silicon Mac, or an x86_64 Linux machine where your user can use
-KVM, the support for virtual machines that Linux has built in. Then `hydo doctor` checks the
-machine.
-[docs/INSTALL.md](docs/INSTALL.md) has the release archives and their checksums, and hydo's own
-kernel module for Intel machines. `hydo update` updates hydo the way you installed it, and the
-onboarding skill (below) with it.
+`hydo setup` downloads the kernel and the tools of hydo's virtual machine, and `hydo doctor`
+checks your machine. hydo needs an Apple Silicon Mac, or an x86_64 Linux machine with KVM. `hydo
+update` updates hydo and its onboarding skill. [docs/INSTALL.md](docs/INSTALL.md) has the release
+archives, their checksums, and hydo's own kernel module for Intel machines.
 
 ## What hydo found in real projects
 
-Each example folder holds the project's hydo setup and the recorded runs.
+Each project's folder in [`hydo/onboard/examples/`](hydo/onboard/examples/) has hydo's setup for it, so you can see
+each bug happen yourself.
 
-- **etcd 3.5.5.** A member that crashes right after it defragments its database comes back on a
-  different revision than the other members. Known as
-  [etcd#14685](https://github.com/etcd-io/etcd/issues/14685), fixed in 3.5.6
-  ([the example](hydo/onboard/examples/etcd/)).
-- **NATS 2.10.22.** A power cut, or a few crashes and pauses, delete a whole JetStream stream for
-  good. Known as [nats-server#6888](https://github.com/nats-io/nats-server/issues/6888), fixed in
-  2.10.23 ([the example](hydo/onboard/examples/nats-jetstream/)).
-- **Qdrant.** A flaky test that never failed in 2,604 ordinary runs fails on every run when hydo
-  pauses one of its threads at one moment
-  ([qdrant#10200](https://github.com/qdrant/qdrant/issues/10200#issuecomment-6803314544),
-  [the example](hydo/onboard/examples/qdrant-flaky-10200/)).
-- **TigerBeetle.** A TigerBeetle server stops for good when two pending transfers expire in the same
-  nanosecond ([tigerbeetle#3960](https://github.com/tigerbeetle/tigerbeetle/issues/3960)). hydo
-  makes it happen on every run, on the releases 0.16.29 to 0.17.9
-  ([the example](hydo/onboard/examples/tigerbeetle/)).
-- **Valkey 9.1.3.** A step of the primary's clock back delays a replica's full sync by the size
-  of the step, and lets `min-replicas-to-write` accept writes that no replica has. A new bug,
-  reported as [valkey#5406](https://github.com/valkey-io/valkey/issues/5406)
-  ([the example](hydo/onboard/examples/valkey/)).
-- **Temporal 1.32.2.** After the clock steps back, one PostgreSQL crash leaves the server without
-  its database for as long as the step. A new bug, reported as
-  [temporal#13099](https://github.com/temporalio/temporal/issues/13099)
-  ([the example](hydo/onboard/examples/temporal/)).
-- **Formance Ledger v2.4.** Two transactions that use a new account at the same moment, in two
-  currencies, race, and one fails with `500`. A new bug, reported as
-  [ledger#2542](https://github.com/formancehq/ledger/issues/2542)
-  ([the example](hydo/onboard/examples/formance-ledger/)).
-- **Blnk.** Two new bugs. Payments sent at the same time go past their overdraft limit
-  ([blnk#437](https://github.com/blnkfinance/blnk/issues/437)). An all-or-nothing batch of
-  transfers keeps its first transfer when a later one fails
-  ([blnk#438](https://github.com/blnkfinance/blnk/issues/438),
-  [the example](hydo/onboard/examples/blnk/)).
-- **Lago.** A subscription cancelled while Redis is down is never invoiced, a known bug
-  ([lago-api#6901](https://github.com/getlago/lago-api/issues/6901)). hydo also found a
-  subscription invoiced twice for one month, a new bug
-  ([lago-api#7164](https://github.com/getlago/lago-api/issues/7164),
-  [the example](hydo/onboard/examples/lago/)).
-- **River v0.51.2.** After a PostgreSQL crash, two workers act as leader at once, and a periodic
-  job runs twice. Reported as [river#1602](https://github.com/riverqueue/river/issues/1602); the
-  maintainers keep the leader table this way by design and recommend unique jobs
-  ([the example](hydo/onboard/examples/river/)).
-- **Hatchet v0.120.5.** With its PostgreSQL queue, a crash of an engine loses the messages it had
-  just read, so runs it acknowledged never run. A new bug, reported as
-  [hatchet#5527](https://github.com/hatchet-dev/hatchet/issues/5527)
-  ([the example](hydo/onboard/examples/hatchet/)).
-- **Saleor 3.23.49.** A refund request is lost with its Celery task when the worker dies. A crash
-  in a gift card charge leaves the card charged and the order unpaid. Two new bugs,
-  reported as [saleor#20022](https://github.com/saleor/saleor/issues/20022) and
-  [saleor#20023](https://github.com/saleor/saleor/issues/20023)
-  ([the example](hydo/onboard/examples/saleor/)).
+**New bugs that hydo found and reported to each project:**
+
+- **[ClickHouse](hydo/onboard/examples/clickhouse/)**: after a power cut, a change to a table's columns gets stuck for
+  good, and every later change to that table waits behind it ([#134373](https://github.com/ClickHouse/ClickHouse/issues/134373)).
+- **[RabbitMQ](hydo/onboard/examples/rabbitmq/)**: a message that RabbitMQ confirmed is lost for good when one server
+  loses power while another one is paused ([#18515](https://github.com/rabbitmq/rabbitmq-server/issues/18515)). After the
+  clock is set back, a stream has no server to write to for that long
+  ([#18516](https://github.com/rabbitmq/rabbitmq-server/issues/18516)).
+- **[Microsoft Garnet](hydo/onboard/examples/garnet/)**: when data moves to another server and that server's backup
+  takes over right after, part of the data has no server that answers for it, for good
+  ([#2440](https://github.com/microsoft/garnet/issues/2440)). A backup server stops copying its main server after that one
+  restarts, and still reports that it is in sync ([#2441](https://github.com/microsoft/garnet/issues/2441)).
+- **[Redpanda](hydo/onboard/examples/redpanda/)**: a transaction can be saved in one place and dropped in another, and
+  a confirmed write can be lost. Redpanda confirmed both and fixed them
+  ([#395](https://github.com/redpanda-data/community/issues/395), [#396](https://github.com/redpanda-data/community/issues/396)).
+- **[Apache Pulsar](hydo/onboard/examples/pulsar/)**: after a server restart, the unfinished transaction of a client
+  that crashed holds back every message after it ([#27749](https://github.com/apache/pulsar/issues/27749)).
+- **[Apache Kvrocks](hydo/onboard/examples/kvrocks/)**: a backup server that has just copied all the data from its main
+  server does not start again after a power cut ([#3827](https://github.com/apache/kvrocks/issues/3827)).
+- **[VictoriaMetrics](hydo/onboard/examples/victoriametrics/)**: after the clock is set back, every server deletes the
+  current month's data ([#11973](https://github.com/VictoriaMetrics/VictoriaMetrics/issues/11973)).
+- **[Typesense](hydo/onboard/examples/typesense/)**: a server that restarts repeats a delete in the wrong order and
+  loses documents that it had saved ([#3202](https://github.com/typesense/typesense/issues/3202)). After the clock is set
+  back, the cluster does not replace a failed leader for that long
+  ([#3203](https://github.com/typesense/typesense/issues/3203)).
+- **[Meilisearch](hydo/onboard/examples/meilisearch/)**: after a crash, a swap of two indexes runs a second time and
+  undoes itself ([#6743](https://github.com/meilisearch/meilisearch/issues/6743)). A power cut empties an upload that
+  Meilisearch had accepted ([#6749](https://github.com/meilisearch/meilisearch/issues/6749)).
+- **[Prometheus](hydo/onboard/examples/prometheus/)**: a backup snapshot leaves out data that arrived late
+  ([#20547](https://github.com/prometheus/prometheus/issues/20547)).
+- **[Dragonfly](hydo/onboard/examples/dragonfly/)**: after the clock is set back, a restart loads an older copy of the
+  data ([#8826](https://github.com/dragonflydb/dragonfly/issues/8826)).
+- **[Temporal](hydo/onboard/examples/temporal/)**: after the clock is set back, one database crash leaves the server
+  without its database for that long ([#13099](https://github.com/temporalio/temporal/issues/13099)).
+- **[Valkey](hydo/onboard/examples/valkey/)**: after the clock is set back, copying data to a backup server waits for
+  that long ([#5406](https://github.com/valkey-io/valkey/issues/5406)).
+- **[Restate](hydo/onboard/examples/restate/)**: after the clock is set back and a restart, accepted work waits for
+  that long ([#5951](https://github.com/restatedev/restate/issues/5951)).
+- **[NSQ](hydo/onboard/examples/nsq/)**: a crash in the first seconds of a new queue loses the messages it had
+  accepted ([#1542](https://github.com/nsqio/nsq/issues/1542)).
+- **[SurrealKV](hydo/onboard/examples/surrealdb/)**: one damaged byte on the disk makes it lose later data that it had
+  saved ([#536](https://github.com/surrealdb/surrealkv/issues/536)).
+- **[Saleor](hydo/onboard/examples/saleor/)**: a refund can be lost, and a gift card can be charged for an order that
+  stays unpaid ([#20022](https://github.com/saleor/saleor/issues/20022), [#20023](https://github.com/saleor/saleor/issues/20023)).
+- **[Blnk](hydo/onboard/examples/blnk/)**: payments can go past their overdraft limit ([#437](https://github.com/blnkfinance/blnk/issues/437)), and
+  a batch that must be all or nothing can be half done ([#438](https://github.com/blnkfinance/blnk/issues/438)).
+- **[Lago](hydo/onboard/examples/lago/)**: one month can be billed twice ([#7164](https://github.com/getlago/lago-api/issues/7164)).
+- **[Hatchet](hydo/onboard/examples/hatchet/)**: after a crash, work that Hatchet had accepted never runs
+  ([#5527](https://github.com/hatchet-dev/hatchet/issues/5527)).
+- **[Formance Ledger](hydo/onboard/examples/formance-ledger/)**: two payments that use a new account at the same moment
+  can make one of them fail ([#2542](https://github.com/formancehq/ledger/issues/2542)).
+
+**Known bugs that showed up rarely, and with hydo show up on every run:**
+
+- **[etcd](hydo/onboard/examples/etcd/)**: a server that crashes at one moment comes back out of step with the others
+  ([#14685](https://github.com/etcd-io/etcd/issues/14685)). hydo found it without being told where to look.
+- **[NATS](hydo/onboard/examples/nats-jetstream/)**: a power cut deletes a whole stream ([#6888](https://github.com/nats-io/nats-server/issues/6888)).
+  hydo found it without being told where to look.
+- **[TigerBeetle](hydo/onboard/examples/tigerbeetle/)**: a server stops for good when two payments expire in the same
+  nanosecond ([#3960](https://github.com/tigerbeetle/tigerbeetle/issues/3960)).
+- **[Qdrant](hydo/onboard/examples/qdrant-flaky-10200/)**: a test that passed 2,604 times in a row fails on every run
+  when hydo pauses one of its threads at the right moment
+  ([#10200](https://github.com/qdrant/qdrant/issues/10200#issuecomment-6803314544)).
 
 ## Your own project
 
@@ -113,11 +124,16 @@ In your repository, run:
 hydo onboard
 ```
 
-`hydo onboard` looks for a Docker Compose file and starts a `hydo/` folder from it. When there is
-none, it writes a skeleton with placeholders that fail every run until you fill them in. It installs the onboarding skill, the instructions that teach an AI coding
-tool to set up hydo, for the tools it finds, such as Claude Code. Then it prints the next step. In Claude Code, that step is `/hydo:onboard`. The skill asks about your system and writes
-the client and the rules with you. Then `hydo explore` looks for failures, and `hydo report`
-lists each one with the command that replays it.
+Then:
+
+1. `hydo onboard` starts a `hydo/` folder from your Docker Compose file, or writes a skeleton
+   whose placeholders fail every run until you fill them in.
+2. It installs the onboarding skill for the AI coding tools it finds, such as Claude Code. The
+   skill teaches the tool to set up hydo.
+3. In Claude Code, type `/hydo:onboard`. The skill asks about your system and writes the client
+   and the rules with you.
+4. `hydo explore` looks for failures, and `hydo report` lists each one with the command that
+   replays it.
 
 To install the skill as a Claude Code plugin without `hydo onboard`, type these in Claude Code:
 

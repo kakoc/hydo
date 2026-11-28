@@ -667,13 +667,43 @@ pub fn merge(dirs: &[PathBuf], out: &Path) -> Result<Exploration, String> {
     }
     // each kept shrink: its part, the part's chain number, and the merged number
     let mut kept: Vec<(usize, usize)> = Vec::new();
+    // Milestone 387: a chosen failure that its part has not shrunk yet keeps its problem open
+    let mut open: Vec<(String, String)> = Vec::new();
     for (i, sd) in &chosen {
-        match parts[*i].doc.shrinks.iter().position(|s| s.from_seed == *sd) {
+        match parts[*i]
+            .doc
+            .shrinks
+            .iter()
+            .position(|s| s.from_seed == *sd)
+        {
             Some(k) => kept.push((*i, k)),
-            None => eprintln!(
-                "hydo explore --merge: warning: {} did not shrink the failure of seed {sd}, which one exploration of the range shrinks",
-                parts[*i].dir.display()
-            ),
+            None => {
+                let f = parts[*i]
+                    .doc
+                    .failures
+                    .iter()
+                    .find(|f| f.run.seed == Some(*sd));
+                if f.is_some_and(|f| hydo_results::shrink_state::is_open(f.shrink_state.as_deref()))
+                {
+                    if let Some(f) = f {
+                        open.push((
+                            crate::advice::shrink_group(f.run.class.as_deref().unwrap_or(""))
+                                .to_string(),
+                            f.signature.clone(),
+                        ));
+                    }
+                    eprintln!(
+                        "hydo explore --merge: note: {} has not shrunk the failure of seed {sd}                          yet; the merged report shows its failing run (hydo shrink {} --problem N,                          then merge again)",
+                        parts[*i].dir.display(),
+                        parts[*i].dir.display()
+                    );
+                } else {
+                    eprintln!(
+                        "hydo explore --merge: warning: {} did not shrink the failure of seed {sd}, which one exploration of the range shrinks",
+                        parts[*i].dir.display()
+                    );
+                }
+            }
         }
     }
     let renames: Vec<HashMap<usize, usize>> = (0..parts.len())
@@ -888,7 +918,33 @@ pub fn merge(dirs: &[PathBuf], out: &Path) -> Result<Exploration, String> {
         })
         .sum::<f64>()
         / nw.max(1) as f64;
-    let failures: Vec<Failure> = failures.into_iter().map(|(_, f)| f).collect();
+    // Milestone 387: each failure's shrink state in the merged exploration
+    let groups_done: Vec<(String, String)> = shrinks
+        .iter()
+        .map(|s| {
+            (
+                crate::advice::shrink_group(&s.class).to_string(),
+                s.signature.clone(),
+            )
+        })
+        .collect();
+    let failures: Vec<Failure> = failures
+        .into_iter()
+        .map(|(_, mut f)| {
+            let g = (
+                crate::advice::shrink_group(f.run.class.as_deref().unwrap_or("")).to_string(),
+                f.signature.clone(),
+            );
+            use hydo_results::shrink_state as st;
+            if open.contains(&g) {
+                f.shrink_state = Some(st::PENDING.into());
+            } else if groups_done.contains(&g) && f.shrink_state.is_some() {
+                f.shrink_state = Some(st::DONE.into());
+                f.repro_command = None;
+            }
+            f
+        })
+        .collect();
     let mut summary = Summary {
         schedules,
         sweep_wall_s: Some(round1(wall)),
@@ -925,6 +981,13 @@ pub fn merge(dirs: &[PathBuf], out: &Path) -> Result<Exploration, String> {
         vacuous_passes: sums(&|s| s.vacuous_passes),
         unfired_reactions: sums(&|s| s.unfired_reactions),
         refused: sums(&|s| s.refused),
+        // Milestone 387: the merged report has every part's problems once the last part's
+        // first report is written
+        first_report_s: parts
+            .iter()
+            .map(|p| p.doc.summary.first_report_s)
+            .collect::<Option<Vec<f64>>>()
+            .and_then(|v| v.into_iter().reduce(f64::max)),
         ..Summary::default()
     };
     if let Some(k) = &error_kinds {

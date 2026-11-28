@@ -618,6 +618,7 @@ version = "0.8.0"
 dependencies = [
  "flate2",
  "gimli",
+ "hydo-results",
  "serde",
  "serde_json",
  "sha2",

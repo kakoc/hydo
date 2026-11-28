@@ -35,7 +35,7 @@ hydo-engine = { workspace = true }
 hydo-kvm = { workspace = true }
 hydo-explore = { workspace = true }
 # function contracts: the plan next to an image (M241)
-hydo-contracts = { workspace = true }
+hydo-contracts = { workspace = true, features = ["compile"] }
 hydo-composer = { workspace = true }
 hydo-errors = { workspace = true }
 hydo-agents = { workspace = true }

@@ -23,7 +23,7 @@ doctest = false
 # Reading a program's debug information (the plan's compiler). The engines read only the plan,
 # so they build without it.
 default = ["compile"]
-compile = ["dep:gimli", "dep:flate2", "dep:sha2"]
+compile = ["dep:gimli", "dep:flate2", "dep:sha2", "dep:hydo-results"]
 
 [dependencies]
 serde = { workspace = true }
@@ -31,6 +31,7 @@ serde_json = { workspace = true }
 gimli = { version = "0.32", default-features = false, features = ["read", "std"], optional = true }
 flate2 = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
+hydo-results = { workspace = true, optional = true }
 
 # the integration tests, one program (ci/consolidate-tests.sh)
 [[test]]

@@ -265,7 +265,8 @@ Host tools (override with the environment variables):
                   hydo-sql (arm64: HYDO_SQL_BIN_ARM64, <build dir>/hydo-sql-arm64)
     HYDO_WORLDBIN hydo-world (hydo/crates/hydo-world/build.sh), staged only for fakes:/proxies:
     HYDO_CLOCKBIN hydo-clock (hydo/crates/hydo-clock/build.sh), staged only for a service with
-                  clock: own (x86_64)
+                  clock: own (x86_64); HYDO_CLOCKBIN_WORDS (<build dir>/hydo-clock-words) for
+                  an image of guest.kernel: containers
     HYDO_AGENT_BIN the pinned hydo-agent (hydo/crates/hydo-agent/build.sh)
                   (default <build dir>/hydo-agent; arm64: HYDO_AGENT_BIN_ARM64, <build dir>/hydo-agent-arm64)
 --arch arm64 takes the arm64 builds of the last two from HYDO_READ_BIN_ARM64 and

@@ -147,6 +147,32 @@ pub fn guest_of_embedded(
     Ok(hydo_manifest::Guest::from_value(&m.data))
 }
 
+/// Why the KVM engine cannot run the services of `clock: own` of an image whose record names the
+/// guest kernel variant `variant` (Milestone 379, `docs/design/service-clocks.md`). hydo-clock
+/// installs a seccomp filter, and of the KVM engine's guest kernels only the ones for containers
+/// have seccomp filters (`guest.kernel: containers`); `hydo build` gives such an image the build
+/// of hydo-clock that reaches the traced memory without `process_vm_readv`, which no KVM kernel
+/// has. None: the image runs.
+pub fn kvm_own_clock_refusal(plan: &Plan, variant: Option<&str>) -> Option<String> {
+    if variant == Some(hydo_image::kernels::CONTAINERS) {
+        return None;
+    }
+    let own: Vec<&str> = plan
+        .services
+        .iter()
+        .filter(|s| s.own_clock)
+        .map(|s| s.name.as_str())
+        .collect();
+    (!own.is_empty()).then(|| {
+        format!(
+            "services: {}: clock: own on the KVM engine needs guest.kernel: containers, whose \
+             guest kernels have the seccomp filters that hydo-clock installs; add `kernel: \
+             containers` under guest: and build the image again, or run it on hvx",
+            own.join(", ")
+        )
+    })
+}
+
 /// The core plan of an agent image's manifest (`/etc/hydo/hydo.yaml`); a manifest that needs a
 /// wave-3 feature is refused with its seam.
 pub fn plan_of_image(image: &Path) -> Result<Plan, Unsupported> {
@@ -722,6 +748,13 @@ impl AgentEngine {
         // Milestone 328: what a root that does not fit into guest RAM is reported with
         let ram = image_guest(image).map(|g| g.ram_mib).unwrap_or(1024);
         plan.root_fit = crate::plan::RootFit::of_image(image, ram as u64);
+        if inner.kind() == EngineKind::Kvm && plan.services.iter().any(|s| s.own_clock) {
+            let rec = hydo_engine::image::image_record(image)?;
+            let variant = rec.as_ref().and_then(|r| r.kernel_variant.as_deref());
+            if let Some(why) = kvm_own_clock_refusal(&plan, variant) {
+                return Err(format!("{}: {why}", image.display()));
+            }
+        }
         Ok(AgentEngine::new(inner, plan))
     }
 
@@ -1596,5 +1629,20 @@ mod tests {
              hydo-ob: workload steps 0..2 rc=0\nHYDO-ORACLE: OK\nlate line\n"
         );
         assert_eq!(console_text(&t, &[]), report_text(&t));
+    }
+
+    /// Milestone 379: the KVM engine runs a service of `clock: own` only on an image of
+    /// `guest.kernel: containers`, and the refusal names the key and the services.
+    #[test]
+    fn own_clocks_on_kvm_need_the_kernels_for_containers() {
+        let text = "name: c\nservices:\n  - name: n1\n    cmd: /bin/n\n    ready: /bin/true\n    clock: own\n  - name: n2\n    cmd: /bin/n\n    ready: /bin/true\n  - name: n3\n    cmd: /bin/n\n    ready: /bin/true\n    clock: own\nworkload:\n  steps: 2\n  run: /bin/true\ninvariants:\n  - id: i\n    cmd: /bin/true\n";
+        let p = plan_of_embedded(text, None).unwrap();
+        let why = kvm_own_clock_refusal(&p, None).expect("refused without the variant");
+        assert!(why.starts_with("services: n1, n3: clock: own"), "{why}");
+        assert!(why.contains("guest.kernel: containers"), "{why}");
+        assert_eq!(kvm_own_clock_refusal(&p, Some("containers")), None);
+        let plain = text.replace("    clock: own\n", "");
+        let p = plan_of_embedded(&plain, None).unwrap();
+        assert_eq!(kvm_own_clock_refusal(&p, None), None);
     }
 }

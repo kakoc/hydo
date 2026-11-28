@@ -2166,6 +2166,29 @@ pub fn cmd_save(ctx: &Ctx, argv: &[String]) -> i32 {
     } else {
         kept
     };
+    // Milestone 387: a problem reported before its shrink has no minimal schedule to save yet
+    let mut open: Vec<(String, String)> = Vec::new();
+    for f in &doc.failures {
+        if hydo_results::shrink_state::is_open(f.shrink_state.as_deref()) {
+            let g = (
+                hydo_explore::advice::shrink_group(f.run.class.as_deref().unwrap_or(""))
+                    .to_string(),
+                f.signature.clone(),
+            );
+            if !open.contains(&g) {
+                open.push(g);
+            }
+        }
+    }
+    if !open.is_empty() {
+        println!(
+            "hydo: {} problem{} not shrunk yet, so not saved: `hydo shrink {} --problem N` \
+             (N as `hydo report` numbers it) shrinks one, then `hydo save` again",
+            open.len(),
+            if open.len() == 1 { " is" } else { "s are" },
+            crate::inspect::work::quote(&args[0])
+        );
+    }
     let with = match &params_line {
         Some(l) => format!(" with `{l}` (the image's build parameters)"),
         None => String::new(),

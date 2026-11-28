@@ -538,6 +538,10 @@ variables! {
     /// The x86_64 `hydo-clock` (one service's own wall clock, Milestone 372), staged only for
     /// manifests with a service of `clock: own`.
     HYDO_CLOCKBIN: Build, User, "path; empty = default", "<build dir>/hydo-clock", "hydo-build";
+    /// The x86_64 `hydo-clock` built with the feature `words` (Milestone 379), staged instead of
+    /// `hydo-clock` for an image of `guest.kernel: containers`, whose KVM kernels have no
+    /// `process_vm_readv`.
+    HYDO_CLOCKBIN_WORDS: Build, User, "path; empty = default", "<build dir>/hydo-clock-words", "hydo-build";
     /// The x86_64 `hydo-read`.
     HYDO_READ_BIN: Build, User, "path; empty = default", "<build dir>/hydo-read", "hydo-build";
     /// The arm64 `hydo-read`.
@@ -619,6 +623,9 @@ variables! {
     /// The scripted engine: a `restart_` scenario's service does not start again after a kill
     /// (Milestone 339, the shrinks of ERROR runs).
     HYDO_FAKE_RESTART: Tests, Test, "flag: not empty", "", "hydo-explore tests";
+    /// `1`: the scripted engine answers the shrinks' runs slowly, so a test can stop the explorer
+    /// after its first report (M387).
+    HYDO_FAKE_SLOW_SHRINKS: Tests, Test, "flag", "", "hydo-explore tests";
     /// Not empty: the scripted engine prints a steered distance and fails only at distance 0 (M209).
     HYDO_FAKE_STEER: Tests, Test, "flag: not empty", "", "hydo-explore tests";
     /// The history checker's dump directory.

@@ -1391,7 +1391,7 @@ pub struct Inspect {
     #[serde(rename = "type")]
     pub ty: InspectType,
     /// `start`, `status`, `list`, `stop`, `exec`, `read`, `ls`, `logs`, `ps`, `sockets`,
-    /// `advance`.
+    /// `advance`, `stacks` (Milestone 383).
     pub op: String,
     /// `start`: the session's id, the same as `session.id`, where scripts look for an id first
     /// (added in Milestone 328).
@@ -1440,6 +1440,152 @@ pub struct Inspect {
     /// Remarks for the caller (what the state is, what to try next).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
+    /// `stacks`: every guest thread's stack and the locks they wait on, read by the engine
+    /// without a change of the run (added in Milestone 383).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stacks: Option<InspectStacks>,
+}
+
+/// The stacks of a stop (added in Milestone 383, docs/design/inspect-stacks.md): the guest's
+/// threads from its kernel's task list, each with its user and kernel stack, the goroutines of
+/// Go programs, and the locks they wait on.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct InspectStacks {
+    /// The engine that read the state (`hvx`).
+    pub engine: String,
+    /// `x86_64` or `arm64`.
+    pub arch: String,
+    /// The guest kernel's release, as its `linux_banner` says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kernel: Option<String>,
+    pub threads: Vec<StackThread>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub goroutines: Vec<StackGoroutine>,
+    /// Every lock a thread or a goroutine waits on, with its waiters and its likely holders.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub locks: Vec<StackLock>,
+    /// Waits that close a cycle: each waits on a lock that the next one holds.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cycles: Vec<StackCycle>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
+}
+
+/// One guest thread (a task of the guest kernel).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StackThread {
+    pub pid: u64,
+    pub tid: u64,
+    /// The thread's name (`comm`).
+    pub comm: String,
+    /// The process's program, as its path in the guest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program: Option<String>,
+    /// The hydo service the process runs for (`HYDO_SVC` in its environment).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<String>,
+    /// `running`, `sleeping`, `disk-sleep`, `stopped`, `traced`, `frozen`, `zombie`, `dead`,
+    /// or `idle`.
+    pub state: String,
+    /// The vCPU the thread runs on at the stop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vcpu: Option<u64>,
+    /// The system call the thread is in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub syscall: Option<StackSyscall>,
+    /// The lock the thread waits on (`locks[].addr`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waits_on: Option<String>,
+    /// The user stack, innermost frame first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub user: Vec<StackFrame>,
+    /// The kernel stack, innermost frame first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kernel: Vec<StackFrame>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub notes: Vec<String>,
+}
+
+/// The system call a thread is in, from the registers the kernel saved at its entry.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StackSyscall {
+    pub nr: u64,
+    /// `futex`, `read`, `epoll_wait`, ... (empty when hydo does not know the number).
+    pub name: String,
+    /// The first arguments, in hexadecimal.
+    pub args: Vec<String>,
+}
+
+/// One frame of a stack.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StackFrame {
+    /// The program counter, in hexadecimal.
+    pub pc: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub function: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<u64>,
+    /// How the frame was found: `regs` (the registers), `cfi` (the program's call frame
+    /// information), `fp` (frame pointers), `go` (Go's table of frame sizes), `orc` (the
+    /// kernel's unwind tables), `scan` (an address in the kernel's text found on the stack).
+    pub how: String,
+}
+
+/// One goroutine of a Go program.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StackGoroutine {
+    pub pid: u64,
+    pub goid: u64,
+    /// `runnable`, `running`, `syscall`, `waiting`, ...
+    pub status: String,
+    /// Why it waits, in the Go runtime's words (`sync.Mutex.Lock`, `chan receive`, ...).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waits_on: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub frames: Vec<StackFrame>,
+}
+
+/// A lock some thread or goroutine waits on.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StackLock {
+    /// The lock's address in its process, in hexadecimal.
+    pub addr: String,
+    pub pid: u64,
+    /// `futex` (a thread in the futex system call) or `go-mutex` (a goroutine in
+    /// `sync.Mutex.Lock` or `sync.RWMutex`).
+    pub kind: String,
+    /// What the address is: a global variable of the program (`main.accountsMu`), with an
+    /// offset when it is inside one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The threads (`tid 812 (worker)`) or goroutines (`goroutine 7`) that wait on it.
+    pub waiters: Vec<String>,
+    /// Who likely holds it: another thread or goroutine whose stack keeps the lock's address.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub holders: Vec<StackHolder>,
+}
+
+/// A likely holder of a lock.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StackHolder {
+    pub who: String,
+    /// The frame whose stack slot keeps the lock's address.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frame: Option<String>,
+    /// Why hydo thinks so.
+    pub why: String,
+}
+
+/// A cycle of waits: each member waits on a lock that the next one holds.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct StackCycle {
+    /// `tid 812 (worker) waits on accounts (0x4c1a40), held by tid 813 (watchdog)`, one line per
+    /// wait.
+    pub waits: Vec<String>,
 }
 
 /// A call of `hydo inspect` that failed (added in M178): what was wrong and what would work.
@@ -1570,6 +1716,36 @@ pub struct Failure {
     pub timing_only: Option<bool>,
     /// The failing run.
     pub run: Run,
+    /// Where the shrink of this failure's problem (its class group and signature) stands, one
+    /// of [`shrink_state`] (added in Milestone 387). The explorer writes its report before it
+    /// shrinks, so a problem may be in a report without its minimal schedule. Absent: an
+    /// exploration made before Milestone 387, which wrote its report after its shrinks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shrink_state: Option<String>,
+    /// The command line that runs this failure's schedule once, while its problem has no
+    /// minimal schedule (its shrink state is not `done`; added in Milestone 387).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repro_command: Option<String>,
+}
+
+/// The values of [`Failure::shrink_state`] (added in Milestone 387).
+pub mod shrink_state {
+    /// The shrink has not started: `hydo explore --shrink-later`, or an exploration that was
+    /// stopped before it; `hydo shrink <explore dir> --problem N` runs it.
+    pub const PENDING: &str = "pending";
+    /// The explorer was shrinking it when it wrote the report. A report read after the
+    /// explorer stopped holds the failing run's schedule, as for `pending`.
+    pub const SHRINKING: &str = "shrinking";
+    /// The shrink ended: `shrinks` has its minimal schedule.
+    pub const DONE: &str = "done";
+    /// No shrink: `--no-shrink`, or a failure the explorer does not shrink (an error of
+    /// detected damage without `--shrink-detected-damage`, and a run that was refused).
+    pub const SKIPPED: &str = "skipped";
+
+    /// The state not shrunk yet: a minimal schedule may still come.
+    pub fn is_open(s: Option<&str>) -> bool {
+        matches!(s, Some(PENDING) | Some(SHRINKING))
+    }
 }
 
 /// Whether an engine's fingerprint names an end state. A run that passed its engine's limit (hvx's
@@ -1864,6 +2040,12 @@ pub struct Summary {
     /// far the seed range got. Absent when the option was not given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time_limit: Option<TimeLimit>,
+    /// Seconds from the explorer's start to its first report, written once the first runs and
+    /// the re-runs of each failure were done and before any shrink ended (added in Milestone
+    /// 387). A merge of parts has the latest of its parts' values. Absent: an exploration made
+    /// before Milestone 387, and a merge of a part made before it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_report_s: Option<f64>,
 }
 
 /// How far an exploration with `--time-limit` got (added in stage 2 of docs/design/ci.md). The
@@ -2460,6 +2642,10 @@ pub struct CiFinding {
     /// record`; added in Milestone 365). `title` is its normalized form.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verdict: Option<String>,
+    /// `minimal` is a failing run's schedule, not a shrunk one: the exploration did not shrink
+    /// the failure, or had not shrunk it yet (added in Milestone 387).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub not_shrunk: Option<bool>,
 }
 
 /// An accepted finding's entry (`hydo/known-findings.yaml`; added in stage 2).

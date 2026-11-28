@@ -1,6 +1,7 @@
 # One service's own wall clock (design)
 
-Status: a prototype is built in Milestone 372 (tentative number) for x86_64 images on hvx. The
+Status: a prototype is built in Milestone 372 (tentative number) for x86_64 images on hvx, and
+runs on KVM since Milestone 379 (tentative number) for an image of `guest.kernel: containers`. The
 authority on the token text is `hydo-schedule` (`ServiceClockChange` in `src/clock.rs`, and the
 test `service_clocks` in `tests/language.rs`). The program that gives a service its own clock is
 `hydo/crates/hydo-clock`. The controller's side is
@@ -155,6 +156,8 @@ Nothing that is recorded. An image without `clock: own` has the bytes it had, be
 hydo-build stages `/bin/hydo-clock` only for such an image, and a schedule without the new form
 gives the controller's commands of before. So the fingerprint epoch stays 6. The pinned
 reproducers gave their epoch-6 values with this tree (`docs/HISTORY.md`, Milestone 372).
+Milestone 379's fallback for KVM is in a second build of hydo-clock, staged only for an image of
+`guest.kernel: containers`, so an image of `clock: own` built before keeps its bytes too.
 
 A kernel variant would not change that rule either. It would be opt-in, keyed on a manifest key,
 and the image record would name the kernel by its sha256, as `guest.kernel: containers` does.
@@ -177,33 +180,73 @@ and the image record would name the kernel by its sha256, as `guest.kernel: cont
 - The offset file is in the run directory, so a recovery boot after a power cut and a reboot
   start every own clock at the guest's clock. A drift restarts from 0 when hydo-clock starts
   again after a kill.
-- x86_64 only, and hvx only. Neither the KVM nor the Mac engine ran it. The section "The KVM and
-  Mac engines" says what they need.
+- x86_64 only. hvx runs it, and KVM since Milestone 379 for an image of `guest.kernel:
+  containers`. The Mac engine does not: the section "The KVM and Mac engines" says what it
+  needs.
 
 ## The KVM and Mac engines
 
-Milestone 375 (tentative number) read what the two other engines lack; nothing was built. Both
-engines' guest kernels start from `allnoconfig` and a list of options, so an option that no list
-names is off:
+Milestone 375 (tentative number) read what the two other engines lack. Both engines' guest
+kernels start from `allnoconfig` and a list of options, so an option that no list names is off.
+Milestone 379 (tentative number) built what KVM needs without a change of a kernel.
+
+### KVM (built in Milestone 379)
+
+Two options were missing:
 
 - **seccomp.** Only the `containers` lists have `CONFIG_SECCOMP_FILTER`
-  (`hv/kvm/linux/hydo-kvm-containers.config` and `hv/hvm/explore/hvm-containers.config`). A
-  service of `clock: own` therefore needs `guest.kernel: containers` there. Without it hydo-clock
-  stops with `hydo-clock: cannot install the clock filter` and the status 126.
-- **Memory of the traced process.** hydo-clock reads and writes the traced process's memory with
+  (`hv/kvm/linux/hydo-kvm-containers.config` and `hv/hvm/explore/hvm-containers.config`). So a
+  service of `clock: own` needs `guest.kernel: containers` on KVM. The KVM engine refuses an
+  image whose record names no such kernel before any VM: `hydo_control::agent::
+  kvm_own_clock_refusal` names the services and the key. hvx boots its own kernel, which has
+  seccomp, whatever `guest.kernel` says.
+- **The traced process's memory.** hydo-clock reads and writes the traced process's memory with
   `process_vm_readv` and `process_vm_writev`. They need `CONFIG_CROSS_MEMORY_ATTACH`, which no
-  KVM or Mac list names, so even the `containers` kernels answer `ENOSYS`. Either the
-  `containers` lists gain the option, a change of their kernels, or hydo-clock falls back to
-  `PTRACE_PEEKDATA` and `PTRACE_POKEDATA`, one word per call. The fallback changes no kernel, and
-  it changes the bytes of hydo-clock, so of the images with `clock: own` only.
-- **arm64.** The Mac engine needs an arm64 build of hydo-clock. The system call number is in
-  `x8` and the arguments in `x0` to `x5`; the registers come from `PTRACE_GETREGSET` with
-  `NT_PRSTATUS`, and a skipped call gets the number -1 through `NT_ARM_SYSTEM_CALL`. arm64 has no
-  `time` system call, and `clock_gettime`, `gettimeofday` and `clock_nanosleep` have other
-  numbers (113, 169 and 115). The vDSO is hidden the same way, by `AT_SYSINFO_EHDR`.
-- **The engines' clocks.** The KVM and Mac engines count exits, as hvx does, so a read under
-  hydo-clock costs guest time there too; no measurement was made.
+  KVM or Mac list names, so every KVM kernel answers `ENOSYS`.
 
-So the smallest step is the fallback in hydo-clock and `guest.kernel: containers` on KVM, then
-the arm64 port for the Mac. A kernel variant with a realtime offset per time namespace would
-replace all of it, at the cost of four kernel builds (the section "The options").
+hydo-clock's cargo feature `words` (`src/words.rs`) adds the fallback. When either call answers
+`ENOSYS`, `peek` and `poke` reach the memory with `PTRACE_PEEKDATA` and `PTRACE_POKEDATA`, one
+aligned 8-byte word per call. An aligned word never crosses a page, and a write of part of a word
+reads the word first, so the bytes around a range stay. Where the calls work, the feature changes
+nothing.
+
+The feature is off in the default build, and the compiler removes the two calls into the empty
+module, so that build keeps Milestone 372's bytes (`de24fd93…`). `build.sh` makes both builds,
+`hydo-clock` and `hydo-clock-words`, each to the same bytes on every build. `hydo build` stages the
+build with the feature as `/bin/hydo-clock` for an image of `guest.kernel: containers`
+(`HYDO_CLOCKBIN_WORDS`, default `<build dir>/hydo-clock-words`), and Milestone 372's build for
+every other image. So every image built before keeps its bytes and its fingerprints on hvx.
+
+The example's `hydo-kvm.yaml` is its `hydo.yaml` with `guest.kernel: containers` and another
+name. The runs are in `docs/HISTORY.md`, Milestone 379.
+
+### The Mac (not built)
+
+The Mac engine needs the same two things and one more:
+
+- `guest.kernel: containers`, as on KVM: `Image-explore-containers` has seccomp, the other Mac
+  kernels do not. The build with the feature `words`, because no Mac kernel has
+  `CONFIG_CROSS_MEMORY_ATTACH`.
+- An arm64 build of hydo-clock. `clock: own` is refused for `--arch arm64` until it exists
+  (`hydo-manifest`'s validator). The port changes these parts of `main.rs`:
+  - the registers: `struct user_pt_regs` (`regs[31]`, `sp`, `pc`, `pstate`) through
+    `PTRACE_GETREGSET` and `PTRACE_SETREGSET` with `NT_PRSTATUS`, because arm64 has no
+    `PTRACE_GETREGS`. The system call number is in `x8`, the arguments in `x0` to `x5`, and the
+    result goes into `x0`;
+  - skipping a call: the number -1 through `PTRACE_SETREGSET` with `NT_ARM_SYSTEM_CALL`, then
+    the result in `x0` (x86_64 writes `orig_rax` instead);
+  - the numbers: arm64 has no `time` system call, and `clock_gettime`, `gettimeofday`,
+    `clock_nanosleep` and `futex` are 113, 169, 115 and 98;
+  - the seccomp filter's architecture, `AUDIT_ARCH_AARCH64` (`0xc00000b7`);
+  - the stack below the stack pointer, for the moved deadline: arm64 has no red zone, so
+    `sp - 512` is free as on x86_64;
+  - hiding the vDSO, which is the same: `AT_SYSINFO_EHDR` becomes `AT_IGNORE`;
+  - the check for a 32-bit program: an AArch32 task's `pstate` has bit 4 set, where x86_64 reads
+    `cs`.
+- A build recipe: `build.sh` with the `aarch64-unknown-linux-musl` target, as the arm64 builds of
+  hydo-agent and hydo-world are made, and `HYDO_CLOCKBIN_ARM64`.
+- **The engine's clock.** The Mac engine counts exits, as hvx and KVM do, so a read under
+  hydo-clock costs guest time there too.
+
+A kernel variant with a realtime offset per time namespace would replace all of it, at the cost
+of four kernel builds (the section "The options").

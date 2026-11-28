@@ -346,6 +346,7 @@ pub fn report(doc: &Exploration) -> String {
         }
         l.push(String::new());
     }
+    l.extend(not_shrunk_md(doc));
     l.extend(
         [
             "## Property table over every schedule (hydo guide sdks)",
@@ -373,6 +374,54 @@ pub fn report(doc: &Exploration) -> String {
         l.extend(hydo_errors::report_md_of(ek));
     }
     l.join("\n") + "\n"
+}
+
+/// Milestone 387: the problems whose shrink has not ended, each with its first failing run's
+/// schedule and the command that replays it; nothing when every shrink ended.
+pub fn not_shrunk_md(doc: &Exploration) -> Vec<String> {
+    use hydo_results::shrink_state;
+    let mut seen: Vec<(String, String)> = Vec::new();
+    let mut l: Vec<String> = Vec::new();
+    for f in &doc.failures {
+        if !shrink_state::is_open(f.shrink_state.as_deref()) {
+            continue;
+        }
+        let g = (
+            crate::advice::shrink_group(&class(f)).to_string(),
+            f.signature.clone(),
+        );
+        if seen.contains(&g) {
+            continue;
+        }
+        seen.push(g);
+        if l.is_empty() {
+            l.extend(["## Not shrunk yet", ""].map(String::from));
+            l.push(
+                "These problems show their first failing run. `hydo shrink <this folder> \
+                 --problem N` shrinks one (N as `hydo report` numbers it)."
+                    .into(),
+            );
+            l.push(String::new());
+        }
+        l.push(format!("### {}: `{}`", class(f), f.signature));
+        l.push(String::new());
+        l.push(format!(
+            "- seed {}, {}",
+            f.run.seed.map(|s| s.to_string()).unwrap_or_default(),
+            if f.shrink_state.as_deref() == Some(shrink_state::SHRINKING) {
+                "the explorer was shrinking it when it wrote this report"
+            } else {
+                "its shrink waits for `hydo shrink`"
+            }
+        ));
+        l.push(format!("- schedule: `{}`", f.run.schedule));
+        l.push(format!("- verdict: `{}`", f.run.verdict.text));
+        if let Some(c) = &f.repro_command {
+            l.push(format!("- by hand: {c}"));
+        }
+        l.push(String::new());
+    }
+    l
 }
 
 /// `--sweep turns` (M205): the boundaries with both neighbours, then every length run.

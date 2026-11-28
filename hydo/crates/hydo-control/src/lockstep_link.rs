@@ -120,6 +120,12 @@ impl Link for LockstepLink<'_, '_> {
                 .map_err(err)?
                 .map(|_| ())
                 .map_err(|e| LinkError(format!("the engine refused DISK: {e}"))),
+            EngineAction::Dump(p) => self
+                .ls
+                .dump(p)
+                .map_err(err)?
+                .map(|_| ())
+                .map_err(|e| LinkError(format!("the engine refused DUMP: {e}"))),
         }
     }
 

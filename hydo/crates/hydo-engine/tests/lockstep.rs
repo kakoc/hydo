@@ -133,6 +133,9 @@ fn replay(name: &str, text: &str, chan: bool) {
                         HostCmd::Disk(t) => {
                             s.disk(t).unwrap().unwrap();
                         }
+                        HostCmd::Dump(p) => {
+                            s.dump(p).unwrap().unwrap();
+                        }
                         HostCmd::Reboot => {
                             s.reboot().unwrap().unwrap();
                             break;

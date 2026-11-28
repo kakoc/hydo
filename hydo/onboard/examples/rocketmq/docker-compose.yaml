@@ -1,0 +1,68 @@
+# Apache RocketMQ 5.5.0 (the newest official image, 2026-05-04) in controller mode, as RocketMQ's
+# docs/en/controller/deploy.md describes it: a NameServer with the controller embedded, and one
+# replica group broker-a of three brokers. The controller chooses the master from the
+# SyncStateSet; a message is acknowledged after every replica of the SyncStateSet has it
+# (allAckInSyncStateSet) and after the master flushed it (SYNC_FLUSH). The nodes find each other
+# at fixed addresses, and each keeps its store in a volume of its own.
+x-broker: &broker
+  image: apache/rocketmq:5.5.0
+  entrypoint: ["sh", "/etc/rocketmq-hydo/start-broker.sh"]
+  depends_on: [namesrv]
+  restart: unless-stopped
+services:
+  namesrv:
+    image: apache/rocketmq:5.5.0
+    entrypoint: ["sh", "-c", "cd $$ROCKETMQ_HOME/bin && exec ./mqnamesrv -c /etc/rocketmq-hydo/namesrv.conf"]
+    environment:
+      HEAP_OPTS: "-Xms128m -Xmx128m -Xmn64m"
+      JAVA_OPT_EXT: "-XX:-AlwaysPreTouch"
+    volumes:
+      - ./config:/etc/rocketmq-hydo:ro
+      - namesrv:/home/rocketmq/store
+    networks:
+      rmq: {ipv4_address: 10.89.0.10}
+    ports: ["9876:9876"]
+    restart: unless-stopped
+  broker0:
+    <<: *broker
+    environment:
+      BROKER_ADDR: 10.89.0.11
+      HEAP_OPTS: "-Xms256m -Xmx256m -Xmn128m -XX:MaxDirectMemorySize=128m"
+      JAVA_OPT_EXT: "-XX:-AlwaysPreTouch -XX:G1HeapRegionSize=1m"
+    volumes:
+      - ./config:/etc/rocketmq-hydo:ro
+      - broker0:/home/rocketmq/store
+    networks:
+      rmq: {ipv4_address: 10.89.0.11}
+  broker1:
+    <<: *broker
+    environment:
+      BROKER_ADDR: 10.89.0.12
+      HEAP_OPTS: "-Xms256m -Xmx256m -Xmn128m -XX:MaxDirectMemorySize=128m"
+      JAVA_OPT_EXT: "-XX:-AlwaysPreTouch -XX:G1HeapRegionSize=1m"
+    volumes:
+      - ./config:/etc/rocketmq-hydo:ro
+      - broker1:/home/rocketmq/store
+    networks:
+      rmq: {ipv4_address: 10.89.0.12}
+  broker2:
+    <<: *broker
+    environment:
+      BROKER_ADDR: 10.89.0.13
+      HEAP_OPTS: "-Xms256m -Xmx256m -Xmn128m -XX:MaxDirectMemorySize=128m"
+      JAVA_OPT_EXT: "-XX:-AlwaysPreTouch -XX:G1HeapRegionSize=1m"
+    volumes:
+      - ./config:/etc/rocketmq-hydo:ro
+      - broker2:/home/rocketmq/store
+    networks:
+      rmq: {ipv4_address: 10.89.0.13}
+networks:
+  rmq:
+    ipam:
+      config:
+        - subnet: 10.89.0.0/24
+volumes:
+  namesrv: {}
+  broker0: {}
+  broker1: {}
+  broker2: {}

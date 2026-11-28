@@ -1,8 +1,9 @@
 # Strategies that found bugs: which checks and faults to choose
 
 This page lists the testing techniques that found bugs with hydo, with the evidence for each.
-Read it when you plan the checks and the faults of a new project. Start with the table, then
-read the entries that it names.
+Read it when you plan the checks and the faults of a new project. Start with the tables of the
+first section, then read the entries that they name. The section "The first hour of exploring"
+of `hydo guide workflow` puts the techniques with the best yield into an order to follow.
 
 Every number comes from runs that the project made on real systems. The examples and their
 results pages are in hydo's source repository, under `hydo/onboard/examples/<name>/`; a release
@@ -10,14 +11,88 @@ does not ship them. A number that the runs do not give is left out. "Blind" mean
 explore` drew the faults without a hint of where the bug is. A finding keeps the label of its
 results page: new as far as the search found, known, by design, or a deployment setting.
 
+The counts of this page come from the project's ledger of 47 onboardings of real systems, made
+on 2026-11-27. A bug in the ledger is one of three classes:
+
+- a new bug, which no upstream report names;
+- a known bug, which an upstream issue or pull request names;
+- a clock effect, a failure that needs a step of the wall clock.
+
+The ledger holds 105 such bugs. It leaves out the planted bugs of hydo's demonstrations and the
+candidates of function fuzzing. The line "Yield" of an entry gives the entry's counts.
+
 ## Start here
+
+### How each bug came first
+
+| way | bugs found first | examples with such a bug | schedules spent |
+|---|---|---|---|
+| a blind exploration, `--strategy process` | 60 | 30 of the 40 where it ran | 4,318 |
+| a directed schedule, written from the code, the documentation, or a report | 23 | 14 | not counted |
+| an aimed reaction grid (`--reactive-at`) | 4 | 4 of the 8 where it ran | 563 |
+| the page walk | 4 | 2 | 160 |
+| the first run without faults | 3 | 3 | one run each |
+| a native probe outside hydo | 3 | 2 | not counted |
+| a directed timing run | 2 | 2 | 508 |
+| a blind exploration, `--strategy swarm` | 2 | 2 of the 19 where it ran | 620 |
+| other ways | 4 | 4 | not counted |
+| explored settings (`--configs`) | 0 | 0 of the 8 where it ran | 245 |
+
+The process strategy found 1.4 bugs per 100 schedules. Of the 43 blind first finds whose place in
+their exploration is recorded, 25 came within the first 10 schedules and 35 within 20. The median
+was the seventh schedule. The directed schedules came after reading: three from Jepsen's reports
+on NATS, three from a scan of kill steps on Hatchet, and three from Meilisearch's code.
+
+### Which faults the bugs needed
+
+The faults are those that each bug's minimal schedule needs. "None" means a concurrent workload,
+a graceful stop, or the composition alone.
+
+| fault | bugs | examples with such a bug |
+|---|---|---|
+| a kill | 40 | 25 |
+| a clock step | 33 | 21 |
+| a power cut of the whole guest | 24 | 17 |
+| a pause | 18 | 12 |
+| none | 11 | 11 |
+| one node's power loss | 11 | 8 |
+| a network fault | 8 | 7 |
+| a damaged file | 6 | 4 |
+| a protocol fault | 3 | 3 |
+| thread timing | 3 | 3 |
+| disk errors | 2 | 2 |
+| a power cut at a flush | 2 | 2 |
+| an upgrade | 1 | 1 |
+
+A damaged file also gave 16 failures of the environment, and disk errors gave 10. In those the
+system detected the damage, or the disk broke its own promise. An operator's action in the
+workload was needed for 14 of the 105 bugs. The actions were failovers, slot migrations, a node's
+removal, a graceful stop, an update's install and commit, an upgrade, and a second producer of
+one transactional id.
+
+The causes of the 105 bugs, as their results pages give them:
+
+| cause | bugs |
+|---|---|
+| the wall clock measures a duration, a deadline, an order, or a version | 29 |
+| the election, replication, or membership logic | 22 |
+| a crash between two commits, or state that lives only in memory | 17 |
+| an acknowledgement before the data is synced | 14 |
+| another cause | 11 |
+| a race of concurrent requests, without a fault | 8 |
+| the handling of a damaged file | 5 |
+| a client library or a dependency | 2 |
+
+A bug with two causes counts in both rows.
+
+### By type of system
 
 | system | its promise | the techniques that found most | where they found bugs |
 |---|---|---|---|
-| database or key-value store | an acknowledged write survives; replicas agree | power cuts of the whole guest; clock steps and the clock audit; one node's storage faults; failovers by the client with a late write; replicas compared after a restart | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus, Kvrocks, Typesense, rqlite, Garnet |
-| object store | an acknowledged object stays as written; a listing shows what exists | a listing compared with a read of each key; kills and pauses of one node; clock steps | Garage |
-| log or stream with partitions | no loss, one offset per record, no aborted read | the messages check; reactions at console events; one node's storage faults; a client that leaves transactions open, and power cuts and clock steps | Redpanda, NATS, Pulsar, RabbitMQ |
-| job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps and the clock audit; the messages check | Hatchet, River, Temporal, Saleor, Restate, NSQ |
+| database or key-value store | an acknowledged write survives; replicas agree | clock steps; kills; power cuts of the whole guest; every replica compared with the leader; one node's storage faults; failovers by the client with a late write | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus, Kvrocks, Typesense, rqlite, Garnet |
+| object store | an acknowledged object stays as written; a listing shows what exists | clock steps; kills and pauses of one node; a listing compared with a read of each key | Garage |
+| log or stream with partitions | no loss, one offset per record, no aborted read | kills; power cuts and clock steps; the messages check; reactions at console events; one node's storage faults; a client that leaves transactions open | Redpanda, NATS, Pulsar, RabbitMQ, RocketMQ |
+| job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps; the messages check | Hatchet, River, Temporal, Saleor, Restate, NSQ |
 | distributed query or compute engine with schedulers and workers | an accepted query ends; a completed query's result stays readable | production's topology and features; checks of how each unknown outcome ends; pauses of a worker past its failure detector; kills of the worker that holds the results | a user's query engine |
 | ledger or billing system | the books match the acknowledged operations; a limit holds | the generic rule beside domain rules; concurrent clients without faults; value properties | Blnk, Lago, Formance Ledger |
 | service that calls outside APIs | a payment or a mail takes effect once | protocol faults on fakes and emulators; a kill while an answer is late | web-shop, checkout, openapi-payouts, Saleor |
@@ -29,17 +104,15 @@ results page: new as far as the search found, known, by design, or a deployment 
 
 These findings hold for every type of system:
 
-- Run the system in production's shape: its replica counts, its cluster sizes, and its features
-  turned on (the entry "Production's topology").
-- Write the generic rule first. It found more than any other rule in Lago, Formance Ledger, and
-  Blnk.
-- Check how each operation ends that the client records as unknown (the entry "How each unknown
-  outcome ends").
-- Explore with `--strategy process` first and `--strategy swarm` last (the entry "The
-  explorer's strategy").
-- Run each durability setting at its durable value. A loss under a relaxed setting is the
-  setting's documented cost. `hydo explore --configs` explores every value and labels such a
-  loss (the entry "Settings that trade durability").
+- Run the system in production's shape, with its durable settings: its replica counts, its
+  cluster sizes, and its features turned on (the entry "Production's topology"). A loss under a
+  relaxed setting is the setting's documented cost.
+- Declare the default checks before the first run, so that the run without faults judges
+  something. 11 bugs needed no fault, and 3 showed in the first run (the section "Checks").
+- Explore 20 seeds with `--strategy process`, and keep clock steps, kills, and power cuts. That
+  found most bugs first (the entry "The explorer's strategy").
+- Judge each failure by directed runs, and shrink only the one that you report. The explorations
+  ran a median of 6.9 re-runs and shrink candidates per first run.
 - Do not stop at one clean exploration. A user's query engine passed 20 seeds and then failed 2
   ways in 60 seeds, with production's shape and checks of the unknown outcomes.
 
@@ -50,6 +123,7 @@ These findings hold for every type of system:
 - **What it is.** The `hydo/` folder runs each service as many times as production does, each
   cluster at production's size, and the features that production turns on. Only the memory
   sizes shrink to fit the guest.
+- **Yield.** 2 new bugs, in one example, a user's query engine.
 - **What to write.** Read the deployment manifests: the Helm values, the Kustomize overlays, and
   the platform's environment files. List each service's replica count, each cluster's size, and
   each feature that production turns on, for example its caches. Then give `hydo.yaml` one
@@ -79,6 +153,7 @@ These findings hold for every type of system:
 
 - **What it is.** A feature that production turns on and a test setup leaves off, such as a
   cache, runs code that no fault reaches while it is off. Turn each such feature on.
+- **Yield.** 3 new bugs, in 3 examples.
 - **What to write.** The production value of each flag in the service's `env:`. For an object
   store, run one whose answers the cache relies on. A cache that keeps its manifests with
   conditional writes, create-if-absent (`If-None-Match`) and update-if-the-ETag-matches
@@ -103,10 +178,18 @@ These findings hold for every type of system:
 
 ## Checks
 
+The first six entries are the default checks: declare them before the first run. Together with
+hydo's own verdicts they would have caught 63 of the 105 bugs. The entries after them are the
+project's own checks, in the order of the bugs that they noticed first. The section "Which check
+noticed each bug" counts them all.
+
 ### The generic rule over the client's acknowledged operations
 
 - **What it is.** One check recomputes the business result from the operations that the client
   saw acknowledged, and compares it with the system's own totals. It knows nothing of the domain.
+- **Yield.** As the first check to fail, the read-back of acknowledged writes noticed 19 of the 105
+  bugs: 7 new, 7 known, and 5 clock effects. It made 2 of the 30 false findings. At least 32
+  examples declared it.
 - **What to write.** Each workload command records an acknowledged operation and what it
   changes. A `final_` check in `hydo/checks/` sums the records and compares the sums with the
   system's. `hydo guide composer` gives the files:
@@ -133,116 +216,13 @@ These findings hold for every type of system:
 - **Cost.** The client must record each operation in a form that the check can replay. The check
   was 156 lines of Go in Formance and 380 in Blnk. It runs on every engine.
 
-### How each unknown outcome ends
-
-- **What it is.** The client records an operation as unknown when it did not see the end: a
-  query still running at the client's timeout, or a result read that failed. No check judges
-  whether an unknown operation was applied, because either answer is correct. So an operation
-  that never ends is a broken promise that nobody checks. For each type of unknown outcome,
-  write the `eventually_` check that says how it must end.
-- **What to write.** Let the workload record each operation under the id that the system gave
-  it, so that a check can ask the system about it. Then write two checks (`hydo guide checks`):
-  - An `eventually_` check that every accepted operation reaches a final state. Set `within=`
-    longer than the system's own timeout for that operation.
-  - An `eventually_` check that the result of each operation that the client saw complete is
-    still readable after the heal.
-
-  ```sh
-  #!/bin/sh
-  # hydo: within=600 after=heal poll=10
-  # hydo-msg: every accepted query ends as completed or failed
-  for id in $(awk '{o[$1] = $2} END {for (i in o) if (o[i] == "unknown") print i}' "$HYDO_OUTCOMES"); do
-    state=$(/bin/client status "$id") || exit 2
-    case $state in completed|failed) ;; *) echo "query $id is still $state"; exit 1 ;; esac
-  done
-  ```
-
-  For the operations that the system acknowledged, the claim `acked_outcome` of a `type:
-  messages` check states the first rule without a hand-written check (`hydo guide messages`,
-  "Read back the final states"). It also keeps the rule for unknown outcomes: such an operation
-  may end in any state, so the claim never counts it as a failure.
-
-- **When it fits.** A system that accepts an operation and finishes it later: a query engine, a
-  job runner, a workflow engine, a batch scheduler.
-- **What it found.** The user's query engine (the entry "Production's topology"). The first
-  round's workload recorded a stuck query and an unreadable result as unknown, so no run could
-  fail on them. With the two checks, the second round found both bugs: a query that stays
-  running after a worker's pause, and a completed query whose results are gone after a kill.
-  The claim `acked_outcome` on Meilisearch's task queue broke on two acknowledged additions
-  after a power cut: both failed with an internal error, and one of them had its documents
-  stored. A kill after an index deletion's `202` left the deletion `failed` with
-  `index_not_found` although the index was gone, an error the declaration named as the
-  client's; the recorded effect broke the claim.
-  Pulsar (findings 1 to 3): a final check over a subscription that nothing else reads judged
-  each transaction of `$HYDO_OUTCOMES` all or nothing, the unknown ones too. It broke in the
-  first run without faults: the Go client's aborted transactions were delivered
-  (pulsar-client-go#1498, known). The client then left 1 transaction in 8 open, as a crashed
-  client does. A clock step back of 600 s inside the transaction's timeout kept it open, and its
-  partitions held back every later message. After a power cut such a transaction stayed open
-  until a transactional client connected. The `eventually_` check that no partition has an open
-  transaction after the heal judges the end of each one.
-- **What it misses.** In an image built before the fingerprint epoch 6, `$HYDO_OUTCOMES` is
-  empty in the recovery boot after a power cut unless `guest.outcomes_after_cut: true` is set
-  (`hydo guide composer`). A check that asks about every
-  operation on every poll starts many processes. In the user's first version, the run ended as
-  `ERROR check: exit budget exhausted` while queries were stuck. Stop at the first operation
-  that has not ended, as the example does.
-- **Cost.** One status call per operation and poll. It runs on every engine.
-
-### Domain rules from the project's sources
-
-- **What it is.** A domain rule states one promise of the system in its own terms, often as a
-  `.sql` check: a query that must return no rows. hydo proposes the evidence and validates each
-  rule on runs without faults.
-- **What to write.** `hydo rules scan` lists the schema, the state columns, the API and the
-  documented promises. Write the candidates into `hydo/rules.yaml`, then run
-  `hydo rules check hydo/rules.yaml --mutate` (`hydo guide rules`).
-- **When it fits.** A system that enforces a rule across processes, such as an API, a queue, and a
-  worker.
-- **What it found.**
-  - Blnk: the overdraft rule alone found finding 1, draws that ignore their
-    limit. The bulk rule found finding 2, an atomic bulk that keeps its first transfer.
-  - Saleor: `refund_requests_end`, `gift_card_balance_is_its_ledger`, and
-    `placed_orders_are_paid` caught both new bugs, saleor#20022 and saleor#20023.
-  - The rule suggestion: on Blnk, Lago, and listmonk, 23 of 25 proposed rules
-    held on clean runs. On the examples' saved regressions they caught six findings.
-- **What it misses.** A rule that one database transaction enforces rarely fails: 7 of
-  Formance's 8 domain rules and 5 of Blnk's 7 never failed. The scan matches words. It read none
-  of Saleor's 25 `models.py` files, so 14 of the 17 rules came from reading the code. Blnk's
-  atomic-bulk bug was caught only by a rule written after the miss.
-- **Cost.** A SQL rule was 5 to 21 lines in Formance and Blnk. `hydo rules check` runs the
-  workload without faults on three composition seeds.
-
-### Value properties (`// hydo: keep`)
-
-- **What it is.** A comment line says that a recorded value must not change between two
-  functions. A run that breaks it fails, also when every business rule holds.
-- **What to write.** Record the value with `key` and `record` lines next to a function, and add
-  a `keep` line (`hydo guide values`, section 4):
-
-  ```go
-  // hydo: keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction
-  // hydo: key transaction.Reference
-  // hydo: record transaction.OverdraftLimit as overdraft_limit at entry
-  ```
-
-- **When it fits.** A value that passes through a queue, a cache, or a copy before a decision
-  uses it. Blnk's overdraft limit is such a value.
-- **What it found.** Blnk (the results page's section "The limit as a property
-  that a run can break"): the property broke in 9 of 30 blind schedules, first at seed 4. The
-  overdraft rule broke in 1, at seed 21. The property fails the run without faults, where every
-  business rule held, and the fixed build holds it. Each break names the first changing call:
-  the worker's coalesced copy had the limit 0.0.
-- **What it misses.** A property names one value. A comparison of two values, or of a value with
-  a constant, is not built.
-- **Cost.** The Mac and KVM engines stop at hardware breakpoints; hvx has none for it. On Blnk a
-  run took 5.6 to 5.9 s of engine time with the plan and 5.7 to 5.8 s without it, with one
-  fingerprint.
-
 ### The messages check's claims
 
 - **What it is.** A `type: messages` check judges the history that the client records against
   the promises that the project declares (`hydo guide messages`).
+- **Yield.** `no-loss` noticed 6 bugs first and made no false finding. `acked-outcome` noticed 4 and
+  made 2 false findings. The other claims noticed 1 and made 1. At least 19 examples declared a
+  messages check.
 - **What to write.** The claims of the Redpanda example. For transactions, add an `eventually`
   check that no transaction stays open after the heal, as Redpanda's `tx.no_hanging`:
 
@@ -275,6 +255,12 @@ These findings hold for every type of system:
     client's documentation says that a receipt does not keep a message from coming again. A
     failover subscription served by one consumer process at a time kept `order: {kind: fifo,
     scope: key}` judgeable; a shared one with prefetching consumers does not keep it.
+  - RocketMQ: `duplicates: forbidden`, with the queue and offset of each delivery as `o=`,
+    broke when the broker stored a committed transaction again after a clock step (finding 3).
+    `after_ack: no-redelivery` broke at every failover, because a slave copies the consumer
+    offsets every 10 s (finding 2, known apache/rocketmq#7790), so the example claims it in a
+    second manifest only. A transaction that rolls back is recorded as a failed send, so a
+    delivery of it would break `no-phantom`; none came.
   - NSQ (finding 1 and the known nsqio/nsq#1386): `acked_outcome` with `effect: recorded`, where
     the effect is a consumer's `FIN`, broke for messages that a consumer had received once and
     that a kill of `nsqd` lost. `no-loss` counted them as delivered. NSQ reports no state per
@@ -285,132 +271,14 @@ These findings hold for every type of system:
 - **Cost.** A drain that reads every message back (`hydo guide messages`, "Write the drain"). It
   runs on every engine.
 
-### An effects file beside a durable execution's journal
-
-- **What it is.** Each journaled step of a handler appends one line with a nonce to a file and
-  syncs it: the outside system that the step changes. A check compares the journal's result of
-  each step with the lines, so it sees a step that ran again after its result was journaled.
-- **What to write.** A `beg` line when the step's closure starts and a result line, both with one
-  nonce, and the handler's state with each step's nonce (the Restate example's `service/`). The
-  check pairs them. A step whose closure starts after a later step started ran again. A later
-  result line whose closure started after the journaled one ended is a re-run too. A closure
-  that an abandoned attempt finishes after the journaled one, started before it, is the
-  at-least-once of a step that was not journaled yet.
-- **When it fits.** A durable execution engine or a workflow engine with journaled steps.
-- **What it found.** Restate: no step ran again after its result was journaled, in 40 blind
-  schedules and about 120 directed runs with kills, power cuts, and pauses.
-- **What it misses.** The file is on the guest's disk, so a lying disk or disk I/O errors break
-  it with the system. A step that an abandoned attempt runs at the same time is undecided without
-  the start lines.
-- **Cost.** One synced write per step. It runs on every engine.
-
-### History checks (list-append and registers)
-
-- **What it is.** The client records each operation's call and result. After the run, hydo
-  checks the history for isolation anomalies or for linearizability.
-- **What to write.** A check file `list_append_<name>` with `# hydo: history=log
-  consistency=strict-serializable` (`hydo guide checks`). For PostgreSQL, MySQL, and libSQL,
-  `hydo sql-gen` writes the workloads and the checks (`hydo guide workloads`).
-- **When it fits.** A database with transactions or a store with compare-and-set.
-- **What it found.**
-  - libSQL's sqld (the results page, findings 1 and 3): with its default durability, a power cut
-    lost acknowledged appends (`lost-append`). With `strong` set through the administration API,
-    4 of 100 schedules still lost appends, because sqld forgets the setting at a restart.
-  - YugabyteDB: its default WAL setting lost acknowledged writes at a power cut.
-    Each loss was found by another generated check.
-- **What it misses.** A level without real time, such as `serializable`, cannot see a lost write.
-  In SurrealDB, 167 schedules showed no anomaly at strong snapshot isolation. In rqlite, 95
-  schedules of transactions with list appends and reads at level `linearizable` or `strong`
-  showed none at strict serializability, under kills, partitions, power cuts, and clock steps.
-  Its two findings were in the queued writes, which the messages check judged.
-- **Cost.** `hydo sql-gen` writes it for the three SQL dialects. The check runs on the host.
-
-### Error logs as findings
-
-- **What it is.** Every error-level line of a service is a finding until you accept its kind in
-  `hydo/known-errors.yaml` (`hydo guide error-logs`).
-- **What to write.** One line in `hydo.yaml`: `errors: true`.
-- **When it fits.** A service whose client retries, so that an error never reaches a rule.
-- **What it found.** Formance Ledger (finding 1): the only signal of the ledger
-  bug, a `500` when two transactions first use one account in two assets. It came as a new
-  error kind at seed 11 of an exploration, after 70 schedules without a failure. It is reported
-  as formancehq/ledger#2542. In Blnk the error logs showed finding 2's failed rollback beside
-  the rules.
-- **What it misses.** It found a bug alone in one of three ledgers. Every kind needs a review:
-  15 entries in Blnk and 31 kinds in Formance. An id in a log line splits one kind into many
-  (`normalize:` fixes it). On hvx the scan reads every service's whole log through the agent.
-  A run of a verbose system can pass the 16 MiB of lines that hvx keeps per boot. In
-  GreptimeDB's first exploration, with Kafka and five GreptimeDB services, such a run waited for
-  its wall limit, so the example turned the scan off.
-- **Cost.** One line, and the review of each new kind.
-
-### Concurrent clients without faults
-
-- **What it is.** Several copies of a workload command run at once, so the system's own races
-  show without any fault.
-- **What to write.** Name the command `parallel_driver_<name>` in `hydo/workload/`
-  (`hydo guide composer`). Let the copies choose the same object sometimes, such as one order or
-  one account.
-- **When it fits.** A system that checks a limit or a state across processes.
-- **What it found.**
-  - Blnk (finding 1): five draws of 30.00 against a limit of 50.00 all apply. The value
-    property's failure shrank to a schedule without a fault. It runs only the draw and the repay
-    commands.
-  - Formance Ledger (finding 1): two first uses of one account at once. Natively 196 of 200
-    pairs failed.
-  - Medusa (finding 1): two refunds of one order at once duplicate its items, found blind at
-    seed 2, and again at seed 1 of a later exploration.
-- **What it misses.** A race between two objects that the drivers never choose together.
-- **Cost.** The drivers only. It runs on every engine.
-
-### A snapshot or a backup read back at once
-
-- **What it is.** A workload command asks the system for a snapshot, a dump or a backup, and
-  reads it back at once with the system's own tool. The snapshot must hold every operation that
-  was acknowledged before the request. A final check reads every snapshot again, also after a
-  power cut.
-- **What to write.** An `anytime_` command that records the snapshot's name in `$HYDO_ACKED`
-  and reads it with the tool inside the service's image (`hydo-oci <service> <tool> ...`), and a
-  `final_` check over the recorded names. Mix every type of write that the system keeps apart:
-  the Prometheus client writes one in-order and one out-of-order series in each request.
-- **When it fits.** A database or a store that offers snapshots or dumps for backups.
-- **What it found.**
-  - Prometheus (finding 1): in a run without faults, every snapshot with the head lacked up to
-    207 samples. They were the out-of-order samples that the server had not yet compacted into a
-    block. The in-order samples were all there.
-  - Meilisearch (finding 3): a dump that succeeded was an empty file after a power cut.
-- **What it misses.** A workload of one type of write: the Prometheus snapshots held every
-  in-order sample. A tool that cannot read the snapshot as it is: `promtool tsdb dump` refuses a
-  directory without a `wal` folder, so the client makes an empty one first.
-- **Cost.** One read of the snapshot per command. It runs on every engine.
-
-### A listing compared with a read of each key
-
-- **What it is.** A final check lists the store's keys, a bucket or a range, and reads each key
-  that the workload wrote on its own. Every key that a read finds must be listed, and no key that
-  a read does not find. A read of one key and a listing take different code paths in a
-  replicated store.
-- **What to write.** A `final_` check that lists first, then reads each key, and prints each key
-  that differs on an earlier line than its count. Do not read a key before the listing: a read
-  can repair the stale replica. The Garage example's `gac check list` is one to copy.
-- **When it fits.** A replicated store with quorum reads, an object store, or any store whose
-  scans merge the replicas' answers.
-- **What it found.**
-  - Garage (finding 2): after one node of three was killed, paused or lost its power, a
-    listing named keys deleted while it was down, and GET answered 404 for each. Each node
-    filters its own copy before the coordinator merges them. The blind explorations ended with it
-    in 52 of 200 schedules, from seed 2 on; the checks of each acknowledged write held in all of
-    them. The same check of the multipart uploads found an aborted upload listed.
-- **What it misses.** A stale replica that anti-entropy repairs before the check runs. In Garage
-  the repair came within 10 minutes, after the run's end, so the check saw it.
-- **Cost.** One listing and one read per key at the end. It runs on every engine.
-
 ### Every replica compared with the leader after a restart
 
 - **What it is.** After the heal, an `eventually_` check reads every document of every node and
   compares each follower with the leader. The generic rule reads the leader alone, so a follower
   that applied the log otherwise passes it. A kill of one follower makes it replay its log at
   the next start.
+- **Yield.** It noticed 10 bugs first: 5 new, 4 known, and 1 clock effect. It made 1 false finding.
+  At least 11 examples declared it.
 - **What to write.** An `eventually_` check that waits for a healthy leader and writes a barrier
   through it. It then compares the id and version of each node's documents with the leader's. Give
   the workload the operations that the system runs in several steps, and writes of the same
@@ -435,267 +303,348 @@ These findings hold for every type of system:
   instead of its keys: the status of Garnet's replica said `up` while it received nothing.
 - **Cost.** One export of every node at the end. It runs on every engine.
 
+### How each unknown outcome ends
+
+- **What it is.** The client records an operation as unknown when it did not see the end: a
+  query still running at the client's timeout, or a result read that failed. No check judges
+  whether an unknown operation was applied, because either answer is correct. So an operation
+  that never ends is a broken promise that nobody checks. For each type of unknown outcome,
+  write the `eventually_` check that says how it must end.
+- **Yield.** The liveness checks, an `eventually_` check or a check that the system serves writes,
+  noticed 10 bugs first: 4 new and 6 clock effects. They made 1 false finding. Four of the 10 needed
+  a check narrower than one write after the heal.
+- **What to write.** Let the workload record each operation under the id that the system gave
+  it, so that a check can ask the system about it. Then write two checks (`hydo guide checks`):
+  - An `eventually_` check that every accepted operation reaches a final state. Set `within=`
+    longer than the system's own timeout for that operation.
+  - An `eventually_` check that the result of each operation that the client saw complete is
+    still readable after the heal.
+
+  ```sh
+  #!/bin/sh
+  # hydo: within=600 after=heal poll=10
+  # hydo-msg: every accepted query ends as completed or failed
+  for id in $(awk '{o[$1] = $2} END {for (i in o) if (o[i] == "unknown") print i}' "$HYDO_OUTCOMES"); do
+    state=$(/bin/client status "$id") || exit 2
+    case $state in completed|failed) ;; *) echo "query $id is still $state"; exit 1 ;; esac
+  done
+  ```
+
+  For the operations that the system acknowledged, the claim `acked_outcome` of a `type:
+  messages` check states the first rule without a hand-written check (`hydo guide messages`,
+  "Read back the final states"). It also keeps the rule for unknown outcomes: such an operation
+  may end in any state, so the claim never counts it as a failure.
+
+  A third `eventually_` check writes to the system after the heal and waits for the answer.
+  It noticed Garage's finding 3, RabbitMQ's finding 3, and Kvrocks's finding 2. In the last two
+  every check of the data held.
+
+- **When it fits.** A system that accepts an operation and finishes it later: a query engine, a
+  job runner, a workflow engine, a batch scheduler.
+- **What it found.** The user's query engine (the entry "Production's topology"). The first
+  round's workload recorded a stuck query and an unreadable result as unknown, so no run could
+  fail on them. With the two checks, the second round found both bugs: a query that stays
+  running after a worker's pause, and a completed query whose results are gone after a kill.
+  The claim `acked_outcome` on Meilisearch's task queue broke on two acknowledged additions
+  after a power cut: both failed with an internal error, and one of them had its documents
+  stored. A kill after an index deletion's `202` left the deletion `failed` with
+  `index_not_found` although the index was gone, an error the declaration named as the
+  client's; the recorded effect broke the claim.
+  Pulsar (findings 1 to 3): a final check over a subscription that nothing else reads judged
+  each transaction of `$HYDO_OUTCOMES` all or nothing, the unknown ones too. It broke in the
+  first run without faults: the Go client's aborted transactions were delivered
+  (pulsar-client-go#1498, known). The client then left 1 transaction in 8 open, as a crashed
+  client does. A clock step back of 600 s inside the transaction's timeout kept it open, and its
+  partitions held back every later message. After a power cut such a transaction stayed open
+  until a transactional client connected. The `eventually_` check that no partition has an open
+  transaction after the heal judges the end of each one.
+- **What it misses.** In an image built before the fingerprint epoch 6, `$HYDO_OUTCOMES` is
+  empty in the recovery boot after a power cut unless `guest.outcomes_after_cut: true` is set
+  (`hydo guide composer`). A check that asks about every
+  operation on every poll starts many processes. In the user's first version, the run ended as
+  `ERROR check: exit budget exhausted` while queries were stuck. Stop at the first operation
+  that has not ended, as the example does.
+- **Cost.** One status call per operation and poll. It runs on every engine.
+
+### History checks (list-append and registers)
+
+- **What it is.** The client records each operation's call and result. After the run, hydo
+  checks the history for isolation anomalies or for linearizability.
+- **Yield.** It noticed 3 bugs first, 1 new, 1 known, and 1 clock effect, and made no false finding.
+  At least 7 examples declared one.
+- **What to write.** A check file `list_append_<name>` with `# hydo: history=log
+  consistency=strict-serializable` (`hydo guide checks`). For PostgreSQL, MySQL, and libSQL,
+  `hydo sql-gen` writes the workloads and the checks (`hydo guide workloads`).
+- **When it fits.** A database with transactions or a store with compare-and-set.
+- **What it found.**
+  - libSQL's sqld (the results page, findings 1 and 3): with its default durability, a power cut
+    lost acknowledged appends (`lost-append`). With `strong` set through the administration API,
+    4 of 100 schedules still lost appends, because sqld forgets the setting at a restart.
+  - YugabyteDB: its default WAL setting lost acknowledged writes at a power cut.
+    Each loss was found by another generated check.
+- **What it misses.** A level without real time, such as `serializable`, cannot see a lost write.
+  In SurrealDB, 167 schedules showed no anomaly at strong snapshot isolation. In rqlite, 95
+  schedules of transactions with list appends and reads at level `linearizable` or `strong`
+  showed none at strict serializability, under kills, partitions, power cuts, and clock steps.
+  Its two findings were in the queued writes, which the messages check judged.
+- **Cost.** `hydo sql-gen` writes it for the three SQL dialects. The check runs on the host.
+
+### Error logs as findings
+
+- **What it is.** Every error-level line of a service is a finding until you accept its kind in
+  `hydo/known-errors.yaml` (`hydo guide error-logs`).
+- **Yield.** It noticed 1 bug first, Formance Ledger's, and made no false finding. At least 15
+  examples turned it on. It costs one line.
+- **What to write.** One line in `hydo.yaml`: `errors: true`.
+- **When it fits.** A service whose client retries, so that an error never reaches a rule.
+- **What it found.** Formance Ledger (finding 1): the only signal of the ledger
+  bug, a `500` when two transactions first use one account in two assets. It came as a new
+  error kind at seed 11 of an exploration, after 70 schedules without a failure. It is reported
+  as formancehq/ledger#2542. In Blnk the error logs showed finding 2's failed rollback beside
+  the rules.
+- **What it misses.** It found a bug alone in one of three ledgers. Every kind needs a review:
+  15 entries in Blnk and 31 kinds in Formance. An id in a log line splits one kind into many
+  (`normalize:` fixes it). On hvx the scan reads every service's whole log through the agent.
+  A run of a verbose system can pass the 16 MiB of lines that hvx keeps per boot. In
+  GreptimeDB's first exploration, with Kafka and five GreptimeDB services, such a run waited for
+  its wall limit, so the example turned the scan off.
+- **Cost.** One line, and the review of each new kind.
+
+### Domain rules from the project's sources
+
+- **What it is.** A domain rule states one promise of the system in its own terms, often as a
+  `.sql` check: a query that must return no rows. hydo proposes the evidence and validates each
+  rule on runs without faults.
+- **Yield.** As the first check to fail, business rules over the stored state noticed 32 bugs: 14
+  new, 8 known, and 10 clock effects. They also made 21 of the 30 false findings, a false share of
+  36 %. 19 bugs were caught by a check of the project's own alone.
+- **What to write.** `hydo rules scan` lists the schema, the state columns, the API and the
+  documented promises. Write the candidates into `hydo/rules.yaml`, then run
+  `hydo rules check hydo/rules.yaml --mutate` (`hydo guide rules`).
+- **When it fits.** A system that enforces a rule across processes, such as an API, a queue, and a
+  worker. The rules paid where the promise is at most once, once per period, a money limit, a
+  device's version, or a listing, an expiry, or a retention.
+- **What it found.**
+  - Blnk: the overdraft rule alone found finding 1, draws that ignore their
+    limit. The bulk rule found finding 2, an atomic bulk that keeps its first transfer.
+  - Saleor: `refund_requests_end`, `gift_card_balance_is_its_ledger`, and
+    `placed_orders_are_paid` caught both new bugs, saleor#20022 and saleor#20023.
+  - The rule suggestion: on Blnk, Lago, and listmonk, 23 of 25 proposed rules
+    held on clean runs. On the examples' saved regressions they caught six findings.
+- **What it misses.** A rule that one database transaction enforces rarely fails: 7 of
+  Formance's 8 domain rules and 5 of Blnk's 7 never failed. The scan matches words. It read none
+  of Saleor's 25 `models.py` files, so 14 of the 17 rules came from reading the code. Blnk's
+  atomic-bulk bug was caught only by a rule written after the miss.
+- **Review before exploring.** Check two points of each rule before the first exploration. Its
+  wait must cover the system's own recovery: a lease, a retry timer, a failover, and a recovery
+  boot. Its result under a clock step must match the promise, not the wall clock's new time.
+  The 21 false findings of the rules were mostly one of these two.
+- **Cost.** A SQL rule was 5 to 21 lines in Formance and Blnk. `hydo rules check` runs the
+  workload without faults on three composition seeds.
+
+### Concurrent clients without faults
+
+- **What it is.** Several copies of a workload command run at once, so the system's own races
+  show without any fault.
+- **Yield.** 4 bugs needed it, in 4 examples: 3 new and 1 known.
+- **What to write.** Name the command `parallel_driver_<name>` in `hydo/workload/`
+  (`hydo guide composer`). Let the copies choose the same object sometimes, such as one order or
+  one account.
+- **When it fits.** A system that checks a limit or a state across processes.
+- **What it found.**
+  - Blnk (finding 1): five draws of 30.00 against a limit of 50.00 all apply. The value
+    property's failure shrank to a schedule without a fault. It runs only the draw and the repay
+    commands.
+  - Formance Ledger (finding 1): two first uses of one account at once. Natively 196 of 200
+    pairs failed.
+  - Medusa (finding 1): two refunds of one order at once duplicate its items, found blind at
+    seed 2, and again at seed 1 of a later exploration.
+- **What it misses.** A race between two objects that the drivers never choose together.
+- **Cost.** The drivers only. It runs on every engine.
+
+### A snapshot or a backup read back at once
+
+- **What it is.** A workload command asks the system for a snapshot, a dump or a backup, and
+  reads it back at once with the system's own tool. The snapshot must hold every operation that
+  was acknowledged before the request. A final check reads every snapshot again, also after a
+  power cut.
+- **Yield.** It noticed 2 new bugs first, and made no false finding.
+- **What to write.** An `anytime_` command that records the snapshot's name in `$HYDO_ACKED`
+  and reads it with the tool inside the service's image (`hydo-oci <service> <tool> ...`), and a
+  `final_` check over the recorded names. Mix every type of write that the system keeps apart:
+  the Prometheus client writes one in-order and one out-of-order series in each request.
+- **When it fits.** A database or a store that offers snapshots or dumps for backups.
+- **What it found.**
+  - Prometheus (finding 1): in a run without faults, every snapshot with the head lacked up to
+    207 samples. They were the out-of-order samples that the server had not yet compacted into a
+    block. The in-order samples were all there.
+  - Meilisearch (finding 3): a dump that succeeded was an empty file after a power cut.
+- **What it misses.** A workload of one type of write: the Prometheus snapshots held every
+  in-order sample. A tool that cannot read the snapshot as it is: `promtool tsdb dump` refuses a
+  directory without a `wal` folder, so the client makes an empty one first.
+- **Cost.** One read of the snapshot per command. It runs on every engine.
+
+### A listing compared with a read of each key
+
+- **What it is.** A final check lists the store's keys, a bucket or a range, and reads each key
+  that the workload wrote on its own. Every key that a read finds must be listed, and no key that
+  a read does not find. A read of one key and a listing take different code paths in a
+  replicated store.
+- **Yield.** 1 new bug, Garage's finding 2.
+- **What to write.** A `final_` check that lists first, then reads each key, and prints each key
+  that differs on an earlier line than its count. Do not read a key before the listing: a read
+  can repair the stale replica. The Garage example's `gac check list` is one to copy.
+- **When it fits.** A replicated store with quorum reads, an object store, or any store whose
+  scans merge the replicas' answers.
+- **What it found.**
+  - Garage (finding 2): after one node of three was killed, paused or lost its power, a
+    listing named keys deleted while it was down, and GET answered 404 for each. Each node
+    filters its own copy before the coordinator merges them. The blind explorations ended with it
+    in 52 of 200 schedules, from seed 2 on; the checks of each acknowledged write held in all of
+    them. The same check of the multipart uploads found an aborted upload listed.
+- **What it misses.** A stale replica that anti-entropy repairs before the check runs. In Garage
+  the repair came within 10 minutes, after the run's end, so the check saw it.
+- **Cost.** One listing and one read per key at the end. It runs on every engine.
+
+### Value properties (`// hydo: keep`)
+
+- **What it is.** A comment line says that a recorded value must not change between two
+  functions. A run that breaks it fails, also when every business rule holds.
+- **Yield.** 1 new bug, Blnk's finding 1, which the overdraft rule noticed first. The property broke
+  in 9 of the same 30 blind schedules, and the rule in 1.
+- **What to write.** Record the value with `key` and `record` lines next to a function, and add
+  a `keep` line (`hydo guide values`, section 4):
+
+  ```go
+  // hydo: keep overdraft_limit from blnk.setTransactionMetadata to model.canProcessTransaction
+  // hydo: key transaction.Reference
+  // hydo: record transaction.OverdraftLimit as overdraft_limit at entry
+  ```
+
+- **When it fits.** A value that passes through a queue, a cache, or a copy before a decision
+  uses it. Blnk's overdraft limit is such a value.
+- **What it found.** Blnk (the results page's section "The limit as a property
+  that a run can break"): the property broke in 9 of 30 blind schedules, first at seed 4. The
+  overdraft rule broke in 1, at seed 21. The property fails the run without faults, where every
+  business rule held, and the fixed build holds it. Each break names the first changing call:
+  the worker's coalesced copy had the limit 0.0.
+- **What it misses.** A property names one value. A comparison of two values, or of a value with
+  a constant, is not built.
+- **Cost.** The Mac and KVM engines stop at hardware breakpoints; hvx has none for it. On Blnk a
+  run took 5.6 to 5.9 s of engine time with the plan and 5.7 to 5.8 s without it, with one
+  fingerprint.
+
+### An effects file beside a durable execution's journal
+
+- **What it is.** Each journaled step of a handler appends one line with a nonce to a file and
+  syncs it: the outside system that the step changes. A check compares the journal's result of
+  each step with the lines, so it sees a step that ran again after its result was journaled.
+- **Yield.** 1 clock effect, Restate's, and no new bug.
+- **What to write.** A `beg` line when the step's closure starts and a result line, both with one
+  nonce, and the handler's state with each step's nonce (the Restate example's `service/`). The
+  check pairs them. A step whose closure starts after a later step started ran again. A later
+  result line whose closure started after the journaled one ended is a re-run too. A closure
+  that an abandoned attempt finishes after the journaled one, started before it, is the
+  at-least-once of a step that was not journaled yet.
+- **When it fits.** A durable execution engine or a workflow engine with journaled steps.
+- **What it found.** Restate: no step ran again after its result was journaled, in 40 blind
+  schedules and about 120 directed runs with kills, power cuts, and pauses.
+- **What it misses.** The file is on the guest's disk, so a lying disk or disk I/O errors break
+  it with the system. A step that an abandoned attempt runs at the same time is undecided without
+  the start lines.
+- **Cost.** One synced write per step. It runs on every engine.
+
+## Which check noticed each bug
+
+A bug needs a trigger, the faults, and a check that notices it. The table counts the 105 bugs and
+the 30 false findings by the check that failed first in each finding's results page. A false
+finding is a failure that came from a mistake of the client or of the checks. The false share is
+the false findings divided by every finding of the check, the documented trade-offs and the
+failures of the environment included.
+
+| check | bugs noticed first | false findings | false share |
+|---|---|---|---|
+| a business rule over the stored state | 32 | 21 | 36 % |
+| a read-back of the acknowledged writes (the generic rule) | 19 | 2 | 6 % |
+| liveness: an `eventually_` check, or a check that the system serves writes | 10 | 1 | 8 % |
+| every replica compared with the leader | 10 | 1 | 8 % |
+| hydo's own verdict without a check: a failed restart, a `TIMEOUT`, an `ERROR` | 9 | 1 | 3 % |
+| the messages check, `no-loss` | 6 | 0 | 0 % |
+| the messages check, `acked-outcome` | 4 | 2 | 22 % |
+| the messages check, another claim | 1 | 1 | 33 % |
+| a history checker | 3 | 0 | 0 % |
+| a page invariant | 3 | 0 | 0 % |
+| a flaky test's own assertion | 3 | 0 | 0 % |
+| a backup or a snapshot read back | 2 | 0 | 0 % |
+| the error-log scan | 1 | 0 | 0 % |
+| the workload's own assertion | 1 | 1 | 50 % |
+
+The default set is these checks, with hydo's own verdicts:
+
+- a read-back of every acknowledged write with its final outcome (the generic rule, or the claim
+  `acked_outcome` of a messages check);
+- every replica compared with the leader after the heal, for a system with replicas;
+- an `eventually_` check that the system serves writes after the heal;
+- the error-log scan;
+- a history checker where the workload has transactions.
+
+The default set would have caught 63 of the 105 bugs, and 29 of the 40 bugs of the 14 latest
+onboardings, from ClickHouse to Garnet. It would have missed 33. For 9 the results pages do not
+say.
+
+Only a check of the project's own caught 19 bugs, in 13 examples. Each of them breaks a promise
+other than "an acknowledged write stays":
+
+- at most once, or once per period, as in River's periodic run, Hatchet's scheduled run, Ghost's
+  donation, and the double refunds of Saleor and Medusa;
+- a limit or books that must match, as in Blnk's overdraft, Saleor's single-use code, and
+  Medusa's capture;
+- a device that boots an allowed version, as in Mender's two findings and SWUpdate's;
+- a listing, an expiry, a retention, or a version order, as in Garage's listing, Valkey's
+  expiry, Iggy's retention, SurrealDB's changefeed, Prometheus's scrape times, and River's
+  leaders.
+
+So write a business rule where the promise is one of these. Business rules also made 21 of the
+30 false findings, in 11 examples. Most were a wait that did not cover the system's own recovery,
+or a rule stricter than the system's promise after a clock step. Before an exploration, review
+each rule on both points (the entry "Domain rules from the project's sources").
+
+14 more bugs needed a check outside both groups. Examples are availability during the faults, a
+`WAIT` that answers, a query that ends, a snapshot read back, a page invariant, and a flaky
+test's own assertion.
+
 ## Faults
 
-### Power cuts of the whole guest (`C=`)
+The entries are in the order of the bugs that needed each technique, most first. The first entry
+is the exploration that drew most of them.
 
-- **What it is.** Every service loses its power before a workload step. Only data that reached
-  the disk survives, and a recovery boot runs the checks.
-- **What to write.** `disk=cut | run C=12`. `hydo explore` can also run one schedule per cut
-  point (`hydo guide faults`, "Exploring").
-- **When it fits.** Any system that acknowledges a write before it syncs it.
-- **What it found.**
-  - NATS JetStream (Jepsen's 3.4): with the default `sync_interval`, all 30 cut
-    points lost acknowledged messages on 2.10.23 and 2.12.1. With `sync_interval: always`, none
-    did.
-  - Vikunja (finding 1): 5 of 40 blind schedules lost tasks that Vikunja had
-    answered as saved. The shrunk walk typed one task, and `C=4` lost it.
-  - Valkey (finding 2, known valkey#5354): a power cut and the restart lose a hash's expiry.
-  - Dragonfly (known dragonfly#8646): six failures of the first exploration had a
-    cut and no backward clock step.
-  - Mender and SWUpdate: `disk=cut | run C=4` gives each its finding 1.
-  - Meilisearch (finding 3): `disk=cut | run C=30` left all 5 dumps of the run at
-    0 bytes, while each dump task said `succeeded`. In the first exploration 9 of 25 schedules
-    failed so; a power loss of the service alone (`L=meilisearch@42+1`) does it too.
-  - ClickHouse (finding 1, known #53143): with `fsync_after_insert = 1` and the fsync after a
-    merge and a fetch off, `disk=cut | run C=40` lost merged parts on both replicas. Replication
-    then stopped for good with rows on one replica. In the first exploration seeds 1 and 5 did it
-    blind, and the power cut of seed 8 passed. With every fsync setting on, no cut did.
-  - Garage (finding 3): a cluster formed with `garage node connect` saves each node's peers once
-    a minute. A cut in the cluster's first minute left every node with no peer, and the cluster
-    never answered again. A check that the cluster answers within 120 s of the recovery boot's
-    start (`eventually_available`) caught it; without one the run ended in an ERROR of a timed
-    out check.
-  - Kvrocks (finding 1): a node that has just rejoined by a full synchronization writes the
-    master's checkpoint without a sync. A cut in the next seconds left its SST files empty, and
-    it stopped at every start. Blind, a cut at the end of the workload did it, shrunk to
-    `disk=cut | run C=40` with the composition. One node's power loss (`L=`) did it too. The
-    checkpoint held SST files only after the client ran `FLUSHMEMTABLE` on the master. A small
-    data set fits in the memtables, and its checkpoint is a WAL, which RocksDB's open replays
-    into a synced file.
-  - Pulsar (finding 3): a cut restarts every broker, and a broker loads a transaction
-    coordinator only when a transactional client connects to it. The recovery boot ran none.
-    A transaction that a crashed client left open before the cut was never aborted. Its
-    partitions delivered nothing after it. Blind in 3 schedules of two explorations, shrunk by
-    hand to `C=16` and the composition. An `eventually_` check that no partition has an open
-    transaction after the heal shows the wait even when no acknowledged message is behind it.
-    The recovery boot runs only the drain and the checks. A system whose recovery waits for a
-    client of some kind meets no such client there, and then the wait is the finding.
-  - RabbitMQ (finding 2, documented): a stream does not sync its data, so a cut lost messages
-    that publisher confirms had acknowledged. After `C=12` a new message took offset 0, the
-    offset of a lost one, and `order: {kind: log}` broke: two messages shared offset 0. The quorum
-    queues, which sync before they confirm, lost nothing at any cut.
-- **What it misses.** hydo's S3 emulator writes its objects without an fsync, so a cut of the
-  guest loses objects that it acknowledged. In GreptimeDB a query of the recovery boot read an
-  SST object shorter than its manifest says. A system whose data lives in object storage needs
-  one service's power loss (`L=`) instead. A relaxed durability setting loses writes by
-  design: make the setting a build parameter and run its durable value, or every value with `hydo explore --configs`. A lying disk or disk I/O errors break the disk's own
-  promise. In Valkey's swarm exploration all 28 failures had a disk fault. Use `--durable-only`
-  once the first exploration shows them.
-- **Cost.** One recovery boot per cut. In Redpanda most of a 3 to 14 minute schedule went to
-  recovery boots and drains. It runs on every engine.
+### The explorer's strategy
 
-### The sync audit and power cuts after an answer
-
-- **What it is.** `hydo rules scan --kind sync` lists the code that can answer a write before
-  the write is on the disk. Examples are a file written without `fsync`, a rename without a sync
-  of its folder, and a setting that turns syncing off. Each place gets one service's power loss
-  and a power cut of the guest, right after the answer that follows it.
-- **What to write.** Run the audit, give the service of the place `storage:`, and run its
-  schedules with `hydo explore --schedule`. With an event of an answered write in the workload, a
-  schedule reads `disk=cut | run A=nsq.pub_acked+10:powerloss-nsqd` (`hydo guide faults`,
-  "Find the writes acknowledged before they are synced").
-- **When it fits.** Any system that stores data in files of its own. Examples are a queue, a log,
-  a store, a device updater, and a server that saves its own state, such as its peers.
-- **What it found.** It came after these findings. It names the place of each:
-  - NSQ (finding 1): go-diskqueue's metadata renamed without a sync of the folder, and its
-    writes answered before the sync on a timer.
-  - Kvrocks (finding 1): the fetched checkpoint's files written without a sync, renamed, and the
-    old database destroyed.
-  - RabbitMQ (findings 1 and 2): osiris writes stream segments and never syncs them.
-  - Garnet (known #2281): the default device opens its files with `O_DIRECT` and no `O_DSYNC`.
-  - Meilisearch (findings 2 and 3): the payload renamed into place without a sync, and the dump
-    never synced before its task succeeds.
-  - Vikunja (finding 1): the database in SQLite's WAL mode without `synchronous=FULL`.
-  - SWUpdate: the raw handler syncs only when it turned the write protection off.
-  - Mender (finding 1): the version file synced while its bytes are still in the stream.
-  - Garage (finding 3): the peer list written without a sync, once a minute.
-  - ClickHouse (finding 1): `fsync_after_insert` and the merge's fsync off by default.
-- **What it misses.** It reads text. A write through an interface, a sync in another thread, or a
-  library that the project does not hold (rclone, RocksDB) is not followed. A place is a fact of
-  the code: a relaxed default that the project documents is a trade-off, and `hydo explore
-  --configs` labels it so.
-- **Cost.** Seconds for most projects, about a minute for ClickHouse. Each schedule is one
-  recovery boot, on every engine.
-
-### Power cuts at the k-th disk flush (`cf=`)
-
-- **What it is.** The disk loses its power at one exact flush, so the cut falls inside a commit.
-- **What to write.** `disk=cut cf=271 | run T=8:15768000`. `hydo explore --more-faults` draws
-  them.
-- **When it fits.** A system that commits in several steps, each with its own flush.
-- **What it found.**
-  - Saleor (finding 4, saleor#20023): seed 5 of the exploration charged a gift
-    card without a record. It shrank to `cf=270 T=8:15768000`.
-  - The bug benchmark's order service: 12 of 282 flush points failed with durable
-    settings and an honest disk. No other fault found that bug.
-  - YugabyteDB: the lost writes of its default WAL setting shrank to one cut at
-    the fourth flush.
-- **What it misses.** The point moves with the image's bytes. Saleor's `cf=270` stopped
-  reproducing when its image was rebuilt, and `cf=271` gives the finding now. Restate held at
-  all 49 flush points from `cf=37` to `cf=4000`: it syncs its log before it answers, as its
-  documentation says. Prometheus held at 19 points from `cf=60` to `cf=1140` and at 11 drawn
-  ones, with blocks of one minute, so the cuts fell around head compactions and WAL
-  checkpoints. Its rule asked only for the samples of a block that the server had listed.
-- **Cost.** hvx only.
-
-### One node's storage faults (`G=` and `L=`)
-
-- **What it is.** `G=` damages one file of a service's storage directory: flipped bits, zeroed
-  bytes, or a truncation. `L=` cuts the power of one service while the others run on.
-- **What to write.** Give the service `storage:` with `size_mib`, then `G=n1@1+2:zero,len=4096,
-  file=tx.snapshot` or `L=n2@10+2`. `hydo explore --storage-faults` draws both, and
-  `--corrupt-several` damages several nodes at once.
-- **When it fits.** A replicated store or log. The promise is that one node's damage loses no
-  acknowledged data and does not stop the cluster.
-- **What it found.**
-  - Redpanda (finding 1): seed 6 found it blind. A zeroed or bit-flipped
-    `tx.snapshot` of one partition stops the whole node at every start.
-  - SurrealKV in SurrealDB: 7 times blind in 167 schedules. A damaged value of
-    the value log drops every later acknowledged commit. The saved regression is
-    `G=surrealdb@40+1:trunc,file=vlog`.
-  - NATS JetStream: Jepsen's 3.2, 3.3, and 3.5 in one VM. With two
-    nodes' blocks zeroed and the third node killed, 2,456 of 24,446 acknowledged messages were
-    lost.
-  - VictoriaMetrics cluster: one node's power loss lost nothing alone. With a backward clock
-    step before it, the power loss lost a batch that vminsert had stored on that node only
-    (finding 3). Damaged files stopped vmstorage at its start in 11 of 30 schedules, and a
-    zeroed range returned another value from vmselect.
-  - GreptimeDB (finding 1): seed 13 of 20 cut the datanode's cached copy of a manifest delta.
-    The datanode then stopped at every start, while the object store kept the intact delta. The
-    copy is a cache, so the datanode could read the object again; with the default uncompressed
-    manifests it does not notice the short copy. Six power losses of a datanode (`L=`, also
-    `:strict`) lost cached copies whole and broke nothing.
-  - RabbitMQ (finding 1): a stream confirms once a majority wrote a chunk and never syncs. After
-    a kill of `rabbit2`, a pause of `rabbit1` past the net tick time, and a power loss of the
-    writer `rabbit3`, a confirmed message was lost for good. The coordinator elected the new
-    writer from `rabbit1` and `rabbit3`, while `rabbit2`, which held the message, waited on a
-    retry timer. Then `rabbit2` deleted its copy. Blind at seed 2 of e2, separated by hand: a
-    run without any one of the three faults passes. The quorum queues, which sync before they
-    confirm, held in the same runs.
-- **What it misses.** NATS's 3.3 and 3.5 need faults in a narrow order on chosen nodes, and the
-  explorer did not draw them; they were written by hand. `G=` picks its file and offset from its
-  seed, so one token damages other files on another image. The explorer never draws
-  `L=...:strict`. On one Iggy server, 7 of 20 schedules damaged a segment, WAL or frontier file
-  that Iggy detects. Each fenced its partition, as Iggy documents, and each ended in an ERROR
-  because the drain could not read that partition. None lost data silently. In Prometheus `G=`
-  also picks files of the snapshots, which hard-link the blocks' files: a flipped bit of one
-  block's `index` broke the read of every later snapshot. A power loss of the server alone loses
-  what its WAL had not synced, as a power cut does. So the rules must know the run of the server
-  that acknowledged a write (its start time), or they call that loss a bug.
-- **Cost.** A file system per service. The explorer shrinks detected damage too. In SurrealDB the
-  shrink of seed 3 took an hour. hvx and the Mac engine ran it.
-
-### Kills of the process that holds acknowledged work
-
-- **What it is.** `K=<svc>@<step>+<down>` kills a service's process tree and starts it again.
-  Aim it at the consumer between the acknowledgement and the completion.
-- **What to write.** `disk=none | run K=hatchet_engine_1@6+3`. `--cluster-faults` aims kills at
-  a group's members.
-- **When it fits.** A queue, a job runner, or a worker that takes work from a broker. The promise
-  is that acknowledged work is done.
-- **What it found.**
-  - Hatchet (hatchet#5527): `K=hatchet_engine_1@6+3` loses acknowledged runs on
-    every run. Of 12 directed kills of an engine, 5 broke a rule.
-  - River (river#1602): `K=postgres@6+1` gives two leaders on every run. Blind, it
-    came at seed 14.
-  - Saleor (saleor#20022): `H=payments.refund@1-12:delay=6000 K=worker@6+1`
-    loses a refund request with its Celery task on every run. Each fault alone passes.
-  - Lago (known lago-api#6901): a swarm schedule that killed and paused Redis
-    during a cancellation.
-  - A user's query engine: a kill of the worker that held a completed query's results came after
-    a pause of one scheduler. The query stayed completed, and every read of its results failed.
-    Only the check that a completed result stays readable saw it (the entry "How each unknown outcome
-    ends").
-  - NSQ (finding 1, new): a kill of the broker itself lost 6 messages that it had answered `OK`.
-    The broker was `nsqd` with every message on disk, killed about 0.8 s after a topic's first
-    message. A disk
-    queue writes its metadata only at its first sync, up to 2 s after its first message. Without
-    that file the restarted queue starts empty. Blind in the trial at seed 2, shrunk to
-    `K=nsqd@4+1`. The same kill 2.8 s after the first message lost nothing. So aim a kill at a
-    new topic, a new channel, or a queue just emptied, as well as at a busy one.
-  - rqlite (finding 1, known as the open pull request rqlite#3027): a kill of the leader while a
-    follower forwarded a queued write with `wait`. The follower tried twice, a second apart, then
-    dropped the batch and answered 200. Blind at seed 28 of 40, and on the final image with
-    `K=nodes.primary@35+3`, the step of a queued write. Aim the kill at the process that a write is
-    forwarded to, not only the one that holds the work.
-- **What it misses.** A kill comes through the guest agent, so the service's threads run on
-  until the agent runs. Meilisearch's index swap that runs twice (finding 1) needs
-  the server stopped between two LMDB commits. Reactions that killed it at 18 delays after a
-  swap, an edit, or an addition all passed. A reaction's `kill-now-<svc>` kills before the
-  service runs on, and broke it at 13 and 14 ms after the swap's `202` (section "Reactions at
-  console events"). A 15 s pause of a Hatchet engine broke nothing, and a kill at the same step
-  lost runs. A kill starts the process with a new identity, so it hides state that the system
-  keeps by a worker's identity (the entry "Pauses of a service past its failure detector"). The
-  restart of a `K=` fault ignores the service's restart policy (River, seed 17).
-- **Cost.** It runs on every engine.
-
-### A graceful stop after answers that are not durable yet
-
-- **What it is.** The workload sends writes that the system answers before they are durable: a
-  queued write, a batched write, or a write that a buffer holds. Then the workload stops that
-  service with SIGTERM, as `docker stop`, a rolling restart, or an upgrade does, and the
-  restart policy starts it again. The generic rule reads every acknowledged write back. A
-  graceful stop must keep what the service has answered, or the documentation must name the
-  stop beside the crash.
-- **What to write.** A serial driver that sends the writes, records each one's answer, and
-  sends SIGTERM to the service's process by its command line in `/proc` (busybox `kill`, or the
-  client's own call). Put it behind a build parameter when every run with it fails. The rqlite
-  example's `rqc qstop` is one to copy.
-- **When it fits.** A system with an asynchronous mode whose documentation names only a crash
-  as the risk: queued or batched writes, write-behind caches, group commit.
-- **What it found.** rqlite (finding 2, new): 3 queued writes without `wait`, each answered 200,
-  and SIGTERM to that node lost all three, in a run without any fault. At the stop the node
-  closes its write queue, and the queue's goroutine returns without writing the batch it holds.
-  The page "Queued Writes" names only a crash.
-- **What it misses.** A stop through hydo's own faults: `K=` kills with SIGKILL, so a loss there
-  is the documented crash. A graceful stop of a node whose batch the timer has already sent.
-- **Cost.** One driver. It runs on every engine.
-
-### Pauses of a service past its failure detector
-
-- **What it is.** `P=<svc>@<step>+<n>` stops a service's processes for `n` workload steps, and
-  the processes go on afterwards with the same process ids and the same identity. A pause
-  longer than the timeout of a health check, a heartbeat, or a lease makes the peers declare the
-  service dead, and then the service comes back as itself. State that the peers keep by the
-  service's identity then has to clear itself. A kill hides such state, because the restarted
-  process registers with a new identity.
-- **What to write.** Read the failure detector's timeout from the system's configuration. Keep
-  `pause` in `faults:` and explore with `--new-faults`, which draws pauses by steps. For a
-  directed run, give the pause enough steps to outlast the timeout, or a length in
-  milliseconds: `P=worker_2@28~0:12000` for a timeout of 8 s (`hydo guide faults`).
-- **When it fits.** A scheduler or a coordinator that tracks its workers by heartbeats or leases,
-  and workers that keep their identity across a stop.
-- **What it found.** The user's query engine (the entry "Production's topology"): a pause of one
-  worker for 8 s, past the failure detector's timeout. A scheduler marked the worker dead and
-  never cleared the mark, because it keeps the mark by the worker's id, which changes only at a
-  restart. Queries stayed running forever. The exploration of 60 seeds with `--strategy process`
-  found it blind, and the shrinker reduced a schedule of 4 faults to `P=worker_2@28+2` alone.
-- **What it misses.** A pause shorter than the timeout changes nothing that the peers see. A
-  pause longer than the lease can find a system that counts its lease on the monotonic clock.
-  In GreptimeDB a pause of a datanode for 25 s made the metasrv fail its regions over
-  (`P=datanode0@10+25`). Afterwards the datanode refused the writes that reached it, because its
-  lease had run out. So did 11 s pauses inside a write's WAL append. A
-  15 s pause of a Hatchet engine broke nothing, and a kill at the same step lost runs (the entry
-  "Kills of the process that holds acknowledged work"). The pause needs the check that every
-  accepted operation ends. Without it, a stuck query was an unknown outcome, and the run passed.
-- **Cost.** It runs on every engine.
+- **What it is.** `--strategy` chooses how `hydo explore` draws faults: `process` gives 2 to 4
+  fault kinds in staggered windows, and `swarm` switches whole categories on and off per run.
+- **Yield.** A blind exploration with `--strategy process` found 60 of the 105 bugs first, in 30 of
+  the 40 examples where it ran. It ran 4,318 schedules, 1.4 bugs per 100. The swarm strategy found 2
+  bugs first in 620 schedules of 19 examples, and most of its failures were disk faults.
+- **What to write.** `hydo explore --seeds 1-20 --strategy process --cluster-faults --no-shrink`
+  first, and `--strategy swarm --new-faults` after the first hour. The process strategy draws
+  pauses, clock steps and one-way losses itself, so `--new-faults` adds nothing to it.
+- **When it fits.** Every project.
+- **What it found.** On the bug benchmark, out of 24 possible
+  detections, random made 19, swarm 21, and process 24. Swarm finds more kinds of failure,
+  many of them disk faults.
+- **What it misses.** Swarm draws lying disks and I/O errors, whose failures are the disk's.
+- **Cost.** Add `--more-faults` on hvx. With `--backend kvm` and on a Mac the explorer refuses it.
 
 ### Clock steps and the clock audit
 
 - **What it is.** `T=<step>:<seconds>` steps the guest's wall clock, as an NTP step does.
   `hydo rules scan --kind clock` lists the code that measures a duration with the wall clock and
   proposes three schedules for each function where it is most sure.
+- **Yield.** 30 of the 105 bugs needed a clock step, in 19 examples: 1 new, 2 known, and 27 clock
+  effects. The clock audit found no bug first. In 12 examples with a recorded outcome it missed the
+  clock bugs of VictoriaMetrics, Typesense, Kvrocks, Garage, Restate, and TiKV. It named no place in
+  Redpanda, GreptimeDB, rqlite, and RabbitMQ. Use it as a reading aid: its places suggest directed
+  schedules.
 - **What to write.** `disk=none | run K=valkey3@2+3 T=10:-300`. Keep `clock` in `faults:`, and
   run the audit's schedules with `hydo explore --schedule` (`hydo guide faults`).
 - **When it fits.** A system with leases, timeouts, throttles, replication delays, or snapshots
@@ -765,6 +714,15 @@ These findings hold for every type of system:
     command that publishes to every queue and stream after the faults caught it; the checks of
     the data held. Blind at seed 10 of e3. The audit reads no Erlang, so the step was the
     explorer's own draw.
+  - RocketMQ (finding 3): the broker's transaction check decides with
+    `System.currentTimeMillis()` and the birth times of its operation records. After `T=10:-3600`
+    the records of the transactions that ended before the step were born an hour ahead, and the
+    check asked about transactions it had already committed at every interval. The producer
+    answered "commit" each time, and the broker stored the message again: `u17` six times in
+    50 s. The claim `duplicates: forbidden` over the drain's offsets (`o=`) caught it; `no-loss`
+    held. The audit ranked the check's function at place 46 of 155, by another line of it. A step back
+    also keeps a slave from copying the consumer offsets for the step's length
+    (`ReplicasManager.handleSlaveSynchronize`, the audit's place 10).
 - **What it misses.** Many clock effects are by design. Examples are Temporal's delayed timers,
   and River's runs of every periodic job that a forward step skipped. The audit reads text. It
   found no place in Redpanda's 2,694 C++ files, whose transaction expiry uses Seastar's wall
@@ -792,96 +750,123 @@ These findings hold for every type of system:
 - **Cost.** The shrinker spends hours on clock steps; stop an exploration once its failures are
   understood. It runs on every engine.
 
-### One node's clock ahead of or behind the others (`clock: own`)
+### Kills of the process that holds acknowledged work
 
-- **What it is.** `clock: own` on a service gives it a wall clock of its own, and
-  `T=<svc>@<step>:<change>` steps it (`-60`, `1500ms`) or makes it drift (`50000ppm`). The other
-  services, the client and the checks keep the guest's clock. `hydo explore --service-clocks`
-  draws such changes (`hydo guide faults`, "One service's clock ahead of the others").
-- **What to write.** Give every node of a cluster `clock: own` in a copy of `hydo.yaml`. Step the
-  node that holds the lease, a follower, and two followers together, by seconds and by minutes,
-  each way. Keep the checks that a guest-wide clock step broke: they tell what one node's skew
-  changes.
-- **When it fits.** A cluster whose nodes compare their own clocks with each other's timestamps,
-  or run timers on the wall clock: leases, timestamp oracles, sample timestamps, and the timers
-  of replicated work.
+- **What it is.** `K=<svc>@<step>+<down>` kills a service's process tree and starts it again.
+  Aim it at the consumer between the acknowledgement and the completion.
+- **Yield.** 26 bugs needed it, in 20 examples: 10 new, 11 known, and 5 clock effects.
+- **What to write.** `disk=none | run K=hatchet_engine_1@6+3`. `--cluster-faults` aims kills at
+  a group's members.
+- **When it fits.** A queue, a job runner, or a worker that takes work from a broker. The promise
+  is that acknowledged work is done.
 - **What it found.**
-  - Typesense (finding 4): one node's clock 60 s behind left that node without a document that
-    the leader holds, for good. The node runs the later batches of a delete by a filter from a
-    timer of its own HTTP loop, which waits while its clock is behind its last run. When the
-    timer fires, the node has applied later writes, and the batch deletes their documents. A
-    step of an hour left the node with 64 documents that the delete removed on the other nodes.
-    The cause is finding 2's, and the loss is finding 1's, without a restart.
-  - Typesense (finding 3 again): the election after a pause of the leader came late only when
-    both followers' clocks were behind. With one follower's clock behind, the other follower took
-    over at once.
-  - Prometheus (by design): a remote-write sender whose clock runs more than 10 minutes ahead
-    of the server loses every sample. The server refuses samples more than 10 minutes in its
-    future (`maxAheadTime`), and the sender drops a refused batch. A server more than its
-    out-of-order window ahead of its senders refuses theirs too. Five minutes either way held.
-- **What it misses.** It covers programs that read the clock through glibc, musl or Go, not the
-  kernel's own times (file times, socket time stamps). A read costs about 40 µs of guest time on
-  hvx. The explorer's largest drawn step is 5 minutes, so a limit of 10 minutes, as
-  Prometheus's, needs a directed schedule. It runs on hvx only.
-- **Cost.** One directed run takes the time of a run; an image of the example with `clock: own`
-  beside the recorded one, so that the recorded values stay.
+  - Hatchet (hatchet#5527): `K=hatchet_engine_1@6+3` loses acknowledged runs on
+    every run. Of 12 directed kills of an engine, 5 broke a rule.
+  - River (river#1602): `K=postgres@6+1` gives two leaders on every run. Blind, it
+    came at seed 14.
+  - Saleor (saleor#20022): `H=payments.refund@1-12:delay=6000 K=worker@6+1`
+    loses a refund request with its Celery task on every run. Each fault alone passes.
+  - Lago (known lago-api#6901): a swarm schedule that killed and paused Redis
+    during a cancellation.
+  - A user's query engine: a kill of the worker that held a completed query's results came after
+    a pause of one scheduler. The query stayed completed, and every read of its results failed.
+    Only the check that a completed result stays readable saw it (the entry "How each unknown outcome
+    ends").
+  - NSQ (finding 1, new): a kill of the broker itself lost 6 messages that it had answered `OK`.
+    The broker was `nsqd` with every message on disk, killed about 0.8 s after a topic's first
+    message. A disk
+    queue writes its metadata only at its first sync, up to 2 s after its first message. Without
+    that file the restarted queue starts empty. Blind in the trial at seed 2, shrunk to
+    `K=nsqd@4+1`. The same kill 2.8 s after the first message lost nothing. So aim a kill at a
+    new topic, a new channel, or a queue just emptied, as well as at a busy one.
+  - rqlite (finding 1, known as the open pull request rqlite#3027): a kill of the leader while a
+    follower forwarded a queued write with `wait`. The follower tried twice, a second apart, then
+    dropped the batch and answered 200. Blind at seed 28 of 40, and on the final image with
+    `K=nodes.primary@35+3`, the step of a queued write. Aim the kill at the process that a write is
+    forwarded to, not only the one that holds the work.
+- **What it misses.** A kill comes through the guest agent, so the service's threads run on
+  until the agent runs. Meilisearch's index swap that runs twice (finding 1) needs
+  the server stopped between two LMDB commits. Reactions that killed it at 18 delays after a
+  swap, an edit, or an addition all passed. A reaction's `kill-now-<svc>` kills before the
+  service runs on, and broke it at 13 and 14 ms after the swap's `202` (section "Reactions at
+  console events"). A 15 s pause of a Hatchet engine broke nothing, and a kill at the same step
+  lost runs. A kill starts the process with a new identity, so it hides state that the system
+  keeps by a worker's identity (the entry "Pauses of a service past its failure detector"). The
+  restart of a `K=` fault ignores the service's restart policy (River, seed 17).
+- **Cost.** It runs on every engine.
 
-### Failovers by the client, with a late write
+### Power cuts of the whole guest (`C=`)
 
-- **What it is.** The client fails a master over to a replica, as an operator's tool such as
-  Redis Sentinel does, during the run. After the promotion it sends one more write to the old
-  master, as a client does that has not learned of the failover yet. The old master's history
-  then differs from the new master's, so it must rejoin by a full synchronization, the path of
-  a store's replication that the faults reach least.
-- **What to write.** A `serial_driver_` command that promotes a replica and records the new
-  master in a synced file on the data disk. It writes once to the old master and records that
-  write's outcome. Then it points every node at the new master and makes the roles last across
-  restarts. Give
-  the group a `primary:` command that prints the recorded master, and an event after the
-  failover for reactions. The Kvrocks example's `kvc failover` is one to copy.
-- **When it fits.** A store with a master and replicas whose failover is outside the store:
-  Redis-compatible stores, databases with an external failover manager.
-- **What it found.** Kvrocks (finding 1): the old master and every replica that had taken the
-  late write rejoined by a full synchronization. A power cut or one node's power loss in the
-  next seconds left that node unable to start. Blind in 10 of 60 schedules, and in 14 of 30
-  cuts aimed after the failover's event.
-- **What it found in a sharded cluster.** Garnet 2.2.14 (finding 2), whose cluster is passive:
-  the client moved slots with `MIGRATE ... SLOTS` and failed shards over with `CLUSTER FAILOVER`,
-  as a control plane does, as two `serial_driver_` commands. A failover that came right after a
-  migration into the same shard left the migrated slot without an owner on every node, for
-  good. The bug needs no fault, only the failover before the gossip of the migration; the
-  faults of the schedule moved the moment so (seed 96 of the example's e2). The
-  blind exploration found it in 3 of 51 first runs on KVM. A check that every node names one
-  owner for every slot, and that the owner is a primary, named it. The same composition
-  without faults passed on another image, where the gossip came first.
-- **What it misses.** The failover runs between workload steps, so a fault inside its own steps
-  comes only from a reaction at its events. The client's failover is not Sentinel's: it has no
-  quorum and no election. Two control-plane steps meet only when the composition puts them
-  next to each other.
-- **Cost.** A synced file for the master's name, and a check that the replicas agree with the
-  master after the heal. It runs on every engine.
-
-### Cluster faults and group selectors
-
-- **What it is.** A manifest's `groups:` names a cluster's members, with a `primary:` command.
-  The tokens then select members: the leader, a majority, or two halves of the group.
-- **What to write.** `K=nodes.primary@5+1`, `N=nodes.halves@3-9:loss,100%`, and
-  `hydo explore --cluster-faults` (`hydo guide faults`, "Faults on a cluster").
-- **When it fits.** A cluster with a leader.
+- **What it is.** Every service loses its power before a workload step. Only data that reached
+  the disk survives, and a recovery boot runs the checks.
+- **Yield.** 20 bugs needed it, in 15 examples: 14 new and 6 known. It also showed 6 documented
+  trade-offs of relaxed settings.
+- **What to write.** `disk=cut | run C=12`. `hydo explore` can also run one schedule per cut
+  point (`hydo guide faults`, "Exploring").
+- **When it fits.** Any system that acknowledges a write before it syncs it.
 - **What it found.**
-  - NATS JetStream 2.10.22: 11 failures in 30 schedules with the option against 9
-    without it. Two had no power cut, for example `N=nodes.isolate@2-10:loss,100% T=11:-18`,
-    which lost 5 of 34 acknowledged messages.
-  - Redpanda (finding 3): the explorer shrank seed 24 to `K=nodes.primary@66+1 P=n2@42+11`.
-- **What it misses.** With `network: bridge` the explorer draws links only between services that
-  list each other in `depends_on`, unless the group has `links: all`, which `hydo
-  compose` writes for the services of one image and one command.
-- **Cost.** `network: bridge` for partitions.
+  - NATS JetStream (Jepsen's 3.4): with the default `sync_interval`, all 30 cut
+    points lost acknowledged messages on 2.10.23 and 2.12.1. With `sync_interval: always`, none
+    did.
+  - Vikunja (finding 1): 5 of 40 blind schedules lost tasks that Vikunja had
+    answered as saved. The shrunk walk typed one task, and `C=4` lost it.
+  - Valkey (finding 2, known valkey#5354): a power cut and the restart lose a hash's expiry.
+  - Dragonfly (known dragonfly#8646): six failures of the first exploration had a
+    cut and no backward clock step.
+  - Mender and SWUpdate: `disk=cut | run C=4` gives each its finding 1.
+  - Meilisearch (finding 3): `disk=cut | run C=30` left all 5 dumps of the run at
+    0 bytes, while each dump task said `succeeded`. In the first exploration 9 of 25 schedules
+    failed so; a power loss of the service alone (`L=meilisearch@42+1`) does it too.
+  - ClickHouse (finding 1, known #53143): with `fsync_after_insert = 1` and the fsync after a
+    merge and a fetch off, `disk=cut | run C=40` lost merged parts on both replicas. Replication
+    then stopped for good with rows on one replica. In the first exploration seeds 1 and 5 did it
+    blind, and the power cut of seed 8 passed. With every fsync setting on, no cut did.
+  - Garage (finding 3): a cluster formed with `garage node connect` saves each node's peers once
+    a minute. A cut in the cluster's first minute left every node with no peer, and the cluster
+    never answered again. A check that the cluster answers within 120 s of the recovery boot's
+    start (`eventually_available`) caught it; without one the run ended in an ERROR of a timed
+    out check.
+  - Kvrocks (finding 1): a node that has just rejoined by a full synchronization writes the
+    master's checkpoint without a sync. A cut in the next seconds left its SST files empty, and
+    it stopped at every start. Blind, a cut at the end of the workload did it, shrunk to
+    `disk=cut | run C=40` with the composition. One node's power loss (`L=`) did it too. The
+    checkpoint held SST files only after the client ran `FLUSHMEMTABLE` on the master. A small
+    data set fits in the memtables, and its checkpoint is a WAL, which RocksDB's open replays
+    into a synced file.
+  - Pulsar (finding 3): a cut restarts every broker, and a broker loads a transaction
+    coordinator only when a transactional client connects to it. The recovery boot ran none.
+    A transaction that a crashed client left open before the cut was never aborted. Its
+    partitions delivered nothing after it. Blind in 3 schedules of two explorations, shrunk by
+    hand to `C=16` and the composition. An `eventually_` check that no partition has an open
+    transaction after the heal shows the wait even when no acknowledged message is behind it.
+    The recovery boot runs only the drain and the checks. A system whose recovery waits for a
+    client of some kind meets no such client there, and then the wait is the finding.
+  - RabbitMQ (finding 2, documented): a stream does not sync its data, so a cut lost messages
+    that publisher confirms had acknowledged. After `C=12` a new message took offset 0, the
+    offset of a lost one, and `order: {kind: log}` broke: two messages shared offset 0. The quorum
+    queues, which sync before they confirm, lost nothing at any cut.
+  - RocketMQ (finding 1, known in its parts): in controller mode each broker writes its epoch
+    file `epochFileCheckpoint` without a sync when the controller gives it a role. A cut 17 s
+    after the brokers became slaves left both slaves' files at 0 bytes (`hydo inspect` listed
+    the store). Each stopped at every start on the unchecked parse of an empty header
+    (apache/rocketmq#11460). `disk=cut | run C=20` does it; blind in 4 of e1's 40 schedules,
+    and one broker's power loss (`L=`) in 8 more. The stop came from the epoch file, not from the
+    commit log, which `SYNC_FLUSH` syncs.
+- **What it misses.** hydo's S3 emulator writes its objects without an fsync, so a cut of the
+  guest loses objects that it acknowledged. In GreptimeDB a query of the recovery boot read an
+  SST object shorter than its manifest says. A system whose data lives in object storage needs
+  one service's power loss (`L=`) instead. A relaxed durability setting loses writes by
+  design: make the setting a build parameter and run its durable value, or every value with `hydo explore --configs`. A lying disk or disk I/O errors break the disk's own
+  promise. In Valkey's swarm exploration all 28 failures had a disk fault. Use `--durable-only`
+  once the first exploration shows them.
+- **Cost.** One recovery boot per cut. In Redpanda most of a 3 to 14 minute schedule went to
+  recovery boots and drains. It runs on every engine.
 
 ### Reactions at console events (`A=`)
 
 - **What it is.** A fault comes at the moment the client or the system writes an assertion record
   to the console, not at a step boundary.
+- **Yield.** 12 bugs needed it, in 9 examples: 11 new and 1 known.
 - **What to write.** `A=rp.txn_add@20+3:kill-n1` or `A=mender.commit_started@3+7:cut`. Give the
   client an event before each operation that matters. `hydo explore --reactive fault
   --react-events <id>,...` draws them. To kill a service between two commits, write
@@ -923,10 +908,63 @@ These findings hold for every type of system:
   needs a second node paused at the confirm, which one reaction does not make.
 - **Cost.** The events in the client. It runs on every engine.
 
+### One node's storage faults (`G=` and `L=`)
+
+- **What it is.** `G=` damages one file of a service's storage directory: flipped bits, zeroed
+  bytes, or a truncation. `L=` cuts the power of one service while the others run on.
+- **Yield.** 12 bugs needed it, in 7 examples: 5 new, 6 known, and 1 clock effect. Of the 22
+  failures with a damaged file, 16 were the environment: the system detected the damage and refused
+  to start. So draw `G=` after the first blind round, and keep `L=` in it.
+- **What to write.** Give the service `storage:` with `size_mib`, then `G=n1@1+2:zero,len=4096,
+  file=tx.snapshot` or `L=n2@10+2`. `hydo explore --storage-faults` draws both, and
+  `--corrupt-several` damages several nodes at once.
+- **When it fits.** A replicated store or log. The promise is that one node's damage loses no
+  acknowledged data and does not stop the cluster.
+- **What it found.**
+  - Redpanda (finding 1): seed 6 found it blind. A zeroed or bit-flipped
+    `tx.snapshot` of one partition stops the whole node at every start.
+  - SurrealKV in SurrealDB: 7 times blind in 167 schedules. A damaged value of
+    the value log drops every later acknowledged commit. The saved regression is
+    `G=surrealdb@40+1:trunc,file=vlog`.
+  - NATS JetStream: Jepsen's 3.2, 3.3, and 3.5 in one VM. With two
+    nodes' blocks zeroed and the third node killed, 2,456 of 24,446 acknowledged messages were
+    lost.
+  - VictoriaMetrics cluster: one node's power loss lost nothing alone. With a backward clock
+    step before it, the power loss lost a batch that vminsert had stored on that node only
+    (finding 3). Damaged files stopped vmstorage at its start in 11 of 30 schedules, and a
+    zeroed range returned another value from vmselect.
+  - GreptimeDB (finding 1): seed 13 of 20 cut the datanode's cached copy of a manifest delta.
+    The datanode then stopped at every start, while the object store kept the intact delta. The
+    copy is a cache, so the datanode could read the object again; with the default uncompressed
+    manifests it does not notice the short copy. Six power losses of a datanode (`L=`, also
+    `:strict`) lost cached copies whole and broke nothing.
+  - RabbitMQ (finding 1): a stream confirms once a majority wrote a chunk and never syncs. After
+    a kill of `rabbit2`, a pause of `rabbit1` past the net tick time, and a power loss of the
+    writer `rabbit3`, a confirmed message was lost for good. The coordinator elected the new
+    writer from `rabbit1` and `rabbit3`, while `rabbit2`, which held the message, waited on a
+    retry timer. Then `rabbit2` deleted its copy. Blind at seed 2 of e2, separated by hand: a
+    run without any one of the three faults passes. The quorum queues, which sync before they
+    confirm, held in the same runs.
+- **What it misses.** NATS's 3.3 and 3.5 need faults in a narrow order on chosen nodes, and the
+  explorer did not draw them; they were written by hand. `G=` picks its file and offset from its
+  seed, so one token damages other files on another image. The explorer never draws
+  `L=...:strict`. On one Iggy server, 7 of 20 schedules damaged a segment, WAL or frontier file
+  that Iggy detects. Each fenced its partition, as Iggy documents, and each ended in an ERROR
+  because the drain could not read that partition. None lost data silently. In Prometheus `G=`
+  also picks files of the snapshots, which hard-link the blocks' files: a flipped bit of one
+  block's `index` broke the read of every later snapshot. A power loss of the server alone loses
+  what its WAL had not synced, as a power cut does. So the rules must know the run of the server
+  that acknowledged a write (its start time), or they call that loss a bug.
+- **Cost.** A file system per service. The explorer shrinks detected damage too. In SurrealDB the
+  shrink of seed 3 took an hour. hvx and the Mac engine ran it.
+
 ### A scan of a reaction's delay
 
 - **What it is.** One reaction runs with a list of delays after its event, one run per delay, to
   map the window where a fault breaks a promise.
+- **Yield.** 5 bugs needed it, in 4 examples: 4 new and 1 known. Aimed grids found 4 bugs first in 8
+  examples, over 563 cells. In RabbitMQ (24 cells), SeaweedFS (125), and Pulsar (15) they found
+  nothing.
 - **What to write.** `hydo explore --reactive-at mender.commit_started@3`. It tries every
   delay from 0 to 50 ms, each with `kill-now-<svc>`, `kill-<svc>` and a power cut, one schedule
   per seed, and shrinks each failure (`--react-delays` and `--react-actions` change the grid).
@@ -973,10 +1011,120 @@ These findings hold for every type of system:
   `mender-update` moved it to 65, 70, and 75 ms.
 - **Cost.** One run per delay and action: 153 runs for one service and the 51 default delays.
 
+### Failovers by the client, with a late write
+
+- **What it is.** The client fails a master over to a replica, as an operator's tool such as
+  Redis Sentinel does, during the run. After the promotion it sends one more write to the old
+  master, as a client does that has not learned of the failover yet. The old master's history
+  then differs from the new master's, so it must rejoin by a full synchronization, the path of
+  a store's replication that the faults reach least.
+- **Yield.** 4 bugs needed it, in 2 examples: 3 new and 1 clock effect. An operator's action in the
+  workload was needed for 14 of the 105 bugs.
+- **What to write.** A `serial_driver_` command that promotes a replica and records the new
+  master in a synced file on the data disk. It writes once to the old master and records that
+  write's outcome. Then it points every node at the new master and makes the roles last across
+  restarts. Give
+  the group a `primary:` command that prints the recorded master, and an event after the
+  failover for reactions. The Kvrocks example's `kvc failover` is one to copy.
+- **When it fits.** A store with a master and replicas whose failover is outside the store:
+  Redis-compatible stores, databases with an external failover manager.
+- **What it found.** Kvrocks (finding 1): the old master and every replica that had taken the
+  late write rejoined by a full synchronization. A power cut or one node's power loss in the
+  next seconds left that node unable to start. Blind in 10 of 60 schedules, and in 14 of 30
+  cuts aimed after the failover's event.
+- **What it found in a sharded cluster.** Garnet 2.2.14 (finding 2), whose cluster is passive:
+  the client moved slots with `MIGRATE ... SLOTS` and failed shards over with `CLUSTER FAILOVER`,
+  as a control plane does, as two `serial_driver_` commands. A failover that came right after a
+  migration into the same shard left the migrated slot without an owner on every node, for
+  good. The bug needs no fault, only the failover before the gossip of the migration; the
+  faults of the schedule moved the moment so (seed 96 of the example's e2). The
+  blind exploration found it in 3 of 51 first runs on KVM. A check that every node names one
+  owner for every slot, and that the owner is a primary, named it. The same composition
+  without faults passed on another image, where the gossip came first.
+- **What it misses.** The failover runs between workload steps, so a fault inside its own steps
+  comes only from a reaction at its events. The client's failover is not Sentinel's: it has no
+  quorum and no election. Two control-plane steps meet only when the composition puts them
+  next to each other.
+- **Cost.** A synced file for the master's name, and a check that the replicas agree with the
+  master after the heal. It runs on every engine.
+
+### The page walk and its invariants
+
+- **What it is.** `browser.explore` lets hydo walk through a web app's pages from a seed. Five
+  invariants watch every page: uncaught errors, spinners that stay, unshown failed requests,
+  broken texts, and failing tests.
+- **Yield.** 4 new bugs, in 2 examples.
+- **What to write.** `browser.explore` in `hydo.yaml` (`hydo guide web-apps`), one page rule
+  over the database, `watch.failures_of` for the writes, and `avoid:` for busy controls.
+- **When it fits.** A web app whose server keeps the data.
+- **What it found.**
+  - web-shop: both planted bugs blind in 20 schedules, without a test.
+  - Vikunja: finding 1 failed 5 of 40 schedules, of which 19 had a power cut.
+    Finding 2, an unhandled rejection, came at seed 9 under disk errors.
+  - Memos: a share link's copy button throws over plain HTTP (memos#6575), one
+    failure in seeds 21 to 60.
+- **What it misses.** Memos's first 20 walks spent 216 actions in the editor without saving.
+  A later walker reached neither Memos finding in seeds 21 to 60. A walk that
+  a power cut ends is not judged.
+- **Cost.** About 40 s a run on hvx; `network: bridge`.
+
+### Pauses of a service past its failure detector
+
+- **What it is.** `P=<svc>@<step>+<n>` stops a service's processes for `n` workload steps, and
+  the processes go on afterwards with the same process ids and the same identity. A pause
+  longer than the timeout of a health check, a heartbeat, or a lease makes the peers declare the
+  service dead, and then the service comes back as itself. State that the peers keep by the
+  service's identity then has to clear itself. A kill hides such state, because the restarted
+  process registers with a new identity.
+- **Yield.** 3 bugs needed it, in 3 examples: 2 new and 1 clock effect.
+- **What to write.** Read the failure detector's timeout from the system's configuration. Keep
+  `pause` in `faults:` and explore with `--new-faults`, which draws pauses by steps. For a
+  directed run, give the pause enough steps to outlast the timeout, or a length in
+  milliseconds: `P=worker_2@28~0:12000` for a timeout of 8 s (`hydo guide faults`).
+- **When it fits.** A scheduler or a coordinator that tracks its workers by heartbeats or leases,
+  and workers that keep their identity across a stop.
+- **What it found.** The user's query engine (the entry "Production's topology"): a pause of one
+  worker for 8 s, past the failure detector's timeout. A scheduler marked the worker dead and
+  never cleared the mark, because it keeps the mark by the worker's id, which changes only at a
+  restart. Queries stayed running forever. The exploration of 60 seeds with `--strategy process`
+  found it blind, and the shrinker reduced a schedule of 4 faults to `P=worker_2@28+2` alone.
+- **What it misses.** A pause shorter than the timeout changes nothing that the peers see. A
+  pause longer than the lease can find a system that counts its lease on the monotonic clock.
+  In GreptimeDB a pause of a datanode for 25 s made the metasrv fail its regions over
+  (`P=datanode0@10+25`). Afterwards the datanode refused the writes that reached it, because its
+  lease had run out. So did 11 s pauses inside a write's WAL append. A
+  15 s pause of a Hatchet engine broke nothing, and a kill at the same step lost runs (the entry
+  "Kills of the process that holds acknowledged work"). The pause needs the check that every
+  accepted operation ends. Without it, a stuck query was an unknown outcome, and the run passed.
+- **Cost.** It runs on every engine.
+
+### Power cuts at the k-th disk flush (`cf=`)
+
+- **What it is.** The disk loses its power at one exact flush, so the cut falls inside a commit.
+- **Yield.** 3 bugs needed it, in 3 examples: 2 new and 1 known.
+- **What to write.** `disk=cut cf=271 | run T=8:15768000`. `hydo explore --more-faults` draws
+  them.
+- **When it fits.** A system that commits in several steps, each with its own flush.
+- **What it found.**
+  - Saleor (finding 4, saleor#20023): seed 5 of the exploration charged a gift
+    card without a record. It shrank to `cf=270 T=8:15768000`.
+  - The bug benchmark's order service: 12 of 282 flush points failed with durable
+    settings and an honest disk. No other fault found that bug.
+  - YugabyteDB: the lost writes of its default WAL setting shrank to one cut at
+    the fourth flush.
+- **What it misses.** The point moves with the image's bytes. Saleor's `cf=270` stopped
+  reproducing when its image was rebuilt, and `cf=271` gives the finding now. Restate held at
+  all 49 flush points from `cf=37` to `cf=4000`: it syncs its log before it answers, as its
+  documentation says. Prometheus held at 19 points from `cf=60` to `cf=1140` and at 11 drawn
+  ones, with blocks of one minute, so the cuts fell around head compactions and WAL
+  checkpoints. Its rule asked only for the samples of a block that the server had listed.
+- **Cost.** hvx only.
+
 ### Protocol faults on fakes and emulators (`H=`)
 
 - **What it is.** A fake or an emulator stands for an outside service, and `H=` delays, drops,
   resets, or fails its answers (`hydo guide outside-services`).
+- **Yield.** 3 bugs needed it, in 3 examples: 2 new and 1 known.
 - **What to write.** `H=api.place_order@0-1:drop` or
   `H=stripe.payment_intent@3-4:status=500,effect=yes`. Use `emulators:` for Stripe, SMTP, and S3,
   and `hydo fake from-openapi` for a service with an OpenAPI description.
@@ -997,10 +1145,29 @@ These findings hold for every type of system:
   experimental object-store WAL does, so `put_if_absent` faults met no request.
 - **Cost.** Fast runs: checkout ran 200 schedules in 242 s on hvx with 4 workers.
 
+### Cluster faults and group selectors
+
+- **What it is.** A manifest's `groups:` names a cluster's members, with a `primary:` command.
+  The tokens then select members: the leader, a majority, or two halves of the group.
+- **Yield.** 2 bugs needed it, in 2 examples: 1 new and 1 known.
+- **What to write.** `K=nodes.primary@5+1`, `N=nodes.halves@3-9:loss,100%`, and
+  `hydo explore --cluster-faults` (`hydo guide faults`, "Faults on a cluster").
+- **When it fits.** A cluster with a leader.
+- **What it found.**
+  - NATS JetStream 2.10.22: 11 failures in 30 schedules with the option against 9
+    without it. Two had no power cut, for example `N=nodes.isolate@2-10:loss,100% T=11:-18`,
+    which lost 5 of 34 acknowledged messages.
+  - Redpanda (finding 3): the explorer shrank seed 24 to `K=nodes.primary@66+1 P=n2@42+11`.
+- **What it misses.** With `network: bridge` the explorer draws links only between services that
+  list each other in `depends_on`, unless the group has `links: all`, which `hydo
+  compose` writes for the services of one image and one command.
+- **Cost.** `network: bridge` for partitions.
+
 ### Pauses of the workload or of one thread
 
 - **What it is.** `P=workload/<thread>@<step>~<ms>:<ms>` stops the named threads of the test for
   some guest time, while its other threads run on. `P=workload@...` stops the whole test.
+- **Yield.** 2 known bugs, the flaky tests of 2 examples.
 - **What to write.** `disk=none | run P=workload/tests::wal_reco@0~4433:500`. `hydo explore
   --pause-thread <name>` draws them, with `--pause-min` and `--pause-lengths`.
 - **When it fits.** A flaky test with a race between its own thread and a background worker.
@@ -1014,11 +1181,33 @@ These findings hold for every type of system:
 - **Cost.** On the Mac and KVM engines it needs an image built at the fingerprint epoch 3 or
   later.
 
+### Reboots and added disks
+
+- **What it is.** `guest.reboot: true` lets a guest program ask for a real reboot.
+  `guest.disks` adds disks, each with its own write cache, so a device's storage chips can be
+  modelled.
+- **Yield.** 2 new bugs, in 2 examples.
+- **What to write.** A guest program prints the console line `HYDO-REBOOT`. The sections
+  "Reboots" and "Added disks" of `hydo guide manifest` give the keys. Add reactions at the
+  update's events.
+- **When it fits.** A device updater with two root slots and a boot loader's environment.
+- **What it found.**
+  - SWUpdate: a slot that is never flushed boots its old contents after
+    a power cut. With real reboots, 20 schedules gave 7 failures, at 82 runs an hour.
+  - Mender (finding 1): 24 schedules gave 9 failures in three signatures.
+  - RAUC held in 80 schedules on the Mac engine and 58 on hvx.
+- **What it misses.** A window between the install and the reboot exists only when the client
+  waits between them. SWUpdate's first client rebooted at once, and 25 schedules found nothing.
+- **Cost.** Added disks need the Mac or KVM engine. A device model needs its own disk images and
+  a boot loader model.
+
 ### Turn lengths and forced preemption points
 
 - **What it is.** hydo changes where threads switch: the turn length of several vCPUs (`q=`),
   forced preemption points (`pct=`, `pctn=`), or shorter and inserted ticks on hvx (`pp=`,
   `xt=`).
+- **Yield.** 2 known bugs, the flaky tests of 2 examples. On services, timing explorations and
+  forced preemption points ran 90 schedules in 3 examples and found no bug first.
 - **What to write.** `hydo explore --vcpus 2 --turns`, or `hydo explore --timing --preempt`.
   To find the turn length where the verdict changes, read the section "Find where the verdict
   changes" of `hydo guide flaky-tests`.
@@ -1034,10 +1223,34 @@ These findings hold for every type of system:
   passes.
 - **Cost.** Several vCPUs need hvx or KVM.
 
+### A graceful stop after answers that are not durable yet
+
+- **What it is.** The workload sends writes that the system answers before they are durable: a
+  queued write, a batched write, or a write that a buffer holds. Then the workload stops that
+  service with SIGTERM, as `docker stop`, a rolling restart, or an upgrade does, and the
+  restart policy starts it again. The generic rule reads every acknowledged write back. A
+  graceful stop must keep what the service has answered, or the documentation must name the
+  stop beside the crash.
+- **Yield.** 1 new bug, rqlite's finding 2.
+- **What to write.** A serial driver that sends the writes, records each one's answer, and
+  sends SIGTERM to the service's process by its command line in `/proc` (busybox `kill`, or the
+  client's own call). Put it behind a build parameter when every run with it fails. The rqlite
+  example's `rqc qstop` is one to copy.
+- **When it fits.** A system with an asynchronous mode whose documentation names only a crash
+  as the risk: queued or batched writes, write-behind caches, group commit.
+- **What it found.** rqlite (finding 2, new): 3 queued writes without `wait`, each answered 200,
+  and SIGTERM to that node lost all three, in a run without any fault. At the stop the node
+  closes its write queue, and the queue's goroutine returns without writing the batch it holds.
+  The page "Queued Writes" names only a crash.
+- **What it misses.** A stop through hydo's own faults: `K=` kills with SIGKILL, so a loss there
+  is the documented crash. A graceful stop of a node whose batch the timer has already sent.
+- **Cost.** One driver. It runs on every engine.
+
 ### Upgrades (`U=`)
 
 - **What it is.** `U=<target>@<step>:<version>` switches a service to another version during the
   run, on the same data. A list or a group's selector gives a rolling upgrade.
+- **Yield.** 1 known bug, etcd's issue 19557.
 - **What to write.** `services[].versions` in the manifest, then `disk=none | run
   U=etcd1@5:3.6.0`. `hydo explore --upgrades` draws them.
 - **When it fits.** A cluster that upgrades in place.
@@ -1048,43 +1261,120 @@ These findings hold for every type of system:
   per schedule.
 - **Cost.** The image carries every version.
 
-### Reboots and added disks
+### One node's clock ahead of or behind the others (`clock: own`)
 
-- **What it is.** `guest.reboot: true` lets a guest program ask for a real reboot.
-  `guest.disks` adds disks, each with its own write cache, so a device's storage chips can be
-  modelled.
-- **What to write.** A guest program prints the console line `HYDO-REBOOT`. The sections
-  "Reboots" and "Added disks" of `hydo guide manifest` give the keys. Add reactions at the
-  update's events.
-- **When it fits.** A device updater with two root slots and a boot loader's environment.
+- **What it is.** `clock: own` on a service gives it a wall clock of its own, and
+  `T=<svc>@<step>:<change>` steps it (`-60`, `1500ms`) or makes it drift (`50000ppm`). The other
+  services, the client and the checks keep the guest's clock. `hydo explore --service-clocks`
+  draws such changes (`hydo guide faults`, "One service's clock ahead of the others").
+- **What to write.** Give every node of a cluster `clock: own` in a copy of `hydo.yaml`. Step the
+  node that holds the lease, a follower, and two followers together, by seconds and by minutes,
+  each way. Keep the checks that a guest-wide clock step broke: they tell what one node's skew
+  changes.
+- **When it fits.** A cluster whose nodes compare their own clocks with each other's timestamps,
+  or run timers on the wall clock: leases, timestamp oracles, sample timestamps, and the timers
+  of replicated work.
 - **What it found.**
-  - SWUpdate: a slot that is never flushed boots its old contents after
-    a power cut. With real reboots, 20 schedules gave 7 failures, at 82 runs an hour.
-  - Mender (finding 1): 24 schedules gave 9 failures in three signatures.
-  - RAUC held in 80 schedules on the Mac engine and 58 on hvx.
-- **What it misses.** A window between the install and the reboot exists only when the client
-  waits between them. SWUpdate's first client rebooted at once, and 25 schedules found nothing.
-- **Cost.** Added disks need the Mac or KVM engine. A device model needs its own disk images and
-  a boot loader model.
+  - Typesense (finding 4): one node's clock 60 s behind left that node without a document that
+    the leader holds, for good. The node runs the later batches of a delete by a filter from a
+    timer of its own HTTP loop, which waits while its clock is behind its last run. When the
+    timer fires, the node has applied later writes, and the batch deletes their documents. A
+    step of an hour left the node with 64 documents that the delete removed on the other nodes.
+    The cause is finding 2's, and the loss is finding 1's, without a restart.
+  - Typesense (finding 3 again): the election after a pause of the leader came late only when
+    both followers' clocks were behind. With one follower's clock behind, the other follower took
+    over at once.
+  - Prometheus (by design): a remote-write sender whose clock runs more than 10 minutes ahead
+    of the server loses every sample. The server refuses samples more than 10 minutes in its
+    future (`maxAheadTime`), and the sender drops a refused batch. A server more than its
+    out-of-order window ahead of its senders refuses theirs too. Five minutes either way held.
+- **What it misses.** It covers programs that read the clock through glibc, musl or Go, not the
+  kernel's own times (file times, socket time stamps). A read costs about 40 µs of guest time on
+  hvx. The explorer's largest drawn step is 5 minutes, so a limit of 10 minutes, as
+  Prometheus's, needs a directed schedule. It runs on hvx only.
+- **Cost.** One directed run takes the time of a run; an image of the example with `clock: own`
+  beside the recorded one, so that the recorded values stay.
 
-### The page walk and its invariants
+### One node's clock on both sides of the cluster's bound (`clock: own`)
 
-- **What it is.** `browser.explore` lets hydo walk through a web app's pages from a seed. Five
-  invariants watch every page: uncaught errors, spinners that stay, unshown failed requests,
-  broken texts, and failing tests.
-- **What to write.** `browser.explore` in `hydo.yaml` (`hydo guide web-apps`), one page rule
-  over the database, `watch.failures_of` for the writes, and `avoid:` for busy controls.
-- **When it fits.** A web app whose server keeps the data.
-- **What it found.**
-  - web-shop: both planted bugs blind in 20 schedules, without a test.
-  - Vikunja: finding 1 failed 5 of 40 schedules, of which 19 had a power cut.
-    Finding 2, an unhandled rejection, came at seed 9 under disk errors.
-  - Memos: a share link's copy button throws over plain HTTP (memos#6575), one
-    failure in seeds 21 to 60.
-- **What it misses.** Memos's first 20 walks spent 216 actions in the editor without saving.
-  A later walker reached neither Memos finding in seeds 21 to 60. A walk that
-  a power cut ends is not judged.
-- **Cost.** About 40 s a run on hvx; `network: bridge`.
+- **What it is.** A cluster that orders by wall-clock time documents a largest clock offset and
+  stops a node whose clock is past it. `clock: own` on one node and `T=<svc>@<at>:<change>` put
+  that node's clock just inside the bound and just outside it, while the other nodes keep the
+  guest's clock. Inside, every rule must hold. Outside, only the node with the bad clock may stop.
+- **What to write.** `clock: own` on one node of a copy of the manifest (`skew/hydo.yaml`), and a
+  final check that counts the nodes that stopped for the clock: at most the one whose clock was
+  moved. Read the bound from the documentation, then run `T=<svc>@5:<60 % of it>`, the same back,
+  and `T=<svc>@5:<twice it>` both ways. Start the workload only when every range or partition has
+  all of its replicas, or the loss of one node can stop the cluster for another reason.
+- **When it fits.** A system that documents a clock bound and enforces it, such as
+  CockroachDB's `--max-offset`, and leases or snapshot reads that trust the clocks.
+- **What it found.** CockroachDB v26.4.1 (finding 1): with one node's clock 1 s off, ahead or
+  behind, the two healthy nodes of three stopped themselves too, each with `clock synchronization
+  error ... (1 of 2 are within the offset)`. A healthy node counts two clocks, and the rule stops
+  it when one of two is off. The cluster acknowledged 5 of 23 and 22 of 65 writes sent. Within the
+  bound, at 300 ms either way, every rule held. The rules over the data held in every run, because hydo started the
+  stopped nodes again; a check of the nodes' own log files showed it.
+- **What it misses.** hydo-clock moves the wall clock only; the kernel's times and `timerfd` stay
+  the guest's. `hydo explore --service-clocks` draws steps of 250 ms to 5 minutes, so a drawn
+  step is mostly far past a bound of 500 ms.
+- **Cost.** A clock read under hydo-clock costs about 40 µs of guest time; a CockroachDB node with
+  its own clock still ran the workload at the speed of the others on hvx. hvx only.
+
+### The sync audit and power cuts after an answer
+
+- **What it is.** `hydo rules scan --kind sync` lists the code that can answer a write before
+  the write is on the disk. Examples are a file written without `fsync`, a rename without a sync
+  of its folder, and a setting that turns syncing off. Each place gets one service's power loss
+  and a power cut of the guest, right after the answer that follows it.
+- **Yield.** The audit came after the findings that it names. Its own schedules then found 1 new
+  candidate first (Kvrocks's backup) and reached 3 known bugs at the first try. Use it as a
+  reading aid: its places suggest directed power cuts, and its list says which acknowledgements
+  to aim a reaction at.
+- **What to write.** Run the audit, give the service of the place `storage:`, and run its
+  schedules with `hydo explore --schedule`. With an event of an answered write in the workload, a
+  schedule reads `disk=cut | run A=nsq.pub_acked+10:powerloss-nsqd` (`hydo guide faults`,
+  "Find the writes acknowledged before they are synced").
+- **When it fits.** Any system that stores data in files of its own. Examples are a queue, a log,
+  a store, a device updater, and a server that saves its own state, such as its peers.
+- **What it found.** It came after these findings. It names the place of each:
+  - NSQ (finding 1): go-diskqueue's metadata renamed without a sync of the folder, and its
+    writes answered before the sync on a timer.
+  - Kvrocks (finding 1): the fetched checkpoint's files written without a sync, renamed, and the
+    old database destroyed.
+  - RabbitMQ (findings 1 and 2): osiris writes stream segments and never syncs them.
+  - Garnet (known #2281): the default device opens its files with `O_DIRECT` and no `O_DSYNC`.
+  - Meilisearch (findings 2 and 3): the payload renamed into place without a sync, and the dump
+    never synced before its task succeeds.
+  - Vikunja (finding 1): the database in SQLite's WAL mode without `synchronous=FULL`.
+  - SWUpdate: the raw handler syncs only when it turned the write protection off.
+  - Mender (finding 1): the version file synced while its bytes are still in the stream.
+  - Garage (finding 3): the peer list written without a sync, once a minute.
+  - ClickHouse (finding 1): `fsync_after_insert` and the merge's fsync off by default.
+  - RocketMQ (finding 1): `IOTinyUtils.writeStringToFile`, through which `MixAll.string2File`
+    writes the epoch file, as its place 22 of 29. Its first places were the commit log's
+    flush services, whose `SYNC_FLUSH` path held in every run. The audit ran after the finding.
+
+  Its own schedules then reached places that no earlier finding had named, each at the first
+  try, on hvx:
+  - Garage with its SQLite engine: a power cut 10 ms after an acknowledged PutObject lost an
+    acknowledged upload, also with `metadata_fsync = true`. The LMDB engine passed the same
+    schedule. Known as Garage #1571.
+  - ClickHouse: a power cut right after an `ALTER TABLE ADD COLUMN` or an `EXCHANGE TABLES`
+    reverted it. Known as ClickHouse #111348.
+  - Meilisearch: a new database does not start again after a power cut in its first seconds,
+    because its `VERSION` file is not synced. Meilisearch #4584 reported it and closed it because
+    nobody could reproduce it.
+  - Kvrocks, new: a backup that `BGSAVE` reported done is the older one after a power cut,
+    because the new backup is renamed into place without a sync of the folder.
+- **What it misses.** It reads text. A write through an interface, a sync in another thread, or a
+  library that the project does not hold (rclone, RocksDB) is not followed. A place is a fact of
+  the code: a relaxed default that the project documents is a trade-off, and `hydo explore
+  --configs` labels it so. It reads a workload's events only in the folder of `hydo.yaml`, so a
+  client in another folder gets schedules at a step; aim them at its event by hand. A place at a
+  service's first start needs a workload that makes the state anew, because hydo syncs the disks
+  after provisioning.
+- **Cost.** Seconds for most projects, about a minute for ClickHouse. Each schedule is one
+  recovery boot, on every engine.
 
 ## Timing and engines
 
@@ -1092,6 +1382,7 @@ These findings hold for every type of system:
 
 - **What it is.** The same schedule on another engine runs with other timing, so it reaches
   other windows.
+- **Yield.** 1 new bug, Redpanda's finding 4.
 - **What to write.** Build the image for the engine, then `hydo run --backend kvm "<schedule>"`.
 - **When it fits.** A timing-sensitive finding, or a schedule that passes on the first engine.
 - **What it found.** Redpanda's finding 4 came only on KVM, from `A=rp.txn_add@20:kill-n3` on
@@ -1101,20 +1392,6 @@ These findings hold for every type of system:
   Compare verdicts, not fingerprints.
 - **Cost.** An image per architecture: the Mac engine runs arm64 guests.
 
-### The explorer's strategy
-
-- **What it is.** `--strategy` chooses how `hydo explore` draws faults: `process` gives 2 to 4
-  fault kinds in staggered windows, and `swarm` switches whole categories on and off per run.
-- **What to write.** `hydo explore --seeds 1-20 --strategy process` first, and `--strategy
-  swarm --new-faults` last. The process strategy draws pauses, clock steps and one-way losses
-  itself, so `--new-faults` adds nothing to it.
-- **When it fits.** Every project.
-- **What it found.** On the bug benchmark, out of 24 possible
-  detections, random made 19, swarm 21, and process 24. Swarm finds more kinds of failure,
-  many of them disk faults.
-- **What it misses.** Swarm draws lying disks and I/O errors, whose failures are the disk's.
-- **Cost.** Add `--more-faults` on hvx. With `--backend kvm` and on a Mac the explorer refuses it.
-
 ## Narrow and confirm a finding
 
 ### A forced order in a native script
@@ -1122,6 +1399,8 @@ These findings hold for every type of system:
 - **What it is.** After hydo shows the cause, a script under Docker forces the order of the
   steps, with locks, an administration call, or a fixed step order. The bug then shows on every
   try.
+- **Yield.** A native probe found 3 bugs first, in 2 examples. Most native scripts confirmed a
+  finding that hydo found.
 - **What to write.** A script in the example's `native/` folder that runs the project's own
   images and holds each step until the next one may run.
 - **When it fits.** A cause that is a timing or environment effect, which the code alone does
@@ -1142,6 +1421,8 @@ These findings hold for every type of system:
 ### Directed workloads for a narrow trigger
 
 - **What it is.** A workload command builds the trigger that a blind exploration does not reach.
+- **Yield.** 2 bugs needed it, in 2 examples: 1 new and 1 known. Directed schedules of every kind
+  found 23 bugs first.
 - **What to write.** One command that makes the trigger with ordinary client requests, such as a
   `singleton_driver_` command (`hydo guide composer`).
 - **When it fits.** A known issue whose trigger is a coincidence, such as two expiries on one
@@ -1156,6 +1437,8 @@ These findings hold for every type of system:
 
 - **What it is.** One exploration runs on a release with a known bug and on the release with its
   fix. The pair checks that the setup can reach the bug.
+- **Yield.** 3 known bugs reached, in 3 examples. Aimed at 2 other known bugs, YugabyteDB's TA-30772
+  and etcd's issue 20418, it reproduced neither.
 - **What to write.** A build parameter for the version, then the same seeds on both images.
   `hydo versions` replays a finding on a list of versions (`hydo guide workflow`).
 - **When it fits.** A project with a known bug that a fault reaches, before the hunt for new ones.
@@ -1195,6 +1478,9 @@ These findings hold for every type of system:
 - **What it is.** One exploration per value of a setting that the system reads at start, with
   the same seeds. The table says which values fail under which faults. A failure that appears
   only with values whose documentation names the trade-off is labeled by design.
+- **Yield.** No bug first, in 245 schedules of 8 examples. It showed the documented loss of a
+  relaxed setting in 7 examples and labeled it in 5. Run it to label such a loss, after the first
+  hour.
 - **What to write.** The setting as a build parameter and its values under `configs:`, with a
   `tradeoff:` note per value that the documentation says weakens a promise. Then `hydo explore
   --configs` (`hydo guide workflow`, "Which settings break a promise").
@@ -1251,6 +1537,8 @@ These findings hold for every type of system:
 
 - **What it is.** `// hydo: requires` and `ensures` comments next to a function are checked at
   every call while the system runs under faults (`hydo guide manifest`, "Function contracts").
+- **Yield.** No bug first: on Blnk, 24 blind schedules found nothing that the rules missed. Keep
+  contracts for function fuzzing.
 - **What to write.** The comments, and `contracts:` in `hydo.yaml` with the program and its
   sources:
 
@@ -1295,6 +1583,7 @@ These findings hold for every type of system:
 
 - **What it is.** `hydo fuzz` tests each contracted Rust function natively, with inputs from its
   `requires` and `input` lines, and judges each call by `ensures` (`hydo guide fuzz`).
+- **Yield.** 8 candidates in 25 crates, and 12 known bugs reproduced.
 - **What to write.** The contract's comments, then `hydo fuzz path/to/crate --fn find`. Add
   `--vm` to make the calls inside hydo's VM under faults.
 - **When it fits.** A library function over integers, strings, bytes, lists, or enumerations,
@@ -1328,10 +1617,26 @@ These findings hold for every type of system:
 - **Cost.** 1 to 15 s per build and run, with no VM. Inside the VM, 76 to 251 s for 16 to 24
   runs.
 
-## Measured without a gain
+## Found no bug first over many tries
 
-Each of these was measured against the plain exploration. The first three are options of `hydo
-explore`. The last two were experiments of the first explorer, before it was written in Rust.
+Each technique of the table ran on real systems, and found no bug before another technique did.
+Keep these techniques for later in an onboarding, for the use that each row names.
+
+| technique | tries | what it found | keep it for |
+|---|---|---|---|
+| the clock audit (`hydo rules scan --kind clock`) | 12 examples with a recorded outcome | no bug; it missed the clock bugs of 6 examples and named no place in 4 | reading: directed clock steps at the places it names |
+| the sync audit (`hydo rules scan --kind sync`) | written after the findings it names; 8 new places, 4 run in VMs | 1 minor new candidate (Kvrocks's backup) and 3 known bugs | reading: directed power cuts after the answers it names |
+| the scan of write routes (`--kind writes`) | 6 examples | no bug; no route in 3 | the workload's list of operations |
+| the swarm strategy | 620 schedules, 19 examples | 2 bugs first; most failures were disk faults | a later round, with `--durable-only` |
+| timing and forced preemption points on services | 90 schedules, 3 examples | nothing first | flaky tests |
+| explored settings (`--configs`) | 245 schedules, 8 examples | no bug; a documented loss in 7, labeled in 5 | labeling a documented loss |
+| aimed reaction grids, in 3 of 8 examples | 164 cells | nothing in RabbitMQ, SeaweedFS, and Pulsar | a crash window that the code shows |
+| function contracts in a whole-system run | 24 schedules, Blnk | nothing new | function fuzzing instead |
+| version pairs aimed at a known bug | 2 bugs | neither reproduced | checking that the setup reaches a known bug |
+
+The techniques below were measured against the plain exploration. The first three are options of
+`hydo explore`. The last two were experiments of the first explorer, before it was written in
+Rust.
 
 - The steered search (`--steer`): on KVM over five seed ranges it found Qdrant's
   failure after a median of 118 schedules, and the plain exploration after 72. On hvx neither
@@ -1351,3 +1656,6 @@ After an onboarding, add its evidence here, in the same shape: what it is, what 
 fits, what it found, what it misses, and the cost. Every number needs its source in the
 example's results page or in the project's history, but the entry says it in words, because a
 release ships neither file. `docs/ONBOARDING-PLAYBOOK.md`, section 8, asks each retro for it.
+Add the onboarding's findings to the ledger, `docs/design/findings-ledger.csv` in hydo's source
+repository, and update the counts of the tables and of each entry's line "Yield" that changed.
+Keep each section's entries in the order of their counts.

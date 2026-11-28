@@ -1,0 +1,56 @@
+# CockroachDB v26.4.1 (the newest release, 2026-11-18) as a cluster of three nodes, the shape of
+# CockroachDB's guide "Start a cluster in Docker" (insecure, one volume per node), at fixed
+# addresses. Each node joins the other two; the one-shot service init runs `cockroach init` once.
+# SQL is on port 26257, the nodes' RPC on 26357 and the DB Console on 8080. The cache and the SQL
+# memory are small, so that three nodes fit in one machine of a few GiB.
+services:
+  roach1:
+    image: cockroachdb/cockroach:v26.4.1
+    command: ["start", "--insecure", "--advertise-addr=10.89.0.11:26357", "--listen-addr=0.0.0.0:26357",
+              "--sql-addr=0.0.0.0:26257", "--http-addr=0.0.0.0:8080",
+              "--join=10.89.0.11:26357,10.89.0.12:26357,10.89.0.13:26357",
+              "--cache=64MiB", "--max-sql-memory=128MiB", "--store=path=/cockroach/cockroach-data,ballast-size=0"]
+    volumes:
+      - roach1:/cockroach/cockroach-data
+    networks:
+      roach: {ipv4_address: 10.89.0.11}
+    ports: ["26257:26257", "8080:8080"]
+    restart: unless-stopped
+  roach2:
+    image: cockroachdb/cockroach:v26.4.1
+    command: ["start", "--insecure", "--advertise-addr=10.89.0.12:26357", "--listen-addr=0.0.0.0:26357",
+              "--sql-addr=0.0.0.0:26257", "--http-addr=0.0.0.0:8080",
+              "--join=10.89.0.11:26357,10.89.0.12:26357,10.89.0.13:26357",
+              "--cache=64MiB", "--max-sql-memory=128MiB", "--store=path=/cockroach/cockroach-data,ballast-size=0"]
+    volumes:
+      - roach2:/cockroach/cockroach-data
+    networks:
+      roach: {ipv4_address: 10.89.0.12}
+    restart: unless-stopped
+  roach3:
+    image: cockroachdb/cockroach:v26.4.1
+    command: ["start", "--insecure", "--advertise-addr=10.89.0.13:26357", "--listen-addr=0.0.0.0:26357",
+              "--sql-addr=0.0.0.0:26257", "--http-addr=0.0.0.0:8080",
+              "--join=10.89.0.11:26357,10.89.0.12:26357,10.89.0.13:26357",
+              "--cache=64MiB", "--max-sql-memory=128MiB", "--store=path=/cockroach/cockroach-data,ballast-size=0"]
+    volumes:
+      - roach3:/cockroach/cockroach-data
+    networks:
+      roach: {ipv4_address: 10.89.0.13}
+    restart: unless-stopped
+  init:
+    image: cockroachdb/cockroach:v26.4.1
+    command: ["init", "--insecure", "--host=10.89.0.11:26357"]
+    depends_on: [roach1, roach2, roach3]
+    networks:
+      roach: {ipv4_address: 10.89.0.20}
+    restart: on-failure
+networks:
+  roach:
+    ipam:
+      config:
+        - subnet: 10.89.0.0/24
+volumes:
+  roach1: {}
+  roach2: {}
+  roach3: {}

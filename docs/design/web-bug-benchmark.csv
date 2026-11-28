@@ -1,0 +1,824 @@
+project,number,title,url,sample,search,class,subclass,correctness_bug,needs,confirmed,fixed,hard_to_reproduce,state,created
+AppFlowy-IO/AppFlowy,8774,"[Bug] When no spaces exist within a workspace, the placeholder loading indicator is visible, even though no data is to be loaded.",https://github.com/AppFlowy-IO/AppFlowy/issues/8774,random,,O,ui,yes,none,no,no,no,open,2026-05-29
+AppFlowy-IO/AppFlowy,5685,[Bug] Mobile: 4 Document Bugs!,https://github.com/AppFlowy-IO/AppFlowy/issues/5685,random,,O,ui,yes,none,no,no,yes,open,2024-07-04
+AppFlowy-IO/AppFlowy,6349,[Bug] App crashed on Windows,https://github.com/AppFlowy-IO/AppFlowy/issues/6349,random,,X,,no,none,no,no,no,closed,2024-09-18
+AppFlowy-IO/AppFlowy,5438,Bug with in-app notifications,https://github.com/AppFlowy-IO/AppFlowy/issues/5438,random,,O,logic,yes,none,yes,yes,no,closed,2024-05-30
+AppFlowy-IO/AppFlowy,5643,[Bug] Line numbers are shifted comparing to the code in the code block,https://github.com/AppFlowy-IO/AppFlowy/issues/5643,random,,O,ui,yes,none,no,no,no,closed,2024-06-27
+AppFlowy-IO/AppFlowy,8618,[Bug] Missing row content in full-screen view,https://github.com/AppFlowy-IO/AppFlowy/issues/8618,random,,O,logic,yes,none,yes,yes,yes,closed,2026-04-02
+AppFlowy-IO/AppFlowy,4504,[Bug] Mobile Editing Database Cards do not save,https://github.com/AppFlowy-IO/AppFlowy/issues/4504,random,,O,logic,yes,none,yes,yes,no,closed,2024-01-26
+AppFlowy-IO/AppFlowy,8802,[Bug] can not search with Ctrl-F,https://github.com/AppFlowy-IO/AppFlowy/issues/8802,random,,O,ui,yes,none,no,no,yes,open,2026-06-11
+AppFlowy-IO/AppFlowy,4623,"[Bug] How to perform ctrl + enter operation on mobile terminal, in some blocks",https://github.com/AppFlowy-IO/AppFlowy/issues/4623,random,,X,,no,none,yes,no,no,closed,2024-02-07
+AppFlowy-IO/AppFlowy,6304,[Bug] Unable to import old data to cloud,https://github.com/AppFlowy-IO/AppFlowy/issues/6304,random,,O,format,yes,none,yes,no,no,closed,2024-09-13
+AppFlowy-IO/AppFlowy,6249,[Bug] Drag images into grid page not working,https://github.com/AppFlowy-IO/AppFlowy/issues/6249,random,,O,ui,yes,none,yes,yes,no,closed,2024-09-09
+AppFlowy-IO/AppFlowy,7722,[Bug] LAI doesn't get detected by the flatpak package,https://github.com/AppFlowy-IO/AppFlowy/issues/7722,random,,X,,no,none,no,no,no,closed,2025-04-10
+AppFlowy-IO/AppFlowy,7480,[Bug] RecordNotFound when loading a recently added Database tab.,https://github.com/AppFlowy-IO/AppFlowy/issues/7480,random,,O,error,yes,none,no,no,no,closed,2025-03-07
+AppFlowy-IO/AppFlowy,5009,[Bug](maybe =) theme inconsistency and cursor position,https://github.com/AppFlowy-IO/AppFlowy/issues/5009,random,,O,ui,yes,none,no,no,no,closed,2024-03-29
+AppFlowy-IO/AppFlowy,6200,[Bug] Importing the data folder of appflowy breaks the link for linked pages,https://github.com/AppFlowy-IO/AppFlowy/issues/6200,random,,3b,upgrade,yes,deploy,no,no,no,closed,2024-09-05
+AppFlowy-IO/AppFlowy,5230,[Bug] the recent views should refresh after switching to another workspace.,https://github.com/AppFlowy-IO/AppFlowy/issues/5230,random,,2,stale,yes,none,no,no,no,closed,2024-04-30
+calcom/cal.diy,29986,Persistent Booking ID Across Reschedules,https://github.com/calcom/cal.diy/issues/29986,random,,X,,no,none,no,no,no,closed,2026-08-18
+calcom/cal.diy,25848,fix(workflows): Add Variables Dropdown Styling Inconsistencies,https://github.com/calcom/cal.diy/issues/25848,random,,O,ui,yes,none,yes,yes,yes,closed,2025-12-13
+calcom/cal.diy,24458,[Bug] : Image of the calender on the official website is half visible,https://github.com/calcom/cal.diy/issues/24458,random,,O,ui,yes,none,no,no,no,closed,2025-10-14
+calcom/cal.diy,21504,"Creates a new booking sample request returns ""Cannot read properties of undefined (reading 'id')""",https://github.com/calcom/cal.diy/issues/21504,random,,O,error,yes,none,no,no,no,closed,2025-05-24
+calcom/cal.diy,21945,Changes to Managed Event Types Reset Assignee Availability,https://github.com/calcom/cal.diy/issues/21945,random,,1c,shared,yes,users,yes,yes,no,closed,2025-06-20
+calcom/cal.diy,17964,Build failure for v4.7.15,https://github.com/calcom/cal.diy/issues/17964,random,,X,,no,none,yes,no,no,closed,2024-12-03
+calcom/cal.diy,26049,settings (gear) icon is misaligned,https://github.com/calcom/cal.diy/issues/26049,random,,O,ui,yes,none,yes,yes,no,closed,2025-12-19
+calcom/cal.diy,29456,LOW: deleteSelectedCalendar silently swallows unexpected errors,https://github.com/calcom/cal.diy/issues/29456,random,,O,logic,yes,none,yes,yes,no,closed,2026-05-26
+calcom/cal.diy,29868,Locked timezone is not honored in confirmation/reminder emails (only on the booking page),https://github.com/calcom/cal.diy/issues/29868,random,,5,tz,yes,clock,no,no,no,closed,2026-07-29
+calcom/cal.diy,14765,[Bug] MS Teams + MS Calendar Bad Implementation,https://github.com/calcom/cal.diy/issues/14765,random,,8,outside,yes,network,yes,yes,no,closed,2024-04-26
+calcom/cal.diy,13867,[CAL-3217] [CAL-3208] Booking limits should not count reschedules,https://github.com/calcom/cal.diy/issues/13867,random,,O,logic,yes,none,yes,yes,no,closed,2024-02-26
+calcom/cal.diy,24083,Step 3 is not visible for all analytics apps in the installation flow on prod,https://github.com/calcom/cal.diy/issues/24083,random,,O,ui,yes,none,no,no,no,open,2025-09-25
+calcom/cal.diy,25796,Google Meet location creates a Cal Video link,https://github.com/calcom/cal.diy/issues/25796,random,,8,outside,yes,network,no,no,no,closed,2025-12-11
+calcom/cal.diy,22736,Desktop app does not work.,https://github.com/calcom/cal.diy/issues/22736,random,,X,,no,none,yes,no,no,open,2025-07-25
+calcom/cal.diy,28736,Improvement: Add @calcom/api-v2 to the dev:api script in root package.json,https://github.com/calcom/cal.diy/issues/28736,random,,X,,no,none,no,no,no,open,2026-04-04
+calcom/cal.diy,21327,Bug Report: /v2/bookings API returns 500 Internal Server Error,https://github.com/calcom/cal.diy/issues/21327,random,,O,error,yes,none,yes,no,no,closed,2025-05-15
+documenso/documenso,2311,Templates are always of type Private and do not inherit the settings from the organization or the team,https://github.com/documenso/documenso/issues/2311,random,,O,logic,yes,none,yes,no,no,closed,2025-12-09
+documenso/documenso,891,Disable signing pad while submitting form (Related to #810),https://github.com/documenso/documenso/issues/891,random,,2,double,yes,none,yes,yes,no,closed,2024-01-31
+documenso/documenso,1011,API token deletion not reflected in cache until page reload,https://github.com/documenso/documenso/issues/1011,random,,2,stale,yes,none,yes,yes,yes,closed,2024-03-09
+documenso/documenso,3115,"Title: [Bug]: Duplicate-email recipients collapse onto one recipient when resolving PDF placeholder tags ({{signature, rN}})",https://github.com/documenso/documenso/issues/3115,random,,O,logic,yes,none,no,no,no,open,2026-07-20
+documenso/documenso,1398,Signing order incorrect (nobody can sign),https://github.com/documenso/documenso/issues/1398,random,,O,logic,yes,none,yes,yes,no,closed,2024-10-12
+documenso/documenso,3483,Expired status filter lists Rejected documents,https://github.com/documenso/documenso/issues/3483,both,5b,O,logic,yes,none,yes,no,no,open,2026-10-24
+documenso/documenso,877,Fix overflow of text on signing pad,https://github.com/documenso/documenso/issues/877,random,,O,ui,yes,none,no,no,no,closed,2024-01-27
+documenso/documenso,1012,Docker with production config cert error,https://github.com/documenso/documenso/issues/1012,random,,X,,no,none,yes,no,no,closed,2024-03-09
+documenso/documenso,1060,Different username preview during sign-up,https://github.com/documenso/documenso/issues/1060,random,,O,ui,yes,none,yes,yes,no,closed,2024-03-27
+documenso/documenso,3180,"Recipients who already signed can still reject, destroying their own signature",https://github.com/documenso/documenso/issues/3180,random,,O,logic,yes,none,yes,yes,no,closed,2026-08-13
+documenso/documenso,3290,POST /api/v2/envelope/field/create-many accepts a field that is both required and read-only,https://github.com/documenso/documenso/issues/3290,random,,O,logic,yes,none,yes,yes,no,closed,2026-08-20
+documenso/documenso,909,[Bug] Document title can be kept empty,https://github.com/documenso/documenso/issues/909,random,,O,logic,yes,none,yes,yes,no,closed,2024-02-05
+documenso/documenso,981,Username min length description does not match schema,https://github.com/documenso/documenso/issues/981,random,,O,logic,yes,none,yes,yes,no,closed,2024-03-01
+documenso/documenso,1032,Command Menu Fails to Close on First 'Escape' Click; Requires Second Click for Closure,https://github.com/documenso/documenso/issues/1032,random,,O,ui,yes,none,yes,no,no,closed,2024-03-17
+documenso/documenso,829,Ctrl+K doesn't prevent default browser shortcut from executing,https://github.com/documenso/documenso/issues/829,random,,O,ui,yes,none,yes,yes,no,closed,2024-01-12
+documenso/documenso,1038,TRPCClientError: We were unable to sign this field. Please try again later.,https://github.com/documenso/documenso/issues/1038,random,,X,,no,none,yes,no,no,closed,2024-03-19
+excalidraw/excalidraw,8661,text not synced if pasted into wysiwyg,https://github.com/excalidraw/excalidraw/issues/8661,random,,7,live,yes,users,no,no,no,open,2024-10-17
+excalidraw/excalidraw,8596,Paste Event doesn't get invoked within Shadow Root,https://github.com/excalidraw/excalidraw/issues/8596,random,,O,ui,yes,none,no,no,no,open,2024-10-04
+excalidraw/excalidraw,9049,Eraser is slow.,https://github.com/excalidraw/excalidraw/issues/9049,random,,X,,no,none,no,no,no,open,2025-01-25
+excalidraw/excalidraw,7951,Arrow disappears when adjusting the size of its surrounding Box,https://github.com/excalidraw/excalidraw/issues/7951,random,,O,ui,yes,none,no,no,no,open,2024-04-25
+excalidraw/excalidraw,9708,Importing Mermaidjs diagrams with <br> tags don't get resolved correctly,https://github.com/excalidraw/excalidraw/issues/9708,random,,O,format,yes,none,no,no,no,open,2025-06-29
+excalidraw/excalidraw,8814,Hyperlink 404 not found,https://github.com/excalidraw/excalidraw/issues/8814,random,,O,ui,yes,none,yes,yes,no,closed,2024-11-16
+excalidraw/excalidraw,8685,Uncaught SyntaxError: Invalid Regular expression,https://github.com/excalidraw/excalidraw/issues/8685,random,,O,error,yes,none,no,no,no,open,2024-10-22
+excalidraw/excalidraw,8614,Word search highlighting is flipped in RTL languages,https://github.com/excalidraw/excalidraw/issues/8614,random,,O,ui,yes,none,no,no,no,open,2024-10-08
+excalidraw/excalidraw,9706,Bug: Local elements moved into collab room on hash change,https://github.com/excalidraw/excalidraw/issues/9706,random,,4,sync,yes,users,yes,yes,no,closed,2025-06-28
+excalidraw/excalidraw,9628,selection cursor doesn't show on hover for other elements if linear element selected,https://github.com/excalidraw/excalidraw/issues/9628,random,,O,ui,yes,none,yes,yes,no,closed,2025-06-07
+excalidraw/excalidraw,9495,undo/redo doesn't work after exiting line editor by click outside,https://github.com/excalidraw/excalidraw/issues/9495,random,,O,ui,yes,none,yes,no,no,closed,2025-05-07
+excalidraw/excalidraw,8870,TypeError: Failed to construct 'URL': Invalid URL,https://github.com/excalidraw/excalidraw/issues/8870,random,,X,,no,none,no,no,no,open,2024-12-03
+excalidraw/excalidraw,8859,Excalidraw screen flashing ( in dark mode ),https://github.com/excalidraw/excalidraw/issues/8859,random,,O,ui,yes,none,yes,yes,no,closed,2024-11-28
+excalidraw/excalidraw,9934,The paste function using Ctrl + V has stopped working (Windows + Firefox).,https://github.com/excalidraw/excalidraw/issues/9934,random,,O,ui,yes,none,yes,yes,no,closed,2025-09-02
+excalidraw/excalidraw,8687,Configure grid step,https://github.com/excalidraw/excalidraw/issues/8687,random,,X,,no,none,yes,yes,no,closed,2024-10-22
+excalidraw/excalidraw,9234,ERROR  error during build:,https://github.com/excalidraw/excalidraw/issues/9234,random,,X,,no,none,no,no,no,open,2025-03-07
+go-gitea/gitea,38099,runner offline,https://github.com/go-gitea/gitea/issues/38099,random,,O,error,yes,none,yes,yes,no,closed,2026-06-13
+go-gitea/gitea,33313,pull request triggers 2 actions instead of one,https://github.com/go-gitea/gitea/issues/33313,random,,O,logic,yes,none,yes,no,no,closed,2025-01-17
+go-gitea/gitea,36855,"Website: ""Download for Mac - Intel Chip"" not changing when other OS/Hardware is selected.",https://github.com/go-gitea/gitea/issues/36855,random,,O,ui,yes,none,no,no,no,closed,2026-03-07
+go-gitea/gitea,32335,MergePullRequest fails to trigger action,https://github.com/go-gitea/gitea/issues/32335,random,,O,error,yes,none,yes,yes,no,closed,2024-10-24
+go-gitea/gitea,29881,"AAD Login via OAuth fails with Dockerhub image ""gitea/gitea""",https://github.com/go-gitea/gitea/issues/29881,random,,O,error,yes,none,no,no,no,closed,2024-03-18
+go-gitea/gitea,37416,Missing colors in Note and Warning markdown highlighting after upgrading to 1.26,https://github.com/go-gitea/gitea/issues/37416,random,,O,ui,yes,none,yes,yes,no,closed,2026-04-25
+go-gitea/gitea,39362,"Incorrect translation for ""individual"" user",https://github.com/go-gitea/gitea/issues/39362,random,,O,ui,yes,none,yes,yes,no,closed,2026-09-19
+go-gitea/gitea,28972,Lfs upload file cannot be ended,https://github.com/go-gitea/gitea/issues/28972,random,,O,logic,yes,none,no,no,no,open,2024-01-29
+go-gitea/gitea,36932,packages/nuget/nuget.go:624:processUploadedFile() [E] Package registry API internal error: 500 zip: not a valid zip file,https://github.com/go-gitea/gitea/issues/36932,random,,O,error,yes,none,yes,yes,no,closed,2026-03-20
+go-gitea/gitea,34003,Gitea server keeps filling up with bundle/zip archives,https://github.com/go-gitea/gitea/issues/34003,random,,O,logic,yes,none,yes,yes,yes,closed,2025-03-24
+go-gitea/gitea,38362,Gitea cannot delete branches,https://github.com/go-gitea/gitea/issues/38362,random,,O,error,yes,none,yes,yes,no,closed,2026-07-07
+go-gitea/gitea,39882,Migration from github met error,https://github.com/go-gitea/gitea/issues/39882,random,,8,outside,yes,network,yes,yes,no,closed,2026-10-20
+go-gitea/gitea,35942,Wrong ui around the comment button,https://github.com/go-gitea/gitea/issues/35942,random,,O,ui,yes,none,yes,yes,no,closed,2025-11-12
+go-gitea/gitea,36067,Wrong user as commit author in imported repos,https://github.com/go-gitea/gitea/issues/36067,random,,O,logic,yes,none,yes,no,no,closed,2025-12-02
+go-gitea/gitea,30148,API errors on some raw files for specific repo,https://github.com/go-gitea/gitea/issues/30148,random,,O,error,yes,none,yes,yes,no,closed,2024-03-27
+go-gitea/gitea,29514,"The usage of `NewRequestWithValues(t, ""PATCH"", url, data)` doesn't work in tests",https://github.com/go-gitea/gitea/issues/29514,random,,X,,no,none,yes,yes,no,closed,2024-03-01
+go-vikunja/vikunja,1170,Assigned user does not receive notification when another project member is subscribed,https://github.com/go-vikunja/vikunja/issues/1170,random,,1c,shared,yes,users,yes,yes,no,closed,2025-07-24
+go-vikunja/vikunja,2084,Checklist not updating after editing task,https://github.com/go-vikunja/vikunja/issues/2084,random,,2,stale,yes,none,no,no,yes,closed,2026-01-11
+go-vikunja/vikunja,1540,zsh: killed on Mac M1 MacOS Tahoe Version 26.0,https://github.com/go-vikunja/vikunja/issues/1540,random,,X,,no,none,yes,no,no,closed,2025-09-23
+go-vikunja/vikunja,2599,Invalid value of requireavailability when reading for env var,https://github.com/go-vikunja/vikunja/issues/2599,random,,X,,no,none,no,no,no,closed,2026-04-11
+go-vikunja/vikunja,1459,Empty payload causes loss of multiple task fields in tasks API update,https://github.com/go-vikunja/vikunja/issues/1459,random,,O,logic,yes,none,yes,no,no,closed,2025-09-10
+go-vikunja/vikunja,3845,veans 2.6.0 fails to install from stable APT repository with 404,https://github.com/go-vikunja/vikunja/issues/3845,random,,X,,no,none,yes,yes,no,closed,2026-09-09
+go-vikunja/vikunja,3123,Passwort reset via CLI not working anymore,https://github.com/go-vikunja/vikunja/issues/3123,random,,O,logic,yes,none,yes,yes,no,closed,2026-07-07
+go-vikunja/vikunja,285,Adding 'labels != <anything>' filter filters out all issues without a label set,https://github.com/go-vikunja/vikunja/issues/285,random,,O,logic,yes,none,yes,yes,yes,closed,2024-07-09
+go-vikunja/vikunja,3482,CalDAV: completed tasks reported under wrong project's calendar,https://github.com/go-vikunja/vikunja/issues/3482,random,,O,logic,yes,none,no,no,no,closed,2026-08-11
+go-vikunja/vikunja,2684,Keyboard shortcuts ignore keyboard layout,https://github.com/go-vikunja/vikunja/issues/2684,random,,O,ui,yes,none,yes,yes,no,closed,2026-04-23
+go-vikunja/vikunja,2211,Gantt chart not rendering done tasks visually distinctive,https://github.com/go-vikunja/vikunja/issues/2211,random,,O,ui,yes,none,no,no,no,closed,2026-02-09
+go-vikunja/vikunja,3914,Accessing Atom feed result in an Internal Server Error,https://github.com/go-vikunja/vikunja/issues/3914,random,,O,error,yes,none,no,no,no,closed,2026-09-16
+go-vikunja/vikunja,2709,Inline tasks remain checked when recurring task is completed and reopened,https://github.com/go-vikunja/vikunja/issues/2709,random,,O,logic,yes,none,no,no,no,closed,2026-04-28
+go-vikunja/vikunja,1424,Current Tasks and Upcoming Tasks View keeps showing all Tasks,https://github.com/go-vikunja/vikunja/issues/1424,random,,X,,no,none,yes,no,no,closed,2025-09-05
+go-vikunja/vikunja,1663,"Description field drag-and-drop behavior changes with ""Upload Attachment"" button presence",https://github.com/go-vikunja/vikunja/issues/1663,random,,O,ui,yes,none,yes,yes,yes,closed,2025-10-15
+go-vikunja/vikunja,2392,can't escape date parsing in task titles,https://github.com/go-vikunja/vikunja/issues/2392,random,,O,logic,yes,none,no,no,no,closed,2026-03-11
+immich-app/immich,25390,Reverse geocoding forces wrong place name and cannot be manually corrected (locality not searchable),https://github.com/immich-app/immich/issues/25390,random,,O,logic,yes,none,no,no,no,closed,2026-01-20
+immich-app/immich,11204,Unable to update from 1.107.0,https://github.com/immich-app/immich/issues/11204,random,,X,,no,none,no,no,no,closed,2024-07-18
+immich-app/immich,21453,.bmp from FLIR not supported,https://github.com/immich-app/immich/issues/21453,random,,O,format,yes,none,yes,yes,yes,closed,2025-08-30
+immich-app/immich,13496,[App]: Missing some translation(codes) for Android (iOS?) App,https://github.com/immich-app/immich/issues/13496,random,,O,ui,yes,none,yes,no,no,closed,2024-10-16
+immich-app/immich,20469,[beta] Album title does not update after editing,https://github.com/immich-app/immich/issues/20469,random,,2,stale,yes,none,yes,yes,no,closed,2025-07-31
+immich-app/immich,9412,iOS App no longer refreshing photos after removing offline files,https://github.com/immich-app/immich/issues/9412,random,,4,sync,yes,none,yes,yes,no,closed,2024-05-12
+immich-app/immich,22243,The image is not fully displayed on the mobile terminal.,https://github.com/immich-app/immich/issues/22243,random,,X,,no,none,yes,no,no,closed,2025-09-20
+immich-app/immich,29398,"AssetExtractMetadata fails with ERR_CHILD_PROCESS_STDIO_MAXBUFFER on clean, valid MP4 (mpeg2video/mp3) - exiftool/ffprobe pass standalone",https://github.com/immich-app/immich/issues/29398,random,,O,error,yes,none,yes,yes,no,closed,2026-06-30
+immich-app/immich,29786,Date of Birth error,https://github.com/immich-app/immich/issues/29786,random,,5,tz,yes,clock,no,no,no,closed,2026-07-10
+immich-app/immich,10322,1.106.3 - 1.106.4 - 360 videos Support removed from PWA.,https://github.com/immich-app/immich/issues/10322,random,,O,ui,yes,none,yes,no,no,closed,2024-06-14
+immich-app/immich,31605,"Mobile app crashes / logs out when device locale is `yue-Hant` (Cantonese) - `Invalid locale ""yue-Hant""` in DateFormat",https://github.com/immich-app/immich/issues/31605,random,,O,error,yes,none,yes,yes,no,closed,2026-09-16
+immich-app/immich,6971,"AFter the upgrade, all albums are gone and not able to access albums tab on web interface",https://github.com/immich-app/immich/issues/6971,random,,3b,upgrade,yes,deploy,yes,no,no,closed,2024-02-08
+immich-app/immich,19621,Postgres Init fails for immich-server  v1.135.3,https://github.com/immich-app/immich/issues/19621,random,,X,,no,none,yes,yes,no,closed,2025-06-30
+immich-app/immich,33063,Email notification customisation problem,https://github.com/immich-app/immich/issues/33063,random,,X,,no,none,no,no,no,closed,2026-11-07
+immich-app/immich,16773,"""Replace with upload"" not deleting image when trash disabled",https://github.com/immich-app/immich/issues/16773,random,,O,logic,yes,none,yes,no,yes,closed,2025-03-10
+immich-app/immich,12008,Machine Learning face-detection errors with cuda hardware acceleration,https://github.com/immich-app/immich/issues/12008,random,,O,error,yes,none,no,no,no,closed,2024-08-23
+makeplane/plane,4908,[bug]: HTTPConnection.request() got an unexpected keyword argument 'chunked',https://github.com/makeplane/plane/issues/4908,random,,X,,no,none,no,no,yes,closed,2024-06-21
+makeplane/plane,8663,"[bug]: Please respect/align to standard behaviors of browsers, eg: Shortcuts :a11y:",https://github.com/makeplane/plane/issues/8663,random,,O,ui,yes,none,no,no,no,open,2026-02-26
+makeplane/plane,9321,[bug]: API container (and others)  restarting due to missing table,https://github.com/makeplane/plane/issues/9321,both,6b,X,,no,none,no,no,no,open,2026-06-25
+makeplane/plane,4019,[bug]: unable to select issue state when its bottom of the window .,https://github.com/makeplane/plane/issues/4019,random,,O,ui,yes,none,yes,yes,no,closed,2024-03-21
+makeplane/plane,8446,Work item does not exist when access pending intake work item,https://github.com/makeplane/plane/issues/8446,random,,1b,perm-wrong,yes,users,no,no,no,open,2025-12-24
+makeplane/plane,4925,[bug]: Adding an issue does not update the UI,https://github.com/makeplane/plane/issues/4925,random,,2,stale,yes,none,no,no,no,closed,2024-06-24
+makeplane/plane,6613,"[bug]: ""See more"" is a broken link for ""Allow Plane to anonymously collect usage events."" on setup form",https://github.com/makeplane/plane/issues/6613,random,,O,ui,yes,none,yes,yes,no,closed,2025-02-16
+makeplane/plane,9011,"[bug]: Creating or patching a work issue from API does not use requested ""completed_at"" field",https://github.com/makeplane/plane/issues/9011,random,,O,logic,yes,none,no,no,no,open,2026-05-04
+makeplane/plane,4077,"[bug]: can't login as ""god""",https://github.com/makeplane/plane/issues/4077,random,,O,error,yes,none,no,no,no,closed,2024-03-27
+makeplane/plane,8580,[bug]: Greeting message uses incorrect timezone instead of user’s local timezone,https://github.com/makeplane/plane/issues/8580,random,,5,tz,yes,clock,no,no,no,open,2026-01-25
+makeplane/plane,4988,[bug]: db migration issue when updating from stable (v0.14.0) to stable (v0.21.0),https://github.com/makeplane/plane/issues/4988,random,,3b,upgrade,yes,deploy,yes,yes,no,closed,2024-07-01
+makeplane/plane,3438,[bug]: Gantt start and due date not correct compare to issue view,https://github.com/makeplane/plane/issues/3438,random,,5,tz,yes,clock,yes,yes,no,closed,2024-01-23
+makeplane/plane,9169,Archiving a Cycle with No End Date Crashes with TypeError,https://github.com/makeplane/plane/issues/9169,random,,O,error,yes,none,yes,yes,no,closed,2026-05-30
+makeplane/plane,5420,[bug]: Windows Development Docker-Entrypoint,https://github.com/makeplane/plane/issues/5420,random,,X,,no,none,no,no,no,closed,2024-08-24
+makeplane/plane,7976,"[bug]: Onboarding fails with message: ""Failed to finish onboarding. Please try again later.""",https://github.com/makeplane/plane/issues/7976,random,,O,error,yes,none,no,no,no,open,2025-10-16
+makeplane/plane,5768,[bug]: Issues accepted from inbox with no state set become inaccessible,https://github.com/makeplane/plane/issues/5768,random,,O,logic,yes,none,no,no,no,closed,2024-10-07
+mattermost/mattermost,36562,"[Bug]: impossible to deploy, devs are apes with crooked hands",https://github.com/mattermost/mattermost/issues/36562,random,,X,,no,none,no,no,no,closed,2026-05-13
+mattermost/mattermost,25958,Notifications that should not include message contents are including message contents,https://github.com/mattermost/mattermost/issues/25958,random,,O,security,yes,none,yes,no,no,closed,2024-01-18
+mattermost/mattermost,27574,"API: ""channels"" endpoint not returning all channels (sometimes just a subset)",https://github.com/mattermost/mattermost/issues/27574,random,,O,logic,yes,none,yes,yes,yes,closed,2024-07-05
+mattermost/mattermost,26091,Duplicated date separator in thread view when Pinned posts has been selected.,https://github.com/mattermost/mattermost/issues/26091,random,,O,ui,yes,none,yes,no,no,closed,2024-02-01
+mattermost/mattermost,30586,[Bug]: plugin-created groups don't sync to teams/channels when membership changes,https://github.com/mattermost/mattermost/issues/30586,random,,O,logic,yes,none,no,no,no,open,2025-03-28
+mattermost/mattermost,38352,[Bug]:,https://github.com/mattermost/mattermost/issues/38352,random,,O,ui,yes,none,no,no,no,open,2026-09-04
+mattermost/mattermost,29990,10.4 DB CPU High load,https://github.com/mattermost/mattermost/issues/29990,random,,X,,no,none,yes,no,no,closed,2025-01-24
+mattermost/mattermost,35642,[Bug]: Refresh not working for all fields except select or radio,https://github.com/mattermost/mattermost/issues/35642,random,,O,ui,yes,none,yes,yes,no,closed,2026-03-17
+mattermost/mattermost,36577,[Bug]: Auto-translation with LibreTranslate provider fails for Chinese (zh-CN) due to missing locale mapping to zh-Hans,https://github.com/mattermost/mattermost/issues/36577,random,,8,outside,yes,network,no,no,no,open,2026-05-15
+mattermost/mattermost,37525,[Bug]: AVIF and JXL images don't render preview,https://github.com/mattermost/mattermost/issues/37525,random,,O,format,yes,none,no,no,no,open,2026-07-15
+mattermost/mattermost,36826,[Bug]: Swedish translations for forwarding and following are wrong,https://github.com/mattermost/mattermost/issues/36826,random,,O,ui,yes,none,no,no,no,open,2026-06-01
+mattermost/mattermost,26594,Accessibility: Certain information about a message thread is not accessible straight away with a screen reader,https://github.com/mattermost/mattermost/issues/26594,random,,O,ui,yes,none,yes,no,no,open,2024-03-26
+mattermost/mattermost,31894,[mmctl] [bug] panic on v10.9.1,https://github.com/mattermost/mattermost/issues/31894,random,,O,error,yes,none,yes,yes,no,closed,2025-06-22
+mattermost/mattermost,29449,Disabled/Deleted LDAP accounts holding on to licensed seats.,https://github.com/mattermost/mattermost/issues/29449,random,,O,logic,yes,none,no,no,no,open,2024-12-02
+mattermost/mattermost,30962,[Bug]: Do not opening the Discussions page.(white screen),https://github.com/mattermost/mattermost/issues/30962,random,,O,error,yes,none,yes,no,no,open,2025-05-08
+mattermost/mattermost,29775,Password manager prompt in message field,https://github.com/mattermost/mattermost/issues/29775,random,,O,ui,yes,none,no,no,no,open,2025-01-08
+nextcloud/server,43043,[Bug]: Low contrast for HTML buttons in emails,https://github.com/nextcloud/server/issues/43043,random,,O,ui,yes,none,yes,no,no,closed,2024-01-23
+nextcloud/server,45239,[Bug]: Error: Cant enable app from Web Gui,https://github.com/nextcloud/server/issues/45239,random,,X,,no,none,no,no,no,closed,2024-05-09
+nextcloud/server,56512,[Bug]: photos previews navigation with arrow keys doesn't work anymore,https://github.com/nextcloud/server/issues/56512,random,,O,ui,yes,none,yes,no,no,closed,2025-11-18
+nextcloud/server,45447,[Bug]: Search with custom date range shows date picker does not respect user locale (always mm/dd/yyyy),https://github.com/nextcloud/server/issues/45447,random,,O,ui,yes,none,yes,no,no,open,2024-05-22
+nextcloud/server,43792,[Bug]: Local files deleted when syncing after fresh install docker container,https://github.com/nextcloud/server/issues/43792,random,,X,,no,none,no,no,no,closed,2024-02-23
+nextcloud/server,52214,[Bug]: files_external SFTP can loop infinitely on symlink and fill databases and prevent cron to finish,https://github.com/nextcloud/server/issues/52214,random,,O,logic,yes,none,yes,no,no,open,2025-04-16
+nextcloud/server,43609,[Bug]: 	Sabre\Xml\ParseException: The input element to parse is empty. Do not attempt to parse,https://github.com/nextcloud/server/issues/43609,random,,O,error,yes,none,no,no,no,closed,2024-02-16
+nextcloud/server,42769,[Bug]: Internal error after upgrade 27.1.5 to 28.0.1,https://github.com/nextcloud/server/issues/42769,random,,3b,upgrade,yes,deploy,yes,no,no,closed,2024-01-15
+nextcloud/server,53750,[Bug]: default files_reminder options are set a month in the future,https://github.com/nextcloud/server/issues/53750,random,,O,logic,yes,none,yes,no,no,closed,2025-07-01
+nextcloud/server,45216,[Bug]: Nextcloud-macOS/FileProviderExt - App token login name does not match,https://github.com/nextcloud/server/issues/45216,random,,X,,no,none,no,no,no,closed,2024-05-07
+nextcloud/server,42572,Search results should include more metadata,https://github.com/nextcloud/server/issues/42572,random,,X,,no,none,yes,no,no,closed,2024-01-04
+nextcloud/server,47144,[Bug]: Nextcloud 30 beta 5 shows PHP stacktrace in LDAP config check,https://github.com/nextcloud/server/issues/47144,random,,O,error,yes,none,no,no,no,closed,2024-08-09
+nextcloud/server,60626,[Bug]: Can not create or delete App password due to NotConfirmedException,https://github.com/nextcloud/server/issues/60626,random,,O,error,yes,none,no,no,no,closed,2026-05-20
+nextcloud/server,47694,"[Bug]: Not possible to undo ""unshare from me"" if the calendar was shared to a group.",https://github.com/nextcloud/server/issues/47694,random,,1c,shared,yes,users,no,no,no,closed,2024-09-02
+nextcloud/server,51448,"[Bug]: Avatar hover description in Files shows ""&amp;"" instead of ""&""",https://github.com/nextcloud/server/issues/51448,random,,O,ui,yes,none,yes,no,no,open,2025-03-12
+nextcloud/server,50793,[Bug]: Upload time estimation progress meter fails when file size exceeds chunk size,https://github.com/nextcloud/server/issues/50793,random,,O,ui,yes,none,yes,no,no,closed,2025-02-13
+outline/outline,6683,the bold text appears as **text** on the reading page,https://github.com/outline/outline/issues/6683,random,,O,ui,yes,none,yes,yes,no,closed,2024-03-18
+outline/outline,12008,cannot import Collections use api,https://github.com/outline/outline/issues/12008,random,,X,,no,none,no,no,no,closed,2026-04-13
+outline/outline,8427,Incorrect Docs for Backlinks,https://github.com/outline/outline/issues/8427,random,,X,,no,none,yes,no,no,closed,2025-02-14
+outline/outline,6349,Pasting retina images into document should correctly size them,https://github.com/outline/outline/issues/6349,random,,O,format,yes,none,yes,yes,no,closed,2024-01-06
+outline/outline,7759,@mention places mention in incorrect location when using space,https://github.com/outline/outline/issues/7759,random,,O,ui,yes,none,no,no,no,closed,2024-10-10
+outline/outline,7755,"Import Failure After Exporting Data with Media Files (jpg, png, mp4) in Getoutline System",https://github.com/outline/outline/issues/7755,random,,O,format,yes,none,no,no,no,closed,2024-10-10
+outline/outline,7986,"Can't sort by ""Role"" on members list on getoutline.com",https://github.com/outline/outline/issues/7986,random,,O,ui,yes,none,no,no,no,closed,2024-11-20
+outline/outline,7194,Firewall Blocked,https://github.com/outline/outline/issues/7194,random,,X,,no,none,no,no,no,closed,2024-07-04
+outline/outline,14120,MCP-created document mentions show “Unknown” as the notification sender,https://github.com/outline/outline/issues/14120,random,,O,logic,yes,none,yes,yes,no,closed,2026-10-17
+outline/outline,10962,Invisible button in email on iOS's Mail app in dark mode,https://github.com/outline/outline/issues/10962,random,,O,ui,yes,none,yes,yes,no,closed,2025-12-19
+outline/outline,8526,"The ""no headings"" TOC advisory cut off in mobile",https://github.com/outline/outline/issues/8526,random,,O,ui,yes,none,yes,yes,no,closed,2025-02-21
+outline/outline,8426,dokumentaion git command,https://github.com/outline/outline/issues/8426,random,,X,,no,none,yes,no,no,closed,2025-02-14
+outline/outline,12090,"No ""+"" for starred Dcoument ar `sidebar of starred`",https://github.com/outline/outline/issues/12090,random,,O,ui,yes,none,yes,yes,no,closed,2026-04-17
+outline/outline,12825,Recent GHSA / security vulnerabilty not mentioned in release notes,https://github.com/outline/outline/issues/12825,random,,X,,no,none,yes,no,no,closed,2026-06-25
+outline/outline,10576,Image toolbar items disappear when image is small,https://github.com/outline/outline/issues/10576,random,,O,ui,yes,none,yes,yes,no,closed,2025-11-05
+outline/outline,8623,Allow text to be both preformatted and linkable.,https://github.com/outline/outline/issues/8623,random,,O,ui,yes,none,yes,yes,no,closed,2025-03-03
+penpot/penpot,7849,bug: navigate-to Interaction Fails with Valid Destination (API Plugin),https://github.com/penpot/penpot/issues/7849,random,,O,logic,yes,none,yes,no,no,closed,2025-11-28
+penpot/penpot,4480,bug: Copying a component prototype with multiple states does not create a full copy of the prototype,https://github.com/penpot/penpot/issues/4480,random,,O,logic,yes,none,yes,no,no,open,2024-04-21
+penpot/penpot,5143,bug: Nested flex layouts don't get updated when toggling visibility with the <del> button,https://github.com/penpot/penpot/issues/5143,random,,O,ui,yes,none,yes,yes,no,closed,2024-10-07
+penpot/penpot,8220,Canvas blurred when selecting active page,https://github.com/penpot/penpot/issues/8220,random,,O,ui,yes,none,yes,no,no,closed,2026-01-27
+penpot/penpot,4887,bug: Prototypes don't work in view mode,https://github.com/penpot/penpot/issues/4887,random,,O,ui,yes,none,no,no,no,closed,2024-07-16
+penpot/penpot,8145,bug: I only see recent fonts in the font list,https://github.com/penpot/penpot/issues/8145,random,,O,ui,yes,none,no,no,no,closed,2026-01-21
+penpot/penpot,8193,Esconde contenido svg,https://github.com/penpot/penpot/issues/8193,random,,O,ui,yes,none,no,no,no,closed,2026-01-26
+penpot/penpot,4754,bug: Absolute position is not fully working inside layouts,https://github.com/penpot/penpot/issues/4754,random,,O,ui,yes,none,yes,no,no,closed,2024-06-17
+penpot/penpot,8050,"bug: Status color for ""saved"" is too similar to the blue status",https://github.com/penpot/penpot/issues/8050,random,,O,ui,yes,none,yes,no,no,closed,2026-01-09
+penpot/penpot,4409,bug: Dragging bezier handle  stops working,https://github.com/penpot/penpot/issues/4409,random,,O,ui,yes,none,no,no,no,closed,2024-04-10
+penpot/penpot,4542,bug: ⚔️ Issues in importing svgs.,https://github.com/penpot/penpot/issues/4542,random,,O,format,yes,none,no,no,no,closed,2024-04-30
+penpot/penpot,6686,bug: Not all files have been imported. The following files have errors,https://github.com/penpot/penpot/issues/6686,random,,O,format,yes,none,yes,no,no,open,2025-06-13
+penpot/penpot,5778,bug: stroke settings for lines not working in Safari,https://github.com/penpot/penpot/issues/5778,random,,O,ui,yes,none,no,no,no,open,2025-02-05
+penpot/penpot,5239,bug: Penpot 导入失败跟主图丢失,https://github.com/penpot/penpot/issues/5239,random,,O,format,yes,none,no,no,no,closed,2024-10-31
+penpot/penpot,4953,"bug: When I type Korean letter in the textfield, the application crashes with an internal error page.",https://github.com/penpot/penpot/issues/4953,random,,O,error,yes,none,no,no,no,closed,2024-08-02
+penpot/penpot,4337,bug: [devenv] nginx 404 not Found,https://github.com/penpot/penpot/issues/4337,random,,X,,no,none,yes,no,no,closed,2024-03-29
+toeverything/AFFiNE,15656,[Bug]: AFFiNE Cloud - Unable to invite collaborators,https://github.com/toeverything/AFFiNE/issues/15656,random,,O,logic,yes,none,yes,no,no,closed,2026-09-30
+toeverything/AFFiNE,14289,[Bug]: Removing Headline breaks affine/sync,https://github.com/toeverything/AFFiNE/issues/14289,random,,4,sync,yes,none,yes,yes,no,closed,2026-01-21
+toeverything/AFFiNE,8838,Incorrect import of escaped characters in mindmaps (OPML and MM),https://github.com/toeverything/AFFiNE/issues/8838,random,,O,format,yes,none,no,no,no,closed,2024-11-15
+toeverything/AFFiNE,8339,​Recursive notes sharing,https://github.com/toeverything/AFFiNE/issues/8339,random,,X,,no,none,no,no,no,closed,2024-09-20
+toeverything/AFFiNE,12932,"[Feature Request]: Add support for Mermaid.js diagrams in Affine (flowcharts, git graphs, pie charts, etc.)",https://github.com/toeverything/AFFiNE/issues/12932,random,,X,,no,none,yes,no,no,closed,2025-06-25
+toeverything/AFFiNE,14531,[Bug]: Kanban board is broken,https://github.com/toeverything/AFFiNE/issues/14531,random,,O,ui,yes,none,yes,yes,no,closed,2026-02-28
+toeverything/AFFiNE,12465,"[Bug]: Telemetry (device details, current url, email address) still sent when toggle is off in self-hosted",https://github.com/toeverything/AFFiNE/issues/12465,random,,O,security,yes,none,yes,no,no,closed,2025-05-22
+toeverything/AFFiNE,12882,[Bug]: AFFINE_SERVER_HOST Seems not working?,https://github.com/toeverything/AFFiNE/issues/12882,random,,X,,no,none,no,no,no,open,2025-06-21
+toeverything/AFFiNE,7685,​Cant Delete Tags,https://github.com/toeverything/AFFiNE/issues/7685,random,,O,logic,yes,none,yes,yes,no,closed,2024-07-31
+toeverything/AFFiNE,13145,[Bug]: journey 创建日期错误,https://github.com/toeverything/AFFiNE/issues/13145,random,,5,tz,yes,clock,no,no,no,open,2025-07-11
+toeverything/AFFiNE,15620,[Bug]: No scrolling in modal login window,https://github.com/toeverything/AFFiNE/issues/15620,random,,O,ui,yes,none,yes,yes,no,closed,2026-09-19
+toeverything/AFFiNE,12983,[Feature Request]: Copy content as markdown,https://github.com/toeverything/AFFiNE/issues/12983,random,,X,,no,none,yes,yes,no,closed,2025-07-02
+toeverything/AFFiNE,13847,[Bug]: Import from Markdown not recognising span style colours,https://github.com/toeverything/AFFiNE/issues/13847,random,,O,format,yes,none,yes,yes,no,closed,2025-11-01
+toeverything/AFFiNE,14236,[Feature Request]: Option to pan with Right Mouse Button like in Miro,https://github.com/toeverything/AFFiNE/issues/14236,random,,X,,no,none,no,no,no,open,2026-01-09
+toeverything/AFFiNE,9647,"Code block input angle bracket <, should not automatically input as a pair <>",https://github.com/toeverything/AFFiNE/issues/9647,random,,O,ui,yes,none,yes,yes,no,closed,2025-01-11
+toeverything/AFFiNE,10557,​The toolbar of the code block should not be movable.,https://github.com/toeverything/AFFiNE/issues/10557,random,,O,ui,yes,none,yes,yes,no,closed,2025-03-03
+twentyhq/twenty,13783,remove IMAP line break (easy),https://github.com/twentyhq/twenty/issues/13783,random,,O,ui,yes,none,yes,yes,no,closed,2025-08-08
+twentyhq/twenty,26624,Opening a Links field value with the cell button gives the external site access to the Twenty tab (reverse tabnabbing),https://github.com/twentyhq/twenty/issues/26624,random,,O,security,yes,none,yes,yes,no,closed,2026-09-25
+twentyhq/twenty,15261,Workspace fully unavailable,https://github.com/twentyhq/twenty/issues/15261,random,,X,,no,none,yes,no,no,closed,2025-10-22
+twentyhq/twenty,17506,Filters on non-displayed fields on kanban view causes issues,https://github.com/twentyhq/twenty/issues/17506,random,,2,optimistic,yes,network,yes,yes,no,closed,2026-01-28
+twentyhq/twenty,15704,Workflow - SEARCH node returns a maximum of 200 records,https://github.com/twentyhq/twenty/issues/15704,random,,O,logic,yes,none,yes,yes,no,closed,2025-11-07
+twentyhq/twenty,22841,text field display messed up after click,https://github.com/twentyhq/twenty/issues/22841,random,,O,ui,yes,none,yes,yes,no,closed,2026-07-11
+twentyhq/twenty,12526,REST API - Cannot filter using a relation if they are 2 fields pointing to the same object,https://github.com/twentyhq/twenty/issues/12526,random,,O,logic,yes,none,yes,no,no,closed,2025-06-10
+twentyhq/twenty,22934,"Dashboard record-table widget: column aggregate footer throws ""ViewField not found""",https://github.com/twentyhq/twenty/issues/22934,random,,O,error,yes,none,yes,yes,no,closed,2026-07-15
+twentyhq/twenty,15345,Limit field isn't reset when selecting another object in Find Records action,https://github.com/twentyhq/twenty/issues/15345,random,,O,logic,yes,none,yes,yes,no,closed,2025-10-24
+twentyhq/twenty,12756,Notes - Images are not shown anymore,https://github.com/twentyhq/twenty/issues/12756,random,,O,logic,yes,none,yes,yes,no,closed,2025-06-20
+twentyhq/twenty,13637,"When exporting a saved view in Twenty CRM, the export does not respect the view’s filters. Instead of exporting only the filtered subset of records, the CSV/XLSX export always includes every record in the object.",https://github.com/twentyhq/twenty/issues/13637,random,,O,logic,yes,none,yes,yes,yes,closed,2025-08-05
+twentyhq/twenty,27386,Invite your team popup has gibberish text on it,https://github.com/twentyhq/twenty/issues/27386,random,,O,ui,yes,none,yes,no,no,closed,2026-10-06
+twentyhq/twenty,19362,Uninstalling apps doesn't work in AWS context,https://github.com/twentyhq/twenty/issues/19362,random,,O,logic,yes,none,yes,no,no,closed,2026-04-06
+twentyhq/twenty,22539,Windows: SDK build generates backslash paths causing `dev --once` upload and `app:install` failures,https://github.com/twentyhq/twenty/issues/22539,random,,X,,no,none,yes,no,no,closed,2026-07-04
+twentyhq/twenty,17382,Label from standard objects cannot be edited when the language is Finnish,https://github.com/twentyhq/twenty/issues/17382,random,,O,logic,yes,none,yes,yes,no,closed,2026-01-23
+twentyhq/twenty,7612,Issue with the 'Docs' button functionality in the top menu.,https://github.com/twentyhq/twenty/issues/7612,random,,O,ui,yes,none,yes,yes,no,closed,2024-10-11
+usememos/memos,2737,Textarea .text-base not updated with new content when note has been updated from other device,https://github.com/usememos/memos/issues/2737,random,,1a,edit,yes,users,yes,no,no,closed,2024-01-10
+usememos/memos,3534,"""Enable auto compact"" doesn't work",https://github.com/usememos/memos/issues/3534,random,,O,logic,yes,none,yes,yes,no,closed,2024-06-07
+usememos/memos,2991,certain text pattern cause memos crash,https://github.com/usememos/memos/issues/2991,random,,O,error,yes,none,yes,no,no,closed,2024-02-23
+usememos/memos,3341,登陆错误,https://github.com/usememos/memos/issues/3341,random,,3b,upgrade,yes,deploy,no,no,no,closed,2024-05-11
+usememos/memos,3065,unable to open database file: out of memory,https://github.com/usememos/memos/issues/3065,random,,X,,no,none,no,no,no,closed,2024-03-09
+usememos/memos,2712,Memos display in the wrong timeline order on v0.18.2,https://github.com/usememos/memos/issues/2712,random,,O,logic,yes,none,no,no,no,closed,2024-01-07
+usememos/memos,3443,No data after windows or docker restart,https://github.com/usememos/memos/issues/3443,random,,X,,no,none,yes,no,no,closed,2024-05-23
+usememos/memos,3914,Can't access memo comments relations in webhook,https://github.com/usememos/memos/issues/3914,random,,2,job-race,yes,none,no,no,no,closed,2024-09-11
+usememos/memos,4413,CVE-2025-22952 memos SSRF,https://github.com/usememos/memos/issues/4413,random,,O,security,yes,none,no,no,no,closed,2025-02-17
+usememos/memos,2720,Short link to note identifier is gone from top line header on each memo,https://github.com/usememos/memos/issues/2720,random,,X,,no,none,yes,no,no,closed,2024-01-08
+usememos/memos,3475,The editing function does not get the latest content on the server side,https://github.com/usememos/memos/issues/3475,random,,1a,edit,yes,users,yes,yes,no,closed,2024-05-28
+usememos/memos,5652,DB issues,https://github.com/usememos/memos/issues/5652,random,,X,,no,none,no,no,no,closed,2026-02-22
+usememos/memos,3704,Backlinks Not Displayed,https://github.com/usememos/memos/issues/3704,random,,O,logic,yes,none,yes,no,no,closed,2024-07-17
+usememos/memos,5194,Selecting a layout doesn't update the selection or layout until the page is refreshed,https://github.com/usememos/memos/issues/5194,random,,2,stale,yes,none,no,no,no,closed,2025-10-27
+usememos/memos,5396,Pulling latest tag does not pull latest version,https://github.com/usememos/memos/issues/5396,random,,X,,no,none,no,no,no,closed,2025-12-31
+usememos/memos,4003,Change date is invalid when editing memos in mobile devices(ios and ipados so far),https://github.com/usememos/memos/issues/4003,random,,O,ui,yes,none,no,no,no,closed,2024-10-10
+AppFlowy-IO/AppFlowy,6358,[Bug] Windows clipboard history [win + v] - not worked,https://github.com/AppFlowy-IO/AppFlowy/issues/6358,random,,O,ui,yes,none,no,no,no,closed,2024-09-19
+AppFlowy-IO/AppFlowy,6112,[Bug] Kanban title is cut off when the text is longer than two lines,https://github.com/AppFlowy-IO/AppFlowy/issues/6112,random,,O,ui,yes,none,yes,yes,no,closed,2024-08-30
+AppFlowy-IO/AppFlowy,8639,"[Bug] some pages broken with ""internal error"" (see copied error code)",https://github.com/AppFlowy-IO/AppFlowy/issues/8639,random,,4,sync,yes,none,no,no,no,closed,2026-04-05
+AppFlowy-IO/AppFlowy,4447,[Tauri][Bug]  markdown checkbox is not supported,https://github.com/AppFlowy-IO/AppFlowy/issues/4447,random,,O,ui,yes,none,no,no,no,closed,2024-01-22
+AppFlowy-IO/AppFlowy,7878,"[Bug] Impossible to create new Grid view if there are ""too many"" views in horizontal list of views",https://github.com/AppFlowy-IO/AppFlowy/issues/7878,random,,O,ui,yes,none,yes,no,no,closed,2025-05-04
+AppFlowy-IO/AppFlowy,4948,[Bug] OpenAI writer does not work. Infinite loading screen,https://github.com/AppFlowy-IO/AppFlowy/issues/4948,random,,8,outside,yes,network,no,no,no,closed,2024-03-20
+AppFlowy-IO/AppFlowy,7070,[Bug] What is happening?,https://github.com/AppFlowy-IO/AppFlowy/issues/7070,random,,O,ui,yes,none,yes,yes,no,closed,2024-12-27
+AppFlowy-IO/AppFlowy,5711,[Bug] table cell inserts a bulleted list,https://github.com/AppFlowy-IO/AppFlowy/issues/5711,random,,O,ui,yes,none,no,no,no,closed,2024-07-10
+AppFlowy-IO/AppFlowy,5359,[Bug] error message when loading themes,https://github.com/AppFlowy-IO/AppFlowy/issues/5359,random,,O,error,yes,none,yes,yes,no,closed,2024-05-18
+AppFlowy-IO/AppFlowy,5907,[Bug] Export HTML,https://github.com/AppFlowy-IO/AppFlowy/issues/5907,random,,O,format,yes,none,no,no,yes,open,2024-08-09
+AppFlowy-IO/AppFlowy,7202,[Bug] Colored icons are not supported as tab title,https://github.com/AppFlowy-IO/AppFlowy/issues/7202,random,,O,ui,yes,none,yes,yes,no,closed,2025-01-13
+AppFlowy-IO/AppFlowy,8133,[Bug] Filter are not highlighted anymore when used,https://github.com/AppFlowy-IO/AppFlowy/issues/8133,random,,O,ui,yes,none,no,no,no,closed,2025-07-23
+calcom/cal.diy,23177,Event Availability Not Displaying Correctly - Slots Missing,https://github.com/calcom/cal.diy/issues/23177,random,,O,logic,yes,none,yes,no,no,open,2025-08-19
+calcom/cal.diy,24455,"""German localization: 'uhr' should be capitalized as 'Uhr'""",https://github.com/calcom/cal.diy/issues/24455,random,,O,ui,yes,none,yes,yes,no,closed,2025-10-14
+calcom/cal.diy,24541,"API v2 fails to start due to Prisma client not loading DATABASE_URL environment variable from .env api area: API, enterprise API, access token, OAuth 🐛 bug Something isn't working Status",https://github.com/calcom/cal.diy/issues/24541,random,,X,,no,none,no,no,no,closed,2025-10-18
+calcom/cal.diy,16282,(bug),https://github.com/calcom/cal.diy/issues/16282,random,,8,outside,yes,network,no,no,no,closed,2024-08-20
+calcom/cal.diy,16898,[CAL-4442] Multiple tabs highlighting on event types page,https://github.com/calcom/cal.diy/issues/16898,random,,O,ui,yes,none,yes,no,yes,closed,2024-10-01
+calcom/cal.diy,15047,[CAL-3708] Invalid Phone Error,https://github.com/calcom/cal.diy/issues/15047,random,,O,logic,yes,none,yes,yes,no,closed,2024-05-15
+calcom/cal.diy,15045,Missing terms and condition text/link on scheduling link,https://github.com/calcom/cal.diy/issues/15045,random,,O,ui,yes,none,yes,no,no,closed,2024-05-15
+calcom/cal.diy,15397,Video settings link in the little popover menu is not clickable in the call room,https://github.com/calcom/cal.diy/issues/15397,random,,O,ui,yes,none,yes,no,yes,closed,2024-06-10
+calcom/cal.diy,15107,Version 1.3 and 1.5.* causes issues in embedding cal. *@calcom/embed-react*,https://github.com/calcom/cal.diy/issues/15107,random,,O,ui,yes,none,no,no,no,closed,2024-05-18
+calcom/cal.diy,20334,Error installing Zoom,https://github.com/calcom/cal.diy/issues/20334,random,,O,error,yes,none,yes,no,no,closed,2025-03-24
+calcom/cal.diy,16083,[CAL-4116] Update button when changing the location of the event in upcoming bookings - not working,https://github.com/calcom/cal.diy/issues/16083,random,,O,logic,yes,none,yes,yes,no,closed,2024-08-06
+calcom/cal.diy,24347,[Bug] #24260 - Slots & Booking API inconsistency / invalid slots,https://github.com/calcom/cal.diy/issues/24347,random,,O,logic,yes,none,yes,no,yes,closed,2025-10-08
+documenso/documenso,3457,Prefilling a template field value via the API erases the field's label and placeholder,https://github.com/documenso/documenso/issues/3457,random,,O,logic,yes,none,no,no,no,open,2026-10-19
+documenso/documenso,875,Layout Shift between views,https://github.com/documenso/documenso/issues/875,random,,O,ui,yes,none,yes,yes,no,closed,2024-01-26
+documenso/documenso,1426,Delete button remains disabled when using French prompt,https://github.com/documenso/documenso/issues/1426,random,,O,ui,yes,none,yes,yes,no,closed,2024-10-29
+documenso/documenso,3280,Document text fields do not autofocus,https://github.com/documenso/documenso/issues/3280,random,,O,ui,yes,none,yes,yes,no,closed,2026-08-20
+documenso/documenso,932,Railway template install failed,https://github.com/documenso/documenso/issues/932,random,,X,,no,none,no,no,no,closed,2024-02-15
+documenso/documenso,3455,"2FA email code countdown shows the wrong time in timezones with non-whole-hour offsets (e.g. India shows ""35:00"")",https://github.com/documenso/documenso/issues/3455,both,5a 5b,5,tz,yes,clock,yes,no,no,open,2026-10-18
+documenso/documenso,2008,"Already in use port, confusion ipv4/ipv6",https://github.com/documenso/documenso/issues/2008,random,,X,,no,none,no,no,no,closed,2025-08-29
+documenso/documenso,3453,"""ISO 8601"" date format stamps a literal ""XXX"" instead of the timezone offset on signed date fields",https://github.com/documenso/documenso/issues/3453,both,5b,5,tz,yes,clock,yes,no,no,open,2026-10-18
+documenso/documenso,950,Add input validation to all input fields,https://github.com/documenso/documenso/issues/950,random,,O,ui,yes,none,yes,yes,no,closed,2024-02-20
+documenso/documenso,1850,Number Template Fields not working on mobile,https://github.com/documenso/documenso/issues/1850,random,,O,ui,yes,none,yes,yes,no,closed,2025-06-18
+documenso/documenso,808,Active state remains even if element is not active in Navbar,https://github.com/documenso/documenso/issues/808,random,,O,ui,yes,none,yes,yes,no,closed,2024-01-07
+documenso/documenso,1016,Subdomains in Advanced,https://github.com/documenso/documenso/issues/1016,random,,O,ui,yes,none,yes,yes,no,closed,2024-03-10
+excalidraw/excalidraw,9032,Continuous Line Doesn't Add the Last Line When Using a Stylus on iPad,https://github.com/excalidraw/excalidraw/issues/9032,random,,O,ui,yes,none,no,no,no,open,2025-01-21
+excalidraw/excalidraw,8672,flowChart new node is not same as the starting node,https://github.com/excalidraw/excalidraw/issues/8672,random,,O,ui,yes,none,yes,yes,no,closed,2024-10-19
+excalidraw/excalidraw,10628,image crop area cannot be moved,https://github.com/excalidraw/excalidraw/issues/10628,random,,O,ui,yes,none,yes,yes,no,closed,2026-01-08
+excalidraw/excalidraw,9357,[Bug]: TextToDiagram modal autoscrolls page to bottom,https://github.com/excalidraw/excalidraw/issues/9357,random,,O,ui,yes,none,yes,yes,no,closed,2025-04-08
+excalidraw/excalidraw,8821,Image crop: confusion in resizing image crop area and image size,https://github.com/excalidraw/excalidraw/issues/8821,random,,O,ui,yes,none,yes,yes,no,closed,2024-11-18
+excalidraw/excalidraw,7936,Prevent default for Ctrl+Z when inside WYSIWYG,https://github.com/excalidraw/excalidraw/issues/7936,random,,O,ui,yes,none,yes,no,no,open,2024-04-24
+excalidraw/excalidraw,9757,arrow point-dragging on mobile drifts,https://github.com/excalidraw/excalidraw/issues/9757,random,,O,ui,yes,none,no,no,yes,open,2025-07-17
+excalidraw/excalidraw,9500,line editor point ghosts,https://github.com/excalidraw/excalidraw/issues/9500,random,,O,ui,yes,none,yes,no,no,closed,2025-05-08
+excalidraw/excalidraw,8951,Issue with Double-Tap Text Input on Excalidraw (Windows Tablet with Stylus),https://github.com/excalidraw/excalidraw/issues/8951,random,,O,ui,yes,none,no,no,no,open,2024-12-25
+excalidraw/excalidraw,9226,Screen flash while moving arrow nodes,https://github.com/excalidraw/excalidraw/issues/9226,random,,O,ui,yes,none,no,no,no,closed,2025-03-05
+excalidraw/excalidraw,9676,when exporting as png/svg it hangs up my mac and also doesnt copy anything,https://github.com/excalidraw/excalidraw/issues/9676,random,,O,format,yes,none,no,no,no,closed,2025-06-20
+excalidraw/excalidraw,8915,frame title not draggable when frame selected,https://github.com/excalidraw/excalidraw/issues/8915,random,,O,ui,yes,none,yes,yes,no,closed,2024-12-13
+go-gitea/gitea,31937,Incomplete/bogus implementation of mail incoming_handler,https://github.com/go-gitea/gitea/issues/31937,random,,8,outside,yes,network,yes,yes,no,closed,2024-08-28
+go-gitea/gitea,36774,README symlinks aren't properly followed in .gitea / .github / docs folders,https://github.com/go-gitea/gitea/issues/36774,random,,O,logic,yes,none,yes,yes,no,closed,2026-02-27
+go-gitea/gitea,31640,HTTP 500 error when adding push mirror with invalid character in URL,https://github.com/go-gitea/gitea/issues/31640,random,,O,error,yes,none,yes,yes,no,closed,2024-07-16
+go-gitea/gitea,35796,Git pull/push is hanging in 1.25.0 (fixed in 1.25 nightly and will be released as 1.25.1),https://github.com/go-gitea/gitea/issues/35796,random,,O,logic,yes,none,yes,yes,no,closed,2025-10-30
+go-gitea/gitea,34753,"Copying & pasting since PR #34745 results in a ""null"" being pasted",https://github.com/go-gitea/gitea/issues/34753,random,,O,ui,yes,none,yes,yes,no,closed,2025-06-17
+go-gitea/gitea,33195,"X on a pinned Pull Request shows ""Unpin Issue""",https://github.com/go-gitea/gitea/issues/33195,random,,O,ui,yes,none,yes,yes,no,closed,2025-01-10
+go-gitea/gitea,39824,Unmerged PR remains blocked when merged_commit_id references a missing Git object,https://github.com/go-gitea/gitea/issues/39824,random,,O,logic,yes,none,yes,yes,no,closed,2026-10-17
+go-gitea/gitea,30580,ViewPost should return JSON data,https://github.com/go-gitea/gitea/issues/30580,random,,O,logic,yes,none,no,no,yes,closed,2024-04-19
+go-gitea/gitea,32931,routers/init.go:64:mustInit() [F] code.gitea.io/gitea/modules/storage.Init failed: Endpoint:  does not follow ip address or domain name standards.,https://github.com/go-gitea/gitea/issues/32931,random,,X,,no,none,yes,yes,no,closed,2024-12-20
+go-gitea/gitea,38487,The Reviewed-on trailer automatically appended to the PR description lacks a newline.,https://github.com/go-gitea/gitea/issues/38487,random,,O,logic,yes,none,yes,yes,no,closed,2026-07-16
+go-gitea/gitea,33791,Have to reauthorize OAuth on every login for public clients,https://github.com/go-gitea/gitea/issues/33791,random,,O,logic,yes,none,no,no,no,closed,2025-03-04
+go-gitea/gitea,37136,diff highlight error,https://github.com/go-gitea/gitea/issues/37136,random,,O,ui,yes,none,no,no,no,closed,2026-04-08
+go-vikunja/vikunja,1989,Saved filters render twice in sidebar on initial load,https://github.com/go-vikunja/vikunja/issues/1989,random,,O,ui,yes,none,yes,yes,yes,closed,2025-12-15
+go-vikunja/vikunja,916,All actions are failing with 401 error,https://github.com/go-vikunja/vikunja/issues/916,random,,X,,no,none,yes,no,no,closed,2025-06-11
+go-vikunja/vikunja,1725,The date chooser should render an entire timestamp.,https://github.com/go-vikunja/vikunja/issues/1725,random,,X,,no,none,yes,yes,no,closed,2025-10-28
+go-vikunja/vikunja,3386,Changing a non-Kanban view to Kanban will break rendering,https://github.com/go-vikunja/vikunja/issues/3386,random,,O,ui,yes,none,no,no,no,closed,2026-07-31
+go-vikunja/vikunja,678,Tasks List does not un-strikethrough when checkmark is removed in non edit mode,https://github.com/go-vikunja/vikunja/issues/678,random,,O,ui,yes,none,no,no,no,closed,2025-04-17
+go-vikunja/vikunja,409,Avoid using NOOP when creating the go-mail client,https://github.com/go-vikunja/vikunja/issues/409,random,,X,,no,none,yes,no,no,closed,2025-02-18
+go-vikunja/vikunja,1929,Link button does not work on modal task detail view,https://github.com/go-vikunja/vikunja/issues/1929,random,,O,ui,yes,none,yes,yes,no,closed,2025-12-04
+go-vikunja/vikunja,2312,Setback when switching colors too fast,https://github.com/go-vikunja/vikunja/issues/2312,random,,2,order,yes,none,no,no,no,closed,2026-02-27
+go-vikunja/vikunja,777,Broken link to account deletion page,https://github.com/go-vikunja/vikunja/issues/777,random,,O,ui,yes,none,yes,yes,no,closed,2025-05-15
+go-vikunja/vikunja,1339,Critical error: invalid character 'd' looking for beginning of value,https://github.com/go-vikunja/vikunja/issues/1339,random,,3b,upgrade,yes,deploy,yes,yes,no,closed,2025-08-24
+go-vikunja/vikunja,1786,"Project ""New Saved Filter"" View | Duplicates Subtasks",https://github.com/go-vikunja/vikunja/issues/1786,random,,O,logic,yes,none,yes,no,no,closed,2025-11-12
+go-vikunja/vikunja,2569,Secondary Webhooks Never Fire If First Fails,https://github.com/go-vikunja/vikunja/issues/2569,random,,8,outside,yes,network,no,no,no,closed,2026-04-09
+immich-app/immich,21930,"​[BUG] Automatic URL Switching: ""Local Network"" feature fails when more than one Wi--Fi SSID is configured",https://github.com/immich-app/immich/issues/21930,random,,O,logic,yes,none,no,no,no,open,2025-09-13
+immich-app/immich,17485,Favorite Page remote thumbnail reload,https://github.com/immich-app/immich/issues/17485,random,,O,ui,yes,none,yes,yes,no,closed,2025-04-09
+immich-app/immich,13048,Files that are offline (deleted or missing) do not show in the trash folder.,https://github.com/immich-app/immich/issues/13048,random,,O,logic,yes,none,yes,no,no,closed,2024-09-30
+immich-app/immich,24828,Immich Thumbnail Jellyfin MJPEG bug,https://github.com/immich-app/immich/issues/24828,random,,O,format,yes,none,yes,yes,no,closed,2025-12-25
+immich-app/immich,28419,Android App issue loading thumbnauls,https://github.com/immich-app/immich/issues/28419,random,,O,logic,yes,none,yes,yes,no,closed,2026-05-14
+immich-app/immich,22595,Page context in uri is lost with OAuth authentification,https://github.com/immich-app/immich/issues/22595,random,,O,logic,yes,none,yes,no,no,closed,2025-10-02
+immich-app/immich,21316,[Mobile] Cannot cancel uploading videos larger than 100 MB,https://github.com/immich-app/immich/issues/21316,random,,O,logic,yes,none,yes,no,no,closed,2025-08-26
+immich-app/immich,16506,Version 1.128.0 won't run immich-server,https://github.com/immich-app/immich/issues/16506,random,,X,,no,none,yes,no,no,closed,2025-03-02
+immich-app/immich,20128,Cannot change settings in Firefox,https://github.com/immich-app/immich/issues/20128,random,,O,ui,yes,none,yes,no,no,closed,2025-07-24
+immich-app/immich,26402,Immich locks when trying to read metadata from .insv files,https://github.com/immich-app/immich/issues/26402,random,,O,logic,yes,none,yes,no,no,closed,2026-02-20
+immich-app/immich,22127,No download progress indicator on Beta Timeline,https://github.com/immich-app/immich/issues/22127,random,,O,ui,yes,none,yes,yes,no,closed,2025-09-17
+immich-app/immich,18517,Issues with locked and deleted photos,https://github.com/immich-app/immich/issues/18517,random,,O,logic,yes,none,yes,yes,no,closed,2025-05-23
+makeplane/plane,5380,[bug]: Intake issue's title is randomly overwritten by other issue's title,https://github.com/makeplane/plane/issues/5380,random,,2,order,yes,none,yes,yes,yes,closed,2024-08-16
+makeplane/plane,7420,"[bug]: Workspace logo , no fallback when image no available",https://github.com/makeplane/plane/issues/7420,random,,O,ui,yes,none,no,no,no,open,2025-07-16
+makeplane/plane,3576,[bug]: E-Mail notifications not working as intended on mention,https://github.com/makeplane/plane/issues/3576,random,,O,logic,yes,none,no,no,no,closed,2024-02-06
+makeplane/plane,9167,Invitation Creation Always Errors - WorkspaceMember.filter().role Returns QuerySet Not Int,https://github.com/makeplane/plane/issues/9167,random,,O,error,yes,none,no,no,no,open,2026-05-30
+makeplane/plane,9067,[bug]: Plane data dir + files are world readable (755),https://github.com/makeplane/plane/issues/9067,random,,O,security,yes,none,no,no,no,open,2026-05-13
+makeplane/plane,4639,"[bug]: Plane API: expand query parameter does not work with ""updated_by"" on ""projects""",https://github.com/makeplane/plane/issues/4639,random,,O,logic,yes,none,yes,yes,no,closed,2024-05-29
+makeplane/plane,4051,[bug]: Uploaded media immediatly vanishes (RangeError: Position -1 out of range),https://github.com/makeplane/plane/issues/4051,random,,O,error,yes,none,no,no,no,closed,2024-03-24
+makeplane/plane,9933,[bug]: Estimate endpoints of the public API (v1) return 404 - routes from #8664 are never registered,https://github.com/makeplane/plane/issues/9933,random,,O,logic,yes,none,no,no,no,open,2026-10-03
+makeplane/plane,4128,[bug]: Issues deleted in other project,https://github.com/makeplane/plane/issues/4128,random,,O,logic,yes,none,no,no,no,closed,2024-04-05
+makeplane/plane,7035,[bug]: API Service Not Ready,https://github.com/makeplane/plane/issues/7035,random,,X,,no,none,no,no,no,closed,2025-05-09
+makeplane/plane,8647,[bug]: MCP created tasks with too many empty lines,https://github.com/makeplane/plane/issues/8647,random,,O,ui,yes,none,no,no,no,open,2026-02-21
+makeplane/plane,5035,[bug]: Can't type question mark on Mac,https://github.com/makeplane/plane/issues/5035,random,,O,ui,yes,none,no,no,no,closed,2024-07-03
+mattermost/mattermost,29343,Private channel keep opening back,https://github.com/mattermost/mattermost/issues/29343,random,,O,logic,yes,none,no,no,no,open,2024-11-20
+mattermost/mattermost,33474,[Bug]: Mattermost 10.10.1 service fails to run after upgrade,https://github.com/mattermost/mattermost/issues/33474,random,,3b,upgrade,yes,deploy,yes,no,no,closed,2025-07-18
+mattermost/mattermost,37778,[Bug]: Message edit form UI broken in narrower area (lang: ja),https://github.com/mattermost/mattermost/issues/37778,random,,O,ui,yes,none,yes,yes,no,closed,2026-07-30
+mattermost/mattermost,33807,[Bug]: `SearchAllChannels` method in server/public/client4.go fails unmarshal because it doesn't fit API spec,https://github.com/mattermost/mattermost/issues/33807,random,,O,logic,yes,none,no,no,no,open,2025-08-28
+mattermost/mattermost,33886,[Issue]: Azure Blob Storage Connection Failure,https://github.com/mattermost/mattermost/issues/33886,random,,X,,no,none,yes,no,no,closed,2025-09-13
+mattermost/mattermost,33556,Documentation error:  operations/GetBot does not mention 404 response,https://github.com/mattermost/mattermost/issues/33556,random,,X,,no,none,no,no,no,open,2025-07-25
+mattermost/mattermost,35671,[Bug]: extra requests after user input in empty field with lookup property,https://github.com/mattermost/mattermost/issues/35671,random,,O,logic,yes,none,no,no,no,open,2026-03-18
+mattermost/mattermost,35226,[Bug]: API get channel posts / get post returns empty message for deleted posts,https://github.com/mattermost/mattermost/issues/35226,random,,O,logic,yes,none,no,no,no,open,2026-02-09
+mattermost/mattermost,30313,SVG as Markdown image not shown on mobile,https://github.com/mattermost/mattermost/issues/30313,random,,O,format,yes,none,yes,no,no,open,2025-02-24
+mattermost/mattermost,35169,[Bug]: Error when creating scheduled message: Cannot read properties of undefined (reading 'findIndex') if scheduledposts.type is NULL,https://github.com/mattermost/mattermost/issues/35169,random,,O,error,yes,none,yes,yes,no,closed,2026-02-03
+mattermost/mattermost,30196,Recent Mentions now include messages not the user is mentioned in the channel they follows (MM Team edition 10.4 - 10.6 with Bleve search enabled),https://github.com/mattermost/mattermost/issues/30196,random,,O,logic,yes,none,no,no,no,open,2025-02-12
+mattermost/mattermost,38263,[Bug]: reducers/plugins/index.ts:25 hasMenuId() returns early is the menu has no submenu,https://github.com/mattermost/mattermost/issues/38263,random,,X,,no,none,no,no,no,open,2026-09-01
+nextcloud/server,44881,[Bug]: Previews of HDR videos being generated are washed out (needs tonemap?),https://github.com/nextcloud/server/issues/44881,random,,O,format,yes,none,no,no,no,closed,2024-04-17
+nextcloud/server,48136,[Bug]: consecutive and non breaking spaces in folder name breaks folder access with Q&D fix !,https://github.com/nextcloud/server/issues/48136,random,,O,ui,yes,none,no,no,no,open,2024-09-17
+nextcloud/server,46848,[Bug]: Error fileexists.html template not exists,https://github.com/nextcloud/server/issues/46848,random,,O,ui,yes,none,yes,yes,no,closed,2024-07-29
+nextcloud/server,44636,[Bug]: Settings for user administration are not saved,https://github.com/nextcloud/server/issues/44636,random,,O,logic,yes,none,yes,no,no,closed,2024-04-03
+nextcloud/server,57894,[Bug]:  Maximum execution time of 3600 seconds exceeded,https://github.com/nextcloud/server/issues/57894,both,6b,X,,no,none,no,no,no,open,2026-01-29
+nextcloud/server,46977,[Bug]: The file name and extension are pre-selected in their entirety when the file is created.,https://github.com/nextcloud/server/issues/46977,random,,O,ui,yes,none,yes,yes,yes,closed,2024-08-02
+nextcloud/server,58596,[Bug]: PHP deprecated messages are logged at ERROR level,https://github.com/nextcloud/server/issues/58596,random,,O,logic,yes,none,no,no,no,closed,2026-02-26
+nextcloud/server,43893,[Bug]: nextcloud acunetix scan is showing bootstrap version 3.3.5 is vulnerable to cross site scripting attacks.,https://github.com/nextcloud/server/issues/43893,random,,O,security,yes,none,yes,no,no,closed,2024-02-28
+nextcloud/server,48490,[Bug]: Behavior change for errors on file uploads,https://github.com/nextcloud/server/issues/48490,random,,O,logic,yes,none,no,no,no,closed,2024-10-01
+nextcloud/server,51732,"[Bug]: ""Set reminder"" does not work correctly with Group folders, Shares and Tags in NC 29+",https://github.com/nextcloud/server/issues/51732,random,,O,logic,yes,none,yes,yes,no,closed,2025-03-26
+nextcloud/server,52591,[Bug]: Repeated requests for get files list while using webui files app,https://github.com/nextcloud/server/issues/52591,random,,O,logic,yes,none,yes,yes,no,closed,2025-05-02
+nextcloud/server,43316,[Bug]: Login auto complete on Chrome,https://github.com/nextcloud/server/issues/43316,random,,O,ui,yes,none,yes,no,no,closed,2024-02-03
+outline/outline,11969,TypeError: Cannot read properties of undefined (reading 'toUpperCase'),https://github.com/outline/outline/issues/11969,random,,O,error,yes,none,yes,no,no,closed,2026-04-05
+outline/outline,8881,Youtube embedding does not work,https://github.com/outline/outline/issues/8881,random,,O,format,yes,none,yes,no,no,closed,2025-04-04
+outline/outline,7501,Column sizes in tables are lost in HTML export,https://github.com/outline/outline/issues/7501,random,,O,format,yes,none,no,no,no,closed,2024-09-01
+outline/outline,9382,Changing list type only works at top level,https://github.com/outline/outline/issues/9382,random,,O,ui,yes,none,yes,yes,no,closed,2025-06-03
+outline/outline,7087,document image hide when print,https://github.com/outline/outline/issues/7087,random,,O,format,yes,none,yes,no,no,closed,2024-06-19
+outline/outline,8575,AI answers not detecting RTL question mark,https://github.com/outline/outline/issues/8575,random,,O,logic,yes,none,yes,yes,no,closed,2025-02-26
+outline/outline,10887,Can't access any documentation or any pages on the main website outside of the home page,https://github.com/outline/outline/issues/10887,random,,O,ui,yes,none,yes,yes,no,closed,2025-12-13
+outline/outline,9427,APIResponseError: Database with ID is a linked database. Database retrievals do not support linked databases.,https://github.com/outline/outline/issues/9427,random,,8,outside,yes,network,yes,yes,no,closed,2025-06-10
+outline/outline,10328,Multiple duplicate documents are created,https://github.com/outline/outline/issues/10328,random,,2,double,yes,none,yes,yes,yes,closed,2025-10-09
+outline/outline,14355,Team creation fails when the organization name is longer than the subdomain limit,https://github.com/outline/outline/issues/14355,random,,O,logic,yes,none,yes,yes,no,closed,2026-10-27
+outline/outline,10633,Safari: alt/option shift arrow keys word selection does not work in header,https://github.com/outline/outline/issues/10633,random,,O,ui,yes,none,yes,yes,no,closed,2025-11-13
+outline/outline,12567,Failed to approve access request,https://github.com/outline/outline/issues/12567,random,,O,error,yes,none,yes,yes,no,closed,2026-06-03
+penpot/penpot,4369,bug: vertical / horizontal path hitbox too small to drag,https://github.com/penpot/penpot/issues/4369,random,,O,ui,yes,none,yes,no,no,closed,2024-04-07
+penpot/penpot,4896,bug: Login using GitHub account doesn't work anymmore,https://github.com/penpot/penpot/issues/4896,random,,O,error,yes,none,no,no,no,closed,2024-07-18
+penpot/penpot,4885,bug: OIDC auth not working after update to 2.1.0,https://github.com/penpot/penpot/issues/4885,random,,3b,upgrade,yes,deploy,yes,no,no,closed,2024-07-16
+penpot/penpot,4888,"bug: Importing SVG images from the filechooser sometimes randomly cause referential-integrity error crash, ""invalid-frame""",https://github.com/penpot/penpot/issues/4888,random,,O,error,yes,none,yes,yes,yes,closed,2024-07-16
+penpot/penpot,5187,bug: SVG Import Issue - Text content converts text to vector path instead of retaining text format,https://github.com/penpot/penpot/issues/5187,random,,O,format,yes,none,no,no,no,closed,2024-10-21
+penpot/penpot,7323,bug: Export fails with ERR_CONNECTION_REFUSED on internal URL and ERR_CERT_AUTHORITY_INVALID on public URL with custom CA,https://github.com/penpot/penpot/issues/7323,random,,X,,no,none,yes,no,no,closed,2025-09-16
+penpot/penpot,4395,bug: Drag and drop of a component into a grid layout behaves weirdly and sometimes crashes,https://github.com/penpot/penpot/issues/4395,random,,O,error,yes,none,yes,yes,yes,closed,2024-04-09
+penpot/penpot,6325,bug: When preview mode not able to click at bottom,https://github.com/penpot/penpot/issues/6325,random,,O,ui,yes,none,no,no,no,closed,2025-04-17
+penpot/penpot,8520,"bug: Multiple Plugin API silent failures - flex auto-sizing, token binding, text properties",https://github.com/penpot/penpot/issues/8520,random,,O,logic,yes,none,yes,no,no,open,2026-03-03
+penpot/penpot,3976,bug: no demo user creation link shown in login screen,https://github.com/penpot/penpot/issues/3976,random,,X,,no,none,no,no,no,closed,2024-01-08
+penpot/penpot,5376,bug: penpotapp/devenv can't run with ./manage.sh run-devenv,https://github.com/penpot/penpot/issues/5376,random,,X,,no,none,yes,no,no,closed,2024-11-26
+penpot/penpot,7661,bug: Text select behavior not as indented in Grid layout,https://github.com/penpot/penpot/issues/7661,random,,O,ui,yes,none,no,no,no,open,2025-11-02
+toeverything/AFFiNE,14482,[Feature Request]: keyboard enabled date input,https://github.com/toeverything/AFFiNE/issues/14482,random,,X,,no,none,no,no,no,open,2026-02-20
+toeverything/AFFiNE,14480,[Bug]: White screen after some minutes.,https://github.com/toeverything/AFFiNE/issues/14480,random,,O,error,yes,none,yes,no,no,closed,2026-02-20
+toeverything/AFFiNE,10574,Filter the database by workspace properties.,https://github.com/toeverything/AFFiNE/issues/10574,random,,X,,no,none,yes,no,no,closed,2025-03-03
+toeverything/AFFiNE,11811,[Feature Request]: Invert scrolling on ipad as a secondary screen,https://github.com/toeverything/AFFiNE/issues/11811,random,,X,,no,none,no,no,no,closed,2025-04-18
+toeverything/AFFiNE,9644,Edit menu property isn't proper​,https://github.com/toeverything/AFFiNE/issues/9644,random,,O,ui,yes,none,yes,yes,no,closed,2025-01-11
+toeverything/AFFiNE,14812,[Feature Request]: Add support for local AI with OpenAI compatible API,https://github.com/toeverything/AFFiNE/issues/14812,random,,X,,no,none,no,no,no,closed,2026-04-09
+toeverything/AFFiNE,13846,[Feature Request]: One-Time Personal Paid Package for Self-Hosting Users,https://github.com/toeverything/AFFiNE/issues/13846,random,,X,,no,none,yes,no,no,closed,2025-11-01
+toeverything/AFFiNE,13679,[Bug] Google login from Android not working,https://github.com/toeverything/AFFiNE/issues/13679,random,,O,error,yes,none,yes,yes,no,closed,2025-09-30
+toeverything/AFFiNE,6668,能否增加URL类型文档和属性，方便制作成收藏夹。,https://github.com/toeverything/AFFiNE/issues/6668,random,,X,,no,none,no,no,no,closed,2024-04-23
+toeverything/AFFiNE,7958,​German DE_Keyboard_Layout (Go Back/Go Forward),https://github.com/toeverything/AFFiNE/issues/7958,random,,X,,no,none,yes,no,no,closed,2024-08-23
+toeverything/AFFiNE,14358,[Feature Request]: Reorder Table View Properties,https://github.com/toeverything/AFFiNE/issues/14358,random,,X,,no,none,no,no,no,closed,2026-02-01
+toeverything/AFFiNE,10542,​Some Emojis Cannot Be Used as Document Icons,https://github.com/toeverything/AFFiNE/issues/10542,random,,O,ui,yes,none,no,no,no,closed,2025-03-02
+twentyhq/twenty,16982,Kanban view - cannot select the field with which data is grouped by,https://github.com/twentyhq/twenty/issues/16982,random,,O,logic,yes,none,yes,yes,no,closed,2026-01-07
+twentyhq/twenty,14442,Record Text identifer change is not properly reflected on views,https://github.com/twentyhq/twenty/issues/14442,random,,O,logic,yes,none,yes,yes,no,closed,2025-09-12
+twentyhq/twenty,26922,CSV export converts null currency amount to 0,https://github.com/twentyhq/twenty/issues/26922,random,,O,format,yes,none,yes,yes,no,closed,2026-09-29
+twentyhq/twenty,12486,[Filter] Search on Workflow seems not working,https://github.com/twentyhq/twenty/issues/12486,random,,O,logic,yes,none,yes,yes,no,closed,2025-06-06
+twentyhq/twenty,9558,Issue loading pages in firefox,https://github.com/twentyhq/twenty/issues/9558,random,,O,error,yes,none,yes,yes,no,closed,2025-01-10
+twentyhq/twenty,10377,All Settings page inputs height switched from 32px to 28px,https://github.com/twentyhq/twenty/issues/10377,random,,O,ui,yes,none,yes,yes,no,closed,2025-02-21
+twentyhq/twenty,25838,A front component cannot preventDefault on an event,https://github.com/twentyhq/twenty/issues/25838,random,,O,ui,yes,none,yes,no,no,open,2026-09-13
+twentyhq/twenty,13845,Hotkey scope issue in object title input,https://github.com/twentyhq/twenty/issues/13845,random,,O,ui,yes,none,yes,yes,yes,closed,2025-08-12
+twentyhq/twenty,17437,Focusing record title for notes and tasks resets them,https://github.com/twentyhq/twenty/issues/17437,random,,O,ui,yes,none,yes,yes,no,closed,2026-01-26
+twentyhq/twenty,13195,Re-importing data with previously defined id fails,https://github.com/twentyhq/twenty/issues/13195,random,,O,format,yes,none,yes,yes,no,closed,2025-07-13
+twentyhq/twenty,8305,Copy buttons not copying input field to clipboard,https://github.com/twentyhq/twenty/issues/8305,random,,O,ui,yes,none,yes,yes,no,closed,2024-11-04
+twentyhq/twenty,21351,"Saving task view doesn't work, error ""Migration execution failed""",https://github.com/twentyhq/twenty/issues/21351,random,,O,error,yes,none,yes,yes,no,closed,2026-06-09
+usememos/memos,5109,Pinned but not show on the top,https://github.com/usememos/memos/issues/5109,random,,O,logic,yes,none,yes,yes,no,closed,2025-09-19
+usememos/memos,4225,期望把资源、链接使用的路径有绝对路径改为相对路径，便于通过nginx反向代理实现访问，否则初选资源定位错误,https://github.com/usememos/memos/issues/4225,random,,X,,no,none,no,no,no,closed,2024-12-23
+usememos/memos,4562,Can't use mariadb,https://github.com/usememos/memos/issues/4562,random,,X,,no,none,no,no,no,closed,2025-03-27
+usememos/memos,2740,No place to show the version of memos,https://github.com/usememos/memos/issues/2740,random,,X,,no,none,yes,no,no,closed,2024-01-11
+usememos/memos,5213,[Tag Duplicate Bug] The new version has a bug where tags are duplicated.,https://github.com/usememos/memos/issues/5213,random,,O,logic,yes,none,no,no,no,closed,2025-11-02
+usememos/memos,4322,Cloudflare Storage: Link too long to be stored to `resource`.`reference`,https://github.com/usememos/memos/issues/4322,random,,O,logic,yes,none,yes,yes,no,closed,2025-01-27
+usememos/memos,5076,Drawer stays open when re-navigating to current route on mobile,https://github.com/usememos/memos/issues/5076,random,,O,ui,yes,none,yes,yes,no,closed,2025-09-07
+usememos/memos,4926,"Underscore character stripped out in memo, replaced with italics",https://github.com/usememos/memos/issues/4926,random,,O,ui,yes,none,no,no,no,closed,2025-07-29
+usememos/memos,5295,web 总是显示我有一个通知，但我打开通知页面并没有通知,https://github.com/usememos/memos/issues/5295,random,,O,logic,yes,none,no,no,no,closed,2025-11-28
+usememos/memos,4281,使用nginx反向代理，但静态资源没法访问,https://github.com/usememos/memos/issues/4281,random,,X,,no,none,no,no,no,closed,2025-01-08
+usememos/memos,3627,CreateResource api param externalLink not work,https://github.com/usememos/memos/issues/3627,random,,O,logic,yes,none,no,no,no,closed,2024-06-30
+usememos/memos,5562,0.26.0 unable to refresh token with REST API,https://github.com/usememos/memos/issues/5562,random,,O,error,yes,none,no,no,no,closed,2026-02-01
+makeplane/plane,9995,🐛 Bug: Concurrent edits silently overwrite work item descriptions (lost images/text),https://github.com/makeplane/plane/issues/9995,targeted,1a1 1a2 1b1 3b 4b 6a,1a,edit,yes,users,no,no,no,open,2026-10-13
+go-gitea/gitea,38993,Feature Request: Add force-push protection for pull mirrors to prevent upstream destructive overwrites,https://github.com/go-gitea/gitea/issues/38993,targeted,1a1,X,,no,none,no,no,no,open,2026-08-20
+outline/outline,14675,MCP update_document has no way to detect a concurrent edit (follow-up to #13405),https://github.com/outline/outline/issues/14675,targeted,1a1,1a,edit,yes,users,yes,no,no,closed,2026-11-20
+go-gitea/gitea,40057,Allow renaming Actions secrets and editing their descriptions without re-entering the value,https://github.com/go-gitea/gitea/issues/40057,targeted,1a1,X,,no,none,no,no,no,open,2026-10-28
+calcom/cal.diy,29898,[bug]: PR #29724 widened delegation-field nulling to the user branch of getLocationGroupedOptions,https://github.com/calcom/cal.diy/issues/29898,targeted,1a1,X,,no,none,no,no,no,open,2026-08-04
+calcom/cal.diy,29967,fix(availability): include PENDING bookings in getBusyTimes to prevent invisible slot overlap,https://github.com/calcom/cal.diy/issues/29967,targeted,1a1 1a2,1a,race,yes,users,no,no,no,open,2026-08-13
+calcom/cal.diy,25432,Create booking via API overwrites email with phone confirmation when the email field is not visible,https://github.com/calcom/cal.diy/issues/25432,targeted,1a1,O,,yes,none,no,no,no,open,2025-11-27
+calcom/cal.diy,30419,Overlay calendar busy blocks get cut short when a long calendar event contains a shorter event inside it,https://github.com/calcom/cal.diy/issues/30419,targeted,1a1,O,,yes,none,no,no,no,open,2026-10-26
+twentyhq/twenty,30203,ru-RU: four filter chip operand labels are corrupted (NUL byte + JSON fragment instead of the translation),https://github.com/twentyhq/twenty/issues/30203,targeted,1a1,O,,yes,none,yes,no,no,open,2026-11-11
+calcom/cal.diy,16006,Implement unified Calendar view for simplified availability management,https://github.com/calcom/cal.diy/issues/16006,targeted,1a1,X,,no,none,yes,no,no,open,2024-07-31
+immich-app/immich,32243,Web search: results from the previous search get mixed in when the search changes while loading,https://github.com/immich-app/immich/issues/32243,targeted,1a1 2c,2,order,yes,network,no,no,no,open,2026-10-08
+AppFlowy-IO/AppFlowy,9002,[Bug] Discrepancy between data in web and desktop app,https://github.com/AppFlowy-IO/AppFlowy/issues/9002,targeted,1a1,4,sync,yes,users,no,no,no,open,2026-09-08
+AppFlowy-IO/AppFlowy,9105,My AppFlowy suddenly stopped working.,https://github.com/AppFlowy-IO/AppFlowy/issues/9105,targeted,1a1,O,,yes,none,no,no,no,open,2026-10-28
+immich-app/immich,32747,"Massive amount (>1,300) of parallel download connections from iCloud in iOS app",https://github.com/immich-app/immich/issues/32747,targeted,1a1,X,,no,none,yes,no,no,open,2026-10-27
+AppFlowy-IO/AppFlowy,6521,[Bug] Japanese input problems on MacOS,https://github.com/AppFlowy-IO/AppFlowy/issues/6521,targeted,1a1,O,,yes,none,no,no,no,open,2024-10-10
+immich-app/immich,10538,Read-only external library metadata edits silently fail,https://github.com/immich-app/immich/issues/10538,targeted,1a1,O,,yes,none,yes,no,no,open,2024-06-22
+AppFlowy-IO/AppFlowy,7298,[FR] Multi-Tabs Management,https://github.com/AppFlowy-IO/AppFlowy/issues/7298,targeted,1a1,X,,no,none,no,no,no,open,2025-01-28
+AppFlowy-IO/AppFlowy,8663,[Bug] Custom themes are lost after app update,https://github.com/AppFlowy-IO/AppFlowy/issues/8663,targeted,1a1 1a2,3b,upgrade,yes,deploy,no,no,no,open,2026-04-13
+immich-app/immich,33699,"[ML][CUDA] ONNX Runtime logs ""Config with key [ep.nv_tensorrt_rtx.device_id] already exists ... It will be overwritten"" on every model load",https://github.com/immich-app/immich/issues/33699,targeted,1a1,X,,no,none,no,no,no,closed,2026-11-26
+immich-app/immich,32273,"shared peoples names are not shown, only as ""aka""",https://github.com/immich-app/immich/issues/32273,targeted,1a1 1a2 1b1,O,,yes,none,no,no,no,open,2026-10-09
+excalidraw/excalidraw,12738,[Bug] Deleted text elements reappear after concurrent editing in collaboration sessions,https://github.com/excalidraw/excalidraw/issues/12738,targeted,1a1,1a,edit,yes,users,no,no,no,open,2026-11-25
+excalidraw/excalidraw,12739,[Bug] Deleted text elements reappear after concurrent editing in collaboration sessions,https://github.com/excalidraw/excalidraw/issues/12739,targeted,1a1,X,duplicate,no,none,no,no,no,open,2026-11-25
+documenso/documenso,3514,Webhook payloads always report documentMeta.timezone as Etc/UTC and the default dateFormat,https://github.com/documenso/documenso/issues/3514,targeted,1a1 5a,O,,yes,none,no,no,no,open,2026-10-27
+nextcloud/server,44611,[Bug]: Automated status overwrites manually set status,https://github.com/nextcloud/server/issues/44611,targeted,1a1,O,,yes,none,yes,no,yes,open,2024-04-02
+penpot/penpot,10744,Allow multiple plugins to run simultaneously,https://github.com/penpot/penpot/issues/10744,targeted,1a1,X,,no,none,no,no,no,open,2026-07-17
+documenso/documenso,3197,"Send dialog keeps the subject/message captured at first mount, and persists them on send",https://github.com/documenso/documenso/issues/3197,targeted,1a1,O,,yes,none,no,no,no,open,2026-08-13
+nextcloud/server,65077,"[Bug]: F-20 Overwrites are written straight into the live file, an interrupted upload truncates it",https://github.com/nextcloud/server/issues/65077,targeted,1a1,6,interrupt,yes,network,no,no,no,open,2026-10-03
+penpot/penpot,10156,Add backend performance/load testing suite with k6,https://github.com/penpot/penpot/issues/10156,targeted,1a1,X,,no,none,no,no,no,open,2026-06-12
+excalidraw/excalidraw,11967,Converting an arrow to elbow-arrow overwrites its endArrowhead (is this intended?),https://github.com/excalidraw/excalidraw/issues/11967,targeted,1a1,O,,yes,none,no,no,no,open,2026-08-25
+excalidraw/excalidraw,7803,opening a file overwrites current file,https://github.com/excalidraw/excalidraw/issues/7803,targeted,1a1,1a,tabs,yes,users,no,no,no,open,2024-03-22
+twentyhq/twenty,26943,Gmail selected-folder backfill stalls on rate limits; queued history disappears without matching imports (v2.41.0),https://github.com/twentyhq/twenty/issues/26943,targeted,1a2 4a,8,outside,yes,network,yes,no,no,open,2026-09-29
+twentyhq/twenty,29394,Text field looses focus,https://github.com/twentyhq/twenty/issues/29394,targeted,1a2 3b 6a,2,autosave,yes,network,yes,no,yes,open,2026-11-01
+calcom/cal.diy,21467,Allow overlapping bookings for different event types assigned to different team members,https://github.com/calcom/cal.diy/issues/21467,targeted,1a2,X,,no,none,yes,no,no,open,2025-05-22
+makeplane/plane,9813,A single work item disappears after being archived.,https://github.com/makeplane/plane/issues/9813,targeted,1a2,O,,yes,none,no,no,no,open,2026-09-11
+makeplane/plane,7985,[bug]: Quick-Edit: Title disappears often,https://github.com/makeplane/plane/issues/7985,targeted,1a2,2,stale,yes,network,no,no,yes,open,2025-10-20
+calcom/cal.diy,29951,[Bug]: Out of Office allows saving overlapping date ranges without any warning,https://github.com/calcom/cal.diy/issues/29951,targeted,1a2,O,,yes,none,no,no,no,open,2026-08-12
+makeplane/plane,10340,[feature]: Make frontend static asset rate limits configurable through environment variables,https://github.com/makeplane/plane/issues/10340,targeted,1a2,X,,no,none,no,no,no,open,2026-11-17
+calcom/cal.diy,24519,Round-Robin Reservation Locks Slot for All Hosts,https://github.com/calcom/cal.diy/issues/24519,targeted,1a2,O,,yes,none,yes,no,no,open,2025-10-16
+AppFlowy-IO/AppFlowy,9152,[Bug] Single-row tables disappear when pasted as HTML,https://github.com/AppFlowy-IO/AppFlowy/issues/9152,targeted,1a2,O,,yes,none,no,no,no,open,2026-11-23
+toeverything/AFFiNE,13741,[Bug]: lost workspaces,https://github.com/toeverything/AFFiNE/issues/13741,targeted,1a2 3b 4a,3b,upgrade,yes,deploy,no,no,no,open,2025-10-13
+AppFlowy-IO/AppFlowy,8455,[Bug] Sync is unreliable and leads to data loss,https://github.com/AppFlowy-IO/AppFlowy/issues/8455,targeted,1a2 3b 6a,4,sync,yes,users,no,no,yes,open,2026-01-26
+AppFlowy-IO/AppFlowy,8959,[Bug] The typed text disappears after a while,https://github.com/AppFlowy-IO/AppFlowy/issues/8959,targeted,1a2,4,sync,yes,users,no,no,yes,open,2026-08-19
+immich-app/immich,32305,Storage template: an interrupted move can never be finished - the resume path stats the old file that is already gone (ENOENT),https://github.com/immich-app/immich/issues/32305,targeted,1a2,6,restart,yes,crash,no,no,no,open,2026-10-10
+AppFlowy-IO/AppFlowy,8722,[FR] Local auto-save and cross-check before cloud sync,https://github.com/AppFlowy-IO/AppFlowy/issues/8722,targeted,1a2 4a,X,,no,none,no,no,no,open,2026-05-14
+immich-app/immich,31387,Mobile (Android): photo locations disappear when zooming out and reappear when zooming in,https://github.com/immich-app/immich/issues/31387,targeted,1a2,O,,yes,none,yes,no,no,open,2026-09-09
+AppFlowy-IO/AppFlowy,8242,Lost Chat Data,https://github.com/AppFlowy-IO/AppFlowy/issues/8242,targeted,1a2,O,,yes,none,no,no,no,open,2025-09-29
+excalidraw/excalidraw,10296,"When creating a new canvas, the data of the old canvas is lost",https://github.com/excalidraw/excalidraw/issues/10296,targeted,1a2 4b,O,,yes,none,no,no,no,open,2025-11-07
+excalidraw/excalidraw,11738,Lost changes when switching tabs,https://github.com/excalidraw/excalidraw/issues/11738,targeted,1a2 4b,1a,tabs,yes,users,no,no,yes,open,2026-07-21
+excalidraw/excalidraw,10907,Lost My Excalidraw Content,https://github.com/excalidraw/excalidraw/issues/10907,targeted,1a2,O,,yes,none,yes,no,no,open,2026-03-06
+excalidraw/excalidraw,11348,Bug: All embedded images disappeared,https://github.com/excalidraw/excalidraw/issues/11348,targeted,1a2,4,local-store,yes,none,no,no,no,open,2026-05-18
+penpot/penpot,13320,MCP connection is lost after refreshing the page (F5),https://github.com/penpot/penpot/issues/13320,targeted,1a2 4a 6a 6b,O,,yes,none,no,no,no,open,2026-11-25
+penpot/penpot,4368,bug: Designs degraded (lost labels etc) after update to Penpot 2.0,https://github.com/penpot/penpot/issues/4368,targeted,1a2,3b,upgrade,yes,deploy,yes,no,no,open,2024-04-07
+nextcloud/server,63159,[Bug]: Meaning and default of `hide_disabled_user_shares` was changed and functionality lost,https://github.com/nextcloud/server/issues/63159,targeted,1a2,3b,upgrade,yes,deploy,yes,no,no,open,2026-08-11
+excalidraw/excalidraw,10567,Accidental overwrite with no way to recover,https://github.com/excalidraw/excalidraw/issues/10567,targeted,1a2 6a,X,,no,none,no,no,no,open,2025-12-23
+excalidraw/excalidraw,10765,Lost all images,https://github.com/excalidraw/excalidraw/issues/10765,targeted,1a2,4,local-store,yes,none,yes,no,no,open,2026-02-10
+excalidraw/excalidraw,12567,Opening a share link whose scene can't be fetched replaces your drawing with an empty canvas,https://github.com/excalidraw/excalidraw/issues/12567,targeted,1a2 2b,4,offline,yes,network,no,no,no,open,2026-11-07
+go-gitea/gitea,34381,Activity feed missing commits for other users,https://github.com/go-gitea/gitea/issues/34381,targeted,1b1,1b,perm-wrong,yes,users,no,no,yes,open,2025-05-06
+makeplane/plane,10001,[bug]: Workspace drafts: members get 403 on their own draft; admins can delete other users’ drafts,https://github.com/makeplane/plane/issues/10001,targeted,1b1,1b,leak,yes,users,no,no,no,open,2026-10-13
+go-gitea/gitea,32370,User can see other users who have read access using the WATCH functionality (but they don't have access to user its hidden),https://github.com/go-gitea/gitea/issues/32370,targeted,1b1,1b,leak,yes,users,no,no,no,open,2024-10-29
+go-gitea/gitea,40399,Personal default repository watch mode with per-organization overrides,https://github.com/go-gitea/gitea/issues/40399,targeted,1b1,X,,no,none,no,no,no,open,2026-11-16
+makeplane/plane,4852,[feature]: Allow users to only see tasks/cards assigned to them,https://github.com/makeplane/plane/issues/4852,targeted,1b1,X,,no,none,no,no,no,open,2024-06-18
+go-gitea/gitea,40089,OAuth2/OIDC callback URL does not follow PUBLIC_URL_DETECTION=auto when accessing Gitea through multiple addresses,https://github.com/go-gitea/gitea/issues/40089,targeted,1b1,O,,yes,none,yes,no,no,open,2026-10-30
+makeplane/plane,9103,[bug]: Guests can see Pages in project navigation but cannot discover/open public project pages without direct URL,https://github.com/makeplane/plane/issues/9103,targeted,1b1,1b,perm-wrong,yes,users,no,no,no,open,2026-05-19
+go-gitea/gitea,34174,Wrong session auth handler order,https://github.com/go-gitea/gitea/issues/34174,targeted,1b1,1b,leak,yes,users,no,no,no,open,2025-04-10
+twentyhq/twenty,24283,It's only possible to create or update dashboard only with additional settings and permissions,https://github.com/twentyhq/twenty/issues/24283,targeted,1b1,1b,perm-wrong,yes,users,yes,no,no,open,2026-08-17
+immich-app/immich,24528,Partner sharing discloses list of (non-public) users,https://github.com/immich-app/immich/issues/24528,targeted,1b1,1b,leak,yes,users,no,no,no,open,2025-12-11
+immich-app/immich,32292,"Merging people in a cluster group only merges my own faces, dropping the other user's photos",https://github.com/immich-app/immich/issues/32292,targeted,1b1,1c,shared,yes,users,no,no,no,open,2026-10-09
+toeverything/AFFiNE,13326,"[Bug]: ""No Access"" strange behaviour",https://github.com/toeverything/AFFiNE/issues/13326,targeted,1b1,1b,leak,yes,users,no,no,no,open,2025-07-26
+immich-app/immich,12614,Better sharing in Immich (feature freeze),https://github.com/immich-app/immich/issues/12614,targeted,1b1,X,,no,none,yes,no,no,open,2024-09-12
+immich-app/immich,32198,[web] People management doesnt refresh already given permissions,https://github.com/immich-app/immich/issues/32198,targeted,1b1 1b2,2,stale,yes,none,no,no,no,open,2026-10-07
+immich-app/immich,33680,`GET /api/duplicates` clears another user's duplicate group,https://github.com/immich-app/immich/issues/33680,targeted,1b1,1b,leak,yes,users,no,no,no,closed,2026-11-25
+go-vikunja/vikunja,3442,Fine-Grained Access Control (FGAC) Design Proposal,https://github.com/go-vikunja/vikunja/issues/3442,targeted,1b1 1b2,X,,no,none,no,no,no,open,2026-08-05
+immich-app/immich,32227,[web] - Shared persons not showing up when image is inside stack,https://github.com/immich-app/immich/issues/32227,targeted,1b1,1c,shared,yes,users,no,no,no,open,2026-10-08
+go-vikunja/vikunja,4024,Add optional ScreenContextAgent notes for task activity,https://github.com/go-vikunja/vikunja/issues/4024,targeted,1b1,X,,no,none,no,no,no,open,2026-09-27
+nextcloud/server,58392,Approve re-sharing of shares with other users or groups,https://github.com/nextcloud/server/issues/58392,targeted,1b1,X,,no,none,no,no,no,open,2026-02-17
+nextcloud/server,67012,[Bug]: UTC time zone missing from calendar event creation time zone selector,https://github.com/nextcloud/server/issues/67012,targeted,1b1 5a,5,tz,yes,clock,no,no,no,open,2026-11-25
+penpot/penpot,13367,Preview typography edits live in the library and publish them only when the editor is confirmed,https://github.com/penpot/penpot/issues/13367,targeted,1b1,X,,no,none,no,no,no,open,2026-11-26
+penpot/penpot,12425,Notify other users when a snapshot is restored,https://github.com/penpot/penpot/issues/12425,targeted,1b1,X,,no,none,yes,yes,no,closed,2026-10-19
+excalidraw/excalidraw,9518,Only one output visible if both users edit same text box,https://github.com/excalidraw/excalidraw/issues/9518,targeted,1b1,1a,edit,yes,users,yes,no,no,open,2025-05-13
+nextcloud/server,65523,[Meta]: Scoped app passwords: limit a token to selected apps,https://github.com/nextcloud/server/issues/65523,targeted,1b1,X,,no,none,no,no,no,open,2026-10-15
+nextcloud/server,54170,New group members should see existing shares,https://github.com/nextcloud/server/issues/54170,targeted,1b1,1b,perm-not-applied,yes,users,yes,no,no,open,2025-07-31
+penpot/penpot,13372,Path edit mode stays open when the edited path is deleted by another user,https://github.com/penpot/penpot/issues/13372,targeted,1b1,7,live,yes,users,no,no,no,open,2026-11-26
+penpot/penpot,12089,Comments don't sync automatically between users/browsers,https://github.com/penpot/penpot/issues/12089,targeted,1b1 4b,7,live,yes,users,no,no,no,open,2026-10-05
+penpot/penpot,10820,File Sharing Without Team Access,https://github.com/penpot/penpot/issues/10820,targeted,1b1,X,,no,none,yes,no,no,open,2026-07-24
+outline/outline,11760,Permission improvements,https://github.com/outline/outline/issues/11760,targeted,1b2,X,,no,none,no,no,no,open,2026-03-15
+twentyhq/twenty,31045,Group-by on a many-to-one relation is answered even when the role's field permission denies reading that relation (v2.60.0),https://github.com/twentyhq/twenty/issues/31045,targeted,1b2,1b,leak,yes,users,yes,no,no,open,2026-11-20
+makeplane/plane,10221,[feature]: Scoped API tokens (read-only / no delete) and a per-token rate limit,https://github.com/makeplane/plane/issues/10221,targeted,1b2,X,,no,none,no,no,no,open,2026-11-07
+go-gitea/gitea,39288,`401 Unauthorized` after switching user,https://github.com/go-gitea/gitea/issues/39288,targeted,1b2,X,,no,none,yes,no,no,open,2026-09-10
+makeplane/plane,7038,[feature]: Add Task Permissions Management,https://github.com/makeplane/plane/issues/7038,targeted,1b2,X,,no,none,no,no,no,open,2025-05-09
+twentyhq/twenty,31646,"API key can no longer soft-delete calendarEvent or write messageThreadTarget (permission denied since Nov 26, 2026 - also affects UI merge)",https://github.com/twentyhq/twenty/issues/31646,targeted,1b2,O,,yes,none,yes,no,no,open,2026-11-26
+twentyhq/twenty,15231,Users with view-only permissions cannot use workflows,https://github.com/twentyhq/twenty/issues/15231,targeted,1b2,1b,perm-wrong,yes,users,yes,no,no,open,2025-10-21
+calcom/cal.diy,29956,security: PermissionCheckService stub allows any authenticated user to confirm or reject any pending team booking,https://github.com/calcom/cal.diy/issues/29956,targeted,1b2,1b,leak,yes,users,no,no,no,open,2026-08-13
+makeplane/plane,10401,"[bug]: Re-invited guests can access projects via ""Recents' tab, though they were removed from all projects/teamspaces",https://github.com/makeplane/plane/issues/10401,targeted,1b2,1b,perm-not-applied,yes,users,no,no,no,open,2026-11-25
+twentyhq/twenty,30488,"Page layout widget conditions cannot read permissions, and a permission condition silently hides the widget from everyone",https://github.com/twentyhq/twenty/issues/30488,targeted,1b2 4a,O,,yes,none,yes,no,no,open,2026-11-16
+usememos/memos,6659,Long ASCII email subjects can still exceed the 998-character header limit,https://github.com/usememos/memos/issues/6659,targeted,1b2,O,,yes,none,no,no,no,open,2026-11-26
+immich-app/immich,32859,Server leaks server config and features to anonymous users,https://github.com/immich-app/immich/issues/32859,targeted,1b2,O,security,yes,none,yes,no,no,open,2026-11-01
+immich-app/immich,27164,Immich web memory leak (on safari),https://github.com/immich-app/immich/issues/27164,targeted,1b2,X,,no,none,no,no,no,open,2026-03-22
+immich-app/immich,31571,Immich logs reports memory leak while syncing with mobile app,https://github.com/immich-app/immich/issues/31571,targeted,1b2 4b,X,,no,none,no,no,no,open,2026-09-15
+toeverything/AFFiNE,14461,[Feature Request]: Unauthorized api error status,https://github.com/toeverything/AFFiNE/issues/14461,targeted,1b2,X,,no,none,no,no,no,open,2026-02-16
+usememos/memos,6553,Support OAuth 2.1 authorization for the built-in MCP server (ChatGPT custom connectors),https://github.com/usememos/memos/issues/6553,targeted,1b2,X,,no,none,no,no,no,open,2026-11-11
+toeverything/AFFiNE,14262,[Bug]: No Access Denied Message,https://github.com/toeverything/AFFiNE/issues/14262,targeted,1b2,1b,leak,yes,users,yes,no,no,open,2026-01-15
+toeverything/AFFiNE,13807,"[Feature Request]: permissions on folder level - ideally also collections (superficial, or cascading)",https://github.com/toeverything/AFFiNE/issues/13807,targeted,1b2,X,,no,none,no,no,no,open,2025-10-26
+documenso/documenso,2758,Bug Bounty report: 2FA Bypass via Google OAuth Login Allows Unauthorized Account Access,https://github.com/documenso/documenso/issues/2758,targeted,1b2,O,security,yes,none,no,no,no,open,2026-05-02
+documenso/documenso,3436,"""Require 2FA to access"" document setting is completely bypassed for viewing",https://github.com/documenso/documenso/issues/3436,targeted,1b2,1b,leak,yes,users,no,no,no,open,2026-10-09
+nextcloud/server,62453,Allow custom files to bypass the integrity check,https://github.com/nextcloud/server/issues/62453,targeted,1b2,X,,no,none,no,no,no,open,2026-07-23
+documenso/documenso,3556,Review organization creation permissions on self-hosted instances,https://github.com/documenso/documenso/issues/3556,targeted,1b2,X,,no,none,no,no,no,open,2026-11-04
+excalidraw/excalidraw,12679,fix(sdk): mounting Excalidraw logs an unload permissions policy error,https://github.com/excalidraw/excalidraw/issues/12679,targeted,1b2,O,,yes,none,no,no,no,open,2026-11-18
+nextcloud/server,66866,"Link share editor: ""Custom permissions"" is checked for a new link share",https://github.com/nextcloud/server/issues/66866,targeted,1b2,O,,yes,none,no,no,no,open,2026-11-20
+nextcloud/server,66164,[Bug]: Retrying an overwrite with versions enabled keeps leaked shared locks alive indefinitely,https://github.com/nextcloud/server/issues/66164,targeted,1b2,6,restart,yes,crash,no,no,no,open,2026-11-03
+documenso/documenso,3451,[Bug] Webhook SSRF via IPv4-Compatible IPv6 Bypass in isPrivateUrl (RFC 4291),https://github.com/documenso/documenso/issues/3451,targeted,1b2,O,security,yes,none,yes,no,no,open,2026-10-16
+nextcloud/server,64118,Explicit permissions for file access,https://github.com/nextcloud/server/issues/64118,targeted,1b2,X,,no,none,yes,no,no,open,2026-09-08
+nextcloud/server,65935,[Bug]: Recipients can no longer see or copy existing public link shares (regression from #65258),https://github.com/nextcloud/server/issues/65935,targeted,1b2,1c,shared,yes,users,no,no,no,open,2026-10-26
+go-gitea/gitea,40232,"Add debounce or loading state to the ""Merge Pull Request"" button",https://github.com/go-gitea/gitea/issues/40232,targeted,2a 2c,X,,no,none,no,no,no,open,2026-11-05
+calcom/cal.diy,30258,Feature Request: Add cancellation cutoff before an event,https://github.com/calcom/cal.diy/issues/30258,targeted,2a,X,,no,none,no,no,yes,open,2026-09-28
+go-gitea/gitea,40426,"PR ""Files Changed"" view does not indicate new commits after push (no refresh prompt like GitHub)",https://github.com/go-gitea/gitea/issues/40426,targeted,2a 7,X,,no,none,no,no,no,open,2026-11-18
+makeplane/plane,10082,"[bug]: GitLab integration posts duplicate ""Linked to Plane Work Item(s)"" comments on MRs with more than 20 notes",https://github.com/makeplane/plane/issues/10082,targeted,2a,8,outside,yes,network,no,no,no,open,2026-10-18
+calcom/cal.diy,30324,Add customizable legal links/footer text directly above the booking confirmation button,https://github.com/calcom/cal.diy/issues/30324,targeted,2a,X,,no,none,no,no,no,open,2026-10-08
+twentyhq/twenty,31655,Workflow email attachments are corrupted and have duplicate file extensions,https://github.com/twentyhq/twenty/issues/31655,targeted,2a 6a,O,,yes,none,yes,no,no,open,2026-11-26
+go-gitea/gitea,31010,Add a more obvious approve button for MRs,https://github.com/go-gitea/gitea/issues/31010,targeted,2a,X,,no,none,yes,no,no,open,2024-05-17
+calcom/cal.diy,19481,[CAL-5200] Prevent duplicate submissions in Routing Form.,https://github.com/calcom/cal.diy/issues/19481,targeted,2a,X,,no,none,yes,no,no,open,2025-02-24
+calcom/cal.diy,26010,Save button turns black(clickable) when opening advance settings,https://github.com/calcom/cal.diy/issues/26010,targeted,2a,O,,yes,none,yes,no,no,open,2025-12-18
+calcom/cal.diy,19127,Loader Overlapping Button Text Instead of Replacing It on Click,https://github.com/calcom/cal.diy/issues/19127,targeted,2a,O,,yes,none,no,no,no,open,2025-02-06
+usememos/memos,6647,Auto Save Memo,https://github.com/usememos/memos/issues/6647,targeted,2a,X,,no,none,no,no,no,open,2026-11-25
+usememos/memos,6652,Space switcher arrow keys jump out of order when Create Space has focus,https://github.com/usememos/memos/issues/6652,targeted,2a,O,,yes,none,no,no,no,open,2026-11-26
+AppFlowy-IO/AppFlowy,9139,[FR] Update button,https://github.com/AppFlowy-IO/AppFlowy/issues/9139,targeted,2a 3a,X,,no,none,no,no,no,open,2026-11-17
+immich-app/immich,33328,Web `/folders` is missing back button,https://github.com/immich-app/immich/issues/33328,targeted,2a,O,,yes,none,no,no,no,open,2026-11-15
+toeverything/AFFiNE,15808,[Bug]: No undo button in edgeless canvas,https://github.com/toeverything/AFFiNE/issues/15808,targeted,2a,X,,no,none,no,no,no,open,2026-11-07
+toeverything/AFFiNE,15756,"[Feature Request]: Graph view, But still keep the endless canvas, we also need that too",https://github.com/toeverything/AFFiNE/issues/15756,targeted,2a,X,,no,none,no,no,no,open,2026-10-27
+AppFlowy-IO/AppFlowy,9138,[Bug] The app crashes unexpectedly on macOS Golden Gate 27.2.1,https://github.com/AppFlowy-IO/AppFlowy/issues/9138,targeted,2a,X,,no,none,no,no,no,open,2026-11-17
+usememos/memos,6527,"Add a ""reblur"" and move the ""unblur"" button to a more fixed position",https://github.com/usememos/memos/issues/6527,targeted,2a,X,,no,none,no,no,no,open,2026-11-05
+usememos/memos,6529,"Selecting multiple photos from ""Photo"" picker doesn't inline images into memo body, breaking thumbnail grid display",https://github.com/usememos/memos/issues/6529,targeted,2a,O,,yes,none,no,no,no,open,2026-11-06
+usememos/memos,6521,WIP: A way to reflect on notes,https://github.com/usememos/memos/issues/6521,targeted,2a,X,,no,none,no,no,no,open,2026-11-03
+penpot/penpot,13400,"[PRE] Unclear MCP connection state when opening a file via ""Open in new tab""",https://github.com/penpot/penpot/issues/13400,targeted,2a,X,,no,none,no,no,no,open,2026-11-27
+excalidraw/excalidraw,8954,safari: double-click to create text doesn't work due to focus issues,https://github.com/excalidraw/excalidraw/issues/8954,targeted,2a,O,,yes,none,no,no,no,open,2024-12-26
+excalidraw/excalidraw,12332,Label edited while a collaborator deletes its shape is left unselectable,https://github.com/excalidraw/excalidraw/issues/12332,targeted,2a,1a,edit,yes,users,no,no,no,open,2026-10-15
+excalidraw/excalidraw,11197,Feature request: Double-click toolbar tool to lock it,https://github.com/excalidraw/excalidraw/issues/11197,targeted,2a,X,,no,none,no,no,no,open,2026-04-18
+penpot/penpot,12560,Annoying to edit text elements,https://github.com/penpot/penpot/issues/12560,targeted,2a,X,,no,none,no,no,no,open,2026-10-22
+nextcloud/server,43238,Files gap analysis,https://github.com/nextcloud/server/issues/43238,targeted,2a,X,,no,none,no,no,no,open,2024-01-31
+excalidraw/excalidraw,12530,"Copying a grouped item, keeps a group surrounding it",https://github.com/excalidraw/excalidraw/issues/12530,targeted,2a,O,,yes,none,no,no,no,open,2026-11-02
+excalidraw/excalidraw,9496,prevent double-click to edit/create text scenarios,https://github.com/excalidraw/excalidraw/issues/9496,targeted,2a,X,,no,none,yes,no,no,open,2025-05-07
+documenso/documenso,2674,Feature Request: Add a confirmation before duplicating a field on all pages,https://github.com/documenso/documenso/issues/2674,targeted,2a,X,,no,none,yes,no,no,open,2026-04-02
+penpot/penpot,12695,Move the legacy form components to the DS components,https://github.com/penpot/penpot/issues/12695,targeted,2a,X,,no,none,no,no,no,open,2026-10-29
+go-gitea/gitea,36525,Race condition with approving review and re-requesting same review,https://github.com/go-gitea/gitea/issues/36525,targeted,2b,1a,race,yes,users,yes,no,no,open,2026-02-03
+go-gitea/gitea,31387,Suspected race condition in API,https://github.com/go-gitea/gitea/issues/31387,targeted,2b,2,order,yes,none,no,no,no,open,2024-06-16
+makeplane/plane,9352,[bug]: local docker setup crashes with FileExistsError in local.py (LOG_DIR race condition),https://github.com/makeplane/plane/issues/9352,targeted,2b,X,,no,none,no,no,no,open,2026-07-03
+calcom/cal.diy,27441,fix: atomic authorization code consumption to prevent race condition,https://github.com/calcom/cal.diy/issues/27441,targeted,2b,2,double,yes,none,yes,no,no,open,2026-01-30
+calcom/cal.diy,13397,[CAL-3023] Race condition in /api/book/event endpoint,https://github.com/calcom/cal.diy/issues/13397,targeted,2b,1a,race,yes,users,yes,no,no,open,2024-01-24
+calcom/cal.diy,29730,Race condition in /api/auth/setup allows creating multiple admin users on a fresh instance,https://github.com/calcom/cal.diy/issues/29730,targeted,2b,1a,race,yes,users,no,no,no,open,2026-07-06
+makeplane/plane,9175,Comment Reaction Activity Crashes Celery Task When Reaction Not Found,https://github.com/makeplane/plane/issues/9175,targeted,2b,2,job-race,yes,none,no,no,no,open,2026-05-30
+calcom/cal.diy,30374,Concurrent bookings of overlapping slots for the same host are both accepted (double booking),https://github.com/calcom/cal.diy/issues/30374,targeted,2b,1a,race,yes,users,no,no,no,open,2026-10-21
+outline/outline,14630,Locale JSON stays stale after upgrades until a hard refresh,https://github.com/outline/outline/issues/14630,targeted,2b 3a,3a,skew,yes,deploy,yes,yes,no,closed,2026-11-18
+calcom/cal.diy,23974,[Bug] Reservation-to-Booking flow allows double-booking reserved slots,https://github.com/calcom/cal.diy/issues/23974,targeted,2b,O,,yes,none,yes,no,no,open,2025-09-22
+immich-app/immich,27267,storage template and sidecar extraction race condition,https://github.com/immich-app/immich/issues/27267,targeted,2b,2,job-race,yes,none,yes,no,no,open,2026-03-25
+immich-app/immich,24358,delete race condition during backup,https://github.com/immich-app/immich/issues/24358,targeted,2b,2,job-race,yes,none,no,no,no,open,2025-12-03
+immich-app/immich,31740,iOS app crashes during backup,https://github.com/immich-app/immich/issues/31740,targeted,2b 6a,O,,yes,none,no,no,no,open,2026-09-22
+immich-app/immich,33719,"Location is saved, but the UI keeps the old selection",https://github.com/immich-app/immich/issues/33719,targeted,2b,2,stale,yes,none,no,no,yes,closed,2026-11-27
+immich-app/immich,29587,Facial recognition job fails with FK violation when target person is merged concurrently,https://github.com/immich-app/immich/issues/29587,targeted,2b,2,job-race,yes,none,no,no,no,open,2026-07-05
+immich-app/immich,29648,Stale deletion from web deletion sync feature breaks data sync on Android,https://github.com/immich-app/immich/issues/29648,targeted,2b 4a 4b,4,sync,yes,deploy,no,no,no,open,2026-07-06
+immich-app/immich,27069,Deep link to album (immich://album?id=...) opens home page when app is cold-started on iOS,https://github.com/immich-app/immich/issues/27069,targeted,2b,O,,yes,none,no,no,no,open,2026-03-20
+AppFlowy-IO/AppFlowy,8950,[Bug] Home stack tab and secondary-view interaction state can become stale,https://github.com/AppFlowy-IO/AppFlowy/issues/8950,targeted,2b,O,,yes,none,no,no,no,open,2026-08-14
+immich-app/immich,31203,Workflow “Add to Album” action displays stale album name after the album is renamed,https://github.com/immich-app/immich/issues/31203,targeted,2b,2,stale,yes,none,yes,no,no,open,2026-09-01
+toeverything/AFFiNE,15163,[Bug]: Infinite Key Repeat and Runaway Backspace with `uinput` Input Method under Wayland (Hyprland),https://github.com/toeverything/AFFiNE/issues/15163,targeted,2b,O,,yes,none,no,no,no,open,2026-06-27
+nextcloud/server,66543,[Bug]: Race condition in quota enforcement during concurrent file uploads,https://github.com/nextcloud/server/issues/66543,targeted,2b,2,race,yes,none,no,no,no,open,2026-11-12
+nextcloud/server,63192,[Bug]: Login for LDAP Users impossible after moving in LDAP,https://github.com/nextcloud/server/issues/63192,targeted,2b,8,outside,yes,network,no,no,no,open,2026-08-12
+penpot/penpot,12300,"(Phase 4): Find and fix overrides that appear, vanish or fall out of sync in copies",https://github.com/penpot/penpot/issues/12300,targeted,2b,X,,no,none,no,no,no,open,2026-10-13
+nextcloud/server,61748,Better handling of previews that are out of sync with the file,https://github.com/nextcloud/server/issues/61748,targeted,2b,X,,no,none,no,no,no,open,2026-07-03
+mattermost/mattermost,37001,[Bug]: Sidebar unread indicateur is out of sync,https://github.com/mattermost/mattermost/issues/37001,targeted,2b,2,stale,yes,none,no,no,no,open,2026-06-10
+mattermost/mattermost,31650,[Bug]: Race condition when sending multiple replies to a post,https://github.com/mattermost/mattermost/issues/31650,targeted,2b,1a,race,yes,users,yes,no,no,open,2025-06-17
+nextcloud/server,66479,"Files: stale ""Locked by online editing in Text"" icon after closing Text editor (NC 34.0.5)",https://github.com/nextcloud/server/issues/66479,targeted,2b,2,stale,yes,none,no,no,no,open,2026-11-08
+nextcloud/server,55814,"[Bug]: File uploads intermittently fail with ""Object not found after writing"" due to object storage race condition",https://github.com/nextcloud/server/issues/55814,targeted,2b,8,outside,yes,network,no,no,yes,open,2025-10-16
+mattermost/mattermost,40273,[Bug]: Server-initiated team leave leaves stale channel state [webapp],https://github.com/mattermost/mattermost/issues/40273,targeted,2b,7,live,yes,none,no,no,no,open,2026-11-22
+calcom/cal.diy,30300,Event type update toast shows the previous title instead of the saved one,https://github.com/calcom/cal.diy/issues/30300,targeted,2c,2,stale,yes,none,no,no,no,open,2026-10-06
+calcom/cal.diy,19594,"When rescheduling, reminder includes previous time",https://github.com/calcom/cal.diy/issues/19594,targeted,2c,O,,yes,none,yes,no,no,open,2025-02-27
+makeplane/plane,7722,[feature]: show work item status in search results,https://github.com/makeplane/plane/issues/7722,targeted,2c,X,,no,none,no,no,no,open,2025-09-04
+calcom/cal.diy,30364,[BUG] Email Notifications Still Sent to Old Address After Changing Primary Email,https://github.com/calcom/cal.diy/issues/30364,targeted,2c,O,,yes,none,no,no,no,open,2026-10-19
+twentyhq/twenty,31562,Board: a card stays in the wrong lane after the server refuses its drag-and-drop update,https://github.com/twentyhq/twenty/issues/31562,targeted,2c,2,optimistic,yes,network,yes,no,no,open,2026-11-26
+twentyhq/twenty,26099,IMAP: drafts pile up in the thread because every client autosave creates a new row and old drafts are never removed,https://github.com/twentyhq/twenty/issues/26099,targeted,2c,8,outside,yes,network,yes,no,no,open,2026-09-16
+twentyhq/twenty,29791,Relation picker with an empty option: Enter after typing a search does nothing,https://github.com/twentyhq/twenty/issues/29791,targeted,2c,O,,yes,none,yes,no,no,open,2026-11-05
+go-gitea/gitea,31006,Stop redirecting by previous renaming?,https://github.com/go-gitea/gitea/issues/31006,targeted,2c,X,,no,none,no,no,no,open,2024-05-17
+makeplane/plane,8557,[feature]: Increase text field input debounce time for mobile devices,https://github.com/makeplane/plane/issues/8557,targeted,2c,2,autosave,yes,network,no,no,no,open,2026-01-18
+immich-app/immich,31796,Search photo viewer stops at end of currently loaded results instead of loading additional search results,https://github.com/immich-app/immich/issues/31796,targeted,2c,O,,yes,none,no,no,no,open,2026-09-25
+immich-app/immich,32205,"[Web] ""Query Asset ID"" search criterion persists across navigation, causing unexpected search results",https://github.com/immich-app/immich/issues/32205,targeted,2c,O,,yes,none,no,no,no,open,2026-10-08
+immich-app/immich,28365,Ctrl+A does not select all assets in search results due to pagination,https://github.com/immich-app/immich/issues/28365,targeted,2c,X,,no,none,yes,no,no,open,2026-05-11
+immich-app/immich,33325,[Web] Star rating in detail panel is applied to the wrong asset / sticks when navigating to the next asset,https://github.com/immich-app/immich/issues/33325,targeted,2c,2,order,yes,none,yes,no,no,open,2026-11-15
+immich-app/immich,29550,Older media files have the wrong path in the database,https://github.com/immich-app/immich/issues/29550,targeted,2c,O,,yes,none,yes,no,no,open,2026-07-04
+immich-app/immich,17374,"iOS/iPadOS Client Issues: Video Distorted, EXIF Wrong",https://github.com/immich-app/immich/issues/17374,targeted,2c,O,,yes,none,yes,no,no,open,2025-04-04
+immich-app/immich,30324,Assets deleted with the Delete key reappear in search results,https://github.com/immich-app/immich/issues/30324,targeted,2c,2,stale,yes,none,no,no,no,open,2026-07-28
+immich-app/immich,28572,Ex motion photos still have the wrong metadata,https://github.com/immich-app/immich/issues/28572,targeted,2c,O,,yes,none,yes,no,no,open,2026-05-23
+immich-app/immich,33286,"MACHINE_LEARNING_MODEL_REVISION=v2 produces different CLIP embeddings than v1 (cosine 0.95-0.99), shifting smart search results against existing embeddings",https://github.com/immich-app/immich/issues/33286,targeted,2c,O,,yes,none,yes,no,no,open,2026-11-13
+documenso/documenso,3164,"MultiSelect async search: stale results can overwrite newer ones, and every search fires twice",https://github.com/documenso/documenso/issues/3164,targeted,2c,2,order,yes,network,yes,no,no,open,2026-08-10
+nextcloud/server,49906,Use virtual scrolling for unified search results,https://github.com/nextcloud/server/issues/49906,targeted,2c,X,,no,none,no,no,no,open,2024-12-17
+excalidraw/excalidraw,9503,canvas search results unstable,https://github.com/excalidraw/excalidraw/issues/9503,targeted,2c,O,,yes,none,yes,no,no,open,2025-05-10
+nextcloud/server,57649,Show “View in folder” for all search results,https://github.com/nextcloud/server/issues/57649,targeted,2c,X,,no,none,no,no,no,open,2026-01-20
+penpot/penpot,13081,Shapes keep the previous theme's token values when several token themes change quickly,https://github.com/penpot/penpot/issues/13081,targeted,2c,2,order,yes,none,no,no,no,open,2026-11-16
+nextcloud/server,65305,"[Bug]: Unified search results nest a link inside role=""option"" (axe nested-interactive)",https://github.com/nextcloud/server/issues/65305,targeted,2c,O,,yes,none,no,no,no,open,2026-10-08
+nextcloud/server,64863,[Bug]: can't reuse old group name,https://github.com/nextcloud/server/issues/64863,targeted,2c,O,,yes,none,no,no,no,open,2026-09-28
+nextcloud/server,66706,[Bug]: Cannot change or reset primary color in theming,https://github.com/nextcloud/server/issues/66706,targeted,2c 3a,O,,yes,none,no,no,no,open,2026-11-17
+nextcloud/server,62961,Show favorite status of a file in search results,https://github.com/nextcloud/server/issues/62961,targeted,2c,X,,no,none,no,no,no,open,2026-08-06
+excalidraw/excalidraw,12305,Dropping a sticky note from the toolbar edits the previously selected text,https://github.com/excalidraw/excalidraw/issues/12305,targeted,2c,O,,yes,none,no,no,no,open,2026-10-15
+makeplane/plane,10015,[bug]: Workspace labels/estimates API returns stale data for up to 2 hours after label rename/delete or estimate changes (per-user cache not invalidated),https://github.com/makeplane/plane/issues/10015,targeted,3a,2,stale,yes,users,no,no,no,open,2026-10-14
+makeplane/plane,9759,[feature]: Add KEY_PREFIX to Redis cache and make clear_cache optional on startup,https://github.com/makeplane/plane/issues/9759,targeted,3a,X,,no,none,no,no,no,open,2026-09-04
+calcom/cal.diy,29718,Please upgrade `tsdav` to 2.3.0,https://github.com/calcom/cal.diy/issues/29718,targeted,3a,X,,no,none,no,no,no,open,2026-07-04
+twentyhq/twenty,28759,"Record table shows a stale list after navigating back, until a full page reload",https://github.com/twentyhq/twenty/issues/28759,targeted,3a,7,live,yes,users,yes,no,no,open,2026-10-24
+makeplane/plane,10341,[bug]: v1.5.0 frontend Caddy rate limit causes HTTP 429 during normal page loading,https://github.com/makeplane/plane/issues/10341,targeted,3a,O,,yes,none,no,no,no,open,2026-11-17
+twentyhq/twenty,29912,Browser memory builds up all day until the tab or the whole computer runs out of memory: data from every list and record viewed is never released,https://github.com/twentyhq/twenty/issues/29912,targeted,3a,X,,no,none,yes,no,no,open,2026-11-07
+twentyhq/twenty,28232,"Upgrade to 2.48.0 fails at CopyMorphRelationReferencesToHeads: ""View field position cannot be lower than label identifier view field position"" on the timeline activity view",https://github.com/twentyhq/twenty/issues/28232,targeted,3a 3b,3b,upgrade,yes,deploy,yes,no,no,open,2026-10-16
+twentyhq/twenty,22606,Stale DB-backed AUTH_GOOGLE_CALLBACK_URL used for Google OAuth instead of current Docker env after upgrades,https://github.com/twentyhq/twenty/issues/22606,targeted,3a,3b,upgrade,yes,deploy,no,no,no,open,2026-07-06
+twentyhq/twenty,31414,"Upgrade from a fresh v2.48.0 install aborts with ""Cannot run instance step"", but the server still boots",https://github.com/twentyhq/twenty/issues/31414,targeted,3a,3b,upgrade,yes,deploy,yes,no,no,open,2026-11-25
+usememos/memos,6638,fix(store): user webhook writes race and mutate cached webhooks before persistence,https://github.com/usememos/memos/issues/6638,targeted,3a,6,failed-write,yes,crash,no,no,no,open,2026-11-24
+immich-app/immich,25442,Clear File Cache not doing anything on iOS,https://github.com/immich-app/immich/issues/25442,targeted,3a,O,,yes,none,no,no,no,open,2026-01-22
+immich-app/immich,26589,Album list not cached in mobile app?,https://github.com/immich-app/immich/issues/26589,targeted,3a,X,,no,none,no,no,no,open,2026-02-28
+immich-app/immich,31122,Recently-uploaded video permanently fails to play in browser due to cached error response on `/video/playback`,https://github.com/immich-app/immich/issues/31122,targeted,3a,2,job-race,yes,none,no,no,no,open,2026-08-29
+immich-app/immich,31011,Fail to add description,https://github.com/immich-app/immich/issues/31011,targeted,3a,2,stale,yes,none,no,no,no,open,2026-08-25
+immich-app/immich,20496,immich-ml giving me errors since upgrading to latest today.,https://github.com/immich-app/immich/issues/20496,targeted,3a 3b,3b,upgrade,yes,deploy,no,no,no,open,2025-08-01
+usememos/memos,6480,Some new editor bugs I noticed while testing (updated for b9a48a70eb690912394c797183f589d301aa617c),https://github.com/usememos/memos/issues/6480,targeted,3a,O,,yes,none,no,no,no,open,2026-10-16
+usememos/memos,6442,Feature Request: Expand AI Integration Beyond Transcription,https://github.com/usememos/memos/issues/6442,targeted,3a,X,,no,none,no,no,no,open,2026-10-07
+AppFlowy-IO/AppFlowy,6554,[FR] Embedded files should be cached locally,https://github.com/AppFlowy-IO/AppFlowy/issues/6554,targeted,3a,X,,no,none,no,no,no,open,2024-10-16
+excalidraw/excalidraw,8142,Failed to fetch dynamically imported module: https://excalidraw.com/assets/index.esm-Dctzu5xt.js,https://github.com/excalidraw/excalidraw/issues/8142,targeted,3a,3a,skew,yes,deploy,yes,no,no,open,2024-06-17
+excalidraw/excalidraw,9151,Error loading dynamically imported module: https://excalidraw.com/assets/index.esm-hU9D1OXy.js,https://github.com/excalidraw/excalidraw/issues/9151,targeted,3a,3a,skew,yes,deploy,no,no,no,open,2025-02-17
+penpot/penpot,12729,Retry and explain lazy module load failures instead of showing the internal error page,https://github.com/penpot/penpot/issues/12729,targeted,3a,3a,skew,yes,deploy,no,no,no,open,2026-10-30
+nextcloud/server,61582,App updates show no progress and remain listed until the Updates page is refreshed,https://github.com/nextcloud/server/issues/61582,targeted,3a,2,stale,yes,none,yes,no,no,open,2026-06-24
+penpot/penpot,13340,Update the 2.20.0 changelog in CHANGES.md,https://github.com/penpot/penpot/issues/13340,targeted,3a,X,,no,none,no,no,no,open,2026-11-25
+nextcloud/server,65960,[Bug]: `occ update:check` does not list all app updates that are shown in the Apps UI,https://github.com/nextcloud/server/issues/65960,targeted,3a,O,,yes,none,no,no,no,open,2026-10-27
+nextcloud/server,65080,[Bug]:  F-23 Paginated PROPFIND/SEARCH crashes when cached pages were evicted,https://github.com/nextcloud/server/issues/65080,targeted,3a,O,,yes,none,no,no,no,open,2026-10-03
+nextcloud/server,66559,[Bug]: Upgrade to 35.0.3 leads to numerous errors,https://github.com/nextcloud/server/issues/66559,targeted,3a 3b,3b,upgrade,yes,deploy,no,no,no,open,2026-11-13
+nextcloud/server,45943,Predict database migration impact of upgrades,https://github.com/nextcloud/server/issues/45943,targeted,3a 3b,X,,no,none,yes,no,no,open,2024-06-18
+twentyhq/twenty,27788,Server start runs cache:flush on every namespace and silently drops the Gmail/messaging import queue (v2.41.0),https://github.com/twentyhq/twenty/issues/27788,targeted,3b 6a 6b,6,restart,yes,crash,yes,no,no,open,2026-10-11
+go-gitea/gitea,37390,Missing documentation of breaking change in release notes v1.26.0,https://github.com/go-gitea/gitea/issues/37390,targeted,3b,X,,no,none,yes,no,no,open,2026-04-23
+calcom/cal.diy,23375,[BUG] Critical data loss between BOOKING_PAYMENT_INITIATED and BOOKING_PAID webhook events,https://github.com/calcom/cal.diy/issues/23375,targeted,3b 6a,O,,yes,none,yes,no,no,open,2025-08-26
+twentyhq/twenty,31373,"Self-hosted upgrade 2.40.0 → 2.54.0 fails at the 2.42 workspace step (`DeleteOrphanCoreWorkflows`: column ""name"" of ""deferredWorkspaceMigrationAction"" does not exist) - works when hopping through 2.42.6",https://github.com/twentyhq/twenty/issues/31373,targeted,3b,3b,upgrade,yes,deploy,yes,yes,no,closed,2026-11-24
+go-gitea/gitea,35289,"when upgrading gitea versions with db migrations and sqlite is used in WAL mode, migration fails",https://github.com/go-gitea/gitea/issues/35289,targeted,3b,3b,upgrade,yes,deploy,yes,no,no,open,2025-08-15
+calcom/cal.diy,22586,"Broken now. All booking pages gone! 404, after upgrading to 5.5.1",https://github.com/calcom/cal.diy/issues/22586,targeted,3b,3b,upgrade,yes,deploy,yes,no,no,open,2025-07-17
+makeplane/plane,10348,[feature]: Auto-save unsent comments and work item drafts in browser localStorage,https://github.com/makeplane/plane/issues/10348,targeted,3b 6a,X,,no,none,no,no,no,open,2026-11-18
+AppFlowy-IO/AppFlowy,9161,[Bug] Intermittent save failures resulting in data loss on self-hosted AppFlowy,https://github.com/AppFlowy-IO/AppFlowy/issues/9161,targeted,3b 6a,4,sync,yes,network,no,no,yes,open,2026-11-26
+AppFlowy-IO/AppFlowy,8996,Loss of Data,https://github.com/AppFlowy-IO/AppFlowy/issues/8996,targeted,3b,4,sync,yes,none,no,no,no,open,2026-09-07
+AppFlowy-IO/AppFlowy,8867,[Bug] Unexpected Data Loss - Dates in Grid have suddenly all automatically changed to a random date in 1970.,https://github.com/AppFlowy-IO/AppFlowy/issues/8867,targeted,3b 6a,O,,yes,none,no,no,no,open,2026-07-17
+immich-app/immich,33713,Redmi K70: Thumbnails not generating for uploaded photos,https://github.com/immich-app/immich/issues/33713,targeted,3b,O,,yes,none,no,no,no,open,2026-11-27
+AppFlowy-IO/AppFlowy,9032,"[Bug] ""Data is not synced from another device"", data loss in record's page",https://github.com/AppFlowy-IO/AppFlowy/issues/9032,targeted,3b,4,sync,yes,users,no,no,no,open,2026-09-20
+immich-app/immich,27352,schema-drift prints an error on version upgrade,https://github.com/immich-app/immich/issues/27352,targeted,3b,3b,upgrade,yes,deploy,no,no,no,open,2026-03-28
+immich-app/immich,29540,"v3.0.1: Migration validation fails with ""corrupted migrations"" despite migration files and database being in correct order",https://github.com/immich-app/immich/issues/29540,targeted,3b,3b,upgrade,yes,deploy,no,no,no,open,2026-07-03
+nextcloud/server,67070,[Bug]: migration: missing execution of maintenance:repair and db:add-missing-indices,https://github.com/nextcloud/server/issues/67070,targeted,3b,3b,upgrade,yes,deploy,no,no,no,open,2026-11-27
+nextcloud/server,67081,[Bug]: No email notifications sent for files uploaded via public share link after upgrading to 35.0.3 (Push notifications work),https://github.com/nextcloud/server/issues/67081,targeted,3b,O,,yes,none,no,no,no,open,2026-11-27
+nextcloud/server,66518,[RC] failed DB upgrade - db check complains about differences in table,https://github.com/nextcloud/server/issues/66518,targeted,3b,3b,upgrade,yes,deploy,yes,no,no,open,2026-11-11
+nextcloud/server,48843,[Bug]: after upgrading nextcloud to 28.0.11 (release 1) it started adding all users to Circles groups twice while user was already being managed by LDAP groups,https://github.com/nextcloud/server/issues/48843,targeted,3b,O,,yes,none,yes,no,no,open,2024-10-22
+nextcloud/server,67017,"RFC: Move ""Critical Changes"" in-tree to ease additions",https://github.com/nextcloud/server/issues/67017,targeted,3b,X,,no,none,no,no,no,open,2026-11-25
+nextcloud/server,59519,`files_external:notify` crashes on SMB mounts after upgrading to v33,https://github.com/nextcloud/server/issues/59519,targeted,3b,8,outside,yes,network,no,no,no,open,2026-04-09
+nextcloud/server,66567,"[Bug]: SVG theming logo is embedded in emails as PNG data labelled image/svg+xml, so it doesn’t display",https://github.com/nextcloud/server/issues/66567,targeted,3b,O,,yes,none,no,no,no,open,2026-11-13
+nextcloud/server,61681,[Bug]: Missing Groups (Dropdown) when editing a searched User,https://github.com/nextcloud/server/issues/61681,targeted,3b,O,,yes,none,yes,no,no,open,2026-06-30
+go-gitea/gitea,40549,Slow pull mirror starves all mirror queue workers via blocking globallock.Lock,https://github.com/go-gitea/gitea/issues/40549,targeted,4a 4b 6b,8,outside,yes,network,no,no,no,open,2026-11-26
+makeplane/plane,10171,"[bug]: Bidirectional GitHub issue sync rewrites issue bodies on GitHub at sync time (Mermaid flattened, lists reformatted, images re-hosted)",https://github.com/makeplane/plane/issues/10171,targeted,4a 4b,8,outside,yes,network,no,no,no,open,2026-11-02
+go-gitea/gitea,39425,Offer: two small mobile UX changes from our fork (1 issue / 2 PRs?),https://github.com/go-gitea/gitea/issues/39425,targeted,4a,X,,no,none,yes,no,no,open,2026-09-25
+makeplane/plane,7863,"[feature]: Differentiate ""duplicated by"" from ""duplicate of"" relations",https://github.com/makeplane/plane/issues/7863,targeted,4a,X,,no,none,no,no,no,open,2025-09-26
+makeplane/plane,10403,[feature]: Optional Setting to Disable threaded comments,https://github.com/makeplane/plane/issues/10403,targeted,4a,X,,no,none,no,no,yes,open,2026-11-25
+makeplane/plane,9793,"[feature]: Merge duplicate ""Settings"" and ""Preferences"" entries in the user avatar menu",https://github.com/makeplane/plane/issues/9793,targeted,4a,X,,no,none,no,no,no,open,2026-09-09
+calcom/cal.diy,29720,Booking delete or edit is not syncing with Google Calendar integration,https://github.com/calcom/cal.diy/issues/29720,targeted,4a 4b,8,outside,yes,network,yes,no,no,open,2026-07-04
+makeplane/plane,9227,[bug]: Duplicate Comments on PR Linkage,https://github.com/makeplane/plane/issues/9227,targeted,4a,8,outside,yes,network,no,no,no,open,2026-06-11
+AppFlowy-IO/AppFlowy,9121,[Bug] DUPLICATION OF ITEMS SYNCS THEM,https://github.com/AppFlowy-IO/AppFlowy/issues/9121,targeted,4a 4b,O,,yes,none,no,no,no,open,2026-11-06
+go-vikunja/vikunja,485,Ability to use PWA without internet connection,https://github.com/go-vikunja/vikunja/issues/485,targeted,4a,X,,no,none,no,no,no,open,2025-04-01
+immich-app/immich,33712,[Android v3.4.2] New local photos not indexed when internet is available but server is unreachable,https://github.com/immich-app/immich/issues/33712,targeted,4a,4,offline,yes,network,no,no,no,open,2026-11-27
+immich-app/immich,33092,iOS Sync - Sync failed on SqliteException,https://github.com/immich-app/immich/issues/33092,targeted,4a 4b,4,sync,yes,none,no,no,no,open,2026-11-08
+AppFlowy-IO/AppFlowy,8880,[Bug] Linux sync issue,https://github.com/AppFlowy-IO/AppFlowy/issues/8880,targeted,4a,4,sync,yes,none,no,no,no,open,2026-07-22
+AppFlowy-IO/AppFlowy,9072,[Bug] This page couldn't sync,https://github.com/AppFlowy-IO/AppFlowy/issues/9072,targeted,4a,4,sync,yes,none,no,no,no,open,2026-10-17
+immich-app/immich,32692,[Android] Sync fails with SQLite foreign key constraint in updateAssetsExifV1,https://github.com/immich-app/immich/issues/32692,targeted,4a 5a,4,sync,yes,none,no,no,no,open,2026-10-24
+excalidraw/excalidraw,11567,Service worker cache limit too low - large assets skipped,https://github.com/excalidraw/excalidraw/issues/11567,targeted,4a,4,offline,yes,network,no,no,no,open,2026-06-27
+penpot/penpot,12581,Report the failing request in Failed to fetch errors and stop counting lost connections as crashes,https://github.com/penpot/penpot/issues/12581,targeted,4a 6a 6b,X,,no,none,no,no,no,open,2026-10-23
+nextcloud/server,66972,"[Bug]: Idle persistent Redis connection dropped by the network: ""Connection lost"" on pconnect, then NOAUTH and a 500 on the first requests",https://github.com/nextcloud/server/issues/66972,targeted,4a 6b,6,backend-net,yes,network,no,no,no,open,2026-11-23
+nextcloud/server,43654,Duplication in advanced search,https://github.com/nextcloud/server/issues/43654,targeted,4a,X,,no,none,yes,no,no,open,2024-02-19
+nextcloud/server,62037,WebDAV external storage breaks Markdown share links and favorites after reconnecting,https://github.com/nextcloud/server/issues/62037,targeted,4a,8,outside,yes,network,yes,no,yes,open,2026-07-13
+nextcloud/server,66874,"[Bug]: Remember-me login on a superseded session id replaces the regenerated session (password-protected share returns 401, IP gets brute-force blocked)",https://github.com/nextcloud/server/issues/66874,targeted,4a,O,,yes,none,no,no,no,open,2026-11-20
+penpot/penpot,12885,"Self-hosted MCP: after an abrupt tab/browser close, the server rejects reconnects with 'Duplicate connection for given user token' for ~108 s even with a single tab",https://github.com/penpot/penpot/issues/12885,targeted,4a 7,4,reconnect,yes,network,no,no,no,open,2026-11-07
+penpot/penpot,12298,(Phase 2b): Keep swapped components in place inside copies,https://github.com/penpot/penpot/issues/12298,targeted,4a,X,,no,none,no,no,no,open,2026-10-13
+penpot/penpot,11724,Bound frontend error report amplification and handle transient failures safely,https://github.com/penpot/penpot/issues/11724,targeted,4a,X,,no,none,no,no,no,open,2026-09-15
+twentyhq/twenty,23192,SDK sync fails after columns are added in the UI and only suggests uninstalling the entire app,https://github.com/twentyhq/twenty/issues/23192,targeted,4b,O,,yes,none,yes,no,yes,open,2026-07-22
+makeplane/plane,8088,[feature]: Enable Full GitLab Integration with  Issue Sync (Parity with GitHub Integration),https://github.com/makeplane/plane/issues/8088,targeted,4b,X,,no,none,no,no,no,open,2025-11-10
+calcom/cal.diy,30592,Failed external calendar sync removes all of a team member's availability,https://github.com/calcom/cal.diy/issues/30592,targeted,4b,8,outside,yes,network,no,no,no,open,2026-11-18
+calcom/cal.diy,13979,Sync Availability with Google Calendar Working Locations,https://github.com/calcom/cal.diy/issues/13979,targeted,4b,X,,no,none,yes,no,no,open,2024-03-05
+calcom/cal.diy,18534,allows conflicts with apple calendar,https://github.com/calcom/cal.diy/issues/18534,targeted,4b,8,outside,yes,network,yes,no,yes,open,2025-01-08
+calcom/cal.diy,22761,Native Google Sheets Integration for Automatic Booking Data Sync,https://github.com/calcom/cal.diy/issues/22761,targeted,4b,X,,no,none,yes,no,no,open,2025-07-27
+immich-app/immich,31678,Album syncing not working on iOS,https://github.com/immich-app/immich/issues/31678,targeted,4b,4,sync,yes,none,no,no,no,open,2026-09-19
+AppFlowy-IO/AppFlowy,5139,[FR] Manual sync conflict resolution,https://github.com/AppFlowy-IO/AppFlowy/issues/5139,targeted,4b,X,,no,none,no,no,no,open,2024-04-15
+immich-app/immich,22407,iOS app not syncing and hangs on Preparing,https://github.com/immich-app/immich/issues/22407,targeted,4b,O,,yes,none,no,no,no,open,2025-09-26
+immich-app/immich,12763,[Android APP] Duplicate album created.,https://github.com/immich-app/immich/issues/12763,targeted,4b,4,sync,yes,none,yes,no,no,open,2024-09-17
+immich-app/immich,29977,Problem syncing Pics: Here Android-App on Google Pixel 9 Pro XL,https://github.com/immich-app/immich/issues/29977,targeted,4b,4,sync,yes,none,no,no,no,open,2026-07-16
+AppFlowy-IO/AppFlowy,5729,[FR] Display Syncing Progress,https://github.com/AppFlowy-IO/AppFlowy/issues/5729,targeted,4b,X,,no,none,no,no,no,open,2024-07-12
+nextcloud/server,64737,Implement syncing to legacy shares,https://github.com/nextcloud/server/issues/64737,targeted,4b,X,,no,none,yes,no,no,open,2026-09-24
+penpot/penpot,13245,Saves are still rejected with main-instance-not-a-variant and variant-component-bad-id after library sync or variant rename,https://github.com/penpot/penpot/issues/13245,targeted,4b,O,,yes,none,yes,no,no,open,2026-11-23
+mattermost/mattermost,38767,[Bug]: Invisible text cursor in light theme on Windows desktop app (OS dark mode conflict),https://github.com/mattermost/mattermost/issues/38767,targeted,4b,O,,yes,none,no,no,no,open,2026-09-24
+nextcloud/server,63502,add an option to disable syncing contact books to federated servers,https://github.com/nextcloud/server/issues/63502,targeted,4b,X,,no,none,no,no,no,open,2026-08-23
+penpot/penpot,12296,"(Phase 1): Check every component action, undo and redo included, with automated tests",https://github.com/penpot/penpot/issues/12296,targeted,4b,X,,no,none,no,no,no,open,2026-10-13
+penpot/penpot,12214,"Version control: Merge, update from main and resolve conflicts",https://github.com/penpot/penpot/issues/12214,targeted,4b,X,,no,none,no,no,no,open,2026-10-08
+penpot/penpot,6878,feature: Reduce debounce time for syncing updates when co-editing,https://github.com/penpot/penpot/issues/6878,targeted,4b,X,,no,none,no,no,no,open,2025-07-09
+makeplane/plane,10229,"🛠️ Improvement: Add missing Central American time zones (Guatemala, El Salvador, Nicaragua, Belize, Panama)",https://github.com/makeplane/plane/issues/10229,targeted,5a,X,,no,none,no,no,no,open,2026-11-09
+makeplane/plane,10292,[bug]:  cycle ending on a daylight saving transition day ends on the next day and blocks the following cycle,https://github.com/makeplane/plane/issues/10292,targeted,5a 5b,5,dst,yes,clock,no,no,no,open,2026-11-15
+calcom/cal.diy,30021,[bug]: afternoon availability is offered one hour late on DST transition dates,https://github.com/calcom/cal.diy/issues/30021,targeted,5a 5b,5,dst,yes,clock,no,no,no,open,2026-08-21
+calcom/cal.diy,30533,"""Requires confirmation if booked with < X notice"" still requires confirmation for notice between X and X+1 units",https://github.com/calcom/cal.diy/issues/30533,targeted,5a,O,,yes,none,no,no,no,open,2026-11-09
+calcom/cal.diy,29501,Timezone Override feature,https://github.com/calcom/cal.diy/issues/29501,targeted,5a,X,,no,none,no,no,no,open,2026-06-03
+calcom/cal.diy,30421,Overlay calendar busy times are an hour off for events that cross a DST change (browser and selected timezones with different DST rules),https://github.com/calcom/cal.diy/issues/30421,targeted,5a,5,dst,yes,clock,no,no,no,open,2026-10-26
+calcom/cal.diy,30587,API v2: normalizeTimezone rewrites valid IANA names (Europe/Isle_of_Man becomes Europe/Isle_Of_Man),https://github.com/calcom/cal.diy/issues/30587,targeted,5a,5,tz,yes,clock,no,no,no,open,2026-11-18
+calcom/cal.diy,30266,Duration limits are checked in the server time zone at booking time,https://github.com/calcom/cal.diy/issues/30266,targeted,5a,5,tz,yes,clock,no,no,no,open,2026-09-29
+calcom/cal.diy,30418,useCheckOverlapWithOverlay formats overlappingTimeStart and overlappingTimeEnd in browser timezone instead of selected booker timezone,https://github.com/calcom/cal.diy/issues/30418,targeted,5a,5,tz,yes,clock,no,no,no,open,2026-10-26
+calcom/cal.diy,30104,Email renderer uses stale tzdata - British Columbia's permanent DST (2026-11-01). Slots API and Workflow emails are correct; default booking emails are an hour early,https://github.com/calcom/cal.diy/issues/30104,targeted,5a,5,tz,yes,clock,no,no,yes,open,2026-09-06
+immich-app/immich,33078,Wrong timezones with daylight saving time,https://github.com/immich-app/immich/issues/33078,targeted,5a 5b,5,dst,yes,clock,yes,no,no,open,2026-11-08
+immich-app/immich,29364,"Whenever I edit the time on a photo, one hour is subtracted",https://github.com/immich-app/immich/issues/29364,targeted,5a,5,tz,yes,clock,no,no,no,open,2026-06-28
+go-vikunja/vikunja,560,Use user timezone for time and date display,https://github.com/go-vikunja/vikunja/issues/560,targeted,5a,5,tz,yes,clock,no,no,no,open,2025-04-01
+immich-app/immich,23538,Single date search only returns partial results,https://github.com/immich-app/immich/issues/23538,targeted,5a 5b,5,tz,yes,clock,yes,no,no,open,2025-11-02
+immich-app/immich,33251,Intermittent StorageMigration failure with Apple Live Images,https://github.com/immich-app/immich/issues/33251,targeted,5a,2,job-race,yes,none,no,no,no,open,2026-11-12
+go-vikunja/vikunja,4278,"CalDAV: task dates are exported as UTC, so a date-only reminder comes back as 12:00 AM",https://github.com/go-vikunja/vikunja/issues/4278,targeted,5a,5,tz,yes,clock,no,no,no,open,2026-10-30
+immich-app/immich,25695,Changing image metadata locally (on Android) makes Immich lose track of file,https://github.com/immich-app/immich/issues/25695,targeted,5a,O,,yes,none,yes,no,no,open,2026-01-30
+immich-app/immich,32277,Birthdays shift to two days earlier while typing them in,https://github.com/immich-app/immich/issues/32277,targeted,5a,5,tz,yes,clock,no,no,no,open,2026-10-09
+AppFlowy-IO/AppFlowy,7044,[FR] Edit timezone instead of automatically using your location,https://github.com/AppFlowy-IO/AppFlowy/issues/7044,targeted,5a,X,,no,none,no,no,no,open,2024-12-24
+documenso/documenso,3386,Audit log event timestamps render in UTC while the header reports the envelope time zone,https://github.com/documenso/documenso/issues/3386,targeted,5a,5,tz,yes,clock,yes,no,no,open,2026-09-22
+documenso/documenso,3607,Prefilled template date fields use the server's timezone instead of the document's timezone,https://github.com/documenso/documenso/issues/3607,targeted,5a,5,tz,yes,clock,yes,no,no,open,2026-11-14
+nextcloud/server,67020,"[Bug]: new Canada/BC timezone PCT for ""Vancouver"" not working in nextcloud",https://github.com/nextcloud/server/issues/67020,targeted,5a,5,tz,yes,clock,no,no,no,open,2026-11-25
+nextcloud/server,66519,"[Bug]: IDateTimeZone ignores the user's timezone in web requests (captures pre-login session), availability saved as UTC",https://github.com/nextcloud/server/issues/66519,targeted,5a,5,tz,yes,clock,no,no,no,open,2026-11-11
+nextcloud/server,43113,[Bug]: Event without timezone causes push notification at UTC,https://github.com/nextcloud/server/issues/43113,targeted,5a,5,tz,yes,clock,yes,no,no,open,2024-01-25
+documenso/documenso,3463,Date-only signed date fields show the previous day for viewers west of the document timezone,https://github.com/documenso/documenso/issues/3463,targeted,5a 5b,5,tz,yes,clock,yes,no,no,open,2026-10-20
+nextcloud/server,48598,[Bug]: CalDAV does not adjust for .ics each entry time zones,https://github.com/nextcloud/server/issues/48598,targeted,5a,5,tz,yes,clock,no,no,no,open,2024-10-07
+calcom/cal.diy,30541,Pipedrive CRM: activity due time is sent in the server's local time instead of UTC,https://github.com/calcom/cal.diy/issues/30541,targeted,5b,5,tz,yes,clock,no,no,no,open,2026-11-09
+makeplane/plane,10168,[bug]: Target due date cannot be set to a lower date,https://github.com/makeplane/plane/issues/10168,targeted,5b,O,,yes,none,no,no,no,open,2026-11-02
+makeplane/plane,7564,[bug]: completed_at shows wrong time = assignation of the task to a user,https://github.com/makeplane/plane/issues/7564,targeted,5b,O,,yes,none,no,no,no,open,2025-08-08
+calcom/cal.diy,30535,Basecamp3: event description shows the server's local time labelled with the organizer's timezone,https://github.com/calcom/cal.diy/issues/30535,targeted,5b,5,tz,yes,clock,no,no,yes,open,2026-11-09
+makeplane/plane,10087,"[bug]: Profile timezone is ignored for activity, comment and version timestamps",https://github.com/makeplane/plane/issues/10087,targeted,5b,5,tz,yes,clock,no,no,no,open,2026-10-19
+twentyhq/twenty,30813,Timeline: recurring calendar events show occurrences ~14 years in the future (September 2040),https://github.com/twentyhq/twenty/issues/30813,targeted,5b,O,,yes,none,yes,yes,no,closed,2026-11-19
+makeplane/plane,10083,[feature]: Time format preference (12-hour / 24-hour),https://github.com/makeplane/plane/issues/10083,targeted,5b,X,,no,none,no,no,yes,open,2026-10-18
+makeplane/plane,10086,[bug]: Timestamp tooltips show the UTC date next to the local time,https://github.com/makeplane/plane/issues/10086,targeted,5b,5,tz,yes,clock,no,no,no,open,2026-10-19
+go-vikunja/vikunja,4361,Undo after completing a recurring task advances its due date again,https://github.com/go-vikunja/vikunja/issues/4361,targeted,5b,O,,yes,none,no,no,no,open,2026-11-07
+usememos/memos,6388,Due date & Hide-to-later option,https://github.com/usememos/memos/issues/6388,targeted,5b,X,,no,none,no,no,no,open,2026-09-27
+go-vikunja/vikunja,4372,Removing End Date replaces it with Due Date,https://github.com/go-vikunja/vikunja/issues/4372,targeted,5b,O,,yes,none,no,no,no,open,2026-11-07
+go-vikunja/vikunja,4430,"CalDAV: VTODO export includes DTEND, which RFC 5545 does not allow in VTODO",https://github.com/go-vikunja/vikunja/issues/4430,targeted,5b,O,,yes,none,no,no,no,open,2026-11-14
+AppFlowy-IO/AppFlowy,8051,[FR] Will WebDAV support be added in the future?,https://github.com/AppFlowy-IO/AppFlowy/issues/8051,targeted,5b,X,,no,none,no,no,no,open,2025-06-11
+immich-app/immich,33557,[mobile] Birthday memories still showing up in Memories page long after the date has passed,https://github.com/immich-app/immich/issues/33557,targeted,5b,O,,yes,none,no,no,no,open,2026-11-22
+immich-app/immich,33593,Shift-click range select doesn't work when the start or end point is a date group,https://github.com/immich-app/immich/issues/33593,targeted,5b,O,,yes,none,no,no,no,open,2026-11-23
+toeverything/AFFiNE,15120,[Feature Request]: Date format,https://github.com/toeverything/AFFiNE/issues/15120,targeted,5b,X,,no,none,no,no,no,open,2026-06-17
+penpot/penpot,11737,Add password protection and expiration dates to public share links,https://github.com/penpot/penpot/issues/11737,targeted,5b,X,,no,none,no,no,no,open,2026-09-15
+nextcloud/server,65797,`OutOfOfficeEventDispatcherJob` is not cleaned up correctly,https://github.com/nextcloud/server/issues/65797,targeted,5b,O,,yes,none,yes,no,no,open,2026-10-22
+penpot/penpot,12776,Add expiration date to shared links (task 2),https://github.com/penpot/penpot/issues/12776,targeted,5b,X,,no,none,no,no,no,open,2026-11-03
+nextcloud/server,45045,Locale-specific date format is not applied to date placeholders in Availability,https://github.com/nextcloud/server/issues/45045,targeted,5b,O,,yes,none,yes,no,no,open,2024-04-25
+nextcloud/server,65580,Display Upload Date for Files in Web Interface and smartphone apps (and make it sortable),https://github.com/nextcloud/server/issues/65580,targeted,5b,X,,no,none,no,no,no,open,2026-10-16
+nextcloud/server,65265,[Bug]: Unified search: 'Search in date range' does nothing and the custom date range dialog stays open,https://github.com/nextcloud/server/issues/65265,targeted,5b,O,,yes,none,no,no,no,open,2026-10-07
+go-gitea/gitea,37563,Clarify or add process for rotating INTERNAL_TOKEN and SECRET_KEY without data loss,https://github.com/go-gitea/gitea/issues/37563,targeted,6a,X,,no,none,no,no,no,open,2026-05-06
+go-gitea/gitea,40279,Actions: dependent jobs stall permanently when a job-completion transition is lost - in-memory job-emitter queue with no startup re-emit,https://github.com/go-gitea/gitea/issues/40279,targeted,6a 6b,6,restart,yes,crash,no,no,no,open,2026-11-08
+go-gitea/gitea,35996,git upload-pack killed by OOM inside Gitea during clone,https://github.com/go-gitea/gitea/issues/35996,targeted,6a,O,,yes,none,no,no,no,open,2025-11-21
+twentyhq/twenty,30384,IMAP: dropped connection during folder discovery recreates all folders and clears isSynced,https://github.com/twentyhq/twenty/issues/30384,targeted,6a,8,outside,yes,network,yes,no,no,open,2026-11-13
+immich-app/immich,32569,Immich keeps retrying failed thumbnails that crash the server,https://github.com/immich-app/immich/issues/32569,targeted,6a 6b,O,,yes,none,no,no,no,open,2026-10-19
+AppFlowy-IO/AppFlowy,9104,"[Bug] iOS 0.14.11 - Local images fail to load after reopening notes, possible data loss",https://github.com/AppFlowy-IO/AppFlowy/issues/9104,targeted,6a,3b,upgrade,yes,deploy,no,no,no,open,2026-10-28
+immich-app/immich,33531,"Microservices worker crashes nightly: ""extract_area: bad extract area"" when generating edited thumbnail for cropped Apple ProRAW (DNG) with EXIF orientation 6",https://github.com/immich-app/immich/issues/33531,targeted,6a 6b,O,,yes,none,no,no,no,open,2026-11-20
+immich-app/immich,27973,Encoded video files can be left corrupt when transcode process is killed mid-write (no atomic rename),https://github.com/immich-app/immich/issues/27973,targeted,6a,6,restart,yes,crash,yes,no,no,open,2026-04-19
+immich-app/immich,33343,v3.4.1: thumbnail generation on problematic external-library images creates ~10 GiB magick temporary files and can fill Docker storage,https://github.com/immich-app/immich/issues/33343,targeted,6a 6b,X,,no,none,no,no,no,open,2026-11-16
+AppFlowy-IO/AppFlowy,9113,[Bug] Page Corrupted and Wont Load,https://github.com/AppFlowy-IO/AppFlowy/issues/9113,targeted,6a,4,sync,yes,none,no,no,no,open,2026-11-01
+nextcloud/server,63071,"[Bug]: Interrupted chunk assembly leaves a 0-byte file while oc_filecache keeps the original size/etag (silent data loss, later propagated to sync clients)",https://github.com/nextcloud/server/issues/63071,targeted,6a,6,interrupt,yes,network,yes,no,no,open,2026-08-08
+nextcloud/server,57447,[Bug]: Trashbin filename collision - data loss,https://github.com/nextcloud/server/issues/57447,targeted,6a,O,,yes,none,yes,no,no,open,2026-01-09
+nextcloud/server,47313,[Bug]: File with content 0x30 is reproducible corrupted when encryption is enabled.,https://github.com/nextcloud/server/issues/47313,targeted,6a,O,,yes,none,yes,no,no,open,2024-08-18
+nextcloud/server,62321,[Bug]: Interrupted non-chunked WebDAV PUT returns 400 but keeps the truncated body as live file content (data corruption),https://github.com/nextcloud/server/issues/62321,targeted,6a,6,interrupt,yes,network,yes,no,no,open,2026-07-18
+mattermost/mattermost,40077,"Plugin bot logger: With and WithError share the context map, which crashes plugins with ""concurrent map writes""",https://github.com/mattermost/mattermost/issues/40077,targeted,6a,O,,yes,none,no,no,no,open,2026-11-16
+nextcloud/server,60611,Allow External Storage backend and mount path changes while preserving file IDs and metadata,https://github.com/nextcloud/server/issues/60611,targeted,6a,X,,no,none,yes,no,no,open,2026-05-20
+penpot/penpot,13393,Fix wasm crashes,https://github.com/penpot/penpot/issues/13393,targeted,6a,X,,no,none,no,no,no,open,2026-11-27
+go-gitea/gitea,40023,"Workflows Stuck in ""Set up job""",https://github.com/go-gitea/gitea/issues/40023,targeted,6b,O,,yes,none,no,no,no,open,2026-10-26
+go-gitea/gitea,40547,Actions: optional priority for queued jobs,https://github.com/go-gitea/gitea/issues/40547,targeted,6b,X,,no,none,no,no,no,open,2026-11-26
+twentyhq/twenty,27966,"Logic function queue runs 20 uncapped child processes, which can stall a small self-hosted server",https://github.com/twentyhq/twenty/issues/27966,targeted,6b,X,,no,none,yes,no,no,open,2026-10-14
+twentyhq/twenty,16727,Worker health status shows outage even though it's running,https://github.com/twentyhq/twenty/issues/16727,targeted,6b,O,,yes,none,yes,no,no,open,2025-12-20
+makeplane/plane,9762,"[bug]: Plane (self-hosted, commercial) • silo + backend • Import • Jobs never leave `TRANSFORMING` state",https://github.com/makeplane/plane/issues/9762,targeted,6b,O,,yes,none,no,no,no,open,2026-09-04
+go-gitea/gitea,39195,[Actions] Support `concurrency: queue: max` to allow more than one pending run per concurrency group,https://github.com/go-gitea/gitea/issues/39195,targeted,6b,X,,no,none,no,no,no,open,2026-08-31
+immich-app/immich,32726,"Assets are permanently left without metadata, thumbnails, OCR and smart search when queued jobs are lost, because Redis has no volume and nothing re-queues them",https://github.com/immich-app/immich/issues/32726,targeted,6b,6,restart,yes,crash,yes,no,no,open,2026-10-25
+immich-app/immich,33202,The Job Queue Sidecar Metadata has a wrong name,https://github.com/immich-app/immich/issues/33202,targeted,6b,X,,no,none,yes,no,no,open,2026-11-11
+immich-app/immich,32046,ROCm / MIGraphX causes reproducible GPU wedge on AMD Hawk Point / gfx1103 during model compilation,https://github.com/immich-app/immich/issues/32046,targeted,6b,X,,no,none,no,no,no,open,2026-10-03
+immich-app/immich,24520,Extract Metadata has inconsistent behaviour,https://github.com/immich-app/immich/issues/24520,targeted,6b,O,,yes,none,no,no,no,open,2025-12-11
+immich-app/immich,10560,Transcoding stuck,https://github.com/immich-app/immich/issues/10560,targeted,6b,O,,yes,none,yes,no,no,open,2024-06-23
+immich-app/immich,33657,iOS crash on foregrounding in ConnectivityPlusPlugin,https://github.com/immich-app/immich/issues/33657,targeted,6b,O,,yes,none,no,no,no,open,2026-11-24
+immich-app/immich,33410,"# ML (OpenVINO): GPU not detected inside the real Gunicorn worker, but works in every standalone process in the same container (Intel Alder Lake-N, Immich v3.4.1)",https://github.com/immich-app/immich/issues/33410,targeted,6b,X,,no,none,no,no,no,open,2026-11-17
+penpot/penpot,12239,Run asset exports as jobs with progress and cancel in the exporter worker,https://github.com/penpot/penpot/issues/12239,targeted,6b,X,,no,none,no,no,no,open,2026-10-09
+nextcloud/server,62324,[Bug]: CleanupBackgroundJobsJob stuck in infinite loop due to integer overflow on oc_job_runs.duration,https://github.com/nextcloud/server/issues/62324,targeted,6b,O,,yes,none,no,no,no,open,2026-07-18
+penpot/penpot,11570,MCP disconnects after Penpot is backgrounded and sometimes cannot reconnect until restart,https://github.com/penpot/penpot/issues/11570,targeted,6b,4,reconnect,yes,network,no,no,no,open,2026-09-09
+penpot/penpot,12580,"Workspace still crashes with React error 185 render loops after thumbnail updates, saves and text edits",https://github.com/penpot/penpot/issues/12580,targeted,6b,O,,yes,none,no,no,no,open,2026-10-23
+nextcloud/server,52877,[RFC] Admin-tooling / Background job improvements,https://github.com/nextcloud/server/issues/52877,targeted,6b,X,,no,none,yes,no,no,open,2025-05-15
+nextcloud/server,52629,RFC: Implement a runner for fast background jobs,https://github.com/nextcloud/server/issues/52629,targeted,6b,X,,no,none,yes,no,no,open,2025-05-05
+go-gitea/gitea,36937,Proposal: Real-time repo activity notifications,https://github.com/go-gitea/gitea/issues/36937,targeted,7,X,,no,none,yes,no,no,open,2026-03-21
+makeplane/plane,9249,🚀 Feature: Real-time comments & activity updates on work items (no manual reload),https://github.com/makeplane/plane/issues/9249,targeted,7,X,,no,none,no,no,no,open,2026-06-17
+makeplane/plane,7944,[feature]: Real-time update functionality,https://github.com/makeplane/plane/issues/7944,targeted,7,X,,no,none,no,no,no,open,2025-10-10
+go-gitea/gitea,28986,refs/ are not updated,https://github.com/go-gitea/gitea/issues/28986,targeted,7,O,,yes,none,yes,no,no,open,2024-01-30
+makeplane/plane,9779,[feature]: Realtime work-item updates over the live server (auto-refresh boards/lists without manual reload),https://github.com/makeplane/plane/issues/9779,targeted,7,X,,no,none,no,no,no,open,2026-09-08
+calcom/cal.diy,16872,Cal.com not updating when Google Calendar event is moved,https://github.com/calcom/cal.diy/issues/16872,targeted,7,8,outside,yes,network,yes,no,no,open,2024-09-28
+calcom/cal.diy,28981,App: ClientX - AI chat widget that books Cal.com meetings in real-time,https://github.com/calcom/cal.diy/issues/28981,targeted,7,X,,no,none,no,no,no,open,2026-04-23
+twentyhq/twenty,23306,Junction relation field does not reliably refresh after creating a link,https://github.com/twentyhq/twenty/issues/23306,targeted,7,2,stale,yes,none,no,no,yes,open,2026-07-25
+go-gitea/gitea,33606,Actions Log Streaming,https://github.com/go-gitea/gitea/issues/33606,targeted,7,X,,no,none,no,no,no,open,2025-02-15
+immich-app/immich,32471,"Real-time transcoding passes bogus frame rate (-r) for videos whose stream time_base numerator is not 1 (e.g. MJPEG AVI), playback fails",https://github.com/immich-app/immich/issues/32471,targeted,7,O,,yes,none,no,no,no,open,2026-10-15
+immich-app/immich,30438,Realtime transcoding issue in Firefox,https://github.com/immich-app/immich/issues/30438,targeted,7,O,,yes,none,yes,no,yes,open,2026-07-31
+AppFlowy-IO/AppFlowy,9089,[Bug] Desktop Client v0.14.10 Fails to Render Database Views Despite Successful Server Responses (Web Version Works Perfectly),https://github.com/AppFlowy-IO/AppFlowy/issues/9089,targeted,7,4,sync,yes,none,no,no,no,open,2026-10-21
+immich-app/immich,30010,"[Bug] Portrait videos play unrotated on iOS (Safari + Chrome) via real-time HLS transcoding, despite correct rotation matrix at every server stage",https://github.com/immich-app/immich/issues/30010,targeted,7,O,,yes,none,no,no,no,open,2026-07-17
+immich-app/immich,25803,Album cover not updated after using photo editor,https://github.com/immich-app/immich/issues/25803,targeted,7,O,,yes,none,yes,no,no,open,2026-02-02
+immich-app/immich,31534,Real-time transcoding fails when ffprobe reports N/A packet PTS or duration because no asset_keyframe row is   created,https://github.com/immich-app/immich/issues/31534,targeted,7,O,,yes,none,no,no,no,open,2026-09-14
+go-vikunja/vikunja,1460,Live state synchronization of projects using websockets,https://github.com/go-vikunja/vikunja/issues/1460,targeted,7,X,,no,none,yes,no,yes,open,2025-09-10
+AppFlowy-IO/AppFlowy,8924,[Bug] Grid View Misalignment -  Columns and Column headers do not move in sync,https://github.com/AppFlowy-IO/AppFlowy/issues/8924,targeted,7,O,,yes,none,yes,no,no,open,2026-08-05
+immich-app/immich,14209,[WEB] Search view does not update when assets change (and don't match the filter anymore),https://github.com/immich-app/immich/issues/14209,targeted,7,2,stale,yes,none,no,no,no,open,2024-11-18
+immich-app/immich,32208,[web] Removing an asset from an album does not update the UI,https://github.com/immich-app/immich/issues/32208,targeted,7,2,stale,yes,none,yes,yes,yes,closed,2026-10-08
+mattermost/mattermost,40455,Replace gorilla/mux and gorilla/websocket dependencies,https://github.com/mattermost/mattermost/issues/40455,targeted,7,X,,no,none,no,no,no,open,2026-11-28
+mattermost/mattermost,38673,[Bug]: Real-time message delivery and unread badge broken on web client,https://github.com/mattermost/mattermost/issues/38673,targeted,7,7,live,yes,users,no,no,no,open,2026-09-21
+nextcloud/server,66610,[Bug]: iMIP REPLY does not update attendee status when email address contains uppercase letters,https://github.com/nextcloud/server/issues/66610,targeted,7,O,,yes,none,yes,no,no,open,2026-11-14
+excalidraw/excalidraw,9736,MCP Server Integration: Real-time Claude + Excalidraw Canvas Sync,https://github.com/excalidraw/excalidraw/issues/9736,targeted,7,X,,no,none,no,no,no,open,2025-07-12
+excalidraw/excalidraw,12278,Sidebar pin tooltip does not update after pinning sidebar in full-screen mode,https://github.com/excalidraw/excalidraw/issues/12278,targeted,7,O,,yes,none,no,no,no,open,2026-10-13
+nextcloud/server,65778,[Bug]: Image previews not invalidated when files are changed outside of Nextcloud,https://github.com/nextcloud/server/issues/65778,targeted,7,2,stale,yes,none,yes,no,no,open,2026-10-22
+excalidraw/excalidraw,8390,Issue with Excalidraw Real-time Collaboration in Docker Setup,https://github.com/excalidraw/excalidraw/issues/8390,targeted,7,X,,no,none,no,no,no,open,2024-08-18
+nextcloud/server,51978,[Bug]: 'PDF conversion' flow does not properly update PDF,https://github.com/nextcloud/server/issues/51978,targeted,7,O,,yes,none,no,no,no,open,2025-04-05
+nextcloud/server,66611,[Bug]: iMIP email replies are processed but attendee status is not updated for events in a writable shared calendar,https://github.com/nextcloud/server/issues/66611,targeted,7,O,,yes,none,no,no,no,open,2026-11-14

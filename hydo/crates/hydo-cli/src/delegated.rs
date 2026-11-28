@@ -120,36 +120,11 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
         }
     }
     let mut full: Vec<String> = Vec::new();
+    prepare_engine(ctx);
     if linux && ctx.kvm {
-        // the KVM engine runs in this process; the bundled debugfs reads the image's manifest
-        if let Some((_, path)) = hvxenv::tool_env(ctx).into_iter().find(|(k, _)| k == "PATH") {
-            std::env::set_var("PATH", path);
-        }
         full.push("--backend".into());
         full.push("kvm".into());
-    } else if linux {
-        ctx.require_hvx();
-        let engine = hvxenv::engine(ctx);
-        let probe = hydo_engine::hvx::Hvx {
-            engine: engine.clone(),
-            hvx_run: None,
-            extra_env: Vec::new(),
-            env: hvxenv::tool_env(ctx),
-            config: ctx.config.env.clone(),
-        };
-        if let Some(p) = probe.missing_program() {
-            die(&format!(
-                "{} is not there (reinstall the release, or build it: cargo build --release -p hydo-hvx)",
-                p.display()
-            ));
-        }
-        // the bundled tools on PATH (the engine wrapper and the tools the explorer starts
-        // inherit it); the release's paths, lock and engine reach the explorer in its
-        // configuration (M144: no hydo variable is set in this process's environment)
-        if let Some((_, path)) = hvxenv::tool_env(ctx).into_iter().find(|(k, _)| k == "PATH") {
-            std::env::set_var("PATH", path);
-        }
-    } else {
+    } else if !linux {
         // the scripted engine of the tests boots no kernel (its stand-in image has none)
         let kernel = match &ctx.config.pool.scripted_engine {
             Some(_) => std::path::PathBuf::from("scripted-kernel"),
@@ -163,18 +138,7 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
     full.push("--image".into());
     full.push(image.display().to_string());
     full.extend(args.iter().cloned());
-    let env = hydo_explore::Env {
-        root: ctx.root.clone(),
-        cli: true,
-        plain_end: plain,
-        config: if linux {
-            hvxenv::explore_config(ctx)
-        } else {
-            ctx.config.clone()
-        },
-        // Milestone 328: a refusal for memory names the sessions that hold guests
-        memory_hint: crate::inspect::session::memory_hint(&crate::inspect::session::running(ctx)),
-    };
+    let env = explore_env(ctx, plain);
     // Milestone 367: a stop by SIGINT or SIGTERM stops the engines too, and their pids are in
     // the folder's engines.txt while they run (hydo guide workflow)
     hydo_engine::children::stop_on_signals();
@@ -212,6 +176,195 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
         );
     }
     rc
+}
+
+/// The engine's programs and tools for an exploration in this process: on Linux the bundled
+/// tools on PATH, and with hvx the module and the engine program checked.
+fn prepare_engine(ctx: &Ctx) {
+    let linux = ctx.platform == Platform::Linux;
+    if linux && ctx.kvm {
+        // the KVM engine runs in this process; the bundled debugfs reads the image's manifest
+        if let Some((_, path)) = hvxenv::tool_env(ctx).into_iter().find(|(k, _)| k == "PATH") {
+            std::env::set_var("PATH", path);
+        }
+    } else if linux {
+        ctx.require_hvx();
+        let engine = hvxenv::engine(ctx);
+        let probe = hydo_engine::hvx::Hvx {
+            engine: engine.clone(),
+            hvx_run: None,
+            extra_env: Vec::new(),
+            env: hvxenv::tool_env(ctx),
+            config: ctx.config.env.clone(),
+        };
+        if let Some(p) = probe.missing_program() {
+            die(&format!(
+                "{} is not there (reinstall the release, or build it: cargo build --release -p hydo-hvx)",
+                p.display()
+            ));
+        }
+        // the bundled tools on PATH (the engine wrapper and the tools the explorer starts
+        // inherit it); the release's paths, lock and engine reach the explorer in its
+        // configuration (M144: no hydo variable is set in this process's environment)
+        if let Some((_, path)) = hvxenv::tool_env(ctx).into_iter().find(|(k, _)| k == "PATH") {
+            std::env::set_var("PATH", path);
+        }
+    }
+}
+
+/// The explorer's environment for `hydo explore` and `hydo shrink` (`plain`: a person reads the
+/// end, Milestone 230).
+fn explore_env(ctx: &Ctx, plain: bool) -> hydo_explore::Env {
+    hydo_explore::Env {
+        root: ctx.root.clone(),
+        cli: true,
+        plain_end: plain,
+        config: if ctx.platform == Platform::Linux {
+            hvxenv::explore_config(ctx)
+        } else {
+            ctx.config.clone()
+        },
+        // Milestone 328: a refusal for memory names the sessions that hold guests
+        memory_hint: crate::inspect::session::memory_hint(&crate::inspect::session::running(ctx)),
+        // Milestone 387: in a terminal, the problems as soon as the first report is written
+        first_report: plain.then_some(print_first_report as fn(&Path)),
+    }
+}
+
+/// The first report in a terminal (Milestone 387): the problems found so far, before the
+/// shrinks end. Nothing when no run failed.
+fn print_first_report(dir: &Path) {
+    let shown = dir.display().to_string();
+    let Ok(hydo_results::Results::Exploration {
+        doc: Some(doc),
+        events,
+        ..
+    }) = hydo_results::read_dir(dir)
+    else {
+        return;
+    };
+    if doc.summary.failures == 0 {
+        return;
+    }
+    let st = crate::htmlreport::exploration_story(dir, &doc, events.as_ref(), &shown);
+    let open = st.items.iter().filter(|i| i.not_shrunk_yet).count();
+    let n = st.failure_problems;
+    let mut o = format!(
+        "hydo: the first report: {} of {} runs failed, in {n} way{}.",
+        doc.summary.failures,
+        doc.summary.schedules,
+        if n == 1 { "" } else { "s" },
+    );
+    if open > 0 {
+        o.push_str(&format!(
+            " hydo shrinks {} now, and until then each one shows its failing run. If you stop \
+             it, the report stays complete, and `hydo shrink {} --problem N` shrinks one later.",
+            if open == 1 { "it" } else { "them" },
+            crate::inspect::work::quote(&shown),
+        ));
+    }
+    println!("{o}");
+    println!(
+        "See them now: hydo report {}",
+        crate::inspect::work::quote(&shown)
+    );
+}
+
+/// `hydo shrink <explore dir> --problem N | --all` (Milestone 387): shrink a problem that the
+/// exploration reported before its shrink (`hydo explore --shrink-later`, or an exploration that
+/// was stopped during its shrinks), with the explorer's shrinker and the exploration's engine
+/// and options. The minimal schedule goes into the same folder's exploration.json, report.md
+/// and events.jsonl.
+pub fn cmd_shrink(ctx: &Ctx, argv: &[String]) -> i32 {
+    const USAGE: &str = "usage: hydo shrink <explore dir> --problem N | --all";
+    let mut dir: Option<String> = None;
+    let mut problem: Option<usize> = None;
+    let mut all = false;
+    let mut it = argv.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--problem" => match it.next().and_then(|v| v.parse().ok()) {
+                Some(n) if n > 0 => problem = Some(n),
+                _ => die(&format!("--problem takes a number from 1\n{USAGE}")),
+            },
+            "--all" => all = true,
+            d if dir.is_none() && !d.starts_with("--") => dir = Some(d.to_string()),
+            _ => die(USAGE),
+        }
+    }
+    let Some(dir) = dir else { die(USAGE) };
+    if problem.is_some() == all {
+        die(USAGE);
+    }
+    let p = Path::new(&dir);
+    let (doc, events) = match hydo_results::read_dir(p) {
+        Ok(hydo_results::Results::Exploration {
+            doc: Some(doc),
+            events,
+            ..
+        }) => (doc, events),
+        _ => die(&format!(
+            "{dir}: no exploration.json (an exploration writes it after its first runs)"
+        )),
+    };
+    use hydo_explore::run::shrinks;
+    let waiting = shrinks::unshrunk_groups(p).unwrap_or_else(|e| die(&e));
+    let errors_waiting = !shrinks::unshrunk_errors(p)
+        .unwrap_or_else(|e| die(&e))
+        .is_empty();
+    let what: shrinks::ShrinkWhat = match problem {
+        None => shrinks::ShrinkWhat {
+            seeds: waiting.iter().map(|x| x.1).collect(),
+            errors: errors_waiting,
+        },
+        Some(n) => {
+            let st = crate::htmlreport::exploration_story(p, &doc, events.as_ref(), &dir);
+            let Some(item) = st.items.get(n - 1) else {
+                die(&format!(
+                    "{dir}: problem {n}: the exploration has {} problem{} (hydo report numbers them)",
+                    st.items.len(),
+                    if st.items.len() == 1 { "" } else { "s" }
+                ))
+            };
+            // the services' error lines are one problem: every new kind that waits
+            let errors = item.link == "errors" && errors_waiting;
+            let s: Vec<i64> = waiting
+                .iter()
+                .map(|x| x.1)
+                .filter(|sd| item.seeds.contains(sd))
+                .collect();
+            if s.is_empty() && !errors {
+                die(&format!(
+                    "{dir}: problem {n} waits for no shrink: it has its minimal schedule, or hydo \
+                     does not shrink it (hydo report --details says which)"
+                ));
+            }
+            shrinks::ShrinkWhat { seeds: s, errors }
+        }
+    };
+    if what.seeds.is_empty() && !what.errors {
+        println!("hydo: {dir}: no problem waits for its shrink");
+        return 0;
+    }
+    prepare_engine(ctx);
+    let env = explore_env(ctx, true);
+    match hydo_explore::shrink_main(p, &what, &env) {
+        Ok(o) => {
+            for (seed, minimal, tries) in o.shrunk {
+                println!(
+                    "hydo: the failure of seed {seed} shrank to {minimal} ({tries} shrink runs)"
+                );
+            }
+            for (sig, minimal, tries) in o.errors {
+                println!(
+                    "hydo: the error lines of kind {sig} shrank to {minimal} ({tries} shrink runs)"
+                );
+            }
+            println!("See it: hydo report {}", crate::inspect::work::quote(&dir));
+            0
+        }
+        Err(e) => die(&format!("hydo shrink: {e}")),
+    }
 }
 
 /// The most problems of one exploration that [`explore_replays`] runs again.

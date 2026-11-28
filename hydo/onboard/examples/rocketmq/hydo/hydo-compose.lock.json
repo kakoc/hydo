@@ -1,0 +1,85 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "apache/rocketmq:5.5.0": {
+   "index_digest": "sha256:7e8f6c9dbd9df742ed26ba69c00d4ad69e2f86a56f3ca7782ff8144dd0798132",
+   "name": "apache/rocketmq",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": [
+       "dummy"
+      ],
+      "Entrypoint": [
+       "./docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "JAVA_HOME=/opt/java/openjdk",
+       "LANG=en_US.UTF-8",
+       "LANGUAGE=en_US:en",
+       "LC_ALL=en_US.UTF-8",
+       "JAVA_VERSION=jdk8u482-b08",
+       "ROCKETMQ_VERSION=5.5.0",
+       "ROCKETMQ_HOME=/home/rocketmq/rocketmq-5.5.0"
+      ],
+      "ExposedPorts": {
+       "10909/tcp": {},
+       "10911/tcp": {},
+       "10912/tcp": {},
+       "9876/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "rocketmq",
+      "Volumes": null,
+      "WorkingDir": "/home/rocketmq/rocketmq-5.5.0/bin"
+     },
+     "digest": "sha256:a613f1341f3404b96900cf11e5c35f2d049c103504a1dd60242a04cebf5be467",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": [
+       "dummy"
+      ],
+      "Entrypoint": [
+       "./docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/opt/java/openjdk/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "JAVA_HOME=/opt/java/openjdk",
+       "LANG=en_US.UTF-8",
+       "LANGUAGE=en_US:en",
+       "LC_ALL=en_US.UTF-8",
+       "JAVA_VERSION=jdk8u482-b08",
+       "ROCKETMQ_VERSION=5.5.0",
+       "ROCKETMQ_HOME=/home/rocketmq/rocketmq-5.5.0"
+      ],
+      "ExposedPorts": {
+       "10909/tcp": {},
+       "10911/tcp": {},
+       "10912/tcp": {},
+       "9876/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "rocketmq",
+      "Volumes": null,
+      "WorkingDir": "/home/rocketmq/rocketmq-5.5.0/bin"
+     },
+     "digest": "sha256:2bf396167ec51a79f394a1aa3bc232c0a8bed8fbed53489e48c9a2d5af77fa25",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "apache/rocketmq:5.5.0",
+   "registry": "docker.io",
+   "repo": "apache/rocketmq",
+   "tag": "5.5.0"
+  }
+ }
+}

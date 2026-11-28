@@ -307,6 +307,21 @@ impl<'a> Lockstep<'a> {
         }
     }
 
+    /// Every vCPU's registers and the guest's RAM at this stop, written to `path` (`DUMP`,
+    /// Milestone 383, docs/design/inspect-stacks.md). It only reads the guest. Ok(Ok(bytes)) with
+    /// the file's length; Ok(Err(reason)) when the engine refuses.
+    pub fn dump(&mut self, path: &str) -> Result<Result<u64, String>, EngineError> {
+        if path.contains('\n') || path.is_empty() {
+            return Err(EngineError::Protocol("a dump's path is one line".into()));
+        }
+        self.cmd(HostCmd::Dump(path.to_string()))?;
+        match self.answer()? {
+            Answer::Refused(e) => Ok(Err(e)),
+            Answer::Dump { bytes, .. } => Ok(Ok(bytes)),
+            a => Err(EngineError::Protocol(a.line())),
+        }
+    }
+
     /// Run on to the next stop.
     pub fn cont(&mut self) -> Result<(), EngineError> {
         self.cmd(HostCmd::Cont)

@@ -120,8 +120,9 @@ evidence of a sixth kind: it proposes schedules, not rules.
 ### How it reads the code
 
 The audit works on text, without a compiler. It reads Go, C and C++, Rust, Java and Kotlin,
-Python, JavaScript and TypeScript, Ruby, C#, and SQL. It skips tests, examples, benchmarks, and
-vendored code. It runs in four steps:
+Python, JavaScript and TypeScript, Ruby, C#, Erlang and Elixir (since Milestone 382), and SQL. It
+skips tests, examples, and benchmarks. Bundled third-party code has a section of its own (Milestone
+382, below). It runs in four steps:
 
 1. It removes comments and the contents of strings from each line. SQL keeps its strings.
 2. It finds the calls that read the wall clock, for example `gettimeofday`, `time(NULL)`,
@@ -322,13 +323,144 @@ file, line 362. The JSON and text reports of Valkey 9.1.3, Temporal 1.32.2, Rive
 Garage v2.5.0, each with its example's `hydo.yaml`, are the same as before, byte for byte, so
 their known places keep their ranks.
 
+### Bundled code, a project's own clocks, and Erlang (Milestone 382)
+
+Most clock findings of the onboardings came from blind explorations, and the audit had named
+none of their places. Typesense's two are in h2o and braft, which Bazel fetches outside the
+project's folder. VictoriaMetrics's three read a cached clock (`fasttime.UnixTimestamp()`) or a
+deadline of `time.Now().Add(d).UnixMilli()`. Restate's and GreptimeDB's read their own wrappers
+of the clock, and RabbitMQ's finding 3 is in Erlang, which the audit did not read. Five changes
+close these gaps; each is in `hydo/crates/hydo-cli/src/clockscan.rs`.
+
+1. **Bundled code.** The audit reads `vendor/`, `third_party/`, `deps/`, and Bazel's
+   `bazel-<name>/external/`, each library by its name. A folder of `deps/` that the root's
+   `.gitignore` keeps (`!/deps/rabbit/`) is the project's own. Bundled code has a section of its
+   own after the project's places, and there a library's timers come first: a place whose
+   function or file names a timer, a timer wheel, an event loop, or a scheduler gets 4 more
+   points. The keys that bundled code sets are its own, so a library's `Now()` or `timestamp`
+   field makes no reading in the project's code, and the project's main languages, functions and
+   ordered names are counted without it.
+2. **A project's own clock, by data flow.** A function of at most 30 lines whose returned value
+   comes from a reading inside it is a reading, whatever its name. Inside means the clock itself,
+   a cached clock, or a variable of the function that holds one; a parameter does not count, so a
+   conversion such as Prometheus's `FromTime(t)` is no clock. The other new readings:
+   - a cached clock: a cell that an atomic store sets from a reading (`x.Store(v)`,
+     `atomic.StoreInt64(&x, v)`, Rust's `x.store(v, ...)`), and every load of it;
+   - Go's `time.Time` with its monotonic reading from a ticker's channel, or `time.Now()` given to
+     a function whose name speaks of time, once `.Unix()`, `.UTC()` or `FromTime(...)` drops it;
+   - a Go chain such as `time.Now().Add(d).UnixMilli()`, a deadline;
+   - a function that returns now plus a duration (`butil::milliseconds_from_now(ms)`, from its
+     name or from `return nanoseconds_from(time, ns)`), a deadline wherever it is called;
+   - Rust paths from their first segment (`chrono::Utc::now()`), a time's own type made from a
+     reading (`MillisSinceEpoch::new(...)`), a tail over several lines, and a method's call
+     without its receiver among the parameters;
+   - C's `gettimeofday(&loop->_tv_at, NULL)`, which sets the field `_tv_at`, and a field read
+     through `->`.
+3. **A stored reading compared later.** The shape `rewind` compares a time with a reading that
+   the code stored in a field. A new reading against it counts in a timer's code (h2o's `if (now
+   < ctx->last_run)`). A timestamp of data against it counts when its name marks a start
+   (Prometheus's `if s.T > w.startTimestamp`). Both are `high`.
+4. **Erlang and Elixir.** The audit reads `erlang:system_time`, `os:system_time`,
+   `erlang:now()`, `os:timestamp()`, the `calendar` and `erlang` local and universal times,
+   Elixir's `System.system_time` and `DateTime.utc_now`, and not `erlang:monotonic_time`. A
+   reading is followed through a match (`Ts = ...`), a key of a map or a record (`#{ts => Ts}`,
+   `maps:get(system_time, Meta)`, `S#state.last_run`), and a fold's clause that renames a key
+   (`fun (ts, V, Acc) -> Acc#{system_time => V}`). This is how Ra's command timestamp reaches
+   RabbitMQ's stream coordinator.
+5. **A fallback.** When the project's own code has no place, the report says so and gives
+   schedules aimed at no place: a restart and a step back for each service, a step back before a
+   failover of each group with `primary:`, a step back of a day, and a step forward of an hour.
+   `--json` has them as `fallback`.
+
+The words of a due time (`run_time`, `duetime`, `due_at`) and of a retention (`retention`) now
+make a deadline.
+
+**The known places.** The tagged sources, each with its example's `hydo.yaml`. Typesense's
+three repositories are at the commits of its `WORKSPACE`, in `bazel-typesense/external/`, a link
+as Bazel makes it. Ra 3.2.0 is in RabbitMQ's `deps/ra`, as erlang.mk fetches it. A rank is
+among the places with schedules of the project's own code, or of the bundled code's section.
+
+| project | finding | the place | before | after |
+|---|---|---|---|---|
+| Typesense v30.2 | 2: h2o's event loop | `h2o/include/h2o/socket/evloop.h:116`, a timer at now plus its delay | not read | 4 of 45, bundled |
+| Typesense v30.2 | 3: braft's election timer | `braft/src/braft/repeated_timer_task.cpp:129` | not read | 2 of 45, bundled |
+| Typesense v30.2 | 3: brpc's timer thread | `brpc/src/bthread/timer_thread.cpp:372` | not read | 23 of 45, bundled |
+| VictoriaMetrics v1.156.0 | 1: the retention watcher | `lib/storage/table.go:458` | not listed | 32 of 73 |
+| VictoriaMetrics v1.156.0 | 2: the flush deadline | `lib/storage/raw_row.go:248` (and the checks at 256 and 330) | 3 of 21 (the check at 330) | 2 of 73 (the store of the deadline) |
+| VictoriaMetrics v1.156.0 | 3: the cached clock against a deadline | `lib/handshake/buffered_conn.go:112` | not listed | 24 of 73 |
+| Kvrocks 2.17.0 | 2: the replica's acknowledgement | `src/cluster/replication.cc:670` | 4 of 22 | 4 of 22 |
+| Restate v1.8.1-hotfix.2 | the scheduler's `run_at` | `crates/vqueues/src/scheduler/vqueue_state.rs:357` | not listed | 10 of 17 |
+| GreptimeDB v1.3.1 | the metasrv's leases | `meta-srv/src/procedure/region_migration/downgrade_leader_region.rs:286`; the failure detector `meta-srv/src/failure_detector.rs:136` | not listed | 3 and 4 of 9 |
+| RabbitMQ 4.4.1 | 3: the coordinator's retry | `deps/rabbit/src/rabbit_stream_coordinator.erl:2350` (the timer's delay) and `:2393` (the retry time) | Erlang not read | 2 and 6 of 33 |
+| Prometheus v3.16.0 | 2: the scrape's alignment | `scrape/scrape.go:1456` | 3 of 4 | 4 of 5 |
+| Prometheus v3.16.0 | 3: the WAL watcher's start | `tsdb/wlog/watcher.go:560` | not listed | 3 of 5 |
+
+The files read and the functions with schedules (the project's own; bundled code):
+
+| project | files before | files after | functions before | functions after |
+|---|---|---|---|---|
+| Valkey 9.1.3 | 255 | 255; 314 | 96 | 97; 5 |
+| Temporal 1.32.2 | 1,515 | 1,515 | 91 | 92 |
+| River v0.51.2 | 595 | 595 | 15 | 16 |
+| Garage v2.5.0 | 205 | 205 | 9 | 9 |
+| Kvrocks 2.17.0 | 255 | 255 | 22 | 22 |
+| Typesense v30.2 | 208 | 208; 1,113 | 14 | 14; 45 |
+| VictoriaMetrics v1.156.0 | 931 | 931; 4,176 | 21 | 73; 76 |
+| Restate v1.8.1-hotfix.2 | 1,155 | 1,155 | 8 | 17 |
+| GreptimeDB v1.3.1 | 1,833 | 1,833 | 4 | 9 |
+| RabbitMQ 4.4.1 | 9 | 1,161; 53 | 0 | 33; 1 |
+| Prometheus v3.16.0 | 612 | 612; 6 | 4 | 5 |
+
+**What stayed.** The reports of Kvrocks 2.17.0 and Garage v2.5.0 are the same as before, byte
+for byte, both the text and the JSON. Valkey 9.1.3, Temporal 1.32.2 and River v0.51.2 keep their 5 places
+shown and every known place's rank:
+
+- Valkey gains two places of the shape `rewind`: `manualFailoverCheckTimeout`'s `mf_end <
+  mstime()` at rank 49, and `clusterCron`'s oldest pong at rank 80. Its `deps/` has a section of
+  its own: 314 files, 5 places with schedules, all in libvalkey.
+- Temporal's `task_generator.go:355` (`closeTime.Add(retention)`) becomes `high`, at rank 65.
+- River's four retention horizons of `RunHandle.java` become `high`; the first is at rank 15.
+
+Each of these compares a time of the wall clock. The JSON of the three keeps every other place,
+with ranks moved by the places added before them.
+
+**Precision.** A seeded sample of 30 of the 236 new places with schedules (seed 382), each read in
+its code. 25 measure a duration, keep a deadline, or keep an order with the wall clock, so a
+step moves them. The 5 others are vendored Go code of VictoriaMetrics. Two reach a buffer named
+`buf` through a function that formats a time (lz4, go-json). Three are `order` places that keep
+the time of a request or a query, not of data: gRPC's xDS metadata, an AWS signature, and
+VictoriaLogs' query time.
+
+**The cost.** The CPU time of one `--json` scan on the shared bare-metal machine, before and
+after:
+
+| project | bundled files | CPU seconds | memory |
+|---|---|---|---|
+| Temporal 1.32.2 | 0 | 6.5, 6.6 | 75 MB, 77 MB |
+| Valkey 9.1.3 | 314 | 2.4, 4.3 | 45 MB, 62 MB |
+| Typesense v30.2 | 1,113 | 1.0, 4.8 | 38 MB, 106 MB |
+| RabbitMQ 4.4.1 | 53 | 0.0, 5.2 (Erlang read) | 10 MB, 75 MB |
+| VictoriaMetrics v1.156.0 | 4,176 | 1.7, 24.0 | 42 MB, 209 MB |
+
+The bundled code costs time in proportion to its size; a project without it costs what it did.
+
 ### What the clock audit does not do
 
 - It reads text, so a reading passed through an interface with several implementations, or
-  through a channel or a queue, is not followed.
+  through a channel, a queue, a closure, or a callback, is not followed. GreptimeDB's
+  `build_active_filter` and Restate's `gardal` clock are two.
+- A library of bundled code is ranked by its words. Nothing tells the audit which library the
+  services lean on. So Typesense's own 14 functions come before h2o's and braft's timers, and
+  brpc's timer thread is at rank 23 of 45.
+- A limit without a value in the code ranks low. VictoriaMetrics's retention watcher is at rank
+  32 of 73.
 - An order or a version that a SQL statement sets, or that a function of another file gets as a
   parameter, is not found. The comparison that makes such a place `high` is matched by the
-  field's name in every file, so two structures with a field `timestamp` share it.
+  field's name in every file, so two structures with a field `timestamp` share it. A field set
+  from a converted Go `time.Time` is followed in its own file only (Milestone 382); the others
+  are followed by their name in every file.
+- Erlang's maps and records are read by their keys, whatever the record. A message that carries
+  a reading to another process is not followed.
 - The schedules place the steps at fixed workload steps (the fault before step 2, the step
   back before step 10 of a 20-step workload). Code that runs at another time needs the steps
   moved by hand.

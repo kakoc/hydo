@@ -1250,8 +1250,13 @@ What it covers and what it costs (`docs/design/service-clocks.md`):
 - A read costs about 40 µs of guest time on hvx, against about 4 µs without it.
 - The kernel's own times stay the guest's: file modification times, socket time stamps and
   `/proc/uptime`. A recovery boot and a reboot start every own clock at the guest's clock.
-- On the KVM and Mac engines the guest kernel needs seccomp, which only `guest.kernel: containers`
-  has, and the Mac needs an arm64 build of hydo-clock; neither ran.
+- On the KVM engine (Milestone 379) the image needs `guest.kernel: containers`, because only those
+  guest kernels have the seccomp filters that hydo-clock installs. The KVM engine refuses another
+  image with `clock: own` before any VM, and the message names the key. `hydo build` gives such an
+  image the build of hydo-clock that reaches the traced program's memory with `PTRACE_PEEKDATA`,
+  from `HYDO_CLOCKBIN_WORDS` (`<build dir>/hydo-clock-words`), because no KVM kernel has
+  `process_vm_readv`. The example's `hydo-kvm.yaml` is such a manifest. hvx runs both kinds of
+  image. The Mac engine needs an arm64 build of hydo-clock, which does not exist yet.
 - `hydo explore --service-clocks` (Milestone 375) draws the token for the services with `clock:
   own` when `faults:` allows `clock`: steps of 250 ms to 5 minutes and drifts of 200 and 50,000
   ppm, either way, from a stream of their own. Without the option it draws what it drew before

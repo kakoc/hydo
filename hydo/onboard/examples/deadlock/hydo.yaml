@@ -1,0 +1,52 @@
+# A planted deadlock for `hydo inspect stacks` (docs/design/inspect-stacks.md): a service hang
+# where the logs stop. Two services, one in Go (go/main.go) and one in Rust (rust/src/main.rs),
+# each with a worker and a watchdog that take two locks in opposite orders. The watchdog takes
+# them only after a gap in its wakes, so the services run forever without faults, and a pause
+# of a service (P=) leaves its worker and its watchdog waiting on each other: its log and its
+# count stop, and nothing prints an error.
+# Build: ./build.sh (x86_64, for hvx), then
+#   hydo build hydo.yaml
+# Try:  disk=none | run               -> OK: both services count on
+#       disk=none | run P=bank_go@3+2 -> VIOLATION [bank_go.progress]: the Go service hangs
+#       disk=none | run P=bank_rs@3+2 -> VIOLATION [bank_rs.progress]: the Rust service hangs
+#   hydo inspect stacks <run dir> --text   -> the two locks, their waiters, the cycle of waits
+name: deadlock
+description: two services whose worker and watchdog deadlock on two locks after a pause.
+
+guest:
+  ram_mib: 512
+
+root:
+  files:
+    - {src: bin/bank-go, dst: /bin/bank-go, mode: "0755"}   # ./build.sh
+    - {src: bin/bank-rs, dst: /bin/bank-rs, mode: "0755"}
+
+services:
+  - name: bank_go
+    cmd: /bin/bank-go
+    ready: test -s /tmp/bank-go.count
+  - name: bank_rs
+    cmd: /bin/bank-rs
+    ready: test -s /tmp/bank-rs.count
+
+workload:
+  steps: 10                         # each step waits 200 ms while the services work
+  run: |
+    i=$HYDO_FROM
+    while [ $i -lt $HYDO_TO ]; do
+      usleep 200000
+      echo "$i ok" >> $HYDO_OUTCOMES
+      i=$((i + 1))
+    done
+
+invariants:
+  - id: bank_go.progress
+    msg: the Go service writes transfers after the faults
+    cmd: |
+      a=$(cat /tmp/bank-go.count); usleep 500000; b=$(cat /tmp/bank-go.count)
+      [ "$b" -gt "$a" ] || { echo "bank-go wrote no transfer in 0.5 s (its count stays $a)"; exit 1; }
+  - id: bank_rs.progress
+    msg: the Rust service writes transfers after the faults
+    cmd: |
+      a=$(cat /tmp/bank-rs.count); usleep 500000; b=$(cat /tmp/bank-rs.count)
+      [ "$b" -gt "$a" ] || { echo "bank-rs wrote no transfer in 0.5 s (its count stays $a)"; exit 1; }

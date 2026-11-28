@@ -483,8 +483,21 @@ manifest gives the nodes `clock: own`, so the recorded images stay. They ran on 
 - Prometheus: a sender more than 10 minutes ahead of the server loses every sample
   (`maxAheadTime`), by design; an exploration of 20 seeds with the option found nothing.
 
-The KVM and Mac engines lack `CONFIG_CROSS_MEMORY_ATTACH` besides seccomp (the design page). The
-details are in `docs/HISTORY.md` Milestone 375 (open item 190).
+The details are in `docs/HISTORY.md` Milestone 375 (open item 190).
+
+**One service's own clock on KVM (M379, tentative number).** The KVM engine runs `clock: own` for
+an image of `guest.kernel: containers`, whose kernels have seccomp filters, and refuses any other
+image with the key before any VM. No KVM kernel has `process_vm_readv`, so `hydo build` stages for
+such an image the build of hydo-clock with the cargo feature `words` (`hydo-clock-words`,
+`5ac4dcdc…`, from `HYDO_CLOCKBIN_WORDS`). It falls back to `PTRACE_PEEKDATA` and `PTRACE_POKEDATA`
+when the calls answer `ENOSYS`. The default build keeps Milestone 372's bytes (`de24fd93…`), so
+every other image keeps its bytes. On hvx the example's nine schedules gave Milestone 372's
+fingerprints, and Typesense's finding 4 Milestone 375's. On GitHub's KVM runners, four Intel and
+two AMD hosts, the example's `hydo-kvm.yaml` gave hvx's verdicts with one fingerprint per vendor:
+`T=n2@3:5` gives two leaders, `T=3:5` does not. Prometheus's `skew/` with the kernels for
+containers gave its by-design loss at 15 minutes ahead. A read costs 21.2 µs of guest time on KVM.
+The Mac engine needs an arm64 port (the design page). The details are in `docs/HISTORY.md`
+Milestone 379 (open item 190).
 
 **The cgroup2 mount (M283, tentative number).** From the fingerprint epoch 4 the host controller
 mounts the cgroup2 file system on `/sys/fs/cgroup` at the start of every boot, before the S0
@@ -550,7 +563,20 @@ They are production's topology, the features behind a flag, the checks of how ea
 outcome ends, and pauses past a failure detector. The skill copies
 production's shape from the deployment manifests and marks promises that no owner confirmed. It
 reads the build's RAM warnings before the first run and asks for a second round before it
-reports no bugs. Its version stays until the lead sets it. The assertion SDKs are in `sdk/`
+reports no bugs. Its version stays until the lead sets it. Since M386 (tentative number) the
+playbook, the skill, and `hydo guide strategies` follow the measured yields of M380's findings
+ledger. The section "The first hour of exploring" of `hydo guide workflow` gives the order to a
+user without the skill:
+- production's shape with its durable settings, and the default checks before the first run;
+- 20 seeds of `--strategy process --cluster-faults --no-shrink`, and directed runs that judge
+  each failure, with a shrink only for the one to report;
+- the operator's actions in the workload, aimed reaction grids, and the sync and clock audits as
+  reading aids.
+
+Business rules are for the promises that the default checks cannot see. Each rule's wait and its
+result under a clock step are reviewed before the first exploration. The strategies page ranks
+its entries by yield, and each entry has a line of its counts. A section of the page says which
+check noticed each bug. The assertion SDKs are in `sdk/`
 (Rust is the reference), with the shared cases in `sdk/cases/`. `sdk/README.md` is for SDK
 maintainers: the shared cases, and the Go module with its frozen copy in `hydo/stack` (section
 "The Go module and the frozen copy in `hydo/stack`"). Every code example on the package pages is a
@@ -871,6 +897,31 @@ its own commit; none moves a recorded value:
   exploration of the `hydo/` folder.
 
 The details are in `docs/HISTORY.md` Milestone 374 (open items 97, 147, 157, 189, 191 and 192).
+
+**Every guest thread's stack at a stop (M383, tentative number; a first version on hvx).** `hydo
+inspect stacks <session | run dir> [--at P] [--pid P] [--text]` answers which lock the threads of
+a hung service wait on, and which function likely holds it. It changes nothing in the guest. The
+engines' protocol has `DUMP <path>`. The hvx engine writes every vCPU's registers and the guest's
+RAM to a file, with no module change, and the Mac and KVM engines refuse it. The host reads the
+file (`hydo_contracts::stacks`):
+- the guest kernel's task list, with the layouts of its own BTF in guest memory, and the symbols
+  of the `System.map` beside the kernel (`<kernel>.System.map`, or `--kernel-map`);
+- each process's page tables (x86_64 and arm64), each thread's saved registers and system call,
+  and its kernel stack through the kernel's ORC tables;
+- each user stack through Go's table of frame sizes, `.eh_frame` or frame pointers, named from
+  the image's own programs;
+- a Go program's goroutines from its runtime, and the locks: a futex's address, or a goroutine's
+  `sync.Mutex`, named by the program's globals;
+- each lock's likely holders (a frame whose function refers to the lock's variable), and the
+  cycles of waits.
+
+`--follow` reads the stacks at each `advance`. `--check-run [--every N]` replays the run with a
+dump at every N-th stop and compares its fingerprint with the recorded one. The example
+`hydo/onboard/examples/deadlock` has a Go and a Rust service that deadlock after a pause. On
+M325's recorded run the command gave the Keeper loop in one call: the two handler threads were
+runnable on `exit_to_user_mode_prepare`. Garnet's hung replica had 78 thread-pool workers, each asleep in
+`futex`. The design is `docs/design/inspect-stacks.md`, the how-to `hydo guide inspect` section
+5; the details are in `docs/HISTORY.md` Milestone 383 (open item 194).
 
 **Each image service's own `/tmp` (M331, tentative number; fingerprint epoch 5).** An image
 service of an image built at epoch 5 has a `/tmp` of its own, as a container has. It is the
@@ -1442,7 +1493,8 @@ fails shards over with `CLUSTER FAILOVER`, moves slots with `MIGRATE ... SLOTS`,
 checkpoints with `BGSAVE`. A messages check with `acked_outcome` and four checks judge them. The
 image and the directed runs used hvx with the released 0.6.0, and the explorations GitHub's KVM
 runners. Every acknowledged write stayed under kills, pauses, partitions, one node's power loss,
-clock steps, and, with `--device-type FileStream`, power cuts. Nothing was posted:
+clock steps, and, with `--device-type FileStream`, power cuts, but in findings 2, B, and C. The
+findings:
 - New: a `CLUSTER FAILOVER` right after a `MIGRATE ... SLOTS` into the same shard leaves the
   migrated slot without an owner on every node, for good. The new primary takes over only the
   slots that its own copy of the configuration gives its primary, and gossip had not brought the
@@ -1458,14 +1510,78 @@ clock steps, and, with `--device-type FileStream`, power cuts. Nothing was poste
   replica.
 - Known (microsoft/garnet#2281, open): with the default device a power cut loses writes
   acknowledged with `--aof-commit-wait` (`disk=cut | run C=10`, 5 of 20).
-- Three candidates whose cause was not traced, each with a regression. A kill of a primary 10 ms
-  after `BGSAVE` leaves its replica without an answer. Failovers of both shards after a migration
-  lose two acknowledged writes. After a kill and a power cut a replica holds other data at its
-  primary's offset.
+- New, finding A: with `--aof-commit-wait`, a replica stops answering when its primary dies
+  before it commits what it streamed. The replica appends streamed records uncommitted and
+  commits only on the primary's commit records. Every gossip reply waits for that commit and
+  blocks its thread: 80 waiting thread-pool workers at the end (`A=garnet.bgsave+10:kill-now-g1`).
+- New, finding B: a failover of a migration's source gives the migrated slot two primaries. The
+  source's replica takes the slot over from its old slot map with the epoch of the target's
+  claim. Both acknowledge writes of it, and the loser's writes are lost: finding 2's cause, on
+  the source side.
+- New, finding C: a replica that attaches after a failover starts its AOF again at a tail inside
+  a sector and overwrites the bytes below it in its file. After a power cut it replays the file,
+  stops at the damage without an error, and reports its primary's offset without the later writes.
 
-The released hydo 0.7.0 replayed findings 1 and 2 on hvx with their recorded fingerprints, each
-twice, and the default image's contrast of finding 1 gave OK `179ac0194c742e8d`. Open item 192
-has what is left.
+The released hydo 0.7.0 replayed the regressions of findings 1, 2, A, B, and C on hvx with their
+recorded fingerprints, each twice. The default image's contrast of finding 1 gave OK
+`179ac0194c742e8d`. Held runs and a trace image with Garnet's `Information` log traced A, B, and
+C (the section "Milestone 371, the three failures traced" of `docs/HISTORY.md`). Findings 1 and 2
+are reported as microsoft/garnet#2441 and #2440. Open item 192 has what is left.
+
+**RocketMQ (M378, tentative number).** Apache RocketMQ 5.5.0, the newest release with an official
+image, runs in controller mode in one hvx guest of 3,072 MiB. The example is
+`hydo/onboard/examples/rocketmq` (RESULTS.md), imported with `hydo compose`. A NameServer with the
+controller embedded and one replica group of three brokers run with `allAckInSyncStateSet` and
+`SYNC_FLUSH`. Each node's store is on a file system of its own. With rocketmq-client-go, a Go
+client sends plain, delayed, ordered, and transactional messages. A small remoting client of its
+own pulls at exact offsets, commits offsets synchronously, and gives poison messages back. Two
+messages checks judge them, and `hydo-offsets.yaml` also claims `after_ack`. The directed runs used
+hvx, and the explorations GitHub's KVM runners. No message acknowledged with `SEND_OK` was lost to
+kills, pauses, partitions, failovers, or a kill of the controller. Nothing was posted:
+- New, a clock effect: the broker writes the commit and rollback records of transactions in
+  batches timed by the wall clock (`batchSendOpMessage`). After a backward step it writes none for
+  the step's length. The transaction check then asks again about transactions it had committed,
+  and the broker stores each message again at every check (`T=10:-3600`: `u17` six times in
+  50 s). After a step back of 30 days the check stops at a half message without its record. It
+  checks no transaction, so one that waits for a check is never delivered (`T=2:-2592000`).
+- Known in its parts (apache/rocketmq#11460, #5905): a broker writes its epoch file without a sync
+  when the controller gives it a role. A power cut 17 s later left both slaves' files at 0 bytes
+  (`C=20`). Each slave then stops at every start on the unchecked parse of an empty header. One
+  broker's power loss (`L=`) does the same.
+- Known (apache/rocketmq#7790): a slave copies the consumer offsets every 10 s, so a failover
+  delivers acknowledged messages again (`K=brokers.primary@10+3`).
+
+Open item 196 has what is left.
+
+**CockroachDB (M377, tentative number).** CockroachDB v26.4.1 runs as a cluster of three nodes
+from the official image in one hvx guest of 3,072 MiB, in `hydo/onboard/examples/cockroachdb`
+(RESULTS.md), imported with `hydo compose`. Each node's store is a file system of its own. The
+emergency ballast file is off, and the image needs `guest.cpu: v3`. The workload starts after
+every range has three replicas. A Go client on pgx writes a register table, explicit
+transactions, list appends and reads at SERIALIZABLE, and bank transfers. The checks are a
+messages check with `acked_outcome` and a list-append check at `serializable`. Reads at one past
+timestamp through every node must agree, and follower reads keep the bank's total. CockroachDB's
+own replica consistency check runs at the end, and so does a count of the nodes that stopped
+for the clock. `skew/hydo.yaml` gives roach3 `clock:
+own` (M372). The public repository has no code of v26.3 or v26.4; its `master` ends at
+`d30c905f`. Nothing was posted:
+- New, a clock effect past the documented bound: with roach3's clock 1 s ahead or behind, or 5 %
+  fast, roach1 and roach2 stop themselves too, with `clock synchronization error ... (1 of 2 are
+  within the offset)`. `VerifyClockOffset` stops a node when `healthyOffsetCount <=
+  numClocks/2`, and a healthy node of three counts two clocks. The cluster acknowledged 5 of 23
+  writes sent. At 300 ms either way every rule held. On the final image the clock 1 s behind
+  stopped no node, roach3 included, which was not traced.
+- Known (#25109), a clock effect by design: after a step back of 300 s and a kill of every node,
+  no node serves for longer than 180 s. Each new process starts its hybrid logical clock 300 s
+  before the cluster's data. Steps of 20 to 120 s passed. With
+  `server.clock.persist_upper_bound_interval` (off by default) the nodes wait at their start, and
+  the schedule fails the same way.
+- Not traced: in one schedule roach1's store kept nine WAL files of its first two minutes and
+  wrote no SST. Each has about 70 MiB preallocated, so its file system of 640 MiB was full, and it
+  did not start after a power cut. The first clean run showed it too, without faults.
+
+Every acknowledged write, transaction, transfer and past-timestamp read held in every run. Open
+item 197 has what is left.
 
 **Temporal with business rules (M231).** Temporal 1.32.2 ran on PostgreSQL 16 on the Mac engine
 and on hvx. Its order workflow runs activities and a timer, and takes signals and updates.
@@ -1876,7 +1992,14 @@ Since M350 (tentative number) a section of its own lists a reading of the clock 
 order or the version of data. Garage's CopyObject is one: it takes its version's timestamp from
 `now_msec()`. A place is `high` when the code compares two values of that name, and it gets
 three steps back of the clock. A limit is no type name, and a plain word such as `timeout` is
-read in the place's own file only.
+read in the place's own file only. Since M382 (tentative number) it reads Erlang and Elixir, and
+the bundled code of `vendor/`, `third_party/`, `deps/` and Bazel's `bazel-<name>/external/` in a
+section of its own, a library's timers first. It follows a project's own clock by data flow,
+cached clocks, Go's ticks and `time.Now().Add(d).UnixMilli()`, and a stored reading compared
+later (the shape `rewind`). Without a place in the project's own code it gives fallback
+schedules. It now names each clock finding's place that it missed in Typesense, VictoriaMetrics,
+Restate, GreptimeDB, RabbitMQ, and Prometheus. The reports of Kvrocks and Garage are the same
+byte for byte.
 The guide is the section "Find the durations measured on the
 wall clock" of `hydo guide faults`. The design and the precision numbers are in the section
 "The clock audit" of `docs/design/rule-suggestion.md`.
@@ -1932,6 +2055,12 @@ and in each project the first known place was among the first 5. 25 of 30 sample
 were real. The guide is the section
 "Find the writes acknowledged before they are synced" of `hydo guide faults`, and the design and
 the numbers are the section "The sync audit" of `docs/design/rule-suggestion.md` (open item 193).
+Since M384 (tentative number) its schedules ran on hvx at the places that no finding had named,
+each in a new manifest of its example. They reproduced three known bugs at the first try. The
+bugs are Garage on SQLite (#1571, `garage/hydo/hydo-sqlite.yaml`), ClickHouse's metadata rename
+(#111348, `clickhouse/single/hydo-metadata.yaml`), and the `VERSION` file of a new Meilisearch
+database (#4584, `meilisearch/fresh/`). A new minor candidate: a Kvrocks backup that `BGSAVE` reported
+done is the older one after a power cut (`kvrocks/backup/`).
 
 **Web apps through their Playwright tests (M253).** `browser:` (a format-1 addition) runs a team's
 Playwright tests unchanged as the workload, in Microsoft's Playwright image 1.65.1, which `hydo
@@ -2379,6 +2508,29 @@ into `findings.jsonl` and `state.json` as a CI run is:
 It ran on the scripted engine and on the Mac engine with the Redis quickstart example. The
 reference is `hydo guide workflow`, "Keep the findings of your runs"; the details are in
 `docs/HISTORY.md` Milestone 365 (open item 187).
+
+**The report before the shrinks (M387, tentative number).** `hydo explore` writes
+`exploration.json`, `report.md` and `stats.json` once its first runs and the re-runs of each
+failure are done, before any shrink ends, and writes them again as each shrink ends. Each write
+replaces the file as a whole. The shrinks' runs wait in a last queue of the pool, after every
+first run and re-run. Results additions: a failure's `shrink_state` (`pending`, `shrinking`,
+`done`, `skipped`) and, until its problem has a minimal schedule, its `repro_command`; the
+summary's `first_report_s`; a CI finding's `not_shrunk`. The other parts:
+
+- A problem without its minimal schedule shows its failing run, its command and "not shrunk
+  yet" in report.md, `hydo report` and its page. In a terminal, `hydo explore` prints the counts
+  at the first report. A stopped exploration keeps that report.
+- `hydo explore --shrink-later` shrinks nothing. `hydo shrink <explore dir> --problem N | --all`
+  shrinks later in the same folder, from `unshrunk.json`, with the exploration's command line.
+- `hydo save`, `hydo stats`, `hydo explore --merge` and the CI comment name what is not shrunk
+  yet. A CI decision uses the minimal schedule when there is one, else the failing run's.
+
+On the scripted engine the 32 scenarios' outputs differ from the goldens only by the added
+fields. Both on the scripted engine and on hvx, shrinks made later give the files of shrinks
+made as the exploration went. On hvx, 60 seeds of the Redis example on one worker gave their
+first report after 1.1 minutes and their final report after 2.1 minutes. Nothing recorded
+moved. The reference is `hydo guide workflow`, "The report comes before the shrinks"; the
+details are in `docs/HISTORY.md` Milestone 387 (open item 195).
 
 **The fixes of the 0.4.0 trial (M301, tentative number).** What hydo tells a user is true again
 where M297's trial found it false (`docs/design/0.4.0-user-trial.md`, "After the fixes of M301"):
@@ -3007,10 +3159,13 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       structures with a field `timestamp` share it.
     - Every service of a guest shares one clock, so no schedule gives one node a clock behind
       the others' (the idea "Clocks per service" of `docs/USE-CASES.md`).
-    - Since M355 a C++ wrapper of the clock is followed (namespaces, template arguments,
-      `duration_cast`). A wrapper in another language is followed only when its name is about
-      time and its `return` starts with a reading. GreptimeDB's `current_time_millis()` and
-      Restate's `WallClock` (open items 152 and 171) did not run again.
+    - Since M382 a wrapper of the clock in any language is followed by data flow. So are
+      cached clocks, Go's ticks, functions that return now plus a duration, and Erlang's map
+      keys. A reading through a closure, a callback, a channel, or a function of more than 30
+      lines is not followed. Examples are GreptimeDB's `build_active_filter` and Restate's
+      `gardal` clock.
+      A field is still followed by its name in every file, but for one set from a converted Go
+      `time.Time`, which only its own file reads.
 118. Fakes from OpenAPI descriptions (M249). Response headers (`Location`), nested echoed fields
     and OpenAPI 3.1 `webhooks:` are not generated, and the business reference is not inferred
     (`--ref` names it). A `DELETE` does not remove the saved object, and a `PATCH` saves nothing.
@@ -3565,8 +3720,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `result.json`, so the example prints its long lines first.
     - One `K=` per schedule: a kill of the deployment and a kill of the server at other steps
       cannot be one schedule.
-    - The clock audit reads `SystemTime::now` and its kin, not a project's own clock. Restate's
-      scheduler reads `restate_clock::WallClock`, and the audit's 8 places missed it.
+    - Since M382 the clock audit follows `restate_clock::WallClock` and its cached
+      `RECENT_UNIX_TIMESTAMP_US`, and it names the scheduler's `run_at` check
+      (`vqueue_state.rs:357`) at rank 10 of 17 functions. Its first places are other timers, so a
+      user reaches the finding's only past them.
     - A kill or a stop reaction did not hold a plain send in flight across a restart, because a
       round's commands run in milliseconds; the explorer's pause of the deployment did.
     - Exploration B (swarm) was stopped before its shrink, and the KVM engine did not run the
@@ -3674,8 +3831,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       `--shrink-detected-damage`. The swarm exploration ran without shrinks.
     - The last `T=` of a schedule wins (open item 65), so no schedule steps the clock back and
       forward again. That the deleted month stays deleted is read from the code and the files.
-    - The clock audit does not follow `fasttime.UnixTimestamp()` or `time.Now().UnixMilli()`
-      into a deadline, so it named none of the three places.
+    - Since M382 the clock audit names all three places among 73 functions. The flush
+      deadline is at rank 2, the cached clock's deadline check at rank 24, and the retention
+      watcher at rank 32. The watcher ranks low because its limit, a retention of months, has
+      no value in the code.
     - Only hvx ran the example; the Mac engine and KVM did not. vmagent, several vminsert or
       vmselect nodes, three vmstorage nodes (the documentation's `2*N-1`), and the rollup cache
       of `query_range` were not tested.
@@ -3978,9 +4137,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       run then waited for its wall limit, so the example turns `errors:` off. Since M348 such a
       boot ends at once with `ERROR agent lines full <phase>`, which names the scan. The scan
       itself is not bounded, so the example keeps `errors:` off.
-    - The clock audit found no place of the metasrv. GreptimeDB reads the wall clock through
-      its own `current_time_millis()` (as open item 152). The audit also maps no image service
-      to the Cargo binaries of its sources.
+    - Since M382 the clock audit follows `current_time_millis()` and names the region
+      migration's lease third and the failure detector's `phi` fourth of 9 functions. The
+      discovery filter is a closure, which it does not follow. It still maps no image service to
+      the Cargo binaries of its sources.
     - The frontend's write retries after a transport error (`[write_retry]`, new in v1.3.0) can
       apply a write twice in an append-mode table. So can rskafka's retry of a produce after its
       timeout. 19 directed runs and the explorations showed no duplicate. Whether a duplicated
@@ -4138,9 +4298,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 179. What the example `kvrocks` left (M351, tentative number):
     - The two candidates are not reported upstream.
     - `hydo rules scan --kind writes` found no route in Kvrocks: its commands are a C++ table of
-      `MakeCmdAttr` entries with a `write` flag (open item 175). The clock audit named no place
-      in 255 C++ files, because Kvrocks reads the wall clock through its own
-      `util::GetTimeStamp`.
+      `MakeCmdAttr` entries with a `write` flag (open item 175). Since M355 the clock audit
+      follows `util::GetTimeStamp` and names finding 2's place fourth of 22, also after M382.
     - A reaction whose event never came passes without a word: three aimed cuts after a failover
       passed in runs without a failover.
     - `hydo explore --reactive-at` with `--seeds A-B` runs one point of the grid per seed, not
@@ -4336,8 +4495,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Since M368 `hydo rules scan --kind writes` reads Typesense's C++ registrations
       (`server->post(...)` and its kin): 54 routes that write, and 3 that read by their names.
       A registration over several lines, or through a table, is not read.
-    - The clock audit named 14 functions and none of the findings' places, which are in h2o and
-      braft.
+    - Since M382 the clock audit reads the repositories that Bazel fetched into
+      `bazel-typesense/external/`. Its section of bundled code has 45 places. There braft's
+      election timer is at rank 2, h2o's timer at now plus its delay at rank 4, and brpc's
+      timer thread at rank 23. Typesense's own 14 functions stay first; nothing tells the audit
+      that the findings are in the bundled code.
     - Since M368 a group's `primary:` command is asked 30 times a second apart, and the ERROR
       names the likely cause; the example's command still waits 15 s itself. A system whose
       election takes longer than 30 s still needs its own wait.
@@ -4388,13 +4550,16 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       option found no failure of a node's own clock. Their drawn steps did not put one node 30 s
       or more behind, which finding 4 needs. TiKV's effect needs a kill of PD's leader after the
       step, which the explorer draws apart from it.
-    - Only hvx ran it. The KVM and Mac guest kernels have seccomp only in their `containers`
-      variants, and none has `CONFIG_CROSS_MEMORY_ATTACH`, which hydo-clock's
-      `process_vm_readv` and `process_vm_writev` need; a fallback to `PTRACE_PEEKDATA` would need
-      no kernel. The Mac needs an arm64 build of hydo-clock; `clock: own` is refused for
-      `--arch arm64`.
-    - A read of the wall clock costs 40.5 µs of guest time under hydo-clock against 4.4 µs. A
-      guest kernel variant with a realtime offset per time namespace would cost nothing per read.
+    - hvx runs it, and KVM since M379 for an image of `guest.kernel: containers` (the service-clocks
+      example and Prometheus's `skew/`). No exploration with `--service-clocks` ran on KVM.
+      Typesense's finding 4 did not run there: it needs the KVM kernels with `/proc/<pid>/io`
+      (M376), which M379's runs did not use. TiKV did not either, because its guest does not fit
+      a runner. The Mac
+      needs an arm64 port of hydo-clock (the design page lists its parts); `clock: own` is
+      refused for `--arch arm64`.
+    - A read of the wall clock costs 40.5 µs of guest time under hydo-clock against 4.4 µs on
+      hvx, and 21.2 µs against 5.2 µs on KVM. A guest kernel variant with a realtime offset per
+      time namespace would cost nothing per read.
     - Not covered: programs that read the TSC for the wall clock or find the vDSO in
       `/proc/self/maps`, 32-bit programs, and a debugger inside the service. `timerfd` and POSIX
       timers with an absolute realtime deadline are not moved, and the kernel's own times (file
@@ -4421,23 +4586,23 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       placeholders `final: "true"`.
     - An exploration cannot leave out one fault kind (as open items 140 and 141), and two images
       of one folder need `--image` on every run (as open item 188).
-    - The clock audit reads no Erlang.
+    - Since M382 the clock audit reads Erlang and Ra in `deps/ra`. It names finding 3's
+      `retry_reconcile_delay` second of 32 functions and `park_action` sixth, through Ra's
+      command timestamp.
     - `hydo compose` dropped Compose's `hostname:` without a warning. The 0.6.0 release's import
       also took epmd's port from the image's `EXPOSE`, which M367 now warns of.
     - Not run: the Mac engine and KVM, five nodes, AMQP 1.0, super streams, a stream's single
       active consumer, Khepri's own promises, and a native run of either candidate.
 192. What the example `garnet` left (M371, tentative number):
-    - Neither finding is reported upstream. The native script of finding 2 is ready; on this
-      Mac it gave two end states in three runs, both with the slot unserved for good. Finding 1
-      is labeled a deployment setting, because Garnet's cluster is passive and has the option.
-      A report would name the replica's link status, which says up without a stream, as
-      microsoft/garnet#2087 did for another trigger. It would also name the option's default 0:
-      its declaration has no help text, and the configuration page names no default.
-    - Three candidates have no traced cause. Each has a regression on the image with the
-      FileStream device, and none was reproduced without hydo. In the first, a replica answers
-      nothing after a kill of its primary during a checkpoint. In the second, two writes are
-      lost after failovers on both sides of a migration. In the third, a replica holds other
-      data at its primary's offset after a power cut.
+    - Findings 1 and 2 are reported as microsoft/garnet#2441 and #2440 (2026-11-27). Findings A,
+      B and C are not reported. None of the three was reproduced without hydo; the causes are
+      read from the code, the logs, the thread counts and, for C, the bytes of both AOF files.
+    - Finding A's last step is the thread pool that every blocked gossip reply drains. It rests
+      on the thread counts, the code and Milestone 383's stacks. The stacks show the waiting
+      workers but not the method where they wait (open item 194). Which recovery held the lock that
+      `EnsureReplication` found taken at 12:03:17 was not traced.
+    - Finding C needs the failover's re-attach at a tail inside a sector and a power cut. Why the
+      kill of the replica before the failover is needed was not separated.
     - A run took 200 to 350 s on GitHub's KVM runners and 50 to 60 s on hvx. A shrink of a
       power cut on the default device took 81 runs, so the first exploration was stopped.
     - Open items 140 and 141 say it too: no exploration leaves out one fault kind.
@@ -4463,11 +4628,25 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Not run: the Mac engine, and the settings exploration over the five parameters. Neither
       ran the parallel replication, diskless replication, a log on disk, or several replicas
       per shard. No slot moved back to its first shard after a failure.
-193. What the sync audit left (M381, tentative number):
-    - Its schedules did not run in a VM. The known places' findings ran before the audit, with
-      the examples' own schedules.
-    - It ran without the examples' `hydo.yaml`, so the ranking by the code that the services run
-      and the schedules aimed at a workload's event were tested on a small project only.
+193. What the sync audit left (M381, M384, tentative numbers):
+    - Since M384 its schedules ran in VMs on hvx, at four places that no finding had named. They
+      are the SQLite adapter of Garage, the metadata exchange of ClickHouse, the `VERSION` file of
+      Meilisearch, and the backup of Kvrocks. Each place that a workload reached broke under the
+      audit's own cut.
+      None ran on the Mac engine or KVM, and no exploration drew them.
+    - The audit reads a workload's events only in the folder of `hydo.yaml`. The examples'
+      clients live in `client/` beside it, so for Garage and Meilisearch it proposed `L=` and
+      `C=` at a step, and the schedules were aimed at `garage.put_acked` by hand. It keeps
+      `<service>` for a place that several services run (Garage's three nodes).
+    - A place at a database's first start is out of reach of every schedule, because hydo syncs
+      the disks after provisioning. Meilisearch's needed a workload that makes a new database
+      (`meilisearch/fresh/`).
+    - Three places did not run. The walk of the Vikunja example uploads no attachment, and its
+      SQLite loses the row too. No example has a local object storage disk of ClickHouse. The
+      SWUpdate example is built for U-Boot with Docker, so its GRUB environment did not run;
+      SWUpdate fixed that write on `master` (`d294ee7113`), in no release. Nothing was posted.
+    - SWUpdate's delta handler is a false place: it writes to `/dev/null`.
+    - The ranking by the code that the services run was tested on Garage and Meilisearch only.
     - It reads text. A write through an interface, a sync in another thread, and a library that
       the project only links (RocksDB, rclone, a driver's build flags such as go-sqlite3's
       `SQLITE_DEFAULT_WAL_SYNCHRONOUS`) are not followed. A default computed in code or set in a
@@ -4475,10 +4654,110 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The answer is found by words, so a condition that names `commit` counts as one.
     - 5 of 30 sampled places were wrong: a sync behind a documented option, a diagnostic log, an
       analytics id, a dump's temporary folder, and an offline tool's copy.
-    - The places that no finding had named were not run or reported. Examples are ClickHouse's
-      metadata exchange of `RENAME TABLE`, Kvrocks's backup, SWUpdate's delta handler and GRUB
-      environment, Vikunja's attachments, and Meilisearch's `VERSION` file.
     - The scan without `--kind` does not list the sync audit's places.
+194. Every guest thread's stack (M383, tentative number; `docs/design/inspect-stacks.md`). What
+    is left:
+    - Only hvx writes the dump. The Mac and KVM engines refuse `DUMP` and need the command.
+      The KVM guest kernels of the fingerprint epoch 6 carry no BTF, and neither do the Mac's. So
+      each such kernel needs its layouts kept beside it.
+    - No release carries a symbol file of its guest kernel yet. For the proofs, the `System.map`
+      of the same nixpkgs build was put beside the kernel by hand.
+    - A likely holder is a guess. It is a function that refers to the lock's global variable, or
+      a stack slot with its address. A lock in a heap structure, taken through a pointer, is found
+      only by the slot, and named by its address.
+    - A shared library's frames are not named (the process's mappings are not read), and the
+      goroutines need the Go program's DWARF. A JIT's frames (.NET, the JVM) are not named: the
+      Garnet case showed its threads and waits, not its methods.
+    - Where the Garnet replica's 78 thread-pool workers wait (M371's candidate A) is not traced.
+      Its frames are .NET's runtime and JIT code, and the image's root tree was not kept beside
+      the image.
+    - No stop comes at a fault or a signal of the guest. A stop of the lock-step protocol comes
+      at the engine's cadence. So a crash, such as the benchmark's Typesense crash on KVM (case
+      C9), is not read before its process ends. KVM has no dump yet either.
+    - A frame's line is the innermost inlined function's (a `Lock` that the compiler inlined
+      names the mutex's file); Go's inline tree and DWARF's inlined calls are not read.
+    - A live session's stacks call costs one stop. A dump writes the guest's whole RAM, so a
+      reading of a guest of several GiB writes that much to the session's folder.
+    - Several vCPUs on hvx were not run.
+195. The report before the shrinks (M387, tentative number). What is left:
+    - The ten explorations of the ledger that record their later runs were not run again with
+      and without shrinks, as `docs/design/time-to-first-bug.md` proposes. Two hvx explorations
+      of the Redis example, whose runs take half a second, measured the minutes; no onboarding
+      used it yet, and neither the Mac engine nor KVM ran it.
+    - The error kinds of the services' logs have no shrink state: the report shows each one's
+      first new run and says nothing about a shrink that has not ended. `hydo shrink --all` and the
+      error-lines problem's number shrink the kinds that wait.
+    - `hydo shrink` writes the minimal schedules into exploration.json, report.md and
+      events.jsonl, but not into stats.json: its cost of shrinks counts only those that the
+      exploration made. Shrinks made in several calls put their runs into events.jsonl in the
+      order of the calls.
+    - `hydo shrink` runs with the exploration's command line, so a relative `--image` path or
+      `--manifest` path needs the folder where the exploration ran. It refuses a merged
+      exploration; its parts are shrunk in their own folders and merged again.
+    - The steered search, the state search and the freeze points write their first report after
+      their own rounds, which run before the first runs end.
+    - An exploration that a `--time-limit` cut writes its first report after the cut, and its
+      shrinks then run past the limit, as before.
+    - Checks left before the merge (Milestone 383, "Tests"): hydo-control's identity corpus
+      failed on the bare-metal machine, and the tests of hydo-explore did not run with the new
+      example `deadlock`. On the Mac the workspace's clippy and the `docs::`, `equivalence::` and
+      `agents_equivalence::` tests did not run, for lack of disk.
+196. What the example `rocketmq` left (M378, tentative number):
+    - No finding is posted. Finding 3, the transaction check after a backward clock step, is new.
+      A report would name `batchSendOpMessage`'s wall-clock interval. It would also name the
+      check's stop at a half message stored "after" the check began. Finding 1 would be a comment
+      on #11460: a power cut makes the empty header, and without a `.bak` file the pull request's
+      fallback reads no epochs.
+    - On GitHub's AMD EPYC 7763 runners the image does not boot on KVM: the boot ends in `SPIN`
+      after 12,695 to 18,135 stops, before S1. The EPYC 9V45 and 9V74 and the Intel hosts boot
+      it. The part's job passes, and its exploration counts both seeds as failures with the
+      signature `ERROR worker: ''`; only its `explore.txt` names the cause. Why the boot loops
+      there was not looked at.
+    - `L=` takes no group selector, so one broker's power loss names a broker, not the master.
+    - A claim cannot be a build parameter (as open items 140 and 181), so `after_ack` lives in a
+      second manifest with an inline regression.
+    - `hydo build --check` passed a data disk and storage file systems over 4,096 MiB, which the
+      build then refused.
+    - The import moved every address of the Compose file by one (as open item 188) and gave each
+      broker the image's first `EXPOSE` port, 9876, the NameServer's.
+    - `ci/remote-explore.sh --ref` with a short commit fails at the runner's checkout.
+    - The send record of a delayed message carries the offset that RocketMQ answers, which is
+      the offset in `SCHEDULE_TOPIC_XXXX`, not in `j`. The example's `duplicates` claim did not
+      misjudge it, but its `o=` names no copy of `j`.
+    - A failover also gives the new master the delay offsets and the transaction check's progress
+      of its last copy. Five schedules of e2 stored a delayed message or a committed transaction
+      twice after a kill or a pause of a broker, and on hvx seed 70's schedule stored `u14` twice.
+      Which offset the copy lacked in each was not traced.
+    - Not run: the Mac engine, three controllers, two replica groups, and the proxy with its gRPC
+      clients. Nor POP consumption, the timer wheel's delays of any length, the consume queues in
+      RocksDB, or `hydo explore --configs` over `flush` and `allack`.
+197. What the example `cockroachdb` left (M377, tentative number):
+    - Finding 1 is not reported upstream. The code of v26.4.1 is not public, so a report would
+      cite `master` at `d30c905f`. A native run with a clock offset (for example libfaketime on
+      one node) was not made.
+    - hydo's gaps: a run's diagnosis replay was killed by the host's out-of-memory killer, which
+      counted the mapped disk images against `hydo run`, and the run kept no `logs/`. A node
+      that stops itself and is started again by its restart policy leaves no trace in the
+      verdict or the report; only `one.log` names its exits. The diagnosis of a glibc that needs
+      x86-64-v3 said that a program it runs was not found, and of a full disk (exit status 10) it
+      said nothing. `hydo compose` kept a one-shot `cockroach init` as a service and took the
+      port 8080 from the image's `EXPOSE`.
+    - The services' own log files reach `logs/` only with `services[].logs`, which the
+      onboarding guide does not name; CockroachDB's `cockroach.log` is a link to the newest
+      process's file.
+    - Candidate 3 (a store that kept nine unflushed WAL files) has no traced cause, and its
+      schedule's faults were not separated. The comment of `hydo.yaml` names the ballast file
+      as the cause of the first full disk; it stays, because it is in the image's bytes.
+    - With roach3's clock 1 s behind, the final skew image stopped no node, roach3 included.
+      An earlier build stopped all three. Why the offset check did not fire was not traced.
+    - Steps back of a day and of 30 days with a kill of one node left no node serving within
+      180 s, in three blind seeds. They were not separated from their other faults.
+    - The explorations were short: one worker on a loaded machine, without shrinks. They ran
+      seeds 1-4 of the skew image with `--service-clocks` and seeds 1-6 of the default image.
+      These were not run: shrinks, power cuts at disk flushes (`cf=`), and the reactive grid.
+      Neither KVM nor the Mac engine ran it (the image has an arm64 build). More than three
+      nodes, several regions, epoch leases, and a `--max-offset` other than 500 ms were not
+      tried.
 
 ## Milestone index
 
@@ -5685,8 +5964,10 @@ build machine, before 2026-10-13.
   into the same shard leaves the slot without an owner on every node, for good. With Garnet's
   default `--cluster-replication-reestablishment-timeout 0`, a replica never replicates again
   after its primary restarts, and it reports its link up. A power cut loses acknowledged writes
-  with the default device (known, #2281). Transactions, scripts, and expiries held. Nothing
-  posted, nothing recorded moved
+  with the default device (known, #2281). Transactions, scripts, and expiries held. The three
+  untraced failures were traced later. A replica stops answering under `--aof-commit-wait`. A
+  failover of a migration's source gives a slot two primaries. A replica's AOF file is damaged
+  below its new tail. Nothing recorded moved
 
 - The 0.6.0 release (no milestone number): prepared, not published. The version is raised with
   the skill's four version fields, `hydo-world`, `hydo-world-tls` and `hydo-grpc` are re-pinned,
@@ -5752,6 +6033,65 @@ build machine, before 2026-10-13.
   and a first clean run comes after a median of 23 to 68 minutes. Re-runs and shrinks take 85 %
   to 94 % of an exploration before its report. A generated client with the generic checks would
   reach 37 of the 105 bugs. The page proposes the report before the shrinks, then that client.
+  Nothing recorded moved
+- M388 (tentative number): a benchmark of 72 unexplained or late-explained failures for
+  debugging tools (`docs/design/debug-benchmark.md`). By primary tool, the first divergence from a
+  passing run serves 21, watchpoints 15, thread stacks 12, a message's path 12, and the existing
+  logs 9. The page proposes stacks first, then the divergence, watchpoints, and the path, each
+  with five first proofs. Nothing recorded moved
+- M379 (tentative number): one service's own clock on the KVM engine, for an image of
+  `guest.kernel: containers`. hydo-clock's feature `words` reaches the traced memory with
+  `PTRACE_PEEKDATA` where `process_vm_readv` answers `ENOSYS`, and its default build keeps its
+  bytes. The KVM engine refuses other images with `clock: own`. On four Intel and two AMD runners
+  the lease example gave hvx's verdicts, one fingerprint per vendor, and Prometheus's `skew/` its
+  by-design loss. Nothing recorded moved
+- M382 (tentative number): the clock audit's blind spots. It reads bundled code (`vendor/`,
+  `third_party/`, `deps/`, Bazel's external repositories) after the project's own, a library's
+  timers first, and Erlang and Elixir. It follows a project's clock by data flow, cached clocks,
+  Go's ticks and deadline chains, and stored readings compared later. Without a place it gives
+  fallback schedules. Every missed place of six projects is named now. Nothing recorded moved
+- M386 (tentative number): the onboarding follows the measured first hour of M380's ledger. The
+  playbook's phase 3, the skill, and a new section "The first hour of exploring" of `hydo guide
+  workflow` give one order. It starts with production's shape and the default checks before the
+  first run, then 20 seeds of the process strategy without shrinks. Operator actions, aimed
+  grids, and the audits as reading aids come after. `hydo guide strategies` ranks its entries by
+  yield and adds which check noticed each bug. No code changed; nothing recorded moved
+- M383 (tentative number): every guest thread's stack at any stop, read by the hypervisor without
+  a change of the run. The engines' `DUMP` writes the vCPUs' registers and the guest RAM (hvx,
+  no module change). `hydo inspect stacks` reads the kernel's task list through its own BTF and
+  its `System.map`, and the kernel and user stacks. It reads a Go program's goroutines, the locks
+  with their likely holders, and the cycles of waits. The example `deadlock` names both locks
+  and both frames of a Go and a Rust deadlock, and `--check-run` proves the fingerprint
+  unchanged. It gave M325's Keeper loop in one call, and the Garnet replica's 78 blocked
+  workers. Nothing recorded moved
+- M387 (tentative number): the report before the shrinks. `hydo explore` writes its report once
+  the first runs and the re-runs are done. Each problem shows its failing run and command until
+  its shrink ends, and the report is written again as each shrink ends. `--shrink-later` shrinks nothing,
+  and `hydo shrink <explore dir> --problem N` shrinks one problem later in the same folder.
+  Shrinks made later give the files of shrinks made as it went. Nothing recorded moved
+- M384 (tentative number): the sync audit's new places run on hvx, each in a new manifest of its
+  example. Power cuts right after an answer reproduced three known bugs at the first try. The
+  SQLite engine of Garage loses acknowledged writes also with `metadata_fsync` (#1571), and
+  ClickHouse reverts an acknowledged `ADD COLUMN` and `EXCHANGE TABLES` (#111348). A new Meilisearch
+  database never starts again (#4584, which nobody had reproduced). New and minor: a Kvrocks
+  backup that `BGSAVE` reported done is the older one after a power cut. Nothing recorded moved
+- M378 (tentative number): the onboarding of Apache RocketMQ 5.5.0 in controller mode: a
+  NameServer with the controller and three brokers. It ran on hvx and on KVM. New, a clock effect:
+  after a backward step the broker writes no commit or rollback records of transactions. So the
+  check stores a committed transaction again at every interval, or checks none. Known in its parts:
+  a power cut leaves the slaves' epoch files empty, and they never start again. Known: a failover
+  moves consumer offsets back by up to 10 s. Nothing posted, nothing recorded moved
+- M377 (tentative number): the onboarding of CockroachDB v26.4.1 on hvx, three nodes, with one
+  node's own clock (`clock: own`). New: one node's clock 1 s off, ahead or behind, stops the two
+  healthy nodes too. A healthy node of three counts two clocks, and one bad clock of two stops
+  it. At 300 ms every rule held. Known (#25109): a step back of 300 s and a restart of every node
+  leave the cluster unavailable for longer than 180 s. Not traced: a store full of unflushed
+  WAL files. Nothing recorded moved
+- M391 (tentative number): which web-app bugs 15 self-hosted web apps report on GitHub
+  (`docs/design/web-bug-benchmark.md`). Of 343 bugs drawn at random, 86 % need one user and no
+  fault. Stale pages and answers in another order are 12, outside services 9, upgrades 8, time
+  zones 7, two users 6, and backend crashes 0. The page proposes a reload check, then two
+  browsers, a browser time zone, upgrades of image services, reordered answers, and partitions.
   Nothing recorded moved
 
 ## Where to look

@@ -98,6 +98,8 @@ const HELP_LINUX: &str = r#"hydo -- deterministic fault testing on an x86_64 Lin
                                                    type an agent image's recorded run again
     hydo save    <explore dir> [--to hydo/regressions]
                                                    save the minimal schedules of an exploration as regressions
+    hydo shrink  <explore dir> --problem N | --all
+                                                   shrink a problem that an exploration reported before its shrink
     hydo explore [IMG] [--seeds 1-20] [--strategy random|swarm|process|...] [--workers N]
                  [--out DIR] [any other explorer option]
                                                    generate, run, re-run and shrink schedules
@@ -177,6 +179,8 @@ const HELP_MAC: &str = r#"hydo -- deterministic fault testing on an Apple Silico
                                                    type an agent image's recorded run again
     hydo save    <explore dir> [--to hydo/regressions]
                                                    save the minimal schedules of an exploration as regressions
+    hydo shrink  <explore dir> --problem N | --all
+                                                   shrink a problem that an exploration reported before its shrink
     hydo explore [IMG] [--seeds 1-20] [--strategy random|swarm|process|...] [--workers N]
                  [--out DIR] [any other explorer option]
                                                    generate, run, re-run and shrink schedules
@@ -364,6 +368,7 @@ fn dispatch(ctx: &Ctx, argv: &[String]) -> i32 {
         // main help is a recorded answer)
         "sql-gen" => sqlgen::cmd_sql_gen(rest),
         "save" => runs::cmd_save(ctx, rest),
+        "shrink" => delegated::cmd_shrink(ctx, rest),
         "errors" => delegated::cmd_errors(ctx, rest),
         "check-history" => hydo_history::cli::main(rest),
         "migrate" => migrate::cmd_migrate(rest),

@@ -37,7 +37,7 @@ at release, and after release. The tables below take the chart's techniques in i
 | Fuzz tests | `hydo fuzz` calls a Rust function with generated inputs natively. `hydo fuzz --vm` makes the calls inside the VM under power cuts and disk errors, and under clock steps, pauses, and kills inside a call. `hydo explore` draws the faults of each run from a seed. | partly built | M275, M282, M289, M292, M296 (`fuzz-vm`), M307 (enumerations, trait methods, `build` lines), M308 (a third evaluation: 9 known upstream bugs reproduced), M318 and M326 (its findings fixed). M327: a fourth evaluation, and M333 its findings fixed. Open items 139 and 163. |
 | Property-based tests | Function contracts (`// hydo: requires` and `ensures`) judge each generated input of `hydo fuzz`, and each call in a whole-system run. Value properties (`// hydo: keep`) judge a recorded value along its history. | partly built | M241, M255, M291 (`blnk`); open items 113 and 146 |
 | Formal verification | Not hydo's job. A proof covers every state of a model, and hydo checks only the runs that it makes. | not hydo's job | |
-| Static analysis | `hydo rules scan` lists a project's promises from its sources. `hydo rules scan --kind clock` lists the code that measures a duration with the wall clock. Both read text, not syntax. Since M324 the clock audit leaves out test code inside source files and ranks first the code of the Cargo and Go programs that the services of `hydo.yaml` run. It does not follow a project's own clock function, such as GreptimeDB's `current_time_millis()` (M343). Since M350 it also lists a reading of the clock kept as the order or the version of data, such as the timestamp of Garage's CopyObject (M349). `hydo rules scan --kind writes` lists the routes of a project's API that write, each with its handler, from the router code of five languages, `.proto` files and OpenAPI files (M344). Since M350 it reads a Rust enumeration of endpoints too, and lists Garage's 42 write routes. It found no route in Kvrocks, whose commands are a C++ table (M351). The clock audit found no place in Kvrocks, which reads the wall clock through its own `util::GetTimeStamp` (M351). Since M355 the clock audit follows a C++ wrapper of the clock, Kvrocks's `util::GetTimeStamp`. The write scan reads the command tables of Redis-compatible servers in C and C++, 142 commands of Kvrocks. Since M381 `hydo rules scan --kind sync` lists the code that can answer a write before it is synced. On the tagged sources of 12 known places it listed all 12 as `high`. 25 of 30 sampled places were real. | partly built | M236, M248, M324, M343, M344, M349, M350, M351, M355, M381; M342 (Prometheus's finding 2); open items 110, 117, 122, 166, 171, and 173 |
+| Static analysis | `hydo rules scan` lists a project's promises from its sources. `hydo rules scan --kind clock` lists the code that measures a duration with the wall clock. Both read text, not syntax. Since M324 the clock audit leaves out test code inside source files and ranks first the code of the Cargo and Go programs that the services of `hydo.yaml` run. Until M382 it did not follow a project's own clock function in Rust, such as GreptimeDB's `current_time_millis()` (M343). Since M350 it also lists a reading of the clock kept as the order or the version of data, such as the timestamp of Garage's CopyObject (M349). `hydo rules scan --kind writes` lists the routes of a project's API that write, each with its handler, from the router code of five languages, `.proto` files and OpenAPI files (M344). Since M350 it reads a Rust enumeration of endpoints too, and lists Garage's 42 write routes. It found no route in Kvrocks, whose commands are a C++ table (M351). The clock audit found no place in Kvrocks, which reads the wall clock through its own `util::GetTimeStamp` (M351). Since M355 the clock audit follows a C++ wrapper of the clock, Kvrocks's `util::GetTimeStamp`. The write scan reads the command tables of Redis-compatible servers in C and C++, 142 commands of Kvrocks. Since M381 `hydo rules scan --kind sync` lists the code that can answer a write before it is synced. On the tagged sources of 12 known places it listed all 12 as `high`. 25 of 30 sampled places were real. Since M382 the clock audit reads Erlang, Elixir, and bundled code (`vendor/`, `third_party/`, `deps/`, Bazel's external repositories), follows a project's own clock by data flow, and gives fallback schedules without a place. It names the clock findings' places of Typesense, VictoriaMetrics, Restate, GreptimeDB, RabbitMQ, and Prometheus. | partly built | M236, M248, M324, M343, M344, M349, M350, M351, M355, M381, M382; M342 (Prometheus's finding 2); open items 110, 117, 122, 166, 171, and 173 |
 | Mutation tests | `hydo rules check --mutate` plants a change of the stored state and says whether each rule catches it. A change of the program is not built. | partly built | M236; open item 110 |
 | Coverage | hvx traces the guest's code with Intel Processor Trace (`HVX_EXPLORE_PT_ELF`). A CI report names the properties that no run reached. Coverage-guided exploration found no bug sooner. `error_paths: true` records which error-handling places of a program ran, on the Mac engine, and `hydo report --paths` lists the places that only faults reached and the places never reached. | partly built | M40, M41, M44, M197, M306 (`blnk`); open item 155 |
 | Benchmarks | `perf:` in the manifest counts the work of each workload step, and `hydo perf compare A B` says each change in words. The work is exact on hvx only. | partly built | M237 (`perf-kv`) |
@@ -86,7 +86,7 @@ at release, and after release. The tables below take the chart's techniques in i
 | Tracing | Value history (`// hydo: record`) records chosen values at every call without a change of the run. `HYDO_PREEMPT_RECORD=1` records each forced preemption point. `hydo diff` names where two runs first differ. | partly built | M165, M208, M285; open items 77 and 146 |
 | Dynamic exploration | `hydo explore` searches the fault space from seeds, and `browser.explore` walks through a web app's pages. `--shard I/N` and `--merge` spread one exploration over many machines. An exploration that refuses before its first run exits with status 5, so a script tells it from one that ran (M328). An option whose draws the engine refuses, or that has nothing to act on in the image, is refused then, one line each (M345). So is an option whose draws the manifest leaves nothing of (M348). Its `stats.json` and `hydo stats` show the curve of new behaviour, the cost, the faults drawn, and how many runs fit in a budget (M336). On the Mac engine the workers of one exploration share the snapshots' RAM, so more of them fit (M335). | built | M38, M102, M258, M304, M328, M335, M336, M345, M348 |
 | Real user monitoring | Not hydo's job. It needs real users. | not hydo's job | |
-| Auditing | `hydo rules scan --kind clock` audits the code for durations on the wall clock. The control transcript records every command and fault of a run. An audit of access or compliance is not hydo's job. | partly built | M248 (`valkey`, valkey#5406) |
+| Auditing | `hydo rules scan --kind clock` audits the code for durations on the wall clock, also in bundled libraries (M382). The control transcript records every command and fault of a run. An audit of access or compliance is not hydo's job. | partly built | M248 (`valkey`, valkey#5406), M382 |
 | On-call experience | When an incident's cause is a fault that hydo can make, a schedule makes it again. `hydo inspect` opens the failed run at any stop, and `hydo report --html` says what broke in plain words. Paging and runbooks are not hydo's job. | partly built | M178, M228 |
 
 ## Use cases by who asks
@@ -105,7 +105,7 @@ last line names the ideas that would answer more.
 | Do the guest's timeouts fire on time late in a long, busy run? | On hvx an x86_64 image built at the fingerprint epoch 5 keeps time with its TSC (`guest.exact_tick`). Its clocks follow the virtual TSC at every uptime and read in steps of 2 µs. The Mac and KVM guest kernels read one counter for the clock and the timer. | built; `clickhouse` seed 20 (M319, M323), `docs/design/guest-clock.md` |
 | Does a program that reads its own I/O counters at start run in the guest? | An image built at the fingerprint epoch 7 has `/proc/<pid>/io` on every engine: the Mac and KVM guest kernels have per-process I/O accounting since then, and hvx's always had it. `guest.proc_io: false` keeps the kernels of epoch 6. | built on KVM, and on the Mac without a run; `typesense` (brpc reads `/proc/self/io` at start; M373, M376) |
 | Does a backward clock step break a lease or a timeout? | `T=` steps the guest's wall clock. `hydo rules scan --kind clock` proposes the steps. | built; `valkey`, `temporal`, `dragonfly`, `river`, `restate`, `iggy` (a topic's message expiry), `victoriametrics` (a step back deletes a month, holds new samples in memory, and leaves one copy), `prometheus` (scrape times freeze after a step back: prometheus#8312), `typesense` (M366). Also `rabbitmq` (M370) |
-| Does a lease hold when one node's clock runs ahead of the others? | `clock: own` gives a service a wall clock of its own, and `T=<svc>@<at>:<change>` steps it or makes it drift, while the other services keep the guest's clock. `hydo explore --service-clocks` draws such steps and drifts, and the clock audit proposes them (M375). It ran on TiKV, Typesense, and Prometheus on hvx. | partly built; `service-clocks` and the `skew/` folders of the TiKV, Typesense and Prometheus examples on hvx (M372, M375; open item 190) |
+| Does a lease hold when one node's clock runs ahead of the others? | `clock: own` gives a service a wall clock of its own, and `T=<svc>@<at>:<change>` steps it or makes it drift, while the other services keep the guest's clock. `hydo explore --service-clocks` draws such steps and drifts, and the clock audit proposes them (M375). It ran on TiKV, Typesense, and Prometheus on hvx, and on KVM with `guest.kernel: containers` (M379). On CockroachDB one node's clock 1 s off stopped all three nodes, and 300 ms broke nothing (M377). | partly built; `service-clocks` and the `skew/` folders of the TiKV, Typesense, Prometheus and CockroachDB examples on hvx, `service-clocks` and Prometheus's `skew/` on KVM (M372, M375, M377, M379; open items 190 and 197) |
 | Does an acknowledged job run, and run once? | A `type: messages` check declares the claims. Kills of the process that holds the work test them. A durable execution's journaled steps append to an effects file, and a rule finds a step that runs again. Since M360 `no-loss` with a `lease` counts a received message that no acknowledgement accepted and that never came back as lost. | built; `hatchet`, `river`, `redpanda`, `restate`, `iggy`; `nsq`, from the NSQ trial (M359, M360, M362: a kill of `nsqd` in a new topic's first seconds loses its messages); `rabbitmq` (M370) |
 | Does a crash between two commits of one operation run it twice? | `A=<event>+<ms>:kill-now-<svc>` kills the service at the moment the client writes an event, or a number of milliseconds later, before any thread of the service runs on. `A=<event>#<k>...` acts at the k-th record of the event. `hydo explore --reactive-at <event>` tries every delay from 0 to 50 ms, each with `kill-now-<svc>`, `kill-<svc>` and a power cut. It runs one schedule per seed. `hydo explore --reactive fault --kill-now` draws such kills at random. It draws them also on a project with one service. | built; `meilisearch` finding 1 on the Mac engine and hvx (M305). Found blind on the Mac engine (M309), and by the aimed grid at schedule 29 of 153 (M345; open items 154 and 173) |
 | Does a node start again after a power loss that follows a failover? | The client fails over as Sentinel does and writes once more to the old master. So the old master and its replicas rejoin by a full synchronization. `hydo explore --reactive-at <the failover's event> --react-actions cut` cuts the power seconds later. A `WAIT` check after the heal tells a replica that holds the data from one that acknowledged it. | built; `kvrocks` findings 1 and 2 on the Mac engine (M351; open item 179) |
@@ -117,11 +117,11 @@ last line names the ideas that would answer more.
 | Does a replica follow its primary again after the primary restarts? | A kill of one primary of a sharded cluster, and an `eventually_` check that compares each primary with its replica, shard by shard, after the heal. The check also names keys of a slot that moved away and stayed on a node. | built; `garnet` finding 1 on hvx, a replica that never replicates again after its primary's restart and reports its link up; replayed with hydo 0.7.0 (M371; open item 192) |
 | Does a sharded cluster serve every slot after the control plane's steps? | The client plays the control plane: `serial_driver_` commands move slots and fail shards over, and the composition puts them next to each other. An `eventually_` check asks every node for every slot's owner and requires one owner that is a primary. | built; `garnet` finding 2 on KVM and hvx, a failover right after a migration that leaves the slot without an owner. Gossip never repairs it, and hydo 0.7.0 replayed it (M371; open item 192) |
 | Does every accepted operation end, and does a completed result stay readable? | An `eventually_` check for each type of outcome that the client records as unknown, with `within=` longer than the system's own timeout. A second check reads each completed result after the heal (`hydo guide strategies`, "How each unknown outcome ends"). | built; the same onboarding, where the two checks found both bugs (M330) |
-| Which checks and faults should a new project start with? | `hydo guide strategies` maps a type of system to the techniques that found bugs. Each technique has its evidence and its cost. | built; M293, M330 |
+| Which checks and faults should a new project start with? | The section "The first hour of exploring" of `hydo guide workflow` gives the order that found most of 105 bugs in 47 onboardings. It starts with production's shape and the default checks before the first run. Then come 20 seeds of the process strategy without shrinks, the operator's actions, aimed reactions, and the audits as reading aids. `hydo guide strategies` ranks the techniques and the checks by their yield, with each one's evidence, its cost, and its false findings. | built; M293, M330, M380, M386 |
 | Has the exploration seen enough, or should it run longer? | `hydo stats` prints the curve of new behaviour: the distinct verdicts, property outcomes, error kinds, and error paths after each run in seed order. It says whether the last quarter of the runs showed anything new. It also lists the fault kinds that `faults:` allows and no schedule drew; since M360 a reaction counts as the fault that its action makes. | built; the Redis quickstart on the Mac engine (M336), and on hvx and KVM, also as two shards merged (M341) |
 | Do the books still match the client's operations? | The generic rule and domain rules, proposed by `hydo rules scan` and validated by `hydo rules check`. | built; `blnk`, `lago`, `formance-ledger` |
 | Does the workload call every operation that writes? | `hydo rules scan --kind writes` lists the API's write routes and RPC methods, each with its handler, grouped by resource and ranked from durable data to logins and metrics. The onboarding skill gives each route of class `data` or `admin` a workload command. | partly built; on six examples' sources every known write of the RESULTS pages was listed, and 109 of 114 sampled routes were writes (M344; open item 175). On Garage it listed none (M349); since M350 it lists 42, every write of Garage's workload among them. Since M355 it lists the 142 write commands of Kvrocks's command tables. Since M368 it reads C and C++ route registrations, and lists 54 of Typesense's 57 routes as writes and the other 3 as reads by their names |
-| Which code answers a write before the write is on the disk? | `hydo rules scan --kind sync` lists each place with the sync that is missing and the answer that follows it. It aims one service's power loss and a power cut of the guest right after that answer. | partly built; on the sources of 12 known places of hydo's findings, every one was listed as `high` (M381; open item 193). Its schedules did not run in a VM yet |
+| Which code answers a write before the write is on the disk? | `hydo rules scan --kind sync` lists each place with the sync that is missing and the answer that follows it. It aims one service's power loss and a power cut of the guest right after that answer. | partly built; on the sources of 12 known places of hydo's findings, every one was listed as `high` (M381; open item 193). Since M384 its schedules ran on hvx at the new places of four projects. They reproduced three known bugs. The bugs are Garage #1571 with SQLite, ClickHouse #111348, and Meilisearch #4584, which its maintainers never reproduced |
 | Where did a wrong value come from? | Value history and value properties on the Mac engine. | partly built; `blnk` (M285, M291) |
 | Did the faults reach the error handling at all? | `error_paths: true` records which `if err != nil` bodies, `Err` returns, `?` branches, panics and retry functions ran in each run. `hydo report --paths` lists what only faults reached, against `hydo explore --no-faults`, and what no run reached. | partly built; `blnk` on the Mac engine (M306; open item 155) |
 | What is the smallest schedule after which a service never starts again? | `hydo explore` shrinks a service that does not start again (`ERROR <svc> restart failed`) and a workload or a check that does not end (`TIMEOUT workload`, the Mac engine's `exit budget exhausted`) by the error's signature, as it shrinks a violation. A system's detection of the damage that hydo made is shrunk only with `--shrink-detected-damage`. | built; M339; the Redis quickstart on the Mac engine, hvx and KVM, the scripted engine; TIMEOUT shrinks on hvx and exit-budget shrinks on KVM (M341) |
@@ -154,8 +154,12 @@ Ideas that would answer more:
 Ideas that would answer more:
 
 - [A walk that follows the page](#a-walk-that-follows-the-page);
-- [Faults inside a step](#faults-inside-a-step); and
-- [Stateful emulators](#stateful-emulators).
+- [Faults inside a step](#faults-inside-a-step);
+- [Stateful emulators](#stateful-emulators);
+- [A reload check for web pages](#a-reload-check-for-web-pages);
+- [Two browsers in one run](#two-browsers-in-one-run);
+- [A browser's own time zone](#a-browsers-own-time-zone); and
+- [Reordered answers and partitions between the browser and the server](#reordered-answers-and-partitions-between-the-browser-and-the-server).
 
 ### A library author in Rust
 
@@ -197,6 +201,7 @@ Ideas that would answer more:
 | Can the pull request show only what it changed? | `hydo ci run` writes `comment.md`, which the GitHub action posts and edits. | built; M286 |
 | Which commit introduced a finding? | `hydo versions --git A..B` replays it per commit, by hand. | partly built; M221 |
 | Does an exploration spend VMs on runs it already ran? | A first run or a shrink candidate whose schedule the exploration already ran takes the earlier result without a VM. `exploration.json` counts `repeats` and `repeats_saved_s`. | built; M339; the Redis quickstart on the Mac engine, and on hvx and KVM (M341) |
+| How soon does an exploration show what failed? | `hydo explore` writes its report once its first runs and the re-runs of each failure are done, before any shrink ends. A problem without its minimal schedule shows its failing run, its replay command, and a mark that it is not shrunk yet. The report is written again as each shrink ends. `--shrink-later` shrinks nothing, and `hydo shrink <explore dir> --problem N` shrinks one problem later in the same folder. | built; M387; the scripted engine (shrinks made later equal shrinks made as the exploration went, and a stopped exploration keeps its report) and the Redis example on hvx |
 | Can a shrink candidate skip the part it shares with an earlier candidate? | `hydo explore --shrink-from-snapshots`: the reruns and the candidates snapshot where a step range or a composed round starts, and a later candidate on the same worker continues from the deepest one it reaches. `--check-continued` compares each with its run from S1. | built on KVM, on by default (four GitHub runners, the Redis example); M340; exact on the Mac engine too, but slower there, so off (open item 172) |
 | Which problems did all the rounds of exploration find? | `hydo report A B C` and `hydo report --html A B C` read several explorations of one image, made with different options. They list each problem once by its class and signature, and name every exploration and seed that showed it. | built; M345 (the Meilisearch example's aimed and blind rounds on the Mac engine) |
 | Can a long exploration run on many machines at once? | `hydo explore --shard I/N` explores one part of the seeds, and `hydo explore --merge` makes one exploration of the parts. hydo's workflow `explore.yml` runs up to 20 parts on GitHub's KVM runners. | built; M304 (Redis, Redpanda, and Dragonfly on GitHub's runners), M310 |
@@ -213,6 +218,7 @@ Ideas that would answer more:
 |---|---|---|
 | Can the maintainer see it fail? | `hydo run <image> '<schedule>'` repeats the run bit for bit, and `hydo repro` replays a run directory. | built; every example |
 | Why did it fail? | `hydo report --html`, `hydo inspect` at any stop of the run, `hydo diff`, and `hydo explain`. The report names a step by the schedule's number. A service that its environment stopped in a recovery boot is not said to have lost data (M316). `hydo inspect diagnose <explore dir> --problem N` diagnoses an exploration's problem, and the report prints the `hydo run ... --out` that makes its run directory (M324). A root too big for guest RAM gets a verdict that names the sizes (M328). A run that used up the engine's exit budget names the check that ran, or gives the check's violation (M328). `hydo inspect stop --all` frees the guests of forgotten sessions (M328). On hvx a boot whose agent lines pass 16 MiB ends with a verdict that names the error-log scan (M348). | built; M165, M178, M220, M228, M301, M324, M328, M348 |
+| A service hangs and its logs stop: which lock do its threads wait on, held by which function? | `hydo inspect stacks` reads every guest thread's user and kernel stack at any stop of the run, and a Go program's goroutines. It names the locks they wait on with their likely holders, and the cycles of waits. The engine writes the stop's state and the host reads it, so the run does not change (`--check-run` proves it). | partly built; `deadlock` on hvx (M383; open item 194) |
 | Is it a bug of the system or of the setup? | Each failure class has a label and advice (`hydo_explore::advice`). Since M328 a failure without a power cut has a class named for its fault families (`process`, `network+clock`). A script under Docker in the example's `native/` folder confirms the cause outside hydo. | built; M228, M328; `redpanda/native`, `saleor/native` |
 | Which versions have it? | `hydo versions` bisects over versions, assuming one change point. | built; `formance-ledger` (M221) |
 | Is the fix complete? | The same schedule on the fixed build, and the saved regression in CI. | built; `blnk`, `qdrant-flaky-10200` |
@@ -426,9 +432,11 @@ that a milestone builds moves into the tables of this page with its new status.
 - **Status.** Partly built in Milestones 372 and 375 on hvx: `clock: own`,
   `T=<svc>@<at>:<change>`, `hydo explore --service-clocks`, and the clock audit's schedules for
   one service (`docs/design/service-clocks.md`, example `service-clocks`). Milestone 375 ran it
-  on TiKV, Typesense and Prometheus (each example's `skew/` folder).
-- **What it still needs.** The KVM and Mac engines, and a guest kernel variant with a realtime
-  offset per time namespace when the tracer's cost matters (open item 190).
+  on TiKV, Typesense and Prometheus (each example's `skew/` folder). Since Milestone 379 the KVM
+  engine runs it for an image of `guest.kernel: containers`.
+- **What it still needs.** The Mac engine (an arm64 build of hydo-clock), and a guest kernel
+  variant with a realtime offset per time namespace when the tracer's cost matters (open item
+  190).
 - **Where it came from.** Item 9 of the section "Ranked plan" of `docs/design/jepsen-gaps.md`.
   The Prometheus example (M342) needed it too: its agent and its server share the guest's clock,
   so a server whose clock alone steps ahead of its senders cannot be tested.
@@ -502,6 +510,51 @@ that a milestone builds moves into the tables of this page with its new status.
 - **What it needs.** A choice of action keyed by the control's role and name, not by its place.
 - **Where it came from.** Open items 129 and 131.
 
+### A reload check for web pages
+
+- **What it is.** After each action of a walk, the walker reloads the page and compares the
+  objects it shows before and after the reload, and with the server's answers.
+- **Why it matters.** In the bug benchmark of web apps, half of the random bugs of answers in
+  another order are pages that keep an old state until a reload. They are 6 of 343 random bugs
+  and 15 targeted ones. The check needs no fault, and the two ideas below need its comparison.
+- **What it needs.** A reload step and a comparison of the objects on a page, in the walker of
+  `browser.explore`, as `browser.read_back` reads the pages.
+- **Where it came from.** Milestone 391 (`docs/design/web-bug-benchmark.md`).
+
+### Two browsers in one run
+
+- **What it is.** Two Playwright contexts for two accounts, or for two tabs of one account. The
+  schedule interleaves their walks. Three checks judge them. One account never sees the other's
+  private ids, a change of one reaches the other within a time, and no saved edit vanishes.
+- **Why it matters.** Bugs of two users and live updates reached 8 of 343 random bugs and 37
+  targeted ones. They are lost updates, races of two writers, authorization leaks, and changes
+  that do not reach another session.
+- **What it needs.** A second browser context with its own sign-in, the ids that
+  `browser.read_back` already collects, and a replay of one account's requests with the other's
+  session.
+- **Where it came from.** Milestone 391 (`docs/design/web-bug-benchmark.md`).
+
+### A browser's own time zone
+
+- **What it is.** A time zone and locale per browser, apart from the guest's own zone, and one
+  walk run in two zones whose stored instants are compared.
+- **Why it matters.** Time-zone and daylight-saving bugs were 7 of 343 random bugs and 27
+  targeted ones. Most of them are in scheduling and signing apps.
+- **What it needs.** Playwright's `timezoneId` and `locale` per context, the clock steps to a
+  time of Milestone 225, and a comparison as in `hydo compare-versions`.
+- **Where it came from.** Milestone 391 (`docs/design/web-bug-benchmark.md`).
+
+### Reordered answers and partitions between the browser and the server
+
+- **What it is.** A proxy between the browser and the app's own backend. It holds one answer
+  until a later one, sends a request twice, refuses one write, or cuts the link and restores it.
+- **Why it matters.** Reporters call answers in another order hard to reproduce more often than
+  other bugs: 9 of 43, against 25 of 409. Reordered answers reach 5 random bugs and 10 targeted
+  ones, and a partition reaches 9 targeted ones.
+- **What it needs.** `H=` faults per request on the app's own routes, walk actions that
+  double-click and type fast, and a cut of the browser's link alone.
+- **Where it came from.** Milestone 391 (`docs/design/web-bug-benchmark.md`).
+
 ### Leaving a fault kind or a known bug out of an exploration
 
 - **What it is.** An option that leaves one fault kind out, and a way to keep a known finding
@@ -519,7 +572,8 @@ that a milestone builds moves into the tables of this page with its new status.
 - **Why it matters.** Many teams run their services from images, and an upgrade often follows
   another.
 - **What it needs.** Versions as images in the manifest, and an explorer that draws several `U=`.
-- **Where it came from.** Open item 109.
+- **Where it came from.** Open item 109. Milestone 391 counted 8 upgrades that fail or damage data
+  among 343 random bugs of web apps, and 21 in targeted searches.
 
 ### Kubernetes beyond one pod
 

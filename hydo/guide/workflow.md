@@ -337,6 +337,46 @@ then named by the faults it keeps. And a reaction's delay (`A=<event>+<ms>:...`)
 every number left out. A shorter delay can reach another cause's window and fail the same check
 with other words; the shrink then keeps the longer delay.
 
+### The report comes before the shrinks
+
+A shrink runs a failing schedule many times with fewer or smaller faults, so it takes most of an
+exploration's time. `hydo explore` therefore writes its report as soon as its first runs and the
+re-runs of each failure are done, before any shrink ends. Then it shrinks, and writes the report
+again as each shrink ends.
+
+- Until its shrink ends, a problem shows its failing run's schedule and the command that runs
+  it, and `hydo report` marks it as not shrunk yet. A failing run replays exactly as a minimal
+  schedule does; it only has more faults.
+- In a terminal, `hydo explore` prints the number of failed runs and problems at the first
+  report. `hydo report <explore dir>` shows them while the shrinks run.
+- `exploration.json`, `report.md` and `stats.json` are replaced as a whole at each write, so you
+  can read them at any time. If you stop the exploration during its shrinks, the report keeps
+  every problem with its failing run and its command.
+- `hydo explore --shrink-later` writes the report and shrinks nothing. `hydo shrink <explore dir>
+  --problem N` shrinks problem N later, as `hydo report` numbers it, and `--all` shrinks every
+  problem that waits. It uses the exploration's engine and options, so run it in the folder where
+  the exploration ran. The minimal schedule goes into the same folder, as if the exploration had
+  shrunk it.
+- The first runs and the re-runs take the workers first; the shrinks' runs wait until no first
+  run waits. The verdicts, fingerprints and minimal schedules are those of an exploration that
+  shrinks as it goes.
+
+Each failure in `exploration.json` has `shrink_state`: `pending` (it waits for `hydo shrink`),
+`shrinking` (the explorer was shrinking it when it wrote the file), `done`, or `skipped` (hydo
+does not shrink it). A failure that is not `done` also has `repro_command`. The summary's
+`first_report_s` is the number of seconds from the start to the first report. The shrinks that
+have not ended are listed in the folder's `unshrunk.json`, which `hydo shrink` reads.
+
+What reads an exploration reads one that is not shrunk yet:
+
+- `hydo save` saves the minimal schedules that exist and names the problems that are not shrunk
+  yet.
+- `hydo stats` says that its cost of shrinks counts only the shrinks that ended.
+- `hydo explore --merge` keeps a part's problem that is not shrunk yet with its failing run; shrink
+  it in the part's folder and merge again.
+- `hydo ci run` decides a finding against the base with its minimal schedule when there is one,
+  and with the failing run's schedule otherwise. Its comment says that such a schedule is not shrunk.
+
 ### Shrinks that continue from snapshots
 
 A shrink candidate keeps the faults before the one it changes. So it runs again what an earlier
@@ -400,6 +440,83 @@ signal a root process, so stop the exploration, not its engines:
 ```text
 hydo-hvx 336735 (under sudo 336733, flock 336723; stop it with: sudo kill 336735)
 ```
+
+## The first hour of exploring
+
+The order below comes from 47 onboardings of real systems. They found 105 bugs, and `hydo guide
+strategies` gives the evidence for each step. Follow it once the folder builds, before you add
+other techniques.
+
+1. Run the system in production's shape. Give it production's replica counts, cluster sizes, and
+   features, and each durability setting at its durable value. Make each such setting a build
+   parameter (`params:`). Under a relaxed setting every power cut gives the documented loss, as
+   in Kvrocks, Garage, SeaweedFS, Iggy, and ClickHouse.
+2. Declare the default checks before the first run, so that the run without faults judges
+   something. 11 bugs needed no fault, and 3 showed in the first run.
+   - A read-back of every acknowledged write with its final outcome: the generic rule over
+     `$HYDO_ACKED` and `$HYDO_OUTCOMES` (`hydo guide composer`), or the claim `acked_outcome`
+     of a messages check (`hydo guide messages`).
+   - Every replica compared with the leader after the heal, for a system with replicas.
+   - An `eventually_` check that the system serves a write after the heal (`hydo guide checks`).
+   - The error-log scan, `errors: true` (`hydo guide error-logs`).
+   - A history checker where the workload has transactions (`hydo guide checks`, "History
+     checks").
+
+   These checks and hydo's own verdicts would have caught 63 of the 105 bugs.
+3. Run the schedule without faults twice, as the section "Build and run" says.
+4. Explore 20 seeds without shrinks:
+
+   ```sh
+   hydo explore --seeds 1-20 --strategy process --cluster-faults --no-shrink
+   ```
+
+   Keep `clock`, `kill`, and `cut` in `faults:`. `--cluster-faults` needs `groups:`; leave it out
+   for a system of one node. Add `--storage-faults` when the nodes have `storage:` of their own,
+   with `powerloss` in `faults:` and `corrupt` left out for now. This exploration found 60 of the
+   105 bugs first, and 35 of the 43 blind first finds with a recorded place came within 20
+   schedules.
+5. Judge each failure with directed runs. `hydo report --details` gives its schedule. Run it with
+   `hydo run "<schedule>"`, then once with each fault left out. A finding needs every fault that
+   stays. A shrink cost a median of 6.9 runs per first run, so shrink only the failure that you
+   report. Explore its seed alone with the same options and without `--no-shrink`, for example
+   with `--seeds 7-7`.
+6. Put the operator's actions into the workload: failovers, slot migrations, the removal of a
+   node, a graceful stop, and upgrades. Make each a `serial_driver_` command (`hydo guide
+   composer`), or a `U=` token for an upgrade (`hydo guide faults`, "Upgrades and rollbacks").
+   14 of the 105 bugs needed such an action. Explore the next 20 seeds.
+7. Aim a reaction grid where a crash can fall between an answer and a commit or a sync. Give the
+   client an event at that answer, then run `hydo explore --reactive-at <event>@<step>` (`hydo
+   guide faults`, "Exploring"). The grids found 4 bugs first in 8 examples, and nothing in 3.
+8. Read the two audits for directed schedules: `hydo rules scan --kind sync` and `hydo rules scan
+   --kind clock` (`hydo guide faults`). Run the schedules of their first places with `hydo
+   explore --schedule`. Neither audit found a bug first; they point at places to aim at.
+
+Write a business rule only where the promise is at most once, once per period, a money limit, a
+device's version, or a listing, an expiry, or a retention. Such rules caught 19 bugs that no
+default check caught. They also made 21 of the 30 false findings. Before an exploration, check
+two points of each rule:
+
+- Its wait covers the system's own recovery: leases, retry timers, failovers, and the recovery
+  boot after a power cut.
+- Its result under a clock step matches the system's promise, not the clock's new time.
+
+Write a value property (`hydo guide values`) where a value must reach a decision unchanged across
+functions or processes. On Blnk it broke in 9 of 30 blind schedules, and the business rule in 1.
+
+Leave these for later rounds:
+
+- damaged files (`corrupt` in `faults:`): 16 of their 22 failures were the system's own
+  detection of the damage;
+- `--strategy swarm`: 2 bugs first in 620 schedules, most of its failures disk faults;
+- the timing options (`--timing`, `--preempt`, `--vcpus N --turns`) on services: nothing first in
+  90 schedules;
+- contracts in a whole-system run (`hydo guide manifest`, "Function contracts"): nothing new in 24
+  schedules;
+- `hydo explore --configs`: no bug first in 245 schedules; run it to label a documented loss;
+- the steered and the state searches: no gain over the plain exploration.
+
+When the first hour finds nothing, run a second round before you report no bugs: 60 seeds or
+more, and the techniques of `hydo guide strategies` for the system's type.
 
 ## How much was explored, and whether to run more
 

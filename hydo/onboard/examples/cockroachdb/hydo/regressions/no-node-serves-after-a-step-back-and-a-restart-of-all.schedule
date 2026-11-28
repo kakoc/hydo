@@ -1,0 +1,10 @@
+# A clock effect in CockroachDB v26.4.1 (RESULTS.md, finding 2). The guest's wall clock steps
+# back 300 s before step 10, and all three nodes are killed before step 15 and start again
+# together before step 18. No node serves a write or a read within 180 s of the heal: the check
+# serves fails. Each node's new process starts its hybrid logical clock from the wall clock, 300 s
+# behind the timestamps of the data and of the leases written before the step, so the ranges stay
+# without a usable lease until the wall clock passes them. The setting
+# server.clock.persist_upper_bound_interval makes a node wait at its start instead (known,
+# cockroachdb/cockroach#25109).
+# expect: violation      (by design; change to ok if the cluster serves within 180 s)
+disk=none | run T=10:-300 K=nodes.all@15+3

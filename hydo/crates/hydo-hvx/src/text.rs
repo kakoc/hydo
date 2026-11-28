@@ -153,6 +153,10 @@ pub fn read_command(ln: &[u8]) -> Cmd {
     if let Some(r) = ln.strip_prefix(b"DISK ") {
         return Cmd::Host(HostCmd::Disk(lossy(r)));
     }
+    // Milestone 383: every vCPU's registers and the guest's RAM, written to a file
+    if let Some(r) = ln.strip_prefix(b"DUMP ") {
+        return Cmd::Host(HostCmd::Dump(lossy(r)));
+    }
     let mut l = "unknown command ".to_string();
     ctl::esc(ln, &mut l);
     Cmd::Bad(l)
