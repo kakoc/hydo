@@ -5,6 +5,7 @@
 
 mod support;
 
+mod answer_faults;
 mod block_faults;
 mod cluster_faults;
 mod corpus;

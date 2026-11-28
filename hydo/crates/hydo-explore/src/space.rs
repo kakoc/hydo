@@ -55,6 +55,10 @@ pub struct Drawn {
     pub block: bool,
     /// `--service-clocks` (Milestone 375).
     pub service_clocks: bool,
+    /// `--answer-faults` (Milestone 393).
+    pub answer_faults: bool,
+    /// `--link-cuts` (Milestone 393).
+    pub link_cuts: bool,
     /// `--reactive-at` (Milestone 345): each schedule is one aimed reaction, and nothing is drawn.
     pub aimed: bool,
 }
@@ -546,6 +550,13 @@ impl Space {
             } else {
                 ask.push(("--service-clocks", w));
             }
+        }
+        // Milestone 393: named only when given, so the line of an exploration without them stays
+        if o.answer_faults && !self.pf_targets.is_empty() {
+            on.push("answers in another order and requests sent twice".to_string());
+        }
+        if o.link_cuts && link_cut_target(self).is_some() {
+            on.push("cuts of the browser's network while a step runs".to_string());
         }
         if !self.knobs.is_empty() {
             let toks: Vec<&str> = self.knobs.iter().map(|(t, _, _)| t.as_str()).collect();
@@ -1201,6 +1212,52 @@ fn pf_targets(m: &Value) -> Vec<PfTarget> {
         }
     }
     out
+}
+
+/// The routes `--answer-faults` draws on (Milestone 393): each `<fake>.<route>` and
+/// `<proxy>.<route>` of an HTTP fake or proxy, with its method (`GET`, `POST`, ...; `*` for a
+/// route of any method), in the manifest's order.
+pub fn answer_routes(m: &Value) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for e in arr(m.get("fakes"))
+        .iter()
+        .chain(arr(m.get("proxies")).iter())
+    {
+        let proto = e
+            .get("protocol")
+            .map(str_of)
+            .unwrap_or_else(|| "http".into());
+        if proto != "http" {
+            continue;
+        }
+        let name = str_of(e.get("name").unwrap_or(&Value::Null));
+        for r in arr(e.get("routes")) {
+            let method = r
+                .get("method")
+                .map(str_of)
+                .filter(|x| !x.is_empty())
+                .unwrap_or_else(|| "*".into());
+            out.push((
+                format!("{name}.{}", str_of(r.get("name").unwrap_or(&Value::Null))),
+                method.to_uppercase(),
+            ));
+        }
+    }
+    out
+}
+
+/// The service `--link-cuts` cuts (Milestone 393): the browser of `browser:`, with `network:
+/// bridge` and `network` allowed by `faults:` (or no `faults:` list).
+pub fn link_cut_target(sp: &Space) -> Option<String> {
+    let bridge = sp.m.get("network").and_then(Value::as_str) == Some("bridge");
+    let allowed = match sp.m.get("faults") {
+        Some(v) if truthy(v) => sp.has_fault("network"),
+        _ => true,
+    };
+    if !bridge || !allowed {
+        return None;
+    }
+    hydo_manifest::browser::services(&sp.m).into_iter().next()
 }
 
 /// grpc_faults.targets_of(m): (target, method paths) of the manifest's gRPC proxies.

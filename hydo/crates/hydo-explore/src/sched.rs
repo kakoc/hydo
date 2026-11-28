@@ -200,6 +200,8 @@ pub struct S {
     pub ts: Vec<(String, i64, hydo_schedule::ServiceClockChange)>,
     /// O=svc@a-b:dir:netem
     pub o: Option<(String, i64, i64, String, Kinds)>,
+    /// `N=svc@at~off:dur` (Milestone 393): a timed cut of one service's link, printed after X=.
+    pub lc: Option<(String, i64, i64, i64)>,
     /// `Q=n[d]`
     pub cq: Option<(i64, bool)>,
     /// X=svc@at~off
