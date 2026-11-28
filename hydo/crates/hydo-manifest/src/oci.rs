@@ -164,6 +164,14 @@ pub fn prepare(m: &Value, manifest_path: &str, arch: &str) -> R<Vec<(String, Str
             continue;
         };
         let p = image_path(img, arch, &mdir, &wh)?;
+        // Milestone 392: each version's own image file
+        if let Some(Value::Array(vs)) = o.get("versions") {
+            for (j, v) in vs.iter().enumerate() {
+                if let Some(vi) = v.get("image") {
+                    image_path(vi, arch, &mdir, &format!("{wh}.versions[{j}]"))?;
+                }
+            }
+        }
         if let Some(f) = o.get("env_file").and_then(Value::as_str) {
             let fp = env_file_path(f, &mdir);
             if !std::path::Path::new(&fp).is_file() {
