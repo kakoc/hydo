@@ -2154,9 +2154,10 @@ and the other kinds (kills, pauses, network faults, clock steps) lost none. The 
 
 **Gitea, the third web app of the walk (M389, tentative number).** Gitea 28.4.0, a self-hosted
 Git service (one Go server, SQLite), runs from its rootless image in
-`hydo/onboard/examples/gitea` (RESULTS.md), imported with `hydo compose`. The walk's setup
-registers the first account, creates a repository with a README, labels, a milestone and an
-issue, and starts the issue's timer; `within:` keeps the walk on the repository's issues. Rules
+`hydo/onboard/examples/gitea` (RESULTS.md). It was imported with `hydo compose`. The walk's
+setup registers the first account and creates a repository with a README. It adds labels, a
+milestone, and an issue, and it starts the issue's timer. `within:` keeps the walk on the
+repository's issues. Rules
 over the database and the API judge the saved issues and comments, Gitea's counts, the search,
 the Git repository, and the tracked times. Two new candidates, not posted:
 
@@ -2168,9 +2169,9 @@ the Git repository, and the tracked times. Two new candidates, not posted:
   Git with its default `core.fsync`, which syncs neither the loose objects nor the ref; with
   `core.fsync=committed` the cut passes.
 
-Every acknowledged issue and comment survived kills, pauses, network faults, clock steps and power
-cuts at the end of the walk, in 200 schedules on hvx and KVM. Open item 198 has what the walk
-lacked.
+Every acknowledged issue and comment survived kills, pauses, network faults, clock steps, and
+power cuts at the end of the walk. That held in 200 schedules on hvx and KVM. Open item 198 has
+what the walk lacked.
 
 **The failing run's own frames, and the pages read back (M334, tentative number).** Two parts,
 each its own commit:
@@ -4785,8 +4786,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The walk takes ids only from a JSON field named `id`. Gitea answers its fetch forms with
       `{"redirect": "/hydo/demo/issues/3"}`, so `browser.read_back` cannot be used, and the rule
       counts issues per repository instead of naming each.
-    - A word of `$HYDO_ACKED` names the method and the path, not the request's body, so a post of
-      Gitea's comment form is a comment, a close or a reopen, and the rule counts them together.
+    - A word of the walk's acknowledged writes names the method and the path, not the request's
+      body. So a post of Gitea's comment form is a comment, a close or a reopen, and the rule
+      counts them together.
     - Without `within`, the walk spent its actions on the API's pages, the settings and the code
       view. With it, `avoid` needs 13 patterns, and one action in seven still fills a field
       without sending it (489 of 3,408 in 60 KVM walks). A code walk with `within: /hydo/demo/` committed no file in 48
@@ -6142,7 +6144,7 @@ build machine, before 2026-10-13.
   sharing off, 34 schedules of the Redis example ran without a panic. `HVM_RAM_SHARE=1` turns it
   on again. Nothing recorded moved
 - M389 (tentative number): the onboarding of Gitea 28.4.0 on hvx and KVM, the third web app of
-  the walk, with rules over its database, counts, search, Git repository and tracked times. Two
+  the walk. Rules judge its database, counts, search, Git repository, and tracked times. Two
   new candidates, not posted. A timer that runs while the clock goes back records a negative
   time. A power cut half a minute after a repository is created with a README leaves its branch
   broken, because Gitea runs Git without `core.fsync`. Nothing recorded moved
