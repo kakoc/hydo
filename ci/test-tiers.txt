@@ -32,6 +32,7 @@ hydo-build::errlog                       fast
 hydo-build::netns                        fast
 hydo-build::oci                          fast
 hydo-build::oci_share                    fast
+hydo-build::oci_versions                 fast
 hydo-build::regressions_beside           fast
 hydo-build::root_fit                     fast
 hydo-build::world_objects                fast
@@ -46,6 +47,7 @@ hydo-compose::private_registry           fast
 hydo-compose::pycheck                    fast
 hydo-compose::registry                   fast
 hydo-compose::start_and_clock            fast
+hydo-compose::upgrade_to                 fast
 hydo-composer                            fast
 hydo-composer::compositions              fast
 hydo-composer::equivalence               full
@@ -98,6 +100,7 @@ hydo-contracts::values                   fast
 hydo-errors                              fast
 hydo-errors::equivalence                 fast
 hydo-explore                             fast
+hydo-explore::answer_faults              fast
 hydo-explore::block_faults               fast
 hydo-explore::cluster_faults             fast
 hydo-explore::corpus                     full
@@ -170,6 +173,7 @@ hydo-schedule::walk                      fast
 hydo-schema-compat::real_schemas         fast
 hydo-schema-compat::rules                fast
 hydo-tools                               fast
+hydo-world::answer_order                 fast
 hydo-world::bin/hydo-world               fast
 hydo-world::fake_errors                  fast
 hydo-world::objects_sign                 fast
