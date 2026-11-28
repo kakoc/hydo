@@ -16,3 +16,4 @@ mod private_registry;
 mod pycheck;
 mod registry;
 mod start_and_clock;
+mod upgrade_to;

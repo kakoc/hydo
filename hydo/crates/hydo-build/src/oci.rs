@@ -1426,7 +1426,7 @@ fn one(
     io: &mut Io,
 ) -> Result<OciService, Fail> {
     let img_v = s.shift_remove("image").unwrap_or(Value::Null);
-    let path = image_path(&img_v, arch, &mdir, &wh).map_err(Fail::Manifest)?;
+    let path = image_path(&img_v, arch, mdir, wh).map_err(Fail::Manifest)?;
     let rf = s.shift_remove("image_ref");
     let rf = match rf {
         None | Some(Value::Null) => None,
@@ -1475,7 +1475,7 @@ fn one(
     }
     // env_file: (a format-1 addition, M243): its values before env:, which wins
     if let Some(f) = s.shift_remove("env_file") {
-        let fp = hydo_manifest::oci::env_file_path(&py::str_of(&f), &mdir);
+        let fp = hydo_manifest::oci::env_file_path(&py::str_of(&f), mdir);
         for (k, v) in hydo_manifest::oci::read_env_file(&fp)
             .map_err(|e| Fail::Manifest(format!("{wh}: {e}")))?
         {
@@ -1542,7 +1542,7 @@ fn one(
     } else {
         user
     };
-    let mounts = mounts_of(s.shift_remove("mounts"), &wh)?;
+    let mounts = mounts_of(s.shift_remove("mounts"), wh)?;
     let writable = match s.shift_remove("writable") {
         None | Some(Value::Null) | Some(Value::Bool(false)) => false,
         Some(Value::Bool(true)) => true,
