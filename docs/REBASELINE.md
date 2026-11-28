@@ -4216,6 +4216,14 @@ containers`; with `guest.proc_io: false`, and built by hydo 0.7.0, it ended `VIO
 With the three engines done the list's `epoch` is 7, and every value of the list is an epoch-7
 value. AGENTS.md open item 105 is empty.
 
+**The release files** (docs/HISTORY.md "The 0.8.0 release, prepared for publication"). The final
+files of the release commit `21710089` gave every value of the list with `hydo-bench rebaseline
+--check --thorough` and their own programs: the Mac's 21 images and 76 schedules (1,164 s), hvx's
+43 images and 141 schedules (in two parts, the second for the 58 runs that the first had not
+made when it was stopped), and KVM's 6 images and 19 schedules on three AMD hosts of run
+46147145301 (the three Intel hosts gave the same verdicts with Intel's own fingerprints). Every
+image built twice with the same bytes, and every run gave one value twice from fresh boots.
+
 **The pinned reproducers.** Their epoch-7 images are the list's `stack-old` (`7dd445a8…`) and
 `stack-fix` (`d00c6481…`), copied to `~/hydo/build/rel080`. On hvx they give the epoch-6 values
 `db33d71069816103` (VIOLATION, order 11) and `c421af1ccb714225` (OK); on KVM (AMD)

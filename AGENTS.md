@@ -218,7 +218,18 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.7.0 was published on 2026-11-27 from the release commit `7d1b66e2` (the
+**Releases.** hydo 0.8.0 is prepared and not published (2026-11-28). Its release commit is
+`21710089` on the release branch, with Milestones 368 to 388, 391, and 395. Its fingerprint epoch
+is 7, and every recorded value was re-recorded at epoch 7 (docs/REBASELINE.md section 35). Its six
+files and `SHA256SUMS` are in `hydo/dist/out/0.8.0/` of the main checkout, each platform built
+twice to the same bytes: `hydo-linux-0.8.0.tar.gz` `4953dfcd…`, `hydo-mac-0.8.0.tar.gz` (signed and
+notarized) `82eb06f5…` and `hydo-skill-0.8.0.tar.gz` `b2ea956f…`. The final files reproduce every
+recorded value on the Mac, on hvx and on KVM (AMD hosts). The release notes, the Homebrew formula
+and the release-index lines are in `prepared/`. Publishing (docs/RELEASING.md step 7 onward) waits
+for the user. The record is the section "The 0.8.0 release, prepared for publication" of
+`docs/HISTORY.md`.
+
+hydo 0.7.0 was published on 2026-11-27 from the release commit `7d1b66e2` (the
 branch `release-0.7.0`, merged into `main`). The GitHub release `v0.7.0` holds both tarballs, their
 sources archives, the Mac signatures, the skill archive and `SHA256SUMS`:
 `hydo-linux-0.7.0.tar.gz` `132c35ab…`, `hydo-mac-0.7.0.tar.gz` (signed and notarized) `9c84e011…`
@@ -6032,6 +6043,13 @@ build machine, before 2026-10-13.
   to 94 % of an exploration before its report. A generated client with the generic checks would
   reach 37 of the 105 bugs. The page proposes the report before the shrinks, then that client.
   Nothing recorded moved
+- The 0.8.0 release (no milestone number): prepared, not published. The version is raised with
+  the skill's four version fields. `hydo-world`, `hydo-world-tls` and `hydo-grpc` are re-pinned,
+  and the released schemas are copied. Every recorded value was re-recorded at the fingerprint
+  epoch 7 on hvx, the Mac and KVM (docs/REBASELINE.md section 35). Qdrant's KVM
+  pause moved to 243 ms. Release step 6a fixed five pages. Both releases were built twice to the
+  same bytes, and the Mac one is signed and notarized. They were verified on hvx, the Mac and KVM,
+  where a runner rebuilt the Linux tarball byte for byte
 - M388 (tentative number): a benchmark of 72 unexplained or late-explained failures for
   debugging tools (`docs/design/debug-benchmark.md`). By primary tool, the first divergence from a
   passing run serves 21, watchpoints 15, thread stacks 12, a message's path 12, and the existing
