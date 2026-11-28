@@ -347,6 +347,17 @@
               "type": "null"
             }
           ]
+        },
+        "functions": {
+          "description": "Which functions of the image's programs ran, and when (added in Milestone 394,\ndocs/design/live-map.md): for an image whose manifest has `all_functions: true` in a\n`contracts:` entry, on an engine that watches them. `hydo explore --live` shows them.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunFunctions"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -1971,6 +1982,114 @@
       },
       "required": [
         "place",
+        "at"
+      ]
+    },
+    "RunFunctions": {
+      "description": "The functions that ran in one run (added in Milestone 394, docs/design/live-map.md).",
+      "type": "object",
+      "properties": {
+        "functions": {
+          "description": "The functions the image's plan watches (`fn_places` of `<image>.contracts.json`).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "reached": {
+          "description": "The functions that ran, in the order of their first run.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FunctionReached"
+          },
+          "default": []
+        },
+        "unwatched": {
+          "description": "The functions the engine could not watch in this run: it found none of their code in\nthe guest's memory.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
+          }
+        },
+        "ranges": {
+          "description": "The workload's step ranges of the run's first boot, in order: `[first, end)`, as the\ncontrol transcript's `workload steps a..z` notes give them. A function's `range` is an\nindex here.",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "first_fault_step": {
+          "description": "The workload step of the schedule's first fault (none: a schedule without a fault).\nA fault of the host part that holds from the start (a disk error, tick jitter) is\nstep 0.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "watched": {
+          "description": "False when the engine wrote no record of the functions (an engine that does not watch\nthem: hvx and KVM); then nothing is known about them.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "functions",
+        "watched"
+      ]
+    },
+    "FunctionReached": {
+      "description": "The first run of one function in a run (added in Milestone 394).",
+      "type": "object",
+      "properties": {
+        "function": {
+          "description": "The function's id in the image's plan (its place in `fn_places`).",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "at": {
+          "description": "The engine's clock at the first run (VM exits on the Mac engine).",
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "boot": {
+          "description": "The boot: 0 is the run's first, and each power cut or reboot starts the next.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "range": {
+          "description": "The workload's step range it first ran in (an index in [`RunFunctions::ranges`]);\nabsent after the workload's last step, in a recovery boot, or when the run recorded no\nstep.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "before_faults": {
+          "description": "It ran before the schedule's first fault: in a range that ends at or before the first\nfault's step, in the first boot (always, for a schedule without a fault). What ran\nthere is what the workload reaches by itself.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "function",
         "at"
       ]
     },

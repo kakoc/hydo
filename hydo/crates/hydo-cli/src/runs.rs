@@ -741,6 +741,7 @@ pub fn contracts_one(
     image: &Path,
     outdir: &Path,
     tag: &str,
+    sched: &str,
     mut res: Map<String, Value>,
     quiet: bool,
 ) -> Map<String, Value> {
@@ -769,6 +770,9 @@ pub fn contracts_one(
                 }
                 if let Some(rp) = hydo_explore::paths::of_res(&res) {
                     println!("{}", hydo_explore::paths::run_line(&rp));
+                }
+                if let Some(rf) = hydo_explore::funcs::of_res(&res, sched) {
+                    println!("{}", hydo_explore::funcs::run_line(&rf));
                 }
             }
         }
@@ -1150,7 +1154,7 @@ pub fn cmd_run(ctx: &Ctx, argv: &[String]) -> i32 {
     let res = run_one(ctx, &image, &sched, &outdir, &eargs, false);
     let printed = verdict_of(&res);
     let res = host_checks(&outdir, res, false);
-    let res = contracts_one(&image, &outdir, "one", res, false);
+    let res = contracts_one(&image, &outdir, "one", &sched, res, false);
     let res = errors_one(&outdir, &sched, res, known.as_deref());
     if let Some(line) = final_verdict_line(&printed, &verdict_of(&res)) {
         println!("{line}");
@@ -1431,7 +1435,7 @@ pub fn cmd_repro(ctx: &Ctx, argv: &[String]) -> i32 {
             let dir = base.join(format!("{k:03}"));
             let res = run_one(ctx, &it.image, &it.sched, &dir, &it.eargs, true);
             let res = host_checks(&dir, res, false);
-            let res = contracts_one(&it.image, &dir, "one", res, true);
+            let res = contracts_one(&it.image, &dir, "one", &it.sched, res, true);
             let res = errors_one(&dir, &it.sched, res, None);
             let run = run_document(
                 &dir,

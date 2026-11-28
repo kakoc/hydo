@@ -30,6 +30,7 @@ pub mod contracts;
 pub mod cover;
 pub mod errlog;
 pub mod fc;
+pub mod funcs;
 pub mod gen;
 pub mod md;
 pub mod merge;
