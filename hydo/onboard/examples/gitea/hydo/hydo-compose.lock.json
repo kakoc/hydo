@@ -1,0 +1,85 @@
+{
+ "generated_by": "hydo compose",
+ "images": {
+  "docker.gitea.com/gitea:28.4.0-rootless": {
+   "index_digest": "sha256:15ab7fadb44981a2b781f40c712cad07066197f395100ea1c6326e14e5bb073a",
+   "name": "docker.gitea.com/gitea",
+   "platforms": {
+    "amd64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/usr/bin/dumb-init",
+       "--",
+       "/usr/local/bin/docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "GITEA_WORK_DIR=/var/lib/gitea",
+       "GITEA_CUSTOM=/var/lib/gitea/custom",
+       "GITEA_TEMP=/tmp/gitea",
+       "TMPDIR=/tmp/gitea",
+       "GITEA_APP_INI=/etc/gitea/app.ini",
+       "HOME=/var/lib/gitea/git"
+      ],
+      "ExposedPorts": {
+       "2222/tcp": {},
+       "3000/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000:1000",
+      "Volumes": {
+       "/etc/gitea": {},
+       "/var/lib/gitea": {}
+      },
+      "WorkingDir": "/var/lib/gitea"
+     },
+     "digest": "sha256:0a28ed70ce0509217a48ce8da8d1ed1c8fcabdb54918b5d55540cfc6352a2d12",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    },
+    "arm64": {
+     "config": {
+      "Cmd": null,
+      "Entrypoint": [
+       "/usr/bin/dumb-init",
+       "--",
+       "/usr/local/bin/docker-entrypoint.sh"
+      ],
+      "Env": [
+       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+       "GITEA_WORK_DIR=/var/lib/gitea",
+       "GITEA_CUSTOM=/var/lib/gitea/custom",
+       "GITEA_TEMP=/tmp/gitea",
+       "TMPDIR=/tmp/gitea",
+       "GITEA_APP_INI=/etc/gitea/app.ini",
+       "HOME=/var/lib/gitea/git"
+      ],
+      "ExposedPorts": {
+       "2222/tcp": {},
+       "3000/tcp": {}
+      },
+      "Healthcheck": null,
+      "User": "1000:1000",
+      "Volumes": {
+       "/etc/gitea": {},
+       "/var/lib/gitea": {}
+      },
+      "WorkingDir": "/var/lib/gitea"
+     },
+     "digest": "sha256:49d23f30d87bda56381cd6d37798764c5fced57b9ae004f1f231b00e6b4fb185",
+     "variant": "",
+     "variants": [
+      ""
+     ]
+    }
+   },
+   "ref": "docker.gitea.com/gitea:28.4.0-rootless",
+   "registry": "docker.gitea.com",
+   "repo": "gitea",
+   "tag": "28.4.0-rootless"
+  }
+ }
+}

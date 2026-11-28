@@ -1,0 +1,184 @@
+# Gitea 28.4.0 (go-gitea/gitea: a self-hosted Git service, one Go server with its pages, SQLite)
+# explored through its own pages by hydo's walk (Milestone 389, tentative number).
+# Started with `hydo compose ../docker-compose.yaml`; RESULTS.md says what was found.
+#
+#   sh fetch-images.sh          # the Gitea image by digest
+#   hydo build hydo.yaml        # x86_64 only (hvx, KVM): it fetches the Playwright image and
+#                               # playwright-core into browser/
+#   hydo run "disk=none | run I=1"
+#   hydo explore --seeds 1-20 --strategy process --no-shrink
+#
+# No Playwright test is written: `browser.explore` lets hydo walk through the pages. The first
+# step registers the first account (the administrator of a fresh instance), creates the
+# repository hydo/demo with a README, the default label set, a milestone and one issue. The walk
+# then stays in the repository's issues. The faults are those of the Gitea server: kills,
+# pauses, network faults between the browser and the server, power cuts, clock steps and disk
+# faults.
+format: 1
+name: gitea
+description: "Gitea 28.4.0 explored by hydo's own walk through its issue pages, under kills, pauses, network faults, power cuts, clock steps and disk faults of the server"
+hydo_version: "0.3"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 4096             # the browser
+  clock_start: 1795824000   # 2026-11-28 00:00 UTC, the day of the import
+
+data:
+  size_mib: 384   # hvx maps at most 4 GiB of root and data disk; the root is 3,584 MiB. The data disk: Gitea's SQLite database, its Git repositories and its queues live here (the fault target)
+  dirs: [vol/bind-data, vol/bind-config]
+
+root:
+  files:
+    - {src: page-rules, dst: /opt/hydo/web/rules}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 server
+
+services:
+  # Compose service server
+  # image docker.gitea.com/gitea:28.4.0-rootless = docker.gitea.com/gitea@sha256:15ab7fadb44981a2b781f40c712cad07066197f395100ea1c6326e14e5bb073a
+  #   linux/amd64: sha256:0a28ed70ce0509217a48ce8da8d1ed1c8fcabdb54918b5d55540cfc6352a2d12
+  #   linux/arm64: sha256:49d23f30d87bda56381cd6d37798764c5fced57b9ae004f1f231b00e6b4fb185
+  # ready: no healthcheck; Gitea opens its port after its database migrations
+  # restart: always: an agent image starts the service again when its process ends by itself while the test runs (MANIFEST.md "Restart policies"); hydo's kill faults keep their own restart points
+  - name: server
+    image: {x86_64: images/docker.gitea.com-gitea-28.4.0-rootless-amd64.docker.tar, arm64: images/docker.gitea.com-gitea-28.4.0-rootless-arm64-oci}
+    image_ref: "docker.gitea.com/gitea:28.4.0-rootless"
+    env:
+      GITEA__security__INSTALL_LOCK: "true"
+      GITEA__database__DB_TYPE: "sqlite3"
+      # the address the guest's browser uses: Gitea writes it into its links and redirects
+      GITEA__server__ROOT_URL: "http://10.89.0.11:3000/"
+      GITEA__server__DISABLE_SSH: "true"
+      GITEA__server__OFFLINE_MODE: "true"
+      # the update checker asks dl.gitea.com once a day; the guest has no network
+      GITEA__cron__update_checker__ENABLED: "false"
+    port: 3000
+    addr: 10.89.0.11
+    ready: "nc -z -w 2 10.89.0.11 3000"
+    restart: "always"
+    # the image runs as uid 1000, and its documentation's volumes belong to that user
+    setup: chown 1000:1000 /data/vol/bind-data /data/vol/bind-config
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/bind-data, dst: /var/lib/gitea}
+      - {src: /data/vol/bind-config, dst: /etc/gitea}
+
+browser:
+  explore:
+    start: http://10.89.0.11:3000/hydo/demo/issues
+    within: /hydo/demo/issues   # the walk follows only the links of the repository's issues
+    steps: 6
+    actions: 12
+    setup:                      # a fresh instance with the installation locked allows registration
+      - {open: /user/sign_up}
+      - {fill: Username, with: hydo}
+      - {fill: Email Address, with: hydo@example.com}
+      - {fill: Password, with: hydo-pass-1}
+      - {fill: Confirm Password, with: hydo-pass-1}
+      - {click: Register Account}
+      - {open: /repo/create}
+      - {fill: Repository Name, with: demo}
+      - {click: "Initialize Repository (Adds .gitignore, License and README)", role: checkbox}
+      - {click: Create Repository}
+      - {see: README.md}
+      - {open: /hydo/demo/labels}
+      - {click: Use Label Set}  # the default labels: bug, duplicate, enhancement, ...
+      - {see: enhancement}
+      - {open: /hydo/demo/milestones/new}
+      - {fill: Title, with: v1}
+      - {click: Create Milestone}
+      - {see: v1}
+      - {open: /hydo/demo/issues/new}
+      - {fill: Title, with: first issue}
+      - {click: Create Issue}
+      - {see: first issue}
+    avoid:
+      - "sign ?out"
+      - "log ?out"
+      - "delete"                # an issue, a comment, the account
+      - "^(Language|English|Auto)$"   # another language renames every control
+      - "^(Settings|API)$"
+      - "^(Star|Unstar|Watch|Unwatch|Watching)$"
+      - "fork"
+      - "^RSS Feed$"
+      - "^Search"
+      # the editor's toolbar inserts text and saves nothing
+      - "^Add (heading|bold text|italic text|strikethrough text|code|a link|a bullet list|a numbered list|a list of tasks|a table)$"
+      - "^(Quote text|Mention a user or team|Reference an issue or pull request)$"
+      - "legacy editor"
+      - "^Drop files"           # a file chooser, which the walk cannot fill
+  watch:
+    alerts: ["[role=alert]", "[role=alertdialog]", ".toastify.toast-error", ".flash-error"]   # Gitea's error toasts and flash messages
+    requests: /hydo/            # the repository's pages and writes, not the static files or /user/events
+    # a failed write of an issue must show: a new issue, a comment, a close or a reopen, a label,
+    # a milestone, an assignee, a timer, a lock, a pin, a reaction (the pattern matches
+    # `<METHOD> <path>`)
+    failures_of: "^POST /hydo/demo/issues"
+
+invariants:
+  - id: gitea.saved_work_survives
+    msg: every issue, comment, close and reopen that Gitea answered as saved is in its database
+    # a copy of the database and its rollback journal (SQLite rolls a hot journal back on open);
+    # a copy taken while Gitea wrote it can be torn, and the rule then exits 3 and the copy is
+    # taken again
+    cmd: |
+      i=0
+      while [ $i -lt 5 ]; do
+        rm -rf /tmp/hydo/rules-db && mkdir -p /tmp/hydo/rules-db
+        cp /data/vol/bind-data/data/gitea.db /tmp/hydo/rules-db/ && cp /data/vol/bind-data/data/gitea.db-journal /tmp/hydo/rules-db/ 2>/dev/null
+        hydo-oci browser node --experimental-sqlite --no-warnings /opt/hydo/web/rules/gitea.mjs saved /tmp/hydo/rules-db/gitea.db "$HYDO_ACKED"
+        rc=$?
+        [ $rc -eq 3 ] || exit $rc
+        sleep 1
+        i=$((i + 1))
+      done
+      exit 2
+  - id: gitea.counters_match
+    msg: the issue, comment, label and milestone counts that Gitea keeps beside its rows match the rows
+    cmd: |
+      i=0
+      while [ $i -lt 5 ]; do
+        rm -rf /tmp/hydo/rules-db2 && mkdir -p /tmp/hydo/rules-db2
+        cp /data/vol/bind-data/data/gitea.db /tmp/hydo/rules-db2/ && cp /data/vol/bind-data/data/gitea.db-journal /tmp/hydo/rules-db2/ 2>/dev/null
+        hydo-oci browser node --experimental-sqlite --no-warnings /opt/hydo/web/rules/gitea.mjs counters /tmp/hydo/rules-db2/gitea.db "$HYDO_ACKED"
+        rc=$?
+        [ $rc -eq 3 ] || exit $rc
+        sleep 1
+        i=$((i + 1))
+      done
+      exit 2
+  - id: gitea.issues_found_by_search
+    msg: the search of the repository's issues finds every issue of the database by a word of its title
+    # Gitea fills its issue index from a queue of its own after the commit; the rule asks the API
+    # (GET /api/v1/repos/hydo/demo/issues?q=), which reads that index, for up to 60 s
+    cmd: |
+      i=0
+      while [ $i -lt 5 ]; do
+        rm -rf /tmp/hydo/rules-db3 && mkdir -p /tmp/hydo/rules-db3
+        cp /data/vol/bind-data/data/gitea.db /tmp/hydo/rules-db3/ && cp /data/vol/bind-data/data/gitea.db-journal /tmp/hydo/rules-db3/ 2>/dev/null
+        hydo-oci browser node --experimental-sqlite --no-warnings /opt/hydo/web/rules/gitea.mjs search /tmp/hydo/rules-db3/gitea.db "$HYDO_ACKED"
+        rc=$?
+        [ $rc -eq 3 ] || exit $rc
+        sleep 1
+        i=$((i + 1))
+      done
+      exit 2
+  - id: gitea.repository_readable
+    msg: the repository hydo/demo, which the setup created with a README, has its branch and every commit that the branch reaches
+    # Gitea answered the creation after the database and the Git repository were written; git
+    # runs in the server's image as its own user
+    cmd: |
+      d=/var/lib/gitea/git/repositories/hydo/demo.git
+      [ -e /data/vol/bind-data/git/repositories/hydo/demo.git ] || { echo "the walk did not create hydo/demo"; exit 0; }
+      out=$(hydo-oci server git -c safe.directory='*' -C $d rev-parse --verify -q 'refs/heads/main^{commit}' 2>&1) || { echo "refs/heads/main of hydo/demo does not name a commit: $out"; exit 1; }
+      out=$(hydo-oci server git -c safe.directory='*' -C $d fsck --connectivity-only --no-progress 2>&1) || { echo "$out" | head -5; echo "git fsck of hydo/demo failed"; exit 1; }
+      echo "hydo/demo has its branch main, and git fsck reaches every object"
+
+faults: [kill, pause, network, oneway, cut, clock, disk]
