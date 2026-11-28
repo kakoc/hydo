@@ -173,3 +173,31 @@ The live map's limits are those of section 5, and four more:
   second for 1.5 GiB. Later runs from the same snapshot check the pages at the addresses found.
 - The step range comes from the control transcript. A function that first ran in a recovery boot
   or after the workload has no step range.
+
+### A page to show: `--showcase`
+
+`--showcase` serves another page on the same address, for people who have never seen hydo, for
+example in a screen recording. It is dark and sized for a screen of 1920 by 1080 or 1200 by 675:
+
+```sh
+hydo explore --live --showcase --live-routes ../work/blnk-paths
+hydo report --live hydo-out/explore --showcase --routes ../work/blnk-paths
+```
+
+The page shows the runs one after another, at most one per 1.1 seconds, so a finished
+exploration plays back in its order. It has two views of the project's own code.
+
+- The code map. Each tile lights up with a short glow when a run first reaches its function.
+- The call flow. The entry points are at the top. Each function hangs under the function of the
+  project that called it first. A hover names the other callers that came first in other runs.
+
+`--routes DIR` names an entry point by its route, such as `POST /transactions`, from `hydo rules
+scan --kind writes DIR`. For `hydo explore` the option is `--live-routes DIR`. The engine reads
+the return address at each function's one-shot stop. So the tree holds only the calls that a run
+made: the first caller of each function in each run.
+
+A track of the runs shows each fault as a pulse with its name. When a run breaks a check for
+the first time, a banner names the check's promise in its own words, from its `hydo-msg:` line.
+The banner also says what hydo did in the run, and gives the `hydo run` command that replays
+it. The page's address takes `#pace=SECONDS`, `#hold=SECONDS`, `#start=SECONDS`, `#view=flow`
+and `#title=NAME`.

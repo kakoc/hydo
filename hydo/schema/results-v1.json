@@ -2086,6 +2086,15 @@
         "before_faults": {
           "description": "It ran before the schedule's first fault: in a range that ends at or before the first\nfault's step, in the first boot (always, for a schedule without a fault). What ran\nthere is what the workload reaches by itself.",
           "type": "boolean"
+        },
+        "caller": {
+          "description": "The function that called it at its first run (added in Milestone 397): the plan's\nfunction whose code holds the return address that the engine read at that stop. Absent\nwhen the return address is in no function of the plan (the language's own code without\ndebug information, or an engine that does not read it).",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
         }
       },
       "required": [

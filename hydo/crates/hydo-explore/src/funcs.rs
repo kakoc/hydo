@@ -51,6 +51,46 @@ fn range_of(t: &Transcript, ranges: &[(u64, u64, u64)], at: u64) -> Option<u32> 
         .map(|i| i as u32)
 }
 
+/// The functions of a plan by their code's addresses (Milestone 397): per program, each
+/// function's `[first, end)` with its id, sorted, to name the function that holds a return
+/// address.
+pub struct Callers {
+    progs: Vec<Vec<(u64, u64, u32)>>,
+    of: std::collections::HashMap<u32, usize>,
+}
+
+impl Callers {
+    pub fn of_plan(plan: &Plan) -> Callers {
+        let mut progs = Vec::new();
+        let mut of = std::collections::HashMap::new();
+        for p in &plan.programs {
+            let k = progs.len();
+            let mut v: Vec<(u64, u64, u32)> = p
+                .fn_places
+                .iter()
+                .filter_map(|f| {
+                    of.insert(f.id, k);
+                    let a = f.sites.first()?.addr;
+                    Some((a, a + f.size.max(4), f.id))
+                })
+                .collect();
+            v.sort_unstable();
+            progs.push(v);
+        }
+        Callers { progs, of }
+    }
+
+    /// The function of `callee`'s program whose code holds the instruction before the return
+    /// address `lr` (the call), None when no function of the plan holds it.
+    pub fn caller(&self, callee: u32, lr: u64) -> Option<u32> {
+        let v = self.progs.get(*self.of.get(&callee)?)?;
+        let call = lr.checked_sub(4)?;
+        let i = v.partition_point(|&(a, _, _)| a <= call);
+        let &(a, z, id) = v.get(i.checked_sub(1)?)?;
+        (a <= call && call < z).then_some(id)
+    }
+}
+
 /// A run's functions from its records and its control transcript (None: no line of
 /// functions, an engine that does not watch them).
 pub fn run_functions(plan: &Plan, records: &Path) -> Result<RunFunctions, String> {
@@ -68,10 +108,16 @@ pub fn run_functions(plan: &Plan, records: &Path) -> Result<RunFunctions, String
         .as_ref()
         .map(hydo_control::search::ranges)
         .unwrap_or_default();
+    let callers = (!h.lr.is_empty()).then(|| Callers::of_plan(plan));
     let reached = h
         .list()
         .into_iter()
-        .map(|x| FunctionReached {
+        .enumerate()
+        .map(|(i, x)| FunctionReached {
+            caller: callers
+                .as_ref()
+                .zip(h.lr.get(i))
+                .and_then(|(c, &lr)| c.caller(x.place, lr)),
             function: x.place,
             at: x.at,
             boot: x.boot,
@@ -274,6 +320,37 @@ pub fn write_map(plan: &Plan, dir: &Path) -> std::io::Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_return_address_names_the_function_that_holds_the_call() {
+        use hydo_contracts::paths::{PathPlace, PathSite};
+        let f = |id: u32, addr: u64, size: u64| PathPlace {
+            id,
+            kind: hydo_contracts::paths::kind::FUNCTION.into(),
+            function: format!("f{id}"),
+            sites: vec![PathSite {
+                addr,
+                ..PathSite::default()
+            }],
+            size,
+            ..PathPlace::default()
+        };
+        let mut plan = Plan::default();
+        let prog = hydo_contracts::plan::Program {
+            fn_places: vec![f(0, 0x1000, 0x40), f(1, 0x1040, 0x20), f(2, 0x2000, 0x10)],
+            ..Default::default()
+        };
+        plan.programs.push(prog);
+        let c = Callers::of_plan(&plan);
+        // the call is the instruction before the return address
+        assert_eq!(c.caller(2, 0x1004), Some(0));
+        assert_eq!(c.caller(2, 0x1040), Some(0));
+        assert_eq!(c.caller(2, 0x1044), Some(1));
+        assert_eq!(c.caller(0, 0x2010), Some(2));
+        assert_eq!(c.caller(0, 0x2014), None);
+        assert_eq!(c.caller(0, 0x800), None);
+        assert_eq!(c.caller(9, 0x1004), None);
+    }
 
     #[test]
     fn the_first_fault_is_the_earliest_step_of_a_fault() {

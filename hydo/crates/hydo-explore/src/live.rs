@@ -26,6 +26,21 @@ const TRIES: u16 = 20;
 
 const PAGE: &str = include_str!("live/page.html");
 
+/// The showcase page (Milestone 397, `--showcase`): the same records, for people who have never
+/// seen hydo, on a dark page sized for a screen recording, with the map and the flow of calls
+/// from the program's entry points.
+const SHOWCASE: &str = include_str!("live/showcase.html");
+
+/// How the page is served (Milestone 397). The default is Milestone 394's page.
+#[derive(Clone, Debug, Default)]
+pub struct Opts {
+    /// Serve the showcase page instead of the map page.
+    pub showcase: bool,
+    /// The program's entry points for the flow (`/entries.json`): `{"routes": [...]}`, each
+    /// route of `hydo rules scan --kind writes --json` with its handler's file and line.
+    pub entries: Option<Value>,
+}
+
 /// What the server has read of the stream.
 #[derive(Default)]
 struct State {
@@ -46,12 +61,23 @@ struct Server {
     /// reached, read once: its folder, its first runs, and the functions.
     baseline: Option<(String, usize, Vec<u64>)>,
     state: Mutex<State>,
+    opts: Opts,
 }
 
 /// Serve the live map of the exploration in `dir` on 127.0.0.1 at `port` (0: any free port;
 /// a port that is taken: the next of [`TRIES`]), in a thread of its own. Returns the page's
 /// address.
 pub fn start(dir: &Path, port: u16, against: Option<&Path>) -> Result<String, String> {
+    start_with(dir, port, against, Opts::default())
+}
+
+/// [`start`] with the page's options (Milestone 397).
+pub fn start_with(
+    dir: &Path,
+    port: u16,
+    against: Option<&Path>,
+    opts: Opts,
+) -> Result<String, String> {
     let baseline = match against {
         Some(a) => Some(baseline(a)?),
         None => None,
@@ -61,6 +87,7 @@ pub fn start(dir: &Path, port: u16, against: Option<&Path>) -> Result<String, St
         dir: dir.to_path_buf(),
         baseline,
         state: Mutex::new(State::default()),
+        opts,
     });
     std::thread::Builder::new()
         .name("hydo-live".into())
@@ -81,7 +108,17 @@ pub fn start(dir: &Path, port: u16, against: Option<&Path>) -> Result<String, St
 /// Serve the live map of a finished exploration (or a run directory) until the process is
 /// stopped (`hydo report --live`).
 pub fn serve_forever(dir: &Path, port: u16, against: Option<&Path>) -> Result<(), String> {
-    let url = start(dir, port, against)?;
+    serve_forever_with(dir, port, against, Opts::default())
+}
+
+/// [`serve_forever`] with the page's options (Milestone 397).
+pub fn serve_forever_with(
+    dir: &Path,
+    port: u16,
+    against: Option<&Path>,
+    opts: Opts,
+) -> Result<(), String> {
+    let url = start_with(dir, port, against, opts)?;
     println!("hydo report: the map of the code the runs reached is at {url} (Ctrl-C stops it)");
     loop {
         std::thread::park();
@@ -95,6 +132,7 @@ fn baseline(dir: &Path) -> Result<(String, usize, Vec<u64>), String> {
         dir: dir.to_path_buf(),
         baseline: None,
         state: Mutex::new(State::default()),
+        opts: Opts::default(),
     };
     let mut st = State::default();
     srv.read_more(&mut st);
@@ -164,7 +202,21 @@ impl Server {
         }
         let (path, query) = target.split_once('?').unwrap_or((target, ""));
         match path {
-            "/" | "/index.html" => reply(&mut c, 200, "text/html; charset=utf-8", PAGE.as_bytes()),
+            "/" | "/index.html" => {
+                let page = if self.opts.showcase { SHOWCASE } else { PAGE };
+                reply(&mut c, 200, "text/html; charset=utf-8", page.as_bytes())
+            }
+            "/entries.json" => {
+                let body = self.opts.entries.clone().unwrap_or(Value::Null);
+                reply(
+                    &mut c,
+                    200,
+                    "application/json",
+                    serde_json::to_string(&body)
+                        .expect("entries serialize")
+                        .as_bytes(),
+                )
+            }
             "/map.json" => match std::fs::read(self.dir.join(crate::funcs::MAP_FILE)) {
                 Ok(b) => reply(&mut c, 200, "application/json", &b),
                 Err(_) => reply(&mut c, 404, "application/json", b"null"),
@@ -276,7 +328,8 @@ fn short_run(v: &Value, any: bool) -> Option<Value> {
     }
     let schedule = v.get("schedule").and_then(Value::as_str).unwrap_or("");
     let fns = v.get("functions");
-    // [function, step range's first step or -1, 1 when it ran before the first fault]
+    // [function, step range's first step or -1, 1 when it ran before the first fault, the
+    // function that called it first or -1 (Milestone 397)]
     let reached: Vec<Value> = fns
         .and_then(|f| f.get("reached"))
         .and_then(Value::as_array)
@@ -294,7 +347,8 @@ fn short_run(v: &Value, any: bool) -> Option<Value> {
                         .and_then(|i| ranges.get(i as usize))
                         .map_or(-1, |r| r.0 as i64);
                     let before = x.get("before_faults").and_then(Value::as_bool) == Some(true);
-                    Some(json!([id, step, before as u8]))
+                    let caller = x.get("caller").and_then(Value::as_i64).unwrap_or(-1);
+                    Some(json!([id, step, before as u8, caller]))
                 })
                 .collect()
         })
@@ -304,12 +358,49 @@ fn short_run(v: &Value, any: bool) -> Option<Value> {
         .and_then(Value::as_array)
         .map(|a| a.iter().filter_map(|x| x.get("place").cloned()).collect())
         .unwrap_or_default();
+    // the schedule and the broken check in words, for the showcase (Milestone 397)
+    let said: Vec<Value> = hydo_schedule::describe::describe_text(schedule, &[])
+        .into_iter()
+        .map(|x| {
+            json!({
+                "token": x.token,
+                "sentence": x.sentence,
+                "gloss": x.gloss,
+                "step": x.step,
+                "fault": x.part == hydo_schedule::describe::Part::Fault,
+            })
+        })
+        .collect();
+    let verdict_text = v
+        .pointer("/verdict/text")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let findings: Vec<hydo_results::Finding> = v
+        .get("findings")
+        .and_then(|f| serde_json::from_value(f.clone()).ok())
+        .unwrap_or_default();
+    let what = match crate::advice::what_of(verdict_text, &findings) {
+        crate::advice::What::Check {
+            id,
+            description,
+            found,
+        } => json!({"check": id, "promise": description, "found": found}),
+        w => json!({"words": crate::advice::what_words(&w)}),
+    };
     Some(json!({
+        "said": said,
+        "what": what,
         "seed": v.get("seed"),
         "tag": v.get("tag").and_then(Value::as_str).unwrap_or(if any { "the run" } else { "" }),
         "schedule": schedule,
         "faults": crate::run::fault_kinds(schedule),
         "first_fault_step": fns.and_then(|f| f.get("first_fault_step")),
+        // the end of the workload's last step range, to place each step on the run's track
+        "steps": fns
+            .and_then(|f| f.get("ranges"))
+            .and_then(Value::as_array)
+            .and_then(|r| r.last())
+            .and_then(|r| r.get(1)),
         "verdict": v.pointer("/verdict/kind"),
         "text": v.pointer("/verdict/text"),
         "fp": v.pointer("/fingerprints/fp"),
@@ -363,7 +454,7 @@ mod tests {
              {\"type\":\"run\",\"role\":\"first\",\"seed\":1,\"tag\":\"seed-1\",\"schedule\":\"disk=none | run K=db@3+1\",\
              \"verdict\":{\"kind\":\"ok\"},\"functions\":{\"functions\":3,\"watched\":true,\"ranges\":[[0,3],[3,4]],\
              \"first_fault_step\":3,\"reached\":[{\"function\":0,\"at\":5,\"range\":0,\"before_faults\":true},\
-             {\"function\":2,\"at\":9,\"range\":1}]}}\n\
+             {\"function\":2,\"at\":9,\"range\":1,\"caller\":0}]}}\n\
              {\"type\":\"run\",\"role\":\"shrink\",\"seed\":1,\"schedule\":\"x\",\"verdict\":{\"kind\":\"ok\"}}\n",
         )
         .unwrap();
@@ -372,7 +463,13 @@ mod tests {
         let v: Value = serde_json::from_str(&get(&url, "/runs?from=0")).unwrap();
         assert_eq!(v["total"], 1);
         assert_eq!(v["image"], "blnk.img");
-        assert_eq!(v["runs"][0]["functions"], json!([[0, 0, 1], [2, 3, 0]]));
+        assert_eq!(
+            v["runs"][0]["functions"],
+            json!([[0, 0, 1, -1], [2, 3, 0, 0]])
+        );
+        assert_eq!(v["runs"][0]["steps"], 4);
+        assert_eq!(v["runs"][0]["said"][0]["token"], "K=db@3+1");
+        assert_eq!(v["runs"][0]["said"][0]["fault"], true);
         assert_eq!(v["runs"][0]["faults"], "K");
         assert_eq!(v["done"], false);
         // a line written after the first read, and the end
@@ -388,6 +485,18 @@ mod tests {
         assert_eq!(v["runs"][0]["seed"], 2);
         assert_eq!(v["done"], true);
         assert_eq!(get(&url, "/map.json"), "null");
+        assert_eq!(get(&url, "/entries.json"), "null");
+        assert!(!get(&url, "/").contains("Breaking"));
+        // Milestone 397: the showcase page, and the entry points of its flow
+        let routes = json!({"routes": [{"method": "POST", "path": "/transactions"}]});
+        let opts = Opts {
+            showcase: true,
+            entries: Some(routes.clone()),
+        };
+        let url = start_with(&d, 0, None, opts).unwrap();
+        assert!(get(&url, "/").contains("Breaking"));
+        let e: Value = serde_json::from_str(&get(&url, "/entries.json")).unwrap();
+        assert_eq!(e, routes);
         let _ = std::fs::remove_dir_all(&d);
     }
 }

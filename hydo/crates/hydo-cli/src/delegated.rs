@@ -100,6 +100,22 @@ pub fn explore_with(ctx: &Ctx, argv: &[String], plain: bool) -> i32 {
         .filter(|a| *a != "--no-diagnose")
         .cloned()
         .collect();
+    // `--live-routes DIR` (Milestone 397): the routes of the sources in DIR name the entry
+    // points of the live page's flow; the explorer reads them from a file
+    if let Some(i) = args.iter().position(|a| a == "--live-routes") {
+        let dir = args
+            .get(i + 1)
+            .cloned()
+            .unwrap_or_else(|| die("hydo explore: --live-routes takes the sources' folder"));
+        let f = std::env::temp_dir().join(format!("hydo-live-routes-{}.json", std::process::id()));
+        if let Err(e) = std::fs::write(&f, live_routes(&dir).to_string()) {
+            die(&format!("hydo explore: {}: {e}", f.display()));
+        }
+        args.splice(
+            i..i + 2,
+            ["--live-entries".to_string(), f.display().to_string()],
+        );
+    }
     let linux = ctx.platform == Platform::Linux;
     let image = find_image(ctx, &mut args);
     if !args.iter().any(|a| a == "--out") {
@@ -691,9 +707,18 @@ fn report_live(argv: &[String]) -> i32 {
     let mut d = None;
     let mut against = None;
     let mut port = hydo_explore::live::PORT;
+    let mut opts = hydo_explore::live::Opts::default();
     let mut it = argv.iter().filter(|a| *a != "--live");
     while let Some(a) = it.next() {
-        if a == "--against" {
+        if a == "--showcase" {
+            // Milestone 397: the page for people new to hydo
+            opts.showcase = true;
+        } else if a == "--routes" {
+            let dir = it
+                .next()
+                .unwrap_or_else(|| die("hydo report --live: --routes takes the sources' folder"));
+            opts.entries = Some(live_routes(dir));
+        } else if a == "--against" {
             against = it.next().cloned();
         } else if a == "--port" {
             port = it.next().and_then(|v| v.parse().ok()).unwrap_or_else(|| {
@@ -732,10 +757,33 @@ fn report_live(argv: &[String]) -> i32 {
             d.display()
         );
     }
-    match hydo_explore::live::serve_forever(&d, port, against.as_deref().map(Path::new)) {
+    match hydo_explore::live::serve_forever_with(&d, port, against.as_deref().map(Path::new), opts)
+    {
         Ok(()) => 0,
         Err(e) => die(&format!("hydo report --live: {e}")),
     }
+}
+
+/// The entry points of the live page's flow (Milestone 397): the routes that write of the
+/// sources in `dir`, each with its handler's file and line, as `hydo rules scan --kind writes
+/// --json` lists them. The page names a root of the flow by the route whose handler is that
+/// function.
+pub fn live_routes(dir: &str) -> serde_json::Value {
+    let p = Path::new(dir);
+    if !p.is_dir() {
+        die(&format!(
+            "--routes {dir}: not a folder (the sources of the program)"
+        ));
+    }
+    let w = crate::writescan::scan_writes(p);
+    let routes: Vec<serde_json::Value> = w
+        .routes
+        .iter()
+        .chain(w.reads.iter())
+        .enumerate()
+        .map(|(i, r)| crate::writescan::route_json(r, i + 1))
+        .collect();
+    serde_json::json!({"dir": dir, "routes": routes})
 }
 
 pub fn cmd_report(_ctx: &Ctx, argv: &[String]) -> i32 {

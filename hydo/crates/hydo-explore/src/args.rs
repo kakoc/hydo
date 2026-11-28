@@ -7,7 +7,7 @@ pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|sw
        [--timing] [--new-faults] [--durable-only] [--concurrency] [--more-faults] [--preempt] [--buggify]
        [--freeze-call] [--protocol-faults] [--protocol-cover] [--grpc-faults] [--answer-faults] [--link-cuts]
        [--vcpus N --turns [--bursts]] [--cpu v2|v3]
-       [--no-faults] [--live [--port N] [--live-against DIR]]
+       [--no-faults] [--live [--port N] [--live-against DIR] [--showcase] [--live-entries FILE]]
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--shrink-causes N]
        [--shrink-detected-damage] [--rerun-repeats] [--shrink-later]
@@ -119,6 +119,12 @@ pub struct Args {
     /// `--live-against DIR`: what a baseline exploration (one made with `--no-faults`) reached
     /// counts as reached without a fault on the live map.
     pub live_against: Option<String>,
+    /// `--showcase` (Milestone 397): the live page for people new to hydo, with the map and
+    /// the flow of calls from the entry points.
+    pub showcase: bool,
+    /// `--live-entries FILE` (Milestone 397): the entry points of the flow, a JSON file of
+    /// routes that `hydo explore --live-routes DIR` writes from `hydo rules scan --kind writes`.
+    pub live_entries: Option<String>,
     pub backend: String,
     pub hvm_kernel: Option<String>,
     pub manifest: Option<String>,
@@ -283,6 +289,8 @@ impl Default for Args {
             live: false,
             port: None,
             live_against: None,
+            showcase: false,
+            live_entries: None,
             backend: "hvx".into(),
             hvm_kernel: None,
             manifest: None,
@@ -332,7 +340,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 37] = [
+const FLAGS: [&str; 38] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -358,6 +366,7 @@ const FLAGS: [&str; 37] = [
     "buggify",
     "no-faults",
     "live",
+    "showcase",
     "turns",
     "no-compose",
     "bursts",
@@ -372,10 +381,11 @@ const FLAGS: [&str; 37] = [
     "check-continued",
 ];
 
-const VALUED: [&str; 66] = [
+const VALUED: [&str; 67] = [
     "seeds",
     "port",
     "live-against",
+    "live-entries",
     "shard",
     "workers",
     "image",
@@ -553,6 +563,8 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "no-faults" => a.no_faults = true,
             "live" => a.live = true,
             "live-against" => a.live_against = Some(val),
+            "showcase" => a.showcase = true,
+            "live-entries" => a.live_entries = Some(val),
             "port" => {
                 a.port = Some(v.parse().map_err(|_| {
                     format!(

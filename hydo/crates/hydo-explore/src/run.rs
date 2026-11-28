@@ -1550,7 +1550,18 @@ fn run(mut cx: Cx) -> i32 {
     }
     if cx.a.live {
         let against = cx.a.live_against.as_deref().map(std::path::Path::new);
-        match crate::live::start(&cx.out, cx.a.port.unwrap_or(crate::live::PORT), against) {
+        // Milestone 397: the showcase page, and the entry points of its flow
+        let entries = cx.a.live_entries.as_ref().and_then(|f| {
+            std::fs::read_to_string(f)
+                .ok()
+                .and_then(|t| serde_json::from_str(&t).ok())
+        });
+        let opts = crate::live::Opts {
+            showcase: cx.a.showcase,
+            entries,
+        };
+        let port = cx.a.port.unwrap_or(crate::live::PORT);
+        match crate::live::start_with(&cx.out, port, against, opts) {
             Ok(url) => eprintln!(
                 "hydo explore: the live map of the code the runs reach is at {url} (it stops \
                  with the exploration)"

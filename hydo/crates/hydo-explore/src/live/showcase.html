@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hydo showcase</title>
+<style>
+:root{
+  --bg:#05060a;--fg:#f3f5f9;--muted:#8b93a7;--dim:#4d5466;--line:rgba(255,255,255,.075);
+  --never:#151923;--clean:#34d399;--faults:#fb923c;--ep:#f43f5e;--bug:#ff5468;
+  --crash:#f87171;--power:#facc15;--clock:#a78bfa;--net:#38bdf8;--pause:#a3b1c6;--disk:#f472b6;
+  --s:min(calc(100vw / 1920), calc(100vh / 1080));
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg)}
+body{color:var(--fg);font-family:"SF Pro Display",-apple-system,BlinkMacSystemFont,Inter,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  font-size:calc(var(--s) * 20);-webkit-font-smoothing:antialiased;
+  background:
+    radial-gradient(calc(var(--s) * 1300) calc(var(--s) * 760) at 78% -12%, rgba(52,211,153,.10), transparent 62%),
+    radial-gradient(calc(var(--s) * 1100) calc(var(--s) * 700) at -8% 112%, rgba(251,146,60,.09), transparent 60%),
+    var(--bg)}
+.mono{font-family:"SF Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.wrap{position:absolute;inset:0;padding:calc(var(--s) * 40) calc(var(--s) * 56) calc(var(--s) * 34);
+  display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:calc(var(--s) * 22)}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:calc(var(--s) * 40)}
+.brand{display:flex;align-items:center;gap:calc(var(--s) * 12);font-weight:650;letter-spacing:.02em;color:var(--muted);
+  font-size:calc(var(--s) * 19);margin-bottom:calc(var(--s) * 12)}
+.brand i{display:inline-block;width:calc(var(--s) * 22);height:calc(var(--s) * 22);border-radius:calc(var(--s) * 6);
+  background:conic-gradient(from 210deg,var(--clean),var(--net),var(--clock),var(--faults),var(--clean));
+  box-shadow:0 0 calc(var(--s) * 18) rgba(52,211,153,.45)}
+.chip{font-size:calc(var(--s) * 14);font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  border:1px solid var(--line);border-radius:999px;padding:calc(var(--s) * 4) calc(var(--s) * 12);margin-left:calc(var(--s) * 6)}
+.chip.live{color:#c7f9e3;border-color:rgba(52,211,153,.4)}
+.chip.live::before{content:"";display:inline-block;width:calc(var(--s) * 8);height:calc(var(--s) * 8);border-radius:50%;
+  background:var(--clean);margin-right:calc(var(--s) * 8);vertical-align:middle;animation:blink 1.4s infinite}
+@keyframes blink{50%{opacity:.25}}
+h1{margin:0;font-size:calc(var(--s) * 54);line-height:1.04;font-weight:720;letter-spacing:-.025em}
+h1 em{font-style:normal;background:linear-gradient(90deg,#fff 0%,#c8ffe9 55%,#ffd2ad 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{margin:calc(var(--s) * 12) 0 0;color:var(--muted);font-size:calc(var(--s) * 21);line-height:1.4;max-width:calc(var(--s) * 1000)}
+.kpis{display:flex;gap:calc(var(--s) * 44);text-align:right}
+.kpi b{display:block;font-size:calc(var(--s) * 56);font-weight:680;letter-spacing:-.03em;font-variant-numeric:tabular-nums;line-height:1}
+.kpi span{display:block;margin-top:calc(var(--s) * 8);font-size:calc(var(--s) * 14);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.kpi.bug b{color:var(--bug);text-shadow:0 0 calc(var(--s) * 24) rgba(255,84,104,.35)}
+.kpi small{font-size:calc(var(--s) * 24);color:var(--muted);font-weight:500;letter-spacing:0}
+.stage{position:relative;border-radius:calc(var(--s) * 22);border:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.008));overflow:hidden;min-height:0}
+#cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.tag{position:absolute;left:calc(var(--s) * 26);top:calc(var(--s) * 20);pointer-events:none;z-index:2}
+.tag b{display:block;font-size:calc(var(--s) * 25);font-weight:650;letter-spacing:-.01em}
+.tag span{display:block;color:var(--muted);font-size:calc(var(--s) * 17);margin-top:calc(var(--s) * 4)}
+.legend{position:absolute;right:calc(var(--s) * 26);top:calc(var(--s) * 24);display:flex;gap:calc(var(--s) * 22);
+  font-size:calc(var(--s) * 16);color:#c6ccd8;z-index:2;pointer-events:none}
+.legend i{display:inline-block;width:calc(var(--s) * 13);height:calc(var(--s) * 13);border-radius:calc(var(--s) * 4);
+  vertical-align:-1px;margin-right:calc(var(--s) * 8)}
+.legend .ring{border-radius:50%;border:calc(var(--s) * 2.4) solid var(--ep);background:transparent}
+.views{position:absolute;right:calc(var(--s) * 26);bottom:calc(var(--s) * 20);display:flex;gap:calc(var(--s) * 6);z-index:3}
+.views button{font:inherit;font-size:calc(var(--s) * 15);color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--line);
+  border-radius:999px;padding:calc(var(--s) * 6) calc(var(--s) * 16);cursor:pointer}
+.views button.on{color:var(--fg);background:rgba(255,255,255,.11)}
+.banner{position:absolute;left:50%;bottom:calc(var(--s) * 30);transform:translate(-50%,calc(var(--s) * 30));opacity:0;
+  width:min(calc(var(--s) * 1180),92%);z-index:4;pointer-events:none;
+  transition:opacity .6s ease,transform .6s cubic-bezier(.2,.8,.2,1);
+  background:rgba(14,10,16,.86);backdrop-filter:blur(calc(var(--s) * 14));-webkit-backdrop-filter:blur(calc(var(--s) * 14));
+  border:1px solid rgba(255,84,104,.35);border-radius:calc(var(--s) * 18);
+  box-shadow:0 calc(var(--s) * 20) calc(var(--s) * 70) rgba(0,0,0,.55),0 0 calc(var(--s) * 60) rgba(255,84,104,.12);
+  padding:calc(var(--s) * 22) calc(var(--s) * 28)}
+.banner.on{opacity:1;transform:translate(-50%,0)}
+.banner .k{font-size:calc(var(--s) * 14);font-weight:650;letter-spacing:.12em;text-transform:uppercase;color:var(--bug);display:flex;align-items:center;gap:calc(var(--s) * 10)}
+.banner .k::before{content:"";width:calc(var(--s) * 10);height:calc(var(--s) * 10);border-radius:50%;background:var(--bug);box-shadow:0 0 0 calc(var(--s) * 5) rgba(255,84,104,.2)}
+.banner .t{font-size:calc(var(--s) * 29);font-weight:640;letter-spacing:-.01em;line-height:1.25;margin-top:calc(var(--s) * 10)}
+.banner .w{color:#c3c9d5;font-size:calc(var(--s) * 19);line-height:1.4;margin-top:calc(var(--s) * 8)}
+.banner .c{margin-top:calc(var(--s) * 14);display:flex;gap:calc(var(--s) * 14);align-items:baseline}
+.banner .c span{color:var(--muted);font-size:calc(var(--s) * 15);white-space:nowrap}
+.banner .c code{flex:1;min-width:0;font-size:calc(var(--s) * 16);color:#e8ecf3;background:rgba(255,255,255,.06);border-radius:calc(var(--s) * 9);
+  padding:calc(var(--s) * 8) calc(var(--s) * 12);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+footer{display:grid;grid-template-columns:auto 1fr;gap:calc(var(--s) * 8) calc(var(--s) * 26);align-items:center}
+footer .lab{font-size:calc(var(--s) * 14);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);line-height:1.3}
+footer .lab b{display:block;color:var(--fg);font-size:calc(var(--s) * 22);letter-spacing:-.01em;text-transform:none;font-weight:620;font-variant-numeric:tabular-nums}
+#tl{width:100%;height:calc(var(--s) * 92);display:block}
+#now{grid-column:2;color:#c3c9d5;font-size:calc(var(--s) * 18);height:calc(var(--s) * 26);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#now b{color:var(--fg);font-weight:600}
+#tip{position:absolute;pointer-events:none;z-index:5;display:none;max-width:calc(var(--s) * 520);
+  background:rgba(12,14,20,.95);border:1px solid var(--line);border-radius:calc(var(--s) * 12);padding:calc(var(--s) * 12) calc(var(--s) * 14);
+  font-size:calc(var(--s) * 15);line-height:1.45;color:#cfd5e0;box-shadow:0 calc(var(--s) * 10) calc(var(--s) * 30) rgba(0,0,0,.5)}
+#tip b{color:var(--fg);font-size:calc(var(--s) * 17)}
+.tick{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:.9em;color:#e8ecf3;background:rgba(255,255,255,.08);
+  border-radius:calc(var(--s) * 5);padding:0 calc(var(--s) * 5)}
+#wait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:calc(var(--s) * 22);z-index:1}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="brand"><i></i>hydo<span class="chip" id="mode">Live</span></div>
+      <h1 id="h1">Breaking it <em>on purpose</em></h1>
+      <p class="sub" id="sub">One virtual machine runs the whole system. hydo crashes it, cuts its power, jumps its clock and cuts its
+        network, then checks every promise it made. Any failure replays bit for bit.</p>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><b id="kRuns">0</b><span>Runs</span></div>
+      <div class="kpi"><b id="kFaults">0</b><span>Faults injected</span></div>
+      <div class="kpi"><b id="kCode">0<small> %</small></b><span id="kCodeL">Code reached</span></div>
+      <div class="kpi bug"><b id="kBugs">0</b><span>Bugs found</span></div>
+    </div>
+  </header>
+  <div class="stage" id="stage">
+    <canvas id="cv"></canvas>
+    <div class="tag"><b id="tagT">Every function of the code</b><span id="tagS">A tile lights up the first time a run reaches it</span></div>
+    <div class="legend">
+      <span><i style="background:var(--clean)"></i>reached in a normal run</span>
+      <span><i style="background:var(--faults)"></i>reached only when something broke</span>
+      <span><i class="ring"></i>error-handling code</span>
+      <span><i style="background:#2a3040"></i>not reached yet</span>
+    </div>
+    <div class="views"><button data-v="map" class="on">Code map</button><button data-v="flow">Call flow</button></div>
+    <div id="wait">Waiting for the first run…</div>
+    <div class="banner" id="banner">
+      <div class="k" id="bK">Bug found</div>
+      <div class="t" id="bT"></div>
+      <div class="w" id="bW"></div>
+      <div class="c"><span>Replay it, bit for bit</span><code class="mono" id="bC"></code></div>
+    </div>
+    <div id="tip"></div>
+  </div>
+  <footer>
+    <div class="lab">Runs<b id="tlN">0 of 0</b></div>
+    <canvas id="tl"></canvas>
+    <div id="now"></div>
+  </footer>
+</div>
+<script>
+"use strict";
+// The showcase page of hydo's live map (Milestone 397, docs/design/live-map.md). It reads what
+// the exploration writes, through the same server as the map page: map.json, runs and
+// entries.json. Every number on it comes from the runs. The runs are shown one after another,
+// at most one per `pace` seconds, so a finished exploration plays back in order.
+const $ = (id) => document.getElementById(id);
+const H = new URLSearchParams(location.hash.slice(1));
+const PACE = +(H.get("pace") || 1.1) * 1000, HOLD = +(H.get("hold") || 3.6) * 1000;
+const COL = {never: "#161b26", clean: "#34d399", faults: "#fb923c", ep: "#f43f5e", bug: "#ff5468"};
+const KIND = {"crash": "#f87171", "power cut": "#facc15", "clock jump": "#a78bfa", "network cut": "#38bdf8",
+  "slow network": "#38bdf8", "pause": "#a3b1c6", "disk errors": "#f472b6", "lying disk": "#f472b6",
+  "damaged file": "#f472b6", "outside service fails": "#38bdf8", "upgrade": "#a3b1c6"};
+let MAP = null, ENTRIES = null, INFO = {};
+const FN = new Map();          // id -> function of the map
+let OWN = [];                  // the functions shown: the project's own code
+const RUNS = [];               // every first run the server gave, in the stream's order
+// `#start=` seconds before the first run plays, for a reader to take in the page
+let shown = 0, cur = null, holdUntil = 0, bannerAt = 0, started = false;
+const st = new Map();          // id -> {any, clean, first, callers:Set}
+const flash = new Map();       // id -> [time, colour]: its first reach
+const pass = new Map();        // id -> time: a later run that reached it again
+const epRan = new Set();
+const broken = new Set();      // checks that broke
+let faults = 0, view = H.get("view") === "flow" ? "flow" : "map";
+let S = 1, DPR = 1;            // the page's scale (1 at 1920x1080) and the device pixels
+
+function scale() {
+  S = Math.min(innerWidth / 1920, innerHeight / 1080); DPR = window.devicePixelRatio || 1;
+}
+const px = (v) => v * S;
+const kindOf = (tok) => {
+  const k = tok.split("=")[0], v = tok.slice(k.length + 1);
+  switch (k) {
+    case "K": case "X": return "crash";
+    case "C": case "cf": case "L": return "power cut";
+    case "T": return "clock jump";
+    case "N": return v.includes("delay") ? "slow network" : "network cut";
+    case "O": return "network cut";
+    case "P": return "pause";
+    case "G": return "damaged file";
+    case "H": return "outside service fails";
+    case "U": return "upgrade";
+    case "disk": return v.startsWith("ioerr") ? "disk errors" : v.startsWith("lying") ? "lying disk" : null;
+    case "A": {
+      const a = v.split(":").pop();
+      if (a.includes("cut") || a.includes("powerloss")) return "power cut";
+      if (a.includes("kill")) return "crash";
+      if (a.includes("clock")) return "clock jump";
+      if (a.includes("stop")) return "pause";
+      return "crash";
+    }
+    default: return null;
+  }
+};
+const shortMod = (m) => { const p = String(m || "").split("/"); return p.slice(-2).join("/"); };
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const cap = (s) => s ? s[0].toUpperCase() + s.slice(1) : s;
+// the schedule's sentences name services and values in backticks
+const md = (s) => esc(s).replace(/`([^`]+)`/g, '<span class="tick">$1</span>');
+let NAME = "the system", OWNMODS = new Set();
+
+// ---------------------------------------------------------------- the data
+function loadMap(m) {
+  MAP = m;
+  for (const p of m.programs) for (const mod of p.modules) for (const f of mod.files) for (const fn of f.functions) {
+    fn.module = mod.module; fn.file = f.file; fn.own = !!fn.own; fn.program = p.program;
+    FN.set(fn.id, fn);
+  }
+  OWN = [...FN.values()].filter((f) => f.own);
+  if (!OWN.length) OWN = [...FN.values()];
+  OWNMODS = new Set(OWN.map((f) => f.module));
+  const prog = (m.programs[0] && m.programs[0].program || "").split("/").pop();
+  NAME = H.get("title") || cap(prog || "the system");
+  $("h1").innerHTML = `Breaking ${esc(NAME)} <em>on purpose</em>`;
+  setView(view);
+  layoutMap();
+}
+
+function runFaults(r) {
+  return (r.said || []).filter((x) => x.fault && kindOf(x.token)).map((x) => ({
+    kind: kindOf(x.token), step: x.step ?? 0, sentence: x.sentence}));
+}
+
+function steps(r) { return Math.max(1, r.steps || 1); }
+
+function reveal(t, now) {
+  const [id, step, before, caller] = t;
+  let s = st.get(id);
+  const fresh = !s;
+  if (!s) { s = {any: false, clean: false, first: undefined, callers: new Set()}; st.set(id, s); }
+  const wasClean = s.clean;
+  s.any = true;
+  if (before) s.clean = true;
+  if (caller !== undefined && caller >= 0) { s.callers.add(caller); if (s.first === undefined) s.first = caller; }
+  else if (s.first === undefined && caller !== undefined) s.first = -1;
+  if (fresh || (s.clean && !wasClean)) { flash.set(id, [now, s.clean ? COL.clean : COL.faults]); treeDirty = true; }
+  else pass.set(id, now);
+}
+
+function status(id) { const s = st.get(id); return !s ? 0 : s.clean ? 2 : 1; }
+const FILL = () => [COL.never, COL.faults, COL.clean];
+
+// ---------------------------------------------------------------- the code map
+let LEAVES = [], BOXES = [];
+function squarify(items, x, y, w, h, out) {
+  let rest = items.slice(), total = rest.reduce((a, b) => a + b.v, 0);
+  while (rest.length) {
+    if (w <= 0 || h <= 0) { for (const it of rest) out.push({item: it, x, y, w: 0, h: 0}); return; }
+    const short = Math.min(w, h), sc = (w * h) / total;
+    let row = [], sum = 0, worst = Infinity, mx = 0, mn = Infinity;
+    for (const it of rest) {
+      const s2 = sum + it.v, rmax = Math.max(mx, it.v), rmin = Math.min(mn, it.v), side = s2 * sc / short;
+      const wst = Math.max((rmax * sc) / (side * side), (side * side) / (rmin * sc));
+      if (row.length && wst > worst) break;
+      row.push(it); sum = s2; worst = wst; mx = rmax; mn = rmin;
+    }
+    const side = sum * sc / short;
+    let off = 0;
+    for (const it of row) {
+      const len = it.v * sc / side;
+      if (w >= h) out.push({item: it, x, y: y + off, w: side, h: len}); else out.push({item: it, x: x + off, y, w: len, h: side});
+      off += len;
+    }
+    if (w >= h) { x += side; w -= side; } else { y += side; h -= side; }
+    rest = rest.slice(row.length); total -= sum;
+  }
+}
+function area() {
+  const r = $("cv").getBoundingClientRect();
+  return {x: px(26), y: px(92), w: r.width - px(52), h: r.height - px(92) - px(70)};
+}
+function layoutMap() {
+  if (!MAP) return;
+  const A = area();
+  const mods = new Map();
+  for (const f of OWN) {
+    const key = f.program + "\u0000" + f.module;
+    if (!mods.has(key)) mods.set(key, {name: f.module, files: new Map(), v: 0});
+    const m = mods.get(key);
+    if (!m.files.has(f.file)) m.files.set(f.file, {fns: [], v: 0});
+    const v = Math.max(24, f.size);
+    m.files.get(f.file).fns.push({f, v}); m.files.get(f.file).v += v; m.v += v;
+  }
+  const placed = [];
+  squarify([...mods.values()].sort((a, b) => b.v - a.v), A.x, A.y, A.w, A.h, placed);
+  LEAVES = []; BOXES = [];
+  const gap = px(3);
+  for (const pm of placed) {
+    const m = pm.item, head = pm.h > px(70) && pm.w > px(110) ? px(24) : 0;
+    BOXES.push({x: pm.x, y: pm.y, w: pm.w, h: pm.h, label: shortMod(m.name), head});
+    const pf = [];
+    squarify([...m.files.values()].sort((a, b) => b.v - a.v), pm.x + gap, pm.y + head + gap, pm.w - 2 * gap, pm.h - head - 2 * gap, pf);
+    for (const q of pf) {
+      const pl = [];
+      squarify(q.item.fns.sort((a, b) => b.v - a.v), q.x, q.y, q.w, q.h, pl);
+      for (const l of pl) LEAVES.push({f: l.item.f, x: l.x, y: l.y, w: l.w, h: l.h});
+    }
+  }
+}
+function glowFill(g, x, y, w, h, base, fl, now, r, ps) {
+  g.fillStyle = base;
+  roundRect(g, x, y, w, h, r); g.fill();
+  // a run that passes through code reached before: a soft light on it
+  let soft = false;
+  if (ps !== undefined && now - ps < 800) {
+    const a = 1 - (now - ps) / 800;
+    g.save(); g.globalAlpha = 0.28 * a; g.fillStyle = "#ffffff"; roundRect(g, x, y, w, h, r); g.fill();
+    g.globalAlpha = 0.7 * a; g.strokeStyle = "#ffffff"; g.lineWidth = px(1.2); g.stroke(); g.restore();
+    soft = true;
+  }
+  if (!fl) return soft;
+  const t = (now - fl[0]) / 1500;
+  if (t >= 1) return soft;
+  const a = 1 - t;
+  g.save();
+  g.shadowColor = fl[1]; g.shadowBlur = px(26) * a;
+  g.globalAlpha = 0.55 + 0.45 * a; g.fillStyle = fl[1];
+  roundRect(g, x, y, w, h, r); g.fill();
+  g.shadowBlur = 0; g.globalAlpha = 0.75 * a * a; g.fillStyle = "#ffffff";
+  roundRect(g, x, y, w, h, r); g.fill();
+  g.restore();
+  return true;
+}
+function roundRect(g, x, y, w, h, r) {
+  r = Math.max(0, Math.min(r, w / 2, h / 2));
+  g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+}
+function epDot(g, f, x, y, w, h) {
+  if (!f.error_paths || w < px(10) || h < px(10)) return;
+  const ran = f.error_paths.some((e) => epRan.has(e[0])), r = Math.min(px(4.2), w / 4, h / 4);
+  g.beginPath(); g.arc(x + r + px(3.5), y + r + px(3.5), ran ? r : r * 0.75, 0, 7);
+  if (ran) {
+    g.save(); g.shadowColor = COL.ep; g.shadowBlur = px(8);
+    g.strokeStyle = "#ff6b81"; g.lineWidth = px(2.4); g.stroke(); g.restore();
+  } else { g.fillStyle = st.has(f.id) ? "rgba(120,20,40,.55)" : "rgba(244,63,94,.32)"; g.fill(); }
+}
+function drawMap(g, now) {
+  let anim = false;
+  const fill = FILL();
+  for (const b of BOXES) {
+    g.fillStyle = "rgba(255,255,255,.022)"; roundRect(g, b.x + px(1), b.y + px(1), b.w - px(2), b.h - px(2), px(10)); g.fill();
+    g.strokeStyle = "rgba(255,255,255,.07)"; g.lineWidth = 1; g.stroke();
+  }
+  for (const l of LEAVES) {
+    if (l.w < 0.5 || l.h < 0.5) continue;
+    const i = px(0.8);
+    if (glowFill(g, l.x + i, l.y + i, l.w - 2 * i, l.h - 2 * i, fill[status(l.f.id)], flash.get(l.f.id), now, px(3), pass.get(l.f.id))) anim = true;
+    epDot(g, l.f, l.x, l.y, l.w, l.h);
+  }
+  g.font = `600 ${px(15)}px -apple-system,Inter,sans-serif`; g.textBaseline = "middle";
+  for (const b of BOXES) if (b.head) { g.fillStyle = "#aab2c3"; clip(g, b.label, b.x + px(12), b.y + px(14), b.w - px(24)); }
+  return anim;
+}
+function clip(g, s, x, y, w) {
+  if (w < px(20)) return;
+  let t = s;
+  if (g.measureText(t).width > w) { while (t.length > 1 && g.measureText(t + "…").width > w) t = t.slice(0, -1); t += "…"; }
+  g.fillText(t, x, y);
+}
+
+// ---------------------------------------------------------------- the call flow
+// Each function of the project's own code hangs under the function that first called it: its
+// nearest caller of the project's own code, walking the first callers up (a library's code in
+// between, such as a web framework, is skipped). A function whose handler a route names, and a
+// function that no function of the project called, is an entry point. Only what the runs
+// reached is drawn: a call that no run made is not known without the program's call graph.
+let treeDirty = true, NODES = new Map(), TREE = [], maxDepth = 1;
+const routeOf = new Map();     // function id -> "POST /transactions"
+function matchRoutes() {
+  routeOf.clear();
+  if (!ENTRIES || !ENTRIES.routes || !MAP) return;
+  const byFile = new Map();
+  for (const f of FN.values()) { if (!byFile.has(f.file)) byFile.set(f.file, []); byFile.get(f.file).push(f); }
+  for (const r of ENTRIES.routes) {
+    if (!r.handler_file || !r.handler_line) continue;
+    for (const [file, fs] of byFile) {
+      if (!(file === r.handler_file || file.endsWith("/" + r.handler_file) || r.handler_file.endsWith("/" + file))) continue;
+      let best = null;
+      for (const f of fs) if (f.line <= r.handler_line && (!best || f.line > best.line)) best = f;
+      if (best && !routeOf.has(best.id)) routeOf.set(best.id, `${r.method} ${r.path}`);
+    }
+  }
+}
+function parentOf(id) {
+  if (routeOf.has(id)) return {root: routeOf.get(id), route: true};
+  const f = FN.get(id);
+  if (f && /(^|\.)main\.main$/.test(f.name)) return {root: "main"};
+  let c = st.get(id)?.first, seen = new Set([id]), lib = null;
+  while (c !== undefined && c >= 0 && !seen.has(c)) {
+    seen.add(c);
+    const g = FN.get(c);
+    if (!g) break;
+    if (g.own && st.has(c)) return {parent: c};
+    // a wrapper that the compiler made for the project's own code is no library
+    if (lib === null && !OWNMODS.has(g.module) && !/-fm$/.test(g.name)) lib = g.module;
+    c = st.get(c)?.first;
+  }
+  if (lib === "runtime" || lib === null && c === -1) return {root: "background work"};
+  return {root: lib ? `called by ${shortMod(lib)}` : "first call unknown"};
+}
+function buildTree() {
+  treeDirty = false;
+  const kids = new Map(), groups = new Map(), par = new Map();
+  for (const f of OWN) if (st.has(f.id)) par.set(f.id, parentOf(f.id));
+  // a parent that is not drawn, or a cycle across runs: the function becomes an entry point
+  for (const [id, p] of par) {
+    if (p.parent === undefined) continue;
+    let a = p.parent, n = 0, cyc = false;
+    while (a !== undefined && n < 400) { if (a === id) { cyc = true; break; } const q = par.get(a); if (!q) break; a = q.parent; n++; }
+    if (cyc || !par.has(p.parent)) par.set(id, {root: "called from more than one place"});
+  }
+  for (const [id, p] of par) {
+    if (p.parent !== undefined) { if (!kids.has(p.parent)) kids.set(p.parent, []); kids.get(p.parent).push(id); }
+    else { if (!groups.has(p.root)) groups.set(p.root, {label: p.root, route: !!p.route, kids: []}); groups.get(p.root).kids.push(id); }
+  }
+  const weight = new Map();
+  const wOf = (id, d) => { let w = 1; for (const k of kids.get(id) || []) w += wOf(k, d + 1); weight.set(id, w); maxDepth = Math.max(maxDepth, d); return w; };
+  maxDepth = 1;
+  let gs = [...groups.values()];
+  for (const g of gs) { g.w = 0; for (const k of g.kids) g.w += wOf(k, 1); }
+  // the small entry points that no route names share one box
+  const all = gs.reduce((a, g) => a + g.w, 0) || 1, small = gs.filter((g) => !g.route && g.label !== "main" && g.w < all * 0.03);
+  if (small.length > 1) {
+    const o = {label: "other entry points", route: false, kids: [], w: 0};
+    for (const g of small) { o.kids.push(...g.kids); o.w += g.w; }
+    gs = gs.filter((g) => !small.includes(g)).concat([o]);
+  }
+  gs.sort((a, b) => (b.route - a.route) || (a.label === "main" ? -1 : b.label === "main" ? 1 : b.w - a.w));
+  TREE = {gs, kids, weight};
+  layoutTree();
+}
+function layoutTree() {
+  if (!TREE.gs) return;
+  const A = area(), {gs, kids, weight} = TREE;
+  const total = gs.reduce((a, g) => a + g.w, 0) || 1;
+  const minOf = (g) => total * (g.route ? 0.075 : 0.03);
+  const sum = gs.reduce((a, g) => a + Math.max(g.w, minOf(g)), 0);
+  const head = px(40), depth = Math.min(maxDepth, 22), rowH = Math.max(px(8), Math.min(px(40), (A.h - head - px(8)) / depth));
+  const target = new Map();
+  let x = A.x;
+  const place = (id, x0, w, d) => {
+    if (d > depth) return;
+    target.set(id, {x: x0, y: A.y + head + px(8) + (d - 1) * rowH, w, h: rowH, d});
+    let cx = x0;
+    const ks = (kids.get(id) || []).slice().sort((a, b) => weight.get(b) - weight.get(a));
+    const tw = ks.reduce((a, k) => a + weight.get(k), 0) || 1, inner = w * (tw / weight.get(id));
+    for (const k of ks) { const kw = inner * weight.get(k) / tw; place(k, cx, kw, d + 1); cx += kw; }
+  };
+  for (const g of gs) {
+    const gw = A.w * Math.max(g.w, minOf(g)) / sum;
+    target.set("g:" + g.label, {x, y: A.y, w: gw, h: head, group: g});
+    let cx = x;
+    for (const k of g.kids.slice().sort((a, b) => weight.get(b) - weight.get(a))) { const kw = gw * weight.get(k) / g.w; place(k, cx, kw, 1); cx += kw; }
+    x += gw;
+  }
+  for (const [k, t] of target) {
+    const n = NODES.get(k);
+    if (n) n.t = t;
+    else {
+      // a new branch grows down from its parent
+      const s = {x: t.x, y: t.y - t.h * 0.6, w: t.w, h: 0};
+      NODES.set(k, {c: s, t});
+    }
+  }
+  for (const k of [...NODES.keys()]) if (!target.has(k)) NODES.delete(k);
+}
+function drawFlow(g, now, dt) {
+  if (treeDirty) buildTree();
+  let anim = false;
+  const fill = FILL(), k = Math.min(1, dt / 160);
+  g.textBaseline = "middle";
+  for (const [key, n] of NODES) {
+    const c = n.c, t = n.t;
+    for (const p of ["x", "y", "w", "h"]) { const d = t[p] - c[p]; if (Math.abs(d) > 0.3) { c[p] += d * k; anim = true; } else c[p] = t[p]; }
+    if (c.w < 0.4 || c.h < 0.4) continue;
+    const gp = px(1.2);
+    if (t.group) {
+      const gr = t.group;
+      g.fillStyle = gr.route ? "rgba(56,189,248,.10)" : "rgba(255,255,255,.05)";
+      roundRect(g, c.x + gp, c.y, c.w - 2 * gp, c.h, px(9)); g.fill();
+      g.strokeStyle = gr.route ? "rgba(56,189,248,.35)" : "rgba(255,255,255,.10)"; g.lineWidth = 1; g.stroke();
+      if (c.w > px(26)) {
+        const [m, ...rest] = gr.label.split(" ");
+        let x0 = c.x + px(12);
+        g.font = `700 ${px(13)}px -apple-system,Inter,sans-serif`;
+        if (gr.route) {
+          const mw = g.measureText(m).width;
+          if (mw + px(30) < c.w) { g.fillStyle = "#7dd3fc"; g.fillText(m, x0, c.y + c.h / 2); x0 += mw + px(8); }
+          g.font = `500 ${px(15)}px "SF Mono",ui-monospace,Menlo,monospace`; g.fillStyle = "#e6f6ff";
+          clip(g, rest.join(" ") || m, x0, c.y + c.h / 2, c.x + c.w - x0 - px(8));
+        } else {
+          g.font = `600 ${px(15)}px -apple-system,Inter,sans-serif`; g.fillStyle = "#c8cfdc";
+          clip(g, gr.label, x0, c.y + c.h / 2, c.w - px(20));
+        }
+      }
+      continue;
+    }
+    const f = FN.get(key);
+    if (glowFill(g, c.x + gp, c.y + gp, c.w - 2 * gp, c.h - 2 * gp, fill[status(key)], flash.get(key), now, px(4), pass.get(key))) anim = true;
+    epDot(g, f, c.x + gp, c.y + gp, c.w - 2 * gp, c.h - 2 * gp);
+    if (c.w > px(70) && c.h > px(18)) {
+      g.font = `600 ${Math.min(px(14), c.h * 0.5)}px -apple-system,Inter,sans-serif`; g.fillStyle = "rgba(5,6,10,.82)";
+      clip(g, f.short || f.name, c.x + px(f.error_paths ? 16 : 9), c.y + c.h / 2 + px(0.5), c.w - px(f.error_paths ? 24 : 16));
+    }
+  }
+  return anim;
+}
+
+// ---------------------------------------------------------------- the runs' track
+const pulses = [];             // [time, x, y, colour, label]
+function drawTimeline(now) {
+  const c = $("tl"), r = c.getBoundingClientRect();
+  c.width = Math.max(1, r.width * DPR); c.height = Math.max(1, r.height * DPR);
+  const g = c.getContext("2d"); g.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const n = Math.max(RUNS.length, 1), gap = px(6), W = r.width, cw = (W - gap * (n - 1)) / n;
+  const y = px(40), h = px(26);
+  let anim = false;
+  for (let k = 0; k < n; k++) {
+    const x = k * (cw + gap), run = RUNS[k];
+    const done = k < shown && !(cur && cur.k === k), live = cur && cur.k === k;
+    g.fillStyle = done || live ? "rgba(255,255,255,.07)" : "rgba(255,255,255,.03)";
+    roundRect(g, x, y, cw, h, px(7)); g.fill();
+    if (!run) continue;
+    const p = live ? Math.min(1, (now - cur.t0) / PACE) : done ? 1 : 0;
+    if (p > 0) {
+      const ok = run.verdict === "ok";
+      const grd = g.createLinearGradient(x, 0, x + cw, 0);
+      const col = !done ? "rgba(255,255,255,.16)" : ok ? "rgba(52,211,153,.30)" : run.verdict === "violation" ? "rgba(255,84,104,.55)" : "rgba(250,204,21,.32)";
+      grd.addColorStop(0, col); grd.addColorStop(1, col);
+      g.fillStyle = grd; roundRect(g, x, y, cw * p, h, px(7)); g.fill();
+    }
+    // a run's faults show once it plays, not before
+    if (!done && !live) continue;
+    for (const fa of runFaults(run)) {
+      const fx = x + px(6) + (cw - px(12)) * Math.min(1, fa.step / steps(run)), fy = y + h / 2;
+      const passed = p >= Math.min(1, fa.step / steps(run));
+      g.beginPath(); g.arc(fx, fy, px(passed ? 4.6 : 3.4), 0, 7);
+      g.fillStyle = passed ? KIND[fa.kind] || "#fff" : "rgba(255,255,255,.28)"; g.fill();
+    }
+    if (done && run.verdict === "violation") {
+      g.fillStyle = COL.bug; g.font = `700 ${px(12)}px -apple-system,Inter,sans-serif`; g.textBaseline = "top"; g.textAlign = "center";
+      if (cw > px(28)) g.fillText("BUG", x + cw / 2, y + h + px(6));
+      g.textAlign = "left";
+    }
+    if (live) {
+      const hx = x + cw * p;
+      g.fillStyle = "#ffffff"; g.globalAlpha = 0.9; g.fillRect(hx - px(1), y - px(5), px(2), h + px(10)); g.globalAlpha = 1;
+      anim = true;
+    }
+  }
+  // the pulses of faults that happen now
+  for (let i = pulses.length - 1; i >= 0; i--) {
+    const [t0, x, yy, col, label] = pulses[i], t = (now - t0) / 1600;
+    if (t >= 1) { pulses.splice(i, 1); continue; }
+    anim = true;
+    g.beginPath(); g.arc(x, yy, px(5) + px(26) * t, 0, 7); g.strokeStyle = col; g.globalAlpha = 1 - t; g.lineWidth = px(2.4); g.stroke();
+    if (i !== pulses.length - 1) { g.globalAlpha = 1; continue; }
+    g.globalAlpha = Math.min(1, (1 - t) * 2); g.fillStyle = col; g.font = `650 ${px(15)}px -apple-system,Inter,sans-serif`;
+    g.textBaseline = "bottom"; g.textAlign = "center";
+    const lx = Math.max(px(40), Math.min(W - px(40), x));
+    g.fillText(label, lx, yy - px(20));
+    g.textAlign = "left"; g.globalAlpha = 1;
+  }
+  return anim;
+}
+
+// ---------------------------------------------------------------- one frame
+let last = performance.now(), firing = new Set();
+function step(now) {
+  const dt = now - last; last = now;
+  scale();
+  if (!cur && shown < RUNS.length && now >= holdUntil) startRun(now);
+  if (cur) advance(now);
+  const c = $("cv"), r = c.getBoundingClientRect();
+  if (c.width !== Math.round(r.width * DPR) || c.height !== Math.round(r.height * DPR)) {
+    c.width = Math.round(r.width * DPR); c.height = Math.round(r.height * DPR); layoutMap(); if (TREE.gs) layoutTree();
+  }
+  const g = c.getContext("2d"); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, r.width, r.height);
+  if (MAP) { if (view === "map") drawMap(g, now); else drawFlow(g, now, dt); }
+  drawTimeline(now);
+  requestAnimationFrame(step);
+}
+function startRun(now) {
+  const k = shown, r = RUNS[k];
+  const order = r.functions.map((t) => [t, t[1] < 0 ? 1 : Math.min(1, (t[1] + 0.5) / steps(r))]).sort((a, b) => a[1] - b[1]);
+  cur = {k, r, t0: now, order, i: 0, faults: runFaults(r), fi: 0};
+  if (bannerAt && now > bannerAt + HOLD * 1.8) { $("banner").classList.remove("on"); bannerAt = 0; }
+  $("wait").style.display = "none";
+  const fs = cur.faults;
+  $("now").innerHTML = `<b>Run ${esc(r.seed ?? k + 1)}</b> · ` + (fs.length ? md(fs.map((x) => x.sentence).slice(0, 2).join(" ")) : "a normal run: no fault, to see what the system does by itself");
+  for (const p of r.paths || []) epRan.add(p);
+}
+function advance(now) {
+  const p = (now - cur.t0) / PACE;
+  while (cur.i < cur.order.length && cur.order[cur.i][1] <= p) { reveal(cur.order[cur.i][0], now); cur.i++; }
+  while (cur.fi < cur.faults.length && Math.min(1, cur.faults[cur.fi].step / steps(cur.r)) <= p) {
+    const fa = cur.faults[cur.fi++];
+    const tl = $("tl").getBoundingClientRect(), n = Math.max(RUNS.length, 1), gap = px(6), cw = (tl.width - gap * (n - 1)) / n;
+    const x = cur.k * (cw + gap) + px(6) + (cw - px(12)) * Math.min(1, fa.step / steps(cur.r));
+    pulses.push([now, x, px(40) + px(13), KIND[fa.kind] || "#fff", fa.kind]);
+    faults++;
+  }
+  if (p >= 1) {
+    const r = cur.r;
+    shown++;
+    cur = null;
+    if (r.verdict === "violation") {
+      const key = (r.what && (r.what.check || r.what.words)) || r.text || "violation";
+      if (!broken.has(key)) { broken.add(key); banner(r); holdUntil = now + HOLD; }
+    }
+    counters();
+  }
+  counters();
+}
+function counters() {
+  $("kRuns").textContent = shown;
+  $("kFaults").textContent = faults;
+  const reached = OWN.filter((f) => st.has(f.id)).length;
+  $("kCode").innerHTML = `${OWN.length ? Math.round(100 * reached / OWN.length) : 0}<small> %</small>`;
+  $("kCodeL").textContent = `of ${OWN.length.toLocaleString("en")} functions reached`;
+  $("kBugs").textContent = broken.size;
+  $("tlN").textContent = `${shown} of ${RUNS.length}`;
+}
+function command(r) {
+  const img = String(INFO.image || "<image>").split("/").pop();
+  const be = INFO.backend === "kvm" ? "--backend kvm " : "";
+  return `hydo run ${be}--image ${img} "${r.schedule}"`;
+}
+function banner(r) {
+  const w = r.what || {};
+  let promise = w.promise ? w.promise.split(":")[0].trim() : null;
+  const head = promise ? `${NAME} broke a promise: “${promise}”` : w.check ? `${NAME} broke a promise: the check “${w.check.replace(/_/g, " ")}” failed` : (w.words || r.text || "A run failed.");
+  const fs = runFaults(r);
+  $("bK").textContent = `Bug found in run ${r.seed ?? ""}`;
+  $("bT").textContent = head;
+  $("bW").innerHTML = fs.length ? `What hydo did: ${md(fs.slice(0, 3).map((x) => x.sentence).join(" "))}${fs.length > 3 ? ` And ${fs.length - 3} more fault${fs.length > 4 ? "s" : ""}.` : ""}` : "No fault at all: the workload alone breaks it.";
+  $("bC").textContent = command(r);
+  $("banner").classList.add("on");
+  bannerAt = performance.now();
+}
+
+// ---------------------------------------------------------------- the server
+let from = 0;
+async function poll() {
+  try {
+    if (!MAP) { const m = await (await fetch("map.json", {cache: "no-store"})).json(); if (m) loadMap(m); }
+    if (ENTRIES === null) { ENTRIES = await (await fetch("entries.json", {cache: "no-store"})).json() || {}; matchRoutes(); }
+    const j = await (await fetch(`runs?from=${from}`, {cache: "no-store"})).json();
+    INFO = j;
+    for (const r of j.runs) RUNS.push(r);
+    if (!started && RUNS.length) { started = true; $("wait").style.display = "none"; holdUntil = performance.now() + (+(H.get("start") || 0)) * 1000; }
+    from = j.total;
+    $("mode").textContent = j.done ? "Recorded exploration, played back" : "Live";
+    $("mode").classList.toggle("live", !j.done);
+    counters();
+    if (!j.done) setTimeout(poll, 1500);
+  } catch (e) {
+    setTimeout(poll, 3000);
+  }
+}
+function setView(v) {
+  view = v;
+  for (const b of document.querySelectorAll(".views button")) b.classList.toggle("on", b.dataset.v === v);
+  $("tagT").textContent = v === "map" ? `Every function of ${NAME}'s own code` : `Who calls what in ${NAME}, from each entry point`;
+  $("tagS").textContent = v === "map" ? "A tile lights up the first time a run reaches it" : "A branch grows the first time a run takes that call";
+  if (v === "flow") treeDirty = true;
+}
+for (const b of document.querySelectorAll(".views button")) b.addEventListener("click", () => setView(b.dataset.v));
+$("stage").addEventListener("mousemove", (ev) => {
+  const r = $("cv").getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, tip = $("tip");
+  let f = null;
+  if (view === "map") { for (const l of LEAVES) if (x >= l.x && x < l.x + l.w && y >= l.y && y < l.y + l.h) { f = l.f; break; } }
+  else for (const [k, n] of NODES) if (!n.t.group && x >= n.c.x && x < n.c.x + n.c.w && y >= n.c.y && y < n.c.y + n.c.h) { f = FN.get(k); break; }
+  if (!f) { tip.style.display = "none"; return; }
+  const s = st.get(f.id), W = ["not reached yet", "reached only when something broke", "reached in a normal run"];
+  let h = `<b>${esc(f.short || f.name)}</b><br><span class="mono">${esc(f.file)}:${f.line}</span><br>${W[status(f.id)]}`;
+  if (s && s.first >= 0 && FN.get(s.first)) h += `<br>first called by <b>${esc(FN.get(s.first).short)}</b>`;
+  const others = s ? [...s.callers].filter((c) => c !== s.first && FN.get(c)).map((c) => FN.get(c).short) : [];
+  if (others.length) h += `<br>other first callers seen in other runs: ${esc(others.slice(0, 6).join(", "))}${others.length > 6 ? ` and ${others.length - 6} more` : ""}`;
+  if (f.error_paths) h += `<br>${f.error_paths.length} error-handling place${f.error_paths.length === 1 ? "" : "s"}, ${f.error_paths.filter((e) => epRan.has(e[0])).length} of them ran`;
+  tip.innerHTML = h; tip.style.display = "block";
+  tip.style.left = Math.min(x + 18, r.width - px(540)) + "px"; tip.style.top = Math.min(y + 18, r.height - px(150)) + "px";
+});
+$("stage").addEventListener("mouseleave", () => { $("tip").style.display = "none"; });
+window.showcase = {setView, runs: () => RUNS.length, shown: () => shown, busy: () => !!cur || shown < RUNS.length || performance.now() < holdUntil};
+setView(view);
+scale(); poll(); requestAnimationFrame(step);
+</script>
+</body>
+</html>

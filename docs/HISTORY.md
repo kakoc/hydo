@@ -27296,3 +27296,70 @@ it` passed (16), and `sh ci/vale.sh` found nothing. Re-recorded with `HYDO_BLESS
 the project schema (the field `answers` added), the explorer's identity and corpus goldens (the two
 new manifests are new inputs; no sampled manifest changed its answers), and the CLI golden of
 `hydo guide manifest`.
+
+## Milestone 397 (tentative number): the showcase page of the live map, and the flow of first calls
+
+Status: a first version on the Mac engine, opt-in, done on 2026-11-28 on this Mac. The design is
+the section "The showcase page and the flow of calls" of `docs/design/live-map.md`; open item 201
+has what is left.
+
+**What was asked.** A page of the live map that people who have never seen hydo understand from
+a screen recording, for a website and for posts: the map of the code as the main picture, the
+runs with their faults, and each bug in one sentence with the command that replays it. A second
+view draws the code as a tree that grows from the program's entry points.
+
+**What was built.**
+
+- `--showcase`, a flag of `hydo explore --live` and of `hydo report --live`, serves the page
+  `hydo_explore::live` `showcase.html` instead of Milestone 394's page. Without the flag nothing
+  changes. The page is dark, sized for 1920 by 1080 and for 1200 by 675, and loads nothing. It
+  shows the runs one after another, at most one per 1.1 seconds (`#pace=`), and holds 3.6
+  seconds after a new bug (`#hold=`), so a finished exploration plays back in its order.
+- The server's short form of a run gains the schedule's sentences (`hydo_schedule::describe`),
+  the broken check with its own words (`hydo_explore::advice::what_of`, the check's `hydo-msg:`
+  line), the end of the last step range, and each function's first caller.
+- The Mac engine reads the guest's x30 at each function's one-shot breakpoint stop, the return
+  address into the caller, and writes it on the functions' records line (`lr`, parallel to
+  `hits`). The host names the function of the plan whose code holds the call
+  (`hydo_explore::funcs::Callers`), and each first run in `result.json` gets `caller` (a results
+  addition).
+- `--routes DIR` of `hydo report --live`, and `--live-routes DIR` of `hydo explore`, read the
+  sources in DIR with `hydo rules scan --kind writes`. The page names a root of the flow by the
+  route whose handler is that function.
+
+**The proof that the read of x30 moves nothing.** The same 30 schedules of the Blnk map image
+(`hydo/onboard/examples/blnk/hydo/hydo-map.yaml`, the image of Milestone 394) ran twice with the
+process strategy, seeds 1-30, one worker, `--no-shrink`, and `HVM_RAM_SHARE=0`, on macOS 27.2.1:
+once with the engine of `main` (Milestone 394, through `HYDO_HVM_ENGINE`) and once with the
+engine of this milestone. All 30 runs gave the same fingerprint and the same verdict, and each
+run reached the same number of functions. With faults among them, a run that starts Blnk again
+counts too. Of the 104,588 first runs of functions, 103,861 named a caller of the plan (99.3 %);
+the others were called from code without debug information.
+
+**The exploration of the recording.** The exploration with this milestone's engine ran with
+`--live --showcase --live-routes ../work/blnk-paths`, and the page served it while it ran. It
+took 307 s for 30 runs, and 10 runs broke a check:
+
+| Check | Runs (seeds) | What it is |
+|---|---|---|
+| `bulk_atomic` | 1, 7, 17, 27 | finding 2 of the example's RESULTS.md, a Blnk bug (blnkfinance/blnk#438) |
+| `business_result` | 10, 19, 20, 21, 26 | finding 3, Redis without an append-only file loses acknowledged commits (a deployment setting) |
+| `no_overdraft` | 18 | the verdict `db: no rows`, not traced |
+
+The first run broke the atomic bulk: with the worker killed and Redis paused, a bulk kept one of
+its two transfers. `hydo report --live <dir> --showcase --routes ../work/blnk-paths` then played
+the 30 runs back for the recording. The flow showed six routes of the scan (`POST
+/transactions`, `PUT /transactions/inflight/:txID` and four more), `main`, and `background work`
+(the goroutines). Blnk's `main.main` and the functions under it are orange: they run at every
+start, before the snapshot that a run starts from, so only a run that kills Blnk reaches them.
+
+**The media.** A headless Chromium (playwright-core 1.64 with the cached headless shell) opened
+the page with Playwright's fake clock and took one screenshot per 1/30 s of the page's time, so
+the video is smooth whatever a screenshot cost. ffmpeg made a video of 31 s at 1920 by 1080
+(H.264, 8.4 MB), a looping GIF of 31 s at 1200 by 675 and 10 frames a second (11.1 MB), and four
+stills. They are outside the repository, for the user to review.
+
+**Checks.** `cargo fmt`, `cargo clippy -D warnings` of hydo-contracts, hydo-hvm, hydo-results,
+hydo-explore and hydo, their tests, `cargo test -p hydo --test it`, `cargo test -p hydo-agents
+--test it`, and `sh ci/vale.sh`. The results schema and the CLI golden were recorded again with
+`HYDO_BLESS=1`; each diff adds the new field or the new options. Nothing recorded moved.

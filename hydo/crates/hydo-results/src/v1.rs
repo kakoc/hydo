@@ -558,6 +558,12 @@ pub struct FunctionReached {
     /// there is what the workload reaches by itself.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub before_faults: bool,
+    /// The function that called it at its first run (added in Milestone 397): the plan's
+    /// function whose code holds the return address that the engine read at that stop. Absent
+    /// when the return address is in no function of the plan (the language's own code without
+    /// debug information, or an engine that does not read it).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caller: Option<u32>,
 }
 
 /// The error paths of one run (added in Milestone 306).

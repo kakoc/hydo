@@ -115,6 +115,80 @@ without it.
 - The stream `events.jsonl` of the exploration with faults was 8.3 MB. Only the first runs carry
   their functions; when the shrink runs carried them too, it was 44 MB.
 
+## The showcase page and the flow of calls
+
+Status: Milestone 397 (a tentative number), opt-in, on the Mac engine.
+
+`--showcase`, a flag of `hydo explore --live` and of `hydo report --live`, serves another page
+on the same address. It is for people who have never seen hydo: a dark page sized for a screen
+of 1920 by 1080 or for 1200 by 675, with large type and no internal terms. Without the flag the
+server serves the page of Milestone 394, so nothing changes for it. The page reads the same
+three answers of the server, and every number on it comes from the runs:
+
+- The headline names the program, and four counters give the runs shown, the faults that the
+  runs injected, the share of the project's own functions reached, and the bugs found. A bug is
+  a check that broke; the counter counts each check once.
+- The hero is one of two views of the project's own code. The code map is Milestone 394's map,
+  where a tile lights up with a short glow when a run first reaches its function. The call flow
+  is described below.
+- A track of the runs shows each run's faults as small dots at their workload steps. While a
+  run plays, a line moves along it, and each fault pulses with its name in words: crash, power
+  cut, clock jump, network cut, slow network, pause, or disk errors.
+- When a run breaks a promise for the first time, a banner names the promise in the check's own
+  words (its `hydo-msg:` line), says what hydo did in the run with the schedule's sentences
+  (`hydo_schedule::describe`), and shows the `hydo run` command that replays it.
+
+The page shows the runs one after another, at most one per 1.1 seconds, and pauses 3.6 seconds
+after a bug. So a finished exploration plays back in its order with `hydo report --live
+--showcase`, and a live one shows each run as it ends. The page's address takes `#pace=`,
+`#hold=`, `#view=flow` and `#title=`. The chip under the name says `Live` or `Recorded
+exploration, played back`. The command on the page names the image by its file name only, so
+a screen recording shows no folder of the machine.
+
+### The flow of calls
+
+The call flow draws the project's own code as a tree that grows from the top. It is the
+first-caller tree of the program's call graph:
+
+- At each function's one-shot breakpoint stop the Mac engine reads the guest's link register
+  (x30 on arm64), the return address into the function that called it. The engine writes the
+  addresses on the functions' records line (`lr`, parallel to `hits`), and the host names the
+  caller as the function of the plan whose code holds the call (`caller`, a results addition of
+  each first run). Each function stops once per run, so a run names one caller per function:
+  the first.
+- A function hangs under its nearest caller of the project's own code. The page walks the first
+  callers up and skips a library's code in between, such as a web framework's middleware chain
+  or a wrapper that the compiler made.
+- The roots are the entry points. `--routes DIR` (`hydo explore --live-routes DIR`) reads the
+  sources in DIR with `hydo rules scan --kind writes`, and a function whose definition a route's
+  handler names is a root labeled with the route, such as `POST /transactions`. `main.main` is
+  the root `main`. A function that no function of the project called first is a root under the
+  library that called it (`called by <library>`), or under `background work` when the
+  language's runtime started it (a goroutine). Roots of less than 3 % of the tree share one box,
+  `other entry points`. On Blnk the 339 functions of its own code that the 30 runs reached hung
+  under six routes, `main` (59), `background work` (166, in 21 goroutines' functions), and
+  three other entry points.
+- A cell is green when a run reached the function before its first fault, and orange when only
+  runs under faults did, as on the map. A red dot marks error-handling code, a ring the code
+  that ran. A cell's width is the number of functions under it, and a new branch grows down from
+  its parent when a run first takes that call, so a fault shows as orange branches under an
+  entry point.
+- A hover names the first caller and the other callers that came first in other runs.
+
+What the tree does not show:
+
+- Calls that no run made. Without a static call graph of the program the tree knows only the
+  calls that ran, so the branches that were never reached are not drawn.
+- A second caller in the same run: a one-shot breakpoint stops once.
+- Inlined functions. A function that the compiler copied into its callers has no first
+  instruction of its own, so it has no node, and its callees hang under the function it was
+  copied into.
+- A call through a tail call: the link register then names the caller's caller.
+
+The read of a register at a stop that already happens changes nothing that the guest can see.
+The proof is in `docs/HISTORY.md`, Milestone 397: the same 30 schedules with faults gave the
+same fingerprints with the engine of Milestone 394 and with the engine that reads the register.
+
 ## Next steps
 
 - KVM and hvx: the same breakpoints, as docs/design/error-paths.md says for error paths.
