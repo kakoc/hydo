@@ -337,10 +337,13 @@ impl Vmm {
         }
         if crate::paths::is_ours(syndrome) {
             let pc = self.rd(HV_REG_PC);
+            // the return address names the first caller on the live map's flow (Milestone
+            // 397): a read of the register, which changes nothing in the guest
+            let lr = self.rd(crate::hv::HV_REG_X0 + 30);
             let exits = self.m.exits;
             if let Some(pa) = self.ct_pa(pc) {
                 if let Some(ep) = self.ct.as_mut().and_then(|c| c.ep.as_mut()) {
-                    if ep.hit(pa, exits, self.ram.bytes_mut(), RAM_BASE, &|p| {
+                    if ep.hit(pa, exits, lr, self.ram.bytes_mut(), RAM_BASE, &|p| {
                         crate::hv::icache_invalidate(p, 4)
                     }) {
                         return true;

@@ -176,6 +176,13 @@ pub struct Hits {
     pub stops: u64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub scan_us: u64,
+    /// The functions' line only (Milestone 397, docs/design/live-map.md): for each hit, in the
+    /// order of `hits`, the return address (the link register, x30 on arm64) that the engine
+    /// read at the hit's stop: it names the function that called this one first in the run.
+    /// The engine only reads the register, so no fingerprint moves. Empty for the error paths'
+    /// line and for an engine that does not read it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lr: Vec<u64>,
 }
 
 fn is_zero(v: &u64) -> bool {

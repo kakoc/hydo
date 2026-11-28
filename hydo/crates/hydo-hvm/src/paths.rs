@@ -75,6 +75,9 @@ pub struct Ep {
     by_pa: HashMap<u64, usize>,
     of_place: Vec<Vec<usize>>,
     hit: Vec<Option<(u64, u32)>>,
+    /// The return address (x30) at each place's first hit (Milestone 397): it names the
+    /// function's first caller in the run. The engine only reads the register.
+    lr: Vec<u64>,
     order: Vec<usize>,
     pub active: bool,
     /// The guest's own instructions are back for a snapshot at a stop
@@ -138,6 +141,7 @@ impl Ep {
             by_pa: HashMap::new(),
             of_place: Vec::new(),
             hit: Vec::new(),
+            lr: Vec::new(),
             order: Vec::new(),
             active: false,
             parked: false,
@@ -201,6 +205,7 @@ impl Ep {
             return None;
         }
         ep.hit = vec![None; ep.ids.len()];
+        ep.lr = vec![0; ep.ids.len()];
         ep.of_place = vec![Vec::new(); ep.ids.len()];
         ep.dropped = vec![false; ep.ids.len()];
         Some(ep)
@@ -219,6 +224,7 @@ impl Ep {
         self.fn_stops = 0;
         self.scan_s = 0.0;
         self.hit.iter_mut().for_each(|h| *h = None);
+        self.lr.iter_mut().for_each(|l| *l = 0);
         self.order.clear();
     }
 
@@ -241,12 +247,22 @@ impl Ep {
     }
 
     fn hits_of(&self, fns: bool, stops: u64) -> Hits {
-        let hits = self
+        let ran: Vec<usize> = self
             .order
             .iter()
-            .filter(|&&k| self.is_fn[k] == fns)
+            .copied()
+            .filter(|&k| self.is_fn[k] == fns && self.hit[k].is_some())
+            .collect();
+        let hits = ran
+            .iter()
             .filter_map(|&k| self.hit[k].map(|(at, boot)| (self.ids[k], at, boot)))
             .collect();
+        // the functions' line names each first caller by its return address (Milestone 397)
+        let lr = if fns {
+            ran.iter().map(|&k| self.lr[k]).collect()
+        } else {
+            Vec::new()
+        };
         let unwatched = (0..self.ids.len())
             .filter(|&k| self.is_fn[k] == fns && self.of_place[k].is_empty())
             .map(|k| self.ids[k])
@@ -262,6 +278,7 @@ impl Ep {
             reads: self.reads,
             stops,
             scan_us: (self.scan_s * 1e6) as u64,
+            lr,
         }
     }
 
@@ -455,11 +472,14 @@ impl Ep {
 
     /// A breakpoint instruction of ours at `pa`: its places ran. Their instructions go back at
     /// every address whose places all ran, and the guest goes on. False when no place is at
-    /// `pa`.
+    /// `pa`. `lr` is the guest's x30 at the stop, the return address into the caller
+    /// (Milestone 397), which the engine only read.
+    #[allow(clippy::too_many_arguments)]
     pub fn hit(
         &mut self,
         pa: u64,
         at: u64,
+        lr: u64,
         ram: &mut [u8],
         ram_base: u64,
         inval: &dyn Fn(*mut u8),
@@ -477,6 +497,7 @@ impl Ep {
         for &p in &places {
             if self.hit[p].is_none() {
                 self.hit[p] = Some((at, self.boot));
+                self.lr[p] = lr;
                 self.order.push(p);
                 new.push(p);
             }
