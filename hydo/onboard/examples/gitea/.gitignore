@@ -1,0 +1,7 @@
+# hydo: the build cache, the fetched images (fetch-images.sh), the Playwright image and
+# playwright-core (hydo build), and the run results
+.hydo/
+hydo/images
+hydo/browser
+hydo-out/
+hydo/hydo-out/

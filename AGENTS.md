@@ -2193,6 +2193,28 @@ In 40 walks with every fault kind but the lying disk, 5 of 19 power cuts lost sa
 and the other kinds (kills, pauses, network faults, clock steps) lost none. The details are in
 `docs/HISTORY.md` Milestone 273; open item 137 has what the walk lacked.
 
+**Gitea, the third web app of the walk (M389, tentative number).** Gitea 28.4.0, a self-hosted
+Git service (one Go server, SQLite), runs from its rootless image in
+`hydo/onboard/examples/gitea` (RESULTS.md). It was imported with `hydo compose`. The walk's
+setup registers the first account and creates a repository with a README. It adds labels, a
+milestone, and an issue, and it starts the issue's timer. `within:` keeps the walk on the
+repository's issues. Rules
+over the database and the API judge the saved issues and comments, Gitea's counts, the search,
+the Git repository, and the tracked times. Two new candidates, not posted:
+
+- A timer that runs while the wall clock goes back records a negative time when it stops
+  (`models/issues/stopwatch.go`, line 140), which the form "Add Time" refuses. Blind on KVM in 2
+  of 60 schedules of the final manifest and on hvx in 1 of 20 (`disk=none | run T=2:-3600
+  I=1,x0.0-11,...`).
+- A power cut within about half a minute after a repository is created with a README leaves its
+  branch broken, while the database says it is not empty (`disk=none | run C=1 I=1`). Gitea runs
+  Git with its default `core.fsync`, which syncs neither the loose objects nor the ref; with
+  `core.fsync=committed` the cut passes.
+
+Every acknowledged issue and comment survived kills, pauses, network faults, clock steps, and
+power cuts at the end of the walk. That held in 200 schedules on hvx and KVM. Open item 198 has
+what the walk lacked.
+
 **The failing run's own frames, and the pages read back (M334, tentative number).** Two parts,
 each its own commit:
 - Every run of a walk keeps a filmstrip. After the page opens and after every action, the walker
@@ -4852,6 +4874,34 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       Neither KVM nor the Mac engine ran it (the image has an arm64 build). More than three
       nodes, several regions, epoch leases, and a `--max-offset` other than 500 ms were not
       tried.
+198. What the example `gitea` left (M389, tentative number):
+    - Neither candidate is reported upstream. Finding 2's symptom is #31834, closed as a power
+      outage's damage; a report would name `initRepoCommit`, Git's default `core.fsync`, and the
+      contrast with `core.fsync=committed`.
+    - The runs used the walker before M390, which wrote no console record at an acknowledged
+      write. M390's `walk.write_acked` and its reactions inside a step did not run on Gitea.
+    - The walk takes ids only from a JSON field named `id`. Gitea answers its fetch forms with
+      `{"redirect": "/hydo/demo/issues/3"}`, so `browser.read_back` cannot be used, and the rule
+      counts issues per repository instead of naming each.
+    - A word of the walk's acknowledged writes names the method and the path, not the request's
+      body. So a post of Gitea's comment form is a comment, a close or a reopen, and the rule
+      counts them together.
+    - Without `within`, the walk spent its actions on the API's pages, the settings and the code
+      view. With it, `avoid` needs 13 patterns, and one action in seven still fills a field
+      without sending it (489 of 3,408 in 60 KVM walks). A code walk with `within: /hydo/demo/`
+      committed no file in 48 actions: the web editor's text area is no textbox in the
+      accessibility tree.
+    - A failing setup step's error names no step: `locator.click: Timeout 10000ms exceeded`.
+    - The process strategy put all 47 of its power cuts after the walk's last step (as open item
+      186), so finding 2 came from directed runs only. Without `guest.clock_after_cut` a power cut
+      set the clock back to `clock_start`, and a running timer stopped with a negative time; the
+      import does not write the key.
+    - `hydo build --check` passed a root of 3,584 MiB and a data disk of 512 MiB, a disk 1 MiB over
+      hvx's 4 GiB, and every run ended with `ERROR harness boot vm`; only `engine.log` named
+      `HVX_SET_DISK: Invalid argument`.
+    - The sync audit lists Gitea's Go writes, not the writes of the `git` that Gitea runs.
+    - Not run: the Mac engine, PostgreSQL, pull requests, the web editor's commits, wikis,
+      releases, a second user, and organizations.
 199. What the upgrades of image services left (M392, tentative number):
     - Only hvx ran them, with two releases of Vikunja; the Mac engine and KVM did not.
     - No exploration with `--upgrades` ran on the example.
@@ -6299,6 +6349,11 @@ build machine, before 2026-10-13.
   caller, and the page draws the code as a tree from the entry points that `--routes DIR` names.
   On Blnk 30 runs kept the fingerprints of M394's engine; the first run broke the atomic bulk.
   A video, a GIF and stills of the played-back exploration stay local. Nothing recorded moved
+- M389 (tentative number): the onboarding of Gitea 28.4.0 on hvx and KVM, the third web app of
+  the walk. Rules judge its database, counts, search, Git repository, and tracked times. Two
+  new candidates, not posted. A timer that runs while the clock goes back records a negative
+  time. A power cut half a minute after a repository is created with a README leaves its branch
+  broken, because Gitea runs Git without `core.fsync`. Nothing recorded moved
 
 ## Where to look
 
