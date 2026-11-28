@@ -60,6 +60,14 @@ const quiet = cfg.quiet_ms ?? 3000;
 const start = new URL(cfg.start || 'http://localhost:3000/');
 const within = cfg.within || '/';
 const avoid = (cfg.avoid || ['log ?out', 'sign ?out']).map((a) => new RegExp(a, 'i'));
+// Milestone 390: the steps that sign in again when a page of the walk is the sign-in page
+// (`sign_in`, on a path that `signed_out` matches), and the drags between lists (`drag`)
+const signIn = Array.isArray(cfg.sign_in) && cfg.sign_in.length ? cfg.sign_in : null;
+const signedOut = new RegExp(cfg.signed_out || '(^|/)(login|log-in|signin|sign-in|sign_in)(/|$)', 'i');
+const drags = Array.isArray(cfg.drag) ? cfg.drag : [];
+// Milestone 390: a schedule with a reaction to the walk (A=walk.action..., A=walk.write_acked...)
+// gets the walk's records on the console as they happen; every other run prints what it printed
+const reacting = /(^|\s)A=walk\./.test(guest);
 const title = readingBack ? 'read back' : `walk step ${step}`;
 globalThis.__hydoWalkTest = title; // the stub @playwright/test hands it to hook.cjs
 const own = path.join(dir, 'walk');
@@ -121,6 +129,16 @@ const streamOf = (k) => mix(walk.seed ^ WALK_SALT ^ mix((BigInt(step) << 20n) | 
 
 // ------------------------------------------------------------------ records
 const log = (line) => process.stdout.write(`hydo-web: ${line}\n`);
+// Milestone 390: an assertion record of the walk, printed when it happens, so that a reaction
+// acts inside a step: `A=walk.action#<k>@<step>+<ms>:kill-<svc>` at the k-th action that the
+// walk starts from that step on, `A=walk.write_acked@<step>+<ms>:cut` after the first write that
+// the server answered 2xx. The workload's other output reaches the console only at the step's
+// end; in a run whose schedule has such a reaction the workload's shell writes each record to the
+// console as it comes (browser.rs, the walk's `run`).
+function record(id, msg, details) {
+  if (!reacting) return;
+  process.stdout.write(`HYDO-ASSERT ${JSON.stringify({ t: 'reachable', id, ok: true, msg, details })}\n`);
+}
 function event(ev) {
   fs.appendFileSync(path.join(dir, 'events.jsonl'), JSON.stringify({ t: Date.now(), ...ev }) + '\n');
 }
@@ -258,16 +276,26 @@ function timeless(name) {
 // last (Milestone 267).
 const OVERLAY = new Set(['dialog', 'alertdialog', 'menu', 'listbox']);
 
+// The rows of a page (Milestone 390): a memo of Memos is an article with a link "now", a button
+// "More" and its text, and a list's entries are list items. A control whose role and name repeat
+// on the page, such as each memo's "More", is chosen by the text of its row, not by its place, so
+// that a fault that changes the order of the rows (a clock step reorders Memos's memos) changes
+// which row the walk takes only when the rows' texts change.
+const ROW = new Set(['article', 'listitem', 'row', 'treeitem']);
+// the words of a row that name it: the names and texts in it before a row inside it begins
+const ROW_WORDS = 12;
+const rowText = (words) => timeless(words.join(' ')).replace(/\s+/g, ' ').trim().slice(0, 120);
+
 // The controls of an ariaSnapshot, in document order: {role, name, m (place among the same role
-// and name), j (place among the same role), key and km (the name without its times, and the
-// place among the same role and key), url, disabled, over (the overlays it is in, numbered in
-// document order)}.
+// and name), j (place among the same role), key, item and km (the name without its times, for a
+// control whose role and key repeat the text of its row, and the place among the same role, key
+// and item), url, disabled, over (the overlays it is in, numbered in document order)}.
 function controls(snapshot) {
   const out = [];
-  const byKey = new Map();
   const byName = new Map();
   const byRole = new Map();
   const open = []; // the overlays around the line: {indent, id}
+  const rows = []; // the rows around the line: {indent, words, closed}
   let overlays = 0;
   let last = null;
   for (const raw of snapshot.split('\n')) {
@@ -277,10 +305,11 @@ function controls(snapshot) {
       last.url = u[1].trim().replace(/^"(.*)"$/, '$1');
       continue;
     }
-    const m = /^(\s*)- ([a-z]+)(?: "((?:[^"\\]|\\.)*)")?((?: \[[^\]]*\])*)(?::.*)?$/.exec(line);
+    const m = /^(\s*)- ([a-z]+)(?: "((?:[^"\\]|\\.)*)")?((?: \[[^\]]*\])*)(?::\s*(.*))?$/.exec(line);
     if (!m) continue;
     const indent = m[1].length;
     while (open.length && open[open.length - 1].indent >= indent) open.pop();
+    while (rows.length && rows[rows.length - 1].indent >= indent) rows.pop();
     const over = open.map((o) => o.id);
     if (OVERLAY.has(m[2])) open.push({ indent, id: ++overlays });
     const role = m[2];
@@ -290,18 +319,41 @@ function controls(snapshot) {
     } catch {
       name = m[3] || '';
     }
+    // the text after the colon: `- paragraph: beta memo`, `- text: "12.50"`
+    let said = (m[5] || '').trim();
+    if (/^".*"$/.test(said)) {
+      try {
+        said = JSON.parse(said);
+      } catch {
+        /* keep it as written */
+      }
+    }
+    const row = rows.length ? rows[rows.length - 1] : null;
+    if (row && !row.closed) for (const w of [name, said]) if (w && row.words.length < ROW_WORDS) row.words.push(w);
+    if (ROW.has(role)) {
+      for (const r of rows) r.closed = true;
+      rows.push({ indent, words: name ? [name] : [], closed: false });
+    }
     const j = byRole.get(role) || 0;
     byRole.set(role, j + 1);
     const key = `${role}\u0000${name}`;
     const n = byName.get(key) || 0;
     byName.set(key, n + 1);
     const tk = timeless(name);
-    const kk = `${role}\u0000${tk}`;
-    const km = byKey.get(kk) || 0;
-    byKey.set(kk, km + 1);
-    const c = { role, name, m: n, j, key: tk, km, url: undefined, disabled: /\[disabled/.test(m[4] || ''), over };
+    const c = { role, name, m: n, j, key: tk, item: '', km: 0, row, url: undefined, disabled: /\[disabled/.test(m[4] || ''), over };
     out.push(c);
     last = role === 'link' ? c : null;
+  }
+  // a role and key that repeat: the text of each one's row; then the place among the same three
+  const keys = new Map();
+  for (const c of out) keys.set(`${c.role}\u0000${c.key}`, (keys.get(`${c.role}\u0000${c.key}`) || 0) + 1);
+  const byItem = new Map();
+  for (const c of out) {
+    if (keys.get(`${c.role}\u0000${c.key}`) > 1 && c.row) c.item = rowText(c.row.words);
+    delete c.row;
+    const ik = `${c.role}\u0000${c.key}\u0000${c.item}`;
+    c.km = byItem.get(ik) || 0;
+    byItem.set(ik, c.km + 1);
   }
   return out;
 }
@@ -374,7 +426,7 @@ async function choose(list, r, s, ok) {
 // The controls by rendezvous hashing, the winner first.
 function ranked(list, s) {
   return list
-    .map((c) => [mix(s ^ fnv(`${c.role}\u0000${c.key}\u0000${c.km}`)), c])
+    .map((c) => [mix(s ^ fnv(`${c.role}\u0000${c.key}\u0000${c.item}\u0000${c.km}`)), c])
     .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
     .map(([, c]) => c);
 }
@@ -383,7 +435,7 @@ function pick(list, s) {
   let best;
   let bestH;
   for (const c of list) {
-    const h = mix(s ^ fnv(`${c.role}\u0000${c.key}\u0000${c.km}`));
+    const h = mix(s ^ fnv(`${c.role}\u0000${c.key}\u0000${c.item}\u0000${c.km}`));
     if (bestH === undefined || h < bestH) {
       best = c;
       bestH = h;
@@ -467,6 +519,7 @@ const KINDS = [
   ['reload', 1],
   ['home', 1],
   ['wait', 1],
+  ['drag', 3],
 ];
 const T = { timeout: 3000 };
 // the largest video or trace that the controller copies out (hydo-control's screens::FILE_MAX,
@@ -476,6 +529,57 @@ const RECORDING_MAX = 3 * 1024 * 1024;
 const DISMISS = /^(close|cancel|dismiss|skip|not now|no thanks|×|✕)$/i;
 // the names of buttons that commit what a form holds
 const COMMIT = /^(save|submit|create|send|post|update|confirm|ok|done|apply|publish|place)\b/i;
+
+// Milestone 390: a check box, a radio button or a switch that a styled label covers. Vikunja's
+// done check boxes are an <input class="is-sr-only"> inside a <label> that draws the box, and
+// the input takes no click of its own; a user clicks the label.
+const TOGGLE = new Set(['checkbox', 'radio', 'switch']);
+const LABEL_OF = '(e) => (e.labels && e.labels[0]) || e.closest("label")';
+async function labelOf(page, c) {
+  if (!TOGGLE.has(c.role)) return null;
+  try {
+    const h = await locate(page, c).evaluateHandle((e) => (e.labels && e.labels[0]) || e.closest('label'), null, { timeout: 1000 });
+    return h.asElement();
+  } catch {
+    return null;
+  }
+}
+const labelCode = (loc) => `await ${loc}.evaluateHandle(${LABEL_OF}).then((l) => l.asElement().click());`;
+
+// Milestone 390: drag and drop between lists. Each entry of `drag` names the items that can be
+// dragged and the places they can be dropped on, as CSS selectors (Vikunja's Kanban cards and
+// buckets: {items: .kanban-card, into: .bucket .tasks}). An item is chosen by its text, a place
+// by its place among the places; the place that holds the item is left out.
+const textKey = (t) => timeless(String(t || '').replace(/\s+/g, ' ').trim()).slice(0, 120);
+async function dragsOn(page) {
+  const out = [];
+  for (const [ri, d] of drags.entries()) {
+    let info;
+    try {
+      info = await page.evaluate(
+        ({ items, into }) => {
+          const is = [...document.querySelectorAll(items)];
+          const zs = [...document.querySelectorAll(into)];
+          return { items: is.map((e) => e.innerText || e.textContent || ''), home: is.map((e) => zs.findIndex((z) => z.contains(e))), zones: zs.length };
+        },
+        { items: d.items, into: d.into },
+      );
+    } catch {
+      continue;
+    }
+    if (info.items.length === 0 || info.zones < 2) continue;
+    const seen = new Map();
+    const items = info.items.map((t, i) => {
+      const key = textKey(t);
+      const n = seen.get(key) || 0;
+      seen.set(key, n + 1);
+      return { ri, i, key, n, home: info.home[i] };
+    });
+    out.push({ ri, items, zones: info.zones });
+  }
+  return out;
+}
+const dragCode = (d, i, z) => `await page.locator(${q(d.items)}).nth(${i}).dragTo(page.locator(${q(d.into)}).nth(${z}));`;
 
 // No control of the chosen ones takes a click: press Escape, which closes a menu or a dialog
 async function escape(page) {
@@ -498,7 +602,7 @@ async function escape(page) {
 // A control as the script of a recording replay names it (Milestone 270): its role and accessible
 // name, its place among the controls of that role and name (m) or of that role (j, without a
 // name), and the name without its times with its place (key, km)
-const ctl = (c) => ({ role: c.role, name: c.name, m: c.m, j: c.j, key: c.key, km: c.km });
+const ctl = (c) => ({ role: c.role, name: c.name, m: c.m, j: c.j, key: c.key, ...(c.item ? { item: c.item } : {}), km: c.km });
 
 async function act(page, k) {
   const r = new Stream(streamOf(k));
@@ -533,6 +637,9 @@ async function act(page, k) {
   }
   const clickable = all.filter((c) => CLICK.has(c.role));
   const fillable = await editable(page, all.filter((c) => FILL.has(c.role)));
+  // Milestone 390: the drags the page allows, read only for a manifest with `drag` and never in
+  // an overlay
+  const draggable = drags.length && !atFront ? await dragsOn(page) : [];
   const have = {
     click: clickable.length > 0,
     fill: fillable.length > 0,
@@ -544,9 +651,20 @@ async function act(page, k) {
     reload: !atFront,
     home: !atFront,
     wait: true,
+    drag: draggable.length > 0,
   };
-  // whether a control takes a click: Playwright's trial of it, without the click
-  const clicks = (c) => locate(page, c).click({ trial: true, timeout: 500 }).then(() => true, () => false);
+  // whether a control takes a click: Playwright's trial of it, without the click; a check box
+  // that its label covers takes it through the label (Milestone 390)
+  const via = new Map();
+  const clicks = async (c) => {
+    if (await locate(page, c).click({ trial: true, timeout: 500 }).then(() => true, () => false)) return true;
+    const l = await labelOf(page, c);
+    if (l && (await l.click({ trial: true, timeout: 500 }).then(() => true, () => false))) {
+      via.set(c, l);
+      return true;
+    }
+    return false;
+  };
   // The kind by weighted rendezvous hashing (Milestone 264): each kind the page allows scores
   // -ln(u)/weight, with u from the action's stream and the kind's name, and the lowest wins. So a
   // kind that the page allows or not (a select on one page and not on the next) changes the
@@ -583,6 +701,11 @@ async function act(page, k) {
         await el.click(T);
         await el.click({ timeout: 300 }).catch(() => {});
         lines.push(`await ${loc}.click();`, `await ${loc}.click({ timeout: 300 }).catch(() => {});`);
+      } else if (via.has(c)) {
+        done.c.via = 'label';
+        what = `click the label of ${c.role} ${q(c.name)}`;
+        await via.get(c).click(T);
+        lines.push(labelCode(loc));
       } else {
         await el.click(T);
         lines.push(`await ${loc}.click();`);
@@ -644,6 +767,17 @@ async function act(page, k) {
         lines.push(`await ${loc}.click();`);
         what = `click ${c.role} ${q(c.name)}`;
       }
+    } else if (kind === 'drag') {
+      // the entry, the item by its text and the place by rendezvous, from the action's stream
+      const d = draggable[Number(mix(s2 ^ fnv('\u0000drag')) % BigInt(draggable.length))];
+      const it = ranked(d.items.map((x) => ({ role: 'drag', key: x.key, item: '', km: x.n, x })), s2)[0].x;
+      const zones = [...Array(d.zones).keys()].filter((z) => z !== it.home);
+      const z = zones.length ? ranked(zones.map((n) => ({ role: 'zone', key: String(n), item: '', km: 0, n })), r.next())[0].n : it.home;
+      const rule = drags[d.ri];
+      done.drag = { rule: d.ri, key: it.key, n: it.n, into: z };
+      what = `drag ${q(it.key.slice(0, 40))} (${rule.items}) to the ${ordinal(z)} ${rule.into}`;
+      await page.locator(rule.items).nth(it.i).dragTo(page.locator(rule.into).nth(z), T);
+      lines.push(dragCode(rule, it.i, z));
     } else if (kind === 'back') {
       what = 'go back';
       await page.goBack({ timeout: 10000 });
@@ -723,6 +857,22 @@ const named = (c) => (c.name ? `${c.role} ${q(c.name)}${c.m ? ` (the ${ordinal(c
 // browser recorded; then the control with the same name without its times and the same place
 // among them is the same control, as the walk's own choice counts them (Milestone 264).
 async function findCtl(page, c) {
+  if (c.item) {
+    // Milestone 390: a control of a row is found by its row's text, as the walk chose it
+    const until = Date.now() + FIND_MS;
+    for (;;) {
+      let snap = '';
+      try {
+        snap = await page.locator('body').ariaSnapshot({ timeout: 5000 });
+      } catch {
+        snap = '';
+      }
+      const x = controls(snap).find((y) => y.role === c.role && y.key === c.key && y.item === c.item && y.km === c.km);
+      if (x) return x;
+      if (Date.now() >= until) return null;
+      await page.waitForTimeout(500);
+    }
+  }
   try {
     await locate(page, c).waitFor({ state: 'visible', timeout: FIND_MS });
     return c;
@@ -736,7 +886,7 @@ async function findCtl(page, c) {
   } catch {
     return null;
   }
-  return controls(snap).find((x) => x.role === c.role && x.key === c.key && x.km === c.km) || null;
+  return controls(snap).find((x) => x.role === c.role && x.key === c.key && x.item === (c.item || '') && x.km === c.km) || null;
 }
 
 const LEFT_OUT = `not on the page within ${FIND_MS / 1000} s; the run that this replays acted on it here, so the replay leaves the action out and takes no other control`;
@@ -760,9 +910,15 @@ async function replay(page, a) {
       else {
         const loc = locatorCode(c);
         const el = locate(page, c);
-        what = `${verb} ${c.role} ${q(c.name)}${renamed(c, a.c)}`;
-        await el.click(T);
-        lines.push(`await ${loc}.click();`);
+        const label = a.c.via === 'label' ? await labelOf(page, c) : null;
+        what = `${label ? 'click the label of' : verb} ${c.role} ${q(c.name)}${renamed(c, a.c)}`;
+        if (label) {
+          await label.click(T);
+          lines.push(labelCode(loc));
+        } else {
+          await el.click(T);
+          lines.push(`await ${loc}.click();`);
+        }
         if (a.do === 'double') {
           await el.click({ timeout: 300 }).catch(() => {});
           lines.push(`await ${loc}.click({ timeout: 300 }).catch(() => {});`);
@@ -809,6 +965,20 @@ async function replay(page, a) {
         lines.push(`await ${locatorCode(c)}.selectOption({ index: ${a.index} });`);
         what = `choose option ${a.index} of ${c.role} ${q(c.name)}`;
       }
+    } else if (a.do === 'drag') {
+      // Milestone 390: the same item by its text, onto the same place
+      const rule = drags[a.drag.rule];
+      const on = rule ? (await dragsOn(page)).find((d) => d.ri === a.drag.rule) : null;
+      const it = on && on.items.find((x) => x.key === a.drag.key && x.n === a.drag.n);
+      if (!it || a.drag.into >= on.zones) {
+        done.missing = true;
+        what = `drag ${q(a.drag.key.slice(0, 40))}: ${LEFT_OUT}`;
+        lines.push(`// left out in hydo's recording replay: the item ${q(a.drag.key.slice(0, 40))} or its place was not on the page`);
+      } else {
+        what = `drag ${q(it.key.slice(0, 40))} (${rule.items}) to the ${ordinal(a.drag.into)} ${rule.into}`;
+        await page.locator(rule.items).nth(it.i).dragTo(page.locator(rule.into).nth(a.drag.into), T);
+        lines.push(dragCode(rule, it.i, a.drag.into));
+      }
     } else if (a.do === 'escape') {
       what = 'press Escape';
       await page.keyboard.press('Escape');
@@ -843,6 +1013,43 @@ async function replay(page, a) {
   await page.waitForTimeout(settle);
   lines.push(`await page.waitForTimeout(${settle});`);
   return { what, lines, act: done };
+}
+
+// ------------------------------------------------------------------ signing in again
+// Milestone 390: a session that ends during the walk. Before, `setup` ran only in a step without
+// a saved session, so a walk whose session ended (Vikunja's seed 9 under disk errors) stayed on
+// the sign-in page for the rest of the run. With `sign_in`, a page whose path `signed_out`
+// matches, at a step's start or after an action, runs those steps, at most three times a step.
+// A sign-in is part of the walk: it takes no action's place, and a recording replay signs in
+// where its page asks.
+let signIns = 0;
+// whether the page is the sign-in page. An app that finds its session ended sends a page that
+// just opened there after its first requests, so on a page that just opened the requests end
+// first (at most 3 s); after an action the wait after it (settle_ms) has passed.
+async function askedToSignIn(page, opened) {
+  if (opened) await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+  try {
+    return signedOut.test(new URL(page.url()).pathname);
+  } catch {
+    return false;
+  }
+}
+async function signInAgain(page, at) {
+  if (!signIn || signIns >= 3) return;
+  if (!(await askedToSignIn(page, at === 'start'))) return;
+  const p = new URL(page.url()).pathname;
+  signIns++;
+  const where = typeof at === 'number' ? `after ${step}.${at}` : `at the start of step ${step}`;
+  code.push(`// hydo signed in again here (${where}): the page ${p} asked for it`);
+  let what;
+  try {
+    await setup(page, signIn);
+    what = `sign in again: the page ${p} asked for it ${where}`;
+  } catch (e) {
+    what = `sign in again: the page ${p} asked for it ${where}; not done (${String((e && e.message) || e).split('\n')[0].slice(0, 120)})`;
+  }
+  log(`walk ${step}: ${what}`);
+  await frame(page, `sign-in-${signIns}`, what);
 }
 
 // ------------------------------------------------------------------ setup steps (sign in)
@@ -1062,6 +1269,7 @@ async function main() {
     const sent = printable(req.postDataBuffer());
     const names = [...new Set(`${sent} ${answer}`.match(/\b[a-z][a-z0-9_-]*\/[A-Za-z0-9_-]{6,}\b/g) || [])].slice(0, 6);
     fs.appendFileSync(path.join(own, 'acks.jsonl'), JSON.stringify({ t: Date.now(), step, method: req.method(), path: p, status: res.status(), names, ids, sent, answer }) + '\n');
+    record('walk.write_acked', 'the server answered a write of the walk', { step, method: req.method(), path: p });
     if (ackedFile) {
       try {
         const last = p.split('/').filter(Boolean).pop() || p;
@@ -1097,12 +1305,14 @@ async function main() {
   }
   const signedIn = status === 'passed';
   await frame(page, 'start', signedIn ? `open ${shortPath(page.url())}` : error, signedIn ? {} : { failed: true });
+  if (signedIn) await signInAgain(page, 'start');
   if (walk.rec && !script) {
     log(`walk ${step}: this recording has no script of the run it replays (${SCRIPT}), so the walk chooses its actions again and may take others`);
   }
   let missed = 0;
   for (let k = 0; k < actions; k++) {
     if (walk.skip.has(`${step}.${k}`)) continue;
+    record('walk.action', 'the walk starts an action', { step, k });
     let done;
     if (script) {
       const a = script.get(`${step}.${k}`);
@@ -1121,6 +1331,7 @@ async function main() {
     log(`walk-act ${step}.${k} ${JSON.stringify(done.act)}`);
     code.push(...done.lines);
     await frame(page, k, done.what, done.act.failed || done.act.missing ? { failed: true } : {});
+    await signInAgain(page, k);
   }
   if (script) {
     log(`walk ${step}: the recording replay ${missed ? `left out ${missed} action${missed === 1 ? '' : 's'}` : 'repeated every action'} of the run it replays`);
@@ -1315,10 +1526,20 @@ async function readBackMain() {
   const missing = [];
   let shot = 0;
   let n = 0;
+  let signedAgain = false;
   for (const [p, list] of byPage) {
     let open = '';
     try {
       await page.goto(new URL(p, start).href, { timeout: 30000 });
+      // Milestone 390: the walk's session ended (a clock step past the token's time): the page
+      // asks to sign in, and the check signs in with its setup steps, or the walk's sign_in, once
+      const again = rb.setup || cfg.sign_in;
+      if (again && !signedAgain && (await askedToSignIn(page, true))) {
+        signedAgain = true;
+        await setup(page, again);
+        await frame(page, 'sign-in', `sign in again: the walk's session had ended`);
+        await page.goto(new URL(p, start).href, { timeout: 30000 });
+      }
     } catch (e) {
       open = String((e && e.message) || e).split('\n')[0].slice(0, 160);
     }

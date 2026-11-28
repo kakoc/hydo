@@ -3912,6 +3912,37 @@
           ],
           "format": "int64",
           "default": 3000
+        },
+        "sign_in": {
+          "description": "Milestone 390: steps that sign in again, as `setup`'s, when a page of the walk is the\nsign-in page (its path matches `signed_out`), at a step's start or after an action. A\nsession can end during a walk, and without them the walk stays on the sign-in page.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/BrowserSetupStep"
+          }
+        },
+        "signed_out": {
+          "description": "Milestone 390: a regular expression, case-insensitive, over the path of the sign-in page\n(default `(^|/)(login|log-in|signin|sign-in|sign_in)(/|$)`); only with `sign_in`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "drag": {
+          "description": "Milestone 390: drag and drop between lists, such as Kanban cards between buckets: each\nentry names the items that can be dragged and the places they can be dropped on.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/BrowserDrag"
+          }
         }
       },
       "additionalProperties": false,
@@ -4010,6 +4041,25 @@
         }
       },
       "additionalProperties": false
+    },
+    "BrowserDrag": {
+      "description": "One entry of `browser.explore.drag` (Milestone 390): CSS selectors of what the walk can drag\nand of where it can drop it.",
+      "type": "object",
+      "properties": {
+        "items": {
+          "description": "The items that can be dragged, such as `.kanban-card`. An item is chosen by its text.",
+          "$ref": "#/$defs/Text"
+        },
+        "into": {
+          "description": "The places an item can be dropped on, such as `.bucket .tasks`. A place is chosen by its\nplace among them; the one that holds the item is left out.",
+          "$ref": "#/$defs/Text"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "into"
+      ]
     },
     "BrowserWatch": {
       "description": "What hydo watches in the pages of `browser:` (Milestone 253). An empty list turns its\ninvariant off.",

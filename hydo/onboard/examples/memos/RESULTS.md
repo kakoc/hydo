@@ -232,6 +232,32 @@ Since Milestone 264 a recording of Memos's last step leaves the guest: with `,re
 seed 46 copied a trace of 116,294 bytes, and without its clock step on KVM a trace of 94,813
 bytes and a video of 345,592.
 
+## Milestone 390: a walk that follows the rows
+
+Milestone 390 changed the walker. A control whose role and name repeat on the page, such as each
+memo's "More" button and its link "now", is chosen by the text of its row (the memo's `article`),
+not by its place in the list. A clock step reorders the memos, so the place moved the walk to
+another memo. The runs used hvx on the bare-metal machine, with that branch's `hydo` over the
+0.7.0 Linux release, at the fingerprint epoch 7. Two images were built from `hydo/hydo.yaml`:
+one with the walker of `main` before the milestone (Milestone 334's), and one with the new one.
+Each walk ran as `disk=none | run I=<walk>` and as `disk=none | run T=1:-2592000 I=<walk>`. The
+count is the actions of 72 that differ between the two runs, as Milestones 264 and 267 counted
+them; the walks are those of seeds 46, 21, 22, 23 and 25 of Milestone 267.
+
+| walker | seed 46 | 21 | 22 | 23 | 25 | mean of 72 |
+|---|---|---|---|---|---|---|
+| Milestone 334's (before) | 19 | 2 | 18 | 20 | 9 | 13.6 |
+| this milestone's (after) | 3 | 1 | 18 | 4 | 1 | 5.4 |
+
+Every run passed, with every saved memo in the database. Seed 22's walk still parts at action
+1.0 for 18 actions with either walker; why was not traced.
+
+The new walker has new bytes and takes other actions, so the walk fingerprints of the sections
+above hold only for the images built before. Finding 1 still has no recording. With the new
+walker, the walks of Milestone 267's seeds 42 and 31 (`I=36c25063a25340e7`,
+`I=4faa1d8cb3256a54`) passed and opened no Share menu (`4dc37f701592ed42`, `98412b446c47c890`);
+neither did the ten walks of the measure.
+
 ## What held
 
 - No memo that Memos answered as saved was lost: 85 memos in 40 walks, through kills, pauses,

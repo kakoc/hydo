@@ -104,7 +104,7 @@ input	hydo/onboard/examples/tikv/hydo/hydo.yaml	9e126602c4bc9e597a5f977f97cd242b
 input	hydo/onboard/examples/typesense/hydo/hydo.yaml	ee45b829c68601c37fc7c8ba2f86b4a919faabc2ce41753c938d24d5a6be5346
 input	hydo/onboard/examples/valkey/hydo/hydo.yaml	81364d5facc6e5b2d2791e5dda6b3c18af56d6dcb2fb321ad27491681c312ad2
 input	hydo/onboard/examples/victoriametrics/hydo/hydo.yaml	f43f0e70557dd1566fa929fec6661d7e49af18ff4e5518e34aaba6eef5de9b36
-input	hydo/onboard/examples/vikunja/hydo/hydo.yaml	b2188032732514eeb9ebbb2481cd89e5950b9a1887d4cefea920423e9413de33
+input	hydo/onboard/examples/vikunja/hydo/hydo.yaml	7ae615f4832b7cc40983c3c3b2173bcb77f0c9cfaa5b35cee50a407626658175
 input	hydo/onboard/examples/yugabyte/hydo/hydo.yaml	49b022282c7f370ee71d4be2a804c2439d3654c18a2061c4645037e460b7747a
 input	hydo/onboard/examples-mac/ledger-spin/hydo.yaml	97abb5b0751d76f6e9793ab4076e25b3d10ce4b3ae2e98529192eb234ac12917
 input	hydo/onboard/examples-mac/ledger/hydo.yaml	01cf6c04e2c7c83d49bbca58d5c8ff4efb95539bbb472a7a2d7f649995765184
@@ -3561,54 +3561,54 @@ manifest	hydo/onboard/examples/web-shop/hydo-walk.yaml	core
 boot	hydo/onboard/examples/web-shop/hydo-walk.yaml	hydo/onboard/examples/web-shop/hydo-walk.yaml#0	snapshot	00d075623c618d08
 counts	hydo/onboard/examples/web-shop/hydo-walk.yaml	identity=132 recovery:error=5 recovery:ok=13 recovery:violation=15 refused=1 run:cut=33 run:error=40 run:ok=80 run:violation=112 token:C=34 token:H=191 token:I=236 token:K=5 token:P=6 token:Q=1 token:T=70 token:X=4 token:Z=1 written=133
 boot-transcript	hydo/onboard/examples/web-shop/hydo-walk.yaml	00d075623c618d08
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	0	500	1013259ba9f3e42b143016bcd86460f1cd1b22f39098d592076bff153bc3b22c
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	1	500	c0365464b9c0e2434cde48c1cf8798b32f680987fabdb735f75786877cd5111d
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	2	500	6eb83310d6752693ae4b76fe38330f426a5c6469616e5fcc3b8db67ade2c69bb
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	3	500	8fccf7e9b25e37b25a481dd37be57cd73abad4a43a9eb269ddae221ffdb6dd0b
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	4	500	1850d170ccc1736cdd27f16b03963feca0726f7792482cd28fb64bc6f07e46be
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	5	500	019b7dd786ecdf1cb7a48cd67a331204647b005d544cceccbba42b8716c0dee6
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	6	500	49dcfc5baa8256668c2a966f8764b9318fd7434f12c6bedb56cbcfa23cebd161
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	7	500	a8ef56094ccf9e88497e50f6a666f1adc4ced12704356fedfde2fdcffad9a005
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	8	500	b9dd00920b1080656c2c9fd498b14bc119f8a502b8312a016c66170905c5b579
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	9	500	59d1a564637fc627d1bcd1fff00353a8f8bf86da249818ad194948d96f23b6b5
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	10	500	347b641b2fd5c5582bc8f3f4338a9335fb8226e03d451f39a6aabee80e86103d
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	11	500	72c887309212f8d7e9a5bc851ef240582f91b09002107704bb49632a064dca3c
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	12	500	12a8039c82486ee3c7fa82ed9656587e3969a14d3d164d2af21bbb69834a0e54
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	13	500	e6f6ad1920edeb6ee0b96d497df7039a862dcb274f31885dad56b7ee6ec29547
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	14	500	dfe2c8ab01c893f60aaeb2269743a7753f04b9215cc0073d7169aa51a5076d60
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	15	500	e52a9a8d47a42840abdeb4e5528ff530728ecaf45618812d7befa058d9bd61ef
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	16	500	1d4057eded2d6a3a80f74ef448137e333b52395eef15311a47e0d63e8c944268
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	17	500	d5cdd2a0b4e28817e83a4ace7d1aadeda96654fd34a080e46e6623e13eb67343
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	18	500	810b471a720d8120f56be5a8ae50318f16f993a85d813c307a275d127bc8dfc8
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	19	500	2aa5288f4e9402fa63f3ee5ae56212ffb433ec1b8dd2c5caeb2c34dc68d9397a
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	20	500	d4b132bab3c52f376942c3f3a69af35b94cc93bd34bac2ea278c4ea2d312f61c
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	21	500	e07e1d2bd95dbf0dc65144788e9edce94d2f757d53a2b8df8a6a317d4705250c
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	22	500	c62688fab786e608c2133a7f15da547dcf80b27f2eb46e12fd3723d2aa0ea490
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	23	500	c71f6e07ff3aaa908c1c018d065736a1cb1c9e8b126ac07d8555aea2efb932de
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	24	500	24cbe1472b11f51bc9ca30d1981f1077ea399788fb0349f137bb5d87993d02ce
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	25	500	b12cac7b08f9fad8ef981e03e8fabc917607d537d16cbef7e9c0e44906807d99
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	26	500	ce2915ea7378295ffb63c85372e390a8534433e43030a658c9d8370d91fc004a
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	27	500	17d1f656a74d8f91f43ea829b5b5905fde8613f660c5caac5c233d5a57c45501
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	28	500	f84a50c47c3b3a4e68e1c9043cb9941faf4c041345386c0cfe55c801b612393f
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	29	500	0f88d447c4506d2ec203893b80b2cf1eda3d64502bd32ee8d98fdc5d128a616c
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	30	500	ffcc846ac68da23b160913b9072671251a5fba328e14cad398efe77488a439ba
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	31	500	efed16a95e2d8fee63320ba1f40e65db6903ae4d657605c1fdac429a4a6eb607
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	32	500	20ac577b5ad939fe3ae0fd591c996b7f228f73fd1d815eb2d133e4581c2e8380
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	33	500	96b47ff637f3d152ab8032e383b2b0e4fe0220c6a9373be9992eb77d6ee9bccc
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	34	500	1d1f137998137f7991e7c0e5ffb7552bd1f9528a875a01e13ab969ccb9587fea
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	35	500	f638bfbc0b8543d31f8a240ab0656b89aa5fb84fd4a1cd88a59c629db22cc2a1
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	36	500	c9c44b997c216b42184149f926e09862638d4acc137d0ad05e49941d5ee3ec00
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	37	500	4a53510a3280c2fa604d8fe0c0971ddf0cc6b7f0e0b503139def3327772d8a8f
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	38	500	857c1f82146f0ce93b304a77c134d6baf22d4dbbb8e5826491b12bce78537029
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	39	500	aad04b0611c5017de9b3ed6182793837bb6075f7cd0d74f9b4df673a88ee7e6e
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	40	500	8865c3416ad53760de27defd3970a535cd0056cb3995918098b007cc159c4a6b
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	41	500	2062822cd54866109479019fb98156c207e300461fc7b33a2783906b0a6ea2f5
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	42	500	fdb3a9962da5934b5f77320b0525c19370fe43ad5bace46482e03ffedf83139b
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	43	500	55f83ccfafbccb4f9085c36203354944bae8fe18c7d60c90001bd8a55002b85e
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	44	500	795b40eaa08a09ec932e0dc7e2f576ac4d80f72f8d4b5ca88f7e205766f17918
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	45	500	ec81007b409694e18c1ab3bd8618a70bd5301ae08626708e50c1ee5b98b9864a
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	46	500	3e25ae69f19f9a87eb42afd3e40ab7ddc8d7cfbf16f2c3f42d49d00f89dc4b48
-chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	47	500	d97e0c825e8364e1ab1cdd11e7364af8dd9bd82411e40c8cd10ac798891c6098
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	0	500	04d4bd1047b229b55c0bd6620abf2e4a049c1977cdfd5dcb1253c78735ad7f82
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	1	500	57dd899259585a4ae6726f8e7d2d58e10bb983026d4bc7d350bb23c3602b5d62
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	2	500	453ae85f8e8d68ee6014e1a2f01c6ab436afee0e952a2618e6def0e1e165a932
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	3	500	68f21b1ef904eb103e01799c4dd53894756e77a18936e331eb6a155d21f94912
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	4	500	018cedbcf5cf036470e41159882f0dfaa2000b9996f8c7bef6eed57a9fd1793d
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	5	500	2a8d62436b995a8a705ec2cdb0723f5edecb9b537746524a61fef0e0a71f1b3e
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	6	500	16ba7aaa83a00d1c327204d1337acf5453dff9a1a84134b48046ccfc3822d25d
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	7	500	0e913b8ea7e1d90a15fb60b437aedb882320a33954d384e98372fc1bf6800a45
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	8	500	4a8b106bb1a90506d3ce45a0d30dc39ec723159402be3f2bfa47043963bb79cd
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	9	500	48e259c05770c64dec3502b391a30d8520e29308da3cfd990659ba6460d8b60d
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	10	500	961e7143152c92ec24f1328122cfc6ad0a64a9becef06306de0c97cf2907fd80
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	11	500	4063ba2c580f90dbef86072244401ef0cae821de4a919d7f215d789dd9a6119c
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	12	500	42d06029be0a10bbdf04d660cf964e53ee6c120e2d232ecbac633652921afac8
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	13	500	f3d7876d70eb8537424ee92a6bd208897c5d29c015d19bad21e75580ed4d3900
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	14	500	56b4df33698c32c6ebebd63772594073a2da4d897a7a5635f44a0c600d3d1c64
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	15	500	c3977b586d9ff2a63d277f4b6fa7170867d63e1a2514320023b8afd6d50b6779
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	16	500	36df944fb51d5819afeda8ae1a0197cbb298618163c23d8ee7be2e3c82a06cfc
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	17	500	24ffbf5a63d4119915b4a5c19b0de37b69b20af72865fd5a821e8b565d9e2b16
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	18	500	a4538bb908d8000f076503e947c23d5a8e95a8dd5a37e90733d6002fbc80d495
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	19	500	b3aee06461019756653042fcb263499f505639c743242487a75ca4c331a61baf
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	20	500	95499961a25b688fa44674bab067a877ee6e3df34a4c2f9c30289c7438d4dfcf
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	21	500	0c789a8b5f216197d6468e62eac0f8ace90368698209285d64c7b17c8981cadd
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	22	500	68e00b24717eec4510afcfcec7c9ebbf5c7bc506688520ef6cf7abcab71f67b1
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	23	500	7f5f8ca14f829b322cf255ee692d35748dbfbdbef30dd24206993320b3ff281c
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	24	500	42ba61115fa816533725ec673643239db994f28361e31bca0cc7ef29faa91d7a
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	25	500	9ae3cbc7f75d3b2ccf7573933b83baca6a3b0a3ede2f4cc05f858c9fdf436d4e
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	26	500	4abcc68aa9d79a4cae819db74816e4aea836e07e8bb751457f9957c05305fb61
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	27	500	4d657713145d58d4a2d13d69d327aaf6912b657a3e17878e30768b37a5959f76
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	28	500	89267d0a1de52f89ccd4e0ed7ad5744797c787e523cacbdc89cdd4bc71ef2391
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	29	500	e3bb16b793cd8e612f70db7059bcdf7344d1805e57dadf5a2f4572d6639def47
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	30	500	fcc243b85f36e94b05e6b197e59e41c37d9d44ee52ca541c6c397a075b4ebf37
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	31	500	bc19faf02bac3c9a019e0b1ad8d705ca3e936f19272d3ccb421c92c59087c5b6
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	32	500	ad8739377792ff9ac079c5883458937017c30e8471f5b08ea7e9f5a6b02f3a41
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	33	500	c7c6bc905f9b46fe77701fd073c91a438bd45226903d09c6f1507ffcffbdf6d8
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	34	500	987070d4bef14c32e614e6ffe446a4275b4edbb423c96874c01ee2ff48a2d63f
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	35	500	2863bdfb6e6fcbf19406fbee293ded963317ce8fa9cb7ee43783a72492579f23
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	36	500	24862e7022d1d664535fa412367c9089cce9535a8f6ac0fcf1cc128aea02bef2
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	37	500	4672099005dac177e018d53e477e24644625256a39e67ef2359ae61720f5cd2a
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	38	500	e5acf944164f165ef3c96aa3e868bbed67e9228f046733147ad2a6492f976083
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	39	500	3452ec092151b25000f383770002e51507c5117b0663cc2ec6327cae8b0813f6
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	40	500	160516d3c1bbd4d18cca84d3536e746ae4f2f0c210e6a2c6ea20d7e9a214a70a
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	41	500	f384dd97cc1f5be4ac9241f6e0e65880ad164cd5f49238872e97f98db0ba5776
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	42	500	339d944d7dc8b790fe0d1cf01f4f8504322326f72f8b08f32ab8bd63f1a6dbee
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	43	500	92f8016b32c5eb2187cd99ff5fd57763e65ae8e68ade4dfaafe326c50df77815
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	44	500	b3e2bdb13964e05de10f80abb430e3d8789d842558762b5accae4d1400976db5
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	45	500	9fd43f7f19558587f25c406c0aa275ad4c3ac3e218482a796a9bf4741d38cbc9
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	46	500	05577c1709bec3d88ae34595c3ee1d8bd3804581e6c5dd89074c694c7c7035f6
+chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	47	500	991289d4f6f46a0252f2f998672d63ed56f8669dd7971221cbf0dd678f7fce15
 chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml	48	91	4f0434106cc08dc77ebfb7d998525f110b567e2f9d62b0f119b812484b57c14b
 manifest	hydo/onboard/examples/web-shop/hydo.yaml	core
 boot	hydo/onboard/examples/web-shop/hydo.yaml	hydo/onboard/examples/web-shop/hydo.yaml#0	snapshot	099a0af8d75e9649

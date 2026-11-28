@@ -66,7 +66,17 @@ pub const KNOWN_EXPLORE: &[&str] = &[
     "values",
     "settle_ms",
     "quiet_ms",
+    "sign_in",
+    "signed_out",
+    "drag",
 ];
+
+/// The keys of one `browser.explore.drag` entry (Milestone 390).
+pub const KNOWN_DRAG: &[&str] = &["items", "into"];
+
+/// The sign-in page's path when `browser.explore.signed_out` does not name it (Milestone 390): a
+/// regular expression, case-insensitive, over the page's path.
+pub const SIGNED_OUT: &str = "(^|/)(login|log-in|signin|sign-in|sign_in)(/|$)";
 
 /// The keys of one `browser.explore.setup` step.
 pub const KNOWN_SETUP: &[&str] = &[
@@ -632,6 +642,11 @@ pub fn expand(m: &mut Value) -> R<()> {
     );
     // a test program (M205): the explorer takes fewer than 4 steps, draws only the fault kinds
     // that `faults:` lists, and classes a failure test-failed
+    // a step of a walk: the walker in the browser's root, with the schedule's walk, its guest
+    // part and the file of acknowledged work
+    let walker = format!(
+        "hydo-oci {name} /bin/sh -c 'cd {WALK_DIR} && NODE_OPTIONS=\"--require {WEB_DIR}/hydo/hook.cjs\" exec node walk.mjs \"$1\" \"$2\" \"$3\" \"$4\"' sh $i \"$HYDO_WALK\" \"$HYDO_GUEST\" \"$HYDO_ACKED\""
+    );
     let workload = match &explore {
         None => json!({
             "kind": "test",
@@ -644,14 +659,24 @@ pub fn expand(m: &mut Value) -> R<()> {
         // schedule's I= value as $HYDO_WALK and the schedule's guest part as $HYDO_GUEST (for
         // repro.spec.ts); a schedule without I= walks seed 0. An ordinary workload: the explorer
         // draws every fault kind that `faults:` allows
+        //
+        // Milestone 390: with a reaction to the walk's records (`A=walk.`), each record goes to
+        // the console as the walker prints it, so that the reaction acts inside the step; every
+        // other run runs the walker as before
         Some(x) => json!({
             "steps": x.steps,
             "run": format!(
                 "mkdir -p {RECORD_DIR}/home\n\
                  i=$HYDO_FROM\n\
                  while [ $i -lt $HYDO_TO ]; do\n\
-                 \x20 hydo-oci {name} /bin/sh -c 'cd {WALK_DIR} && NODE_OPTIONS=\"--require {WEB_DIR}/hydo/hook.cjs\" exec node walk.mjs \"$1\" \"$2\" \"$3\" \"$4\"' sh $i \"$HYDO_WALK\" \"$HYDO_GUEST\" \"$HYDO_ACKED\" > {RECORD_DIR}/step-$i.log 2>&1\n\
-                 \x20 rc=$?\n\
+                 \x20 case \"$HYDO_GUEST\" in\n\
+                 \x20 *A=walk.*)\n\
+                 \x20   {{ {walker} 2>&1; echo $? > {RECORD_DIR}/rc-$i; }} | while IFS= read -r l; do case \"$l\" in 'HYDO-ASSERT '*) printf '%s\\n' \"$l\" > /dev/console;; *) printf '%s\\n' \"$l\";; esac; done > {RECORD_DIR}/step-$i.log\n\
+                 \x20   rc=$(cat {RECORD_DIR}/rc-$i);;\n\
+                 \x20 *)\n\
+                 \x20   {walker} > {RECORD_DIR}/step-$i.log 2>&1\n\
+                 \x20   rc=$?;;\n\
+                 \x20 esac\n\
                  \x20 grep '^hydo-web:' {RECORD_DIR}/step-$i.log > /dev/console\n\
                  \x20 echo \"hydo-web: step $i: the walker exited $rc\" > /dev/console\n\
                  \x20 i=$((i + 1))\n\
@@ -1041,6 +1066,56 @@ fn explore_cfg(e: &Value, m: &Value) -> R<Explore> {
         }
     };
     let setup = setup_steps(get(e, "setup"), "browser.explore.setup")?;
+    // Milestone 390: the steps that sign in again when the walk meets the sign-in page
+    let sign_in = setup_steps(get(e, "sign_in"), "browser.explore.sign_in")?;
+    let signed_out = match get(e, "signed_out") {
+        None => Value::Null,
+        Some(Value::String(s)) if regex::Regex::new(&format!("(?i){s}")).is_ok() => {
+            if sign_in.is_empty() {
+                return Err(err(
+                    "browser.explore.signed_out: only with browser.explore.sign_in (the steps that sign in again on that page)",
+                ));
+            }
+            Value::String(s.clone())
+        }
+        Some(_) => {
+            return Err(err(
+                "browser.explore.signed_out: a regular expression over the path of the sign-in page, such as ^/login",
+            ))
+        }
+    };
+    // Milestone 390: the drags between lists
+    let mut drag = Vec::new();
+    match get(e, "drag") {
+        None => {}
+        Some(Value::Array(a)) => {
+            for (i, d) in a.iter().enumerate() {
+                let w = format!("browser.explore.drag[{i}]");
+                if !d.is_object() {
+                    return Err(err(format!(
+                        "{w}: a mapping {{items: <CSS selector of what can be dragged>, into: <CSS selector of where it can be dropped>}}"
+                    )));
+                }
+                crate::validate::unknown(d, KNOWN_DRAG, &w)?;
+                let sel = |k: &str| -> R<String> {
+                    match get(d, k) {
+                        Some(Value::String(s)) if !s.trim().is_empty() && !s.contains('\'') => {
+                            Ok(s.clone())
+                        }
+                        _ => Err(err(format!(
+                            "{w}.{k}: a CSS selector without a single quote, such as .kanban-card"
+                        ))),
+                    }
+                };
+                drag.push(json!({"items": sel("items")?, "into": sel("into")?}));
+            }
+        }
+        Some(_) => {
+            return Err(err(
+                "browser.explore.drag: a list of entries, each {items: <CSS selector>, into: <CSS selector>}",
+            ))
+        }
+    }
     // the fakes' routes, for repro.spec.ts: an H= fault on a route becomes a page.route
     let mut routes = Map::new();
     if let Some(Value::Array(fakes)) = m.get("fakes") {
@@ -1059,20 +1134,31 @@ fn explore_cfg(e: &Value, m: &Value) -> R<Explore> {
             }
         }
     }
+    let mut cfg = json!({
+        "start": start,
+        "server": server,
+        "actions": actions,
+        "setup": setup,
+        "avoid": avoid,
+        "within": within,
+        "values": values,
+        "steps": steps,
+        "settle_ms": settle,
+        "quiet_ms": quiet,
+        "routes": Value::Object(routes),
+    });
+    // Milestone 390: only when given, so that a walk without them keeps its configuration's bytes
+    if !sign_in.is_empty() {
+        cfg["sign_in"] = json!(sign_in);
+    }
+    if !signed_out.is_null() {
+        cfg["signed_out"] = signed_out;
+    }
+    if !drag.is_empty() {
+        cfg["drag"] = json!(drag);
+    }
     Ok(Explore {
-        cfg: json!({
-            "start": start,
-            "server": server,
-            "actions": actions,
-            "setup": setup,
-            "avoid": avoid,
-            "within": within,
-            "values": values,
-            "steps": steps,
-            "settle_ms": settle,
-            "quiet_ms": quiet,
-            "routes": Value::Object(routes),
-        }),
+        cfg,
         steps,
         actions,
     })
@@ -1419,6 +1505,69 @@ mod tests {
         }
     }
 
+    /// Milestone 390: `sign_in`, `signed_out` and `drag` reach the walker's configuration only
+    /// when given, so a walk without them keeps its configuration as it was.
+    #[test]
+    fn explore_takes_a_sign_in_again_and_drags_between_lists() {
+        let walk = |x: Value| -> R<Value> {
+            let mut m = json!({"name": "web", "network": "bridge",
+                "browser": {"explore": {"start": "http://localhost:3000/"}}});
+            for (k, v) in x.as_object().unwrap() {
+                m["browser"]["explore"][k] = v.clone();
+            }
+            expand(&mut m)?;
+            Ok(
+                serde_json::from_str(m["services"][0]["env"]["HYDO_WEB_WALK"].as_str().unwrap())
+                    .unwrap(),
+            )
+        };
+        let plain = walk(json!({})).unwrap();
+        for k in ["sign_in", "signed_out", "drag"] {
+            assert!(plain.get(k).is_none(), "{k}");
+        }
+        let cfg = walk(json!({
+            "sign_in": [{"open": "/login"}, {"fill": "User", "with": "a"}, {"click": "Login"}],
+            "signed_out": "^/auth",
+            "drag": [{"items": ".kanban-card", "into": ".bucket .tasks"}],
+        }))
+        .unwrap();
+        assert_eq!(cfg["sign_in"][1], json!({"fill": "User", "with": "a"}));
+        assert_eq!(cfg["signed_out"], "^/auth");
+        assert_eq!(
+            cfg["drag"],
+            json!([{"items": ".kanban-card", "into": ".bucket .tasks"}])
+        );
+        // the walker's own default is the one the documentation names
+        assert!(WALK.contains(&format!("'{SIGNED_OUT}'")));
+        for (bad, says) in [
+            (
+                json!({"signed_out": "^/login"}),
+                "only with browser.explore.sign_in",
+            ),
+            (
+                json!({"sign_in": [{"click": "Login"}], "signed_out": "(x"}),
+                "a regular expression",
+            ),
+            (json!({"sign_in": [{"klick": "Login"}]}), "klick"),
+            (
+                json!({"drag": [{"items": ".a"}]}),
+                "browser.explore.drag[0].into",
+            ),
+            (
+                json!({"drag": [{"items": ".a", "into": "a[x='1']"}]}),
+                "single quote",
+            ),
+            (
+                json!({"drag": [{"items": ".a", "into": ".b", "on": 1}]}),
+                "on",
+            ),
+            (json!({"drag": ".a"}), "a list of entries"),
+        ] {
+            let e = walk(bad.clone()).unwrap_err().to_string();
+            assert!(e.contains(says), "{bad}: {e}");
+        }
+    }
+
     #[test]
     fn explore_becomes_a_walk_with_the_walker_and_its_playwright_core() {
         let mut m = json!({"name": "web", "network": "bridge",
@@ -1438,6 +1587,15 @@ mod tests {
         );
         assert!(
             run.contains("sh $i \"$HYDO_WALK\" \"$HYDO_GUEST\" \"$HYDO_ACKED\""),
+            "{run}"
+        );
+        // Milestone 390: a schedule with a reaction to the walk gets its records on the console
+        // as they come; the others run the walker as before
+        assert!(
+            run.contains("*A=walk.*)\n")
+                && run.contains("'HYDO-ASSERT '*) printf '%s\\n' \"$l\" > /dev/console;;")
+                && run.contains("rc=$(cat /tmp/hydo/web/rc-$i);;")
+                && run.contains("\"$HYDO_ACKED\" > /tmp/hydo/web/step-$i.log 2>&1\n    rc=$?;;"),
             "{run}"
         );
         let ids: Vec<&str> = m["invariants"]

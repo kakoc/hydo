@@ -26846,3 +26846,135 @@ on the panic reports, the code, and the runs without it.
 until 0.8.0. The panic should go to Apple through Feedback Assistant, with the two reports.
 Whether only the private mapping or also `hv_vm_protect` triggers it was not separated.
 
+
+## Milestone 390 (tentative number): the walk signs in again, clicks checkboxes, drags, follows the rows, and meets faults inside a step
+
+The walk through a web app's pages (`browser.explore`, Milestone 258) had five gaps that the
+Memos and Vikunja onboardings named (open items 129, 131, 134 and 137). Four are fixed here,
+each its own commit; the fifth was tried again. A sixth gap came out of the proofs: a run with a
+reaction walked seed 0.
+
+### What changed
+
+1. **Sign in again** (`browser.explore.sign_in`, `signed_out`, format-1 additions). Before,
+   `setup` ran only in a step without a saved session, so a walk whose session ended stayed on
+   the sign-in page for the rest of its run. Now a page whose path `signed_out` matches (default
+   `(^|/)(login|log-in|signin|sign-in|sign_in)(/|$)`), at a step's start or after an action,
+   runs the `sign_in` steps, at most three times a step. The run prints `hydo-web: walk <step>:
+   sign in again: ...`, and the filmstrip has a frame of it. The read-back check of Milestone 334
+   signs in the same way when the walk's session has ended, with `read_back.setup` or
+   `sign_in`. Vikunja's `hydo.yaml` signs in on `/login`.
+2. **Checkboxes under a label, and drags** (`browser.explore.drag`, a format-1 addition). A
+   checkbox, a radio button or a switch that takes no trial click of its own is clicked
+   through its label when the label takes one, as Vikunja's done checkboxes need (an input of
+   the class `is-sr-only` inside a `<label>`). `drag` names, as CSS selectors, the items that
+   can be dragged and the places they can be dropped on; the action drag (weight 3) takes an
+   item by its text and a place by its order. Vikunja's `hydo.yaml` drags Kanban cards between
+   buckets. Since its walks now mark tasks done, and the home page hides a done task, its
+   read-back looks for each task on its own page, `/tasks/<id>`.
+3. **Faults inside a step.** In a run whose schedule has a reaction to the walk (`A=walk.`), the
+   walker prints a `HYDO-ASSERT` record when it starts an action (`walk.action`) and when the
+   server answers a write (`walk.write_acked`), and the workload's shell writes each such line
+   to the console as it comes. So `A=walk.action#<k>@<step>[+<ms>]:<action>` acts at the k-th
+   action from that step on. A run without such a reaction runs the walker as before.
+   `hydo explore` gives 40 % of a walking image's schedules one such reaction, from a stream of
+   its own (`WALK_FAULT_SALT`): three in four at an action with a delay of 0 to 1,000 ms, one in
+   four after an acknowledged write with 0 to 200 ms; a kill, a pause or a power cut, as
+   `faults:` allows. A schedule with a reaction already, with `cf=`, or `--no-faults` gets none.
+   `hydo report` says it in words: "When the walk starts its 3rd action from step 1 on, hydo
+   kills `vikunja`."
+4. **A run with a reaction walked seed 0.** The controller's workload call for a run with
+   reactions (`react::workload`) got only `HYDO_FROM` and `HYDO_TO`. A walk's call needs its
+   walk, its schedule's guest part and a recording's script too (`HYDO_WALK`, `HYDO_GUEST`),
+   so every run of a walking image with an `A=` token walked seed 0 and wrote no schedule into
+   its `repro.spec.ts`. Both paths now take `workload_extra`. No run with a walk and a reaction
+   is in `hydo/onboard/recorded.json`.
+5. **Rows.** A control whose role and name repeat on the page, such as each memo's "More"
+   button and its link "now", carries the text of its row: the names and texts of its nearest
+   `article`, `listitem`, `row` or `treeitem` before a row inside it begins, without times, at
+   most 12. The walk's choice hashes the role, the name, the row and the place among those
+   three, and a recording replay finds such a control by its row. Before, the place was the
+   list's order, and a clock step that reorders the memos made the walk take another memo.
+
+### The proofs
+
+The runs used hvx on the bare-metal machine, one VM of this milestone at a time, with this
+branch's `hydo` over the 0.7.0 Linux release, at the fingerprint epoch 7. Each example has two
+images: "before", built by `main` at `00d3089d` (Milestone 334's walker), and "after", built by
+this branch. Every schedule below gave one fingerprint over two runs, where two are named.
+
+**Vikunja** (`hydo/onboard/examples/vikunja`, RESULTS.md "Milestone 390"):
+
+| schedule | image | the walk | verdict | fingerprint |
+|---|---|---|---|---|
+| `disk=none \| run T=2:2678400 I=1` | before | its session ended at the 31-day clock step; 33 frames on `/login`, 2 tasks acknowledged | VIOLATION `browser.acked_shown`, a false finding: the check opened `/` with the ended session | `b259153002792f54`, twice |
+| the same | after | signed in again at the start of step 2; 5 tasks acknowledged; 2 done checkboxes clicked through their labels | OK, 7 invariants | `35b61bf045be4d2c`, twice |
+| `disk=none \| run A=walk.action#3@1:kill-vikunja I=1` | before | the walk of seed 0, and no record of the walk on the console: the reaction never fired ("seen":0) | OK, 7 invariants | `9751f31f588dc3e0`, twice |
+| the same | after | `vikunja` killed when the walk started action 1.2; the rest of step 1 met a refused server | VIOLATION `browser.no_page_errors`: "The page /trash/projects left a promise rejection unhandled during the test "walk step 1": Error: Error while refreshing user info:" | `4e58b966ae56621e`, twice |
+| `disk=none \| run I=1` of `hydo-kanban.yaml` | after | 5 drags of a card between the buckets, one of them not done (a drag of 3 s that timed out); the Kanban rule held | OK, 7 invariants | `7c734d670e182574`, twice |
+
+- In the runs of `hydo.yaml` without a clock step, the walks of `I=1` and `I=3` clicked 2 and 1
+  done checkboxes (`4899b87e1dab99d8`, `6875aa5efa0b5397`), and each click sent `PATCH
+  /api/v2/tasks/<id>`. The Kanban rule held in every run: every task the walk marked done was in
+  the done bucket. No walk of `hydo.yaml` dragged a card: neither 4 walks on hvx nor 13 against
+  Vikunja in Docker on this Mac. Three of the local walks opened the Kanban view and took other
+  actions there. The three walks that ran in both places clicked the same number of labels. So
+  `hydo-kanban.yaml` starts the walk on the Kanban view.
+- The unhandled rejection after the kill is a candidate of Vikunja's frontend, not traced and
+  not posted: when the server goes away, its refresh of the user's information rejects without a
+  handler.
+- The first image of the branch, before the controller's fix, ran the same reaction: the walk
+  walked seed 0, no record reached the console, and the run noted `HYDO-REACT-UNFIRED ...
+  "seen":0`. Its `repro.spec.ts` named no schedule.
+
+**Memos** (`hydo/onboard/examples/memos`, RESULTS.md "Milestone 390"): the measure of Milestones
+264 and 267. Each of the five walks of Milestone 267 (seeds 46, 21, 22, 23 and 25) ran as
+`disk=none | run I=<walk>` and as `disk=none | run T=1:-2592000 I=<walk>`, and the count is the
+actions of 72 that differ between the two runs (`walk-act` lines compared by kind, role, name
+without times, row, place and value):
+
+| walker | seed 46 | 21 | 22 | 23 | 25 | mean of 72 |
+|---|---|---|---|---|---|---|
+| Milestone 334's (before) | 19 | 2 | 18 | 20 | 9 | 13.6 |
+| this milestone's (after) | 3 | 1 | 18 | 4 | 1 | 5.4 |
+
+The rows took the mean from 13.6 to 5.4. Seed 22's walk parts at action 1.0 for 18 actions with
+both walkers, and its cause was not traced. Milestone 267's numbers (7.4 and 19.8) came from
+other images and an older epoch, so only the two rows above compare. Every run passed, and
+every saved memo was in the database.
+
+**Memos's share-link finding** (open item 134) was tried again with the new walker: the walks of
+Milestone 267's seeds 42 and 31 (`I=36c25063a25340e7`, `I=4faa1d8cb3256a54`) passed
+(`4dc37f701592ed42`, `98412b446c47c890`) and opened no Share menu, nor did the ten walks of the
+measure. The finding still has no recording.
+
+**The explorer's draw.** `hydo explore --seeds 1-8 --no-shrink --no-diagnose` of Vikunja's
+`hydo.yaml` on the after image (one worker, 1,071 s) drew a reaction to the walk in 6 of the 8
+schedules, such as `A=walk.action#5:stop-vikunja-3000`, `A=walk.action#12@4+100:stop-vikunja-300`
+and `A=walk.action#6+1000:cut`; the generator's test counts 120 to 200 of 400. Seven runs
+passed. One ended in ERROR: the Kanban rule could not read its copy of the database under disk
+errors (`disk=ioerr:2`), as open item 137 says. No new finding came of these 8 schedules.
+
+**What did not change.** Nothing in `hydo/onboard/recorded.json` moved: no `browser:` image is in
+it. Images built from `browser.explore` get new bytes, because the walker and the walk's `run`
+changed: `web-shop`'s `hydo-walk.yaml`, `memos` and `vikunja`. Their walks take other actions, so
+the walk fingerprints of their RESULTS.md pages hold only for the images built before. An image of
+`browser.tests` keeps its bytes. The engines and the module did not change. Several boots of this
+milestone's runs failed with `HVX_CREATE_VM: Cannot allocate memory` or an engine that the host's
+memory ended, beside other sessions' VMs; each was run again.
+
+**Tests.** In copies of the tree on the bare-metal machine, with an index of their tracked
+files: `cargo clippy --workspace --all-targets -- -D warnings` was clean. These passed: `cargo
+test -p hydo-manifest -p hydo-schedule -p hydo-build`, `cargo test -p hydo-explore` (with the
+goldens below), `cargo test -p hydo-control --lib` and its `screens::`, `react::` and
+`features::` tests, `cargo test -p hydo --test it` (80 tests), and `cargo test -p hydo-agents
+--test it` (16 tests). Each code commit's own tree passed `cargo fmt --check`, the manifest's
+`browser` and `format::` tests, and `cargo check` of hydo-explore and hydo-control. `sh
+ci/vale.sh` found nothing in the changed documents. The copies have no `AGENTS.local.md`, so
+`public_content::` checked the generic patterns; a `grep` of the listed values found none in the
+change. With `HYDO_BLESS=1` the explorer's `corpus-full.txt` and `identity-quick.txt` and the
+controller's `corpus-quick.txt` were recorded again: the walking manifests' chunks moved (their
+schedules draw reactions to the walk, and the walk's `run` changed), and the Vikunja manifest's
+input line moved. The explorer's `corpus-quick.txt` and `identity-full.txt` did not change.
+
+**What is left** is in open items 129, 131, 134 and 137.

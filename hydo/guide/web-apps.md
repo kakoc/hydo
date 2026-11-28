@@ -173,6 +173,65 @@ under the problem. The page links each problem's recording, its video, its trace
 `repro.spec.ts`, in `replays/rec-<k>/screens/`. The minimal schedule without `rec` still shows
 the failure, and its run's filmstrip and traces show it action by action.
 
+### Sign in again, check boxes, and drags
+
+A session can end during a walk: a clock step past the token's time, or a sign-in that a power
+cut lost. Before, the walk then stayed on the sign-in page for the rest of the run. With
+`sign_in`, a page whose path is the sign-in page, at a step's start or after an action, runs
+those steps, at most three times a step:
+
+```yaml
+browser:
+  explore:
+    setup: [...]               # the first step: here it creates the account
+    sign_in:                   # steps as setup's: sign in to the account again
+      - {open: /login}
+      - {fill: Username Or Email Address, with: hydo}
+      - {fill: Password, with: hydo-pass-1}
+      - {click: Login}
+      - {see: Current Tasks}
+    signed_out: "^/login"      # the sign-in page's path (default: login, signin, sign-in)
+    drag:                      # what the walk can drag, and where it can drop it
+      - {items: .kanban-card, into: ".bucket .tasks"}
+```
+
+The run prints each sign-in, `hydo-web: walk 3: sign in again: the page /login asked for it
+after 3.4`, and the filmstrip has a frame of it.
+
+A checkbox, a radio button or a switch that a styled label covers takes no click of its own.
+Vikunja's done checkboxes are such controls: an input that only screen readers see, inside a
+label that draws the box. When such a control does not take Playwright's trial click, the walk clicks its
+label, as a user does: `click the label of checkbox "Mark 'Buy milk' as done"`.
+
+`drag` adds the action drag and drop. Each entry names, as CSS selectors, the items that can be
+dragged and the places they can be dropped on. The walk chooses an item by its text and a place
+by its order among the places, and leaves out the place that holds the item. Without `drag` the
+walk drags nothing, because the accessibility tree does not say what can be dragged.
+
+A role and a name can repeat on a page, such as the "More" button of every memo in a list. The
+walk then chooses among them by the text of each one's row (an `article`, a `listitem`, a `row`),
+not by their order. A fault that changes the list's order then changes which row the walk takes only
+when it changes the rows' texts.
+
+### Faults inside a step of the walk
+
+A step of the walk is one workload step, so a kill, a pause or a power cut between two steps
+never meets an action in the middle of a step. A reaction to the walk's own records acts inside
+a step:
+
+| token | what happens |
+|---|---|
+| `A=walk.action#4@2:kill-app` | the service `app` is killed when the walk starts its fourth action, counted from step 2 on |
+| `A=walk.action#1@3+300:stop-app-3000` | 300 ms after the first action of step 3, `app` is paused for 3 s |
+| `A=walk.write_acked@1+50:cut` | 50 ms after the server answers a write, from step 1 on, the power is cut |
+
+The walker writes these records to the console only in a run whose schedule has such a
+reaction, so other runs print what they printed. `hydo explore` gives 40 % of a walking image's
+schedules such a reaction, from a stream of its own, with a kill, a pause or a power cut that
+`faults:` allows. The shrinker treats it as any reaction: it drops it, makes it act at once, or
+arms it at the first record. A killed service stays down until the heal, so the rest of the walk
+meets a server that refuses its writes.
+
 ### Check that the pages show what the server stored
 
 The five properties below judge what a page did. `browser.read_back` adds a sixth check,

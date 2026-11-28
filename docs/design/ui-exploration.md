@@ -179,7 +179,9 @@ walks the seed 0. The token is not a fault: a schedule with only `I=` is a run w
 The explorer draws the faults that `faults:` lists for the backend's services: kills, pauses,
 network faults between the browser and a service, power cuts, clock steps, disk faults. The
 browser's own service is never a target. `H=` faults act on a fake's routes, as in Milestone
-253. Nothing about the walk changes a fault: the faults and the walk meet at step boundaries.
+253. Nothing about the walk changes a fault. Up to Milestone 389 the faults and the walk met at
+step boundaries; since Milestone 390 a reaction to the walk's own records acts inside a step
+(the last section).
 
 The judges are:
 
@@ -358,6 +360,61 @@ The check cannot see an object that the app shows only on a page it does not ope
 second page of a long list, or an object that the app hides on purpose, such as a done task. A
 cascade of a delete, such as a project's tasks, needs `unless`. It judges that an object is
 there, not that its content is right.
+
+### Sign-ins, rows, checkboxes, drags, and faults inside a step (Milestone 390)
+
+Five gaps of the walk that the Memos and Vikunja onboardings named (open items 129, 131 and 137).
+
+**A session that ends.** `setup` ran only in a step without a saved session. A walk whose
+session ended, after a clock step past the token's time or under disk errors, stayed on the
+sign-in page for the rest of its run, and its later actions were the sign-in form's. With
+`explore.sign_in`, a page whose path `explore.signed_out` matches runs those steps again: at a
+step's start, after the page's requests have ended (at most 3 s), and after every action. A step
+signs in at most three times. The read-back check signs in the same way when the walk's session
+has ended, with `read_back.setup` or `sign_in`. A sign-in is part of the walk, not an action:
+it takes no action's place, and a recording replay signs in where its page asks.
+
+**Checkboxes under a label.** A control takes a click when it takes Playwright's trial click.
+Vikunja draws its checkboxes with a `<label>` around an `<input>` that only screen readers see
+(`is-sr-only`), so the input takes no click, and no walk marked a task done. A checkbox, a radio
+button or a switch that does not take the trial click is now clicked through its label
+(`input.labels[0]`, else the `<label>` around it), when the label takes the trial click. The
+script of a recording replay notes `via: label`.
+
+**Drags.** The accessibility tree does not say what can be dragged, so a drag is configured:
+`explore.drag` names, as CSS selectors, the items and the places to drop them. The action drag
+(weight 3) is open only outside an overlay and when the page has an item and two places. The
+walk takes the item by rendezvous over its text, without its times, and the place by rendezvous
+over its order, leaving out the place that holds the item. Playwright's `dragTo` moves the mouse,
+which the Kanban board's drag library takes as a user's drag. The script names the item by its
+text and the place by its number.
+
+**Rows.** A control is chosen by rendezvous over its role, its name without times and its place
+among the same. When a role and a name repeat, as each memo's "More" button and its link "now"
+do on Memos's home page, the place was the order of the list. A clock step reorders the memos,
+and the walk then took another memo's button. Since this milestone such a control carries its
+row's text: the names and texts of its nearest `article`, `listitem`, `row` or `treeitem`, up to
+12 of them, before a row inside it begins, without times. Its place is counted among the same
+role, name and row. A control whose role and name are unique keeps no row, so a change of a row's
+text does not move it. The measure of Milestones 264 and 267, the actions of five Memos walks
+that differ without their clock step `T=1:-2592000`, is in `docs/HISTORY.md` Milestone 390.
+
+**Faults inside a step.** A part of the walk is one workload step, so every fault started
+between two steps, and a write that the server refuses in the middle of a step needed a timed
+`X=`. In a run whose schedule has a reaction to the walk (`A=walk.`), the walker prints a
+`HYDO-ASSERT` record of the kind `reachable` when it starts an action (`walk.action`) and when
+the server answers a write with 2xx (`walk.write_acked`). The workload's shell then writes each
+such line to the console as it comes; its other output still reaches the console at the step's
+end. The reactions of Milestone 139 act on the records as on any event:
+`A=walk.action#<k>@<step>[+<ms>]:<action>` at the k-th action from step `<step>` on. A run
+without such a reaction runs the walker as before and prints no record.
+
+`hydo explore` gives 40 % of a walking image's schedules one such reaction, from a stream of its
+own: three in four at an action, with a delay of 0, 100, 300 or 1,000 ms, one in four after a
+write, with 0 to 200 ms. The action is a kill, a pause (`stop-<svc>-<ms>`) or a power cut, as
+`faults:` allows. A schedule with a reaction already, or with `cf=`, gets none. The shrinker
+drops the reaction, acts at once, or arms it at the first record, as for any reaction. A network
+fault inside a step has no reaction action yet.
 
 ## Sources
 

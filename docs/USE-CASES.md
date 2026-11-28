@@ -47,7 +47,7 @@ at release, and after release. The tables below take the chart's techniques in i
 | Regression tests | `hydo save` keeps a finding's schedule in `hydo/regressions/`, and `hydo repro --regressions` replays every saved one. A regression that needs other build parameters names them (`# params: k=v`), and is replayed only on an image built with them (M355). Since M360 `hydo save` writes that line for an image built with `--set`, and since M363 with the defaults too when the manifest has `params:`. It gives a second finding of one filename a file of its own. `hydo ci run` reports such a regression as left out. | built | M197, M269, M355, M360, M363 |
 | Smoke tests | `hydo doctor` checks the machine, `hydo build --check` checks the project, and the schedule `disk=none \| run` runs the system once without faults. | built | M239; the quickstarts |
 | Usability tests | Not hydo's job. They need people who use the product. | not hydo's job | |
-| UI and UX tests | `browser:` runs a team's Playwright tests in the VM and watches every page. `browser.explore` walks through the pages without tests, and `browser.read_back` checks that the pages show what the server acknowledged. `browser.screens: compare` compares screenshots pixel for pixel. The look and feel needs people. | partly built | M253, M254, M258, M273, M284, M334 (`web-shop`, `memos`, `vikunja`); open items 124, 131, 145, and 167 |
+| UI and UX tests | `browser:` runs a team's Playwright tests in the VM and watches every page. `browser.explore` walks through the pages without tests, and `browser.read_back` checks that the pages show what the server acknowledged. `browser.screens: compare` compares screenshots pixel for pixel. The look and feel needs people. | partly built | M253, M254, M258, M273, M284, M334, M390 (`web-shop`, `memos`, `vikunja`); open items 124, 131, 145, and 167 |
 | Penetration tests | Not hydo's job. They need an attacker's tools and goals. `hydo fuzz` of a decoder of untrusted input is the nearest capability (Qdrant's `decompress_sequence`, M275). | not hydo's job | |
 | Threat modeling | Not hydo's job. It is a design review that people do. | not hydo's job | |
 | Performance tests | `perf:` counts work per step, and `hydo run --memory` prints each service's peak memory. Time in the VM is virtual, so speed on real hardware is out of reach (`docs/LIMITS.md`). | partly built | M237, M239 |
@@ -145,7 +145,8 @@ Ideas that would answer more:
 |---|---|---|
 | Why is one of the team's Playwright tests flaky? | `browser:` runs the tests in the VM, and an `H=` delay of the API makes the flaky test fail on every run. | built; `web-shop` (M253) |
 | Does a page show an uncaught error, a spinner that stays, or a failed request it never shows? | Five invariants watch every page that a test or a walk opens. A spinner ends with its document, so a page that the walk leaves is not a stuck spinner. | built; `web-shop` (M253, M301) |
-| Can hydo test the pages without the team's tests? | `browser.explore` and the token `I=` walk through the pages from a seed, and each run leaves the walk as a Playwright test. Every run keeps a screenshot of every action, and a failing run the Playwright trace of every step, also across a power cut; `hydo report --html` shows them as the run's timeline. | partly built; `memos`, `vikunja` (M258, M273, M301, M334); open items 124, 131, and 167 |
+| Can hydo test the pages without the team's tests? | `browser.explore` and the token `I=` walk through the pages from a seed, and each run leaves the walk as a Playwright test. Every run keeps a screenshot of every action, and a failing run the Playwright trace of every step, also across a power cut; `hydo report --html` shows them as the run's timeline. Since M390 the walk signs in again when its session ends (`explore.sign_in`), and clicks a checkbox that its label covers. It drags between lists (`explore.drag`) and chooses among a list's alike controls by the text of their row. | partly built; `memos`, `vikunja` (M258, M273, M301, M334, M390); open items 124, 131, and 167 |
+| Does the page show an error when the server refuses a write in the middle of what the user does? | A reaction to the walk's own records kills, pauses or cuts the power at the k-th action of a step (`A=walk.action#<k>@<step>`) or right after an acknowledged write (`A=walk.write_acked`). `hydo explore` draws one for 40 % of a walking image's schedules. | partly built; `vikunja` (M390); no network fault inside a step |
 | Does the page still show what the server said it saved? | `browser.read_back` opens the pages at the end of the run and after a power cut, and looks for every object whose id the server returned in an acknowledged write. | built; `vikunja`, `web-shop` (M334); both on KVM (M341); open item 168 |
 | Is a saved object still saved after a crash? | A rule over the database, with power cuts of the whole guest. | built; `vikunja` finding 1 (M273) |
 | Did a page change visually? | `browser.screens: compare` compares each page with a recorded screenshot. | partly built; M254; the Mac engine ran no comparison (open item 145) |
@@ -499,6 +500,9 @@ that a milestone builds moves into the tables of this page with its new status.
   Memos's finding 2 needs a refused write in the middle of a step. Since Milestone 296 a fuzzed
   call gets its faults inside it from a reaction at the call's start.
 - **What it needs.** A timed form of each guest fault that the explorer draws for every manifest.
+  Since Milestone 390 a walk's actions and acknowledged writes are events. So a kill, a pause or
+  a power cut acts inside a step of a walk, and the explorer draws them. Left: a network fault
+  inside a step, and the faults inside a step of a workload that does not walk.
 - **Where it came from.** Open items 131 and 139.
 
 ### A walk that follows the page
@@ -508,6 +512,8 @@ that a milestone builds moves into the tables of this page with its new status.
 - **Why it matters.** A fault changes the page, and so the walk. Then a shrink candidate takes
   other actions, and the walk loses its failure.
 - **What it needs.** A choice of action keyed by the control's role and name, not by its place.
+  Since Milestone 390 a control whose role and name repeat is chosen by its row's text, such as a
+  memo's "More" by the memo's text. Breadth that depends on the page alone is left.
 - **Where it came from.** Open items 129 and 131.
 
 ### A reload check for web pages

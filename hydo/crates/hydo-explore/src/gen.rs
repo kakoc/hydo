@@ -76,6 +76,14 @@ pub const WP_DURS: [i64; 6] = [10, 20, 50, 100, 200, 500];
 pub const WP_MAX: i64 = 1000;
 /// The walks' own stream (`browser.explore`, Milestone 258).
 pub const WALK_SALT: u64 = 0x57A1_4B5E_EDC0_FFEE;
+/// Milestone 390: the stream of the faults inside a step of a walk ([`Ex::add_walk_faults`]).
+pub const WALK_FAULT_SALT: u64 = 0x57A1_4BFA_C0FF_E390;
+/// The share of a walk's schedules that get a fault inside a step, in percent.
+pub const WALK_FAULT_PCT: i64 = 40;
+/// The delays after the walk's record, in ms of guest time: after an action's start, and after a
+/// write that the server answered.
+pub const WALK_ACTION_DELAYS: [i64; 5] = [0, 0, 100, 300, 1000];
+pub const WALK_WRITE_DELAYS: [i64; 4] = [0, 10, 50, 200];
 /// The upgrades' own stream (`--upgrades`, Milestone 238).
 pub const UPGRADE_SALT: u64 = 0x0B6EADEC0FFEE0B6;
 /// The service clocks' own stream (`--service-clocks`, Milestone 375).
@@ -1784,6 +1792,7 @@ impl Ex {
         }
         s = self.add_more_faults(s, seed, strategy);
         s = self.add_reactive(s, seed);
+        s = self.add_walk_faults(s, seed);
         s = self.add_storage_faults(s, seed);
         s = self.add_corrupt_several(s, seed);
         s = self.add_block_faults(s, seed);
@@ -1833,6 +1842,73 @@ impl Ex {
             .and_then(|e| e.get("actions"))
             .and_then(|a| a.as_u64())
             .unwrap_or(10)
+    }
+
+    /// Milestone 390: a fault inside a step of a walk. A walk's step is one workload step, so the
+    /// other faults start only between two parts of the walk, and a write that the server
+    /// refuses in the middle of a step (Memos's finding 2) needed a directed `X=`. For a manifest
+    /// whose workload walks, 40 % of the schedules, from a stream of their own
+    /// ([`WALK_FAULT_SALT`]), get a reaction to the walk's own records: `A=walk.action#<k>@<step>
+    /// [+<ms>]:<action>` at the k-th action of a step (three in four), or `A=walk.write_acked@
+    /// <step>[+<ms>]:<action>` after the first write that the server answered in it. The action is
+    /// a kill or a pause of a service, or a power cut, as `faults:` allows. A schedule that has a
+    /// reaction already, a cut at a flush (`cf=`), or `--no-faults`, keeps what it has. Every draw is made
+    /// whether it is used or not, so every other field of a seed's schedule stays as it was.
+    pub fn add_walk_faults(&self, mut s: S, seed: u64) -> S {
+        if !self.walks() {
+            return s;
+        }
+        let mut t = SplitMix::new(seed ^ WALK_FAULT_SALT);
+        let on = t.below(100) < WALK_FAULT_PCT;
+        let write = t.below(4) == 0;
+        let at = t.below(self.norders.max(1));
+        let nth = 1 + t.below(self.walk_actions().max(1) as i64);
+        let delay = if write {
+            t.pick(&WALK_WRITE_DELAYS)
+        } else {
+            t.pick(&WALK_ACTION_DELAYS)
+        };
+        let kind = t.below(3);
+        let svc = t.next();
+        let stop_ms = t.pick(&REACT_STOP_MS);
+        if !on || self.no_faults || !s.a.is_empty() || s.cf.is_some() || self.pause_svcs.is_empty()
+        {
+            return s;
+        }
+        let allowed = |k: &str| self.space.as_ref().is_none_or(|sp| sp.has_fault(k));
+        let v = self.pause_svcs[(svc % self.pause_svcs.len() as u64) as usize].clone();
+        let cut_ok = allowed("cut") && (s.disk == "none" || s.disk == "cut");
+        // the kinds that the manifest allows, the drawn one first
+        let mut choice = None;
+        for i in 0..3 {
+            choice = match (kind + i) % 3 {
+                0 if allowed("kill") && v != "-" => Some(format!("kill-{v}")),
+                1 if allowed("pause") && v != "-" => Some(format!("stop-{v}-{stop_ms}")),
+                2 if cut_ok => Some("cut".to_string()),
+                _ => None,
+            };
+            if choice.is_some() {
+                break;
+            }
+        }
+        let Some(action) = choice else {
+            return s;
+        };
+        if action == "cut" {
+            s.disk = "cut".into();
+        }
+        s.a.push(Ra {
+            nth: if write { 1 } else { nth },
+            event: if write {
+                "walk.write_acked".into()
+            } else {
+                "walk.action".into()
+            },
+            at,
+            delay,
+            action,
+        });
+        s
     }
 
     /// Milestone 258: for a manifest whose workload walks through its pages, every schedule
