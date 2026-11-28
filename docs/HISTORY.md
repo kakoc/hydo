@@ -27317,3 +27317,46 @@ fingerprint and schedule.
 GIF of 37 s at 1200 by 675 and 10 frames a second (11.5 MB), four stills and their captions,
 made as the Blnk recording's were. The banners come at about 13 s (#1542), 23 s (#1124) and
 28 s (#1386). They are outside the repository, for the user to review.
+
+### Milestone 397, the fourth follow-up: the tree of runs
+
+**What the user asked.** A view of the showcase page, from an approved sketch, where every run
+of the exploration is one hair from the booted system, and a failure's re-runs and shrink
+candidates grow a bush on its branch. Repeated branches more visible than plain hairs, readable
+at 1920 by 1080 and at 1200 by 675, with hovers and a click on a red end. And NSQ recorded again
+with it, from an exploration with shrinks.
+
+**What was built** (the design is the section "The tree of runs" of `docs/design/live-map.md`):
+
+- The server gives the page every other run of the stream (`others`, `others_total`, read from
+  `ofrom=`): re-runs, shrink candidates and minimal schedules, each with its seed, its folder
+  and a note's kind, without their functions. A note that leaves a first run out leaves its
+  family out.
+- The view `Runs` (`#view=runs`). Each first run is a hair from the booted system to its row,
+  over the workload's steps. A run of a seed's family forks off the seed's first run at the
+  least step of a token that one schedule has and the other has not; a re-run of the same
+  schedule is a glowing strand along it. Faults are dots at their steps, a green tick marks a
+  step where a first run reached own functions that no earlier first run had, and a hair ends
+  grey for a pass or coloured and labelled as the banner names the failure. A bush's run that
+  breaks another check than its first run is another failure, with no banner.
+- A bush's row takes 0.4 of a first run's, and its hairs are brighter, thicker and glowing. In
+  this view the banner stands at the stage's right and the tree ends left of it, so a bush grows
+  in sight. A failure's bush grows right after its first run, one run every 0.22 seconds.
+- Hovers name a hair's run with its schedule in words and its replay command, a dot's fault and
+  a tick's functions; a click on a red end shows its banner. `window.showcase.hits()` gives the
+  shapes under the pointer; the checks of the hovers and the click used it.
+
+**The runs.** Seeds 9 to 16 ran again on the map image with shrinks, on the Mac engine with
+`HVM_RAM_SHARE=0` and one worker. The 8 first runs gave the fingerprints of the run without
+shrinks; the exploration added 4 re-runs, 41 shrink candidates of seeds 11 and 14, and their 4
+runs of minimal schedules. Seed 14's lost message, left out of the earlier recordings, is now
+traced: it stays in flight to a consumer that is gone, because nsqd times an in-flight message
+out on the wall clock (the NSQ example's RESULTS.md, "The tree of runs"). So the notes leave out
+seed 15 only. The recording plays 11 first runs (3 without faults, the 7 of seeds 9 to 16
+without seed 15, and finding 2's regression) and the 48 runs of their families.
+
+**The media.** A video of 37 s at 1920 by 1080 (H.264, yuv420p, faststart, 2.5 MB) shows the code
+map for 6 s and the tree of runs for the rest; a looping GIF of 38 s at 1200 by 675 (5.2 MB),
+two stills and their captions go with it. The banners come at about 13 s (#1542), 23 s (#1124)
+and 30 s (#1386), at the stage's right. They are outside the repository, for the user to
+review. No VM ran for the recording: the page played the recorded runs back.

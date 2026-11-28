@@ -326,12 +326,12 @@ names gave the verdict shown:
 | seed 16, `T=8:-300` | `eventually_publish`, every claim of `jobs` held | finding 3, nsqio/nsq#1124 | without `T=`: OK |
 | `A=nsq.msg_received+2200:kill-nsqd` | `jobs.acked-outcome`: m0, which a consumer held, has no final state; m1 to m3 came to the drain | finding 2, nsqio/nsq#1386 | `disk=none \| run`: OK |
 
-Two failures of seeds 9 to 16 are left out of the playback (`hydo/showcase-notes.yaml`),
-because a part of each is not traced:
+Two failures of seeds 9 to 16 were left out of the first recordings (`hydo/showcase-notes.yaml`),
+because a part of each was not traced:
 
 - Seed 14 (`T=17:-300`) breaks `eventually_publish`, and `m5`, published at 6.76 s, was never
-  received. Without `T=` the run passes, so the clock step loses it too. How, for example by an
-  in-flight timeout on the wall clock, was not traced.
+  received. Without `T=` the run passes, so the clock step loses it too. It is traced since, in
+  "The tree of runs" below, and the recording of that view shows it.
 - Seed 15 (`K=nsqd@8+4 T=2:-3600`) loses `m1` after a kill about 17 s in, long after the queues'
   first syncs. Without `K=`, `jobs.no-loss` holds and the clock step breaks
   `eventually_publish`. Why the kill loses `m1` was not traced.
@@ -344,6 +344,30 @@ documented limit, shown" for finding 2:
 ```sh
 hydo report --live hydo-out/p-a hydo-out/p-b hydo-out/p-c --showcase --routes ../work/nsq --notes showcase-notes.yaml
 ```
+
+**The tree of runs.** The recording of the view `Runs` (Milestone 397's fourth follow-up) needs
+the re-runs and the shrinks, so seeds 9 to 16 ran again with shrinks (`hydo-out/s-b`, 451 s).
+The 8 first runs gave the fingerprints of the folder without shrinks. Besides them it ran 4
+re-runs, 18 shrink candidates of seed 11 and 23 of seed 14, and each failure's minimal schedule
+twice: `K=nsqd@10+1` with the composition of one publish for seed 11, and `T=17:-150` with the
+composition of one publish for seed 14. Every failing shrink candidate of seed 11 keeps
+`K=nsqd@10+1` and breaks `jobs.no-loss`. Every failing candidate of seed 14 keeps a backward
+step of the clock; all but one break `eventually_publish`.
+
+Seed 14's lost message is traced since. In the run of its schedule `m5` was published at 6.76 s
+and never received. At its end (`hydo inspect`, `--at end`) nsqd's channel `work` has
+`in_flight_count` 1, `client_count` 0 and `timeout_count` 0, so a message is in flight to a
+consumer that is gone and never timed out. nsqd delivers a message to a consumer that has sent
+`FIN` and still has a ready count, before the consumer's `CLS`. Such a message comes back only
+when its in-flight timeout ends, and the timeout is on the wall clock:
+`StartInFlightTimeout` sets `msg.pri = now.Add(timeout).UnixNano()` (`nsqd/channel.go` line
+451), and `queueScanWorker` compares it with `time.Now().UnixNano()` (`nsqd/nsqd.go` line 644).
+After the step back of 5 minutes the message stays in flight past the drain's quiet window of
+70 s. The shrink candidate `T=17:-150 W=726d723b,p1,q2,r400`, the one that broke `jobs.no-loss`
+(`m8`), ends the same way (`in_flight_count` 1, `timeout_count` 0; fingerprint
+`52f0139612cd3ff6`). It is a clock effect of the same kind as finding 3, and it is not
+reported. So the notes leave out only seed 15 now, and the tree shows that one candidate's end as
+another failure, with no banner.
 
 The page's address took `#title=NSQ&pace=2&hold=3.6&start=1.5`, and the view changed to the call
 graph after the first banner. The video, the GIF, the stills and their captions are outside the
