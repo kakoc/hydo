@@ -26867,14 +26867,14 @@ Immich uploads and a machine-learning service.
 `hydo compose`, with the installation locked and the update checker off. The walk's setup
 registers `hydo`, creates `hydo/demo` with a README, the default labels, a milestone and an issue,
 and starts that issue's timer. `within: /hydo/demo/issues` keeps the walk's links on the
-repository's issues, and `avoid` names 13 patterns, two of them for the editor's toolbar. Five rules
-over a copy of `gitea.db` and the API (`page-rules/gitea.mjs`): every issue, comment, close and
-reopen that Gitea answered is in the database; the counts that Gitea keeps beside its rows match
-the rows; the search finds every issue; the repository's branch reaches every object (`git
+repository's issues, and `avoid` names 13 patterns, two of them for the editor's toolbar. Five
+rules over a copy of `gitea.db` and the API (`page-rules/gitea.mjs`): every issue, comment, close
+and reopen that Gitea answered is in the database; the counts that Gitea keeps beside its rows
+match the rows; the search finds every issue; the repository's branch reaches every object (`git
 fsck`); and no tracked time is below zero, after the rule stops a running timer through the API.
 `guest.clock_after_cut: 60` keeps the clock across a power cut, and `watch.console: false` leaves
-out the `console.error` that Gitea writes beside each error toast. `hydo-kvm.yaml` differs only
-in `guest.proc_io: false`, because the runners' release has no KVM kernels of epoch 7.
+out the `console.error` that Gitea writes beside each error toast. `hydo-kvm.yaml` differs only in
+`guest.proc_io: false`, because the runners' release has no KVM kernels of epoch 7.
 `hydo-gitfsync.yaml` adds `core.fsync=committed` to Gitea's `[git.config]`, the contrast of
 finding 2.
 
@@ -26897,9 +26897,10 @@ the database's row, written before the push, is synced. Gitea sets no `core.fsyn
 state `refs/heads/main` and two loose objects are empty files. Directed: `disk=none | run C=1
 I=1` failed twice with `5a3e89f72094688c`, and with `disk=cut` too (`dc0fa08f19c782ec`); `C=2`
 passes (`f4cd928bbc981238`). With `core.fsync=committed` the same cut passes
-(`e882ddb1c91a65ca` twice, and `1c8785ced5482035` with `disk=cut`). Gitea's #31834, the same symptom after a merge's power outage, was closed as a
-power outage's damage. The repository's pages then say "The Git data underlying this repository
-cannot be read. Contact the administrator of this instance or delete this repository".
+(`e882ddb1c91a65ca` twice, and `1c8785ced5482035` with `disk=cut`). Gitea's #31834, the same
+symptom after a merge's power outage, was closed as a power outage's damage. The repository's
+pages then say "The Git data underlying this repository cannot be read. Contact the
+administrator of this instance or delete this repository".
 
 **The rules' mistakes.** The first failures of e1 and of the first KVM exploration (seeds 16, 37,
 41, 57) were a close followed by a reopen, which the rule did not count: a reopen is comment type
@@ -26923,14 +26924,16 @@ its error; and power cuts inside the walk. `hydo build --check` passed a disk 1 
 GiB.
 
 Retro: Gitea 28.4.0, hvx and KVM, 2026-11-28
-- Time to the first clean run: 45 minutes of wall time, 10 of them for builds; the first image's
+- Time to the first clean run: 45 minutes of wall time, 20 of them for builds; the first image's
   disk was over hvx's limit.
-- Schedules run before the first finding: 120 (e1, k1, and k2 up to seed 72), of which 4 failed
-  by the rules' mistakes.
+- Schedules run before the first finding: 72 (e1's 20, k1's 40, and k2's first 12), of which 4
+  failed by the rules' mistakes.
+- The findings ledger has five new rows: the two findings and three rows of false failures.
 - The findings: 2 new (a clock effect, and a missing sync of Git's writes), 0 known.
 - What took the most time: the builds beside another session's builds (15 to 40 minutes each),
   three restarts of the agent's process on the Mac, and the rule's comment types.
 - What hydo lacked: the five gaps of the walk above (open item 198), and `--check`'s disk limit.
-- Strategies: the page walk found finding 1 blind on KVM in 2 of 60 schedules of the final manifest; power cuts at a
-  step found finding 2 only as directed runs, because the process strategy cut only at the end.
+- Strategies: the page walk found finding 1 blind on KVM in 2 of 60 schedules of the final
+  manifest. Power cuts at a step found finding 2 only as directed runs, because the process
+  strategy cut only at the end.
   "The page walk and its invariants" and "Power cuts of the whole guest" are updated.

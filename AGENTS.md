@@ -4792,8 +4792,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       counts them together.
     - Without `within`, the walk spent its actions on the API's pages, the settings and the code
       view. With it, `avoid` needs 13 patterns, and one action in seven still fills a field
-      without sending it (489 of 3,408 in 60 KVM walks). A code walk with `within: /hydo/demo/` committed no file in 48
-      actions: the web editor's text area is no textbox in the accessibility tree.
+      without sending it (489 of 3,408 in 60 KVM walks). A code walk with `within: /hydo/demo/`
+      committed no file in 48 actions: the web editor's text area is no textbox in the
+      accessibility tree.
     - A failing setup step's error names no step: `locator.click: Timeout 10000ms exceeded`.
     - The process strategy put all 47 of its power cuts after the walk's last step (as open item
       186), so finding 2 came from directed runs only. Without `guest.clock_after_cut` a power cut
