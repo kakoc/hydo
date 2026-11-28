@@ -24,6 +24,7 @@ mod grpc;
 mod h2x;
 mod http1;
 mod objects;
+mod order;
 mod rt;
 mod rules;
 mod serve;
