@@ -325,8 +325,8 @@ dry-runs the packages on every pull request that changes one. The details are in
 **Fingerprints.** The fingerprint epoch is 7 (M376; 6 from M353, 5 from M317, 4 from M269, 3
 from M234, 2 from M204, 1 from M155). An image built at epoch 7 boots the Mac and KVM guest
 kernels with `/proc/<pid>/io` (M376, below). The pass of 0.8.0 re-recorded the list at epoch 7 on
-hvx, the Mac and KVM (docs/REBASELINE.md section 35). The Mac's voting image waits, as open
-item 105 says. On hvx the epoch moved only the images' bytes. The runs that moved there are those of the
+hvx, the Mac and KVM (docs/REBASELINE.md section 35), the Mac's voting image last, on
+2026-11-28. On hvx the epoch moved only the images' bytes. The runs that moved there are those of the
 images that carry hydo's version. An
 image built at epoch 6 carries the first boot's outcomes into a
 recovery boot and gives the controller's commands a `PATH` (M353, below). The 0.6.0 pass
@@ -3056,11 +3056,7 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
     milestone and the values it moves; the pass removes the lines. The lines since the 0.8.0
-    re-recording pass (docs/REBASELINE.md section 35):
-    - `hvm/voting` (4 runs) keeps its epoch-6 values. The pass re-recorded the other 20 Mac
-      images at epoch 7. This image's build and runs need about 4 GB more than this Mac had free
-      over its 13 GB floor, and the watchdog stopped both tries. Its one build at epoch 7 gave
-      `68e52fe560be68d6`.
+    re-recording pass (docs/REBASELINE.md section 35): none.
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.

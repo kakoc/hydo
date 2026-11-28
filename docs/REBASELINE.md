@@ -4190,9 +4190,19 @@ differ in their numbers and keep their class and property:
 - `hvm/redis-composed-racy`: the balances sum to 497 instead of 509;
 - `hvm/python-kv-hist` `C=12 S=never`: the times of the history's operations.
 
-`hvm/voting` keeps its epoch-6 values (AGENTS.md open item 105). Its one build at epoch 7
-(`68e52fe560be68d6`) and its runs need about 4 GB more than this Mac had free above its 13 GB
-floor while other work filled the disk and the swap, and the pass's watchdog stopped it twice.
+`hvm/voting` did not run in this pass: its build and runs need about 4 GB more than this Mac had
+free above its 13 GB floor while other work filled the disk and the swap, and the pass's watchdog
+stopped it twice. It ran on 2026-11-28 with the same candidate and the same `--write --thorough`,
+once the Mac had 37 GB free (532 s). It built twice with the same bytes (`68e52fe560be68d6…`),
+and its 4 runs gave the same values twice from fresh boots; every run moved and no verdict
+changed. The `C=12` verdict waited 60.65 s instead of 60.66 s and keeps its class:
+
+| schedule | verdict | fp | ctl |
+|---|---|---|---|
+| `disk=none \| run` | OK, all 20 acknowledged votes counted | `5c8cb2c9421677b2` | `a11dfcb1ac61da23` |
+| `disk=none \| run K=worker@5+5` | OK, all 20 counted | `c9c0b6aeb17dba2a` | `3006795fe630437f` |
+| `disk=cut \| run C=12` | VIOLATION `[votes.counted_soon]`, 0 of 12 counted | `646aa17de7c29fbd` | `838b3da71a27bc54` |
+| `disk=none \| run N=vote-redis@5-12:loss,100%` | OK, all 13 counted | `39e3ed65ae99d608` | `5dd3762589d4ba87` |
 
 These are the Mac kernels' first runs. An image built by hydo 0.7.0 (the release Redis example,
 `502d7540…`, epoch 6) gave all 7 recorded values of `hvm/release-redis` under the candidate. The
@@ -4203,7 +4213,8 @@ containers`; with `guest.proc_io: false`, and built by hydo 0.7.0, it ended `VIO
 `690ba17b113132a5` without faults, `620ef75eee122006` at `C=12 R=everysec` (`k:0` lost) and
 `7ba8e0d68df64e1d` at `C=12`.
 
-With the three engines done the list's `epoch` is 7. AGENTS.md open item 105 holds one line, `hvm/voting`.
+With the three engines done the list's `epoch` is 7, and every value of the list is an epoch-7
+value. AGENTS.md open item 105 is empty.
 
 **The pinned reproducers.** Their epoch-7 images are the list's `stack-old` (`7dd445a8…`) and
 `stack-fix` (`d00c6481…`), copied to `~/hydo/build/rel080`. On hvx they give the epoch-6 values

@@ -617,38 +617,38 @@
     {
       "id": "hvm/voting",
       "platform": "hvm",
-      "recorded": "hydo-bench rebaseline --write, 2026-11-25",
+      "recorded": "hydo-bench rebaseline --write, 2026-11-28",
       "build": {
         "stage": "mac-voting",
         "dir": "hydo/onboard/examples/compose-voting",
         "manifest": "hydo-mac.yaml",
         "args": []
       },
-      "sha256": "1ccebf85a13d94a4c26d750c088e6b1e04152bccad9b168321c86feb5017db89",
+      "sha256": "68e52fe560be68d658b1bc292ea73cbf4158272926bf083a842ea8717c57378e",
       "runs": [
         {
           "schedule": "disk=none | run",
           "verdict": "OK invariants=1 held (votes.counted: all 20 acknowledged votes counted)",
-          "fp": "42eb699baeebe702",
-          "ctl": "2ef990200e95fe1e"
+          "fp": "5c8cb2c9421677b2",
+          "ctl": "a11dfcb1ac61da23"
         },
         {
           "schedule": "disk=none | run K=worker@5+5",
           "verdict": "OK invariants=1 held (votes.counted: all 20 acknowledged votes counted)",
-          "fp": "0ed1a94cf5ef414e",
-          "ctl": "36cf2dd10731bc26"
+          "fp": "c9c0b6aeb17dba2a",
+          "ctl": "3006795fe630437f"
         },
         {
           "schedule": "disk=cut | run C=12",
-          "verdict": "VIOLATION [votes.counted_soon] not satisfied 60.66s after heal, deadline 60s (last check rc=1: too few votes counted: 0 of 12 acknowledged votes are in PostgreSQL; voter0 (vote a) is not)",
-          "fp": "f9b190790c006a75",
-          "ctl": "b82e0858721ccc14"
+          "verdict": "VIOLATION [votes.counted_soon] not satisfied 60.65s after heal, deadline 60s (last check rc=1: too few votes counted: 0 of 12 acknowledged votes are in PostgreSQL; voter0 (vote a) is not)",
+          "fp": "646aa17de7c29fbd",
+          "ctl": "838b3da71a27bc54"
         },
         {
           "schedule": "disk=none | run N=vote-redis@5-12:loss,100%",
           "verdict": "OK invariants=1 held (votes.counted: all 13 acknowledged votes counted)",
-          "fp": "e36caa65a93e961f",
-          "ctl": "33fff5b34d9934d7"
+          "fp": "39e3ed65ae99d608",
+          "ctl": "5dd3762589d4ba87"
         }
       ]
     },
