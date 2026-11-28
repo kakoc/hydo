@@ -3448,6 +3448,66 @@ fn handler_name(expr: &str) -> String {
     }
 }
 
+/// Milestone 397's third follow-up: the handler of a Go registration that wraps a method value
+/// in a call, NSQ's `http_api.Decorate(s.doPUB, log, http_api.V1)`: the call's first argument,
+/// when it is a method of a value (`s.doPUB`) and not a name of an imported package
+/// (`http_api.V1`). None for any other expression, which [`handler_name`] reads.
+fn go_wrapped_method(expr: &str, f: &Src) -> Option<String> {
+    if !f.rel.ends_with(".go") {
+        return None;
+    }
+    let e = expr.trim();
+    let open = e.find('(')?;
+    let callee = &e[..open];
+    if callee.is_empty() || !callee.bytes().all(|c| is_ident_char(c) || c == b'.') {
+        return None;
+    }
+    let first = e[open + 1..].split([',', ')']).next()?.trim();
+    let (recv, method) = first.split_once('.')?;
+    let ident = |w: &str| !w.is_empty() && w.bytes().all(is_ident_char);
+    if !ident(recv) || !ident(method) || go_imports(&f.code).iter().any(|p| p == recv) {
+        return None;
+    }
+    Some(method.to_string())
+}
+
+/// The names that a Go file's imports give their packages: an alias, or the path's last part.
+fn go_imports(code: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut block = false;
+    for l in code {
+        let t = l.trim();
+        let spec = if block {
+            if t.starts_with(')') {
+                block = false;
+                continue;
+            }
+            t
+        } else if let Some(r) = t.strip_prefix("import") {
+            let r = r.trim();
+            if r.starts_with('(') {
+                block = true;
+                continue;
+            }
+            r
+        } else {
+            continue;
+        };
+        let Some(q) = spec.find('"') else {
+            continue;
+        };
+        let path = spec[q + 1..].split('"').next().unwrap_or("");
+        let alias = spec[..q].trim();
+        let name = if alias.is_empty() {
+            path.rsplit('/').next().unwrap_or(path).to_string()
+        } else {
+            alias.to_string()
+        };
+        out.push(name);
+    }
+    out
+}
+
 // ---------------------------------------------------------------- command tables (Milestone 355)
 
 /// A file is a command table when it holds at least this many entries.
@@ -4103,6 +4163,8 @@ pub fn scan_writes(root: &Path) -> Writes {
         let path = join_path(&resolve(&c.owner, &c.owner_fn), &c.path);
         let handler = if c.handler_line.is_some() {
             c.handler.clone()
+        } else if let Some(m) = go_wrapped_method(&c.handler, f) {
+            m
         } else {
             handler_name(&c.handler)
         };
@@ -4984,6 +5046,35 @@ pub async fn search_with_post() {}
             .iter()
             .any(|r| r.path == "/indexes/{index_uid}/search"));
         assert!(!found(&w).iter().any(|x| x.contains("search")));
+    }
+
+    #[test]
+    fn a_go_method_value_wrapped_in_a_call_is_the_handler() {
+        // NSQ's nsqd/http.go (Milestone 397's third follow-up): the method value, not the
+        // imported package's name after it
+        let w = scan_texts(&[(
+            "nsqd/http.go",
+            r#"package nsqd
+import (
+	"github.com/julienschmidt/httprouter"
+	"github.com/nsqio/nsq/internal/http_api"
+)
+func newHTTPServer(nsqd *NSQD) *httpServer {
+	router := httprouter.New()
+	s := &httpServer{nsqd: nsqd, router: router}
+	router.Handle("POST", "/pub", http_api.Decorate(s.doPUB, http_api.V1))
+	router.Handle("POST", "/topic/create", http_api.Decorate(s.doCreateTopic, log, http_api.V1))
+	router.Handle("POST", "/channel/empty", http_api.Decorate(http_api.V1, s.doEmptyChannel))
+	return s
+}
+func (s *httpServer) doPUB(req *http.Request, ps httprouter.Params) (interface{}, error) {}
+func (s *httpServer) doCreateTopic(req *http.Request, ps httprouter.Params) (interface{}, error) {}
+"#,
+        )]);
+        has_route(&w, "POST /pub -> doPUB");
+        has_route(&w, "POST /topic/create -> doCreateTopic");
+        // a package's name first: the expression's last name, as before
+        has_route(&w, "POST /channel/empty -> doEmptyChannel");
     }
 
     #[test]

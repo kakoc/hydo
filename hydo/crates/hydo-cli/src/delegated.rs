@@ -699,12 +699,15 @@ fn report_paths(argv: &[String]) -> i32 {
     0
 }
 
-/// `hydo report --live [DIR] [--port N] [--against DIR2]` (Milestone 394,
-/// docs/design/live-map.md): the live map of a finished exploration, or of one run, served on
-/// 127.0.0.1 until the process is stopped. What DIR2's runs reached (an exploration made with
-/// `--no-faults`) counts as reached without a fault.
+/// `hydo report --live [DIR...] [--port N] [--against DIR2] [--showcase [--routes DIR]
+/// [--notes FILE]]` (Milestone 394, docs/design/live-map.md): the live map of a finished
+/// exploration, or of one run, served on 127.0.0.1 until the process is stopped. What DIR2's
+/// runs reached (an exploration made with `--no-faults`) counts as reached without a fault.
+/// Several DIRs of one image play one after another (Milestone 397's third follow-up), and the
+/// notes name the known and documented failures and the runs left out.
 fn report_live(argv: &[String]) -> i32 {
     let mut d = None;
+    let mut more: Vec<std::path::PathBuf> = Vec::new();
     let mut against = None;
     let mut port = hydo_explore::live::PORT;
     let mut opts = hydo_explore::live::Opts::default();
@@ -718,6 +721,12 @@ fn report_live(argv: &[String]) -> i32 {
                 .next()
                 .unwrap_or_else(|| die("hydo report --live: --routes takes the sources' folder"));
             opts.entries = Some(live_routes(dir));
+        } else if a == "--notes" {
+            let f = it
+                .next()
+                .unwrap_or_else(|| die("hydo report --live: --notes takes the notes file"));
+            opts.notes = hydo_explore::live::read_notes(Path::new(f))
+                .unwrap_or_else(|e| die(&format!("hydo report --live: --notes {e}")));
         } else if a == "--against" {
             against = it.next().cloned();
         } else if a == "--port" {
@@ -726,15 +735,20 @@ fn report_live(argv: &[String]) -> i32 {
             });
         } else if d.is_none() {
             d = Some(a.clone());
+        } else {
+            more.push(std::path::PathBuf::from(a));
         }
     }
     let d = std::path::PathBuf::from(d.unwrap_or_else(|| pjoin(OUT, "explore")));
-    if !d.is_dir() {
-        die(&format!(
-            "hydo report --live: {} is not a directory",
-            d.display()
-        ));
+    for x in std::iter::once(&d).chain(&more) {
+        if !x.is_dir() {
+            die(&format!(
+                "hydo report --live: {} is not a directory",
+                x.display()
+            ));
+        }
     }
+    opts.more = more;
     // a run directory has no map of its own, and an exploration whose map is gone: it is made
     // from the plan next to its image (for an exploration, the image of its stream's start
     // record, Milestone 397's follow-up)

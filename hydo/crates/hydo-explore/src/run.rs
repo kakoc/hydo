@@ -1551,6 +1551,7 @@ fn run(mut cx: Cx) -> i32 {
         let opts = crate::live::Opts {
             showcase: cx.a.showcase,
             entries,
+            ..Default::default()
         };
         let port = cx.a.port.unwrap_or(crate::live::PORT);
         match crate::live::start_with(&cx.out, port, against, opts) {

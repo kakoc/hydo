@@ -69,6 +69,16 @@ h1 em{font-style:normal;background:linear-gradient(90deg,#fff 0%,#c8ffe9 55%,#ff
 .banner .k{font-size:calc(var(--s) * 14);font-weight:650;letter-spacing:.12em;text-transform:uppercase;color:var(--bug);display:flex;align-items:center;gap:calc(var(--s) * 10)}
 .banner .k::before{content:"";width:calc(var(--s) * 10);height:calc(var(--s) * 10);border-radius:50%;background:var(--bug);box-shadow:0 0 0 calc(var(--s) * 5) rgba(255,84,104,.2)}
 .banner .t{font-size:calc(var(--s) * 29);font-weight:640;letter-spacing:-.01em;line-height:1.25;margin-top:calc(var(--s) * 10)}
+.banner .i{font-size:calc(var(--s) * 17);font-weight:600;color:#ffd0d6;margin-top:calc(var(--s) * 8)}
+.banner .i:empty{display:none}
+.banner .i b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-weight:600;color:#fff;text-decoration:underline;
+  text-decoration-color:rgba(255,255,255,.35);text-underline-offset:calc(var(--s) * 4)}
+.banner.known .k{color:var(--faults)}
+.banner.known .k::before{background:var(--faults);box-shadow:0 0 0 calc(var(--s) * 5) rgba(251,146,60,.2)}
+.banner.known .i{color:#ffe0c2}
+.banner.doc .k{color:var(--net)}
+.banner.doc .k::before{background:var(--net);box-shadow:0 0 0 calc(var(--s) * 5) rgba(56,189,248,.2)}
+.banner.doc .i{color:#cdeefd}
 .banner .w{color:#c3c9d5;font-size:calc(var(--s) * 19);line-height:1.4;margin-top:calc(var(--s) * 8)}
 .banner .c{margin-top:calc(var(--s) * 14);display:flex;gap:calc(var(--s) * 14);align-items:baseline}
 .banner .c span{color:var(--muted);font-size:calc(var(--s) * 15);white-space:nowrap}
@@ -119,6 +129,7 @@ footer .lab b{display:block;color:var(--fg);font-size:calc(var(--s) * 22);letter
     <div class="banner" id="banner">
       <div class="k" id="bK">Bug found</div>
       <div class="t" id="bT"></div>
+      <div class="i" id="bI"></div>
       <div class="w" id="bW"></div>
       <div class="c"><span>Replay it, bit for bit</span><code class="mono" id="bC"></code></div>
     </div>
@@ -153,7 +164,8 @@ const st = new Map();          // id -> {any, clean, first, callers:Set}
 const flash = new Map();       // id -> [time, colour]: its first reach
 const pass = new Map();        // id -> time: a later run that reached it again
 const epRan = new Set();
-const broken = new Set();      // checks that broke
+const broken = new Set();      // checks that broke (with the issue a note names)
+const bugs = new Set();        // the ones that are bugs: no documented limit or trade-off
 let faults = 0, view = ["flow", "graph"].includes(H.get("view")) ? H.get("view") : "map";
 let S = 1, DPR = 1;            // the page's scale (1 at 1920x1080) and the device pixels
 
@@ -963,7 +975,7 @@ function startRun(now) {
   if (bannerAt && now > bannerAt + HOLD * 1.8) { $("banner").classList.remove("on"); bannerAt = 0; }
   $("wait").style.display = "none";
   const fs = cur.faults;
-  $("now").innerHTML = `<b>Run ${esc(r.seed ?? k + 1)}</b> · ` + (fs.length ? md(fs.map((x) => x.sentence).slice(0, 2).join(" ")) : "a normal run: no fault, to see what the system does by itself");
+  $("now").innerHTML = `<b>Run ${esc(runNo(r, k))}</b> · ` + (fs.length ? md(fs.map((x) => x.sentence).slice(0, 2).join(" ")) : "a normal run: no fault, to see what the system does by itself");
   for (const p of r.paths || []) epRan.add(p);
 }
 function advance(now) {
@@ -977,12 +989,17 @@ function advance(now) {
     faults++;
   }
   if (p >= 1) {
-    const r = cur.r;
+    const r = cur.r, k = cur.k;
     shown++;
     cur = null;
     if (r.verdict === "violation") {
-      const key = (r.what && (r.what.check || r.what.words)) || r.text || "violation";
-      if (!broken.has(key)) { broken.add(key); banner(r); holdUntil = now + HOLD; }
+      // one banner per check and issue; a documented limit or a setting's trade-off is no bug
+      const key = ((r.what && (r.what.check || r.what.words)) || r.text || "violation") + "|" + ((r.note && r.note.issue) || "");
+      if (!broken.has(key)) {
+        broken.add(key);
+        if (!["documented", "setting", "expected"].includes(kindOf(r))) bugs.add(key);
+        banner(r, k); holdUntil = now + HOLD;
+      }
     }
     counters();
   }
@@ -994,24 +1011,58 @@ function counters() {
   const reached = OWN.filter((f) => st.has(f.id)).length;
   $("kCode").innerHTML = `${OWN.length ? Math.round(100 * reached / OWN.length) : 0}<small> %</small>`;
   $("kCodeL").textContent = `of ${OWN.length.toLocaleString("en")} functions reached`;
-  $("kBugs").textContent = broken.size;
+  $("kBugs").textContent = bugs.size;
   $("tlN").textContent = `${shown} of ${RUNS.length}`;
 }
 function command(r) {
-  const img = String(INFO.image || "<image>").split("/").pop();
+  const img = String(r.image || INFO.image || "<image>").split("/").pop();
   const be = INFO.backend === "kvm" ? "--backend kvm " : "";
   return `hydo run ${be}--image ${img} "${r.schedule}"`;
 }
-function banner(r) {
-  const w = r.what || {};
+// What a failure is: a bug (`bug`, or a note's `new`, `reported` or `known`), a limit that the
+// project documents (a note's `documented`), or what the explorer's advice expects: a setting
+// that trades safety for speed (`setting`) or a fault that no system survives (`expected`).
+// A run's number on the page: its seed, or its place in the playback when the recording has
+// several explorations, leaves runs out, or the run has no seed (`hydo explore --schedule`).
+function runNo(r, k) {
+  return (INFO.parts || 1) > 1 || INFO.left_out || r.seed == null ? k + 1 : r.seed;
+}
+function kindOf(r) {
+  const k = r.note && r.note.kind;
+  if (k) return k;
+  if (r.attention === "setting" || r.attention === "expected") return r.attention;
+  return "bug";
+}
+function banner(r, k) {
+  const w = r.what || {}, kind = kindOf(r), note = r.note || {};
   let promise = w.promise ? w.promise.split(":")[0].trim() : null;
-  const head = promise ? `${NAME} broke a promise: “${promise}”` : w.check ? `${NAME} broke a promise: the check “${w.check.replace(/_/g, " ")}” failed` : (w.words || r.text || "A run failed.");
+  const said = note.words || (promise ? `“${promise}”` : w.check ? `the check “${w.check.replace(/_/g, " ")}” failed` : null);
+  let head, kicker;
+  if (kind === "documented") {
+    kicker = `A documented limit, in run ${runNo(r, k)}`;
+    head = said ? `A documented limit, shown: ${said}` : "A documented limit, shown.";
+  } else if (kind === "setting" || kind === "expected") {
+    kicker = kind === "setting" ? `Expected with this setting, in run ${runNo(r, k)}` : `Expected, in run ${runNo(r, k)}`;
+    head = said ? `A documented trade-off, shown: ${said}` : "A documented trade-off, shown.";
+  } else if (kind === "known") {
+    kicker = `Known bug, found again in run ${runNo(r, k)}`;
+    head = said ? `A known bug of ${NAME}, found again: ${said}` : `A known bug of ${NAME}, found again.`;
+  } else {
+    kicker = `Bug found in run ${runNo(r, k)}`;
+    head = note.words ? `${NAME} broke a promise: ${note.words}` : promise ? `${NAME} broke a promise: “${promise}”` : w.check ? `${NAME} broke a promise: the check “${w.check.replace(/_/g, " ")}” failed` : (w.words || r.text || "A run failed.");
+  }
+  const issue = note.issue ? esc(note.issue) : "";
+  const iw = !issue ? "" : kind === "documented" ? `Documented upstream: <b>${issue}</b>` : kind === "known" ? `Known upstream: <b>${issue}</b>` : kind === "reported" ? `Reported upstream by hydo: <b>${issue}</b>` : `Upstream: <b>${issue}</b>`;
   const fs = runFaults(r);
-  $("bK").textContent = `Bug found in run ${r.seed ?? ""}`;
+  const b = $("banner");
+  b.classList.toggle("known", kind === "known");
+  b.classList.toggle("doc", ["documented", "setting", "expected"].includes(kind));
+  $("bK").textContent = kicker;
   $("bT").textContent = head;
+  $("bI").innerHTML = iw;
   $("bW").innerHTML = fs.length ? `What hydo did: ${md(fs.slice(0, 3).map((x) => x.sentence).join(" "))}${fs.length > 3 ? ` And ${fs.length - 3} more fault${fs.length > 4 ? "s" : ""}.` : ""}` : "No fault at all: the workload alone breaks it.";
   $("bC").textContent = command(r);
-  $("banner").classList.add("on");
+  b.classList.add("on");
   bannerAt = performance.now();
 }
 
@@ -1027,7 +1078,7 @@ async function poll() {
     if (j.runs.length) graphDirty = true;
     if (!started && RUNS.length) { started = true; $("wait").style.display = "none"; holdUntil = performance.now() + (+(H.get("start") || 0)) * 1000; }
     from = j.total;
-    $("mode").textContent = j.done ? "Recorded exploration, played back" : "Live";
+    $("mode").textContent = !j.done ? "Live" : (j.parts || 1) > 1 ? "Recorded explorations, played back" : "Recorded exploration, played back";
     $("mode").classList.toggle("live", !j.done);
     counters();
     if (!j.done) setTimeout(poll, 1500);
