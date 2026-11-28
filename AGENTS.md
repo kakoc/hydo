@@ -4593,9 +4593,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Findings 1 and 2 are reported as microsoft/garnet#2441 and #2440 (2026-11-27). Findings A,
       B and C are not reported. None of the three was reproduced without hydo; the causes are
       read from the code, the logs, the thread counts and, for C, the bytes of both AOF files.
-    - Finding A's last step, the thread pool that every blocked gossip reply drains, rests on the
-      thread counts, the code and Milestone 383's stacks, which show the waiting workers but not
-      the method where they wait (open item 194). Which recovery held the lock that
+    - Finding A's last step is the thread pool that every blocked gossip reply drains. It rests
+      on the thread counts, the code and Milestone 383's stacks. The stacks show the waiting
+      workers but not the method where they wait (open item 194). Which recovery held the lock that
       `EnsureReplication` found taken at 12:03:17 was not traced.
     - Finding C needs the failover's re-attach at a tail inside a sector and a power cut. Why the
       kill of the replica before the failover is needed was not separated.
