@@ -66,9 +66,28 @@ h1 em{font-style:normal;background:linear-gradient(90deg,#fff 0%,#c8ffe9 55%,#ff
   box-shadow:0 calc(var(--s) * 20) calc(var(--s) * 70) rgba(0,0,0,.55),0 0 calc(var(--s) * 60) rgba(255,84,104,.12);
   padding:calc(var(--s) * 22) calc(var(--s) * 28)}
 .banner.on{opacity:1;transform:translate(-50%,0)}
+/* the tree of runs keeps the banner at its right, so the bushes stay in sight */
+.banner.side{left:auto;right:calc(var(--s) * 22);bottom:calc(var(--s) * 70);width:calc(var(--s) * 560);transform:translate(0,calc(var(--s) * 30))}
+.banner.side.on{transform:translate(0,0)}
+.banner.side .t{font-size:calc(var(--s) * 25)}
+.banner.side .w{font-size:calc(var(--s) * 17)}
+.banner.side .c{flex-direction:column;gap:calc(var(--s) * 6)}
+.banner.side .c code{width:100%}
 .banner .k{font-size:calc(var(--s) * 14);font-weight:650;letter-spacing:.12em;text-transform:uppercase;color:var(--bug);display:flex;align-items:center;gap:calc(var(--s) * 10)}
 .banner .k::before{content:"";width:calc(var(--s) * 10);height:calc(var(--s) * 10);border-radius:50%;background:var(--bug);box-shadow:0 0 0 calc(var(--s) * 5) rgba(255,84,104,.2)}
 .banner .t{font-size:calc(var(--s) * 29);font-weight:640;letter-spacing:-.01em;line-height:1.25;margin-top:calc(var(--s) * 10)}
+.banner .i{font-size:calc(var(--s) * 17);font-weight:600;color:#ffd0d6;margin-top:calc(var(--s) * 8)}
+.banner .i:empty{display:none}
+.banner .i b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-weight:600;color:#fff;text-decoration:underline;
+  text-decoration-color:rgba(255,255,255,.35);text-underline-offset:calc(var(--s) * 4)}
+.banner.known{border-color:rgba(251,146,60,.4);box-shadow:0 calc(var(--s) * 20) calc(var(--s) * 70) rgba(0,0,0,.55),0 0 calc(var(--s) * 60) rgba(251,146,60,.12)}
+.banner.doc{border-color:rgba(56,189,248,.4);box-shadow:0 calc(var(--s) * 20) calc(var(--s) * 70) rgba(0,0,0,.55),0 0 calc(var(--s) * 60) rgba(56,189,248,.12)}
+.banner.known .k{color:var(--faults)}
+.banner.known .k::before{background:var(--faults);box-shadow:0 0 0 calc(var(--s) * 5) rgba(251,146,60,.2)}
+.banner.known .i{color:#ffe0c2}
+.banner.doc .k{color:var(--net)}
+.banner.doc .k::before{background:var(--net);box-shadow:0 0 0 calc(var(--s) * 5) rgba(56,189,248,.2)}
+.banner.doc .i{color:#cdeefd}
 .banner .w{color:#c3c9d5;font-size:calc(var(--s) * 19);line-height:1.4;margin-top:calc(var(--s) * 8)}
 .banner .c{margin-top:calc(var(--s) * 14);display:flex;gap:calc(var(--s) * 14);align-items:baseline}
 .banner .c span{color:var(--muted);font-size:calc(var(--s) * 15);white-space:nowrap}
@@ -108,17 +127,28 @@ footer .lab b{display:block;color:var(--fg);font-size:calc(var(--s) * 22);letter
   <div class="stage" id="stage">
     <canvas id="cv"></canvas>
     <div class="tag"><b id="tagT">Every function of the code</b><span id="tagS">A tile lights up the first time a run reaches it</span></div>
-    <div class="legend">
+    <div class="legend" id="legRuns" style="display:none">
+      <span><i style="background:#f87171;border-radius:50%"></i>crash</span>
+      <span><i style="background:#facc15;border-radius:50%"></i>power cut</span>
+      <span><i style="background:#a78bfa;border-radius:50%"></i>clock jump</span>
+      <span><i style="background:#38bdf8;border-radius:50%"></i>network fault</span>
+      <span><i style="background:#a3b1c6;border-radius:50%"></i>pause</span>
+      <span><i style="background:#34d399;width:calc(var(--s) * 3);height:calc(var(--s) * 15)"></i>new code reached</span>
+      <span><i style="background:#ff5468;border-radius:50%"></i>promise broken</span>
+      <span><i style="background:#5b6478;border-radius:50%"></i>run passed</span>
+    </div>
+    <div class="legend" id="legMap">
       <span><i style="background:var(--clean)"></i>reached in a normal run</span>
       <span><i style="background:var(--faults)"></i>reached only when something broke</span>
       <span><i class="ring"></i>error-handling code</span>
       <span><i style="background:#2a3040"></i>not reached yet</span>
     </div>
-    <div class="views"><button data-v="map" class="on">Code map</button><button data-v="flow">Call flow</button></div>
+    <div class="views"><button data-v="map" class="on">Code map</button><button data-v="graph">Call graph</button><button data-v="flow">First calls</button><button data-v="runs">Runs</button></div>
     <div id="wait">Waiting for the first run…</div>
     <div class="banner" id="banner">
       <div class="k" id="bK">Bug found</div>
       <div class="t" id="bT"></div>
+      <div class="i" id="bI"></div>
       <div class="w" id="bW"></div>
       <div class="c"><span>Replay it, bit for bit</span><code class="mono" id="bC"></code></div>
     </div>
@@ -153,8 +183,9 @@ const st = new Map();          // id -> {any, clean, first, callers:Set}
 const flash = new Map();       // id -> [time, colour]: its first reach
 const pass = new Map();        // id -> time: a later run that reached it again
 const epRan = new Set();
-const broken = new Set();      // checks that broke
-let faults = 0, view = H.get("view") === "flow" ? "flow" : "map";
+const broken = new Set();      // checks that broke (with the issue a note names)
+const bugs = new Set();        // the ones that are bugs: no documented limit or trade-off
+let faults = 0, view = ["flow", "graph", "runs"].includes(H.get("view")) ? H.get("view") : "map";
 let S = 1, DPR = 1;            // the page's scale (1 at 1920x1080) and the device pixels
 
 function scale() {
@@ -226,8 +257,14 @@ function reveal(t, now) {
   if (before) s.clean = true;
   if (caller !== undefined && caller >= 0) { s.callers.add(caller); if (s.first === undefined) s.first = caller; }
   else if (s.first === undefined && caller !== undefined) s.first = -1;
-  if (fresh || (s.clean && !wasClean)) { flash.set(id, [now, s.clean ? COL.clean : COL.faults]); treeDirty = true; }
-  else pass.set(id, now);
+  if (fresh || (s.clean && !wasClean)) {
+    flash.set(id, [now, s.clean ? COL.clean : COL.faults]); treeDirty = true;
+    if (fresh && FN.get(id)?.own) bolt(id, now, s.clean ? COL.clean : COL.faults);
+  } else {
+    pass.set(id, now);
+    // a later run on a path reached before: a fainter flash of the same path
+    if (FN.get(id)?.own && bolts.length < 24) bolt(id, now, "rgba(205,225,255,.5)");
+  }
 }
 
 function status(id) { const s = st.get(id); return !s ? 0 : s.clean ? 2 : 1; }
@@ -500,7 +537,590 @@ function drawFlow(g, now, dt) {
   return anim;
 }
 
+// ---------------------------------------------------------------- the call graph
+// Milestone 397's follow-up: every function of the project's own code as a partition from left
+// to right, from the entry points. The edges are the program's direct calls (the plan's
+// `calls`, from its machine code) and the first callers that the runs recorded. A breadth-first
+// search over the direct calls from every root at once places each function once, at its
+// shortest path. A function that a run reached and no direct call from a root reaches is then
+// placed under the nearest function of the project that called it first in a run, and the
+// direct calls go on from there. What is left, no run reached and no direct call reaches: the
+// last group. A call through an interface, a closure or a function value is no direct edge.
+//
+// Each box's height is its subtree's share of its parent's box, by code size, so every column
+// fills its parent's height. When a run first reaches a function, a bolt runs along the boxes of
+// its path from the root and the function stays lit.
+let G = null, graphDirty = true;
+const firstAll = new Map();    // id -> the first caller that any received run named
+const bolts = [];              // [time, id, chain, colour]
+function noteCallers(r) {
+  for (const t of r.functions) if (t[3] !== undefined && !firstAll.has(t[0])) firstAll.set(t[0], t[3]);
+}
+// The nearest function of the project above a function in the runs' first callers: {own} or
+// {lib: module} for a library's or the runtime's code with no function of the project above it.
+function ownCaller(id) {
+  let c = firstAll.get(id), seen = new Set([id]), lib = null;
+  while (c !== undefined && c >= 0 && !seen.has(c)) {
+    seen.add(c);
+    const g = FN.get(c);
+    if (!g) break;
+    if (g.own) return {own: c};
+    if (lib === null && !OWNMODS.has(g.module) && !/-fm$/.test(g.name)) lib = g.module;
+    c = firstAll.get(c);
+  }
+  return {lib};
+}
+// A function's name in a box: the part after its package and its receiver
+// (`QueueTransaction`, `processTransaction.func1`).
+function boxName(f) {
+  const s = f.short || f.name, p = s.split(")").pop().replace(/^\./, "");
+  const parts = p.split(".");
+  if (parts.length > 1 && /^(func|gowrap)\d+$/.test(parts[parts.length - 1])) return parts.slice(-2).join(".");
+  return parts[parts.length - 1] || s;
+}
+function buildGraph() {
+  graphDirty = false;
+  const ids = new Set(OWN.map((f) => f.id));
+  const calls = new Map(OWN.map((f) => [f.id, (f.calls || []).filter((c) => ids.has(c))]));
+  const callers = new Map();
+  for (const [a, cs] of calls) for (const c of cs) { if (!callers.has(c)) callers.set(c, []); callers.get(c).push(a); }
+  const groups = [];
+  const routes = [];
+  for (const f of OWN) if (routeOf.has(f.id)) routes.push({label: routeOf.get(f.id), route: true, roots: [f.id]});
+  routes.sort((a, b) => a.label.localeCompare(b.label));
+  groups.push(...routes);
+  const mainF = OWN.find((f) => /(^|\.)main\.main$/.test(f.name) && !routeOf.has(f.id));
+  if (mainF) groups.push({label: "main", roots: [mainF.id]});
+  const isRoot = new Set(groups.flatMap((g) => g.roots));
+  // background work: no direct caller in the project, and the runtime started it in a run
+  const bg = OWN.filter((f) => !isRoot.has(f.id) && !(callers.get(f.id) || []).length && ownCaller(f.id).lib === "runtime");
+  if (bg.length) groups.push({label: "background work", roots: bg.map((f) => f.id)});
+  const depth = new Map(), parent = new Map(), by = new Map();
+  const bfs = (q) => {
+    for (let i = 0; i < q.length; i++) {
+      const a = q[i];
+      for (const c of calls.get(a) || []) if (!depth.has(c)) { depth.set(c, depth.get(a) + 1); parent.set(c, a); by.set(c, "call"); q.push(c); }
+    }
+  };
+  const root = (id) => { depth.set(id, 1); parent.set(id, null); by.set(id, "root"); };
+  const q = [];
+  for (const g of groups) for (const id of g.roots) if (!depth.has(id)) { root(id); q.push(id); }
+  bfs(q);
+  const staticOnly = OWN.filter((f) => !depth.has(f.id)).length;
+  // the runs' first callers: a reached function under the function of the project that called it
+  let moved = 0, more = true;
+  while (more) {
+    more = false;
+    const q2 = [];
+    for (const f of OWN) {
+      if (depth.has(f.id) || !firstAll.has(f.id)) continue;
+      const c = ownCaller(f.id);
+      if (c.own !== undefined && depth.has(c.own)) {
+        depth.set(f.id, depth.get(c.own) + 1); parent.set(f.id, c.own); by.set(f.id, "run"); q2.push(f.id); moved++; more = true;
+      }
+    }
+    const before = depth.size;
+    bfs(q2);
+    moved += depth.size - before - 0;
+  }
+  // a reached function with no function of the project above it: an entry point of its own,
+  // under the library that called it
+  const libs = new Map();
+  for (const f of OWN) {
+    if (depth.has(f.id) || !firstAll.has(f.id)) continue;
+    const c = ownCaller(f.id);
+    if (c.own !== undefined) continue;
+    const label = c.lib === "runtime" || c.lib === null ? "background work" : `called by ${shortMod(c.lib)}`;
+    if (!libs.has(label)) libs.set(label, []);
+    libs.get(label).push(f.id);
+  }
+  for (const [label, rs] of libs) {
+    let g = groups.find((x) => x.label === label);
+    if (!g) { g = {label, roots: []}; groups.push(g); }
+    const q3 = [];
+    for (const id of rs) if (!depth.has(id)) { root(id); g.roots.push(id); q3.push(id); moved++; }
+    bfs(q3);
+  }
+  // still more reached functions under the ones placed now
+  for (let round = 0; round < 8; round++) {
+    const q4 = [];
+    for (const f of OWN) {
+      if (depth.has(f.id) || !firstAll.has(f.id)) continue;
+      const c = ownCaller(f.id);
+      if (c.own !== undefined && depth.has(c.own)) { depth.set(f.id, depth.get(c.own) + 1); parent.set(f.id, c.own); by.set(f.id, "run"); q4.push(f.id); moved++; }
+    }
+    if (!q4.length) break;
+    const before = depth.size; bfs(q4); moved += depth.size - before;
+  }
+  // the rest: no run reached it and no direct call reaches it
+  const none = {label: "not reached from an entry point by a direct call", none: true, roots: []};
+  groups.push(none);
+  let rest = OWN.filter((f) => !depth.has(f.id));
+  while (rest.length) {
+    let rs = rest.filter((f) => !(callers.get(f.id) || []).some((c) => !depth.has(c)));
+    if (!rs.length) rs = [rest.reduce((a, b) => (b.size > a.size ? b : a))];
+    const q5 = [];
+    for (const f of rs) { root(f.id); none.roots.push(f.id); q5.push(f.id); }
+    bfs(q5);
+    rest = rest.filter((f) => !depth.has(f.id));
+  }
+  // the children and the weights: each function's code and its subtree's
+  const kids = new Map();
+  for (const [id, p] of parent) if (p !== null) { if (!kids.has(p)) kids.set(p, []); kids.get(p).push(id); }
+  const weight = new Map(), count = new Map();
+  // a box's own share grows with the square root of its code, so that small functions keep a
+  // box that a name fits in beside the large ones
+  // and a function that no run of the exploration reached gets a quarter of it
+  const sz = (id) => Math.sqrt(Math.max(64, FN.get(id).size)) * (firstAll.has(id) ? 1 : 0.25);
+  const wOf = (id) => { let w = sz(id), n = 1; for (const k of kids.get(id) || []) { w += wOf(k); n += count.get(k); } weight.set(id, w); count.set(id, n); return w; };
+  for (const g of groups) { g.w = 0; g.n = 0; for (const r of g.roots) { g.w += wOf(r); g.n += count.get(r); } }
+  for (const [, ks] of kids) ks.sort((a, b) => weight.get(b) - weight.get(a));
+  for (const g of groups) g.roots.sort((a, b) => weight.get(b) - weight.get(a));
+  // small routes share one box, and so do the small entry points of libraries
+  const all = groups.reduce((a, g) => a + g.w, 0) || 1;
+  const merge = (pick, label, flag) => {
+    const sm = groups.filter(pick);
+    if (sm.length < 2) return;
+    const m = {label: label(sm.length), roots: [], w: 0, n: 0, [flag]: true};
+    for (const g of sm) { m.roots.push(...g.roots); m.w += g.w; m.n += g.n; }
+    m.roots.sort((a, b) => weight.get(b) - weight.get(a));
+    const at = groups.indexOf(sm[0]);
+    for (const g of sm) groups.splice(groups.indexOf(g), 1);
+    groups.splice(at, 0, m);
+  };
+  merge((g) => g.route && g.w < all * 0.02, (n) => `${n} more routes`, "route");
+  merge((g) => !g.route && !g.none && g.label.startsWith("called by") && g.w < all * 0.02, () => "called by libraries", "lib");
+  const rt = groups.filter((g) => g.route && !/more routes$/.test(g.label)).sort((a, b) => b.w - a.w);
+  const gs = rt.concat(groups.filter((g) => g.route && /more routes$/.test(g.label)), groups.filter((g) => !g.route));
+  const of = new Map();
+  gs.forEach((g, i) => { for (const r of g.roots) of.set(r, i); });
+  const gOf = (id) => { let c = id; for (let k = 0; k < 200 && parent.get(c) !== null && parent.get(c) !== undefined; k++) c = parent.get(c); return of.get(c); };
+  const members = gs.map(() => []);
+  for (const f of OWN) { const gi = gOf(f.id); if (gi !== undefined) members[gi].push(f.id); }
+  gs.forEach((g, i) => { g.members = members[i]; });
+  let maxD = 1;
+  for (const d of depth.values()) maxD = Math.max(maxD, d);
+  // how many functions the runs' first callers took out of the last group
+  G = {gs, calls, depth, parent, by, kids, weight, gOf, maxD, rect: new Map(), staticOnly, grey: none.members.length, moved: staticOnly - none.members.length};
+  layoutGraph();
+}
+// Split `h` among items by weight, each at least `min` (or an equal share when they do not fit).
+function shares(items, w, h, min) {
+  const n = items.length;
+  if (!n) return [];
+  if (n * min >= h) return items.map(() => h / n);
+  const tot = items.reduce((a, x) => a + w(x), 0) || 1;
+  let hs = items.map((x) => h * w(x) / tot);
+  const low = items.map(() => false);
+  for (let k = 0; k <= n; k++) {
+    let changed = false;
+    hs.forEach((v, i) => { if (!low[i] && v < min - 1e-9) { low[i] = true; changed = true; } });
+    if (!changed) break;
+    const lowN = low.filter(Boolean).length, free = h - lowN * min;
+    const rest = items.reduce((a, x, i) => a + (low[i] ? 0 : w(x)), 0) || 1;
+    hs = items.map((x, i) => (low[i] ? min : free * w(x) / rest));
+  }
+  return hs;
+}
+function layoutGraph() {
+  if (!G) return;
+  const A = area(), LW = px(290), cols = Math.min(G.maxD, 12), colW = (A.w - LW - px(6)) / cols;
+  const gap = px(4), n = G.gs.length;
+  // the group that no run reached is a treemap of its own at the bottom, an eighth of the height:
+  // its boxes stay dark, and they have no path from an entry point to show
+  const greyH = G.gs.some((g) => g.none) ? Math.max(px(64), A.h * 0.125) : 0;
+  const hs = shares(G.gs.filter((g) => !g.none), (g) => g.w, A.h - gap * (n - 1) - greyH, px(34));
+  if (greyH) hs.push(greyH);
+  G.rect.clear(); G.bands = []; G.cols = cols; G.colW = colW; G.LW = LW;
+  const min = px(3);
+  const place = (id, y0, h, d) => {
+    if (d > cols) return;
+    const ks = G.kids.get(id) || [];
+    // a function that calls none of the placed ones reaches to the right edge: the space
+    // there is its own, and its name fits
+    const span = ks.length && d < cols ? 1 : cols - d + 1;
+    G.rect.set(id, {x: A.x + LW + px(6) + (d - 1) * colW, y: y0, w: colW * span, h, d});
+    const kh = shares(ks, (k) => G.weight.get(k), h, min);
+    let cy = y0;
+    ks.forEach((k, i) => { place(k, cy, kh[i], d + 1); cy += kh[i]; });
+  };
+  let y = A.y;
+  G.gs.forEach((g, i) => {
+    const h = hs[i];
+    G.bands.push({g, x: A.x, y, w: LW, h});
+    if (g.none) {
+      const items = g.members.map((id) => ({id, v: Math.sqrt(Math.max(64, FN.get(id).size))})).sort((a, b) => b.v - a.v), out = [];
+      squarify(items, A.x + LW + px(6), y, A.w - LW - px(6), h, out);
+      for (const o of out) G.rect.set(o.item.id, {x: o.x, y: o.y, w: o.w, h: o.h, d: 0});
+      y += h + gap;
+      return;
+    }
+    const rh = shares(g.roots, (r) => G.weight.get(r), h, min);
+    let cy = y;
+    g.roots.forEach((r, k) => { place(r, cy, rh[k], 1); cy += rh[k]; });
+    y += h + gap;
+  });
+  G.labeled = [...G.rect.values()].filter((r) => r.h >= px(11) && r.w >= px(40)).length;
+  G.visible = [...G.rect.values()].filter((r) => Math.min(r.h, r.w) >= px(3)).length;
+}
+function pathOf(id) {
+  const chain = [id];
+  let cur = id;
+  for (let guard = 0; guard < 64; guard++) {
+    const p = G.parent.get(cur);
+    if (p === null || p === undefined) break;
+    chain.push(p); cur = p;
+  }
+  return chain.reverse();
+}
+function bolt(id, now, colour) {
+  if (!G || !G.depth.has(id)) return;
+  if (bolts.length > 70) return;
+  // spread the paths of one step a little, so that they read as several bolts
+  bolts.push([now + (jitter(id, 7) + 0.5) * 260, id, pathOf(id), colour]);
+}
+function jitter(a, b) { const s = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453; return s - Math.floor(s) - 0.5; }
+function boltPoints(chain) {
+  const first = G.rect.get(chain[0]);
+  if (!first) return [];
+  const band = G.bands[G.gOf(chain[0])];
+  const pts = [[band ? band.x + band.w : first.x, first.y + first.h / 2]];
+  for (const id of chain) {
+    const r = G.rect.get(id);
+    if (!r) break;
+    const [px0, py0] = pts[pts.length - 1], x1 = r.x + r.w / 2, y1 = r.y + r.h / 2;
+    for (let k = 1; k <= 2; k++) {
+      const t = k / 3;
+      pts.push([px0 + (x1 - px0) * t, py0 + (y1 - py0) * t + jitter(id, k) * Math.min(px(10), r.h * 0.4 + px(2))]);
+    }
+    pts.push([x1, y1]);
+  }
+  return pts;
+}
+// A route's path that does not fit: its first part, `…`, and as much of its end as fits
+// (`/transactions/…/recover`), so that routes of one prefix stay apart.
+function midClip(g, s, x, y, w) {
+  if (g.measureText(s).width <= w) { g.fillText(s, x, y); return; }
+  const parts = s.split("/").filter(Boolean);
+  for (let k = 1; k < parts.length; k++) {
+    const t = "/" + parts[0] + "/…/" + parts.slice(k).join("/");
+    if (g.measureText(t).width <= w) { g.fillText(t, x, y); return; }
+  }
+  let t = "…/" + parts[parts.length - 1];
+  while (t.length > 2 && g.measureText(t).width > w) t = "…" + t.slice(2);
+  g.fillText(t, x, y);
+}
+function headAt(pts, seg, head) {
+  let left = head;
+  for (let k = 1; k < pts.length; k++) {
+    const d = seg[k - 1];
+    if (left <= d) { const t = d ? left / d : 0; return [pts[k - 1][0] + (pts[k][0] - pts[k - 1][0]) * t, pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * t]; }
+    left -= d;
+  }
+  return pts[pts.length - 1];
+}
+function drawGraph(g, now) {
+  if (graphDirty) buildGraph();
+  if (!G) return false;
+  let anim = false;
+  const fill = FILL();
+  // the entry points with what their boxes reached
+  for (const b of G.bands) {
+    const gr = b.g, reached = gr.members.filter((id) => st.has(id)).length;
+    g.fillStyle = gr.route ? "rgba(56,189,248,.09)" : gr.none ? "rgba(255,255,255,.025)" : "rgba(255,255,255,.05)";
+    roundRect(g, b.x, b.y, b.w, b.h, px(9)); g.fill();
+    g.strokeStyle = gr.route ? "rgba(56,189,248,.32)" : "rgba(255,255,255,.09)"; g.lineWidth = 1; g.stroke();
+    const share = gr.members.length ? reached / gr.members.length : 0;
+    g.fillStyle = gr.none ? "rgba(148,163,184,.35)" : "rgba(52,211,153,.6)";
+    g.fillRect(b.x + px(1), b.y + b.h - px(3), (b.w - px(2)) * share, px(2));
+    g.textBaseline = "middle";
+    const big = b.h >= px(46), cy = big ? b.y + b.h / 2 - px(10) : b.y + b.h / 2;
+    let x0 = b.x + px(12);
+    const cov = `${reached} of ${gr.members.length}`;
+    if (gr.route && !/more routes$/.test(gr.label)) {
+      const [m, ...rest] = gr.label.split(" ");
+      g.font = `700 ${px(13)}px -apple-system,Inter,sans-serif`; g.fillStyle = "#7dd3fc"; g.fillText(m, x0, cy);
+      x0 += g.measureText(m).width + px(8);
+      g.font = `500 ${px(13)}px "SF Mono",ui-monospace,Menlo,monospace`; g.fillStyle = "#e6f6ff";
+      midClip(g, rest.join(" "), x0, cy, b.x + b.w - x0 - px(big ? 10 : 62));
+    } else {
+      g.font = `600 ${px(14.5)}px -apple-system,Inter,sans-serif`; g.fillStyle = gr.none ? "#a3abbd" : "#d2d8e3";
+      if (gr.none && big && g.measureText(gr.label).width > b.w - px(22)) {
+        const words = gr.label.split(" "), half = Math.ceil(words.length / 2);
+        g.fillText(words.slice(0, half).join(" "), x0, cy - px(9));
+        g.fillText(words.slice(half).join(" "), x0, cy + px(9));
+      } else clip(g, gr.label, x0, cy, b.w - px(big ? 22 : 90));
+    }
+    g.font = `600 ${px(13)}px -apple-system,Inter,sans-serif`; g.fillStyle = "#9aa3b5";
+    if (big) g.fillText(`${cov} reached`, b.x + px(12), b.y + b.h / 2 + px(gr.none ? 22 : 12));
+    else { g.textAlign = "right"; g.fillText(cov, b.x + b.w - px(10), cy); g.textAlign = "left"; }
+  }
+  // the boxes on a bolt's way now
+  const lit = new Map();
+  for (const [t0, , chain] of bolts) {
+    const age = now - t0;
+    if (age < 0 || age > 900) continue;
+    const k = Math.min(chain.length, Math.ceil(chain.length * Math.min(1, age / 380)));
+    for (let i = 0; i < k; i++) lit.set(chain[i], Math.max(lit.get(chain[i]) || 0, 1 - Math.max(0, age - 380) / 520));
+  }
+  // the functions
+  const inset = px(1);
+  for (const [id, r] of G.rect) {
+    const f = FN.get(id), s = status(id), x = r.x + inset, y = r.y + (r.h > px(3) ? inset * 0.5 : 0);
+    const w = r.w - 2 * inset, h = Math.max(r.h - (r.h > px(3) ? inset : 0), px(1.2));
+    const base = s ? fill[s] : "#171c27";
+    if (glowFill(g, x, y, w, h, base, flash.get(id), now, r.h > px(8) ? px(3) : px(1), pass.get(id))) anim = true;
+    if (!s && r.h > px(5)) { g.strokeStyle = "rgba(255,255,255,.05)"; g.lineWidth = 1; roundRect(g, x, y, w, h, px(3)); g.stroke(); }
+    const a = lit.get(id);
+    if (a) { g.save(); g.globalAlpha = 0.35 * a; g.fillStyle = "#ffffff"; g.fillRect(x, y, w, h); g.restore(); anim = true; }
+    if (f.error_paths) {
+      const ran = f.error_paths.some((e) => epRan.has(e[0]));
+      if (h >= px(12)) epDot(g, f, x, y, w, h);
+      else { g.fillStyle = ran ? "#ff6b81" : "rgba(244,63,94,.38)"; g.fillRect(x, y, px(2), h); }
+    }
+    if (h >= px(11) && w >= px(40)) {
+      g.font = `600 ${Math.min(px(13), h * 0.78)}px -apple-system,Inter,sans-serif`; g.textBaseline = "middle";
+      g.fillStyle = s ? "rgba(5,6,10,.85)" : "rgba(214,220,232,.62)";
+      const lx = x + px(f.error_paths && h >= px(12) ? 15 : 6);
+      clip(g, boxName(f), lx, y + h / 2 + px(0.5), x + w - lx - px(4));
+    }
+  }
+  // the lightning: each first reach runs from its entry point along its path, then fades
+  g.save(); g.globalCompositeOperation = "lighter"; g.lineCap = "round"; g.lineJoin = "round";
+  for (let i = bolts.length - 1; i >= 0; i--) {
+    const [t0, id, chain, colour] = bolts[i], age = now - t0;
+    if (age > 1300) { bolts.splice(i, 1); continue; }
+    if (age < 0) { anim = true; continue; }
+    anim = true;
+    const pts = boltPoints(chain);
+    if (pts.length < 2) continue;
+    let L = 0; const seg = [];
+    for (let k = 1; k < pts.length; k++) { const d = Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]); seg.push(d); L += d; }
+    const head = L * Math.min(1, age / 380), fade = age < 380 ? 1 : 1 - (age - 380) / 920;
+    g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+    let left = head;
+    for (let k = 1; k < pts.length && left > 0; k++) {
+      const d = seg[k - 1], t = Math.min(1, left / d);
+      g.lineTo(pts[k - 1][0] + (pts[k][0] - pts[k - 1][0]) * t, pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * t);
+      left -= d;
+    }
+    g.globalAlpha = 0.12 * fade; g.strokeStyle = colour; g.lineWidth = px(8); g.stroke();
+    g.globalAlpha = 0.5 * fade; g.lineWidth = px(2); g.stroke();
+    g.globalAlpha = 0.7 * fade * fade; g.strokeStyle = "#ffffff"; g.lineWidth = px(0.9); g.stroke();
+    if (age < 380) { const [hx, hy] = headAt(pts, seg, head); g.globalAlpha = 0.9; g.fillStyle = "#ffffff"; g.beginPath(); g.arc(hx, hy, px(2.4), 0, 7); g.fill(); }
+  }
+  g.restore();
+  return anim;
+}
+
 // ---------------------------------------------------------------- the runs' track
+// ---------------------------------------------------------------- the tree of runs
+// Milestone 397's fourth follow-up: every run of the exploration is one hair from left to
+// right over the workload's steps, from the booted system. A failure's re-runs and shrink
+// candidates fork off it at the step where their schedule first differs, so a failure grows a
+// bush; a re-run of the same schedule is a thicker strand along it. The page shows each
+// failure's bush right after its first run, not at the moment the explorer ran it.
+const OTHERS = [];             // every other run the server gave (re-runs, shrink candidates)
+const FAMILY = new Map();      // "<part>:<seed>" -> its other runs, in the stream's order
+let ofrom = 0;
+const bushAt = new Map();      // first run's index -> the time its bush starts to grow
+// a run without step ranges of its own (only first runs carry their functions) has its parent's
+const stepsOf = (o, parent) => (o.steps ? steps(o) : steps(parent));
+const famKey = (r) => `${r.part ?? 0}:${r.seed ?? "m" + (r.schedule || "")}`;
+function addOther(o) {
+  OTHERS.push(o);
+  const k = famKey(o);
+  if (!FAMILY.has(k)) FAMILY.set(k, []);
+  FAMILY.get(k).push(o);
+}
+// the step where a run's schedule first differs from its parent's: the least step of a token
+// that one of them has and the other has not; null when they are the same schedule
+function forkStep(r, parent) {
+  const tok = (x) => (x.said || []).map((t) => [t.token, t.step ?? 0]);
+  const a = tok(r), b = tok(parent), as = new Set(a.map((t) => t[0])), bs = new Set(b.map((t) => t[0]));
+  let f = null;
+  for (const [t, s] of a) if (!bs.has(t)) f = f === null ? s : Math.min(f, s);
+  for (const [t, s] of b) if (!as.has(t)) f = f === null ? s : Math.min(f, s);
+  if (f === null && r.schedule !== parent.schedule) f = 0;
+  return f;
+}
+// the new code a first run reached: per step, the functions that no earlier first run reached
+const TICKS = [];              // first run's index -> [[step, [function ids]]]
+const everReached = new Set();
+function noteTicks(r, k) {
+  const by = new Map();
+  for (const t of r.functions || []) {
+    if (everReached.has(t[0])) continue;
+    everReached.add(t[0]);
+    const f = FN.get(t[0]);
+    if (f && !f.own) continue;
+    const s = Math.max(0, t[1]);
+    if (!by.has(s)) by.set(s, []);
+    by.get(s).push(t[0]);
+  }
+  TICKS[k] = [...by.entries()].sort((a, b) => a[0] - b[0]);
+}
+const ENDCOL = {bug: "#ff5468", new: "#ff5468", reported: "#ff5468", known: "#fb923c", documented: "#38bdf8", setting: "#38bdf8", expected: "#38bdf8"};
+const ENDLABEL = {bug: "bug", new: "bug", reported: "bug", known: "known bug", documented: "documented limit", setting: "documented trade-off", expected: "expected"};
+// a failure's kind for a run of a bush: its own note, else its parent's when it breaks the same
+// check (the failure being shrunk), else none (another failure, labelled as such)
+function bushKind(o, parent) {
+  if (o.verdict !== "violation") return null;
+  if (o.note && o.note.kind) return o.note.kind;
+  const c = (x) => x.what && x.what.check;
+  if (parent && c(o) && c(o) === c(parent)) return failureKind(parent);
+  return "other";
+}
+let HIT = {hairs: [], dots: [], ticks: [], ends: []};
+function drawRuns(g, now) {
+  const rc = $("cv").getBoundingClientRect(), W = rc.width, Hh = rc.height;
+  // the right keeps the banner's room, so a bush never grows under the banner
+  const top = px(132), bot = px(70), x0 = px(130), x1 = W - px(560 + 22 + 190);
+  const n = RUNS.length;
+  const S0 = Math.max(1, ...RUNS.map(steps), ...OTHERS.map(steps));
+  const sx = (s) => x0 + (x1 - x0) * Math.min(1, s / S0);
+  HIT = {hairs: [], dots: [], ticks: [], ends: []};
+  // the rows: each first run, and under it the runs of its bush that are no same-schedule re-run
+  const rows = [];
+  for (let k = 0; k < n; k++) {
+    const r = RUNS[k], fam = (FAMILY.get(famKey(r)) || []).map((o) => ({o, f: forkStep(o, r)}));
+    rows.push({k, r, fam, members: fam.filter((m) => m.f !== null)});
+  }
+  const MW = 0.4;                // a bush's row, against a first run's
+  const units = rows.reduce((a, w) => a + 1 + MW * w.members.length, 0) || 1;
+  const unit = Math.min(px(48), (Hh - top - bot) / units);
+  let y = top + Math.max(0, (Hh - top - bot - unit * units) / 2);
+  const rootY = (Hh - bot + top) / 2;
+  // the step grid
+  g.font = `500 ${px(13)}px -apple-system,Inter,sans-serif`; g.textAlign = "center"; g.textBaseline = "alphabetic";
+  const every = S0 > 30 ? 10 : 5;
+  for (let s = 0; s <= S0; s += every) {
+    g.strokeStyle = "rgba(255,255,255,.05)"; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(sx(s), top - px(18)); g.lineTo(sx(s), Hh - bot + px(4)); g.stroke();
+    g.fillStyle = "#5b6478"; g.textAlign = s + every > S0 ? "right" : s === 0 ? "left" : "center";
+    g.fillText(`step ${s}`, sx(s) + (s === 0 ? -px(4) : s + every > S0 ? px(4) : 0), Hh - bot + px(26));
+  }
+  // the booted system
+  g.fillStyle = "#e8ebf2"; g.beginPath(); g.arc(px(60), rootY, px(8), 0, 7); g.fill();
+  g.fillStyle = "#8b93a7"; g.textAlign = "center"; g.font = `600 ${px(14)}px -apple-system,Inter,sans-serif`;
+  g.fillText("booted", px(60), rootY + px(28)); g.fillText("system", px(60), rootY + px(45));
+  const hair = (from, fy, ty, fs, ts, col, w, glow) => {
+    const xa = from[0], xb = sx(ts);
+    const mid = Math.max(xa + px(40), Math.min(xb, sx(fs) + px(60)));
+    g.beginPath(); g.moveTo(xa, fy);
+    g.bezierCurveTo(xa + (mid - xa) * 0.55, fy, xa + (mid - xa) * 0.35, ty, mid, ty);
+    if (xb > mid) g.lineTo(xb, ty);
+    g.strokeStyle = col; g.lineWidth = w;
+    if (glow) { g.shadowColor = glow; g.shadowBlur = px(10); }
+    g.stroke(); g.shadowBlur = 0;
+  };
+  let bushes = 0;
+  for (const row of rows) {
+    const {k, r} = row, ry = y + unit / 2;
+    y += unit;
+    const done = k < shown && !(cur && cur.k === k), live = cur && cur.k === k;
+    if (!done && !live) { y += MW * unit * row.members.length; continue; }
+    const p = live ? Math.min(1, (now - cur.t0) / PACE) : 1, S1 = steps(r);
+    const fail = r.verdict === "violation", kind = fail ? failureKind(r) : null;
+    const col = fail ? "rgba(255,120,135,.62)" : r.verdict === "ok" ? "rgba(150,165,190,.55)" : "rgba(250,204,21,.5)";
+    hair([px(60), rootY], rootY, ry, 0, S1 * p, col, px(fail ? 1.8 : 1.3), null);
+    HIT.hairs.push({r, k, y: ry, xa: sx(0), xb: sx(S1 * p), what: "run"});
+    // a re-run of the same schedule: a glowing strand along the hair, thicker with each
+    const same = row.fam.filter((m) => m.f === null);
+    const t0 = bushAt.get(k);
+    const famShown = (i) => t0 !== undefined && now >= t0 + i * 220;
+    let idx = 0;
+    same.forEach((m, j) => {
+      const i = idx++;
+      if (!famShown(i)) return;
+      const q = Math.min(1, (now - (t0 + i * 220)) / 220);
+      const ec = ENDCOL[bushKind(m.o, r)] || "#9fb0c8";
+      g.beginPath(); g.moveTo(sx(0), ry + px(3 + 2 * j)); g.lineTo(sx(stepsOf(m.o, r) * q), ry + px(3 + 2 * j));
+      g.strokeStyle = ec; g.globalAlpha = 0.85; g.lineWidth = px(2.6); g.shadowColor = ec; g.shadowBlur = px(12); g.stroke();
+      g.shadowBlur = 0; g.globalAlpha = 1;
+      HIT.hairs.push({r: m.o, k, y: ry + px(3 + 2 * j), xa: sx(0), xb: sx(stepsOf(m.o, r)), what: "rerun"});
+    });
+    // the bush: each other run forks off at its first differing step
+    let by = y;
+    for (const m of row.members) {
+      const my = by + MW * unit / 2; by += MW * unit;
+      const i = idx++;
+      if (!famShown(i)) continue;
+      bushes++;
+      const q = Math.min(1, (now - (t0 + i * 220)) / 220), so = stepsOf(m.o, r);
+      const bk = bushKind(m.o, r), ec = bk ? ENDCOL[bk] || "#c4a7ff" : "#9fb0c8";
+      const bcol = m.o.verdict === "violation" ? ec : "rgba(190,205,225,.85)";
+      g.globalAlpha = 0.9;
+      hair([sx(m.f), ry], ry, my, m.f, m.f + (so - m.f) * q, bcol, px(1.9), bcol);
+      g.globalAlpha = 1;
+      HIT.hairs.push({r: m.o, k, y: my, xa: sx(m.f), xb: sx(so), what: m.o.role, parent: r});
+      if (q >= 1) {
+        for (const fa of runFaults(m.o)) if (fa.step >= m.f) {
+          g.fillStyle = KIND[fa.kind] || "#fff"; g.beginPath(); g.arc(sx(fa.step + 0.5), my, px(3.2), 0, 7); g.fill();
+          HIT.dots.push({x: sx(fa.step + 0.5), y: my, fa});
+        }
+        endMark(g, sx(so), my, m.o, bk, px(4.2), false);
+        HIT.ends.push({x: sx(so), y: my, r: m.o, k, kind: bk});
+      }
+    }
+    y = by;
+    // its faults and its new code
+    for (const fa of runFaults(r)) if (fa.step <= S1 * p) {
+      g.fillStyle = KIND[fa.kind] || "#fff"; g.beginPath(); g.arc(sx(fa.step + 0.5), ry, px(4.4), 0, 7); g.fill();
+      HIT.dots.push({x: sx(fa.step + 0.5), y: ry, fa});
+    }
+    for (const [s, ids] of TICKS[k] || []) if (s <= S1 * p) {
+      const h = px(6 + Math.min(10, 3 * Math.log2(1 + ids.length)));
+      g.strokeStyle = "#34d399"; g.lineWidth = px(2); g.globalAlpha = 0.95;
+      g.beginPath(); g.moveTo(sx(s + 0.5) + px(5), ry - h); g.lineTo(sx(s + 0.5) + px(5), ry + h); g.stroke(); g.globalAlpha = 1;
+      HIT.ticks.push({x: sx(s + 0.5) + px(5), y: ry, h, ids, s});
+    }
+    if (p >= 1) {
+      endMark(g, sx(S1), ry, r, kind, px(fail ? 7.5 : 3), true);
+      HIT.ends.push({x: sx(S1), y: ry, r, k, kind});
+    }
+  }
+  const nb = OTHERS.filter((o) => rows.some((w) => w.fam.some((m) => m.o === o))).length;
+  g.fillStyle = "#8b93a7"; g.textAlign = "left"; g.font = `500 ${px(15)}px -apple-system,Inter,sans-serif`;
+  g.fillText(`${Math.min(shown, n)} runs, and ${bushes + rows.reduce((a, w) => a + (bushAt.has(w.k) ? w.fam.filter((m) => m.f === null).length : 0), 0)} of the ${nb} re-runs and shrink candidates of their failures`, px(26), px(112));
+}
+function endMark(g, x, y, r, kind, rad, label) {
+  if (r.verdict === "violation") {
+    const c = ENDCOL[kind] || "#c4a7ff";
+    g.fillStyle = c; g.shadowColor = c; g.shadowBlur = px(14); g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill(); g.shadowBlur = 0;
+    if (label) {
+      g.font = `700 ${px(14)}px -apple-system,Inter,sans-serif`; g.textAlign = "left"; g.textBaseline = "middle";
+      g.fillText((ENDLABEL[kind] || "another failure").toUpperCase(), x + rad + px(8), y); g.textBaseline = "alphabetic";
+    }
+  } else {
+    g.fillStyle = r.verdict === "ok" ? "#5b6478" : "#facc15"; g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill();
+  }
+}
+function runsTip(x, y) {
+  for (const d of HIT.ends) if (Math.hypot(d.x - x, d.y - y) < px(10) && d.r.verdict === "violation")
+    return `<b>${esc(ENDLABEL[d.kind] || "another failure")}</b><br>${md((d.r.what && (d.r.what.found || d.r.what.words)) || d.r.text || "")}<br>a click shows its banner`;
+  for (const d of HIT.dots) if (Math.hypot(d.x - x, d.y - y) < px(7)) return `<b>${esc(d.fa.kind)}</b><br>${md(d.fa.sentence)}`;
+  for (const t of HIT.ticks) if (Math.abs(t.x - x) < px(5) && Math.abs(t.y - y) < t.h + px(2)) {
+    const names = t.ids.map((i) => FN.get(i)).filter(Boolean).map((f) => f.short || f.name);
+    return `<b>new code in step ${t.s}</b>: ${t.ids.length} function${t.ids.length === 1 ? "" : "s"} no earlier run reached<br><span class="mono">${esc(names.slice(0, 8).join(", "))}${names.length > 8 ? ` and ${names.length - 8} more` : ""}</span>`;
+  }
+  let best = null;
+  for (const h of HIT.hairs) if (x >= h.xa && x <= h.xb + px(4) && Math.abs(h.y - y) < px(5) && (!best || Math.abs(h.y - y) < Math.abs(best.y - y))) best = h;
+  if (!best) return null;
+  const r = best.r, who = best.what === "run" ? `Run ${runNo(r, best.k)}` : best.what === "rerun" ? `A re-run of run ${runNo(RUNS[best.k], best.k)}, the same schedule` : `A ${best.what === "shrink" ? "shrink candidate" : best.what} of run ${runNo(RUNS[best.k], best.k)}`;
+  const fs = runFaults(r);
+  return `<b>${esc(who)}</b><br>${fs.length ? md(fs.map((x) => x.sentence).join(" ")) : "a normal run: no fault"}<br><span class="mono">${esc(command(r))}</span>`;
+}
+// a click on a red end: the banner of the failure it shows (a bush's run shows its first run's
+// banner when it breaks the same check; another failure has none)
+function runsClick(x, y) {
+  for (const d of HIT.ends) if (Math.hypot(d.x - x, d.y - y) < px(12) && d.r.verdict === "violation") {
+    if (d.kind === "other") return false;
+    banner(d.r === RUNS[d.k] ? d.r : RUNS[d.k], d.k); return true;
+  }
+  return false;
+}
+
 const pulses = [];             // [time, x, y, colour, label]
 function drawTimeline(now) {
   const c = $("tl"), r = c.getBoundingClientRect();
@@ -519,7 +1139,8 @@ function drawTimeline(now) {
     if (p > 0) {
       const ok = run.verdict === "ok";
       const grd = g.createLinearGradient(x, 0, x + cw, 0);
-      const col = !done ? "rgba(255,255,255,.16)" : ok ? "rgba(52,211,153,.30)" : run.verdict === "violation" ? "rgba(255,84,104,.55)" : "rgba(250,204,21,.32)";
+      const fk = failureKind(run), doc = ["documented", "setting", "expected"].includes(fk);
+      const col = !done ? "rgba(255,255,255,.16)" : ok ? "rgba(52,211,153,.30)" : run.verdict !== "violation" ? "rgba(250,204,21,.32)" : doc ? "rgba(56,189,248,.45)" : fk === "known" ? "rgba(251,146,60,.55)" : "rgba(255,84,104,.55)";
       grd.addColorStop(0, col); grd.addColorStop(1, col);
       g.fillStyle = grd; roundRect(g, x, y, cw * p, h, px(7)); g.fill();
     }
@@ -532,8 +1153,13 @@ function drawTimeline(now) {
       g.fillStyle = passed ? KIND[fa.kind] || "#fff" : "rgba(255,255,255,.28)"; g.fill();
     }
     if (done && run.verdict === "violation") {
-      g.fillStyle = COL.bug; g.font = `700 ${px(12)}px -apple-system,Inter,sans-serif`; g.textBaseline = "top"; g.textAlign = "center";
-      if (cw > px(28)) g.fillText("BUG", x + cw / 2, y + h + px(6));
+      // a documented limit or a setting's trade-off is no bug, and a known bug says so
+      const fk = failureKind(run), doc = ["documented", "setting", "expected"].includes(fk);
+      const [label, short] = doc ? ["DOCUMENTED", "DOC"] : fk === "known" ? ["KNOWN BUG", "BUG"] : ["BUG", "BUG"];
+      g.fillStyle = doc ? "#38bdf8" : fk === "known" ? "#fb923c" : COL.bug;
+      g.font = `700 ${px(12)}px -apple-system,Inter,sans-serif`; g.textBaseline = "top"; g.textAlign = "center";
+      const fit = g.measureText(label).width + px(8) < cw ? label : short;
+      if (cw > px(28)) g.fillText(fit, x + cw / 2, y + h + px(6));
       g.textAlign = "left";
     }
     if (live) {
@@ -567,10 +1193,11 @@ function step(now) {
   if (cur) advance(now);
   const c = $("cv"), r = c.getBoundingClientRect();
   if (c.width !== Math.round(r.width * DPR) || c.height !== Math.round(r.height * DPR)) {
-    c.width = Math.round(r.width * DPR); c.height = Math.round(r.height * DPR); layoutMap(); if (TREE.gs) layoutTree();
+    c.width = Math.round(r.width * DPR); c.height = Math.round(r.height * DPR); layoutMap(); if (TREE.gs) layoutTree(); layoutGraph();
   }
   const g = c.getContext("2d"); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, r.width, r.height);
-  if (MAP) { if (view === "map") drawMap(g, now); else drawFlow(g, now, dt); }
+  if (view === "runs") drawRuns(g, now);
+  else if (MAP) { if (view === "map") drawMap(g, now); else if (view === "graph") drawGraph(g, now); else drawFlow(g, now, dt); }
   drawTimeline(now);
   requestAnimationFrame(step);
 }
@@ -581,7 +1208,7 @@ function startRun(now) {
   if (bannerAt && now > bannerAt + HOLD * 1.8) { $("banner").classList.remove("on"); bannerAt = 0; }
   $("wait").style.display = "none";
   const fs = cur.faults;
-  $("now").innerHTML = `<b>Run ${esc(r.seed ?? k + 1)}</b> · ` + (fs.length ? md(fs.map((x) => x.sentence).slice(0, 2).join(" ")) : "a normal run: no fault, to see what the system does by itself");
+  $("now").innerHTML = `<b>Run ${esc(runNo(r, k))}</b> · ` + (fs.length ? md(fs.map((x) => x.sentence).slice(0, 2).join(" ")) : "a normal run: no fault, to see what the system does by itself");
   for (const p of r.paths || []) epRan.add(p);
 }
 function advance(now) {
@@ -595,12 +1222,18 @@ function advance(now) {
     faults++;
   }
   if (p >= 1) {
-    const r = cur.r;
+    const r = cur.r, k = cur.k;
+    if ((FAMILY.get(famKey(r)) || []).length) bushAt.set(k, now);
     shown++;
     cur = null;
     if (r.verdict === "violation") {
-      const key = (r.what && (r.what.check || r.what.words)) || r.text || "violation";
-      if (!broken.has(key)) { broken.add(key); banner(r); holdUntil = now + HOLD; }
+      // one banner per check and issue; a documented limit or a setting's trade-off is no bug
+      const key = ((r.what && (r.what.check || r.what.words)) || r.text || "violation") + "|" + ((r.note && r.note.issue) || "");
+      if (!broken.has(key)) {
+        broken.add(key);
+        if (!["documented", "setting", "expected"].includes(failureKind(r))) bugs.add(key);
+        banner(r, k); holdUntil = now + HOLD;
+      }
     }
     counters();
   }
@@ -612,24 +1245,58 @@ function counters() {
   const reached = OWN.filter((f) => st.has(f.id)).length;
   $("kCode").innerHTML = `${OWN.length ? Math.round(100 * reached / OWN.length) : 0}<small> %</small>`;
   $("kCodeL").textContent = `of ${OWN.length.toLocaleString("en")} functions reached`;
-  $("kBugs").textContent = broken.size;
+  $("kBugs").textContent = bugs.size;
   $("tlN").textContent = `${shown} of ${RUNS.length}`;
 }
 function command(r) {
-  const img = String(INFO.image || "<image>").split("/").pop();
+  const img = String(r.image || INFO.image || "<image>").split("/").pop();
   const be = INFO.backend === "kvm" ? "--backend kvm " : "";
   return `hydo run ${be}--image ${img} "${r.schedule}"`;
 }
-function banner(r) {
-  const w = r.what || {};
+// What a failure is: a bug (`bug`, or a note's `new`, `reported` or `known`), a limit that the
+// project documents (a note's `documented`), or what the explorer's advice expects: a setting
+// that trades safety for speed (`setting`) or a fault that no system survives (`expected`).
+// A run's number on the page: its seed, or its place in the playback when the recording has
+// several explorations, leaves runs out, or the run has no seed (`hydo explore --schedule`).
+function runNo(r, k) {
+  return (INFO.parts || 1) > 1 || INFO.left_out || r.seed == null ? k + 1 : r.seed;
+}
+function failureKind(r) {
+  const k = r.note && r.note.kind;
+  if (k) return k;
+  if (r.attention === "setting" || r.attention === "expected") return r.attention;
+  return "bug";
+}
+function banner(r, k) {
+  const w = r.what || {}, kind = failureKind(r), note = r.note || {};
   let promise = w.promise ? w.promise.split(":")[0].trim() : null;
-  const head = promise ? `${NAME} broke a promise: “${promise}”` : w.check ? `${NAME} broke a promise: the check “${w.check.replace(/_/g, " ")}” failed` : (w.words || r.text || "A run failed.");
+  const said = note.words || (promise ? `“${promise}”` : w.check ? `the check “${w.check.replace(/_/g, " ")}” failed` : null);
+  let head, kicker;
+  if (kind === "documented") {
+    kicker = `A documented limit, in run ${runNo(r, k)}`;
+    head = said ? `A documented limit, shown: ${said}` : "A documented limit, shown.";
+  } else if (kind === "setting" || kind === "expected") {
+    kicker = kind === "setting" ? `Expected with this setting, in run ${runNo(r, k)}` : `Expected, in run ${runNo(r, k)}`;
+    head = said ? `A documented trade-off, shown: ${said}` : "A documented trade-off, shown.";
+  } else if (kind === "known") {
+    kicker = `Known bug, found again in run ${runNo(r, k)}`;
+    head = said ? `A known bug of ${NAME}, found again: ${said}` : `A known bug of ${NAME}, found again.`;
+  } else {
+    kicker = `Bug found in run ${runNo(r, k)}`;
+    head = note.words ? `${NAME} broke a promise: ${note.words}` : promise ? `${NAME} broke a promise: “${promise}”` : w.check ? `${NAME} broke a promise: the check “${w.check.replace(/_/g, " ")}” failed` : (w.words || r.text || "A run failed.");
+  }
+  const issue = note.issue ? esc(note.issue) : "";
+  const iw = !issue ? "" : kind === "documented" ? `Documented upstream: <b>${issue}</b>` : kind === "known" ? `Known upstream: <b>${issue}</b>` : kind === "reported" ? `Reported upstream by hydo: <b>${issue}</b>` : `Upstream: <b>${issue}</b>`;
   const fs = runFaults(r);
-  $("bK").textContent = `Bug found in run ${r.seed ?? ""}`;
+  const b = $("banner");
+  b.classList.toggle("known", kind === "known");
+  b.classList.toggle("doc", ["documented", "setting", "expected"].includes(kind));
+  $("bK").textContent = kicker;
   $("bT").textContent = head;
+  $("bI").innerHTML = iw;
   $("bW").innerHTML = fs.length ? `What hydo did: ${md(fs.slice(0, 3).map((x) => x.sentence).join(" "))}${fs.length > 3 ? ` And ${fs.length - 3} more fault${fs.length > 4 ? "s" : ""}.` : ""}` : "No fault at all: the workload alone breaks it.";
   $("bC").textContent = command(r);
-  $("banner").classList.add("on");
+  b.classList.add("on");
   bannerAt = performance.now();
 }
 
@@ -638,13 +1305,16 @@ let from = 0;
 async function poll() {
   try {
     if (!MAP) { const m = await (await fetch("map.json", {cache: "no-store"})).json(); if (m) loadMap(m); }
-    if (ENTRIES === null) { ENTRIES = await (await fetch("entries.json", {cache: "no-store"})).json() || {}; matchRoutes(); }
-    const j = await (await fetch(`runs?from=${from}`, {cache: "no-store"})).json();
+    if (ENTRIES === null) { ENTRIES = await (await fetch("entries.json", {cache: "no-store"})).json() || {}; matchRoutes(); graphDirty = true; }
+    const j = await (await fetch(`runs?from=${from}&ofrom=${ofrom}`, {cache: "no-store"})).json();
     INFO = j;
-    for (const r of j.runs) RUNS.push(r);
+    for (const r of j.runs) { RUNS.push(r); noteCallers(r); noteTicks(r, RUNS.length - 1); }
+    for (const o of j.others || []) addOther(o);
+    ofrom = j.others_total ?? ofrom;
+    if (j.runs.length) graphDirty = true;
     if (!started && RUNS.length) { started = true; $("wait").style.display = "none"; holdUntil = performance.now() + (+(H.get("start") || 0)) * 1000; }
     from = j.total;
-    $("mode").textContent = j.done ? "Recorded exploration, played back" : "Live";
+    $("mode").textContent = !j.done ? "Live" : (j.parts || 1) > 1 ? "Recorded explorations, played back" : "Recorded exploration, played back";
     $("mode").classList.toggle("live", !j.done);
     counters();
     if (!j.done) setTimeout(poll, 1500);
@@ -655,19 +1325,35 @@ async function poll() {
 function setView(v) {
   view = v;
   for (const b of document.querySelectorAll(".views button")) b.classList.toggle("on", b.dataset.v === v);
-  $("tagT").textContent = v === "map" ? `Every function of ${NAME}'s own code` : `Who calls what in ${NAME}, from each entry point`;
-  $("tagS").textContent = v === "map" ? "A tile lights up the first time a run reaches it" : "A branch grows the first time a run takes that call";
+  $("tagT").textContent = v === "map" ? `Every function of ${NAME}'s own code` : v === "graph" ? `Every function of ${NAME}, by its calls from each entry point` : `Who calls what in ${NAME}, from each entry point`;
+  $("tagS").textContent = v === "map" ? "A tile lights up the first time a run reaches it" : v === "graph" ? "A path lights up from its entry point the first time a run takes it" : "A branch grows the first time a run takes that call";
+  if (v === "runs") {
+    $("tagT").textContent = `Every run of ${NAME}, from the booted system`;
+    $("tagS").textContent = "A failure's re-runs and shrink candidates fork off it where their faults first differ";
+  }
+  $("legRuns").style.display = v === "runs" ? "flex" : "none";
+  $("banner").classList.toggle("side", v === "runs");
+  $("legMap").style.display = v === "runs" ? "none" : "flex";
   if (v === "flow") treeDirty = true;
 }
 for (const b of document.querySelectorAll(".views button")) b.addEventListener("click", () => setView(b.dataset.v));
 $("stage").addEventListener("mousemove", (ev) => {
   const r = $("cv").getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, tip = $("tip");
   let f = null;
+  if (view === "runs") {
+    const h = runsTip(x, y);
+    if (!h) { tip.style.display = "none"; return; }
+    tip.innerHTML = h; tip.style.display = "block";
+    tip.style.left = Math.min(x + 18, r.width - px(540)) + "px"; tip.style.top = Math.min(y + 18, r.height - px(150)) + "px";
+    return;
+  }
   if (view === "map") { for (const l of LEAVES) if (x >= l.x && x < l.x + l.w && y >= l.y && y < l.y + l.h) { f = l.f; break; } }
+  else if (view === "graph") { if (G) for (const [k, n] of G.rect) if (x >= n.x - px(4) && x < n.x + n.w && y >= n.y && y < n.y + Math.max(n.h, 1)) { f = FN.get(k); break; } }
   else for (const [k, n] of NODES) if (!n.t.group && x >= n.c.x && x < n.c.x + n.c.w && y >= n.c.y && y < n.c.y + n.c.h) { f = FN.get(k); break; }
   if (!f) { tip.style.display = "none"; return; }
   const s = st.get(f.id), W = ["not reached yet", "reached only when something broke", "reached in a normal run"];
-  let h = `<b>${esc(f.short || f.name)}</b><br><span class="mono">${esc(f.file)}:${f.line}</span><br>${W[status(f.id)]}`;
+  let h = `<b>${esc(f.short || f.name)}</b><br>${view === "graph" ? `<span class="mono">${esc(f.name)}</span><br>` : ""}<span class="mono">${esc(f.file)}:${f.line}</span><br>${W[status(f.id)]}`;
+  if (view === "graph" && G && G.by.get(f.id) === "run") h += `<br>placed under the function that called it first in a run`;
   if (s && s.first >= 0 && FN.get(s.first)) h += `<br>first called by <b>${esc(FN.get(s.first).short)}</b>`;
   const others = s ? [...s.callers].filter((c) => c !== s.first && FN.get(c)).map((c) => FN.get(c).short) : [];
   if (others.length) h += `<br>other first callers seen in other runs: ${esc(others.slice(0, 6).join(", "))}${others.length > 6 ? ` and ${others.length - 6} more` : ""}`;
@@ -675,8 +1361,19 @@ $("stage").addEventListener("mousemove", (ev) => {
   tip.innerHTML = h; tip.style.display = "block";
   tip.style.left = Math.min(x + 18, r.width - px(540)) + "px"; tip.style.top = Math.min(y + 18, r.height - px(150)) + "px";
 });
+$("stage").addEventListener("click", (ev) => {
+  if (view !== "runs") return;
+  const r = $("cv").getBoundingClientRect();
+  runsClick(ev.clientX - r.left, ev.clientY - r.top);
+});
 $("stage").addEventListener("mouseleave", () => { $("tip").style.display = "none"; });
-window.showcase = {setView, runs: () => RUNS.length, shown: () => shown, busy: () => !!cur || shown < RUNS.length || performance.now() < holdUntil};
+window.showcase = {setView, runs: () => RUNS.length, shown: () => shown, hits: () => HIT, busy: () => !!cur || shown < RUNS.length || performance.now() < holdUntil || bushBusy()};
+// a bush still grows
+function bushBusy() {
+  const now = performance.now();
+  for (const [k, t0] of bushAt) if (now < t0 + ((FAMILY.get(famKey(RUNS[k])) || []).length + 1) * 220) return true;
+  return false;
+}
 setView(view);
 scale(); poll(); requestAnimationFrame(step);
 </script>

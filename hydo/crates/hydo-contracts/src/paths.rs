@@ -85,6 +85,30 @@ pub struct PathPlace {
     /// project's own code), not in a dependency or the language's runtime.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub own: bool,
+    /// A function of the project's own code (Milestone 397's follow-up, the static call graph of
+    /// the live map): the functions of the project's own code that it calls directly, by their
+    /// ids, from its machine code (arm64 `bl` and `b` to another function's first instruction).
+    /// A call through an interface, a closure or a function value has no edge.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calls: Vec<u32>,
+}
+
+/// The direct calls in arm64 machine code that starts at `addr`: the targets of each `bl` and
+/// `b` (an immediate branch of 26 bits, the call and the tail call), in the code's order.
+pub fn arm64_branch_targets(code: &[u8], addr: u64) -> Vec<u64> {
+    code.chunks_exact(4)
+        .enumerate()
+        .filter_map(|(i, w)| {
+            let w = u32::from_le_bytes(w.try_into().ok()?);
+            // `b` is 0b000101, `bl` is 0b100101 in the top six bits
+            if w >> 26 != 0b00_0101 && w >> 26 != 0b10_0101 {
+                return None;
+            }
+            let imm = ((w & 0x03ff_ffff) << 6) as i32 >> 6;
+            let pc = addr + 4 * i as u64;
+            Some(pc.wrapping_add_signed(imm as i64 * 4))
+        })
+        .collect()
 }
 
 /// One address of a place, and where its instruction is in the program's file.

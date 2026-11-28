@@ -196,6 +196,8 @@ fn a_runs_functions_have_their_step_range_and_their_place_before_the_faults() {
             module: "github.com/x/ledger".into(),
             own: true,
             sites: vec![PathSite::default()],
+            // Milestone 397's follow-up: f0 calls f1 directly
+            calls: if i == 0 { vec![1] } else { Vec::new() },
             ..PathPlace::default()
         })
         .collect();
@@ -263,6 +265,9 @@ fn a_runs_functions_have_their_step_range_and_their_place_before_the_faults() {
         m["programs"][0]["modules"][0]["module"],
         "github.com/x/ledger"
     );
+    let fns = &m["programs"][0]["modules"][0]["files"][0]["functions"];
+    assert_eq!(fns[0]["calls"], serde_json::json!([1]));
+    assert!(fns[1].get("calls").is_none());
     // a run without a fault: every function ran before the faults
     let r = hydo_explore::results::run_of("seed-1", "disk=none | run", &res, &[]);
     assert!(r.functions.unwrap().reached.iter().all(|x| x.before_faults));

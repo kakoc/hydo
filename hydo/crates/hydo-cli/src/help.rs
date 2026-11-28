@@ -125,7 +125,11 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
   dark page for people new to hydo instead: the map and the flow of calls from the program's
   entry points, the runs with their faults, and each bug in one sentence with the command that
   replays it. --routes DIR (`hydo explore --live-routes DIR`) names the flow's entry points by
-  the routes of the sources in DIR, as `hydo rules scan --kind writes` lists them.
+  the routes of the sources in DIR, as `hydo rules scan --kind writes` lists them. Several
+  DIRs of one image play one after another, as one recording. --notes FILE names what the runs
+  cannot say: a list `notes:`, each with a `check:`, a text of the `schedule:` or a `seed:`, and
+  `kind: new | reported | known | documented` with its `issue: owner/repo#N`, or `leave_out:
+  true` with its `why:`. The banner calls a documented failure a documented limit, not a bug.
   --html writes it as one web page instead (FILE, default DIR/report.html), for a run, an
   exploration or a `hydo ci run` output directory: each failure with its minimal schedule and
   the command that replays it, the failing run's timeline, where it first differs from a

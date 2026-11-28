@@ -1,0 +1,26 @@
+# What the showcase page cannot know from the runs (hydo report --live --showcase --notes,
+# docs/design/live-map.md): which issue each failure of NSQ is, and what kind it is
+# (RESULTS.md, "What was found"). The first note that matches a run applies.
+notes:
+  # a run of the recording's blind exploration (seeds 9 to 16) whose loss is not traced
+  # (RESULTS.md, "The recording of the live map"): left out of the playback, with its re-run
+  - schedule: "K=nsqd@8+4 T=2:-3600"
+    leave_out: true
+    why: "seed 15: m1 is lost after a kill long after the queues' first syncs; not traced"
+  # finding 1: a kill of nsqd, or a power cut, before a new queue's first sync loses its messages
+  - check: jobs.no-loss
+    schedule: "K=nsqd@"
+    kind: reported
+    issue: "nsqio/nsq#1542"
+  # finding 2, documented: a kill loses the message that a consumer holds in flight
+  - check: jobs.acked-outcome
+    schedule: "A=nsq.msg_received+2200:kill-nsqd"
+    kind: documented
+    issue: "nsqio/nsq#1386"
+    words: "a crash of nsqd loses a message that a consumer holds and has not finished"
+  # finding 3, a clock effect: after a backward step of the wall clock every publish waits
+  - check: eventually_publish
+    schedule: "T="
+    kind: known
+    issue: "nsqio/nsq#1124"
+    words: "after the clock steps back, every publish waits until the clock catches up"

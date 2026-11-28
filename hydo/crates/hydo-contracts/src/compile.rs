@@ -1570,6 +1570,9 @@ pub fn compile(sources: &[Source]) -> Result<Plan, String> {
         path_id += p.paths.len() as u32;
         for pl in &mut p.fn_places {
             pl.id += fn_id;
+            for c in &mut pl.calls {
+                *c += fn_id;
+            }
         }
         fn_id += p.fn_places.len() as u32;
         plan.programs.push(p);

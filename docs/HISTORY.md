@@ -27364,6 +27364,210 @@ hydo-explore and hydo, their tests, `cargo test -p hydo --test it`, `cargo test 
 --test it`, and `sh ci/vale.sh`. The results schema and the CLI golden were recorded again with
 `HYDO_BLESS=1`; each diff adds the new field or the new options. Nothing recorded moved.
 
+### Milestone 397, the follow-up: the call graph from left to right
+
+**What the user asked.** The flow view shows only what the runs reached. The user asked for a
+view of the whole space, as the map shows it, that runs from left to right and lights the paths
+like lightning. The first-caller tree stays as a third view, `First calls`.
+
+**What was built.**
+
+- `hydo build` records the static call graph of the project's own code in the plan. For each
+  function of `fn_places` whose file is one of the sources, it reads the function's arm64 machine
+  code and keeps each `bl` and `b` to the first instruction of another such function, as `calls`
+  (`hydo_contracts::paths::arm64_branch_targets`). The map of the live page carries them.
+- The showcase page's `Call graph` lays every function of the project's own code out from left
+  to right. The roots are the routes of `--routes DIR`, `main.main`, and the background work: the
+  functions that no function of the project calls directly and that the runs show the runtime
+  started. A breadth-first search from every root at once places each function once, at its
+  shortest path of direct calls. The rest is the group `not reached from an entry point by a
+  direct call`. Each root shows how many of the functions its direct calls reach a run reached.
+  A first reach flashes a bolt from the root to the function, which stays lit; the bolt follows
+  the runs' first caller where it is the static caller one column before.
+- `hydo report --live` makes an exploration's map again from the plan beside its image when the
+  map is missing, so an exploration made before keeps its runs and gets the edges.
+
+**The plan.** The Blnk map image was built again from the same inputs, and its sha256 stayed
+`fe492497…`; the 39,038 functions of the plan kept their ids, names and addresses. Of the 1,039
+functions of Blnk's own code, 598 call another one directly, with 1,347 edges. 407 have no direct
+caller among them; most are closures and methods called through interfaces.
+
+**The coverage per root** after the 30 runs of the exploration of the recording (the routes with
+less than 1.6 % of the functions share one box):
+
+| Root | Reached | Reachable by direct calls |
+|---|---|---|
+| `POST /transactions` | 108 | 167 |
+| `POST /transactions/bulk` | 112 | 174 |
+| `PUT /transactions/inflight/:txID` | 54 | 77 |
+| `POST /refund-transaction/:id` | 30 | 54 |
+| `POST /reconciliation/upload` | 2 | 22 |
+| 50 more routes | 148 | 315 |
+| `main` | 5 | 5 |
+| background work (14 functions) | 151 | 222 |
+| not reached from an entry point by a direct call | 147 | 609 |
+
+The search placed each function once at depth 1 to 12. The whole project's share stayed 339 of
+1,039 functions (33 %).
+
+**The media.** A second video (31 s, 1920 by 1080, 5.2 MB) and GIF (1200 by 675, 12 frames a
+second, 13.2 MB) of the same exploration, named `-v2`, show the call graph for 24 of their 31
+seconds. Two stills show the call graph at the end and during the first run. No VM ran:
+the page played back the recorded runs.
+
+**Checks.** The Go program of `tests/go-paths` gives the edges `main.main` to `retryLoad` to
+`load` to `parse`, and a unit test decodes `bl` and `b` both ways. The same tests, clippy, Vale
+and goldens as above ran again.
+
+### Milestone 397, the second follow-up: the call graph as a partition
+
+**What the user asked.** Each function of the call graph was a row of about 1.6 pixels, so even
+`POST /transactions` showed only bars, while the code map shows each function as a tile. The
+user asked for a partition from left to right that fills the space as the treemap does, with
+the runs' first callers as edges too, names inside the boxes, and the lightning kept.
+
+**What changed** (the page only; the plan, the engine and the server stay as before):
+
+- A box's height is its subtree's share of its parent's box, so each column fills its parent's
+  height. A subtree weighs the square root of each function's code, and a function that no run
+  of the exploration reached weighs a quarter of that. A box is at least 3 pixels high where that
+  fits, and a function that calls none of the placed ones reaches to the right edge.
+- A function that a run reached, and that no direct call from a root reaches, goes under the
+  nearest function of the project that called it first in a run; the direct calls go on from
+  it. A reached function with no function of the project above it is an entry point under
+  `background work` or `called by libraries`.
+- The last group keeps only the functions that no run reached and no direct call reaches. It is
+  a treemap of dark boxes in an eighth of the height.
+- A box at least 11 pixels high shows the function's name without its package and receiver,
+  and a hover shows the full name. A route's path that does not fit keeps its first part and
+  its end (`/transactions/…/recover`).
+- A first reach's bolt runs along the boxes of its path from the root, and the boxes on the way
+  light up while it passes.
+- Each root's count is now of the functions placed under it, so the counts add up to the
+  project's 1,039 functions.
+
+**The numbers** after the 30 runs of the exploration of the recording:
+
+- The last group held 609 functions with the direct calls alone and 415 with the runs' first
+  callers: 194 functions moved out of it.
+- 28 boxes carry a name at 1920 by 1080 and 27 at 1200 by 675, against the code map's 8 module
+  names. 542 boxes are at least 3 pixels in both directions (the 415 boxes of the last group's
+  treemap among them), against 1,029 tiles of the code map. A partition gives a column at most
+  its height, so the deep columns of a large subtree stay thinner than 3 pixels.
+
+| Root | Reached | Placed under it |
+|---|---|---|
+| `POST /transactions` | 108 | 154 |
+| `PUT /transactions/inflight/:txID` | 20 | 27 |
+| `POST /refund-transaction/:id` | 23 | 43 |
+| `POST /transactions/recover` | 18 | 18 |
+| `POST /transactions/bulk` | 15 | 21 |
+| `POST /transactions/inflight/bulk/commit` | 11 | 16 |
+| 49 more routes | 26 | 152 |
+| `main` | 53 | 83 |
+| background work (21 functions) | 61 | 99 |
+| called by libraries (3 functions) | 4 | 11 |
+| not reached from an entry point by a direct call | 0 | 415 |
+
+**The media.** A third video (31 s, 1920 by 1080, 7.9 MB) and GIF (1200 by 675, 10 frames a
+second, 8.0 MB) of the same exploration, named `-v3`, show the call graph for 24 of their 31
+seconds, with two stills: the first run's bolts and the end. No VM ran.
+
+### Milestone 397, the third follow-up: the NSQ recording, and a banner that does not call every failure a bug
+
+**What was asked.** A recording of the showcase page on NSQ v1.3.0 for the README and posts, with
+the three public issues each found by a real run: nsqio/nsq#1542 (the NSQ example's finding 1,
+reported by hydo), #1386 (documented) and #1124 (a known clock bug). The Blnk recording's banner
+said "Blnk broke a promise" for a deployment setting and for a failure that was not traced. The
+banner was to say "broke a promise" only for a bug, name each issue, and show no failure that
+is not traced.
+
+**What changed.**
+
+- The showcase banner reads each run's failure kind. A note of the recording (`hydo report
+  --live --showcase --notes FILE`, a list `notes:`) names a failure by its check, a text of its
+  schedule or its seed as `new`, `reported`, `known` or `documented`, with its issue and
+  optional words. A bug keeps "<program> broke a promise" and gets "Reported upstream by hydo:
+  <issue>". A known bug reads "A known bug of <program>, found again", and a documented one "A
+  documented limit, shown", each in its own colour with its issue. A failure that the
+  explorer's advice expects (the attention `setting` or `expected`, which the server now gives
+  each run) reads "A documented trade-off, shown". The run track labels each failed run `BUG`,
+  `KNOWN BUG` or `DOCUMENTED`, and the header counts no documented limit or trade-off as a bug.
+- `hydo report --live A B ...` plays several explorations or run directories of one image one
+  after another, as one recording, and a note's `leave_out: true` keeps a run out of it. The
+  chip says "Recorded explorations, played back", and the runs are numbered by their place in
+  the playback. A second page of the same server keeps the recording's end (a bug of the first
+  version of the change, found by the recording).
+- `hydo build` gives each folder of a `contracts:` entry's `sources:` its own vote for the folder
+  of the debug information that names its files. Before, the one file of go-diskqueue under
+  `github.com/nsqio/go-diskqueue@v1.1.0/` was outvoted by NSQ's files, so the disk queue's
+  functions were not the project's own. A manifest with one folder gets the plan it got before.
+- `hydo rules scan --kind writes` takes the method value that a Go registration wraps in a call
+  as its handler (`http_api.Decorate(s.doPUB, http_api.V1)` gives `doPUB`), unless its receiver
+  is an imported package's name. So the call graph names NSQ's `POST /pub`.
+
+**The image and the runs.** `hydo/onboard/examples/nsq/hydo/hydo-map.yaml` binds nsqd v1.3.0,
+built from its source with its debug information (`build-map.sh`, Go 1.21.5 as the official
+image), over the image's `/usr/local/bin/nsqd`. Its plan has 6,765 functions, 284 of them in
+NSQ's and go-diskqueue's sources. Every run used the Mac engine on macOS 27.2.1 with
+`HVM_RAM_SHARE=0` and one worker. `disk=none | run` gave one fingerprint with the watch and
+without it. A blind exploration of the seeds 1-20 failed 13 schedules, as the example's e1 did.
+The recording plays three folders: 3 runs without a fault, the seeds 9 to 16 (the range without
+a power cut), and the regression of finding 2. Each failure it shows was traced. The kill of
+seed 11 came while both disk queues had their messages and no metadata file (`hydo inspect` at
+the kill's stop). Seed 16 passes without its clock step, and the regression of finding 2 is the
+example's. Seeds 14 and 15 are left out by the notes, because each also lost a message whose
+cause is not traced. The example's RESULTS.md, "The recording of the live map", has every
+fingerprint and schedule.
+
+**The media.** A video of 36 s at 1920 by 1080 (H.264, yuv420p, faststart, 4.3 MB), a looping
+GIF of 37 s at 1200 by 675 and 10 frames a second (11.5 MB), four stills and their captions,
+made as the Blnk recording's were. The banners come at about 13 s (#1542), 23 s (#1124) and
+28 s (#1386). They are outside the repository, for the user to review.
+
+### Milestone 397, the fourth follow-up: the tree of runs
+
+**What the user asked.** A view of the showcase page, from an approved sketch, where every run
+of the exploration is one hair from the booted system, and a failure's re-runs and shrink
+candidates grow a bush on its branch. Repeated branches more visible than plain hairs, readable
+at 1920 by 1080 and at 1200 by 675, with hovers and a click on a red end. And NSQ recorded again
+with it, from an exploration with shrinks.
+
+**What was built** (the design is the section "The tree of runs" of `docs/design/live-map.md`):
+
+- The server gives the page every other run of the stream (`others`, `others_total`, read from
+  `ofrom=`): re-runs, shrink candidates and minimal schedules, each with its seed, its folder
+  and a note's kind, without their functions. A note that leaves a first run out leaves its
+  family out.
+- The view `Runs` (`#view=runs`). Each first run is a hair from the booted system to its row,
+  over the workload's steps. A run of a seed's family forks off the seed's first run at the
+  least step of a token that one schedule has and the other has not; a re-run of the same
+  schedule is a glowing strand along it. Faults are dots at their steps, a green tick marks a
+  step where a first run reached own functions that no earlier first run had, and a hair ends
+  grey for a pass or coloured and labelled as the banner names the failure. A bush's run that
+  breaks another check than its first run is another failure, with no banner.
+- A bush's row takes 0.4 of a first run's, and its hairs are brighter, thicker and glowing. In
+  this view the banner stands at the stage's right and the tree ends left of it, so a bush grows
+  in sight. A failure's bush grows right after its first run, one run every 0.22 seconds.
+- Hovers name a hair's run with its schedule in words and its replay command, a dot's fault and
+  a tick's functions; a click on a red end shows its banner. `window.showcase.hits()` gives the
+  shapes under the pointer; the checks of the hovers and the click used it.
+
+**The runs.** Seeds 9 to 16 ran again on the map image with shrinks, on the Mac engine with
+`HVM_RAM_SHARE=0` and one worker. The 8 first runs gave the fingerprints of the run without
+shrinks; the exploration added 4 re-runs, 41 shrink candidates of seeds 11 and 14, and their 4
+runs of minimal schedules. Seed 14's lost message, left out of the earlier recordings, is now
+traced: it stays in flight to a consumer that is gone, because nsqd times an in-flight message
+out on the wall clock (the NSQ example's RESULTS.md, "The tree of runs"). So the notes leave out
+seed 15 only. The recording plays 11 first runs (3 without faults, the 7 of seeds 9 to 16
+without seed 15, and finding 2's regression) and the 48 runs of their families.
+
+**The media.** A video of 37 s at 1920 by 1080 (H.264, yuv420p, faststart, 2.5 MB) shows the code
+map for 6 s and the tree of runs for the rest; a looping GIF of 38 s at 1200 by 675 (5.2 MB),
+two stills and their captions go with it. The banners come at about 13 s (#1542), 23 s (#1124)
+and 30 s (#1386), at the stage's right. They are outside the repository, for the user to
+review. No VM ran for the recording: the page played the recorded runs back.
+
 ## Milestone 389 (tentative number): Gitea, a timer that records a negative time and a branch broken by a power cut
 
 Status: done on 2026-11-28, on hvx on the bare-metal machine and on GitHub's KVM runners.
