@@ -91,7 +91,7 @@ A bug with two causes counts in both rows.
 |---|---|---|---|
 | database or key-value store | an acknowledged write survives; replicas agree | clock steps; kills; power cuts of the whole guest; every replica compared with the leader; one node's storage faults; failovers by the client with a late write | NATS, Valkey, Dragonfly, SurrealDB, libSQL, Meilisearch, VictoriaMetrics, ClickHouse, Prometheus, Kvrocks, Typesense, rqlite, Garnet |
 | object store | an acknowledged object stays as written; a listing shows what exists | clock steps; kills and pauses of one node; a listing compared with a read of each key | Garage |
-| log or stream with partitions | no loss, one offset per record, no aborted read | kills; power cuts and clock steps; the messages check; reactions at console events; one node's storage faults; a client that leaves transactions open | Redpanda, NATS, Pulsar, RabbitMQ |
+| log or stream with partitions | no loss, one offset per record, no aborted read | kills; power cuts and clock steps; the messages check; reactions at console events; one node's storage faults; a client that leaves transactions open | Redpanda, NATS, Pulsar, RabbitMQ, RocketMQ |
 | job queue or workflow engine | an acknowledged job runs, once, at its time | kills of the process that holds the work; clock steps; the messages check | Hatchet, River, Temporal, Saleor, Restate, NSQ |
 | distributed query or compute engine with schedulers and workers | an accepted query ends; a completed query's result stays readable | production's topology and features; checks of how each unknown outcome ends; pauses of a worker past its failure detector; kills of the worker that holds the results | a user's query engine |
 | ledger or billing system | the books match the acknowledged operations; a limit holds | the generic rule beside domain rules; concurrent clients without faults; value properties | Blnk, Lago, Formance Ledger |
@@ -255,6 +255,12 @@ noticed each bug" counts them all.
     client's documentation says that a receipt does not keep a message from coming again. A
     failover subscription served by one consumer process at a time kept `order: {kind: fifo,
     scope: key}` judgeable; a shared one with prefetching consumers does not keep it.
+  - RocketMQ: `duplicates: forbidden`, with the queue and offset of each delivery as `o=`,
+    broke when the broker stored a committed transaction again after a clock step (finding 3).
+    `after_ack: no-redelivery` broke at every failover, because a slave copies the consumer
+    offsets every 10 s (finding 2, known apache/rocketmq#7790), so the example claims it in a
+    second manifest only. A transaction that rolls back is recorded as a failed send, so a
+    delivery of it would break `no-phantom`; none came.
   - NSQ (finding 1 and the known nsqio/nsq#1386): `acked_outcome` with `effect: recorded`, where
     the effect is a consumer's `FIN`, broke for messages that a consumer had received once and
     that a kill of `nsqd` lost. `no-loss` counted them as delivered. NSQ reports no state per
@@ -708,6 +714,15 @@ is the exploration that drew most of them.
     command that publishes to every queue and stream after the faults caught it; the checks of
     the data held. Blind at seed 10 of e3. The audit reads no Erlang, so the step was the
     explorer's own draw.
+  - RocketMQ (finding 3): the broker's transaction check decides with
+    `System.currentTimeMillis()` and the birth times of its operation records. After `T=10:-3600`
+    the records of the transactions that ended before the step were born an hour ahead, and the
+    check asked about transactions it had already committed at every interval. The producer
+    answered "commit" each time, and the broker stored the message again: `u17` six times in
+    50 s. The claim `duplicates: forbidden` over the drain's offsets (`o=`) caught it; `no-loss`
+    held. The audit ranked the check's function at place 46 of 155, by another line of it. A step back
+    also keeps a slave from copying the consumer offsets for the step's length
+    (`ReplicasManager.handleSlaveSynchronize`, the audit's place 10).
 - **What it misses.** Many clock effects are by design. Examples are Temporal's delayed timers,
   and River's runs of every periodic job that a forward step skipped. The audit reads text. It
   found no place in Redpanda's 2,694 C++ files, whose transaction expiry uses Seastar's wall
@@ -830,6 +845,13 @@ is the exploration that drew most of them.
     that publisher confirms had acknowledged. After `C=12` a new message took offset 0, the
     offset of a lost one, and `order: {kind: log}` broke: two messages shared offset 0. The quorum
     queues, which sync before they confirm, lost nothing at any cut.
+  - RocketMQ (finding 1, known in its parts): in controller mode each broker writes its epoch
+    file `epochFileCheckpoint` without a sync when the controller gives it a role. A cut 17 s
+    after the brokers became slaves left both slaves' files at 0 bytes (`hydo inspect` listed
+    the store). Each stopped at every start on the unchecked parse of an empty header
+    (apache/rocketmq#11460). `disk=cut | run C=20` does it; blind in 4 of e1's 40 schedules,
+    and one broker's power loss (`L=`) in 8 more. The stop came from the epoch file, not from the
+    commit log, which `SYNC_FLUSH` syncs.
 - **What it misses.** hydo's S3 emulator writes its objects without an fsync, so a cut of the
   guest loses objects that it acknowledged. In GreptimeDB a query of the recovery boot read an
   SST object shorter than its manifest says. A system whose data lives in object storage needs
@@ -1303,6 +1325,9 @@ is the exploration that drew most of them.
   - Mender (finding 1): the version file synced while its bytes are still in the stream.
   - Garage (finding 3): the peer list written without a sync, once a minute.
   - ClickHouse (finding 1): `fsync_after_insert` and the merge's fsync off by default.
+  - RocketMQ (finding 1): `IOTinyUtils.writeStringToFile`, through which `MixAll.string2File`
+    writes the epoch file, as its place 22 of 29. Its first places were the commit log's
+    flush services, whose `SYNC_FLUSH` path held in every run. The audit ran after the finding.
 
   Its own schedules then reached places that no earlier finding had named, each at the first
   try, on hvx:

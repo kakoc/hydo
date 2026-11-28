@@ -1,0 +1,10 @@
+#!/bin/sh
+# hydo: timeout=30
+# send one message to the topic j with SendSync; one in five is a poison message (x<id>) that
+# every consumer gives back, so that it is retried and dead-lettered, and one in five is delayed
+# by 5 s (d<id>)
+case $((HYDO_CMD_ID % 5)) in
+  0) exec /bin/rmq pub x$HYDO_CMD_ID ;;
+  1) exec /bin/rmq pub d$HYDO_CMD_ID ;;
+esac
+exec /bin/rmq pub m$HYDO_CMD_ID

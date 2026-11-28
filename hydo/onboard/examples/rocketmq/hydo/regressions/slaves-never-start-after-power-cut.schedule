@@ -1,0 +1,8 @@
+# Finding 1 (RESULTS.md), known in its parts (apache/rocketmq#11460, #5905). The controller made
+# broker0 and broker1 slaves at 00:00:38 of the guest clock, and each wrote its epoch file
+# epochFileCheckpoint without a sync. The power cut before step 20 (17 s later) leaves both files
+# at 0 bytes. At every start CheckpointFile.read parses the empty first line with
+# Integer.parseInt, the NumberFormatException is not caught, and the broker exits with status
+# 255: VIOLATION service cannot recover (committed data unrecoverable) (broker0).
+# expect: violation      (known in its parts: #11460's unchecked parse, #5905's unsynced files)
+disk=cut | run C=20

@@ -92,6 +92,7 @@ input	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	f27eb816afc247ea09f68cff
 input	hydo/onboard/examples/redpanda/hydo/hydo.yaml	a81d2ad14bf95e1eb2bb7766eb15c0da8ce0fe3697dd47f9bef090ae919b295a
 input	hydo/onboard/examples/restate/hydo/hydo.yaml	57a2fd507cc21b4821451ba79273d33a93b7a62501c7763363ec84f65ca1a1c8
 input	hydo/onboard/examples/river/hydo/hydo.yaml	6df7b0553b4a38f9d9f3ab285c37bb1d659703f5177ffd9ffcbabe6a1826ba0e
+input	hydo/onboard/examples/rocketmq/hydo/hydo.yaml	0aabc8a0cb05a274933a209c34068df0010702e3a104aa138569d51871bedb60
 input	hydo/onboard/examples/rqlite/hydo/hydo.yaml	66725e1846d2ca9f3904618019daa5d5c17ee68186d150a694f2b207863722e6
 input	hydo/onboard/examples/saleor/hydo/hydo.yaml	f05fc0c26134482af2ea78fda7c2e9dee2a8f1f082b583b86830e45f9698be94
 input	hydo/onboard/examples/seaweedfs/hydo/hydo.yaml	5fd69f77470e49e2807e91d36920a1fb07193fbf9dedf5ae48ab2cb390080153
@@ -7777,6 +7778,7 @@ chunk	hydo/onboard/examples/redis-errors/hydo/hydo.yaml	492	333	ad1e87c6fecbdf1e
 manifest	hydo/onboard/examples/redpanda/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/restate/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/river/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
+manifest	hydo/onboard/examples/rocketmq/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/rqlite/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/saleor/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)
 manifest	hydo/onboard/examples/seaweedfs/hydo/hydo.yaml	not core: restart policies: no shell model (their proof is tests/restart.rs)

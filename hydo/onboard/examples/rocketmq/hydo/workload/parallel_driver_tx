@@ -1,0 +1,9 @@
+#!/bin/sh
+# hydo: timeout=30
+# send one transactional message to j: t<id> commits, r<id> rolls back, u<id> answers
+# "unknown" and commits at the broker's check
+case $((HYDO_CMD_ID % 3)) in
+  0) exec /bin/rmq tx r$HYDO_CMD_ID ;;
+  1) exec /bin/rmq tx t$HYDO_CMD_ID ;;
+esac
+exec /bin/rmq tx u$HYDO_CMD_ID
