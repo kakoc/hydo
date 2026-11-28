@@ -269,8 +269,8 @@ at-most-once api.place_order` (`hydo guide checks`, "Side effects at fake outsid
 ## Upgrade the backend while the pages are open
 
 A deploy replaces the server while people use the app. Their open pages keep the frontend of
-the old version, and their next requests reach the new one: during the restart they fail, and
-afterwards the old frontend talks to the new API. To test it, give the backend's service both
+the old version, and their next requests reach the new one. During the restart they fail.
+Afterwards the old frontend talks to the new API. To test it, give the backend's service both
 versions' images and upgrade it in the middle of a step.
 
 1. Put the next version's image in the manifest as a version of the service. With a Compose file,
@@ -298,9 +298,9 @@ versions' images and upgrade it in the middle of a step.
    2.8.0 when the old process has ended (SIGKILL after 10 s), and waits for its readiness check.
    The walk goes on meanwhile.
 3. Read the verdict as for any fault. The page properties judge what the old pages did against
-   the new server: a write that failed during the restart and that the page did not show
-   (`browser.failures_shown`), an error that the old frontend's code threw on a new answer
-   (`browser.no_page_errors`), or a spinner that stays. `browser.read_back` then opens the pages of
+   the new server. A write may fail during the restart without a word on the page
+   (`browser.failures_shown`). The old frontend's code may throw on a new answer
+   (`browser.no_page_errors`), or a spinner may stay. `browser.read_back` then opens the pages of
    the new version and looks for every object that either version acknowledged.
 4. Compare with `U=web@2:2.8.0`, the same upgrade between two steps, where no page is open, and
    with the run without `U=`. A finding of the first schedule only is a finding of the open pages.

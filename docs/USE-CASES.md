@@ -150,7 +150,7 @@ Ideas that would answer more:
 | Is a saved object still saved after a crash? | A rule over the database, with power cuts of the whole guest. | built; `vikunja` finding 1 (M273) |
 | Did a page change visually? | `browser.screens: compare` compares each page with a recorded screenshot. | partly built; M254; the Mac engine ran no comparison (open item 145) |
 | Does the frontend behave when a payment API fails? | Fakes, emulators, and `hydo explore --protocol-cover`. | built; `web-shop`, `openapi-payouts` (M257) |
-| Do the open pages survive a deploy of the backend? | The backend's next version is a version of its image service, and `U=<svc>@<at>~<ms>:<version>` switches it while the walk's pages are open, so the old frontend talks to the new API; the page invariants and `browser.read_back` judge it. `hydo explore --upgrades` draws such switches for a manifest with `browser:`. | partly built; `vikunja/upgrade` (M392); open item 199 |
+| Do the open pages survive a deploy of the backend? | The backend's next version is a version of its image service. `U=<svc>@<at>~<ms>:<version>` switches it while the walk's pages are open, so the old frontend talks to the new API. The page invariants and `browser.read_back` judge it. `hydo explore --upgrades` draws such switches for a manifest with `browser:`. | partly built; `vikunja/upgrade` (M392); open item 199 |
 
 Ideas that would answer more:
 

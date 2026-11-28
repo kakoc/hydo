@@ -267,10 +267,10 @@ fetches both. `hydo-oci vikunja <command>` runs in the root of the version that 
 
 `U=<target>@<at>~<ms>:<version>` makes the switch `ms` of guest time after step `at` starts,
 while the step's workload goes on, as a deploy comes while users work. A client in the middle
-of its requests then meets the stop, the start and the new version. A web app's walk keeps the
-pages that the old version served open: they talk to the new version's API until the walk opens
-a page again (`hydo guide web-apps`, "Upgrade the backend while the pages are open"). The next
-step's faults wait until the switch is over. For a manifest with `browser:`, `hydo explore
+of its requests then meets the stop. It also meets the start, and then the new version. A web
+app's walk keeps the pages that the old version served open. They talk to the new version's API
+until the walk opens a page again (`hydo guide web-apps`, "Upgrade the backend while the pages
+are open"). The next step's faults wait until the switch is over. For a manifest with `browser:`, `hydo explore
 --upgrades` draws half of its upgrades this way, 3 to 12 s into the step.
 
 ## Knobs (durability settings the explorer may relax)
