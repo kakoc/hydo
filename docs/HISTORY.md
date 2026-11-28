@@ -26947,7 +26947,7 @@ boots. The decisions:
   built by 0.7.0 have no file. The image that hydo 0.7.0 builds from the release Redis example
   (`502d7540…`) gave all 7 recorded values under the candidate.
 - **`hvm/voting` ran last.** Its build and runs needed about 4 GB more than this Mac had free
-  above the 13 GB floor during the pass, and the watchdog stopped it twice. On 2026-11-28, with
+  above the 13 GB it keeps free during the pass, and the watchdog stopped it twice. On 2026-11-28, with
   37 GB free, it ran with the same candidate and `--write --thorough` (532 s). It built twice
   with the same bytes (`68e52fe560be68d6…`), and its 4 runs gave the same values twice; every run
   moved and no verdict changed. Open item 105 is empty (docs/REBASELINE.md section 35).

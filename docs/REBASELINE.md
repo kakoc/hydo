@@ -4191,7 +4191,7 @@ differ in their numbers and keep their class and property:
 - `hvm/python-kv-hist` `C=12 S=never`: the times of the history's operations.
 
 `hvm/voting` did not run in this pass: its build and runs need about 4 GB more than this Mac had
-free above its 13 GB floor while other work filled the disk and the swap, and the pass's watchdog
+free above the 13 GB it keeps free while other work filled the disk and the swap, and the pass's watchdog
 stopped it twice. It ran on 2026-11-28 with the same candidate and the same `--write --thorough`,
 once the Mac had 37 GB free (532 s). It built twice with the same bytes (`68e52fe560be68d6…`),
 and its 4 runs gave the same values twice from fresh boots; every run moved and no verdict
