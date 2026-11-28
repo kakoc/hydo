@@ -26923,6 +26923,15 @@ reactions; ids in a redirect answer; the request's body in a word; the setup ste
 its error; and power cuts inside the walk. `hydo build --check` passed a disk 1 MiB over hvx's 4
 GiB.
 
+**Tests.** In a clone of the branch on the bare-metal machine: `cargo test -p hydo-agents --test
+it` (16 passed) and `cargo test -p hydo --test it -- equivalence:: agents_equivalence:: docs::`
+(23 passed). The explorer's corpus (full and quick) and identity (quick and full) goldens and the
+controller's corpus golden were recorded again with `HYDO_BLESS=1`. Each golden's inputs gain the
+nine files of `hydo/onboard/examples/gitea/hydo/` and lose none. The chunks are hashes of one
+stream, so the new example's schedules change the chunks after them, and the quick identity
+stream takes every fifth group, so its three new groups shift which examples it samples.
+`sh ci/vale.sh` has no finding.
+
 Retro: Gitea 28.4.0, hvx and KVM, 2026-11-28
 - Time to the first clean run: 45 minutes of wall time, 20 of them for builds; the first image's
   disk was over hvx's limit.
