@@ -3,7 +3,7 @@
 This page records how hydo explored Gitea 28.4.0 with its own walk through the pages and what it
 found (Milestone 389, tentative number). The design of the walk is
 `docs/design/ui-exploration.md`, and `hydo guide web-apps`, section "Let hydo walk through the
-pages", is the how-to. The earlier apps explored this way are Memos
+pages" is the how-to. The earlier apps explored this way are Memos
 (`hydo/onboard/examples/memos/RESULTS.md`) and Vikunja (`hydo/onboard/examples/vikunja/RESULTS.md`).
 
 ## The short answers
@@ -15,9 +15,9 @@ pages", is the how-to. The earlier apps explored this way are Memos
   README leaves its branch broken, while Gitea's database says it is not empty. Found by directed
   power cuts; the regression is `power-cut-after-a-new-repository-breaks-its-branch.schedule`. The
   symptom is that of #31834, which was closed as a power outage's damage. Not posted.
-- **What held.** Every issue, comment, close and reopen that Gitea answered as saved stayed
-  saved, Gitea's counts matched its rows, and the search found every issue, in 200 schedules of
-  kills, pauses, network faults, clock steps and power cuts.
+- **What held.** Every issue, comment, close, and reopen that Gitea answered as saved stayed
+  saved. Gitea's counts matched its rows, and the search found every issue. That held in 200
+  schedules of kills, pauses, network faults, clock steps, and power cuts.
 - **What hydo lacked.** The section of that name: chiefly no console event at an acknowledged
   write, no id in a redirect answer, and power cuts only at the end of the walk.
 
@@ -65,17 +65,18 @@ The other candidates were left for these reasons:
 | `hydo/hydo.yaml` | Started with `hydo compose ../docker-compose.yaml`; the workload is `browser.explore`. |
 | `hydo/page-rules/gitea.mjs` | The project's own rules over the database and the search (below). |
 | `hydo/fetch-images.sh`, `hydo/hydo-compose.lock.json` | The Gitea image by digest, written by `hydo compose`. |
+| `hydo/hydo-kvm.yaml` | The manifest for KVM: `guest.proc_io: false`, because the runners' release has no KVM kernels of epoch 7. |
+| `hydo/hydo-gitfsync.yaml` | The contrast of finding 2: Gitea runs Git with `core.fsync=committed`. |
 | `hydo/regressions/` | The saved schedules of the findings. |
 
 What changed from the import:
 
 - The workload and the placeholder invariant of `hydo compose` gave way to `browser.explore`.
-- The walk's setup registers the account `hydo`, the first account and so the administrator. It
-  creates the repository `hydo/demo` with a README ("Initialize Repository"), the default label
-  set, the milestone `v1`, and one issue, and it starts that issue's timer. The walk then starts
-  on `/hydo/demo/issues`, and
-  `within: /hydo/demo/issues` keeps it on the repository's issues. It has 6 workload steps of 12
-  actions.
+- The walk's setup registers the account `hydo`, the first account and so the administrator.
+  It creates the repository `hydo/demo` with a README ("Initialize Repository"). It adds the
+  default label set, the milestone `v1`, and one issue, and it starts that issue's timer. The
+  walk then starts on `/hydo/demo/issues`, and `within: /hydo/demo/issues` keeps it on the
+  repository's issues. It has 6 workload steps of 12 actions.
 - `GITEA__server__ROOT_URL` names the server's address on the guest's bridge, which the guest's
   browser uses. The update checker, which asks `dl.gitea.com`, is off.
 - The service's `setup:` gives both volumes to uid 1000: the rootless image runs as that user.
@@ -87,7 +88,10 @@ What changed from the import:
 - `watch.alerts` adds Gitea's error toasts (`.toastify.toast-error`) and flash messages
   (`.flash-error`). `watch.requests: /hydo/` judges the repository's requests, not the static
   files or the notification stream `/user/events`. `watch.failures_of: "^POST /hydo/demo/issues"`
-  names the issue writes.
+  names the issue writes. `watch.console: false`: Gitea logs each failed fetch with
+  `console.error` and shows it as an error toast.
+- `guest.clock_after_cut: 60`: the recovery boot after a power cut continues the first boot's
+  clock, 60 s later, as a server's clock does.
 
 ## The rules
 
@@ -100,18 +104,18 @@ answers.
 
 The walk writes one word to `$HYDO_ACKED` for each write that Gitea answered 2xx, such as
 `POST:/hydo/demo/issues/new` or `POST:/hydo/demo/issues/2/comments`. Gitea's pages send their
-forms with `fetch` and answer `{"redirect": "/hydo/demo/issues/3"}`, without an `id` field, so a
-word names the kind of write and, for a comment, its issue, but not the new object.
+forms with `fetch` and answer `{"redirect": "/hydo/demo/issues/3"}`, without an `id` field. So a
+word names the write's path and, for a comment, its issue, but not the new object.
 
 - `gitea.saved_work_survives`: a repository has at least as many issues as the walk created there
-  (the walk deletes no issue), and an issue has at least as many comments, closes and reopens as
-  the acknowledged posts of its comment form. A post of that form makes a comment, a close or a
+  (the walk deletes no issue). An issue has at least as many comments, closes, and reopens as the
+  acknowledged posts of its comment form. A post of that form makes a comment, a close, or a
   reopen, and the word does not say which. When it fails, it prints the issue's state and every
   event of its timeline on a line before its verdict.
 - `gitea.counters_match`: the numbers that Gitea keeps beside its rows agree with the rows. These
   are a repository's open and closed issues, an issue's comments, a label's and a milestone's open
   and closed issues, and the repository's last issue number. Gitea shows these numbers on its
-  pages: the "Issues 3" tab, "2 Open 1 Closed", a label's and a milestone's counts.
+  pages: the tab "Issues 3", the line "2 Open 1 Closed", and a label's and a milestone's counts.
 - `gitea.issues_found_by_search`: the search of the repository's issues finds every issue of the
   database by the longest word of its title of 4 to 20 letters and digits. Gitea fills its issue
   index (bleve) from a queue of its own after the commit, so the rule asks the API
