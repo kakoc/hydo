@@ -11,7 +11,7 @@
 #
 #   hydo build hydo-proxy.yaml
 #   hydo run "disk=none | run I=1"
-#   hydo run "disk=none | run H=app.projects@0-6:order=2 I=1"
+#   hydo run "disk=none | run H=app.tasks@0-6:order=2 I=1"
 #   hydo run "disk=none | run N=browser@2~500:5000 I=1"
 #   hydo explore --seeds 1-20 --answer-faults --link-cuts
 format: 1
@@ -120,14 +120,17 @@ proxies:
     addr: 10.89.0.1
     service: vikunja
     protocol: http
+    # the frontend of 2.8.0 reads and writes through /api/v2 (a clean run's record: GET
+    # /api/v2/tasks and /api/v2/projects, POST /api/v2/projects/<id>/tasks/bulk, PATCH
+    # /api/v2/tasks/<id>)
     routes:
-      - {name: projects, method: GET, path: /api/v1/projects}
-      - {name: project_reads, method: GET, path: "/api/v1/projects/*"}
-      - {name: task_reads, method: GET, path: "/api/v1/tasks/*"}
-      - {name: creates, method: PUT, path: "/api/v1/*"}
-      - {name: updates, method: POST, path: "/api/v1/*"}
-      - {name: bulk, method: POST, path: "/api/v2/*"}
+      - {name: tasks, method: GET, path: /api/v2/tasks}
+      - {name: projects, method: GET, path: /api/v2/projects}
+      - {name: task_reads, method: GET, path: "/api/v2/tasks/*"}
+      - {name: project_reads, method: GET, path: "/api/v2/projects/*"}
+      - {name: bulk, method: POST, path: "/api/v2/projects/*"}
       - {name: patches, method: PATCH, path: "/api/v2/*"}
+      - {name: deletes, method: DELETE, path: "/api/v2/*"}
 
 invariants:
   - id: vikunja.saved_work_survives
