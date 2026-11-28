@@ -72,7 +72,7 @@ each bug happen yourself.
 - **[Apache Kvrocks](hydo/onboard/examples/kvrocks/)**: a backup server that has just copied all the data from its main
   server does not start again after a power cut ([#3827](https://github.com/apache/kvrocks/issues/3827)).
 - **[VictoriaMetrics](hydo/onboard/examples/victoriametrics/)**: after the clock is set back, every server deletes the
-  current month's data. Fixed ([#11973](https://github.com/VictoriaMetrics/VictoriaMetrics/issues/11973)).
+  current month's data ([#11973](https://github.com/VictoriaMetrics/VictoriaMetrics/issues/11973)).
 - **[Typesense](hydo/onboard/examples/typesense/)**: a server that restarts repeats a delete in the wrong order and
   loses documents that it had saved ([#3202](https://github.com/typesense/typesense/issues/3202)). After the clock is set
   back, the cluster does not replace a failed leader for that long
