@@ -27,12 +27,13 @@ Each command of the service (its setup, its process and its readiness check) see
 version it runs as `$HYDO_VERSION`. So one command can serve every version, and a version needs
 its own `cmd:` only when its command line differs. A version name is a letter or digit followed by
 letters, digits, `.`, `_` and `-`, at most 40 bytes. A `{{param}}` may name a version, so one
-manifest builds the pair of versions to test (`params:`, MANIFEST.md). Versions of a service
-from an image (`image:`) are not supported yet.
+manifest builds the pair of versions to test (`params:`, MANIFEST.md). A service from an image
+(`image:`) names an image for each version (Milestone 392, below).
 
 ## The token
 
-`U=<target>@<at>[/<gap>][+<back>]:<version>` switches services to `<version>` before step `at`:
+`U=<target>@<at>[~<off>][/<gap>][+<back>]:<version>` switches services to `<version>` before step
+`at`:
 
 | form | what it does |
 |---|---|
@@ -41,6 +42,7 @@ from an image (`image:`) are not supported yet.
 | `U=etcd1,etcd2@5:3.6.0` | switches `etcd1`, then `etcd2`, both before step 5 |
 | `U=etcd.all@5/3:3.6.0` | a rolling upgrade of the group `etcd`: the k-th member before step 5+3k |
 | `U=etcd1@5:3.6.0 U=etcd1@9:3.5.5` | an upgrade, then a downgrade written as its own token |
+| `U=web@2~8000:2.8.0` | switches `web` to 2.8.0 8 s of guest time into step 2, while the step runs (Milestone 392) |
 
 The target is a service, a list, or a group selector, as for `K=` (MANIFEST.md "Groups of
 services and partitions"). A target with several services is never switched at once: the services
@@ -72,6 +74,61 @@ HYDO-ORACLE: VIOLATION [upgrade.started] etcd1 did not start on version 3.6.0-rc
 The upgrade itself is the failure, for example when the new version cannot read what the old one
 wrote. A version that starts but serves wrong answers fails the manifest's invariants, as any
 other fault does.
+
+## A switch while a step runs
+
+With `~<off>` (Milestone 392) every switch of the token, its rollbacks too, comes `off` ms of guest
+time after its step starts. A thread of the controller of its own (`upgrade::timer`) sleeps that
+long in the guest and then makes the three steps above, while the step's workload goes on. The
+main thread joins it before the next step's faults, and a power cut cancels it. Several timed
+switches of one step run in the order of their offsets, each later one the difference after the
+one before. The controller's words name the moment: `UPGRADING web from version 2.7.1 to 2.8.0
+8000 ms into step 2: stopping it`.
+
+A deploy comes while users work, and this is the form that shows it. A client in the middle of
+its requests meets the stop, the downtime and the new version. A web app's walk keeps the pages
+that the old version served open, so their code talks to the new version's API until the walk
+loads a page again. Before a step, no page is open: each step of a walk is a fresh browser.
+
+## Versions of an image service
+
+A service from a Docker image gets each version from an image of its own:
+
+```yaml
+services:
+  - name: vikunja
+    image: {x86_64: images/vikunja-vikunja-2.7.1-amd64.docker.tar}
+    image_ref: "vikunja/vikunja:2.7.1"
+    version: "2.7.1"
+    versions:
+      - name: "2.8.0"
+        image: {x86_64: images/vikunja-vikunja-2.8.0-amd64.docker.tar}
+        image_ref: "vikunja/vikunja:2.8.0"
+```
+
+hydo-build (`hydo-build/src/oci.rs`) unpacks the version's image into `/oci/<service>@<version>`
+and writes its launcher `/etc/hydo/oci/<service>@<version>/run`. The plan
+(`hydo-control/src/plan.rs`) takes that launcher as the version's command, so the switch above
+needs nothing else. The version keeps what a deploy keeps:
+
+- the service's `mounts:`, so the new image opens the old one's data folders;
+- its `workdir:`, `user:`, `env_file:` and `env:`, with the version's `env:` over them;
+- its `cmd:` and `entrypoint:` unless the version gives its own;
+- its `/tmp` (`/tmp/oci/<service>`), as a restart keeps it.
+
+`@` is no character of a service's name, so a version's root never meets another service's. Each
+root has its own mounts, bound once per boot by its own lock and done file. A one-service power
+loss (`L=`) removes the versions' done files too, so the next start binds the new file system.
+
+`hydo-oci <service>` runs a command in the root that runs. Each launcher of a service with
+versions writes its root's key into `/tmp/hydo/oci-ver.<service>` before it starts the program.
+`hydo-oci` reads the file, but a command of the service itself (`$HYDO_SVC` is the service) takes
+the root of `$HYDO_VERSION`, so a readiness check right after the switch never runs in the old
+root. An image without versions keeps the `hydo-oci` and the launchers it had.
+
+`hydo compose <file> --upgrade-to <service>=<image>:<tag>` pins the version's image by digest in
+the lock file and fetches it in `fetch-images.sh`, and writes `version:` with the service's tag
+and the version named by the new tag.
 
 ## Power cuts and replays
 
@@ -117,16 +174,23 @@ switched before one step.
 
 Every addition is opt-in. A manifest without `versions:` gets no `$HYDO_VERSION`, and a schedule
 without `U=` sends the commands it sent before. So no recorded fingerprint moves and the
-fingerprint epoch stays 2. The additions are:
+fingerprint epoch stays 2. Milestone 392 keeps this: an image without versions of an image
+service has the bytes it had, and a `U=` without `~` sends the commands it sent. The additions are:
 
 - format 1 of the project: `services[].version` and `services[].versions`;
-- the schedule language: the token `U=` (the letter `U` is reserved, so no knob may use it);
+- the schedule language: the token `U=` (the letter `U` is reserved, so no knob may use it), and
+  its `~<off>` (Milestone 392);
+- format 1 of the project: `image:`, `image_ref:`, `entrypoint:` and `env:` of a version (Milestone
+  392);
 - the results format: `Run.upgrades`;
 - the control transcript: the report line `hydo-explore-versions:` in runs with `U=`.
 
 ## Limits
 
-- A version of an image service (`image:`) is not supported.
+- A version of an image service with `writable: true` is refused: each root would need its own
+  writable layer.
+- A timed switch comes when the controller's thread wakes, a few milliseconds of guest time
+  after its offset, as a timed kill does.
 - The grace period after SIGTERM is fixed at 10 seconds.
 - The explorer draws one `U=` per schedule and only the selector `all` for a group.
 - The Mac and KVM engines run `U=` through the same controller; the proof of Milestone 238 ran on

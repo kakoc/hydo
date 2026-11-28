@@ -392,7 +392,11 @@ I	hydo/onboard/examples/victoriametrics/hydo/hydo.yaml	97ec0d99baf0039b5ee148757
 I	hydo/onboard/examples/victoriametrics/hydo/known-errors.yaml	386f0aefc10fd48d89a75a4ba72f54aafcbee49f47d55b49e2e5f2ab1e9fa92e
 I	hydo/onboard/examples/vikunja/docker-compose.yaml	bf9844faa68e86f6b4631c66cf0b93f84fdac43b2054e79f7fcf8c8f59f11c17
 I	hydo/onboard/examples/vikunja/hydo/hydo-compose.lock.json	c4d673b24249044b7fa2b6e34f14c2860b47424c7f31e3c091ed613a9aa023dd
-I	hydo/onboard/examples/vikunja/hydo/hydo.yaml	99d1e69e4c874d24828b8307a0876b808157074f6c1831181cfddb154ed1dc0f
+I	hydo/onboard/examples/vikunja/hydo/hydo-kanban.yaml	74516930dae4ccf6de657da947e4cc273ef82724c7be0a8269f7989665e20f2c
+I	hydo/onboard/examples/vikunja/hydo/hydo.yaml	0fb117a3e84da25d678f8f18faa0d9e10540440f07ecf70c0140f884cc65a5bc
+I	hydo/onboard/examples/vikunja/upgrade/docker-compose.yaml	aa4d8d9b9203f7752ce98388eb114e04aea308fa50a7ce05fc2c4937a0fbf652
+I	hydo/onboard/examples/vikunja/upgrade/hydo/hydo-compose.lock.json	648a0ad13b0c5608b8864515fdcfe6be499425bb56a47418ebc38ab54043d5ca
+I	hydo/onboard/examples/vikunja/upgrade/hydo/hydo.yaml	527781d76dff9375a11406e62ec1a329509e6fd0d4a2c9815a364e043b9642f5
 I	hydo/onboard/examples/web-shop/app/package-lock.json	9cf2e4dd43bfd6da00dfd6dbdcb999a7aace67f994b430aa7b029beca2891266
 I	hydo/onboard/examples/web-shop/app/package.json	fabac0ae1c35cb1313afeaaecaf93582ed8714230099aed89b8864eaff64cd4b
 I	hydo/onboard/examples/web-shop/e2e/package-lock.json	1bd677fb86c5282ed7783b24460ff5c05031c71ed0dfc00b4f240354acf391c3
@@ -1241,7 +1245,15 @@ R	^	<root>/hydo/onboard/examples/vikunja/docker-compose.yaml --set version=zz --
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/vikunja/hydo/hydo-compose.lock.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
+R	^	<root>/hydo/onboard/examples/vikunja/hydo/hydo-kanban.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
+R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/vikunja/hydo/hydo.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
+R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
+R	^	<root>/hydo/onboard/examples/vikunja/upgrade/docker-compose.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
+R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
+R	^	<root>/hydo/onboard/examples/vikunja/upgrade/hydo/hydo-compose.lock.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
+R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
+R	^	<root>/hydo/onboard/examples/vikunja/upgrade/hydo/hydo.yaml --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
 R	^	<root>/hydo/onboard/examples/web-shop/app/package-lock.json --set version=zz --print-shell	run	1	""	"hydo-build: --set version: the manifest declares no paramete…#c37a0be20138383f"
 R	^	^ --print-world --print-init	run	2	""	"hydo-build: --print-init was removed in Milestone 136: image…#194bde69b6657365"
@@ -12139,100 +12151,100 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	<tmp>/mutant377.15.json --arch x86_64 --check	run	1	""	"hydo-build: services[1]: storage: a directory under /data, o…#646f80d6731ef8a9"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.0.json --arch arm64 --check	run	1	""	"hydo-build: services[2]: unknown field(s) bogus (known: addr…#92ec80caf4b812f5"
+R	^	<tmp>/mutant392.0.json --arch arm64 --check	run	1	""	"hydo-build: services[2]: unknown field(s) bogus (known: addr…#92ec80caf4b812f5"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.1.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant392.1.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.2.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant392.2.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.3.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant392.3.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.4.json --arch arm64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
+R	^	<tmp>/mutant392.4.json --arch arm64 --check	run	1	""	"hydo-build: top level: unknown field(s) bogus (known: browse…#f5acf88fd95b1581"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.5.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant392.5.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.6.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant392.6.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.7.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant392.7.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.8.json --arch arm64 --check	run	1	""	"hydo-build: services[2]: storage: size_mib: a number from 16 to 3072\n"
+R	^	<tmp>/mutant392.8.json --arch arm64 --check	run	1	""	"hydo-build: services[2]: storage: size_mib: a number from 16 to 3072\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: storage: size_mib: a number from 16 to 3072\n"
+R	^	<tmp>/mutant392.9.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: storage: size_mib: a number from 16 to 3072\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.10.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant392.10.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.11.json --arch x86_64 --check	run	1	""	"hydo-build: services[5].image_ref: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant392.11.json --arch x86_64 --check	run	1	""	"hydo-build: services[5].image_ref: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.12.json --arch arm64 --check	run	1	""	"hydo-build: services[3]: addr 10.89.0.14 is used by two services\n"
+R	^	<tmp>/mutant392.12.json --arch arm64 --check	run	1	""	"hydo-build: services[3]: addr 10.89.0.14 is used by two services\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.13.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant392.13.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.14.json --arch x86_64 --check	run	1	""	"hydo-build: format: the project format, a whole number; this…#82f68f2f3a5c3a1e"
+R	^	<tmp>/mutant392.14.json --arch x86_64 --check	run	1	""	"hydo-build: format: the project format, a whole number; this…#82f68f2f3a5c3a1e"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant388.15.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant392.15.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.0.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant395.0.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.1.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant395.1.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.2.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant395.2.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[0].cmd[4]: {{p}} is not a declared parameter\n"
+R	^	<tmp>/mutant395.3.json --arch x86_64 --check	run	1	""	"hydo-build: services[0].cmd[4]: {{p}} is not a declared parameter\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant395.4.json --arch arm64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: missing required field 'ready'\n"
+R	^	<tmp>/mutant395.5.json --arch x86_64 --check	run	1	""	"hydo-build: services[0]: missing required field 'ready'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.6.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant395.6.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.7.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant395.7.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.8.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant395.8.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.9.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant395.9.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.10.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant395.10.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.11.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant395.11.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.12.json --arch arm64 --check	run	1	""	^
+R	^	<tmp>/mutant395.12.json --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.13.json --arch x86_64 --check	run	1	""	^
+R	^	<tmp>/mutant395.13.json --arch x86_64 --check	run	1	""	^
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.14.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: unknown field(s) bogus (known: addr…#338cf733b27b0703"
+R	^	<tmp>/mutant395.14.json --arch x86_64 --check	run	1	""	"hydo-build: services[3]: unknown field(s) bogus (known: addr…#338cf733b27b0703"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
-R	^	<tmp>/mutant391.15.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
+R	^	<tmp>/mutant395.15.json --arch x86_64 --check	run	1	""	"hydo-build: workload: missing required field 'run'\n"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	tracked manifest candidates	<root>/.claude-plugin/marketplace.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) owner, plugins (know…#17954ba947fef49c"
@@ -14521,10 +14533,34 @@ R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	^
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<root>/hydo/onboard/examples/vikunja/hydo/hydo-kanban.yaml --arch x86_64 --check	run	1	""	"hydo-build: services[0] (vikunja): image <root>/hydo/onboard…#e3c78113070160b4"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	"hydo-build: services[0] (vikunja): image <root>/hydo/onboard…#44b72e7552bd8de0"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<root>/hydo/onboard/examples/vikunja/hydo/hydo.yaml --arch x86_64 --check	run	1	""	"hydo-build: services[0] (vikunja): image <root>/hydo/onboard…#e3c78113070160b4"
 R	^	^ --arch x86_64 --print-shell	run	1	""	^
 R	^	^ --arch x86_64 --print-world	run	1	""	^
 R	^	^ --arch arm64 --check	run	1	""	"hydo-build: services[0] (vikunja): image <root>/hydo/onboard…#44b72e7552bd8de0"
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<root>/hydo/onboard/examples/vikunja/upgrade/docker-compose.yaml --arch x86_64 --check	run	1	""	"hydo-build: top level: missing required field 'name'\n"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<root>/hydo/onboard/examples/vikunja/upgrade/hydo/hydo-compose.lock.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) generated_by, images…#d34a9646873203b6"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	^
+R	^	^ --arch arm64 --print-shell	run	1	""	^
+R	^	^ --arch arm64 --print-world	run	1	""	^
+R	^	<root>/hydo/onboard/examples/vikunja/upgrade/hydo/hydo.yaml --arch x86_64 --check	run	1	""	"hydo-build: services[0] (vikunja): image <root>/hydo/onboard…#aa7fceb81e98fc99"
+R	^	^ --arch x86_64 --print-shell	run	1	""	^
+R	^	^ --arch x86_64 --print-world	run	1	""	^
+R	^	^ --arch arm64 --check	run	1	""	"hydo-build: services[0] (vikunja): image <root>/hydo/onboard…#3705019a1c0254b8"
 R	^	^ --arch arm64 --print-shell	run	1	""	^
 R	^	^ --arch arm64 --print-world	run	1	""	^
 R	^	<root>/hydo/onboard/examples/web-shop/app/package-lock.json --arch x86_64 --check	run	1	""	"hydo-build: top level: unknown field(s) lockfileVersion, pac…#09370c59b6527f3d"

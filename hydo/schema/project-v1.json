@@ -1525,6 +1525,56 @@
               "type": "null"
             }
           ]
+        },
+        "image": {
+          "description": "For a service with image: (Milestone 392): the Docker/OCI image file this version runs;\nan upgrade starts it on the service's data, mounts and settings. Every version of an\nimage service has one.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ImageSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "image_ref": {
+          "description": "Which image in this version's file: a tag or sha256:<digest>.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entrypoint": {
+          "description": "Replaces this version's image's Entrypoint (default: the service's entrypoint:).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CommandLine"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "env": {
+          "description": "Added to or overriding the service's env: for this version.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Scalar"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
         }
       },
       "additionalProperties": false,

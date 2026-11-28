@@ -1,0 +1,16 @@
+# Vikunja as its documentation runs it with Docker and SQLite, at the release before the
+# example's (Milestone 392): `hydo compose docker-compose.yaml --upgrade-to
+# vikunja=vikunja/vikunja:2.8.0` imports it with the next release as a version of the service.
+services:
+  vikunja:
+    image: vikunja/vikunja:2.7.1
+    environment:
+      VIKUNJA_SERVICE_SECRET: hydo-example-secret-not-for-production
+      VIKUNJA_SERVICE_PUBLICURL: http://vikunja:3456/
+      VIKUNJA_DATABASE_PATH: /db/vikunja.db
+    ports:
+      - "3456:3456"
+    volumes:
+      - ./files:/app/vikunja/files
+      - ./db:/db
+    restart: unless-stopped

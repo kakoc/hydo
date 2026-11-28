@@ -21,6 +21,10 @@
 //! record `fault.upgraded`. Without `U=` none of this runs: a plan's services start on their own
 //! version with their own commands, command for command as before (no `$HYDO_VERSION` for a
 //! service without `versions:`).
+//!
+//! Milestone 392: `U=<target>@<at>~<off>...` makes the token's switches `off` ms into their
+//! step, from a thread of their own ([`timer`]), while the step's workload runs; a service from
+//! an image switches to the launcher of its version's image (`/etc/hydo/oci/<svc>@<v>/run`).
 
 use super::{
     bb, die_oracle, env, log, run, running, secs, start_svc, svc_sig, targets, xassert, Ctx, Part,
@@ -87,6 +91,18 @@ pub(super) fn current(fx: &mut F<'_>, ctx: &Ctx, s: &str) -> Option<String> {
 
 /// One switch of `svc` to `to` (None: back to the version it ran before) before step `p`.
 pub(super) fn switch(fx: &mut F<'_>, ctx: &Ctx, svc: &str, to: Option<&str>, p: i64) -> Step<()> {
+    switch_when(fx, ctx, svc, to, p, &format!("before step {p}"))
+}
+
+/// [`switch`], with the words of when it happens (`before step 5`, `1500 ms into step 5`).
+fn switch_when(
+    fx: &mut F<'_>,
+    ctx: &Ctx,
+    svc: &str,
+    to: Option<&str>,
+    p: i64,
+    when: &str,
+) -> Step<()> {
     let Some(from) = current(fx, ctx, svc) else {
         log(fx, format!("U: {svc} has no versions, ignored"));
         return Ok(());
@@ -111,7 +127,7 @@ pub(super) fn switch(fx: &mut F<'_>, ctx: &Ctx, svc: &str, to: Option<&str>, p: 
     if to == from {
         log(
             fx,
-            format!("{svc} runs version {to} already before step {p}; not switched"),
+            format!("{svc} runs version {to} already {when}; not switched"),
         );
         return Ok(());
     }
@@ -122,7 +138,7 @@ pub(super) fn switch(fx: &mut F<'_>, ctx: &Ctx, svc: &str, to: Option<&str>, p: 
     if alive {
         log(
             fx,
-            format!("{what} {svc} from version {from} to {to} before step {p}: stopping it"),
+            format!("{what} {svc} from version {from} to {to} {when}: stopping it"),
         );
         // the restart policies' supervisors and the heal see a process hydo ended (as after K=)
         let s = svc.to_string();
@@ -141,7 +157,7 @@ pub(super) fn switch(fx: &mut F<'_>, ctx: &Ctx, svc: &str, to: Option<&str>, p: 
     } else {
         log(
             fx,
-            format!("{what} {svc} from version {from} to {to} before step {p}: it is down, it starts on {to} at its restart"),
+            format!("{what} {svc} from version {from} to {to} {when}: it is down, it starts on {to} at its restart"),
         );
     }
     let (s, f, t) = (svc.to_string(), from.clone(), to.clone());
@@ -170,11 +186,11 @@ pub(super) fn switch(fx: &mut F<'_>, ctx: &Ctx, svc: &str, to: Option<&str>, p: 
             fx,
             format!(
                 "HYDO-ORACLE: VIOLATION [upgrade.started] {svc} did not start on version {to} \
-                 before step {p} (it ran {from})"
+                 {when} (it ran {from})"
             ),
         );
     }
-    log(fx, format!("{svc} runs version {to} before step {p}"));
+    log(fx, format!("{svc} runs version {to} {when}"));
     Ok(())
 }
 
@@ -207,8 +223,8 @@ pub(super) fn grace(fx: &mut F<'_>, ctx: &Ctx, svc: &str, spawn: u64) -> Step<()
 
 /// The run's switches, resolved at the first step of each token (a group's selector then picks
 /// its members, `primary` by its probe): (step, token index, order within the token, service,
-/// version or None for a rollback).
-pub(super) type Pending = Vec<(i64, usize, usize, String, Option<String>)>;
+/// version or None for a rollback, the token's offset into the step in ms: Milestone 392).
+pub(super) type Pending = Vec<(i64, usize, usize, String, Option<String>, Option<u64>)>;
 
 /// The tokens whose first step is `p`: their targets resolved, their switches added to `pending`.
 pub(super) fn resolve_at(fx: &mut F<'_>, ctx: &Ctx, p: i64, pending: &mut Pending) -> Step<()> {
@@ -221,18 +237,69 @@ pub(super) fn resolve_at(fx: &mut F<'_>, ctx: &Ctx, p: i64, pending: &mut Pendin
         };
         let svcs = targets::resolve(fx, ctx, 'U', &t)?;
         for (k, w) in u.switches(&svcs).into_iter().enumerate() {
-            pending.push((w.step as i64, i, k, w.service, w.version));
+            pending.push((w.step as i64, i, k, w.service, w.version, u.off));
         }
     }
     pending.sort_by_key(|x| (x.0, x.1, x.2));
     Ok(())
 }
 
-/// The switches due before step `p`, in order.
+/// The switches due before step `p`, in order (those of a token without `~<off>`).
 pub(super) fn apply_at(fx: &mut F<'_>, ctx: &Ctx, p: i64, pending: &mut Pending) -> Step<()> {
-    let due: Vec<_> = pending.iter().filter(|x| x.0 == p).cloned().collect();
-    for (_, _, _, svc, v) in due {
+    let due: Vec<_> = pending
+        .iter()
+        .filter(|x| x.0 == p && x.5.is_none())
+        .cloned()
+        .collect();
+    for (_, _, _, svc, v, _) in due {
         switch(fx, ctx, &svc, v.as_deref(), p)?;
+    }
+    Ok(())
+}
+
+/// Milestone 392: the switches of step `p` that a token's `~<off>` makes while the step runs,
+/// by their offset (stable: in the order of [`apply_at`] among one offset).
+pub(super) fn timed_at(p: i64, pending: &Pending) -> Vec<(u64, String, Option<String>)> {
+    let mut v: Vec<(u64, String, Option<String>)> = pending
+        .iter()
+        .filter(|x| x.0 == p)
+        .filter_map(|x| x.5.map(|o| (o, x.3.clone(), x.4.clone())))
+        .collect();
+    v.sort_by_key(|x| x.0);
+    v
+}
+
+/// Milestone 392: the thread of the switches made while step `p` runs. It sleeps the first
+/// switch's offset from the step's start (each later offset of the step: the difference to the
+/// one before, after that switch) and makes the switch as [`switch`] does before a step:
+/// SIGTERM, the grace period, the new version's start and its readiness check. The step's
+/// workload goes on meanwhile; the main thread joins this one before the next step's faults.
+pub(super) fn timer(
+    fx: &mut F<'_>,
+    ctx: &Ctx,
+    p: i64,
+    switches: &[(u64, String, Option<String>)],
+) -> Step<()> {
+    let mut slept = 0u64;
+    for (off, svc, v) in switches {
+        if *off > slept {
+            let e = env(fx, ctx, &[]);
+            run(
+                fx,
+                vec![bb(ctx), "sleep".into(), secs(off - slept, 3)],
+                e,
+                None,
+            )?;
+            slept = *off;
+        }
+        switch_when(
+            fx,
+            ctx,
+            svc,
+            v.as_deref(),
+            p,
+            &format!("{off} ms into step {p}"),
+        )?;
     }
     Ok(())
 }

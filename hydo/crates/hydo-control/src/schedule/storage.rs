@@ -599,7 +599,13 @@ pub(super) fn power_loss(
                 .is_some_and(|s| s.cmd == format!("/etc/hydo/oci/{svc}/run"))
             {
                 format!(
-                    "n=0; while {b} grep -q '^{dev} ' /proc/mounts; do for m in $({b} awk '$1 == \"{dev}\" {{ print $2 }}' /proc/mounts | {b} sort -r); do {b} umount $m 2>/dev/null; done; n=$((n+1)); [ $n -ge 100 ] && {{ {b} grep '^{dev} ' /proc/mounts; exit 1; }}; {b} grep -q '^{dev} ' /proc/mounts && {b} usleep 50000; done; {b} rm -f /tmp/hydo/oci-mnt.{svc}.done"
+                    "n=0; while {b} grep -q '^{dev} ' /proc/mounts; do for m in $({b} awk '$1 == \"{dev}\" {{ print $2 }}' /proc/mounts | {b} sort -r); do {b} umount $m 2>/dev/null; done; n=$((n+1)); [ $n -ge 100 ] && {{ {b} grep '^{dev} ' /proc/mounts; exit 1; }}; {b} grep -q '^{dev} ' /proc/mounts && {b} usleep 50000; done; {b} rm -f /tmp/hydo/oci-mnt.{svc}.done{}",
+                    // Milestone 392: the roots of the service's versions bound it too
+                    if ctx.plan.service(svc).is_some_and(|s| s.has_versions()) {
+                        format!(" /tmp/hydo/oci-mnt.{svc}@*.done")
+                    } else {
+                        String::new()
+                    }
                 )
             } else {
                 format!(

@@ -1660,6 +1660,24 @@ reaches etcd issue 19557 on hvx with `U=etcd1@5:3.6.0`, and etcd's documented pa
 3.5.26 passes. Design: `docs/design/upgrades.md`; guide: `hydo guide faults`, "Upgrades and
 rollbacks"; details: `docs/HISTORY.md` Milestone 238.
 
+**Upgrades of image services, also while a walk's pages are open (M392, tentative number).** A
+service with `image:` gives each of its `versions:` an image of its own (a format-1 addition).
+hydo-build unpacks it into `/oci/<service>@<version>` with its own launcher. `U=` starts it on
+the service's data, mounts, settings and `/tmp`, and `hydo-oci` runs in the root that runs. `hydo
+compose --upgrade-to <service>=<image>:<tag>` pins the second image in the lock file and
+`fetch-images.sh`. `U=<target>@<at>~<off>:<version>` makes the switch `off` ms into its step
+while the step runs. So a walk's pages of the old version stay open and talk to the new one.
+For a manifest with `browser:`, `hydo explore --upgrades` draws half of its upgrades so. An image
+without versions of an image service keeps its bytes, and a `U=` without `~` its commands.
+`hydo build` stops at an x86_64 disk past 4,096 MiB. The example is
+`hydo/onboard/examples/vikunja/upgrade` (Vikunja 2.7.1 to 2.8.0 on hvx). The upgrade 8 s and 12 s
+into a step, with the page of 2.7.1 open, held, each schedule twice with one fingerprint. A switch
+1.5 s into the step met a page opened while the server was down. Its unhandled promise rejection
+(`Error while refreshing user info`) comes with a plain kill too, a small candidate of the
+downtime. The references are the section "Versions of a service and upgrades" of MANIFEST.md,
+`hydo guide faults` and `hydo guide web-apps`. The details are in `docs/HISTORY.md` Milestone 392
+(open items 109 and 199).
+
 **One node's storage faults on NATS (M235).** `hydo/onboard/examples/nats-jetstream/storage/`
 puts each node's store on a file system of its own. On hvx it reaches two of Jepsen's NATS 2.12.1
 findings in one VM. `P=n1@2+10 L=n2@10+2 K=n3@12+6` loses acknowledged messages (3.5), and one
@@ -3113,7 +3131,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
 108. What the 0.3.3 docs review left is done in M247. The replay at the end of `hydo explore`
     ran on the Mac engine only, on one disk-error schedule of the Redis example. It did not run
     on hvx or KVM, or on a problem whose service writes its own log files (`logs:`).
-109. Upgrades (M238). Versions of an image service (`image:`) are refused. The explorer draws one
+109. Upgrades (M238, M392). Since M392 a version of an image service has an image of its own
+    (open item 199 has what that left). The explorer draws one
     `U=` per schedule and only the selector `all` for a group, and the state search does not move
     `U=`. The Mac and KVM engines ran `U=` only on the scripted agent. The grace period after
     SIGTERM is fixed at 10 s. The example is not in `hydo/onboard/recorded.json`.
@@ -4805,6 +4824,25 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       Neither KVM nor the Mac engine ran it (the image has an arm64 build). More than three
       nodes, several regions, epoch leases, and a `--max-offset` other than 500 ms were not
       tried.
+199. What the upgrades of image services left (M392, tentative number):
+    - Only hvx ran them, with two releases of Vikunja; the Mac engine and KVM did not.
+    - No exploration with `--upgrades` ran on the example.
+    - `writable: true` with versions is refused. Each version's image is unpacked beside the
+      service's own and takes its room in the root. So the example's data disk is 256 MiB, to fit
+      hvx's 4 GiB beside the Playwright image.
+    - The switch is a SIGTERM and a start, so a deploy always has downtime. There is no second
+      instance behind a balancer, and no frontend served apart from its backend (a CDN keeps the
+      old files).
+    - A walk opens its first page some seconds into a step, so `~<off>` has to come after it. The
+      explorer's offsets of 3 to 12 s fit Vikunja's steps of 12 actions; a step of another length
+      needs others.
+    - After a rollback, 2.7.1 does not know the column `deleted_at` of 2.8.0, so a task kept as
+      deleted would come back. No walk deleted a task, so no run showed it.
+    - The small Vikunja candidate (an unhandled rejection of the user's refresh while the server
+      is down) is not posted.
+    - The image record lists a version as a service `<service>@<version>`, and the build's
+      warnings of a readiness check, the CPU caches and a `storage:` owner judge the service's own
+      image only.
 201. The live map of the code an exploration reaches (M394, tentative number;
     `docs/design/live-map.md`). What is left:
     - Only the Mac engine watches the functions. hvx and KVM say that nothing was watched, as
@@ -6186,6 +6224,12 @@ build machine, before 2026-10-13.
   program that reads its own file met the breakpoints, so pages with them are execute-only, off
   on macOS 27 (`HVM_BRK_PROTECT`). On Blnk 15 of 30 runs with faults kept their fingerprints, all
   30 without; a Rust server kept all. Nothing recorded moved
+- M392 (tentative number): upgrades of image services. Each version of a service from an image
+  names its own image, and `U=` starts it on the service's data and mounts; `hydo compose
+  --upgrade-to` pins it. `U=<target>@<at>~<ms>` switches while a step runs, so a walk's old
+  pages meet the new backend. Vikunja 2.7.1 to 2.8.0 held with the pages open on hvx. A page
+  opened during the downtime leaves a promise rejection unhandled, also after a plain kill.
+  Nothing recorded moved
 
 ## Where to look
 

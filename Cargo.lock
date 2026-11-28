@@ -588,6 +588,7 @@ dependencies = [
  "flate2",
  "hydo-config",
  "hydo-manifest",
+ "hydo-schedule",
  "libc",
  "libyaml-safer",
  "regex",

@@ -1,0 +1,150 @@
+# Vikunja 2.7.1 upgraded to 2.8.0 in the middle of hydo's walk through its pages (Milestone 392).
+# Started with `hydo compose ../docker-compose.yaml --upgrade-to vikunja=vikunja/vikunja:2.8.0`;
+# the rest is the example ../../hydo/hydo.yaml. RESULTS.md, section "Upgrades during a walk",
+# says what it showed.
+#
+#   sh fetch-images.sh          # both Vikunja images by digest
+#   hydo build hydo.yaml        # x86_64 only (hvx, KVM)
+#   hydo run "disk=none | run I=1"                          # 2.7.1 throughout
+#   hydo run "disk=none | run I=1 U=vikunja@2~1500:2.8.0"   # 2.8.0 from 1.5 s into step 2
+#   hydo explore --upgrades --seeds 1-20
+#
+# U=vikunja@<step>~<ms>:2.8.0 stops the server 2.7.1 while the walk's step runs (SIGTERM), starts
+# 2.8.0 on the same database, which migrates it at its start, and lets the walk go on: the pages
+# that 2.7.1 served stay open in the browser and talk to 2.8.0's API.
+format: 1
+name: vikunja-upgrade
+description: "Vikunja 2.7.1 upgraded to 2.8.0 on the same database while hydo's own walk has its pages open"
+hydo_version: "0.3"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 4096             # the browser
+  clock_start: 1794787200   # 2026-11-16 00:00 UTC, the day of the import
+  outcomes_after_cut: true  # the walk's acknowledged writes ($HYDO_ACKED) reach the recovery boot
+
+data:
+  size_mib: 256   # the data disk: Vikunja's SQLite database and its files live here (the fault
+                  # target); 256 MiB, so that the root with both images and the disk fit hvx's 4 GiB
+  dirs: [vol/bind-files, vol/bind-db]
+
+root:
+  files:
+    - {src: page-rules, dst: /opt/hydo/web/rules}   # ../../hydo/page-rules, read for both versions' schemas
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 vikunja
+
+services:
+  # Compose service vikunja
+  # image vikunja/vikunja:2.7.1 = docker.io/vikunja/vikunja@sha256:f7dc8428d10aef17f3075886d3c1c022f566ec456f88985f02c137f4fc534576
+  #   linux/amd64: sha256:3a848c83404d59ba9df4d91b92af4c400c8876ccdbbf3b563d41019cee29df39
+  #   linux/arm64: sha256:0ffc7058858557fbfdab92dbc72cdbc227f81b685c567655de08e210029e5d3d
+  # restart: unless-stopped: an agent image starts the service again when its process ends by itself while the test runs (MANIFEST.md "Restart policies"); hydo's kill faults keep their own restart points
+  - name: vikunja
+    image: {x86_64: images/vikunja-vikunja-2.7.1-amd64.docker.tar, arm64: images/vikunja-vikunja-2.7.1-arm64-oci}
+    image_ref: "vikunja/vikunja:2.7.1"
+    version: "2.7.1"   # this image; U=vikunja@<step>:<version> switches to another of versions: (MANIFEST.md "Versions of a service and upgrades")
+    versions:
+      - name: "2.8.0"
+        image: {x86_64: images/vikunja-vikunja-2.8.0-amd64.docker.tar, arm64: images/vikunja-vikunja-2.8.0-arm64-oci}
+        image_ref: "vikunja/vikunja:2.8.0"
+    env:
+      VIKUNJA_SERVICE_SECRET: "hydo-example-secret-not-for-production"
+      # the address the guest's browser uses (the documentation: the URL the browser reaches)
+      VIKUNJA_SERVICE_PUBLICURL: "http://10.89.0.11:3456/"
+      VIKUNJA_DATABASE_PATH: "/db/vikunja.db"
+    port: 3456
+    addr: 10.89.0.11
+    ready: "nc -z -w 2 10.89.0.11 3456"
+    restart: "unless-stopped"
+    # the image runs as uid 1000, and its documentation has `chown 1000` of both volumes
+    setup: chown 1000 /data/vol/bind-files /data/vol/bind-db
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/bind-files, dst: /app/vikunja/files}
+      - {src: /data/vol/bind-db, dst: /db}
+
+browser:
+  explore:
+    start: http://10.89.0.11:3456/
+    steps: 6
+    actions: 12
+    setup:                      # a fresh instance allows registration; it signs in at once
+      - {open: /register}
+      - {fill: Username, with: hydo}
+      - {fill: Email address, with: hydo@example.com}
+      - {fill: Password, with: hydo-pass-1}
+      - {click: Create account}
+      - {see: Current Tasks}    # the home page after the sign-in
+    avoid:
+      - "log ?out"
+      - "sign ?out"
+      - "^Delete (my |your )?account"
+      - "^Import your data"     # the importers reach Todoist, Trello and others on the internet
+      - "^(Language|English)$"  # another language renames every control
+      - "^change$"              # the login page's "change" points the frontend at another server
+  watch:
+    console: false              # Vikunja logs the errors it shows as toasts with console.error
+    alerts: ["[role=alert]", "[role=alertdialog]", ".vue-notification"]   # the error toasts
+    requests: /api/             # judge the API's requests (/api/v1 and /api/v2), not the static files
+    # a failed write of a project, a task, a label, a team or a saved filter must show (the
+    # pattern matches `<METHOD> <path>`); the token's refresh in the background, and the reads
+    # that refresh lists and notifications, retry by themselves
+    failures_of: "^(POST|PUT|PATCH|DELETE) /api/v[12]/(projects|tasks|labels|teams|filters)"
+  # Milestone 334: the pages show what Vikunja acknowledged. Every task that Vikunja answered as
+  # created is a link to /tasks/<id> under "Current Tasks" of the home page, unless a later
+  # acknowledged write deleted it or its project. The check runs at the end of the run and in
+  # the recovery boot after a power cut, where it signs in with the account that the walk made.
+  read_back:
+    setup:
+      - {open: /login}
+      - {fill: Username Or Email Address, with: hydo}
+      - {fill: Password, with: hydo-pass-1}
+      - {click: Login}
+      - {see: Current Tasks}
+    objects:
+      - writes: '^(POST|PUT) /api/v[12]/projects/(?<project>\d+)/tasks(/bulk)?$'
+        name: task
+        page: /
+        shows: 'a[href$="/tasks/{id}"]'
+        unless: '^DELETE /api/v[12]/(tasks/{id}|projects/{project})$'
+
+invariants:
+  - id: vikunja.saved_work_survives
+    msg: every task, project, comment, label, saved filter and team that Vikunja answered as saved is in its database
+    # a copy of the database and its WAL (SQLite rebuilds the index); a copy taken while
+    # Vikunja wrote it can be torn, and the rule then exits 3 and the copy is taken again
+    cmd: |
+      i=0
+      while [ $i -lt 5 ]; do
+        rm -rf /tmp/hydo/rules-db && mkdir -p /tmp/hydo/rules-db
+        cp /data/vol/bind-db/vikunja.db /data/vol/bind-db/vikunja.db-wal /tmp/hydo/rules-db/ 2>/dev/null
+        hydo-oci browser node --experimental-sqlite --no-warnings /opt/hydo/web/rules/vikunja.mjs saved /tmp/hydo/rules-db/vikunja.db "$HYDO_ACKED"
+        rc=$?
+        [ $rc -eq 3 ] || exit $rc
+        sleep 1
+        i=$((i + 1))
+      done
+      exit 2
+  - id: vikunja.kanban_matches_done
+    msg: on every Kanban board with a done bucket, a task is in that bucket exactly when it is done, and every task is in one bucket of the board
+    cmd: |
+      i=0
+      while [ $i -lt 5 ]; do
+        rm -rf /tmp/hydo/rules-db2 && mkdir -p /tmp/hydo/rules-db2
+        cp /data/vol/bind-db/vikunja.db /data/vol/bind-db/vikunja.db-wal /tmp/hydo/rules-db2/ 2>/dev/null
+        hydo-oci browser node --experimental-sqlite --no-warnings /opt/hydo/web/rules/vikunja.mjs kanban /tmp/hydo/rules-db2/vikunja.db "$HYDO_ACKED"
+        rc=$?
+        [ $rc -eq 3 ] || exit $rc
+        sleep 1
+        i=$((i + 1))
+      done
+      exit 2
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

@@ -868,9 +868,19 @@ fn upgrades() {
         "disk=none dseed=0 | run U=nodes.one.2@0:new_1",
         "disk=none dseed=0 | run U=etcd1@10:3.6.0 U=etcd1@20:3.5.5",
         "disk=cut dseed=0 | run U=n1@3:b K=n2@5+2 C=20",
+        // Milestone 392: a switch while the step runs
+        "disk=none | run U=web@2~1500:2.8.0",
+        "disk=none | run U=nodes.all@4~0/2+1:3.6.0",
     ] {
         round_trip(s);
     }
+    let s = Schedule::parse("disk=none | run U=web@2~1500+1:new").unwrap();
+    let GuestToken::Upgrade(u) = &s.guest[0] else {
+        panic!("not an upgrade: {:?}", s.guest[0])
+    };
+    assert_eq!((u.at, u.off, u.back), (2, Some(1500), Some(1)));
+    assert!(Schedule::parse("disk=none | run U=web@2~:new").is_err());
+    assert!(Schedule::parse("disk=none | run U=web@2~01:new").is_err());
     let s = Schedule::parse("disk=none | run U=nodes.all@4/6+2:3.6.0").unwrap();
     let GuestToken::Upgrade(u) = &s.guest[0] else {
         panic!("not an upgrade: {:?}", s.guest[0])
@@ -885,6 +895,7 @@ fn upgrades() {
                 sel: Selector::All
             },
             at: 4,
+            off: None,
             gap: 6,
             back: Some(2),
             version: "3.6.0".into(),

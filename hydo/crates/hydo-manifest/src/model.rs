@@ -1095,6 +1095,20 @@ pub struct ServiceVersion {
     pub ready: Option<Text>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<Scalar>,
+    /// For a service with image: (Milestone 392): the Docker/OCI image file this version runs;
+    /// an upgrade starts it on the service's data, mounts and settings. Every version of an
+    /// image service has one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image: Option<ImageSource>,
+    /// Which image in this version's file: a tag or sha256:<digest>.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_ref: Option<Text>,
+    /// Replaces this version's image's Entrypoint (default: the service's entrypoint:).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub entrypoint: Option<CommandLine>,
+    /// Added to or overriding the service's env: for this version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<IndexMap<String, Option<Scalar>>>,
 }
 
 /// A service's storage: the directory under /data, or the directory with its own file system.

@@ -621,9 +621,16 @@ impl Plan {
                         let or = |k: &str, own: &str| {
                             get(v, k).map(py::str_of).unwrap_or_else(|| own.to_string())
                         };
+                        let name = py::str_of(&v["name"]);
                         PlanVersion {
-                            name: py::str_of(&v["name"]),
-                            cmd: or("cmd", &cmd),
+                            // Milestone 392: a version of an image service runs the launcher of
+                            // its own image (hydo-build's oci::version_key)
+                            cmd: if get(s, "image").is_some() {
+                                format!("/etc/hydo/oci/{n}@{name}/run")
+                            } else {
+                                or("cmd", &cmd)
+                            },
+                            name,
                             setup: or("setup", &truthy_str(s, "setup")),
                             ready: or(
                                 "ready",

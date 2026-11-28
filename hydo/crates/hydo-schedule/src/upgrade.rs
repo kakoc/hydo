@@ -9,6 +9,10 @@
 //! step `at + k*gap`; without `/<gap>` all of them before step `at`, each once the one before it
 //! is ready again. With `+<back>` each service is rolled back to the version it ran before,
 //! `back` steps after its own switch. A downgrade is the same token with an older version.
+//!
+//! `U=<target>@<at>~<off>...` (Milestone 392) makes each switch of the token `off` ms of guest
+//! time after its step starts, while the step's workload runs: a web app's pages that the old
+//! version served stay open in the walk's browser and talk to the new version.
 
 use crate::num::{dec, err};
 use crate::target::Target;
@@ -27,12 +31,15 @@ pub fn version_name_ok(v: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
 }
 
-/// `U=<target>@<at>[/<gap>][+<back>]:<version>`.
+/// `U=<target>@<at>[~<off>][/<gap>][+<back>]:<version>`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Upgrade {
     pub target: Target,
     /// The step before which the first service is switched.
     pub at: u64,
+    /// Milestone 392: ms of guest time after its step starts at which each switch happens, while
+    /// the step runs (None: before the step, as before).
+    pub off: Option<u64>,
     /// Steps between two services of a rolling upgrade (0: all before step `at`).
     pub gap: u64,
     /// Steps after its own switch at which each service goes back to the version it ran before.
@@ -54,7 +61,7 @@ pub struct Switch {
 
 impl Upgrade {
     pub(crate) fn parse(v: &str, what: &str) -> Result<Upgrade, ParseError> {
-        let form = "U=<service|list|group.selector>@<at>[/<gap>][+<back>]:<version>";
+        let form = "U=<service|list|group.selector>@<at>[~<off>][/<gap>][+<back>]:<version>";
         let (head, version) = v
             .rsplit_once(':')
             .ok_or_else(|| err(format!("{what}: {form}")))?;
@@ -80,7 +87,7 @@ impl Upgrade {
             }
             None => (when, None),
         };
-        let (at, gap) = match when.split_once('/') {
+        let (when, gap) = match when.split_once('/') {
             Some((a, g)) => {
                 let g = dec(g, what)?;
                 if g == 0 {
@@ -95,13 +102,18 @@ impl Upgrade {
                          takes none"
                     )));
                 }
-                (dec(a, what)?, g)
+                (a, g)
             }
-            None => (dec(when, what)?, 0),
+            None => (when, 0),
+        };
+        let (at, off) = match when.split_once('~') {
+            Some((a, o)) => (dec(a, what)?, Some(dec(o, what)?)),
+            None => (dec(when, what)?, None),
         };
         Ok(Upgrade {
             target,
             at,
+            off,
             gap,
             back,
             version: version.to_string(),
@@ -142,6 +154,9 @@ impl Upgrade {
 impl fmt::Display for Upgrade {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}@{}", self.target, self.at)?;
+        if let Some(o) = self.off {
+            write!(f, "~{o}")?;
+        }
         if self.gap > 0 {
             write!(f, "/{}", self.gap)?;
         }

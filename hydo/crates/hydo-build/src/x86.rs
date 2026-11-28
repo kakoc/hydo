@@ -971,6 +971,18 @@ pub fn build(
     let (p1, n1) = (2048u64, rmib as u64 * 2048);
     let (p2, n2) = (p1 + n1, dmib as u64 * 2048);
     let vols = volume_images(ctx, &mk, &m, &name, bdir, &format!("{out}-vol"))?;
+    // Milestone 392: the engines map at most DISK_MAX_BYTES; a larger disk built, and the hvx
+    // engine refused it at the boot with `HVX_SET_DISK: Invalid argument` (a root with two
+    // Vikunja images and the Playwright image beside a data disk of 512 MiB)
+    if (p2 + n2) * 512 > image::DISK_MAX_BYTES {
+        return Err(Fail::Exit(format!(
+            "hydo-build: the disk is {} MiB (root {rmib} MiB, data {dmib} MiB), more than the {} MiB \
+             an engine maps; make data.size_mib smaller, or the services' images (root.share_images \
+             shares the tree of services of one image)",
+            (p2 + n2) / 2048,
+            image::DISK_MAX_BYTES >> 20
+        )));
+    }
     if vols.is_empty() {
         image::assemble_disk(
             &disk,

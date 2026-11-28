@@ -34,6 +34,7 @@ test = false
 [dependencies]
 hydo-config = { workspace = true }
 hydo-manifest = { workspace = true }
+hydo-schedule = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
 flate2 = { workspace = true }

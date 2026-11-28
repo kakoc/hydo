@@ -847,6 +847,19 @@ struct Svc {
     keeps_data: bool,
     /// The port came from the image's first `EXPOSE` (no `ports:`), Milestone 367.
     port_expose: bool,
+    /// `--upgrade-to <service>=<image>` (Milestone 392): the other versions of the service, each
+    /// an image pinned in the lock file as the service's own.
+    versions: Vec<SvcVersion>,
+}
+
+/// One other version of an imported service (`--upgrade-to`, Milestone 392).
+#[derive(Clone, Debug)]
+struct SvcVersion {
+    /// The version's name: the image's tag.
+    name: String,
+    info: Y,
+    image: Img,
+    image_ref: String,
 }
 
 /// The options of one import.
@@ -870,6 +883,10 @@ pub struct Opts {
     /// `--from-docker`: an image whose registry refuses or cannot be reached is saved from the
     /// local Docker instead, and pinned by the saved file's digest (Milestone 320).
     pub from_docker: bool,
+    /// `--upgrade-to <service>=<image>` (Milestone 392, repeatable): the image of another version
+    /// of a service, resolved and pinned as the service's own; the manifest gets `version:` and
+    /// `versions:`, so that `U=<service>@<step>:<tag>` switches the service to it.
+    pub upgrade_to: Vec<(String, String)>,
     /// Set by `hydo k8s` (M243): the document comes from Kubernetes manifests, not from a
     /// Compose file, and its `x-hydo-*` keys carry what Compose cannot say.
     pub origin: Option<Origin>,
@@ -1426,6 +1443,49 @@ impl<'a> Importer<'a> {
     }
 
     /// The images directory, relative to the output's folder (`--images-dir`, else `images`).
+    /// `--upgrade-to` (Milestone 392): the image `vref` as another version of `svc`, resolved by
+    /// digest as an image of the Compose file is, and pinned in the lock file.
+    fn version_of(&mut self, wh: &str, svc: &Svc, vref: &str) -> R<SvcVersion> {
+        if svc.build.is_some() || svc.from_docker {
+            return err(format!(
+                "{wh}: --upgrade-to names a service whose image is built locally or saved from \
+                 Docker; give it a published image"
+            ));
+        }
+        let info = self.image_info(vref, false)?;
+        let (reg, repo, tag, digest) = parse_ref(vref);
+        let Some(name) = tag.clone().filter(|t| hydo_schedule::version_name_ok(t)) else {
+            return err(format!(
+                "{wh}: --upgrade-to {vref}: the image's tag names the version (U=<service>@<step>:<tag>), \
+                 so give a tag such as 2.8.0"
+            ));
+        };
+        let base = svc.image_ref.rsplit_once(':').map(|x| x.1.to_string());
+        if base.as_deref() == Some(name.as_str()) || svc.versions.iter().any(|v| v.name == name) {
+            return err(format!(
+                "{wh}: --upgrade-to {vref}: the version {name} is named twice"
+            ));
+        }
+        let stem = file_stem(&reg, &repo, tag.as_deref(), digest.as_deref())?;
+        let idir = self.images_dir();
+        let x86 = format!("{idir}/{stem}-amd64.docker.tar");
+        let arm = format!("{idir}/{stem}-arm64-oci");
+        let plat = info.getn("platforms").clone();
+        let unresolved = info.getn("unresolved").truthy();
+        let image = if plat.has("arm64") || unresolved {
+            Img::Two(x86, arm)
+        } else {
+            Img::One(x86)
+        };
+        let iname = pstr(info.getn("name"));
+        Ok(SvcVersion {
+            name: name.clone(),
+            image,
+            image_ref: format!("{iname}:{name}"),
+            info,
+        })
+    }
+
     fn images_dir(&self) -> String {
         self.o
             .images_dir
@@ -1869,6 +1929,14 @@ impl<'a> Importer<'a> {
         if !self.bridge {
             self.port_collisions();
         }
+        // Milestone 392: every --upgrade-to names an imported service
+        for (t, r) in &self.o.upgrade_to {
+            if !self.svcs.iter().any(|s| s.name == *t || s.compose == *t) {
+                return err(format!(
+                    "--upgrade-to {t}={r}: no service {t} with an image in the Compose file"
+                ));
+            }
+        }
         Ok(self.emit())
     }
 
@@ -2194,7 +2262,15 @@ impl<'a> Importer<'a> {
             from_docker,
             keeps_data: false,
             port_expose: false,
+            versions: Vec::new(),
         };
+        // Milestone 392: the images of the service's other versions
+        for (target, vref) in self.o.upgrade_to.clone() {
+            if target == *n || target == hn {
+                let v = self.version_of(&wh, &svc, &vref)?;
+                svc.versions.push(v);
+            }
+        }
         if self.o.origin.is_some() {
             // the x-hydo-* keys of a converted document (M243)
             let strs = |k: &str| as_list(s.get(k)).iter().map(pstr).collect::<Vec<_>>();
@@ -3480,6 +3556,32 @@ impl<'a> Importer<'a> {
                 Img::One(a) => l.push_str(&format!("    image: {}\n", q_str(a))),
             }
             l.push_str(&format!("    image_ref: {}\n", q_str(&s.image_ref)));
+            if !s.versions.is_empty() {
+                // Milestone 392: the versions an upgrade switches the service to, on its data
+                let own = s
+                    .image_ref
+                    .rsplit_once(':')
+                    .map(|x| x.1.to_string())
+                    .filter(|t| hydo_schedule::version_name_ok(t))
+                    .unwrap_or_else(|| "current".into());
+                l.push_str(&format!(
+                    "    version: {}   # this image; U={}@<step>:<version> switches to another of versions: (MANIFEST.md \"Versions of a service and upgrades\")\n",
+                    dumps_str(&own),
+                    s.name
+                ));
+                l.push_str("    versions:\n");
+                for v in &s.versions {
+                    l.push_str(&format!("      - name: {}\n", dumps_str(&v.name)));
+                    match &v.image {
+                        Img::Two(a, b) => l.push_str(&format!(
+                            "        image: {}\n",
+                            flow_map(&[("x86_64", Y::s(a)), ("arm64", Y::s(b))])
+                        )),
+                        Img::One(a) => l.push_str(&format!("        image: {}\n", q_str(a))),
+                    }
+                    l.push_str(&format!("        image_ref: {}\n", q_str(&v.image_ref)));
+                }
+            }
             if let Some(e) = &s.entrypoint {
                 l.push_str(&format!("    entrypoint: {}\n", flow_list(e)));
             }
@@ -3689,7 +3791,7 @@ impl<'a> Importer<'a> {
             "[ -n \"$F\" ] || { echo \"fetch-images.sh: hydo-fetch-image not found (put hydo's bin directory on PATH, or set HYDO_FETCH_IMAGE)\" >&2; exit 1; }".into(),
             format!("mkdir -p {}", shlex::quote(&idir)),
         ];
-        let mut done: Vec<(&str, String)> = Vec::new();
+        let mut done: Vec<(&'static str, String)> = Vec::new();
         let mut local: Vec<String> = Vec::new();
         let mut saved: Vec<String> = Vec::new();
         let lock_rel = || {
@@ -3770,57 +3872,12 @@ impl<'a> Importer<'a> {
                 }
                 continue;
             }
-            let mut img: Vec<(&str, &String)> = match &s.image {
-                Img::One(a) => vec![("x86_64", a)],
-                Img::Two(a, b) => vec![("x86_64", a), ("arm64", b)],
-            };
-            img.sort();
-            let plat = info.getn("platforms");
-            for (arch, path) in img {
-                if done.iter().any(|(_, p)| p == path) {
-                    continue;
-                }
-                let a = if arch == "x86_64" { "amd64" } else { "arm64" };
-                let other = if arch == "x86_64" { "arm64" } else { "x86_64" };
-                let pd = plat.get(a).map(|p| p.getn("digest"));
-                let other_a = if a == "amd64" { "arm64" } else { "amd64" };
-                if pd.is_none() && plat.get(other_a).is_some_and(|p| p.truthy()) {
-                    // a pinned image without this architecture (only an arm64 build): the
-                    // machine of that architecture cannot run it, so say so instead of
-                    // fetching the tag
-                    l.push(format!(
-                        "[ \"$A\" = {other} ] || {{ echo {} >&2; exit 1; }}",
-                        shlex::quote(&format!(
-                            "fetch-images.sh: {} has no linux/{a} build, so it does not run on this machine",
-                            pstr(info.getn("ref"))
-                        ))
-                    ));
-                    continue;
-                }
-                done.push((arch, path.clone()));
-                let repo = format!(
-                    "{}/{}",
-                    pstr(info.getn("registry")),
-                    pstr(info.getn("repo"))
-                );
-                let what = match pd.filter(|d| d.truthy()) {
-                    Some(d) => pstr(d),
-                    None => {
-                        let t = info.getn("tag");
-                        let t = if t.truthy() { pstr(t) } else { "latest".into() };
-                        l.push(format!("# NOT pinned: docker://{repo}:{t}"));
-                        format!("linux/{a}")
-                    }
-                };
-                let test = if arch == "x86_64" { "-f" } else { "-e" };
-                l.push(format!(
-                    "[ \"$A\" = {other} ] || [ {test} {} ] || \"$F\" {} {} {} {}",
-                    shlex::quote(path),
-                    shlex::quote(&repo),
-                    shlex::quote(&what),
-                    shlex::quote(&s.image_ref),
-                    shlex::quote(path),
-                ));
+            plain_fetch(&mut l, &mut done, info, &s.image, &s.image_ref);
+        }
+        // Milestone 392: the images of the services' other versions (--upgrade-to)
+        for s in &self.svcs {
+            for v in &s.versions {
+                plain_fetch(&mut l, &mut done, &v.info, &v.image, &v.image_ref);
             }
         }
         done.sort();
@@ -3859,6 +3916,69 @@ impl<'a> Importer<'a> {
             (Y::s("images"), self.lock.clone()),
         ]);
         pyval::dumps_indent1_sorted(&v) + "\n"
+    }
+}
+
+/// The lines of fetch-images.sh that fetch one published image by its digests (an image
+/// service's own, or one of its versions': Milestone 392); `done` holds the paths fetched.
+fn plain_fetch(
+    l: &mut Vec<String>,
+    done: &mut Vec<(&'static str, String)>,
+    info: &Y,
+    image: &Img,
+    image_ref: &str,
+) {
+    let mut img: Vec<(&str, &String)> = match image {
+        Img::One(a) => vec![("x86_64", a)],
+        Img::Two(a, b) => vec![("x86_64", a), ("arm64", b)],
+    };
+    img.sort();
+    let plat = info.getn("platforms");
+    for (arch, path) in img {
+        if done.iter().any(|(_, p)| p == path) {
+            continue;
+        }
+        let a = if arch == "x86_64" { "amd64" } else { "arm64" };
+        let other = if arch == "x86_64" { "arm64" } else { "x86_64" };
+        let pd = plat.get(a).map(|p| p.getn("digest"));
+        let other_a = if a == "amd64" { "arm64" } else { "amd64" };
+        if pd.is_none() && plat.get(other_a).is_some_and(|p| p.truthy()) {
+            // a pinned image without this architecture (only an arm64 build): the
+            // machine of that architecture cannot run it, so say so instead of
+            // fetching the tag
+            l.push(format!(
+                "[ \"$A\" = {other} ] || {{ echo {} >&2; exit 1; }}",
+                shlex::quote(&format!(
+                    "fetch-images.sh: {} has no linux/{a} build, so it does not run on this machine",
+                    pstr(info.getn("ref"))
+                ))
+            ));
+            continue;
+        }
+        done.push((arch, path.clone()));
+        let repo = format!(
+            "{}/{}",
+            pstr(info.getn("registry")),
+            pstr(info.getn("repo"))
+        );
+        let what = match pd.filter(|d| d.truthy()) {
+            Some(d) => pstr(d),
+            None => {
+                let t = info.getn("tag");
+                let t = if t.truthy() { pstr(t) } else { "latest".into() };
+                l.push(format!("# NOT pinned: docker://{repo}:{t}"));
+                format!("linux/{a}")
+            }
+        };
+        let test = if arch == "x86_64" { "-f" } else { "-e" };
+        l.push(format!(
+            "[ \"$A\" = {other} ] || [ {test} {} ] || \"$F\" {} {} {} {}",
+            shlex::quote(path),
+            shlex::quote(&repo),
+            shlex::quote(&what),
+            shlex::quote(image_ref),
+            shlex::quote(path),
+        ));
     }
 }
 
@@ -3920,6 +4040,7 @@ pub fn main_with_clock(
                 | "--profile"
                 | "--network"
                 | "--docker"
+                | "--upgrade-to"
         ) {
             if i + 1 >= a.len() {
                 eprintln!("hydo-compose: {x} needs a value");
@@ -3934,6 +4055,15 @@ pub fn main_with_clock(
                 "--images-dir" => o.images_dir = Some(v),
                 "--lock" => o.lock = Some(v),
                 "--docker" => o.docker = Some(v),
+                "--upgrade-to" => match v.split_once('=') {
+                    Some((a, b)) if !a.is_empty() && !b.is_empty() => {
+                        o.upgrade_to.push((a.to_string(), b.to_string()))
+                    }
+                    _ => {
+                        eprintln!("hydo-compose: --upgrade-to <service>=<image>, such as web=vikunja/vikunja:2.8.0");
+                        return 2;
+                    }
+                },
                 _ => o.network = Some(v),
             }
             i += 2;

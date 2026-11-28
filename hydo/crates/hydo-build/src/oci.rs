@@ -1061,7 +1061,16 @@ fn mkdir755(p: &Path) -> R<()> {
 // ------------------------------------------------------------------ manifest side
 /// One image service, as `prepare` leaves it for `stage`.
 pub struct OciService {
+    /// The tree key: the service's name, or `<service>@<version>` for a version of it
+    /// (Milestone 392): its root is `/oci/<svc>` and its scripts are in `/etc/hydo/oci/<svc>/`.
     pub svc: String,
+    /// The service's name (the same as `svc` but for a version).
+    pub service: String,
+    /// The version of a version's tree (None for the service's own image).
+    pub version: Option<String>,
+    /// Whether the service has versions (`services[].versions`, Milestone 392): its launchers
+    /// write which tree runs, for `hydo-oci`.
+    pub versioned: bool,
     pub path: String,
     pub img: Image,
     pub final_cmd: String,
@@ -1329,60 +1338,171 @@ pub fn prepare(
             }
             continue;
         }
-        let img_v = s.shift_remove("image").unwrap_or(Value::Null);
-        let path = image_path(&img_v, arch, &mdir, &wh).map_err(Fail::Manifest)?;
-        let rf = s.shift_remove("image_ref");
-        let rf = match rf {
-            None | Some(Value::Null) => None,
-            Some(x) => Some(py::str_of(&x)),
-        };
-        let img = Image::new(&path, rf.as_deref(), arch).map_err(Fail::Manifest)?;
-        let cfg = img.config_section();
-        let (entry, dflt_cmd) = if s.contains_key("entrypoint") {
-            let v = s.shift_remove("entrypoint").unwrap_or(Value::Null);
-            let e = match &v {
-                Value::Array(a) => words(a),
-                Value::Null => String::new(),
-                other => py::str_of(other),
-            };
-            (e, String::new())
-        } else {
-            (
-                words_of(sget(&cfg, "Entrypoint")),
-                words_of(sget(&cfg, "Cmd")),
-            )
-        };
-        let cmd = match s.get("cmd") {
-            Some(Value::Array(a)) => words(a),
-            Some(v) => py::str_of(v),
-            None => dflt_cmd,
-        };
-        let final_cmd = py::strip(&format!("{entry} {cmd}")).to_string();
-        if final_cmd.is_empty() {
-            return Err(Fail::Manifest(format!(
-                "{wh}: the image has no Entrypoint/Cmd; give cmd:"
-            )));
+        // Milestone 392: the keys a version of the service inherits, before `one` removes them
+        let raw = s.clone();
+        let name = py::str_of(s.get("name").unwrap_or(&Value::Null));
+        let mut base = one(s, &name, &wh, &mdir, arch, io)?;
+        let nv = s
+            .get("versions")
+            .and_then(Value::as_array)
+            .map_or(0, Vec::len);
+        base.versioned = nv > 0;
+        out.push(base);
+        for j in 0..nv {
+            let v = s["versions"][j]
+                .as_object_mut()
+                .ok_or_else(|| Fail::Crash(format!("{wh}: versions[{j}] is not a mapping")))?;
+            let vname = py::str_of(v.get("name").unwrap_or(&Value::Null));
+            let key = version_key(&name, &vname);
+            let mut t = Map::new();
+            t.insert("name".into(), Value::String(key.clone()));
+            for k in VERSION_INHERITS {
+                if let Some(x) = raw.get(*k) {
+                    t.insert((*k).into(), x.clone());
+                }
+            }
+            for k in ["image", "image_ref", "entrypoint", "cmd"] {
+                if let Some(x) = v.shift_remove(k) {
+                    t.insert(k.into(), x);
+                }
+            }
+            // the version's env: over the service's
+            if let Some(Value::Object(e)) = v.shift_remove("env") {
+                let mut m2 = match t.shift_remove("env") {
+                    Some(Value::Object(o)) => o,
+                    _ => Map::new(),
+                };
+                for (k, x) in e {
+                    m2.insert(k, x);
+                }
+                t.insert("env".into(), Value::Object(m2));
+            }
+            let mut o = one(
+                &mut t,
+                &key,
+                &format!("{wh}.versions[{j}]"),
+                &mdir,
+                arch,
+                io,
+            )?;
+            o.service = name.clone();
+            o.version = Some(vname);
+            o.versioned = true;
+            v.insert("cmd".into(), t.get("cmd").cloned().unwrap_or(Value::Null));
+            out.push(o);
         }
-        let mut env: Vec<(String, String)> = Vec::new();
-        let mut keys: HashMap<String, usize> = HashMap::new();
-        if let Some(Value::Array(a)) = sget(&cfg, "Env") {
-            for kvs in a {
-                let t = kvs.as_str().ok_or_else(|| {
-                    Fail::Crash(format!(
-                        "{path}: the image config's Env has a non-string entry"
-                    ))
-                })?;
-                let (k, v) = t.split_once('=').unwrap_or((t, ""));
-                keys.insert(k.to_string(), env.len());
-                env.push((k.to_string(), v.to_string()));
+    }
+    Ok(out)
+}
+
+/// The keys of an image service that each of its versions inherits (Milestone 392); a version's
+/// own `image:`, `image_ref:`, `entrypoint:`, `cmd:` and `env:` come over them.
+const VERSION_INHERITS: &[&str] = &[
+    "entrypoint",
+    "cmd",
+    "env",
+    "env_file",
+    "workdir",
+    "user",
+    "mounts",
+];
+
+/// The tree key of a version of an image service (Milestone 392): its root is `/oci/<key>` and
+/// its launcher `/etc/hydo/oci/<key>/run`. A service's name has no `@`, so no key meets another
+/// service's.
+pub fn version_key(svc: &str, version: &str) -> String {
+    format!("{svc}@{version}")
+}
+
+/// One image service of [`prepare`]: `s` is the service's mapping (or, for a version of it,
+/// the mapping that [`prepare`] makes of the service's keys and the version's), `name` its tree
+/// key. The image keys are removed from `s`, and its cmd becomes the launcher.
+fn one(
+    s: &mut Map<String, Value>,
+    name: &str,
+    wh: &str,
+    mdir: &str,
+    arch: &str,
+    io: &mut Io,
+) -> Result<OciService, Fail> {
+    let img_v = s.shift_remove("image").unwrap_or(Value::Null);
+    let path = image_path(&img_v, arch, mdir, wh).map_err(Fail::Manifest)?;
+    let rf = s.shift_remove("image_ref");
+    let rf = match rf {
+        None | Some(Value::Null) => None,
+        Some(x) => Some(py::str_of(&x)),
+    };
+    let img = Image::new(&path, rf.as_deref(), arch).map_err(Fail::Manifest)?;
+    let cfg = img.config_section();
+    let (entry, dflt_cmd) = if s.contains_key("entrypoint") {
+        let v = s.shift_remove("entrypoint").unwrap_or(Value::Null);
+        let e = match &v {
+            Value::Array(a) => words(a),
+            Value::Null => String::new(),
+            other => py::str_of(other),
+        };
+        (e, String::new())
+    } else {
+        (
+            words_of(sget(&cfg, "Entrypoint")),
+            words_of(sget(&cfg, "Cmd")),
+        )
+    };
+    let cmd = match s.get("cmd") {
+        Some(Value::Array(a)) => words(a),
+        Some(v) => py::str_of(v),
+        None => dflt_cmd,
+    };
+    let final_cmd = py::strip(&format!("{entry} {cmd}")).to_string();
+    if final_cmd.is_empty() {
+        return Err(Fail::Manifest(format!(
+            "{wh}: the image has no Entrypoint/Cmd; give cmd:"
+        )));
+    }
+    let mut env: Vec<(String, String)> = Vec::new();
+    let mut keys: HashMap<String, usize> = HashMap::new();
+    if let Some(Value::Array(a)) = sget(&cfg, "Env") {
+        for kvs in a {
+            let t = kvs.as_str().ok_or_else(|| {
+                Fail::Crash(format!(
+                    "{path}: the image config's Env has a non-string entry"
+                ))
+            })?;
+            let (k, v) = t.split_once('=').unwrap_or((t, ""));
+            keys.insert(k.to_string(), env.len());
+            env.push((k.to_string(), v.to_string()));
+        }
+    }
+    // env_file: (a format-1 addition, M243): its values before env:, which wins
+    if let Some(f) = s.shift_remove("env_file") {
+        let fp = hydo_manifest::oci::env_file_path(&py::str_of(&f), mdir);
+        for (k, v) in hydo_manifest::oci::read_env_file(&fp)
+            .map_err(|e| Fail::Manifest(format!("{wh}: {e}")))?
+        {
+            if let Some(&j) = keys.get(&k) {
+                env[j].1 = v;
+            } else {
+                keys.insert(k.clone(), env.len());
+                env.push((k, v));
             }
         }
-        // env_file: (a format-1 addition, M243): its values before env:, which wins
-        if let Some(f) = s.shift_remove("env_file") {
-            let fp = hydo_manifest::oci::env_file_path(&py::str_of(&f), &mdir);
-            for (k, v) in hydo_manifest::oci::read_env_file(&fp)
-                .map_err(|e| Fail::Manifest(format!("{wh}: {e}")))?
-            {
+    }
+    let menv = s.shift_remove("env").filter(py::truthy);
+    match menv {
+        None => {}
+        Some(Value::Object(o)) => {
+            for (k, v) in o {
+                if !crate::fullmatch_ident(&k) {
+                    return Err(Fail::Manifest(format!(
+                        "{wh}: env: {} is not a valid variable name",
+                        py::repr_str(&k)
+                    )));
+                }
+                let v = match v {
+                    Value::Null => String::new(),
+                    Value::Bool(b) => if b { "true" } else { "false" }.to_string(),
+                    other => py::str_of(&other),
+                };
                 if let Some(&j) = keys.get(&k) {
                     env[j].1 = v;
                 } else {
@@ -1391,102 +1511,78 @@ pub fn prepare(
                 }
             }
         }
-        let menv = s.shift_remove("env").filter(py::truthy);
-        match menv {
-            None => {}
-            Some(Value::Object(o)) => {
-                for (k, v) in o {
-                    if !crate::fullmatch_ident(&k) {
-                        return Err(Fail::Manifest(format!(
-                            "{wh}: env: {} is not a valid variable name",
-                            py::repr_str(&k)
-                        )));
-                    }
-                    let v = match v {
-                        Value::Null => String::new(),
-                        Value::Bool(b) => if b { "true" } else { "false" }.to_string(),
-                        other => py::str_of(&other),
-                    };
-                    if let Some(&j) = keys.get(&k) {
-                        env[j].1 = v;
-                    } else {
-                        keys.insert(k.clone(), env.len());
-                        env.push((k, v));
-                    }
-                }
-            }
-            Some(_) => return Err(Fail::Manifest(format!("{wh}: env: must be a mapping"))),
-        }
-        if !keys.contains_key("PATH") {
-            env.insert(0, ("PATH".into(), DEFAULT_PATH.into()));
-        }
-        let wd = s.shift_remove("workdir").filter(py::truthy);
-        let workdir = match wd {
-            Some(v) => py::str_of(&v),
-            None => sget(&cfg, "WorkingDir")
-                .filter(|x| py::truthy(x))
-                .map(py::str_of)
-                .unwrap_or_else(|| "/".into()),
-        };
-        if !workdir.starts_with('/') {
-            return Err(Fail::Manifest(format!(
-                "{wh}: workdir {} must be absolute",
-                py::repr_str(&workdir)
-            )));
-        }
-        let user = match s.shift_remove("user") {
-            None | Some(Value::Null) => sget(&cfg, "User")
-                .filter(|x| py::truthy(x))
-                .map(py::str_of)
-                .unwrap_or_default(),
-            Some(u) => py::str_of(&u),
-        };
-        let user = if ["root", "0", "0:0", "root:root"].contains(&user.as_str()) {
-            String::new()
-        } else {
-            user
-        };
-        let mounts = mounts_of(s.shift_remove("mounts"), &wh)?;
-        let writable = match s.shift_remove("writable") {
-            None | Some(Value::Null) | Some(Value::Bool(false)) => false,
-            Some(Value::Bool(true)) => true,
-            Some(_) => return Err(Fail::Manifest(format!("{wh}: writable: true or false"))),
-        };
-        let name = py::str_of(s.get("name").unwrap_or(&Value::Null));
-        s.insert(
-            "cmd".into(),
-            Value::String(format!("/etc/hydo/oci/{name}/run")),
-        );
-        let tags = if img.ref_names.is_empty() {
-            "untagged".to_string()
-        } else {
-            img.ref_names.join(",")
-        };
-        let man = img
-            .manifest_digest
-            .as_ref()
-            .map(|d| format!(", manifest {}", head(d, 19)))
-            .unwrap_or_default();
-        errln(
-            io,
-            &format!(
-                "hydo-build: service {name} from image {path} ({tags}, config {}{man})",
-                head(&img.config_digest, 19)
-            ),
-        );
-        out.push(OciService {
-            svc: name,
-            path,
-            img,
-            final_cmd,
-            env,
-            workdir,
-            user,
-            mounts,
-            writable,
-        });
+        Some(_) => return Err(Fail::Manifest(format!("{wh}: env: must be a mapping"))),
     }
-    Ok(out)
+    if !keys.contains_key("PATH") {
+        env.insert(0, ("PATH".into(), DEFAULT_PATH.into()));
+    }
+    let wd = s.shift_remove("workdir").filter(py::truthy);
+    let workdir = match wd {
+        Some(v) => py::str_of(&v),
+        None => sget(&cfg, "WorkingDir")
+            .filter(|x| py::truthy(x))
+            .map(py::str_of)
+            .unwrap_or_else(|| "/".into()),
+    };
+    if !workdir.starts_with('/') {
+        return Err(Fail::Manifest(format!(
+            "{wh}: workdir {} must be absolute",
+            py::repr_str(&workdir)
+        )));
+    }
+    let user = match s.shift_remove("user") {
+        None | Some(Value::Null) => sget(&cfg, "User")
+            .filter(|x| py::truthy(x))
+            .map(py::str_of)
+            .unwrap_or_default(),
+        Some(u) => py::str_of(&u),
+    };
+    let user = if ["root", "0", "0:0", "root:root"].contains(&user.as_str()) {
+        String::new()
+    } else {
+        user
+    };
+    let mounts = mounts_of(s.shift_remove("mounts"), wh)?;
+    let writable = match s.shift_remove("writable") {
+        None | Some(Value::Null) | Some(Value::Bool(false)) => false,
+        Some(Value::Bool(true)) => true,
+        Some(_) => return Err(Fail::Manifest(format!("{wh}: writable: true or false"))),
+    };
+    s.insert(
+        "cmd".into(),
+        Value::String(format!("/etc/hydo/oci/{name}/run")),
+    );
+    let tags = if img.ref_names.is_empty() {
+        "untagged".to_string()
+    } else {
+        img.ref_names.join(",")
+    };
+    let man = img
+        .manifest_digest
+        .as_ref()
+        .map(|d| format!(", manifest {}", head(d, 19)))
+        .unwrap_or_default();
+    errln(
+        io,
+        &format!(
+            "hydo-build: service {name} from image {path} ({tags}, config {}{man})",
+            head(&img.config_digest, 19)
+        ),
+    );
+    Ok(OciService {
+        svc: name.to_string(),
+        service: name.to_string(),
+        version: None,
+        versioned: false,
+        path,
+        img,
+        final_cmd,
+        env,
+        workdir,
+        user,
+        mounts,
+        writable,
+    })
 }
 
 fn head(s: &str, n: usize) -> String {
@@ -1620,6 +1716,7 @@ fn mount_body(svc: &str, mounts: &[Mount]) -> Vec<String> {
 /// 144).
 fn once_lines(
     svc: &str,
+    tmp_svc: &str,
     shares: Option<&str>,
     mounts: &[Mount],
     own_tmp: bool,
@@ -1641,7 +1738,8 @@ fn once_lines(
         ));
     }
     if own_tmp {
-        let own = own_tmp_dir(svc);
+        // a version's root has its service's /tmp (Milestone 392), as a restart keeps it
+        let own = own_tmp_dir(tmp_svc);
         if sys_rbind {
             l.extend(["proc", "sys", "dev"].map(bind));
         } else {
@@ -1758,9 +1856,9 @@ fn scripts(o: &OciService, home: &str, shares: Option<&str>, epoch: u64) -> (Str
             "#!/bin/busybox sh\n# generated by hvx/onboard/hydo_oci.py -- service {svc} from {}\nBB=/bin/busybox R={r}\n",
             o.img.config_digest
         );
-        let mounts = once_lines(svc, shares, &o.mounts, own_tmp, sys_rbind);
+        let mounts = once_lines(svc, &o.service, shares, &o.mounts, own_tmp, sys_rbind);
         return (
-            format!("{top}{layer}{mounts}{run_tail}"),
+            format!("{top}{}{layer}{mounts}{run_tail}", marker(o)),
             format!("{top}{usage}{layer}{mounts}{ex_tail}"),
         );
     }
@@ -1785,9 +1883,42 @@ fn scripts(o: &OciService, home: &str, shares: Option<&str>, epoch: u64) -> (Str
     if !o.mounts.is_empty() {
         head.push_str(&mount_lines(o));
     }
-    let run = format!("{head}{run_tail}");
+    let run = format!("{head}{}{run_tail}", marker(o));
     let ex = head.replacen("for d in", &format!("{usage}for d in"), 1) + &ex_tail;
     (run, ex)
+}
+
+/// Milestone 392: the launcher of a service with versions says which of its trees runs, for
+/// `hydo-oci` ([`HYDO_OCI_VERSIONS`]); "" for every other service.
+fn marker(o: &OciService) -> String {
+    if !o.versioned {
+        return String::new();
+    }
+    format!(
+        "$BB mkdir -p /tmp/hydo && echo {} > /tmp/hydo/oci-ver.{}\n",
+        o.svc, o.service
+    )
+}
+
+/// Milestone 392: `hydo-oci` of an image with a service that has versions. It runs the command in
+/// the tree of the version that runs: for the service's own commands (`setup:`, `ready:`) the one
+/// `$HYDO_VERSION` names, else the one its launcher last wrote into `/tmp/hydo/oci-ver.<svc>`.
+const VERSIONS_PICK: &str = "t=\n\
+if [ \"$HYDO_SVC\" = \"$s\" ] && [ -n \"$HYDO_VERSION\" ]; then t=$s@$HYDO_VERSION; [ -x /etc/hydo/oci/$t/exec ] || t=$s; fi\n\
+[ -n \"$t\" ] || t=$(/bin/busybox cat /tmp/hydo/oci-ver.$s 2>/dev/null)\n\
+[ -n \"$t\" ] && [ -x /etc/hydo/oci/$t/exec ] || t=$s\n";
+
+fn hydo_oci_versions(netns: bool) -> String {
+    let base = if netns {
+        hydo_oci_netns()
+    } else {
+        HYDO_OCI.to_string()
+    };
+    base.replacen("shift\n", &format!("shift\n{VERSIONS_PICK}"), 1)
+        .replace(
+            "/etc/hydo/oci/$s/exec \"$@\"",
+            "/etc/hydo/oci/$t/exec \"$@\"",
+        )
 }
 
 const HYDO_OCI: &str = "#!/bin/busybox sh\n\
@@ -2576,7 +2707,10 @@ pub fn stage_with(
             eff.insert("mounts".into(), mounts_json(&o.mounts));
         }
         let mut rec = Map::new();
-        rec.insert("service".into(), Value::String(o.svc.clone()));
+        rec.insert("service".into(), Value::String(o.service.clone()));
+        if let Some(v) = &o.version {
+            rec.insert("version".into(), Value::String(v.clone()));
+        }
         rec.insert(
             "source".into(),
             Value::String(py::basename(o.path.trim_end_matches('/'))),
@@ -2675,7 +2809,9 @@ pub fn stage_with(
     let hb = root.join("bin/hydo-oci");
     fsx::write_text(
         &hb,
-        &if netns {
+        &if oci.iter().any(|o| o.versioned) {
+            hydo_oci_versions(netns)
+        } else if netns {
             hydo_oci_netns()
         } else {
             HYDO_OCI.to_string()
@@ -3109,6 +3245,9 @@ mod tests {
         .unwrap_or_else(|e| panic!("refused: {}", e.message()));
         OciService {
             svc: "db".into(),
+            service: "db".into(),
+            version: None,
+            versioned: false,
             path: String::new(),
             img: Image {
                 path: String::new(),

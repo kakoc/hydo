@@ -1027,7 +1027,10 @@ fn guest_noun(t: &GuestToken, knobs: &[KnobInfo]) -> Option<String> {
             "a switch of {} to version {} {}",
             target_words(&u.target).0,
             code(&u.version),
-            after(u.at)
+            match u.off {
+                Some(o) => format!("{} into {}", ms(o), nth_step(u.at)),
+                None => after(u.at),
+            }
         ),
         GuestToken::Walk(w) => format!("the walk {} through the pages", code(&w.to_string())),
         GuestToken::Knob { letter, value } => match knob_named(*letter, knobs) {
@@ -1533,15 +1536,28 @@ fn guest_said(t: &GuestToken, knobs: &[KnobInfo]) -> Said {
                 ),
                 None => String::new(),
             };
+            let when = match u.off {
+                Some(o) => format!("{} after {} starts", ms(o), nth_step(u.at)),
+                None => after(u.at),
+            };
+            let open = if u.off.is_some() {
+                " The step goes on meanwhile, so a page the old version served stays open and \
+                 talks to the new one."
+            } else {
+                ""
+            };
             fault(
                 format!(
                     "{}, hydo stops {who}, switches {} to version {v} and starts {} again on the \
-                     same data, as in a rolling upgrade.{how}{back}",
-                    cap(&after(u.at)),
+                     same data, as in a rolling upgrade.{open}{how}{back}",
+                    cap(&when),
                     it_them(pl),
                     it_them(pl)
                 ),
-                format!("switch {who} to version {v} {}", after(u.at)),
+                format!("switch {who} to version {v} {}", match u.off {
+                    Some(o) => format!("{} into {}", ms(o), nth_step(u.at)),
+                    None => after(u.at),
+                }),
             )
             .at(u.at)
             .fault("upgrades", format!("after {who} switched to version {v}"))

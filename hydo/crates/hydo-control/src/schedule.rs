@@ -382,6 +382,12 @@ enum Part {
         svc: String,
         spawn: u64,
     },
+    /// Milestone 392: the switches of `U=<target>@<at>~<off>` due before step `step`, each
+    /// (offset in ms, service, version or None for a rollback), made while the step runs.
+    UpgradeTimer {
+        step: i64,
+        switches: Vec<(u64, String, Option<String>)>,
+    },
     /// Milestone 261: the power cut of a `cf=` schedule, at the first stop after its disk lost
     /// power (`disk_cut`); every other thread is cancelled then.
     DiskCut,
@@ -399,6 +405,7 @@ fn label(p: &Part) -> String {
         Part::Restart(s) => restart::label(s),
         Part::React(i) => format!("react:a{i}"),
         Part::UpgradeGrace { svc, .. } => upgrade::label(svc),
+        Part::UpgradeTimer { .. } => "upgrade-timer".into(),
         Part::DiskCut => "cut".into(),
     }
 }
@@ -1128,6 +1135,7 @@ fn body(fx: &mut F<'_>, part: &Part) -> Step<()> {
         Part::Restart(s) => restart::watch(fx, &ctx, s),
         Part::React(i) => react::watch(fx, &ctx, *i),
         Part::UpgradeGrace { svc, spawn } => upgrade::grace(fx, &ctx, svc, *spawn),
+        Part::UpgradeTimer { step, switches } => upgrade::timer(fx, &ctx, *step, switches),
         Part::DiskCut => disk_cut(fx, &ctx),
     }
 }
@@ -3384,6 +3392,8 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     let mut rcut = false;
     // Milestone 238: the upgrades' switches, resolved at each token's first step
     let mut upgrades: upgrade::Pending = Vec::new();
+    // Milestone 392: the threads of the switches made while a step runs (U=...@<at>~<off>)
+    let mut utimers: Vec<usize> = Vec::new();
     // Milestone 372: each own clock's offset (ms) and drift (ppm) so far in this boot
     let mut own_clocks: BTreeMap<String, (i64, i64)> = BTreeMap::new();
     for &p in &pts {
@@ -3391,6 +3401,10 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
             if a < p {
                 step_range(fx, ctx, a, p)?;
             }
+        }
+        // Milestone 392: a switch made while the step ran ends before the next step's faults
+        for t in std::mem::take(&mut utimers) {
+            fx.join(t)?;
         }
         if !cfg.a.is_empty() && react::cut_due(fx) {
             cut = true;
@@ -3440,6 +3454,13 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         if !cfg.u.is_empty() {
             upgrade::resolve_at(fx, ctx, p, &mut upgrades)?;
             upgrade::apply_at(fx, ctx, p, &mut upgrades)?;
+            let timed = upgrade::timed_at(p, &upgrades);
+            if !timed.is_empty() {
+                utimers.push(fx.start(Part::UpgradeTimer {
+                    step: p,
+                    switches: timed,
+                })?);
+            }
         }
         if p == xat {
             if let Some(t) = &xtarget {
@@ -3654,6 +3675,9 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         if let Some(t) = xtimer {
             fx.cancel(t);
         }
+        for t in std::mem::take(&mut utimers) {
+            fx.cancel(t); // no service is started after the cut
+        }
         // SEAM(Freeze): stop_periodic's wrapper: the helper must not continue the service
         freeze::kill(fx)?;
         stop_periodic(fx);
@@ -3754,6 +3778,9 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         }
     }
     if let Some(t) = xtimer {
+        fx.join(t)?;
+    }
+    for t in std::mem::take(&mut utimers) {
         fx.join(t)?;
     }
     const NO_RESTART: &str = "HYDO-ORACLE: ERROR restart after the faults";

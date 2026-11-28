@@ -100,6 +100,8 @@ pub const KNOWN_SVC: &[&str] = &[
 ];
 /// The keys of a `services[].versions` entry (Milestone 238).
 pub const KNOWN_VERSION: &[&str] = &["name", "cmd", "setup", "ready", "description"];
+/// The keys of a version of an image service (Milestone 392): its own image and how it starts.
+pub const KNOWN_VERSION_IMAGE: &[&str] = &["image", "image_ref", "entrypoint", "env"];
 pub const KNOWN_INV: &[&str] = &[
     "id",
     "type",
@@ -512,10 +514,13 @@ fn validate_versions(s: &Value, wh: &str) -> R<()> {
         )));
     };
     let mut names = vec![ok_name(base, "version:")?];
-    if obj_get(s, "image").is_some() {
+    // Milestone 392: each version of an image service runs an image of its own
+    let image = obj_get(s, "image").is_some();
+    if image && obj_get(s, "writable") == Some(&Value::Bool(true)) {
         return Err(err(format!(
-            "{wh}: versions: of an image service are not supported yet; put both versions' \
-             programs in root: and name their commands in versions:"
+            "{wh}: versions: of an image service with writable: true are not supported yet \
+             (each version's root would need its own writable layer); mount the folders it \
+             writes with mounts:"
         )));
     }
     if list.is_empty() {
@@ -526,7 +531,38 @@ fn validate_versions(s: &Value, wh: &str) -> R<()> {
         if !v.is_object() {
             return Err(err(format!("{vw}: must be a mapping")));
         }
-        unknown(v, KNOWN_VERSION, &vw)?;
+        if image {
+            let known: Vec<&str> = KNOWN_VERSION
+                .iter()
+                .chain(KNOWN_VERSION_IMAGE)
+                .copied()
+                .collect();
+            unknown(v, &known, &vw)?;
+            if obj_get(v, "image").is_none() {
+                return Err(err(format!(
+                    "{vw}: a version of an image service needs image:, the image file it runs \
+                     (MANIFEST.md \"Versions of a service and upgrades\")"
+                )));
+            }
+            if let Some(e) = obj_get(v, "env") {
+                if !(e.is_object() || e.is_null()) {
+                    return Err(err(format!("{vw}: env: must be a mapping")));
+                }
+            }
+        } else {
+            let extra: Vec<&str> = KNOWN_VERSION_IMAGE
+                .iter()
+                .copied()
+                .filter(|k| obj_get(v, k).is_some())
+                .collect();
+            if !extra.is_empty() {
+                return Err(err(format!(
+                    "{vw}: {} only for a service with image:",
+                    extra.join(", ")
+                )));
+            }
+            unknown(v, KNOWN_VERSION, &vw)?;
+        }
         let n = need_str(v, "name", &vw)?;
         let n = ok_name(&Value::String(n), "name")?;
         if names.contains(&n) {
