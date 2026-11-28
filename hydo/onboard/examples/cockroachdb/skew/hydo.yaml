@@ -1,0 +1,180 @@
+# One node's own clock (Milestones 372 and 375, docs/design/service-clocks.md): ../hydo/hydo.yaml,
+# with `clock: own` on roach3 and the name cockroachdb-skew, so that hydo.yaml's image stays.
+# T=roach3@<at>:<change> steps or drifts roach3's wall clock alone; the other nodes, the client
+# and the checks keep the guest's clock. CockroachDB's --max-offset is 500 ms: a node whose clock
+# is more than 400 ms (80 %) away from a majority of the others must stop itself. RESULTS.md,
+# "One node's own clock", has the runs and what they found.
+#
+#   HYDO_CLOCKBIN=<hydo-clock of hydo/crates/hydo-clock/build.sh> hydo build hydo.yaml
+#   hydo run "disk=none | run T=roach3@10:300ms"
+#   hydo explore --seeds 1-20 --strategy process --new-faults --service-clocks --workers 1
+#
+# CockroachDB v26.4.1 (the newest release, 2026-11-18), the distributed SQL database on Raft, as
+# a cluster of three nodes, as ../docker-compose.yaml runs it. Each node keeps its store on a file
+# system of its own. RESULTS.md has the promises under test and what was found.
+#
+#   sh ../build.sh            # bin/crc-<arch>, the test client (../client)
+#   sh fetch-images.sh        # the image by digest
+#   hydo build hydo.yaml
+#   hydo run "disk=none | run"
+#   hydo explore --seeds 1-20 --strategy process --new-faults --cluster-faults --storage-faults
+#
+# Started with `hydo compose` on ../docker-compose.yaml. The services below are the importer's,
+# with these changes:
+# - each node's /cockroach/cockroach-data is a file system of its own (storage:), the target of
+#   L= and G=, instead of the importer's folder on the shared data disk;
+# - the one-shot service init is gone: the workload's first_init runs `cockroach init` once with
+#   roach1's image (hydo-oci), because a node is ready (its RPC port open) before the cluster is
+#   initialized, and the importer's job would run in the setup: of the nodes that wait for it;
+# - no emergency ballast file (ballast-size=0, also in the Compose file): CockroachDB's default
+#   ballast filled a node's own file system of 640 MiB, and the node stopped with status 10
+#   (disk full) in the first clean run;
+# - guest.cpu: v3, because the image's glibc needs x86-64-v3;
+# - the readiness check is a connect to the RPC port (26357), open from the start;
+# - the nodes start together (start_after: started), as Compose starts them;
+# - the group restarts its killed members together and links every pair (Milestone 374);
+# - the test client crc is in the image (../build.sh).
+format: 1
+name: cockroachdb-skew
+description: "CockroachDB v26.4.1, a cluster of three nodes: acknowledged inserts, upserts, updates, deletes and transactions stay as acknowledged, transactions of list appends and reads are serializable, transfers keep the bank's total, reads at one past timestamp give every node the same answer, follower reads keep the total, every range's replicas agree, and the cluster serves after the heal, under kills, pauses, partitions, one node's power loss or damaged files, power cuts and clock steps"
+hydo_version: "0.6"
+
+params:
+  arch: amd64     # amd64 | arm64: the client's architecture, the same as the image's
+  persist: "0"    # server.clock.persist_upper_bound_interval, which crc init sets when it is not 0
+                  #   (CockroachDB's default is 0, off): the wall time's upper bound on disk, so
+                  #   that a node waits at its start until its clock passes it (RESULTS.md, finding 1)
+
+env:
+  CRC_PERSIST: "{{persist}}"   # the client reads it
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 3072
+  cpu: v3                   # the image's glibc stops with "CPU does not support x86-64-v3" at v2
+  clock_start: 1795651200   # 2026-11-26 00:00 UTC
+  clock_after_cut: 60       # a real machine's clock runs on across a power cut
+
+data:
+  size_mib: 512   # the data disk: the run's own files; the three nodes' file systems of 640 MiB come on top
+  dirs: [vol/roach1, vol/roach2, vol/roach3]
+
+root:
+  share_images: true   # the three nodes share one tree of the CockroachDB image
+  files:
+    - {src: "../bin/crc-{{arch}}", dst: /bin/crc, mode: "0755"}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 roach1
+      10.89.0.12 roach2
+      10.89.0.13 roach3
+
+groups:
+  - name: nodes
+    services: [roach1, roach2, roach3]
+    primary: /bin/crc primary   # the node that holds the lease of the table la
+    restart: together           # a kill of several nodes ends with all of them started at once
+    links: all                  # network faults between every pair of nodes
+
+services:
+  # Compose service roach1
+  # image cockroachdb/cockroach:v26.4.1 = docker.io/cockroachdb/cockroach@sha256:13331054ac7b815bcf7d4396e3416d3ef53522be308b5c4a8155079f35fe58a1
+  #   linux/amd64: sha256:de1c2ef57bc2b5b7e553ab68e0cd4217a948ab26eae471b63ffea00127f8e0f6
+  #   linux/arm64: sha256:a1bde0884057cd9edd9cfccf2c88d943e4e8bdbcacc9558167067bc7bb72d53f
+  - name: roach1
+    image: {x86_64: images/cockroachdb-cockroach-v26.4.1-amd64.docker.tar, arm64: images/cockroachdb-cockroach-v26.4.1-arm64-oci}
+    image_ref: "cockroachdb/cockroach:v26.4.1"
+    cmd: ["start", "--insecure", "--advertise-addr=10.89.0.11:26357", "--listen-addr=0.0.0.0:26357", "--sql-addr=0.0.0.0:26257", "--http-addr=0.0.0.0:8080", "--join=10.89.0.11:26357,10.89.0.12:26357,10.89.0.13:26357", "--cache=64MiB", "--max-sql-memory=128MiB", "--store=path=/cockroach/cockroach-data,ballast-size=0"]
+    env: {COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING: "true"}
+    port: 26257
+    addr: 10.89.0.11
+    ready: "tcp:26357"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/roach1, size_mib: 640}   # the node's store (Pebble), its WAL and its logs
+    logs: [/data/vol/roach1/logs/cockroach.log]   # the node's own log; the diagnosis shows its last lines
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/roach1, dst: /cockroach/cockroach-data, copy_up: true}
+  # Compose service roach2
+  - name: roach2
+    image: {x86_64: images/cockroachdb-cockroach-v26.4.1-amd64.docker.tar, arm64: images/cockroachdb-cockroach-v26.4.1-arm64-oci}
+    image_ref: "cockroachdb/cockroach:v26.4.1"
+    cmd: ["start", "--insecure", "--advertise-addr=10.89.0.12:26357", "--listen-addr=0.0.0.0:26357", "--sql-addr=0.0.0.0:26257", "--http-addr=0.0.0.0:8080", "--join=10.89.0.11:26357,10.89.0.12:26357,10.89.0.13:26357", "--cache=64MiB", "--max-sql-memory=128MiB", "--store=path=/cockroach/cockroach-data,ballast-size=0"]
+    env: {COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING: "true"}
+    port: 26257
+    addr: 10.89.0.12
+    start_after: started   # Compose starts the three nodes together
+    ready: "tcp:26357"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/roach2, size_mib: 640}
+    logs: [/data/vol/roach2/logs/cockroach.log]   # the node's own log; the diagnosis shows its last lines
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/roach2, dst: /cockroach/cockroach-data, copy_up: true}
+  # Compose service roach3
+  - name: roach3
+    image: {x86_64: images/cockroachdb-cockroach-v26.4.1-amd64.docker.tar, arm64: images/cockroachdb-cockroach-v26.4.1-arm64-oci}
+    image_ref: "cockroachdb/cockroach:v26.4.1"
+    cmd: ["start", "--insecure", "--advertise-addr=10.89.0.13:26357", "--listen-addr=0.0.0.0:26357", "--sql-addr=0.0.0.0:26257", "--http-addr=0.0.0.0:8080", "--join=10.89.0.11:26357,10.89.0.12:26357,10.89.0.13:26357", "--cache=64MiB", "--max-sql-memory=128MiB", "--store=path=/cockroach/cockroach-data,ballast-size=0"]
+    env: {COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING: "true"}
+    port: 26257
+    addr: 10.89.0.13
+    clock: own             # its own wall clock: T=roach3@<at>:<change> moves it alone
+    start_after: started
+    ready: "tcp:26357"
+    ready_timeout: 180
+    restart: "unless-stopped"
+    storage: {dir: vol/roach3, size_mib: 640}
+    logs: [/data/vol/roach3/logs/cockroach.log]   # the node's own log; the diagnosis shows its last lines
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/roach3, dst: /cockroach/cockroach-data, copy_up: true}
+
+# 40 rounds of 1 s with up to 3 commands each. hvx keeps 64 KiB of the guest's console, so the
+# run stays small.
+workload:
+  steps: 40
+  timeout: 300    # also the read-backs' limit
+
+test:
+  parallel: 4
+  per_round: 3
+  round_ms: 1000
+  command_timeout: 60
+  drain_timeout: 60
+
+checks:
+  # hydo's ready-made claim (hydo guide messages, "Read back the final states"): every write of
+  # the table kv that CockroachDB acknowledged is there at the end, unless a later write of the
+  # same key replaced it, and no write that CockroachDB refused took effect. `crc readback` reads
+  # every row back through a node and writes each write's effect (f=1 or f=0).
+  - id: writes
+    type: messages
+    history: w
+    msg: every write that CockroachDB acknowledged ends as CockroachDB acknowledged it
+    final: /bin/crc readback
+    claims:
+      acked_outcome:
+        client_errors: [refused]   # a retry error (40001), a unique violation, or an error before the commit: nothing applied
+        effect: recorded
+  # Transactions of list appends and reads at SERIALIZABLE, CockroachDB's default isolation
+  # (hydo guide checks, "History checks").
+  - id: la
+    type: list-append
+    history: la
+    consistency: serializable
+    msg: transactions of list appends and reads are serializable, and no acknowledged append is lost
+    final: /bin/crc lafinal
+
+faults: [kill, pause, network, oneway, cut, clock, corrupt, powerloss]

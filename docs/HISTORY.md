@@ -26656,3 +26656,121 @@ Retro: RocketMQ 5.5.0, hvx and KVM, 2026-11-27
   audit", "The messages check's claims" and "The sync audit and power cuts after an answer" of `hydo
   guide strategies`; the table "By type of system" names RocketMQ. The sync audit, run after the
   finding, names the epoch file's write as its place 22 of 29.
+
+## Milestone 377 (tentative number): CockroachDB, one node's clock out of bounds stops the two healthy nodes too
+
+CockroachDB v26.4.1, the newest release (2026-11-18), became the example
+`hydo/onboard/examples/cockroachdb` (RESULTS.md), by `docs/ONBOARDING-PLAYBOOK.md`. It runs as a
+cluster of three nodes from the official image in one hvx guest of 3,072 MiB on the bare-metal
+machine. The fit took under 30 minutes: the image is 193 MB, a node with a cache of 64 MiB and
+128 MiB of SQL memory fits, and the roots and the three nodes' file systems fit hvx's 4,096 MiB of
+disk. The public repository has no tag or branch of v26.3 or v26.4; its `master` ends at
+`d30c905f` (2026-09-23) with a commit that forwards its automation to "the code repository", so
+the causes cite that `master`. The programs were this branch's `hydo` and `hydo-hvx` with the
+explorer's `--service-clocks` of Milestone 375's branch (`6f65876a`) over the 0.6.0 release's guest
+files. One new candidate, one known clock effect, and one candidate whose cause was not traced;
+nothing was posted, and nothing recorded moved.
+
+**Finding 1, new, a clock effect past the documented bound.** With `clock: own` on roach3
+(`skew/hydo.yaml`), `T=roach3@5:1` puts roach3's clock 1 s ahead, past 80 % of `--max-offset`
+(400 ms). roach3 stops itself, as documented, and roach1 and roach2, whose clocks agree, stop
+themselves too, again and again: `clock synchronization error: this node is more than 400ms away
+from at least half of the known nodes (1 of 2 are within the offset)`. `VerifyClockOffset`
+(`pkg/rpc/clock_offset.go` line 467) stops a node when `healthyOffsetCount <= numClocks/2`, and a
+healthy node of three counts two clocks. The cluster acknowledged 5 of the 23 writes sent; 1 s
+behind, 22 of 65; a drift of 5 % fast from the start, 6 of 28. At 300 ms either way no node
+stopped and every rule held. hydo started the stopped nodes again, so the rules over the data
+held; the final check `clockstops`, which counts the nodes that stopped for the clock in their
+own log files, fails on the final skew image (`f49d4079…`), twice with `57bca9568e26a82d`. On that
+image the clock 1 s behind stopped no node, roach3 included, which was not traced. The
+message is in four roachtest failures on three-node clusters (#145889, #156834, #137898,
+#173765), each closed as the test machines' clock; the investigation of #173248 (`1 of 3`) calls
+the survival of the healthy nodes the intended behavior.
+
+**Finding 2, known, a clock effect by design.** A step back of the guest's clock of 300 s before
+step 10 and a kill of every node before step 15, started again together, leave no node serving a
+write or a read within 180 s of the heal (`[serves]`, twice `052cb64318f15b3f`). Each new
+process starts its hybrid logical clock from the wall clock, 5 minutes before everything the
+cluster wrote; the logs say `first range unavailable` and `found no descriptor with id 1`. A step
+of 120 s or 60 s with the same kills passed, and so did a step of 20 s with a kill of every node,
+of one node, or none. `server.clock.persist_upper_bound_interval` (#25109, open since 2018), off
+by default, makes a node wait at its start for the wall clock; with it the schedule fails the same
+way. No acknowledged write was lost.
+
+**The example.** Three nodes at fixed addresses as CockroachDB's Docker guide starts them,
+insecure, imported with `hydo compose`. Each node's store is a file system of its own of
+640 MiB, with the emergency ballast file turned off (`ballast-size=0`) after the first clean run
+filled roach1's file system (exit status 10); candidate 3 below was the cause, not the ballast. The image's glibc needs `guest.cpu: v3`. The workload's
+`first_init` runs `cockroach init` with roach1's image (`hydo-oci`), and the client `crc` (Go,
+pgx) waits until every range has three replicas: 40 s after `init` 62 ranges had two, and a
+node's stop left 29 without a quorum. The group restarts its killed members together and links
+every pair (Milestone 374). Writes of a register table, explicit transactions, transactions of
+list appends and reads, and bank transfers, each sent once; a messages check with `acked_outcome`,
+a list-append check at `serializable`, reads of the bank and the lists at one past timestamp
+through every node (the same answer, a total of 500, prefixes of the current lists), follower
+reads, the bank at the end, CockroachDB's own replica consistency check
+(`crdb_internal.check_consistency`), a check that the cluster serves after the heal, and
+`clockstops`. The build parameter `persist` sets `server.clock.persist_upper_bound_interval`.
+
+**The runs.** The final default image (`5bb6c565…`) passed `disk=none | run` twice with
+`2ed1cc731ea7b53f`, and the final skew image is `f49d4079…`. Each regression ran twice with one
+fingerprint: `skew/regressions/a-node-clock-ahead-stops-the-healthy-nodes.schedule`
+(`57bca9568e26a82d`, `[clockstops]`) and
+`hydo/regressions/no-node-serves-after-a-step-back-and-a-restart-of-all.schedule`
+(`052cb64318f15b3f`, `[serves]`). The third, `skew/regressions/the-first-node-fills-its-store-with-unflushed-wal-files.schedule`,
+ran twice with `09ec5ed750333c34`. `hydo repro --regressions` on both final images gave each saved
+schedule its verdict and fingerprint.
+
+**The explorations.** Two short explorations ran with one worker and without shrinks. On the skew image,
+`--strategy process --new-faults --service-clocks` over seeds 1-4 failed all four: seed 2 found
+finding 1 blind (`T=roach3@34:1500ms`), seed 3 found it at a restart (`ERROR roach1 restart
+failed` after `T=roach3@28:-1500ms`), seed 1 is candidate 3 below, and seed 4 a step back of 30
+days with a kill of one node (no service within 180 s, not separated). On the default image,
+`--strategy process --new-faults --cluster-faults --storage-faults` over seeds 1-6 failed three:
+two more steps back of a day and of 30 days with a kill (`[serves]`), and one node's damaged files
+(`ERROR roach1 restart failed (its files were corrupted)`, the environment).
+
+**Candidate 3, not traced.** In seed 1 of the skew exploration roach1's store kept nine Pebble
+WAL files of its first two minutes and wrote no SST (`MANIFEST-000001` stayed 33 bytes). Each WAL
+file has about 70 MiB preallocated, so they filled roach1's 640 MiB file system, and in the
+recovery boot after the power cut roach1 stopped at every start with exit status 6 (`service
+cannot recover`). roach2 and roach3 flushed and used 147 MiB. The first clean run of the first
+image showed the same nine files and a full disk (exit status 10), which this example first took
+for the emergency ballast file. Saved as
+`skew/regressions/the-first-node-fills-its-store-with-unflushed-wal-files.schedule`, twice
+`09ec5ed750333c34`.
+
+**Not bugs.** The first image started the workload as soon as every node served SQL. A node's
+clock 1 s off then left the cluster without service for good, because ranges still had two
+replicas, one on the stopped node. `crc init` waits for three replicas since.
+
+**Tests.** On the bare-metal machine the explorer's corpus and identity goldens, the controller's
+quick corpus, and the equivalence corpora of hydo-build and hydo-manifest were recorded again
+with `HYDO_BLESS=1`, because they read the repository's manifests and now hold the two of this
+example. Then `cargo test -p hydo-explore --test it` (63 passed), the equivalence
+tests of hydo-build and hydo-manifest, `cargo test -p hydo --test it -- equivalence::
+agents_equivalence::` (9 passed) and `cargo test -p hydo-agents --test it` (16 passed) passed.
+A sync of the tree after the first round copied the old goldens back over three of the
+re-recorded ones, so that round was run again.
+
+**Retro.**
+
+```text
+Retro: CockroachDB v26.4.1, hvx, 2026-11-27
+- Time to the first clean run: about 2 hours of wall time, half of it waiting for builds and for
+  memory on the shared machine.
+- Schedules run before the first finding: 6 directed runs of the skew image; none failed by the
+  rules' mistakes, but two failed because the cluster was 40 s old (ranges of two replicas).
+- The findings: 1 new (finding 1, a clock effect past the bound), 1 known (#25109, a clock
+  effect with a documented setting), 1 candidate not traced (candidate 3, a store full of WAL
+  files).
+- What took the most time: runs of 5 to 17 minutes on the loaded machine; three rebuilds of every
+  image for the client's fixes (crdb_internal access, the wait for replication, the check of the
+  nodes' logs); hydo inspect sessions to read the nodes' own log files.
+- What hydo lacked: the diagnosis's replay killed by the out-of-memory killer, the services' own
+  log files outside logs/ until services[].logs was set, a stopped and restarted node invisible to
+  the verdict, a misleading diagnosis of a glibc that needs v3, and an import that kept a
+  one-shot init as a service; open item 197.
+- Strategies: "One node's clock on both sides of the cluster's bound" is new in hydo guide
+  strategies.
+```

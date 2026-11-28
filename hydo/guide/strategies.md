@@ -1295,6 +1295,31 @@ is the exploration that drew most of them.
 - **Cost.** One directed run takes the time of a run; an image of the example with `clock: own`
   beside the recorded one, so that the recorded values stay.
 
+### One node's clock on both sides of the cluster's bound (`clock: own`)
+
+- **What it is.** A cluster that orders by wall-clock time documents a largest clock offset and
+  stops a node whose clock is past it. `clock: own` on one node and `T=<svc>@<at>:<change>` put
+  that node's clock just inside the bound and just outside it, while the other nodes keep the
+  guest's clock. Inside, every rule must hold. Outside, only the node with the bad clock may stop.
+- **What to write.** `clock: own` on one node of a copy of the manifest (`skew/hydo.yaml`), and a
+  final check that counts the nodes that stopped for the clock: at most the one whose clock was
+  moved. Read the bound from the documentation, then run `T=<svc>@5:<60 % of it>`, the same back,
+  and `T=<svc>@5:<twice it>` both ways. Start the workload only when every range or partition has
+  all of its replicas, or the loss of one node can stop the cluster for another reason.
+- **When it fits.** A system that documents a clock bound and enforces it, such as
+  CockroachDB's `--max-offset`, and leases or snapshot reads that trust the clocks.
+- **What it found.** CockroachDB v26.4.1 (finding 1): with one node's clock 1 s off, ahead or
+  behind, the two healthy nodes of three stopped themselves too, each with `clock synchronization
+  error ... (1 of 2 are within the offset)`. A healthy node counts two clocks, and the rule stops
+  it when one of two is off. The cluster acknowledged 5 of 23 and 22 of 65 writes sent. Within the
+  bound, at 300 ms either way, every rule held. The rules over the data held in every run, because hydo started the
+  stopped nodes again; a check of the nodes' own log files showed it.
+- **What it misses.** hydo-clock moves the wall clock only; the kernel's times and `timerfd` stay
+  the guest's. `hydo explore --service-clocks` draws steps of 250 ms to 5 minutes, so a drawn
+  step is mostly far past a bound of 500 ms.
+- **Cost.** A clock read under hydo-clock costs about 40 µs of guest time; a CockroachDB node with
+  its own clock still ran the workload at the speed of the others on hvx. hvx only.
+
 ### The sync audit and power cuts after an answer
 
 - **What it is.** `hydo rules scan --kind sync` lists the code that can answer a write before

@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# the bank and the lists at one past timestamp through every node: one answer, a total of 500, prefixes of the current lists
+exec /bin/crc read

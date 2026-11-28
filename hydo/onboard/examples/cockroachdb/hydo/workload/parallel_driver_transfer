@@ -1,0 +1,4 @@
+#!/bin/sh
+# hydo: timeout=40
+# a transfer of 1 to 5 between two accounts of acct in one transaction
+exec /bin/crc transfer
