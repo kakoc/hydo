@@ -5,6 +5,9 @@
 // retried without an idempotency key, so an order whose answer was lost is placed twice.
 
 export const BUGGY = import.meta.env.VITE_VARIANT === 'buggy';
+// Milestone 393: VITE_SEARCH=1 adds a search box to the product list (App.jsx); the builds
+// without it leave it out entirely.
+export const SEARCH = import.meta.env.VITE_SEARCH === '1';
 const TIMEOUT_MS = 3000;
 
 export class HttpError extends Error {
@@ -48,6 +51,8 @@ function post(body, headers = {}) {
 }
 
 export const getProducts = () => call('/api/products');
+
+export const search = (q) => call(`/api/search?q=${encodeURIComponent(q)}`);
 
 export const addItem = (product) => call('/api/cart/items', post({ product }));
 
