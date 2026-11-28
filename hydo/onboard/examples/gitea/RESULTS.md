@@ -18,8 +18,8 @@ pages" is the how-to. The earlier apps explored this way are Memos
 - **What held.** Every issue, comment, close, and reopen that Gitea answered as saved stayed
   saved. Gitea's counts matched its rows, and the search found every issue. That held in 200
   schedules of kills, pauses, network faults, clock steps, and power cuts.
-- **What hydo lacked.** The section of that name: chiefly no console event at an acknowledged
-  write, no id in a redirect answer, and power cuts only at the end of the walk.
+- **What hydo lacked.** The section of that name: chiefly no id in a redirect answer, and power
+  cuts only at the end of the walk, with the walker before Milestone 390.
 
 ## The system
 
@@ -133,8 +133,10 @@ word names the write's path and, for a comment, its issue, but not the new objec
 
 - hvx on the bare-metal machine, the main module (srcversion `91D86B693F4D4035C368F9B`), one VM
   of this onboarding at a time beside another session's VMs.
-- hydo: this branch's `hydo`, `hydo-hvx` and `hydo-build` over the published 0.7.0 Linux release,
-  at the fingerprint epoch 7.
+- hydo: `hydo`, `hydo-hvx` and `hydo-build` built from `main` at `00d3089d`, with the walker before
+  Milestone 390, over the published 0.7.0 Linux release, at the fingerprint epoch 7. The KVM
+  explorations built the branch's own commits on the same base. An image built with a later
+  walker has other bytes, and its walks can take other actions.
 - KVM: three explorations of `hydo/hydo-kvm.yaml` on GitHub's runners in 20 parts each
   (`ci/remote-explore.sh`), on AMD EPYC 7763, 9V45 and 9V74 hosts and on Intel Xeon 6975P-C and
   Platinum 8573C hosts.
@@ -323,14 +325,15 @@ the walk (`C=6`). No exploration shrank: the failures were judged by directed ru
 The gaps are in the order of the time they cost. The ones of the walk go to open item 198 of
 `AGENTS.md`.
 
-- **No event at an acknowledged write.** The walk writes `$HYDO_ACKED` when the server answers a
-  write, but it writes no console record. A reaction `A=<event>+<ms>:cut` acts at an SDK
-  assertion record, so no schedule can cut the power a few milliseconds after a write that the
-  walk saw acknowledged. The power cuts of this page came at the steps (`C=`) and at the k-th
-  disk flush (`cf=`, hvx only).
-- **Power cuts only at the end of the walk.** The process strategy put all 47 of its power cuts
-  after the last step (`C=6`), as in the SeaweedFS example (open item 186). Finding 2 needs a cut
-  within half a minute of the setup's push, so only directed runs reached it.
+- **No event at an acknowledged write, and power cuts only at the end of the walk.** The walker of
+  these runs wrote `$HYDO_ACKED` when the server answered a write, but no console record, so no
+  reaction `A=<event>+<ms>:cut` could cut the power right after a write that the walk saw
+  acknowledged. The process strategy put all 47 of its power cuts after the last step (`C=6`),
+  as in the SeaweedFS example (open item 186). Finding 2 needs a cut within half a minute of the
+  setup's push, so only directed runs reached it. Milestone 390, merged while this onboarding
+  ran, adds the records `walk.write_acked` and `walk.action` and gives 40 % of a walk's schedules
+  such a reaction. It did not run on Gitea, and the setup's push is no write that the walk
+  answers, so a reaction after `walk.write_acked` comes after it only by chance.
 - **The recovery boot's clock.** Without `guest.clock_after_cut` a power cut set the clock back to
   `clock_start`, and the timer rule then recorded a negative time in four KVM schedules, one of
   them without any clock step. The import does not write the key, and the guide names it for

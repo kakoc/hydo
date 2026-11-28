@@ -190,11 +190,9 @@ pub(super) fn workload(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<Option
     if cut_due(fx) {
         return Ok(None);
     }
-    let e = env(
-        fx,
-        ctx,
-        &[("HYDO_FROM", a.to_string()), ("HYDO_TO", b.to_string())],
-    );
+    // Milestone 390: a walk's call gets its walk here too (before, it walked seed 0)
+    let extra = super::workload_extra(fx, ctx, a, b)?;
+    let e = env(fx, ctx, &extra);
     let id = fx.send(spawn_cmd(
         "workload",
         timeout_argv(ctx, &ctx.plan.workload_run),

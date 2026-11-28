@@ -345,3 +345,29 @@ fn a_recording_replay_gets_its_script_before_the_walk() {
     let none = run(&b2, "disk=none | run I=1,rec");
     assert!(writes_to(&none.run.items, file).is_empty());
 }
+
+/// Milestone 390: a walk's workload call gets its walk and its schedule's guest part also in a
+/// run with a reaction; before, such a run walked seed 0 and its walker printed none of the
+/// records that the reaction waits for.
+#[test]
+fn a_walk_with_a_reaction_gets_its_walk() {
+    let mut p = plan(false);
+    p.walk = true;
+    let b = support::boot(&p, "kv").unwrap();
+    for s in [
+        "disk=none | run I=7",
+        "disk=none | run A=walk.action#2:kill-kv I=7",
+    ] {
+        let r = support::run_schedule(&b, &Schedule::parse(s).unwrap()).unwrap();
+        let guest = format!("HYDO_GUEST={}", s.split_once("| ").unwrap().1);
+        let spawned = r.run.items.iter().any(|i| {
+            matches!(i, Item::Send { cmd: Command::Spawn(x), .. }
+                if x.env.iter().flatten().any(|e| e == "HYDO_WALK=7")
+                    && x.env.iter().flatten().any(|e| *e == guest))
+        });
+        assert!(
+            spawned,
+            "{s}: no workload call with HYDO_WALK=7 and {guest}"
+        );
+    }
+}

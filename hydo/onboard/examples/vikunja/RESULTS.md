@@ -304,6 +304,44 @@ walker.
   task 3 too (two tasks before), and with `disk=cut` and `C=6` the WAL had reached the disk
   before the cut, and nothing was lost (two tasks before).
 
+## Milestone 390: a sign-in again, done checkboxes, drags, and faults inside a step
+
+Milestone 390 built four of the gaps above (open item 137). The runs used hvx on the bare-metal
+machine, with that branch's `hydo` over the 0.7.0 Linux release, at the fingerprint epoch 7. Two
+images were built from `hydo/hydo.yaml`: one with the walker of `main` before the milestone
+("before"), and one with the milestone's walker and the new keys of `hydo.yaml` ("after"). A
+run's 31-day clock step (`T=2:2678400`) ends the walk's session: Vikunja's token is past its
+time, and the page goes to `/login`. The new walker and keys give the image new bytes and its
+walks other actions, so the fingerprints of the sections above hold only for the images built
+before this milestone.
+
+| schedule | image | the walk | verdict | fingerprint |
+|---|---|---|---|---|
+| `disk=none \| run T=2:2678400 I=1` | before | 33 of its frames on `/login`; 2 tasks acknowledged | VIOLATION `browser.acked_shown`: the check opened `/` with the ended session | `b259153002792f54`, twice |
+| the same | after | signed in again at the start of step 2; 5 tasks acknowledged; 2 tasks marked done through their labels | OK, 7 invariants held | `35b61bf045be4d2c`, twice |
+| `disk=none \| run I=1` | after | the same 2 labels: at 3.0 a task done, at 4.6 not done again | OK | `4899b87e1dab99d8` |
+| `disk=none \| run I=3` | after | 1 label, at 3.4 | OK | `6875aa5efa0b5397` |
+| `disk=none \| run A=walk.action#3@1:kill-vikunja I=1` | before | the walk of seed 0; no record of the walk reached the console, so the reaction never fired | OK | `9751f31f588dc3e0`, twice |
+| the same | after | `vikunja` killed when the walk started action 1.2; the rest of step 1 met a server that refused every request | VIOLATION `browser.no_page_errors`: "The page /trash/projects left a promise rejection unhandled during the test "walk step 1": Error: Error while refreshing user info:" | `4e58b966ae56621e`, twice |
+| `disk=none \| run I=1` of `hydo-kanban.yaml` | after | 5 drags of a card between the buckets; one timed out after 3 s | OK | `7c734d670e182574`, twice |
+
+- The sign-in is `browser.explore.sign_in` of `hydo.yaml`: the login form of `read_back.setup`.
+  The first step still creates the account with `setup`.
+- Each label's click sent `PATCH /api/v2/tasks/<id>`, and the Kanban rule held: every task that
+  the walk marked done was in the done bucket of its board. Before, the done checkboxes took no
+  click, and the Kanban rule judged only tasks that were not done.
+- The read-back looks for each task on its own page now (`/tasks/<id>`, `.task-view`), because
+  the home page hides a done task. With the old entry the run with `T=2:2678400 I=1` failed it
+  falsely twice: once by the ended session, and once by the done task.
+- No walk of `hydo.yaml` dragged a card: the walk reaches the Kanban view in few of its
+  actions. `hydo-kanban.yaml` is `hydo.yaml` whose setup adds three cards and opens the
+  Inbox's Kanban view, which is also its start page. Its walk of `I=1` dragged cards to the
+  Doing and the Done bucket, and the Kanban rule held: a card dragged to Done was done.
+- The rejection after the kill is a candidate of Vikunja's frontend, not traced and not posted:
+  when the server goes away, the page's refresh of the user's information rejects without a
+  handler. Before the milestone, a schedule with any reaction walked seed 0, because the
+  controller gave such a run's workload no walk; that is fixed too.
+
 ## What held
 
 - Apart from the power cuts of finding 1, every object that Vikunja answered as saved was in its

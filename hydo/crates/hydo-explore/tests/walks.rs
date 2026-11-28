@@ -10,6 +10,9 @@
 //!   walk is the last thing it cuts.
 //! - A violation's signature blanks generated ids, so a shrink candidate whose walk made
 //!   another note keeps the failure (Milestone 264).
+//! - Milestone 390: 40 % of a walking manifest's schedules get a fault inside a step, a reaction
+//!   to the walk's own records (`A=walk.action#<k>@<step>...`, `A=walk.write_acked@<step>...`),
+//!   from a stream of its own, with an action that `faults:` allows.
 
 use hydo_explore::gen::Ex;
 use hydo_explore::space::Space;
@@ -59,6 +62,8 @@ fn every_schedule_of_a_walking_manifest_has_its_own_walk() {
             let s = on.compose_seed(st, seed, false);
             let mut rest = s.clone();
             rest.i = None;
+            // Milestone 390: and the fault inside a step, from a stream of its own
+            rest.a.retain(|r| !r.event.starts_with("walk."));
             // the walk is drawn from its own stream: the faults are those of the same seed
             // without it (the plain manifest has the same services and fault kinds)
             assert_eq!(
@@ -152,6 +157,82 @@ fn a_walk_shrinks_by_fewer_actions_and_by_leaving_out_actions() {
     let s = e.parse("disk=none dseed=1 | run K=app@2+1 I=9f3a").unwrap();
     let first = &e.candidates(&s, None)[0];
     assert!(first.k.is_none() && first.i.as_deref() == Some("9f3a"));
+}
+
+/// Milestone 390: faults inside a step of a walk, at an action or after an acknowledged write.
+#[test]
+fn a_walking_manifest_gets_faults_inside_a_step() {
+    let (m, plain) = (manifest(true), manifest(false));
+    let (on, off) = (ex(&m), ex(&plain));
+    let p = plan(&m);
+    let (mut with, mut actions, mut writes) = (0, 0, 0);
+    for seed in 1..=400u64 {
+        let s = on.compose_seed("process", seed, false);
+        assert!(off
+            .compose_seed("process", seed, false)
+            .a
+            .iter()
+            .all(|r| !r.event.starts_with("walk.")));
+        let walk: Vec<_> =
+            s.a.iter()
+                .filter(|r| r.event.starts_with("walk."))
+                .collect();
+        assert!(walk.len() <= 1, "{}", on.render(&s));
+        let Some(r) = walk.first() else { continue };
+        with += 1;
+        assert!((0..6).contains(&r.at), "{}", on.render(&s));
+        match r.event.as_str() {
+            "walk.action" => {
+                actions += 1;
+                assert!((1..=8).contains(&r.nth), "{}", on.render(&s));
+            }
+            "walk.write_acked" => {
+                writes += 1;
+                assert_eq!(r.nth, 1);
+            }
+            e => panic!("{e}"),
+        }
+        // the manifest has no `cut`: a kill or a pause of its one service
+        assert!(
+            r.action == "kill-app" || r.action.starts_with("stop-app-"),
+            "{}",
+            r.action
+        );
+        let text = on.render(&s);
+        let parsed = Schedule::parse(&text).unwrap_or_else(|e| panic!("{text}: {e}"));
+        assert_eq!(parsed.to_string(), text);
+        hydo_control::names::check(&p, &parsed).unwrap_or_else(|e| panic!("{text}: {e}"));
+    }
+    assert!((120..=200).contains(&with), "{with} of 400");
+    assert!(actions > 2 * writes && writes > 0, "{actions} {writes}");
+    // with `cut` in `faults:`, a third of them may cut the power, on the cut disk
+    let mut mc = manifest(true);
+    mc["faults"] = json!(["cut"]);
+    let ec = ex(&mc);
+    let cuts: Vec<_> = (1..=200u64)
+        .map(|seed| ec.compose_seed("random", seed, false))
+        .filter(|s| s.a.iter().any(|r| r.event.starts_with("walk.")))
+        .collect();
+    assert!(!cuts.is_empty());
+    for s in &cuts {
+        assert_eq!(s.disk, "cut", "{}", ec.render(s));
+        assert!(s.a.iter().any(|r| r.action == "cut"), "{}", ec.render(s));
+    }
+    // the words of a report
+    let words: Vec<String> = hydo_schedule::describe::describe_text(
+        "disk=none | run A=walk.action#3@2+300:kill-app",
+        &[],
+    )
+    .into_iter()
+    .map(|w| w.sentence)
+    .collect();
+    let words = words.join(" ");
+    assert!(
+        words.contains(
+            "When the walk starts its 3rd action from step 2 on, hydo 300 ms later kills"
+        ),
+        "{words}"
+    );
 }
 
 #[test]

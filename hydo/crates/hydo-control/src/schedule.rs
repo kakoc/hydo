@@ -2691,13 +2691,7 @@ fn step_range_run_in(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
     } else if let Some(p) = &ctx.plan.perf {
         perf::steps(fx, ctx, p, a, b)? // perf: (Milestone 237): one marked call per step
     } else {
-        let mut extra = vec![("HYDO_FROM", a.to_string()), ("HYDO_TO", b.to_string())];
-        if ctx.plan.walk {
-            walk_script(fx, ctx)?;
-            // Milestone 258: the walker reads the walk and writes repro.spec.ts from the schedule
-            extra.push(("HYDO_WALK", ctx.run.walk.clone().unwrap_or_default()));
-            extra.push(("HYDO_GUEST", ctx.run.guest_text.clone()));
-        }
+        let extra = workload_extra(fx, ctx, a, b)?;
         let e = env(fx, ctx, &extra);
         spawn_wait(
             fx,
@@ -2742,6 +2736,21 @@ fn step_range_run_in(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<()> {
 /// Milestone 270: a recording replay's script, written once before the walk's first step range.
 /// The walker of a schedule with `rec` repeats these actions instead of choosing them again. A
 /// run without `rec`, or without a script from the host, sends nothing more than before.
+/// The environment of a workload call over steps `a..b`: `HYDO_FROM` and `HYDO_TO`, and for a
+/// walk the schedule's walk and guest part, after the script of a recording replay is in place.
+/// Milestone 390: a run with a reaction (`A=`) gave its call the first two only, so its walk
+/// walked seed 0 and printed none of the walk's records that the reaction waits for.
+fn workload_extra(fx: &mut F<'_>, ctx: &Ctx, a: i64, b: i64) -> Step<Vec<(&'static str, String)>> {
+    let mut extra = vec![("HYDO_FROM", a.to_string()), ("HYDO_TO", b.to_string())];
+    if ctx.plan.walk {
+        walk_script(fx, ctx)?;
+        // Milestone 258: the walker reads the walk and writes repro.spec.ts from the schedule
+        extra.push(("HYDO_WALK", ctx.run.walk.clone().unwrap_or_default()));
+        extra.push(("HYDO_GUEST", ctx.run.guest_text.clone()));
+    }
+    Ok(extra)
+}
+
 fn walk_script(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     let Some(text) = ctx.plan.walk_script.as_deref().filter(|_| ctx.run.walk_rec) else {
         return Ok(());
