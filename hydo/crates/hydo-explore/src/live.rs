@@ -370,6 +370,10 @@ impl Server {
     /// Read the new whole lines of the folder being read, and of the folders after it once it
     /// ended.
     fn read_more(&self, st: &mut State) {
+        // the last folder ended: nothing more comes
+        if st.done {
+            return;
+        }
         loop {
             let dir = if st.part == 0 {
                 self.dir.clone()
@@ -382,7 +386,7 @@ impl Server {
             let mut ended = false;
             self.read_part(&dir, st, &mut ended);
             if !ended || st.part >= self.opts.more.len() {
-                st.done = ended;
+                st.done |= ended;
                 return;
             }
             st.part += 1;
@@ -721,6 +725,10 @@ mod tests {
         assert_eq!(v["left_out"], 1);
         assert_eq!(v["done"], true);
         assert_eq!(v["image"], "one.img");
+        // a second page reads the same: the end stays, and no run comes twice
+        let again: Value = serde_json::from_str(&get(&url, "/runs?from=0")).unwrap();
+        assert_eq!(again["done"], true);
+        assert_eq!(again["total"], 3);
         let r = v["runs"].as_array().unwrap();
         assert_eq!(r[0]["note"], Value::Null);
         assert_eq!(r[0]["attention"], Value::Null);

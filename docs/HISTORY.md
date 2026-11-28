@@ -27265,3 +27265,55 @@ the runs' first callers as edges too, names inside the boxes, and the lightning 
 **The media.** A third video (31 s, 1920 by 1080, 7.9 MB) and GIF (1200 by 675, 10 frames a
 second, 8.0 MB) of the same exploration, named `-v3`, show the call graph for 24 of their 31
 seconds, with two stills: the first run's bolts and the end. No VM ran.
+
+### Milestone 397, the third follow-up: the NSQ recording, and a banner that does not call every failure a bug
+
+**What was asked.** A recording of the showcase page on NSQ v1.3.0 for the README and posts, with
+the three public issues each found by a real run: nsqio/nsq#1542 (the NSQ example's finding 1,
+reported by hydo), #1386 (documented) and #1124 (a known clock bug). The Blnk recording's banner
+said "Blnk broke a promise" for a deployment setting and for a failure that was not traced. The
+banner was to say "broke a promise" only for a bug, name each issue, and show no failure that
+is not traced.
+
+**What changed.**
+
+- The showcase banner reads each run's failure kind. A note of the recording (`hydo report
+  --live --showcase --notes FILE`, a list `notes:`) names a failure by its check, a text of its
+  schedule or its seed as `new`, `reported`, `known` or `documented`, with its issue and
+  optional words. A bug keeps "<program> broke a promise" and gets "Reported upstream by hydo:
+  <issue>". A known bug reads "A known bug of <program>, found again", and a documented one "A
+  documented limit, shown", each in its own colour with its issue. A failure that the
+  explorer's advice expects (the attention `setting` or `expected`, which the server now gives
+  each run) reads "A documented trade-off, shown". The run track labels each failed run `BUG`,
+  `KNOWN BUG` or `DOCUMENTED`, and the header counts no documented limit or trade-off as a bug.
+- `hydo report --live A B ...` plays several explorations or run directories of one image one
+  after another, as one recording, and a note's `leave_out: true` keeps a run out of it. The
+  chip says "Recorded explorations, played back", and the runs are numbered by their place in
+  the playback. A second page of the same server keeps the recording's end (a bug of the first
+  version of the change, found by the recording).
+- `hydo build` gives each folder of a `contracts:` entry's `sources:` its own vote for the folder
+  of the debug information that names its files. Before, the one file of go-diskqueue under
+  `github.com/nsqio/go-diskqueue@v1.1.0/` was outvoted by NSQ's files, so the disk queue's
+  functions were not the project's own. A manifest with one folder gets the plan it got before.
+- `hydo rules scan --kind writes` takes the method value that a Go registration wraps in a call
+  as its handler (`http_api.Decorate(s.doPUB, http_api.V1)` gives `doPUB`), unless its receiver
+  is an imported package's name. So the call graph names NSQ's `POST /pub`.
+
+**The image and the runs.** `hydo/onboard/examples/nsq/hydo/hydo-map.yaml` binds nsqd v1.3.0,
+built from its source with its debug information (`build-map.sh`, Go 1.21.5 as the official
+image), over the image's `/usr/local/bin/nsqd`. Its plan has 6,765 functions, 284 of them in
+NSQ's and go-diskqueue's sources. Every run used the Mac engine on macOS 27.2.1 with
+`HVM_RAM_SHARE=0` and one worker. `disk=none | run` gave one fingerprint with the watch and
+without it. A blind exploration of the seeds 1-20 failed 13 schedules, as the example's e1 did.
+The recording plays three folders: 3 runs without a fault, the seeds 9 to 16 (the range without
+a power cut), and the regression of finding 2. Each failure it shows was traced. The kill of
+seed 11 came while both disk queues had their messages and no metadata file (`hydo inspect` at
+the kill's stop). Seed 16 passes without its clock step, and the regression of finding 2 is the
+example's. Seeds 14 and 15 are left out by the notes, because each also lost a message whose
+cause is not traced. The example's RESULTS.md, "The recording of the live map", has every
+fingerprint and schedule.
+
+**The media.** A video of 36 s at 1920 by 1080 (H.264, yuv420p, faststart, 4.3 MB), a looping
+GIF of 37 s at 1200 by 675 and 10 frames a second (11.5 MB), four stills and their captions,
+made as the Blnk recording's were. The banners come at about 13 s (#1542), 23 s (#1124) and
+28 s (#1386). They are outside the repository, for the user to review.

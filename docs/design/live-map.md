@@ -138,12 +138,43 @@ three answers of the server, and every number on it comes from the runs:
   words (its `hydo-msg:` line), says what hydo did in the run with the schedule's sentences
   (`hydo_schedule::describe`), and shows the `hydo run` command that replays it.
 
+The banner says "<program> broke a promise" only for a bug (Milestone 397's third follow-up). A
+failure that the explorer's advice expects, from a setting that trades safety for speed or a
+fault that no system survives, reads "A documented trade-off, shown". The notes of a recording
+(below) can name a failure as a documented limit or a known bug, with its issue.
+
 The page shows the runs one after another, at most one per 1.1 seconds, and pauses 3.6 seconds
 after a bug. So a finished exploration plays back in its order with `hydo report --live
 --showcase`, and a live one shows each run as it ends. The page's address takes `#pace=`,
 `#hold=`, `#view=flow` and `#title=`. The chip under the name says `Live` or `Recorded
 exploration, played back`. The command on the page names the image by its file name only, so
 a screen recording shows no folder of the machine.
+
+### The notes of a recording, and several explorations
+
+Status: Milestone 397's third follow-up, from the NSQ recording.
+
+The runs do not say whether a failure is a new bug, a bug that someone reported before, or a
+behaviour that the project documents. `--notes FILE` of `hydo report --live --showcase` names
+it. The file is a list `notes:`. A note names a check of the verdict (`check:`), a text of the
+schedule (`schedule:`), a seed (`seed:`), or several of them, and the first note that matches a
+run applies:
+
+- `kind: new | reported | known | documented`, `issue: owner/repo#N` and optional `words:`.
+  The banner of a new or reported bug says "<program> broke a promise" and names the issue
+  ("Reported upstream by hydo"). A known bug reads "A known bug of <program>, found again", and
+  a documented limit "A documented limit, shown", each with its issue. The run track labels
+  each failed run `BUG`, `KNOWN BUG` or `DOCUMENTED`, and the header counts no documented limit
+  or trade-off as a bug.
+- `leave_out: true` with `why:` leaves a run out of the playback, for example a failure whose
+  cause is not traced. The server counts the runs left out (`left_out`).
+
+`hydo report --live A B ...` plays the runs of several explorations or run directories of one
+image one after another, as one recording. The map is the first folder's, each run's command
+names its own image, and the chip says "Recorded explorations, played back". A run's number on
+the page is then its place in the playback, not its seed, and so it is when a note leaves runs
+out. The example is the NSQ recording (`hydo/onboard/examples/nsq/RESULTS.md`, "The recording
+of the live map").
 
 ### The flow of calls
 

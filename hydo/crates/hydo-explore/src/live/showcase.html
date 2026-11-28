@@ -73,6 +73,8 @@ h1 em{font-style:normal;background:linear-gradient(90deg,#fff 0%,#c8ffe9 55%,#ff
 .banner .i:empty{display:none}
 .banner .i b{font-family:"SF Mono",ui-monospace,Menlo,monospace;font-weight:600;color:#fff;text-decoration:underline;
   text-decoration-color:rgba(255,255,255,.35);text-underline-offset:calc(var(--s) * 4)}
+.banner.known{border-color:rgba(251,146,60,.4);box-shadow:0 calc(var(--s) * 20) calc(var(--s) * 70) rgba(0,0,0,.55),0 0 calc(var(--s) * 60) rgba(251,146,60,.12)}
+.banner.doc{border-color:rgba(56,189,248,.4);box-shadow:0 calc(var(--s) * 20) calc(var(--s) * 70) rgba(0,0,0,.55),0 0 calc(var(--s) * 60) rgba(56,189,248,.12)}
 .banner.known .k{color:var(--faults)}
 .banner.known .k::before{background:var(--faults);box-shadow:0 0 0 calc(var(--s) * 5) rgba(251,146,60,.2)}
 .banner.known .i{color:#ffe0c2}
@@ -913,7 +915,8 @@ function drawTimeline(now) {
     if (p > 0) {
       const ok = run.verdict === "ok";
       const grd = g.createLinearGradient(x, 0, x + cw, 0);
-      const col = !done ? "rgba(255,255,255,.16)" : ok ? "rgba(52,211,153,.30)" : run.verdict === "violation" ? "rgba(255,84,104,.55)" : "rgba(250,204,21,.32)";
+      const fk = failureKind(run), doc = ["documented", "setting", "expected"].includes(fk);
+      const col = !done ? "rgba(255,255,255,.16)" : ok ? "rgba(52,211,153,.30)" : run.verdict !== "violation" ? "rgba(250,204,21,.32)" : doc ? "rgba(56,189,248,.45)" : fk === "known" ? "rgba(251,146,60,.55)" : "rgba(255,84,104,.55)";
       grd.addColorStop(0, col); grd.addColorStop(1, col);
       g.fillStyle = grd; roundRect(g, x, y, cw * p, h, px(7)); g.fill();
     }
@@ -926,8 +929,13 @@ function drawTimeline(now) {
       g.fillStyle = passed ? KIND[fa.kind] || "#fff" : "rgba(255,255,255,.28)"; g.fill();
     }
     if (done && run.verdict === "violation") {
-      g.fillStyle = COL.bug; g.font = `700 ${px(12)}px -apple-system,Inter,sans-serif`; g.textBaseline = "top"; g.textAlign = "center";
-      if (cw > px(28)) g.fillText("BUG", x + cw / 2, y + h + px(6));
+      // a documented limit or a setting's trade-off is no bug, and a known bug says so
+      const fk = failureKind(run), doc = ["documented", "setting", "expected"].includes(fk);
+      const [label, short] = doc ? ["DOCUMENTED", "DOC"] : fk === "known" ? ["KNOWN BUG", "BUG"] : ["BUG", "BUG"];
+      g.fillStyle = doc ? "#38bdf8" : fk === "known" ? "#fb923c" : COL.bug;
+      g.font = `700 ${px(12)}px -apple-system,Inter,sans-serif`; g.textBaseline = "top"; g.textAlign = "center";
+      const fit = g.measureText(label).width + px(8) < cw ? label : short;
+      if (cw > px(28)) g.fillText(fit, x + cw / 2, y + h + px(6));
       g.textAlign = "left";
     }
     if (live) {
@@ -997,7 +1005,7 @@ function advance(now) {
       const key = ((r.what && (r.what.check || r.what.words)) || r.text || "violation") + "|" + ((r.note && r.note.issue) || "");
       if (!broken.has(key)) {
         broken.add(key);
-        if (!["documented", "setting", "expected"].includes(kindOf(r))) bugs.add(key);
+        if (!["documented", "setting", "expected"].includes(failureKind(r))) bugs.add(key);
         banner(r, k); holdUntil = now + HOLD;
       }
     }
@@ -1027,14 +1035,14 @@ function command(r) {
 function runNo(r, k) {
   return (INFO.parts || 1) > 1 || INFO.left_out || r.seed == null ? k + 1 : r.seed;
 }
-function kindOf(r) {
+function failureKind(r) {
   const k = r.note && r.note.kind;
   if (k) return k;
   if (r.attention === "setting" || r.attention === "expected") return r.attention;
   return "bug";
 }
 function banner(r, k) {
-  const w = r.what || {}, kind = kindOf(r), note = r.note || {};
+  const w = r.what || {}, kind = failureKind(r), note = r.note || {};
   let promise = w.promise ? w.promise.split(":")[0].trim() : null;
   const said = note.words || (promise ? `“${promise}”` : w.check ? `the check “${w.check.replace(/_/g, " ")}” failed` : null);
   let head, kicker;

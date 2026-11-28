@@ -11,7 +11,8 @@ user's trial of hydo 0.6.0 (`docs/design/0.6.0-user-trial.md`).
 
 ## The short answers
 
-- **What was found?** One new candidate and two known bugs. Nothing was posted.
+- **What was found?** One new candidate and two known bugs. Finding 1 is reported as
+  nsqio/nsq#1542 (2026-11-26); nothing else was posted.
   1. **New: a kill of `nsqd` in the first seconds of a new topic or channel, or a power cut a
      few seconds later, loses every message of it.** A disk queue of go-diskqueue writes its
      metadata file only at its first sync, up to 2 s after its first message, and renames it into
@@ -275,6 +276,78 @@ again every millisecond and logs every 10,000th try. The HTTP and TCP publish pa
 **The judgment.** Known: #1124 ("nsqd: stops sending messages after moving time backward",
 open, labeled `bug`), #1249 (a change to ids that do not depend on the clock, closed unmerged),
 and #1283 (a pull request that logs the error, closed). A clock effect.
+
+## The recording of the live map
+
+`hydo/hydo-map.yaml` is `hydo.yaml` with every function of `nsqd` watched, for the live map and
+its showcase page (docs/design/live-map.md). `sh build-map.sh` builds nsqd v1.3.0 from NSQ's
+source with its debug information, `bin/nsqd-map-arm64` (`93057626…`). It uses Go 1.21.5,
+`CGO_ENABLED=0` and `-trimpath`, as the official image's nsqd was built (`go version -m`), but
+without `-ldflags "-s -w"`. The manifest binds it over the image's `/usr/local/bin/nsqd`, the
+target of `/nsqd`, so the image, the commands, the workload and the rules stay `hydo.yaml`'s.
+The sources are NSQ's and go-diskqueue v1.1.0's, so the disk queue counts as NSQ's own code on
+the map. The image is `explore-ob-nsq-map-arm64.cpio.gz` `d1d04085…`, at the fingerprint epoch
+7 with `guest.proc_io: false`, which boots the Mac kernels of epoch 6, as the Blnk map's image
+does:
+
+```text
+hydo-build: functions of /bin/nsqd-map: 6765 functions with code of their own (284 in the sources, 2983 KiB of code), on 744 pages of the program's file
+```
+
+Every run used the Mac engine on macOS 27.2.1 with `HVM_RAM_SHARE=0`, one worker and no
+shrinks. `disk=none | run` gave the fingerprint `8940537bafec1b1e` with the watch and without
+it, with every claim held.
+
+**The blind exploration.** `--seeds 1-20 --strategy process` on the map image failed 13 of 20
+schedules, as e1 did on the example's image:
+
+| failure | seeds |
+|---|---|
+| `jobs.no-loss` after a kill of `nsqd` in the topic's first seconds (finding 1) | 2, 11, 15 |
+| `jobs.no-loss` with a power cut `C=20` at the workload's end | 1, 6, 8, 17, 20 |
+| `eventually_publish` after a backward clock step (finding 3) | 4, 7, 14, 16, 18 |
+
+**The playback.** The recording plays three folders one after another (`hydo report --live A B
+C`), each made on the map image:
+
+1. `hydo explore --seeds 1-3 --no-faults`: three runs without a fault, OK.
+2. `hydo explore --seeds 9-16 --strategy process`: the blind exploration's seeds 9 to 16, the
+   range of seeds 1-20 without a power cut. It gave the same 8 fingerprints as seeds 9 to 16 of
+   the exploration of seeds 1-20, and each failure ran again with its fingerprint.
+3. `hydo explore --schedule "disk=none dseed=0 | run A=nsq.msg_received+2200:kill-nsqd"`, the
+   regression of finding 2.
+
+Each failure that the recording shows was traced. Each schedule without the fault that the trace
+names gave the verdict shown:
+
+| run of the playback | verdict | trace | without the fault |
+|---|---|---|---|
+| seed 11, `K=nsqd@10+1` | `jobs.no-loss`: m0 to m8 were published from 1.19 s. At the kill's stop (`hydo inspect`, `run:2167`, the guest's clock at 00:00:02) `jobs.diskqueue.000000.dat` and `jobs:work.diskqueue.000000.dat` hold 288 bytes each, the nine messages, and no `.meta.dat` exists | finding 1, nsqio/nsq#1542 | without `K=`: OK |
+| seed 16, `T=8:-300` | `eventually_publish`, every claim of `jobs` held | finding 3, nsqio/nsq#1124 | without `T=`: OK |
+| `A=nsq.msg_received+2200:kill-nsqd` | `jobs.acked-outcome`: m0, which a consumer held, has no final state; m1 to m3 came to the drain | finding 2, nsqio/nsq#1386 | `disk=none \| run`: OK |
+
+Two failures of seeds 9 to 16 are left out of the playback (`hydo/showcase-notes.yaml`),
+because a part of each is not traced:
+
+- Seed 14 (`T=17:-300`) breaks `eventually_publish`, and `m5`, published at 6.76 s, was never
+  received. Without `T=` the run passes, so the clock step loses it too. How, for example by an
+  in-flight timeout on the wall clock, was not traced.
+- Seed 15 (`K=nsqd@8+4 T=2:-3600`) loses `m1` after a kill about 17 s in, long after the queues'
+  first syncs. Without `K=`, `jobs.no-loss` holds and the clock step breaks
+  `eventually_publish`. Why the kill loses `m1` was not traced.
+
+The power cuts of seeds 1, 6, 8, 17 and 20 were not traced one by one; their range is not in
+the playback. The notes file names the kind and the issue of each finding, so the banner says
+"NSQ broke a promise" for finding 1, "A known bug of NSQ, found again" for finding 3, and "A
+documented limit, shown" for finding 2:
+
+```sh
+hydo report --live hydo-out/p-a hydo-out/p-b hydo-out/p-c --showcase --routes ../work/nsq --notes showcase-notes.yaml
+```
+
+The page's address took `#title=NSQ&pace=2&hold=3.6&start=1.5`, and the view changed to the call
+graph after the first banner. The video, the GIF, the stills and their captions are outside the
+repository, for the user to review.
 
 ## The duplicate searches
 

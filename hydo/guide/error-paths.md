@@ -207,3 +207,28 @@ the first time, a banner names the check's promise in its own words, from its `h
 The banner also says what hydo did in the run, and gives the `hydo run` command that replays
 it. The page's address takes `#pace=SECONDS`, `#hold=SECONDS`, `#start=SECONDS`, `#view=flow`
 and `#title=NAME`.
+
+The banner calls a failure a broken promise only when it is a bug. A setting that trades safety
+for speed, or a fault that no system survives, reads "A documented trade-off, shown". The runs
+cannot say which failure is a known bug or a documented limit, so a notes file says it:
+
+```yaml
+notes:
+  - {check: jobs.no-loss, schedule: "K=nsqd@", kind: reported, issue: "nsqio/nsq#1542"}
+  - check: jobs.acked-outcome
+    kind: documented            # new, reported, known or documented
+    issue: "nsqio/nsq#1386"
+    words: "a crash of nsqd loses a message that a consumer holds and has not finished"
+  - {schedule: "T=2:-3600", leave_out: true, why: "its loss is not traced"}
+```
+
+```sh
+hydo report --live hydo-out/normal hydo-out/explore hydo-out/aimed --showcase --notes notes.yaml
+```
+
+The first note that matches a run applies: by the check that its verdict names, a text of its
+schedule, or its seed. A documented limit and a known bug get their own words and their issue,
+and the header counts no documented limit as a bug. `leave_out: true` keeps a run out of the
+playback, for example one whose failure is not traced yet. Several folders of one image play
+one after another, as one recording; the runs are then numbered by their place in it. The NSQ
+example's `hydo/showcase-notes.yaml` is a whole file.
