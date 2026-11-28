@@ -1901,6 +1901,24 @@ PostgreSQL, queue errors, and the recovery of queued transactions. Every schedul
 fingerprint with the plan and without it, and a run's search of guest RAM took 10 ms. The design is
 `docs/design/error-paths.md`, the how-to `hydo guide error-paths` (open item 155).
 
+**The live map of the code an exploration reaches (M394, tentative number; a first version on
+the Mac engine).** `all_functions: true` in a `contracts:` entry (a format-1 addition) lists every
+function of the program with code of its own in the plan (`fn_places`). The Mac engine watches
+each with the error paths' one-shot breakpoint, so the fingerprint stays. `result.json` and the
+first runs' records get `functions` (a results addition): each function's first run, its step
+range, and whether it came before the schedule's first fault. `hydo explore --live [--port N]
+[--live-against DIR]` and `hydo report --live [DIR]` serve a page on 127.0.0.1 that loads nothing.
+It is a map of the code by module, file and function, dark until a run reaches a function, then
+green without a fault or orange only under faults. It also shows the runs, the curve, and each
+function's first run with its command. A program that reads its own file reads the breakpoints, as
+Blnk's protobuf does when it hashes samples of its binary at every start. So the engine maps a page with
+breakpoints execute-only, and a read puts its instructions back first (`HVM_BRK_PROTECT`). On
+macOS 27 that is off by default, as the kernel's panic of M395 names a change of permissions. On
+Blnk (39,038 functions, 1,039 its own), 30 runs without faults kept their fingerprints. 15 of 30
+with faults kept theirs; the other 15 start Blnk again during the run. 236 of its own functions
+ran without a fault, 103 only under faults, and 700 never. The design is
+`docs/design/live-map.md`, the how-to `hydo guide error-paths` section 6 (open item 201).
+
 **Faults of the disk's blocks (M313, tentative number; the Mac and KVM engines).** Four host
 tokens make faults that a real disk makes, on the data disk, decided from `dseed=` and from the
 requests counted from the workload's start:
@@ -4756,6 +4774,33 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       Neither KVM nor the Mac engine ran it (the image has an arm64 build). More than three
       nodes, several regions, epoch leases, and a `--max-offset` other than 500 ms were not
       tried.
+201. The live map of the code an exploration reaches (M394, tentative number;
+    `docs/design/live-map.md`). What is left:
+    - Only the Mac engine watches the functions. hvx and KVM say that nothing was watched, as
+      for error paths (open item 155).
+    - On macOS 27 the execute-only pages are off by default (`HVM_BRK_PROTECT`). The kernel's
+      panic of Milestone 395 names a change of a page's permissions. With them off, a
+      program that reads its own file can read a breakpoint. Blnk's protobuf hashes eight samples
+      of its own binary at every start. So a run whose Blnk starts again during the run gives
+      another fingerprint with the watch than without it. Whether `hv_vm_protect` is safe on
+      macOS 27 was not tried, because a try risks a panic of the whole Mac. On macOS 26 the
+      pages gave the fingerprint of the run without the watch.
+    - With the pages on, a read of a page puts its instructions back for the rest of the boot,
+      so the functions of that page are not watched after it. The engine maps guest memory in
+      16 KiB pages, so a read of another 4 KiB page of the same 16 KiB drops them too.
+    - A function that ran only during the services' start, before the snapshot that every run
+      starts from, is reached only by a run that starts the service again. Blnk's `metrics.Init`
+      shows as reached only under faults for that reason.
+    - A function that the compiler copied into every caller has no tile. Go's inline tree and
+      DWARF's inlined calls are not read for it.
+    - The first run of each engine reads all of guest RAM to find the program's pages, about
+      0.4 s for 1.5 GiB. A restore of a snapshot in the middle of a run (the shrinks from
+      snapshots, the state search) maps guest RAM again and leaves the pages readable.
+    - `stats.json` has no measure of the functions reached, `exploration.json` has no list of
+      them, and `hydo report --html` has no section. The page draws its own curve.
+    - The page was checked with a headless browser's screenshots and by hand, not by a test that
+      clicks it. It reads `events.jsonl` again from the last whole line, so a stream that a
+      merge (`hydo explore --merge`) wrote is read as one.
 
 ## Milestone index
 
@@ -6096,6 +6141,13 @@ build machine, before 2026-10-13.
   VIOLATION_ILLEGAL_DOWNGRADE`, the page-table monitor refusing a permission change. With the
   sharing off, 34 schedules of the Redis example ran without a panic. `HVM_RAM_SHARE=1` turns it
   on again. Nothing recorded moved
+- M394 (tentative number): the live map of the code an exploration reaches. `all_functions: true`
+  watches every function of a program with the Mac engine's one-shot breakpoints, and
+  `result.json` gets each function's first run. `hydo explore --live` and `hydo report --live`
+  serve a map of the code that shows what ran without a fault, only under faults, or never. A
+  program that reads its own file met the breakpoints, so pages with them are execute-only, off
+  on macOS 27 (`HVM_BRK_PROTECT`). On Blnk 15 of 30 runs with faults kept their fingerprints, all
+  30 without; a Rust server kept all. Nothing recorded moved
 
 ## Where to look
 
