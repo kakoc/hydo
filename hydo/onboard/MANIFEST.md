@@ -794,6 +794,7 @@ verdict rules are in `hydo/HISTORIES.md`.
 | `P=workload@<at>~<off>:<dur>` | a pause of the workload (Milestone 216): the same for the workload's own process tree, as a CPU limit stops it. `workload` may stand in a list with services. `hydo explore --pause-workload` draws it (`hydo guide faults`, "Pause the workload") |
 | `P=workload/<thread>[#<k>]@<at>~<off>:<dur>` | a pause of threads of the workload (Milestone 226): the same for the workload's threads of that name (`/proc/<pid>/task/<tid>/comm`, at most 15 bytes, `*` and `?` as wildcards), or only the k-th of them (from 1, in the order they were created). The other threads run on. On the Mac and KVM engines it needs an image built at fingerprint epoch 3 or later, whose guest kernel has cgroups (Milestone 234). `hydo explore --pause-thread <name>` draws it (`hydo guide faults`, "Pause threads of the workload") |
 | `N=<svc>@<from>-<to>:<netem>` | `tc netem` on traffic to the service's `port` for steps `[from,to)` |
+| `N=<svc>@<at>~<off>:<dur>` | a cut of the service's link (Milestone 393): `off` ms of guest time after step `at` starts, its bridge port goes down, and `dur` ms later it comes up again, while the step runs. With `browser:` the service is the browser, whose page is then offline. Needs `network: bridge`; `hydo explore --link-cuts` draws it for the browser |
 | `O=<svc>@<from>-<to>:req\|resp:<netem>` | one direction only |
 | `C=<at>` | power cut before step `at` |
 | `T=<at>:<delta>` | step the realtime clock by `delta` seconds (`-30` back; `+30` and `30` forward, printed `30`) |
@@ -2172,6 +2173,9 @@ browser:
     failures_of: "(Create|Update|Delete)[A-Za-z]*$"   # only these failed requests must show (default all);
                                #   it matches the path or `<METHOD> <path>`: "^(POST|PATCH|DELETE) /api/"
     text: [NaN, undefined, "[object Object]", Invalid Date]   # <name>.no_bad_text; [] turns it off
+    answers: true              # <name>.newest_answer_shown (Milestone 393; default off): true for
+                               #   every GET under requests:, or a regular expression over
+                               #   `<METHOD> <path>` such as "^GET /api/search$"
   screens: failures            # failures (default) | all | compare: which pages get a screenshot
   screens_ref: hydo-screens    # compare only: the reference screenshots (default hydo-screens)
 ```
@@ -2182,7 +2186,9 @@ browser:
   `/opt/hydo/web` and a 256 MB `/dev/shm`, and `env:` with `CI=1`, `TZ=UTC`, `HOME`, and the
   watcher's settings.
 - `root.files` gains `{src: <tests>, dst: /opt/hydo/web/tests}`, and `root.text` gains hydo's
-  `hook.cjs`, `reporter.cjs` and `check.mjs` under `/opt/hydo/web/hydo/`. Put the files the tests
+  `hook.cjs`, `reporter.cjs` and `check.mjs` under `/opt/hydo/web/hydo/`. With `watch.answers`
+  (Milestone 393) it gains `answers.cjs` and `answers.mjs` too, and the workload loads
+  `answers.cjs` beside `hook.cjs`; without it nothing of them is in the image. Put the files the tests
   need (a built app) under `/opt/hydo/web/` with `root.files`.
 - `workload:` is written, with `kind: test` (a test program: fewer than 4 steps, only the fault
   kinds that `faults:` lists, the class `test-failed`); a manifest with both is refused. Step i
@@ -2443,6 +2449,14 @@ H=<target>@<from>-<to>:<rule>[,<rule>...]
     delay=<ms>          the answer comes <ms> of guest time late (combines with status= / drop / reset)
     drop                no answer: the request is held until the client gives up or the rule ends
     reset               the connection is reset instead of answered
+    order=<k>           (Milestone 393) the answers of k matching requests (2 to 8) are held until
+                        all k are ready, then given 30 ms apart in another order drawn from the
+                        token, never the order of arrival (for 2: the second request's answer first)
+    wait=<ms>           with order=: an answer waits at most <ms> for the others (default 3000),
+                        then goes with the ones that came
+    twice               (Milestone 393) the request reaches the fake or the service twice, as a
+                        double submit sends it; the client gets the second answer. The copy is
+                        recorded with copy=<seq>; on an idempotent route with a key it is a replay
   webhook rules (on the webhooks of effects made while the rule is on):
     dup                 delivered twice
     reorder             delivered after the next webhook of the same route (pairs swap)
@@ -2480,6 +2494,10 @@ false verdict.
 second on 25%) on its own random stream, from the targets the manifest gives: every fake
 route (with the webhook rules when it has a webhook), every proxy and proxy route. Without the flag
 every schedule string is byte-identical.
+`hydo explore --answer-faults` (Milestone 393) draws, from a stream of its own, `order=<k>` on a GET
+route of the fakes and HTTP proxies (80 % of the schedules) and `twice` on one of the other routes
+(40 %); for a browser whose requests reach a real backend, put an HTTP proxy in front of it and
+let the page open the proxy (`examples/vikunja/hydo/hydo-proxy.yaml`).
 `--sweep protocol` runs every rule kind (status, status with effect=yes, delay=3000, drop, reset,
 and on webhook routes dup, reorder, late=5000, lost) on every target, one workload step at a time. The shrinker drops
 `H=` tokens, narrows their window, and removes `p=`, `retry-after=` and `effect=`, then halves
