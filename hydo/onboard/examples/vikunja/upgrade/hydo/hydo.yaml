@@ -25,7 +25,8 @@ guest:
   outcomes_after_cut: true  # the walk's acknowledged writes ($HYDO_ACKED) reach the recovery boot
 
 data:
-  size_mib: 512   # the data disk: Vikunja's SQLite database and its files live here (the fault target)
+  size_mib: 256   # the data disk: Vikunja's SQLite database and its files live here (the fault
+                  # target); 256 MiB, so that the root with both images and the disk fit hvx's 4 GiB
   dirs: [vol/bind-files, vol/bind-db]
 
 root:
