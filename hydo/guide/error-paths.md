@@ -188,11 +188,12 @@ The page shows the runs one after another, at most one per 1.1 seconds, so a fin
 exploration plays back in its order. It has three views of the project's own code.
 
 - The code map. Each tile lights up with a short glow when a run first reaches its function.
-- The call graph. Every function runs from left to right from the entry points, by the direct
-  calls in the program's machine code, so the functions that no run reached show too. When a run
-  first reaches a function, its path from the entry point flashes like a bolt and stays lit. Each
-  entry point shows how many of the functions its direct calls reach a run reached. A call
-  through an interface, a closure or a function value has no edge.
+- The call graph. Every function runs from left to right from the entry points, as a flame
+  graph on its side, so the functions that no run reached show too. The edges are the direct
+  calls in the program's machine code and the first callers that the runs recorded. When a run
+  first reaches a function, its path from the entry point flashes like a bolt and stays lit.
+  Each entry point shows how many of the functions under it a run reached. A function that no
+  run reached and no direct call reaches is in the last group, a small treemap of dark boxes.
 - The first calls. The entry points are at the top. Each function hangs under the function of the
   project that called it first. A hover names the other callers that came first in other runs.
 

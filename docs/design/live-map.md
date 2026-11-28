@@ -188,7 +188,7 @@ What the tree does not show:
 ### The call graph, left to right
 
 The third view of the showcase page draws every function of the project's own code, also the
-ones that no run reached, as a tree that runs from left to right:
+ones that no run reached, as a partition from left to right, as a flame graph on its side:
 
 - `hydo build` reads the static call graph of the project's own code from the program's machine
   code. For each function of `fn_places` whose file is one of the sources, it reads the
@@ -200,29 +200,43 @@ ones that no run reached, as a tree that runs from left to right:
   background work. A function of background work calls no function of the project's own code
   before it, and the runs' first callers show that the language's runtime started it (a
   goroutine). Small routes share one box.
-- A breadth-first search from every root at once places each function once, at its shortest
-  path of direct calls; a tie goes to the root above. The functions that no root reaches by
-  direct calls are in the last group, `not reached from an entry point by a direct call`, laid
-  out from their own roots the same way.
-- Each root shows its coverage: the functions its direct calls reach, and how many of them a run
-  reached (`POST /transactions 108 of 167`). The header keeps the share of the whole project.
-- When a run first reaches a function, a bolt runs from the root to the function and the
-  function stays lit, green or orange as on the map, with a red mark for error-handling code.
-  The bolt takes the function's first caller in the runs when that caller is a static caller in
-  the column before; else it takes the search's path. A run that reaches a function again
-  flashes a fainter bolt.
+- A breadth-first search over the direct calls from every root at once places each function
+  once, at its shortest path; a tie goes to the root above. Then a function that a run reached,
+  and that no direct call from a root reaches, goes under the nearest function of the project
+  that called it first in a run (the return address of Milestone 397), and the direct calls go
+  on from it. A reached function with no function of the project above it is an entry point of
+  its own, under `background work` or `called by libraries`. On Blnk the direct calls alone
+  left 609 functions unplaced; the runs' first callers placed 194 of them, and 415 stay in the
+  last group.
+- The last group, `not reached from an entry point by a direct call`, holds the functions that
+  no run reached and no direct call reaches. They have no path to show, so the group is a
+  treemap of dark boxes in an eighth of the height.
+- A box's height is its subtree's share of its parent's box, so each column fills its parent's
+  height. A subtree weighs the square root of each function's code, and a function that no run
+  of the exploration reached weighs a quarter of that, so the code that the runs reach has the
+  room. A box is at least 3 pixels high where that fits. A function that calls none of the
+  placed ones reaches to the right edge, so its name fits. A box at least 11 pixels high shows
+  the function's name without its package and receiver, and a hover shows the full name.
+- Each root shows how many of the functions placed under it a run reached (`POST /transactions
+  108 of 154`). The header keeps the share of the whole project.
+- When a run first reaches a function, a bolt runs along the boxes of its path from the root,
+  the boxes on the way light up, and the function stays lit, green or orange as on the map,
+  with a red mark for error-handling code. A run that reaches a function again flashes a
+  fainter bolt.
 
 What the call graph does not show:
 
-- A call through an interface, a closure or a function value: the code holds no direct branch
-  to the function. On Blnk 407 functions of its own code have no direct caller among them, such
-  as the closures that Go names `func1` and the methods called through interfaces. Most of them
-  are in the last group.
+- A call through an interface, a closure or a function value has no direct edge. Such a function
+  is placed by its first caller in the runs when a run reached it, else it is in the last group.
 - A function that the compiler copied into its callers, as in the first-caller tree.
 - The machine code of x86_64: the plan reads arm64 only, so an x86_64 program has no edges.
-- The width of a function's row is one share of its group's height, so on a screen of 1080
-  lines the functions of a large group are thin lines; the page draws each at least 1.6 pixels
-  high.
+- The layout uses the first callers of every run that the page has, so a live exploration's
+  layout can change when a run reaches a function for the first time. A played-back exploration
+  has all its runs from the start.
+- A partition gives a column at most its height. On a screen of 1080 lines, 28 boxes of Blnk's
+  call graph carry a name, against the 8 module names of the code map, and 542 boxes are at
+  least 3 pixels in both directions, against 1,029 tiles of the code map. The deep columns of a
+  large subtree are lines thinner than 3 pixels.
 
 The read of a register at a stop that already happens changes nothing that the guest can see.
 The proof is in `docs/HISTORY.md`, Milestone 397: the same 30 schedules with faults gave the

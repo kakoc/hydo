@@ -1921,9 +1921,10 @@ ran without a fault, 103 only under faults, and 700 never. Since M397 (tentative
 function's first caller from the entry points (the routes of `--routes DIR`, `main`, the
 background work). It also has the runs with their faults, and each bug in one sentence with its
 replay command. The engine reads x30 at each function's stop (`caller` of each first run); on
-Blnk 30 runs kept the fingerprints of M394's engine. Its call graph lays out every function of
-the project's own code from left to right by the direct calls in the machine code (the plan's
-`calls`). It lights each first reach's path from its entry point, and gives each root's coverage. The design is `docs/design/live-map.md`, the
+Blnk 30 runs kept the fingerprints of M394's engine. Its call graph is a partition of every function
+of the project's own code from left to right. Its edges are the direct calls in the machine code
+(the plan's `calls`) and the runs' first callers. It lights each first reach's path from its
+entry point, and gives each root's coverage. The design is `docs/design/live-map.md`, the
 how-to `hydo guide error-paths` section 6 (open item 201).
 
 **Faults of the disk's blocks (M313, tentative number; the Mac and KVM engines).** Four host
@@ -4841,9 +4842,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       merge (`hydo explore --merge`) wrote is read as one.
     - The flow of M397 is the tree of first callers. Without a static call graph, calls that no
       run made are not drawn. A one-shot stop names one caller per run. An inlined function has
-      no node, and a tail call names the caller's caller. The call graph's edges are arm64 `bl`
-      and `b` only: a call through an interface, a closure or a function value has no edge, and
-      an x86_64 program has none. Only HTTP routes that write (and POST
+      no node, and a tail call names the caller's caller. The call graph's direct edges are arm64
+      `bl` and `b` only: a call through an interface, a closure or a function value has none, and
+      an x86_64 program has none. Its partition gives a column at most its height, so on Blnk 542
+      boxes are at least 3 pixels in both directions, against 1,029 tiles of the code map. Only HTTP routes that write (and POST
       routes that read) name roots, so a GET handler hangs under the middleware that first called
       it. Queue consumers are named only by the library that called them.
 
@@ -6199,7 +6201,8 @@ build machine, before 2026-10-13.
   On Blnk 30 runs kept the fingerprints of M394's engine; the first run broke the atomic bulk.
   A video, a GIF and stills of the played-back exploration stay local. A follow-up adds the
   static call graph of the program's own code to the plan (arm64 `bl` and `b`). A new view lays
-  every function out from left to right from the entry points, with each root's coverage.
+  every function out as a partition from left to right from the entry points, by those calls and
+  the runs' first callers, with each root's coverage.
   Nothing recorded moved
 - M394 (tentative number): the live map of the code an exploration reaches. `all_functions: true`
   watches every function of a program with the Mac engine's one-shot breakpoints, and

@@ -27211,3 +27211,57 @@ the page played back the recorded runs.
 **Checks.** The Go program of `tests/go-paths` gives the edges `main.main` to `retryLoad` to
 `load` to `parse`, and a unit test decodes `bl` and `b` both ways. The same tests, clippy, Vale
 and goldens as above ran again.
+
+### Milestone 397, the second follow-up: the call graph as a partition
+
+**What the user asked.** Each function of the call graph was a row of about 1.6 pixels, so even
+`POST /transactions` showed only bars, while the code map shows each function as a tile. The
+user asked for a partition from left to right that fills the space as the treemap does, with
+the runs' first callers as edges too, names inside the boxes, and the lightning kept.
+
+**What changed** (the page only; the plan, the engine and the server stay as before):
+
+- A box's height is its subtree's share of its parent's box, so each column fills its parent's
+  height. A subtree weighs the square root of each function's code, and a function that no run
+  of the exploration reached weighs a quarter of that. A box is at least 3 pixels high where that
+  fits, and a function that calls none of the placed ones reaches to the right edge.
+- A function that a run reached, and that no direct call from a root reaches, goes under the
+  nearest function of the project that called it first in a run; the direct calls go on from
+  it. A reached function with no function of the project above it is an entry point under
+  `background work` or `called by libraries`.
+- The last group keeps only the functions that no run reached and no direct call reaches. It is
+  a treemap of dark boxes in an eighth of the height.
+- A box at least 11 pixels high shows the function's name without its package and receiver,
+  and a hover shows the full name. A route's path that does not fit keeps its first part and
+  its end (`/transactions/…/recover`).
+- A first reach's bolt runs along the boxes of its path from the root, and the boxes on the way
+  light up while it passes.
+- Each root's count is now of the functions placed under it, so the counts add up to the
+  project's 1,039 functions.
+
+**The numbers** after the 30 runs of the exploration of the recording:
+
+- The last group held 609 functions with the direct calls alone and 415 with the runs' first
+  callers: 194 functions moved out of it.
+- 28 boxes carry a name at 1920 by 1080 and 27 at 1200 by 675, against the code map's 8 module
+  names. 542 boxes are at least 3 pixels in both directions (the 415 boxes of the last group's
+  treemap among them), against 1,029 tiles of the code map. A partition gives a column at most
+  its height, so the deep columns of a large subtree stay thinner than 3 pixels.
+
+| Root | Reached | Placed under it |
+|---|---|---|
+| `POST /transactions` | 108 | 154 |
+| `PUT /transactions/inflight/:txID` | 20 | 27 |
+| `POST /refund-transaction/:id` | 23 | 43 |
+| `POST /transactions/recover` | 18 | 18 |
+| `POST /transactions/bulk` | 15 | 21 |
+| `POST /transactions/inflight/bulk/commit` | 11 | 16 |
+| 49 more routes | 26 | 152 |
+| `main` | 53 | 83 |
+| background work (21 functions) | 61 | 99 |
+| called by libraries (3 functions) | 4 | 11 |
+| not reached from an entry point by a direct call | 0 | 415 |
+
+**The media.** A third video (31 s, 1920 by 1080, 7.9 MB) and GIF (1200 by 675, 10 frames a
+second, 8.0 MB) of the same exploration, named `-v3`, show the call graph for 24 of their 31
+seconds, with two stills: the first run's bolts and the end. No VM ran.
