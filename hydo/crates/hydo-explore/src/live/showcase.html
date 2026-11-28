@@ -114,7 +114,7 @@ footer .lab b{display:block;color:var(--fg);font-size:calc(var(--s) * 22);letter
       <span><i class="ring"></i>error-handling code</span>
       <span><i style="background:#2a3040"></i>not reached yet</span>
     </div>
-    <div class="views"><button data-v="map" class="on">Code map</button><button data-v="flow">Call flow</button></div>
+    <div class="views"><button data-v="map" class="on">Code map</button><button data-v="graph">Call graph</button><button data-v="flow">First calls</button></div>
     <div id="wait">Waiting for the first run…</div>
     <div class="banner" id="banner">
       <div class="k" id="bK">Bug found</div>
@@ -154,7 +154,7 @@ const flash = new Map();       // id -> [time, colour]: its first reach
 const pass = new Map();        // id -> time: a later run that reached it again
 const epRan = new Set();
 const broken = new Set();      // checks that broke
-let faults = 0, view = H.get("view") === "flow" ? "flow" : "map";
+let faults = 0, view = ["flow", "graph"].includes(H.get("view")) ? H.get("view") : "map";
 let S = 1, DPR = 1;            // the page's scale (1 at 1920x1080) and the device pixels
 
 function scale() {
@@ -226,8 +226,14 @@ function reveal(t, now) {
   if (before) s.clean = true;
   if (caller !== undefined && caller >= 0) { s.callers.add(caller); if (s.first === undefined) s.first = caller; }
   else if (s.first === undefined && caller !== undefined) s.first = -1;
-  if (fresh || (s.clean && !wasClean)) { flash.set(id, [now, s.clean ? COL.clean : COL.faults]); treeDirty = true; }
-  else pass.set(id, now);
+  if (fresh || (s.clean && !wasClean)) {
+    flash.set(id, [now, s.clean ? COL.clean : COL.faults]); treeDirty = true;
+    if (fresh && FN.get(id)?.own) bolt(id, now, s.clean ? COL.clean : COL.faults);
+  } else {
+    pass.set(id, now);
+    // a later run on a path reached before: a fainter flash of the same path
+    if (FN.get(id)?.own && bolts.length < 24) bolt(id, now, "rgba(205,225,255,.5)");
+  }
 }
 
 function status(id) { const s = st.get(id); return !s ? 0 : s.clean ? 2 : 1; }
@@ -500,6 +506,275 @@ function drawFlow(g, now, dt) {
   return anim;
 }
 
+// ---------------------------------------------------------------- the call graph
+// Milestone 397's follow-up: every function of the project's own code, laid out left to right
+// from the entry points by the program's direct calls (the plan's static call graph, `calls`).
+// Each function is placed once, at its shortest path of direct calls from a root (a
+// breadth-first search from every root at once); a function that no root reaches by direct
+// calls is in the last group. A call through an interface, a closure or a function value is
+// no edge. When a run first reaches a function, its path from the root flashes left to right
+// and stays lit. The path takes the function's first caller of the runs where that caller is
+// the function's static caller one column to the left, else the search's path.
+let G = null, graphDirty = true;
+const firstAll = new Map();    // id -> the first caller that any received run named
+const bolts = [];              // [time, id, chain, colour]
+function noteCallers(r) {
+  for (const t of r.functions) if (t[3] !== undefined && !firstAll.has(t[0])) firstAll.set(t[0], t[3]);
+}
+function startedByRuntime(id) {
+  let c = firstAll.get(id), seen = new Set([id]);
+  while (c !== undefined && c >= 0 && !seen.has(c)) {
+    seen.add(c);
+    const g = FN.get(c);
+    if (!g) return false;
+    if (g.own) return false;
+    if (!OWNMODS.has(g.module) && !/-fm$/.test(g.name)) return g.module === "runtime";
+    c = firstAll.get(c);
+  }
+  return false;
+}
+function buildGraph() {
+  graphDirty = false;
+  const ids = new Set(OWN.map((f) => f.id));
+  const calls = new Map(OWN.map((f) => [f.id, (f.calls || []).filter((c) => ids.has(c))]));
+  const callers = new Map();
+  for (const [a, cs] of calls) for (const c of cs) { if (!callers.has(c)) callers.set(c, []); callers.get(c).push(a); }
+  const groups = [];
+  const byPath = (a, b) => a.label.localeCompare(b.label);
+  const routes = [];
+  for (const f of OWN) if (routeOf.has(f.id)) routes.push({label: routeOf.get(f.id), route: true, roots: [f.id]});
+  routes.sort(byPath);
+  groups.push(...routes);
+  const mainF = OWN.find((f) => /(^|\.)main\.main$/.test(f.name) && !routeOf.has(f.id));
+  if (mainF) groups.push({label: "main", roots: [mainF.id]});
+  const bg = OWN.filter((f) => !routeOf.has(f.id) && f !== mainF && !(callers.get(f.id) || []).length && startedByRuntime(f.id));
+  if (bg.length) groups.push({label: "background work", roots: bg.sort((a, b) => b.size - a.size).map((f) => f.id)});
+  const depth = new Map(), parent = new Map(), group = new Map();
+  const bfs = (q) => {
+    for (let i = 0; i < q.length; i++) {
+      const a = q[i];
+      for (const c of calls.get(a) || []) if (!depth.has(c)) { depth.set(c, depth.get(a) + 1); parent.set(c, a); group.set(c, group.get(a)); q.push(c); }
+    }
+  };
+  const q = [];
+  groups.forEach((g, gi) => { for (const id of g.roots) if (!depth.has(id)) { depth.set(id, 1); parent.set(id, null); group.set(id, gi); q.push(id); } });
+  bfs(q);
+  // every root's reach by direct calls, for its coverage
+  for (const g of groups) {
+    const seen = new Set(g.roots), w = [...g.roots];
+    for (let i = 0; i < w.length; i++) for (const c of calls.get(w[i]) || []) if (!seen.has(c)) { seen.add(c); w.push(c); }
+    g.reach = seen;
+  }
+  // the rest: their own roots, the functions that no other function of the rest calls
+  const none = {label: "not reached from an entry point by a direct call", none: true, roots: [], reach: new Set()};
+  const ni = groups.length;
+  groups.push(none);
+  let rest = OWN.filter((f) => !depth.has(f.id));
+  while (rest.length) {
+    let rs = rest.filter((f) => !(callers.get(f.id) || []).some((c) => !depth.has(c)));
+    if (!rs.length) rs = [rest.reduce((a, b) => (b.size > a.size ? b : a))];
+    const q2 = [];
+    for (const f of rs.sort((a, b) => b.size - a.size)) { depth.set(f.id, 1); parent.set(f.id, null); group.set(f.id, ni); none.roots.push(f.id); q2.push(f.id); }
+    bfs(q2);
+    rest = rest.filter((f) => !depth.has(f.id));
+  }
+  for (const f of OWN) if (group.get(f.id) === ni) none.reach.add(f.id);
+  // the members, the children and the weights
+  const kids = new Map();
+  for (const [id, p] of parent) if (p !== null) { if (!kids.has(p)) kids.set(p, []); kids.get(p).push(id); }
+  const weight = new Map();
+  const wOf = (id) => { let w = 1; for (const k of kids.get(id) || []) w += wOf(k); weight.set(id, w); return w; };
+  for (const g of groups) { g.w = 0; for (const r of g.roots) g.w += wOf(r); }
+  for (const [, ks] of kids) ks.sort((a, b) => weight.get(b) - weight.get(a));
+  // small routes share one box, so that each box can carry its label
+  const own = OWN.length || 1, small = groups.filter((g) => g.route && g.w < own * 0.016);
+  let gs = groups.filter((g) => !small.includes(g));
+  if (small.length > 1) {
+    const m = {label: `${small.length} more routes`, more: true, roots: [], reach: new Set(), w: 0};
+    for (const g of small) { m.roots.push(...g.roots); m.w += g.w; for (const id of g.reach) m.reach.add(id); }
+    const first = gs.findIndex((g) => !g.route);
+    gs.splice(first < 0 ? gs.length : first, 0, m);
+  } else gs = groups;
+  const rt = gs.filter((g) => g.route).sort((a, b) => b.w - a.w);
+  gs = rt.concat(gs.filter((g) => !g.route));
+  const of = new Map();
+  gs.forEach((g, i) => { for (const r of g.roots) of.set(r, i); });
+  const gOf = (id) => { let c = id; while (parent.get(c) !== null && parent.get(c) !== undefined) c = parent.get(c); return of.get(c); };
+  let maxD = 1;
+  for (const d of depth.values()) maxD = Math.max(maxD, d);
+  G = {gs, calls, depth, parent, kids, weight, gOf, maxD, rect: new Map()};
+  layoutGraph();
+}
+function layoutGraph() {
+  if (!G) return;
+  const A = area(), LW = px(330), cols = Math.min(G.maxD, 16), colW = (A.w - LW) / cols, barW = colW * 0.56;
+  const gap = px(5), n = G.gs.length, avail = A.h - gap * (n - 1);
+  const total = G.gs.reduce((a, g) => a + g.w, 0) || 1, minH = px(30);
+  let hs = G.gs.map((g) => Math.max(minH, avail * g.w / total));
+  const over = hs.reduce((a, b) => a + b, 0) - avail;
+  if (over > 0) {
+    const big = hs.map((h) => Math.max(0, h - minH)), bs = big.reduce((a, b) => a + b, 0) || 1;
+    hs = hs.map((h, i) => h - over * big[i] / bs);
+  }
+  G.rect.clear(); G.bands = []; G.cols = cols; G.colW = colW; G.barW = barW; G.LW = LW;
+  let y = A.y;
+  const place = (id, y0, h, d, unit) => {
+    if (d > cols) return;
+    G.rect.set(id, {x: A.x + LW + (d - 1) * colW, y: y0, w: barW, h, d});
+    const ks = G.kids.get(id) || [];
+    const sum = ks.reduce((a, k) => a + G.weight.get(k), 0) * unit;
+    let cy = y0 + (h - sum) / 2;
+    for (const k of ks) { const kh = G.weight.get(k) * unit; place(k, cy, kh, d + 1, unit); cy += kh; }
+  };
+  G.gs.forEach((g, i) => {
+    const h = hs[i], unit = h / Math.max(1, g.w);
+    G.bands.push({g, x: A.x, y, w: LW - px(16), h});
+    let cy = y;
+    for (const r of g.roots) { const rh = G.weight.get(r) * unit; place(r, cy, rh, 1, unit); cy += rh; }
+    y += h + gap;
+  });
+}
+function pathOf(id) {
+  const chain = [id];
+  let cur = id;
+  for (let guard = 0; guard < 64; guard++) {
+    const d = G.depth.get(cur);
+    if (d === 1 || d === undefined) break;
+    let p = G.parent.get(cur);
+    const rc = st.get(cur)?.first;
+    if (rc !== undefined && rc >= 0 && G.depth.get(rc) === d - 1 && (G.calls.get(rc) || []).includes(cur)) p = rc;
+    if (p === null || p === undefined) break;
+    chain.push(p); cur = p;
+  }
+  return chain.reverse();
+}
+function bolt(id, now, colour) {
+  if (!G || !G.depth.has(id)) return;
+  if (bolts.length > 70) return;
+  // spread the paths of one step a little, so that they read as several bolts
+  bolts.push([now + (jitter(id, 7) + 0.5) * 260, id, pathOf(id), colour]);
+}
+function jitter(a, b) { const s = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453; return s - Math.floor(s) - 0.5; }
+function boltPoints(chain) {
+  const first = G.rect.get(chain[0]);
+  if (!first) return [];
+  const band = G.bands[G.gOf(chain[0])];
+  const pts = [[band ? band.x + band.w : first.x - px(20), first.y + first.h / 2]];
+  for (const id of chain) {
+    const r = G.rect.get(id);
+    if (!r) break;
+    const [px0, py0] = pts[pts.length - 1], x1 = r.x + r.w / 2, y1 = r.y + r.h / 2;
+    for (let k = 1; k <= 2; k++) {
+      const t = k / 3;
+      pts.push([px0 + (x1 - px0) * t, py0 + (y1 - py0) * t + jitter(id, k) * px(11)]);
+    }
+    pts.push([x1, y1]);
+  }
+  return pts;
+}
+function headAt(pts, seg, head) {
+  let left = head;
+  for (let k = 1; k < pts.length; k++) {
+    const d = seg[k - 1];
+    if (left <= d) { const t = d ? left / d : 0; return [pts[k - 1][0] + (pts[k][0] - pts[k - 1][0]) * t, pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * t]; }
+    left -= d;
+  }
+  return pts[pts.length - 1];
+}
+function drawGraph(g, now) {
+  if (graphDirty) buildGraph();
+  if (!G) return false;
+  let anim = false;
+  const fill = FILL();
+  // the entry points with their coverage
+  for (const b of G.bands) {
+    const gr = b.g, reached = [...gr.reach].filter((id) => st.has(id)).length;
+    g.fillStyle = gr.route ? "rgba(56,189,248,.09)" : gr.none ? "rgba(255,255,255,.025)" : "rgba(255,255,255,.05)";
+    roundRect(g, b.x, b.y, b.w, b.h, px(9)); g.fill();
+    g.strokeStyle = gr.route ? "rgba(56,189,248,.32)" : "rgba(255,255,255,.09)"; g.lineWidth = 1; g.stroke();
+    const share = gr.reach.size ? reached / gr.reach.size : 0;
+    g.fillStyle = gr.none ? "rgba(148,163,184,.35)" : "rgba(52,211,153,.55)";
+    g.fillRect(b.x + px(1), b.y + b.h - px(3), (b.w - px(2)) * share, px(2));
+    g.textBaseline = "middle";
+    const big = b.h >= px(44), cy = big ? b.y + b.h / 2 - px(9) : b.y + b.h / 2;
+    let x0 = b.x + px(12);
+    if (gr.route) {
+      const [m, ...rest] = gr.label.split(" ");
+      g.font = `700 ${px(13)}px -apple-system,Inter,sans-serif`; g.fillStyle = "#7dd3fc"; g.fillText(m, x0, cy);
+      x0 += g.measureText(m).width + px(8);
+      g.font = `500 ${px(15)}px "SF Mono",ui-monospace,Menlo,monospace`; g.fillStyle = "#e6f6ff";
+      clip(g, rest.join(" "), x0, cy, b.x + b.w - x0 - px(big ? 10 : 96));
+    } else {
+      g.font = `600 ${px(gr.none ? 14 : 15)}px -apple-system,Inter,sans-serif`; g.fillStyle = gr.none ? "#a3abbd" : "#d2d8e3";
+      if (gr.none && big && g.measureText(gr.label).width > b.w - px(22)) {
+        // the long label on two lines
+        const words = gr.label.split(" "), half = Math.ceil(words.length / 2);
+        g.fillText(words.slice(0, half).join(" "), x0, cy - px(9));
+        g.fillText(words.slice(half).join(" "), x0, cy + px(9));
+      } else clip(g, gr.label, x0, cy, b.w - px(big ? 22 : 106));
+    }
+    const cov = `${reached} of ${gr.reach.size}`;
+    g.font = `600 ${px(13)}px -apple-system,Inter,sans-serif`; g.fillStyle = "#9aa3b5";
+    if (big) g.fillText(`${cov} reached`, b.x + px(12), b.y + b.h / 2 + px(gr.none ? 22 : 11));
+    else { g.textAlign = "right"; g.fillText(cov, b.x + b.w - px(10), cy); g.textAlign = "left"; }
+  }
+  // the calls: faint until both ends ran
+  g.lineWidth = 1;
+  for (const [id, r] of G.rect) {
+    const p = G.parent.get(id);
+    const a = p === null ? null : G.rect.get(p);
+    const band = p === null ? G.bands[G.gOf(id)] : null;
+    const x0 = a ? a.x + a.w : band ? band.x + band.w : r.x - px(10), y0 = a ? a.y + a.h / 2 : r.y + r.h / 2;
+    const lit = st.has(id) && (p === null || st.has(p));
+    g.strokeStyle = lit ? (status(id) === 2 ? "rgba(52,211,153,.30)" : "rgba(251,146,60,.30)") : "rgba(255,255,255,.035)";
+    const x1 = r.x, y1 = r.y + r.h / 2, mx = (x0 + x1) / 2;
+    g.beginPath(); g.moveTo(x0, y0); g.bezierCurveTo(mx, y0, mx, y1, x1, y1); g.stroke();
+  }
+  // the functions
+  for (const [id, r] of G.rect) {
+    const f = FN.get(id), fl = flash.get(id), h = Math.max(r.h - (r.h > px(3) ? px(0.6) : 0), px(1.6));
+    if (glowFill(g, r.x, r.y, r.w, h, fill[status(id)], fl, now, r.h > px(8) ? px(3) : 0, pass.get(id))) anim = true;
+    if (f.error_paths && r.h >= px(1.2)) {
+      const ran = f.error_paths.some((e) => epRan.has(e[0]));
+      g.fillStyle = ran ? "#ff6b81" : "rgba(244,63,94,.38)"; g.fillRect(r.x - px(4), r.y, px(2.2), h);
+    }
+    if (r.h >= px(15) && r.w > px(54)) {
+      g.font = `600 ${Math.min(px(13), r.h * 0.5)}px -apple-system,Inter,sans-serif`; g.textBaseline = "middle";
+      g.fillStyle = status(id) ? "rgba(5,6,10,.82)" : "rgba(220,226,236,.55)";
+      clip(g, f.short || f.name, r.x + px(7), r.y + r.h / 2 + px(0.5), r.w - px(12));
+    }
+  }
+  // the lightning: each first reach runs from its entry point to the function, then fades
+  g.save(); g.globalCompositeOperation = "lighter"; g.lineCap = "round"; g.lineJoin = "round";
+  for (let i = bolts.length - 1; i >= 0; i--) {
+    const [t0, id, chain, colour] = bolts[i], age = now - t0;
+    if (age > 1300) { bolts.splice(i, 1); continue; }
+    if (age < 0) { anim = true; continue; }
+    anim = true;
+    const pts = boltPoints(chain);
+    if (pts.length < 2) continue;
+    let L = 0; const seg = [];
+    for (let k = 1; k < pts.length; k++) { const d = Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]); seg.push(d); L += d; }
+    const head = L * Math.min(1, age / 380), fade = age < 380 ? 1 : 1 - (age - 380) / 920;
+    const path = () => {
+      g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+      let left = head;
+      for (let k = 1; k < pts.length && left > 0; k++) {
+        const d = seg[k - 1], t = Math.min(1, left / d);
+        g.lineTo(pts[k - 1][0] + (pts[k][0] - pts[k - 1][0]) * t, pts[k - 1][1] + (pts[k][1] - pts[k - 1][1]) * t);
+        left -= d;
+      }
+    };
+    path(); g.globalAlpha = 0.10 * fade; g.strokeStyle = colour; g.lineWidth = px(7); g.stroke();
+    g.globalAlpha = 0.45 * fade; g.lineWidth = px(1.8); g.stroke();
+    g.globalAlpha = 0.6 * fade * fade; g.strokeStyle = "#ffffff"; g.lineWidth = px(0.8); g.stroke();
+    // the bolt's head
+    if (age < 380) { const [hx, hy] = headAt(pts, seg, head); g.globalAlpha = 0.9; g.fillStyle = "#ffffff"; g.beginPath(); g.arc(hx, hy, px(2.2), 0, 7); g.fill(); }
+  }
+  g.restore();
+  return anim;
+}
+
 // ---------------------------------------------------------------- the runs' track
 const pulses = [];             // [time, x, y, colour, label]
 function drawTimeline(now) {
@@ -567,10 +842,10 @@ function step(now) {
   if (cur) advance(now);
   const c = $("cv"), r = c.getBoundingClientRect();
   if (c.width !== Math.round(r.width * DPR) || c.height !== Math.round(r.height * DPR)) {
-    c.width = Math.round(r.width * DPR); c.height = Math.round(r.height * DPR); layoutMap(); if (TREE.gs) layoutTree();
+    c.width = Math.round(r.width * DPR); c.height = Math.round(r.height * DPR); layoutMap(); if (TREE.gs) layoutTree(); layoutGraph();
   }
   const g = c.getContext("2d"); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, r.width, r.height);
-  if (MAP) { if (view === "map") drawMap(g, now); else drawFlow(g, now, dt); }
+  if (MAP) { if (view === "map") drawMap(g, now); else if (view === "graph") drawGraph(g, now); else drawFlow(g, now, dt); }
   drawTimeline(now);
   requestAnimationFrame(step);
 }
@@ -638,10 +913,11 @@ let from = 0;
 async function poll() {
   try {
     if (!MAP) { const m = await (await fetch("map.json", {cache: "no-store"})).json(); if (m) loadMap(m); }
-    if (ENTRIES === null) { ENTRIES = await (await fetch("entries.json", {cache: "no-store"})).json() || {}; matchRoutes(); }
+    if (ENTRIES === null) { ENTRIES = await (await fetch("entries.json", {cache: "no-store"})).json() || {}; matchRoutes(); graphDirty = true; }
     const j = await (await fetch(`runs?from=${from}`, {cache: "no-store"})).json();
     INFO = j;
-    for (const r of j.runs) RUNS.push(r);
+    for (const r of j.runs) { RUNS.push(r); noteCallers(r); }
+    if (j.runs.length) graphDirty = true;
     if (!started && RUNS.length) { started = true; $("wait").style.display = "none"; holdUntil = performance.now() + (+(H.get("start") || 0)) * 1000; }
     from = j.total;
     $("mode").textContent = j.done ? "Recorded exploration, played back" : "Live";
@@ -655,8 +931,8 @@ async function poll() {
 function setView(v) {
   view = v;
   for (const b of document.querySelectorAll(".views button")) b.classList.toggle("on", b.dataset.v === v);
-  $("tagT").textContent = v === "map" ? `Every function of ${NAME}'s own code` : `Who calls what in ${NAME}, from each entry point`;
-  $("tagS").textContent = v === "map" ? "A tile lights up the first time a run reaches it" : "A branch grows the first time a run takes that call";
+  $("tagT").textContent = v === "map" ? `Every function of ${NAME}'s own code` : v === "graph" ? `Every function of ${NAME}, by its calls from each entry point` : `Who calls what in ${NAME}, from each entry point`;
+  $("tagS").textContent = v === "map" ? "A tile lights up the first time a run reaches it" : v === "graph" ? "A path lights up from its entry point the first time a run takes it" : "A branch grows the first time a run takes that call";
   if (v === "flow") treeDirty = true;
 }
 for (const b of document.querySelectorAll(".views button")) b.addEventListener("click", () => setView(b.dataset.v));
@@ -664,6 +940,7 @@ $("stage").addEventListener("mousemove", (ev) => {
   const r = $("cv").getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, tip = $("tip");
   let f = null;
   if (view === "map") { for (const l of LEAVES) if (x >= l.x && x < l.x + l.w && y >= l.y && y < l.y + l.h) { f = l.f; break; } }
+  else if (view === "graph") { if (G) for (const [k, n] of G.rect) if (x >= n.x - px(4) && x < n.x + n.w && y >= n.y && y < n.y + Math.max(n.h, 1)) { f = FN.get(k); break; } }
   else for (const [k, n] of NODES) if (!n.t.group && x >= n.c.x && x < n.c.x + n.c.w && y >= n.c.y && y < n.c.y + n.c.h) { f = FN.get(k); break; }
   if (!f) { tip.style.display = "none"; return; }
   const s = st.get(f.id), W = ["not reached yet", "reached only when something broke", "reached in a normal run"];
