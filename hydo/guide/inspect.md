@@ -220,7 +220,9 @@ hydo names the frames from the programs in the image's root tree, which `hydo bu
 the image. For a copy elsewhere, give `--program /guest/path=./host/file`. A Go program needs its
 DWARF for the goroutines (do not build it with `-ldflags=-w`); a Rust program needs line tables
 for file and line (`debug = "line-tables-only"`). The guest kernel's symbols are the file
-`<kernel>.System.map` beside the guest kernel; `--kernel-map FILE` names another.
+`<kernel>.System.map` beside the guest kernel; `--kernel-map FILE` names another. No release
+ships that file yet. With a release's guest kernel, give `--kernel-map` the `System.map` of the
+same kernel build; without it, `hydo inspect stacks` stops and names the file it looked for.
 
 To check that reading changes nothing, replay the run with a read at one stop in every 25 and
 compare its fingerprint with the recorded one:
