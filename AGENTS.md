@@ -2173,6 +2173,29 @@ Images built from `browser.explore` get new bytes (the walker and `/etc/hydo/wal
 in `hydo/onboard/recorded.json`, and nothing recorded moved. The reference is `hydo guide
 web-apps`; the design is the last section of `docs/design/ui-exploration.md` (open item 168).
 
+**Answers in another order, double submits, and offline pages (M393, tentative number).** Three
+faults act between a web app's page and its server; each is opt-in, and a schedule without them
+runs as before:
+- `H=<route>@<from>-<to>:order=<k>[,wait=<ms>]` on a fake or an HTTP proxy: the answers of k
+  requests are held and given 30 ms apart in another order drawn from the token
+  (hydo-world's `order.rs`). For a real backend the page opens a proxy in front of it
+  (`examples/vikunja/hydo/hydo-proxy.yaml`).
+- `H=...:twice`: each matching request reaches the server twice, as a double submit sends it;
+  the page gets the second answer.
+- `N=<svc>@<at>~<off>:<dur>`: a timer of the controller sets the service's bridge port down `off`
+  ms into step `at`, for `dur` ms. With `browser:` the browser's page is offline.
+
+`browser.watch.answers` (a format-1 addition) adds `<browser>.newest_answer_shown`. It fails a
+page that shows a value of only an older answer after a newer request's answer came, and none of
+only the newer one. `hydo explore --answer-faults` and `--link-cuts` draw them from streams of
+their own. web-shop's `hydo-search.yaml` has a search box with a planted bug of that kind. On
+hvx its buggy build fails `H=api.search@0-4:order=2 I=1`, the fixed build holds, and the blind
+exploration of seeds 1 to 20 found the search bug, a double order, and an unhandled rejection.
+Vikunja ran through a proxy (`hydo-proxy.yaml`) under all three faults, and every check held.
+Each schedule gave one fingerprint twice. Images and schedules without the tokens kept their
+bytes and fingerprints. The reference is `hydo guide web-apps`, "Answers in another order"; the
+details are in `docs/HISTORY.md` Milestone 393 (open item 200).
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -4754,6 +4777,31 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       Neither KVM nor the Mac engine ran it (the image has an arm64 build). More than three
       nodes, several regions, epoch leases, and a `--max-offset` other than 500 ms were not
       tried.
+200. Answers in another order, double submits, and offline pages (M393, tentative number). What
+    is left:
+    - A walk's fill sets a field at once, so a search box asks once per fill. Two searches in one
+      `order=` window need two fills within `wait=`; a walk action that types key by key is the
+      idea "Fast typing and a refused write in a walk" of `docs/USE-CASES.md`.
+    - A page answers a request once over HTTP, so "an answer given twice" is no rule; `twice`
+      sends the request twice instead. `order=` and `twice` act on HTTP fakes and proxies, not on
+      a `tcp` proxy, and no test ran them on a gRPC one.
+    - The page check compares text. It fails a page that shows an older answer's values
+      elsewhere on purpose, such as a list of recent searches. It leaves a page undecided that
+      formats every value, such as a price in cents shown as dollars. Only JSON answers count.
+    - A link cut cuts the browser's whole network: its fakes too, and every service it talks to.
+      A cut of one pair of services inside a step is not built; `N=a-b@...` cuts a link for whole
+      steps.
+    - The walk's `repro.spec.ts` maps no `order=`, `twice` or link cut to `page.route`; a native
+      replay of such a finding misses its fault.
+    - Only hvx ran it. KVM and the Mac engine did not, and no Playwright test suite (`browser.tests`)
+      ran with `watch.answers`.
+    - No check of the examples judges a duplicate. On Vikunja `twice` sent 4 bulk creations of
+      tasks twice, and every check held; whether Vikunja stored them twice was not read.
+    - On Vikunja the reordered answers of the task and project lists gave one comparison, which
+      stayed undecided: the page showed neither answer's own values.
+    - `hydo explore` ended with SIGPIPE (exit status 141) after 1 h 18 min, during the shrinks of
+      the web-shop exploration, with its first report written; `hydo shrink --all` finished
+      them. The cause was not traced.
 
 ## Milestone index
 
@@ -6089,6 +6137,12 @@ build machine, before 2026-10-13.
   zones 7, two users 6, and backend crashes 0. The page proposes a reload check, then two
   browsers, a browser time zone, upgrades of image services, reordered answers, and partitions.
   Nothing recorded moved
+- M393 (tentative number): answers in another order, double submits, and offline pages. `H=`
+  rules `order=<k>` and `twice` on fakes and HTTP proxies, `N=<svc>@<at>~<off>:<dur>` cuts one
+  service's link while a step runs, and `browser.watch.answers` fails a page that shows an older
+  answer than the newest. `hydo explore --answer-faults` and `--link-cuts` draw them. web-shop's
+  planted search bug fails on hvx and was found blind; Vikunja ran through a proxy. Nothing
+  recorded moved
 
 ## Where to look
 

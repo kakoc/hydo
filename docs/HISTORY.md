@@ -26816,3 +26816,126 @@ topic, playbook, or skill changed; the lead decides.
 it` passed (16 tests). Its content test first stopped on one issue title with a version number
 that reads as an IPv4 address, and the CSV now spells that number out. A `grep` of each value of
 the list of `AGENTS.local.md` found none in the new text.
+
+## Milestone 393 (tentative number): answers in another order, double submits, and offline pages
+
+Milestone 391 counted the bug reports of 15 web apps. Pages that show an older answer than the
+newest one, or keep an old state, were 12 of 343 random bugs and 31 targeted ones, and reporters
+call them hard to reproduce more often than any other class (9 of 43 against 25 of 409). A cut of
+the link between the browser and the server reached 9 targeted bugs. This milestone builds both
+fault kinds, a generic page check for the first, and the explorer's draws, and proves them on the
+web-shop example and on Vikunja through a proxy, with hvx on the bare-metal machine.
+
+**What was built.** Each part is its own commit.
+
+- The schedule language (`hydo-schedule`): the `H=` rules `order=<k>` (2 to 8), `wait=<ms>` and
+  `twice`, and the token `N=<svc>@<at>~<off>:<dur>` (`GuestToken::LinkCut`), each with its plain
+  words in `describe.rs`.
+- hydo-world (`order.rs`, `serve.rs`): an `order=` rule numbers its requests in their order of
+  arrival and holds their answers in a pen. When k answers are in it, they go out 30 ms apart in a
+  permutation drawn from the token, never the order of arrival; for two the second request's
+  answer goes first. An answer that waited `wait=` ms (default 3000) goes with the ones that came.
+  A `twice` rule hands the request to the fake or the service a second time after its answer,
+  with no rule, recorded with `copy=<seq>`, and the client gets the second answer. Both act on a
+  fake and on an HTTP proxy (`tests/answer_order.rs`).
+- The controller (`hydo-control`): `N=<svc>@<at>~<off>:<dur>` arms a timer before step `at`.
+  `off` ms later it sets the service's bridge port down and declares `fault.link_cut`; `dur` ms
+  later it sets the port up. A power cut cancels the timer, and the recovery boot sets every link
+  up. The names check refuses an unknown service and an image without `network: bridge`.
+- The page check (`hydo-manifest`): `browser.watch.answers` (a format-1 addition: true, or a
+  regular expression over `<METHOD> <path>`) loads `answers.cjs` beside `hook.cjs`. It records the
+  requests the setting names and their JSON answers. When an answer comes after the answer of a
+  newer request of the same method and path, it reads the page's visible text 300 ms later and
+  compares it with the two answers' values. The property `<browser>.newest_answer_shown`
+  (`answers.mjs`) fails when the page shows a value of only the older answer and none of only the
+  newer one. The files and the property are staged only with the setting.
+- The explorer (`hydo-explore`): `--answer-faults` draws `order=<k>` on a GET route of the fakes
+  and HTTP proxies (80 % of the schedules) and `twice` on one of the other routes (40 %).
+  `--link-cuts` draws a cut of the browser's link (60 %). Each has a stream of its own, and each
+  is refused where it draws nothing. The shrinker leaves a link cut out, halves it, and moves it
+  to its step's start.
+- web-shop: the builds with `VITE_SEARCH=1` put a search box on the product list, which asks
+  `GET /api/search?q=` at every change. The variant `buggy` shows whichever answer came last; the
+  variant `fixed` drops every answer but the newest search's. `hydo-search.yaml` walks it with
+  `watch.answers` and a fake route `search` whose answer names the query. The builds without
+  `VITE_SEARCH` are byte for byte the ones before, checked on this Mac.
+- Vikunja: `hydo-proxy.yaml` puts an HTTP proxy `app` on the bridge's address in front of the
+  server; the walk opens it, so every request of the page goes through it.
+
+**A first check outside the VM.** On this Mac, hydo-world (a debug build) served the fake API,
+`serve.mjs` the two search builds, and a Playwright script loaded `hook.cjs` and `answers.cjs`.
+With `on 1 api.search@0-9:order=2,wait=3000` the page's first search (`q=`) was answered after
+the second (`q=hydo`). The buggy build's page kept "Results for", and `answers.mjs` exited 1. The
+fixed build's page showed "Results for hydo", and it exited 0.
+
+**How the runs were made.** hvx on the bare-metal machine, with the main module. This branch's
+`hydo`, `hydo-hvx`, `hydo-build` and `hydo-compose` were built there in a tree of their own and put
+over the 0.7.0 Linux release (`132c35ab…`), as `HYDO_RELEASE_DIR`. The images with the new rules
+staged the branch's `hydo-world` (`HYDO_WORLDBIN`, `d0138fbc…`, a static build of
+`hydo/crates/hydo-world/build.sh`); the others staged the release's. Every image was built at the
+fingerprint epoch 7. Each schedule ran twice from a fresh boot, one VM at a time, and gave one
+fingerprint both times.
+
+**web-shop.** The images are `hydo-search.yaml` buggy (`911e7d7f…`) and fixed (`280f2e16…`), and
+`hydo.yaml` (the Playwright tests) buggy (`d398c493…`) and fixed (`644fbb76…`):
+
+| image | schedule | verdict | fingerprint |
+|---|---|---|---|
+| search, buggy | `disk=none \| run I=1` | OK | `dfdf037d0c5c83f4` |
+| search, buggy | `disk=none \| run H=api.search@0-4:order=2 I=1` | VIOLATION `browser.newest_answer_shown`: the page `/` shows the answer of `GET /api/search?q=` after the answer of `GET /api/search?q=%23tag` | `899f47669f8c705e` |
+| search, fixed | the same | OK: 2 answers came after a newer one's, and the page showed the newer one | `e9cab0e71251cb5e` |
+| search, buggy | `disk=none \| run N=browser@1~500:5000 I=1` | OK: the link was cut 500 ms into step 1 for 5 s, and every page check held | `92692705fa6d2b41` |
+| tests, buggy | `disk=none \| run H=api.place_order@0-1:twice` | VIOLATION `api.order_placed_once`: one cart took effect 2 times | `877f5ec0558fff8c` |
+| tests, fixed | the same | OK: the second sending had the key and was a replay | `ecede369d2009748` |
+
+**The blind exploration.** `hydo explore --seeds 1-20 --answer-faults --link-cuts --workers 1` on
+the buggy search image ran 20 schedules in 802 s, and 4 failed. Each failure ran again with its
+verdict. Seed 7 (`N=browser@0~2000:500 H=api.search@2-4:order=3 H=api.add_item@2-4:twice`) failed
+`browser.newest_answer_shown`: the planted search bug. Seeds 14 and 16 failed
+`api.order_placed_once`: `twice` sent the order of the buggy build, which has no key, twice.
+Seed 18 (`H=api.get_order@1-4:order=3`) failed `browser.no_page_errors`: the held answer passed
+the client's time limit of 3 s, and the buggy order page left the rejection unhandled. It shrank in
+47 runs to `H=api.get_order@1-4:order=3 I=d94729ae6c47c1f6,x0.0-9,x1.0-5,x3.0-9`. The explorer's process ended with SIGPIPE (exit status 141)
+after 1 h 18 min, during the other shrinks, with its first report written; the cause was not
+traced. `hydo shrink <explore dir> --all` finished them in the same folder in 52 minutes. The
+search bug shrank in 49 runs to `H=api.search@2-4:order=3 I=a0d28305209409f6,x0.2-9,x1.0-9,x2.0-9`,
+without the link cut and the `twice` rule. The order sent twice shrank in 69 runs to
+`H=api.place_order@1-2:twice I=1bbd089acadda3c3,n7,...`, one problem with seed 16.
+
+**Vikunja.** `hydo-proxy.yaml` (`2d9d3639…`) puts the proxy `app` in front of the server. The
+first version's routes named `/api/v1`, and a clean run's record showed that the frontend of 2.8.0
+uses `/api/v2` (`GET /api/v2/tasks`, `GET /api/v2/projects`, `POST
+/api/v2/projects/<id>/tasks/bulk`), so the routes were fixed. Each schedule ran twice with one
+fingerprint, and a session of `hydo inspect` at each run's end read the proxy's record:
+
+| schedule | verdict | the proxy's record | fingerprint |
+|---|---|---|---|
+| `disk=none \| run I=1` | OK, 8 properties held | 1,254 requests | `b563ccc23110abff` |
+| `disk=none \| run H=app.tasks@0-6:order=2,wait=6000 H=app.projects@0-6:order=2,wait=6000 I=1` | OK; one answer came after a newer one's, and the page showed neither answer's own values | 16 answers of `tasks` and 15 of `projects` held | `ca55ff6488b7e55f` |
+| `disk=none \| run H=app.bulk@1-6:twice I=1` | OK | 4 bulk creations sent twice (`copy=`) | `ca73949ad83de3de` |
+| `disk=none \| run N=browser@2~500:5000 I=1` | OK: the link was cut 500 ms into step 2 for 5 s | | `23dc627c63eb67ab` |
+
+The pages and the database rules held under each. The 4 copies of the bulk creations reached the
+server. Whether Vikunja stored those tasks twice was not read: no check of the example judges a
+duplicate, because `vikunja.saved_work_survives` and `browser.acked_shown` look only for every
+acknowledged task.
+
+**What did not move.** web-shop's `hydo-walk.yaml` built by this branch's `hydo` and by `main`'s
+(`ae19e5a8`), both with the released `hydo-world`, gave one image, `ddbef3ba…`. A first build from
+`main` differed only in the modes of `hydo.yaml` and `serve.mjs` (664 against 644), from the
+umask under which its tree was unpacked (open item 78); with the modes matched the bytes are equal.
+On it `disk=none | run I=1` gave `d3ee8d5e7c289e8a` and the walk's saved `H=api.place_order@2-4:reset`
+schedule gave `030ab3d6eec55b0d`, with both programs. Under this branch's hydo the pinned
+reproducers' epoch-6 images gave their recorded `db33d71069816103` and `c421af1ccb714225`. The
+app's builds without `VITE_SEARCH` are byte for byte the ones before.
+
+**Tests.** On this Mac: `cargo fmt`, `cargo clippy --workspace --all-targets -- -D warnings`, and
+the tests of the changed crates passed. They are hydo-schedule (39, with the new
+`answer_order_and_link_cuts` and the plain words of the three forms), hydo-world (29 unit tests and
+6 integration tests, with `answer_order::`), hydo-control (165, with the scripted link cut of
+`storage::`), hydo-manifest, hydo-build, hydo-explore (70, with `answer_faults::`), and
+hydo-schema-compat. `cargo test -p hydo --test it` passed (80) and `cargo test -p hydo-agents --test
+it` passed (16), and `sh ci/vale.sh` found nothing. Re-recorded with `HYDO_BLESS=1`, each diff read:
+the project schema (the field `answers` added), the explorer's identity and corpus goldens (the two
+new manifests are new inputs; no sampled manifest changed its answers), and the CLI golden of
+`hydo guide manifest`.
