@@ -28,9 +28,9 @@ candidates of function fuzzing. The line "Yield" of an entry gives the entry's c
 | way | bugs found first | examples with such a bug | schedules spent |
 |---|---|---|---|
 | a blind exploration, `--strategy process` | 60 | 30 of the 40 where it ran | 4,318 |
-| a directed schedule, written from the code, the documentation, or a report | 23 | 14 | not counted |
+| a directed schedule, written from the code, the documentation, or a report | 24 | 15 | not counted |
 | an aimed reaction grid (`--reactive-at`) | 4 | 4 of the 8 where it ran | 563 |
-| the page walk | 4 | 2 | 160 |
+| the page walk | 5 | 3 | 360 |
 | the first run without faults | 3 | 3 | one run each |
 | a native probe outside hydo | 3 | 2 | not counted |
 | a directed timing run | 2 | 2 | 508 |
@@ -810,6 +810,10 @@ is the exploration that drew most of them.
     did.
   - Vikunja (finding 1): 5 of 40 blind schedules lost tasks that Vikunja had
     answered as saved. The shrunk walk typed one task, and `C=4` lost it.
+  - Gitea (finding 2): a directed cut after step 0, `disk=none | run C=1 I=1`, about 20 s after
+    the setup created a repository with a README, left its branch broken. Gitea runs Git with
+    its default `core.fsync`. The blind explorations' 47 cuts all came after the walk's last
+    step, and none failed so.
   - Valkey (finding 2, known valkey#5354): a power cut and the restart lose a hash's expiry.
   - Dragonfly (known dragonfly#8646): six failures of the first exploration had a
     cut and no backward clock step.
@@ -1053,7 +1057,7 @@ is the exploration that drew most of them.
 - **What it is.** `browser.explore` lets hydo walk through a web app's pages from a seed. Five
   invariants watch every page: uncaught errors, spinners that stay, unshown failed requests,
   broken texts, and failing tests.
-- **Yield.** 4 new bugs, in 2 examples.
+- **Yield.** 5 new bugs, in 3 examples.
 - **What to write.** `browser.explore` in `hydo.yaml` (`hydo guide web-apps`), one page rule
   over the database, `watch.failures_of` for the writes, and `avoid:` for busy controls.
 - **When it fits.** A web app whose server keeps the data.
@@ -1063,9 +1067,14 @@ is the exploration that drew most of them.
     Finding 2, an unhandled rejection, came at seed 9 under disk errors.
   - Memos: a share link's copy button throws over plain HTTP (memos#6575), one
     failure in seeds 21 to 60.
+  - Gitea (finding 1): the setup starts an issue's timer, and a rule stops it through the API at
+    the end. A step back of the clock while it ran recorded a negative time in 3 of 60 KVM
+    schedules and 1 of 20 hvx schedules of the final manifest. `within:` kept the walk on the
+    repository's issues.
 - **What it misses.** Memos's first 20 walks spent 216 actions in the editor without saving.
   A later walker reached neither Memos finding in seeds 21 to 60. A walk that
-  a power cut ends is not judged.
+  a power cut ends is not judged. On Gitea one action in seven filled a field without sending
+  it, and a walk of the code view committed no file in 48 actions.
 - **Cost.** About 40 s a run on hvx; `network: bridge`.
 
 ### Pauses of a service past its failure detector

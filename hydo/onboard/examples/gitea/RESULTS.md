@@ -293,9 +293,9 @@ The gaps are in the order of the time they cost. The ones of the walk go to open
   it counts comments, closes and reopens together.
 - **The walk wanders.** Without `within`, the first native walks spent their actions in the API's
   Swagger pages, the settings, the code view and the search. With `within: /hydo/demo/issues` the
-  walk stays on the issues, but `avoid` needs 13 patterns, most for the editor's toolbar, whose
-  buttons insert text and save nothing. About a third of the actions still filled the comment
-  field without sending it.
+  walk stays on the issues, but `avoid` needs 13 patterns. Two of them cover the editor's toolbar,
+  whose 15 buttons insert text and save nothing. In the 60 walks of the last KVM exploration, 489 of 3,408
+  actions (one in seven) still filled a field without sending it, 222 of them the comment field.
 - **A setup step's failure does not name the step.** The first walk's setup stopped with
   `locator.click: Timeout 10000ms exceeded`. The button was `Register Account`, not `Create
   Account`, and the message did not say which of the eleven setup steps failed. The labels are

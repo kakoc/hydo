@@ -9,7 +9,9 @@ onboarding. Milestone 386 (tentative number) took the first hour and the default
 and the skill.
 
 The ledger itself is the file `findings-ledger.csv` beside this page: one row per finding, 189
-rows. A few rows hold several findings of one kind, so the rows hold 223 findings.
+rows. A few rows hold several findings of one kind, so the rows hold 223 findings. Milestone 389
+added the five rows of the Gitea example: two new bugs and three rows of false failures. The
+table "How each bug came first" counts them; the other tables count the 189 rows.
 
 ## How the ledger was made
 
@@ -154,9 +156,9 @@ hold 105 of them, in 43 of the 47 examples. The last column counts each bug by i
 | first mode | bugs first found | examples with such a bug | schedules spent, where the records count them | examples tried |
 |---|---|---|---|---|
 | blind exploration, process strategy (`BP`) | 60 | 30 | 4,318 | 40 |
-| directed schedule (`DS`) | 23 | 14 | not counted in most records | |
+| directed schedule (`DS`) | 24 | 15 | not counted in most records | |
 | aimed reaction grid (`AG`) | 4 | 4 | 563 | 8 |
-| page walk (`WK`) | 4 | 2 | 160 | 2 |
+| page walk (`WK`) | 5 | 3 | 360 | 3 |
 | run without faults (`NF`) | 3 | 3 | 1 run each | |
 | native probe (`NP`) | 3 | 2 | | |
 | directed timing (`TM`) | 2 | 2 | 508 | 4 |

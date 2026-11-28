@@ -26846,3 +26846,87 @@ on the panic reports, the code, and the runs without it.
 until 0.8.0. The panic should go to Apple through Feedback Assistant, with the two reports.
 Whether only the private mapping or also `hv_vm_protect` triggers it was not separated.
 
+
+## Milestone 389 (tentative number): Gitea, a timer that records a negative time and a branch broken by a power cut
+
+Status: done on 2026-11-28, on hvx on the bare-metal machine and on GitHub's KVM runners.
+
+Gitea 28.4.0 became the example `hydo/onboard/examples/gitea` (RESULTS.md), the third web app of
+hydo's walk through the pages, after Memos (M258) and Vikunja (M273). It ran with this branch's
+`hydo` over the published 0.7.0 Linux release, at the fingerprint epoch 7. Two new candidates,
+not posted; nothing recorded moved.
+
+**The choice.** A fit check of 30 minutes over Forgejo, Gitea, Plane, Outline, Twenty CRM and
+Immich. Gitea was the first to meet every criterion of the playbook: GitHub issues (2,192 open),
+an official rootless image, one service, SQLite, and a first account that registers on a fresh
+instance. Forgejo's tracker needs a Codeberg account. Plane needs about ten services, Outline an
+outside sign-in provider, Twenty CRM four services and GraphQL answers with nested ids, and
+Immich uploads and a machine-learning service.
+
+**The example.** The rootless image as Gitea's documentation runs it with Docker, imported with
+`hydo compose`, with the installation locked and the update checker off. The walk's setup
+registers `hydo`, creates `hydo/demo` with a README, the default labels, a milestone and an issue,
+and starts that issue's timer. `within: /hydo/demo/issues` keeps the walk's links on the
+repository's issues, and `avoid` names 13 patterns, two of them for the editor's toolbar. Five rules
+over a copy of `gitea.db` and the API (`page-rules/gitea.mjs`): every issue, comment, close and
+reopen that Gitea answered is in the database; the counts that Gitea keeps beside its rows match
+the rows; the search finds every issue; the repository's branch reaches every object (`git
+fsck`); and no tracked time is below zero, after the rule stops a running timer through the API.
+`guest.clock_after_cut: 60` keeps the clock across a power cut, and `watch.console: false` leaves
+out the `console.error` that Gitea writes beside each error toast. `hydo-kvm.yaml` differs only
+in `guest.proc_io: false`, because the runners' release has no KVM kernels of epoch 7.
+`hydo-gitfsync.yaml` adds `core.fsync=committed` to Gitea's `[git.config]`, the contrast of
+finding 2.
+
+**Finding 1, new, a clock effect.** A timer that runs while the wall clock goes back records a
+negative time when it stops: `finishIssueStopwatch` stores `time.Now().Unix() -
+sw.CreatedUnix` without a lower bound (`models/issues/stopwatch.go`, line 140), while the form
+"Add Time" refuses a total of zero or less (`routers/web/repo/issue_timetrack.go`, line 39). The
+issue's timeline then shows "worked for now", and its "Total Time Spent" counts the negative time
+against the times before it. Blind on KVM at seeds 72, 79, 122 and 169, and on hvx at seed 37 of
+e2. The regression `disk=none | run T=2:-3600 I=1,x0.0-11,...,x5.0-11` (the setup's timer alone)
+failed twice with FP_BACK; without the step FP_NONE and with a step forward FP_FWD it passes.
+
+**Finding 2, new.** A power cut within about half a minute after a repository is created with
+"Initialize Repository" leaves its branch broken: `git` says "warning: ignoring broken ref
+refs/heads/main", while Gitea's database says the repository is not empty. Gitea pushes the first
+commit from a temporary folder (`initRepoCommit`, `services/repository/init.go`), and with Git's
+default `core.fsync` neither the loose objects nor the ref reach the disk before Gitea answers;
+Gitea sets no `core.fsync`. Directed: `disk=none | run C=1 I=1` failed twice with FP_CUT1, and
+with `disk=cut` too (FP_DCUT1); `C=2` passes. With `core.fsync=committed` the same cut passes
+(FSYNC_CONTRAST). Gitea's #31834, the same symptom after a merge's power outage, was closed as a
+power outage's damage. INSPECT_PAGE
+
+**The rules' mistakes.** The first failures of e1 and of the first KVM exploration (seeds 16, 37,
+41, 57) were a close followed by a reopen, which the rule did not count: a reopen is comment type
+1, not 3. Four timer failures of the second KVM exploration came from the recovery boot's clock,
+which starts at `clock_start` again without `guest.clock_after_cut`. One page error of the third
+KVM exploration was the `console.error` beside a shown toast. Each was fixed in the example.
+
+**The explorations.** Five, all `--strategy process --no-shrink`: e1 (hvx, seeds 1-20, 76 min),
+k1 (KVM, 21-60, 12 min on 20 runners), k2 (KVM, 61-120, 16 min), e2 (hvx, 21-40, 34 min) and k3
+(KVM, 121-180, 16 min). Of the 200 schedules 150 killed the server, 67 stepped the clock back, and
+47 cut the power, every cut after the walk's last step.
+
+**What held.** Every acknowledged issue, comment, close and reopen survived kills, pauses,
+network faults, clock steps and power cuts at the end of the walk: Gitea's SQLite runs with its
+rollback journal and `synchronous=FULL`. The counts beside the rows matched, the search found
+every issue, and every failed write showed an error toast.
+
+**What the walk lacked** (open item 198): a console event at an acknowledged write for `A=`
+reactions; ids in a redirect answer; the request's body in a word; the setup step that failed in
+its error; and power cuts inside the walk. `hydo build --check` passed a disk 1 MiB over hvx's 4
+GiB.
+
+Retro: Gitea 28.4.0, hvx and KVM, 2026-11-28
+- Time to the first clean run: 45 minutes of wall time, 10 of them for builds; the first image's
+  disk was over hvx's limit.
+- Schedules run before the first finding: 120 (e1, k1, and k2 up to seed 72), of which 4 failed
+  by the rules' mistakes.
+- The findings: 2 new (a clock effect, and a missing sync of Git's writes), 0 known.
+- What took the most time: the builds beside another session's builds (15 to 40 minutes each),
+  two restarts of the Mac, and the rule's comment types.
+- What hydo lacked: the five gaps of the walk above (open item 198), and `--check`'s disk limit.
+- Strategies: the page walk found finding 1 blind on KVM in 3 of 60 schedules; power cuts at a
+  step found finding 2 only as directed runs, because the process strategy cut only at the end.
+  "The page walk and its invariants" and "Power cuts of the whole guest" are updated.
