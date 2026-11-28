@@ -78,6 +78,9 @@ pub const WP_MAX: i64 = 1000;
 pub const WALK_SALT: u64 = 0x57A1_4B5E_EDC0_FFEE;
 /// The upgrades' own stream (`--upgrades`, Milestone 238).
 pub const UPGRADE_SALT: u64 = 0x0B6EADEC0FFEE0B6;
+/// Milestone 392: how far into its step a drawn upgrade of a web app's backend comes, in ms of
+/// guest time: while the step's walk has its pages open.
+pub const UPGRADE_OFFSETS_MS: [u64; 4] = [500, 1000, 2000, 4000];
 /// The service clocks' own stream (`--service-clocks`, Milestone 375).
 pub const SERVICE_CLOCK_SALT: u64 = 0x5C10_C4E5_C0FF_E375;
 /// What a drawn `T=<svc>@<at>:<change>` does to one service's clock (Milestone 375,
@@ -1506,7 +1509,11 @@ impl Ex {
     /// upgrade of one service with versions; the version is one of the service's other
     /// versions (for a group, one of the first member's that every member has), and a quarter of
     /// the upgrades roll back 1 to 4 steps later (`+<back>`). Every switch falls on a step of the
-    /// workload. A drawn upgrade is added to the schedule's other faults.
+    /// workload. A drawn upgrade is added to the schedule's other faults. Milestone 392: for a
+    /// manifest with `browser:`, half of the upgrades come while their step's walk runs, 500 ms to
+    /// 4 s into the step (`~<off>`), so the pages the old version served talk to the new one;
+    /// those draws come after every earlier draw of the stream, so another manifest's upgrades
+    /// stay as they were.
     pub fn add_upgrades(&self, mut s: S, seed: u64) -> S {
         if !self.upgrades {
             return s;
@@ -1525,6 +1532,9 @@ impl Ex {
         let gap = t.rng(0, 3);
         let back = if t.below(4) == 0 { t.rng(1, 4) } else { 0 };
         let at_r = t.next();
+        let timed = t.below(2) == 0;
+        let off = UPGRADE_OFFSETS_MS[(t.next() % UPGRADE_OFFSETS_MS.len() as u64) as usize];
+        let web = !hydo_manifest::browser::services(&sp.m).is_empty();
         let with = |n: &str| sp.versions.iter().find(|v| v.0 == n);
         // groups whose members all have versions, with the versions every member has
         let groups: Vec<(String, usize, Vec<String>)> = sp
@@ -1561,6 +1571,9 @@ impl Ex {
         }
         let at = (at_r % (last - span + 1) as u64) as i64;
         let mut u = format!("{target}@{at}");
+        if web && timed {
+            u.push_str(&format!("~{off}"));
+        }
         if gap > 0 {
             u.push_str(&format!("/{gap}"));
         }
@@ -2610,6 +2623,14 @@ impl Ex {
                 if x.gap > 0 {
                     let y = hydo_schedule::Upgrade {
                         gap: 0,
+                        ..x.clone()
+                    };
+                    var(&|t| t.u[i] = y.to_string());
+                }
+                // Milestone 392: a switch while its step runs, made before the step
+                if x.off.is_some() {
+                    let y = hydo_schedule::Upgrade {
+                        off: None,
                         ..x.clone()
                     };
                     var(&|t| t.u[i] = y.to_string());
