@@ -173,7 +173,7 @@ type Draws = (
     &'static str,
 );
 
-const DRAWING: [Draws; 8] = [
+const DRAWING: [Draws; 10] = [
     (
         "--new-faults",
         |e| e.new_faults,
@@ -219,6 +219,20 @@ const DRAWING: [Draws; 8] = [
         |e, v| e.service_clocks = v,
         "it steps the clocks of the services with clock: own, and the manifest's faults: does \
          not allow clock",
+    ),
+    (
+        "--answer-faults",
+        |e| e.answer_faults,
+        |e, v| e.answer_faults = v,
+        "it acts on the routes of fakes and HTTP proxies, and this manifest has none, or its \
+         faults: does not allow protocol",
+    ),
+    (
+        "--link-cuts",
+        |e| e.link_cuts,
+        |e, v| e.link_cuts = v,
+        "it cuts the network of the browser of browser:, and this manifest has no browser, no \
+         network: bridge, or a faults: that does not allow network",
     ),
     (
         "--corrupt-several",

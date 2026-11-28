@@ -300,6 +300,7 @@ Each one is an invariant named `<browser>.<property>`; an empty list in `watch:`
 | `browser.failures_shown` | a request fails (an answer of 500 or more, or no answer) and within `failures_within_ms` (default 5000) the page shows no error element and does not send the request again. With `watch.failures_of`, a regular expression over the path or over `<METHOD> <path>`, only the requests it matches count: `^(POST|PATCH|DELETE) /api/` names the writes of an API whose reads use the same paths. When the pattern matches none of the requests the pages sent, the run warns: `hydo: warning: ... judged no failed request`. |
 | `browser.no_bad_text` | a page prints a watched text (default `NaN`, `undefined`, `[object Object]`, `Invalid Date`) |
 | `browser.acked_shown` | with `browser.read_back`: an object whose id the server returned in an acknowledged write is not on its page. The check runs at the end of the run and after a power cut ("Check that the pages show what the server stored") |
+| `browser.newest_answer_shown` | with `watch.answers`: an answer came after the answer of a newer request of the same method and path, and the page shows the older one ("Answers in another order") |
 
 A finding reads like this:
 
@@ -320,10 +321,78 @@ at-most-once api.place_order` (`hydo guide checks`, "Side effects at fake outsid
 | a slow API | `H=api.add_item@1-2:delay=300` | the answers come 300 ms late |
 | a lost answer | `H=api.place_order@0-1:drop` | the API acts, and the answer never comes |
 | a clock step | `T=...` (`hydo guide faults`) | the page's `Date.now()` and its timers jump, for example past a token's expiry |
-| a stalled browser | `P=workload@0~4:500` | every process of the tests, the browser too, stops for 500 ms |
+| a stopped browser | `P=workload@0~4:500` | every process of the tests, the browser too, stops for 500 ms |
 | a deploy of the backend | `U=web@2~8000:2.8.0` | 8 s into step 2 the server stops and its next version starts on the same data, while the pages stay open |
+| answers in another order | `H=api.search@0-4:order=2` | of two requests, the second one's answer comes first |
+| a double submit | `H=api.place_order@0-1:twice` | the request reaches the API twice; the page gets the second answer |
+| an offline page | `N=browser@1~500:5000` | 500 ms into step 1 the browser's network is cut for 5 s |
 
 `hydo explore --protocol-faults` draws `H=` tokens on every route of the fakes.
+`hydo explore --answer-faults` draws answers in another order and double submits, and
+`--link-cuts` draws cuts of the browser's network.
+
+## Answers in another order
+
+A search box asks the server at every key. On a real network an older request's answer can
+come after a newer one's: a slower query, another connection, a retry. A page that shows
+whichever answer came last then shows results for an older query. A double click or a retry
+sends a write twice. A train goes into a tunnel, and the page is offline for a few seconds.
+Bug trackers call these bugs hard to reproduce. hydo makes each of them one schedule.
+
+1. Name the requests whose answers the page must keep up to date:
+
+   ```yaml
+   browser:
+     watch:
+       requests: /api/
+       answers: true        # every GET under /api/; or a pattern such as "^GET /api/search$"
+   ```
+
+2. Put the faults between the page and its server. With a fake API the fake takes them. With a
+   real backend, put an HTTP proxy in front of it, let the page open the proxy's address, and name
+   the API's routes there (`hydo guide outside-services`):
+
+   ```yaml
+   proxies:
+     - name: app
+       port: 3456
+       addr: 10.89.0.1           # the bridge's address: the browser reaches it
+       service: vikunja          # the server, at its own addr:
+       protocol: http
+       routes:
+         - {name: projects, method: GET, path: /api/v1/projects}
+         - {name: creates, method: PUT, path: "/api/v1/*"}
+   ```
+
+3. Run the faults by hand, or let the explorer draw them:
+
+   ```sh
+   hydo run "disk=none | run H=api.search@0-4:order=2 I=3"
+   hydo explore --seeds 1-20 --answer-faults --link-cuts
+   ```
+
+The property `browser.newest_answer_shown` judges every page. Sometimes an answer comes after
+the answer of a newer request of the same method and path. Then hydo reads the page's visible
+text 300 ms later. The property fails when the page shows a value that only the older answer had,
+and none that only the newer answer had. A value is a string or a number of an answer's JSON body.
+
+| rule or token | what it does |
+|---|---|
+| `order=<k>` | holds the answers of k matching requests (2 to 8) and gives them in another order, 30 ms apart; for two, the second request's answer comes first |
+| `wait=<ms>` | with `order=`: an answer waits at most this long for the others (default 3000), then goes with the ones that came |
+| `twice` | each matching request reaches the server or the fake twice, and the page gets the second answer; the fake's record marks the copy `copy=<seq>` |
+| `N=<browser>@<at>~<off>:<dur>` | `off` ms after step `at` starts, the browser's network is cut for `dur` ms: the page is offline, and its requests fail or wait until the link is back |
+
+The page checks you already have judge a cut of the browser's network. A request that failed
+must show an error or be sent again (`browser.failures_shown`), and a spinner must end
+(`browser.busy_ends`). With `browser.read_back` every acknowledged object must be on its page at
+the end. A double submit is judged by the fake's record (`hydo-world check at-most-once`) or by
+the project's own rules over its database.
+
+The order of the answers is a pure function of the token and the order in which the requests
+came, so a schedule gives the same order on every run. The comparison is by text, so a page that
+shows an old answer's values elsewhere on purpose (a list of recent searches) can fail it; name
+fewer requests in `answers:` then.
 
 ## Upgrade the backend while the pages are open
 

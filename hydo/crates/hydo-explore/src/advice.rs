@@ -282,7 +282,9 @@ pub fn defaults_class(s: &Schedule) -> String {
             | GuestToken::Pause(_)
             | GuestToken::TimedKill { .. }
             | GuestToken::Freeze(_) => had[0] = true,
-            GuestToken::Net { .. } | GuestToken::OneWay { .. } => had[1] = true,
+            GuestToken::Net { .. } | GuestToken::OneWay { .. } | GuestToken::LinkCut { .. } => {
+                had[1] = true
+            }
             GuestToken::Clock { .. }
             | GuestToken::ClockTo { .. }
             | GuestToken::ServiceClock { .. } => had[2] = true,

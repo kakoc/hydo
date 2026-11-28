@@ -4,6 +4,7 @@
 //! H=<target>@<from>-<to>:<rule>[,<rule>...]
 //! target  <fake|proxy> or <fake|proxy>.<route>
 //! request rules: status=<code> [retry-after=<s>] | delay=<ms> | drop | reset
+//!                order=<k> [wait=<ms>] | twice      (Milestone 393, the module `order`)
 //! webhook rules: dup | reorder | late=<ms> | lost
 //! p=<1..100>      share of the matching requests (or webhooks) the rule acts on (default 100)
 //! effect=yes|no   whether the outside world still performs the side effect; default no for
@@ -36,11 +37,19 @@ pub struct Rule {
     pub reorder: bool,
     pub late_ms: i64,
     pub lost: bool,
+    /// order=<k> (Milestone 393): hold k answers and give them in another order; 0 = none
+    pub order: i64,
+    /// wait=<ms>: the longest an order= answer is held for the others
+    pub wait_ms: i64,
+    /// twice (Milestone 393): the request reaches the service or the fake twice
+    pub twice: bool,
     pub p: i64,
     /// -1 default, 0 no, 1 yes
     pub effect: i64,
     /// how many matching requests (or webhooks) the rule has decided on (under the world lock)
     n: AtomicU64,
+    /// how many requests an order= rule has taken, in their order of arrival
+    ord: AtomicU64,
     pub release: Arc<Latch>,
     /// the gRPC-only keys; present once the token had `reset` or one of them
     pub ext: Option<GrpcExt>,
@@ -124,9 +133,13 @@ impl Rule {
             reorder: false,
             late_ms: 0,
             lost: false,
+            order: 0,
+            wait_ms: 3000,
+            twice: false,
             p: 100,
             effect: -1,
             n: AtomicU64::new(0),
+            ord: AtomicU64::new(0),
             release: Latch::new(),
             ext: None,
         };
@@ -159,6 +172,14 @@ impl Rule {
                     r.parse_ext(k, v)?; // reset=stream|conn
                 }
                 "dup" => r.dup = true,
+                "order" => {
+                    r.order = num(k, v)?;
+                    if !(2..=8).contains(&r.order) {
+                        return Err(format!("order={}: 2 to 8 requests", quote(v)));
+                    }
+                }
+                "wait" => r.wait_ms = num(k, v)?,
+                "twice" => r.twice = true,
                 "reorder" => r.reorder = true,
                 "lost" => r.lost = true,
                 "effect" => {
@@ -224,7 +245,18 @@ impl Rule {
     }
 
     pub fn request_rule(&self) -> bool {
-        self.status > 0 || self.delay_ms > 0 || self.drop || self.reset
+        self.status > 0
+            || self.delay_ms > 0
+            || self.drop
+            || self.reset
+            || self.order > 0
+            || self.twice
+    }
+
+    /// The place of the next request an order= rule takes, from 0 in their order of arrival
+    /// (the caller holds the world lock).
+    pub fn next_ord(&self) -> u64 {
+        self.ord.fetch_add(1, Ordering::Relaxed)
     }
 
     pub fn hook_rule(&self) -> bool {
@@ -256,6 +288,12 @@ impl Rule {
         let mut p = Vec::new();
         if self.delay_ms > 0 {
             p.push(format!("delay{}", self.delay_ms));
+        }
+        if self.order > 0 {
+            p.push(format!("order{}", self.order));
+        }
+        if self.twice {
+            p.push("twice".into());
         }
         if self.drop {
             p.push("drop".into());
@@ -339,6 +377,15 @@ mod tests {
         let x = r.ext.as_ref().unwrap();
         assert!(x.call_lo == 8 && x.call_hi == 9 && x.rpc == "Place" && x.conn);
         assert!(GrpcExt::grpc_only(r.ext.as_ref()));
+        let r = Rule::parse(7, "api.search@0-3:order=2,wait=5000").unwrap();
+        assert!(r.request_rule() && r.order == 2 && r.wait_ms == 5000 && r.applied());
+        assert_eq!(r.outcome(), "order2");
+        let r = Rule::parse(8, "api.place_order@0-3:twice").unwrap();
+        assert!(r.request_rule() && r.twice && r.wait_ms == 3000);
+        assert_eq!(
+            Rule::parse(9, "a@0-1:order=1").unwrap_err(),
+            "order=\"1\": 2 to 8 requests"
+        );
         let r = Rule::parse(6, "o@0-1:reset").unwrap();
         assert!(r.ext.is_some() && !GrpcExt::grpc_only(r.ext.as_ref()));
     }

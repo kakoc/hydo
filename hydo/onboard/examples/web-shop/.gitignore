@@ -1,6 +1,8 @@
 node_modules/
 app/dist-fixed/
 app/dist-buggy/
+app/dist-fixed-search/
+app/dist-buggy-search/
 browser/
 test-results/
 playwright-report/

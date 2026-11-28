@@ -93,6 +93,17 @@ pub const UPGRADE_SALT: u64 = 0x0B6EADEC0FFEE0B6;
 pub const UPGRADE_OFFSETS_MS: [u64; 4] = [3000, 6000, 9000, 12000];
 /// The service clocks' own stream (`--service-clocks`, Milestone 375).
 pub const SERVICE_CLOCK_SALT: u64 = 0x5C10_C4E5_C0FF_E375;
+/// The answer faults' own stream (`--answer-faults`, Milestone 393).
+pub const ANSWER_SALT: u64 = 0xA45E_0D3E_5C0F_F393;
+/// The link cuts' own stream (`--link-cuts`, Milestone 393).
+pub const LINK_CUT_SALT: u64 = 0x11C0_7C07_C0FF_E393;
+/// How many answers a drawn `order=` holds, and how long it holds the first (None: the default
+/// 3000 ms).
+const ORDER_KS: [i64; 4] = [2, 2, 2, 3];
+const ORDER_WAITS: [Option<i64>; 3] = [None, Some(1500), Some(6000)];
+/// When a drawn link cut starts after its step's start, and how long it lasts, ms of guest time.
+const CUT_OFFS: [i64; 6] = [0, 200, 500, 1000, 2000, 4000];
+const CUT_DURS: [i64; 4] = [500, 2000, 5000, 15_000];
 /// What a drawn `T=<svc>@<at>:<change>` does to one service's clock (Milestone 375,
 /// `docs/design/service-clocks.md`): a step of 250 ms, 1.5 s, 5 s, 30 s or 5 minutes either way,
 /// as NTP corrects a node or an operator sets it, or a drift of 200 ppm (a poor oscillator) or
@@ -245,6 +256,12 @@ pub struct Ex {
     /// (`T=<svc>@<at>:<change>`) for the services with `clock: own`, from their own stream
     /// (SERVICE_CLOCK_SALT).
     pub service_clocks: bool,
+    /// `--answer-faults` (Milestone 393): answers in another order and requests sent twice on
+    /// the fakes' and HTTP proxies' routes, from their own stream (ANSWER_SALT).
+    pub answer_faults: bool,
+    /// `--link-cuts` (Milestone 393): cuts of the browser's link while a step runs, from their
+    /// own stream (LINK_CUT_SALT).
+    pub link_cuts: bool,
     pub pause_max: i64,
     /// `--pause-thread` (Milestone 226): the targets a drawn pause names, `workload/<name>`
     /// (and `workload` with `--pause-workload`); empty: `workload` only.
@@ -333,6 +350,8 @@ impl Default for Ex {
             workload_pauses: false,
             upgrades: false,
             service_clocks: false,
+            answer_faults: false,
+            link_cuts: false,
             pause_max: WP_MAX,
             pause_targets: Vec::new(),
             pause_min: 0,
@@ -1650,6 +1669,97 @@ impl Ex {
         s
     }
 
+    /// `--answer-faults` (Milestone 393): from their own stream (ANSWER_SALT), so every other
+    /// field of a seed's schedule stays as it was; every draw is made whether it is used or not.
+    /// In 80 % of the schedules an `order=<k>` rule on one of the GET routes of the fakes and
+    /// HTTP proxies (any route when none is a GET): the answers of k of its requests come in
+    /// another order, as a search box's answers come on a real network. In 40 % a `twice` rule on
+    /// one of the other routes (the writes): the request reaches the service twice, as a double
+    /// submit sends it. Each window starts at a drawn step and lasts one step or to the end.
+    pub fn add_answer_faults(&self, mut s: S, seed: u64) -> S {
+        if !self.answer_faults || self.pf_targets.is_empty() {
+            return s;
+        }
+        let Some(sp) = &self.space else {
+            return s;
+        };
+        let routes = crate::space::answer_routes(&sp.m);
+        let n_ = self.norders.max(1);
+        let mut t = SplitMix::new(seed ^ ANSWER_SALT);
+        let o_on = t.below(100) < 80;
+        let o_which = t.next();
+        let o_at = t.below(n_);
+        let o_long = t.below(2) == 0;
+        let o_k = t.pick(&ORDER_KS);
+        let o_wait = t.pick(&ORDER_WAITS);
+        let w_on = t.below(100) < 40;
+        let w_which = t.next();
+        let w_at = t.below(n_);
+        let w_long = t.below(2) == 0;
+        let reads: Vec<&String> = routes
+            .iter()
+            .filter(|(_, m)| m == "GET")
+            .map(|(r, _)| r)
+            .collect();
+        let writes: Vec<&String> = routes
+            .iter()
+            .filter(|(_, m)| m != "GET")
+            .map(|(r, _)| r)
+            .collect();
+        let all: Vec<&String> = routes.iter().map(|(r, _)| r).collect();
+        let win = |at: i64, long: bool| (at, if long { n_ } else { (at + 1).min(n_) });
+        let reads = if reads.is_empty() { &all } else { &reads };
+        if o_on && !reads.is_empty() {
+            let (a, b) = win(o_at, o_long);
+            let mut rules = vec![("order".to_string(), RV::Int(o_k))];
+            if let Some(w) = o_wait {
+                rules.push(("wait".to_string(), RV::Int(w)));
+            }
+            s.h.push(H {
+                target: reads[(o_which % reads.len() as u64) as usize].clone(),
+                a,
+                b,
+                rules,
+            });
+        }
+        if w_on && !writes.is_empty() {
+            let (a, b) = win(w_at, w_long);
+            s.h.push(H {
+                target: writes[(w_which % writes.len() as u64) as usize].clone(),
+                a,
+                b,
+                rules: vec![("twice".to_string(), RV::None)],
+            });
+        }
+        s
+    }
+
+    /// `--link-cuts` (Milestone 393): for a manifest with `browser:` and `network: bridge` whose
+    /// `faults:` allows `network`, a cut of the browser's link to the bridge in 60 % of the
+    /// schedules, from its own stream (LINK_CUT_SALT): before a drawn step, after one of
+    /// [`CUT_OFFS`] ms, for one of [`CUT_DURS`] ms. The page is offline for that time, and its
+    /// requests fail or wait until the link is back.
+    pub fn add_link_cuts(&self, mut s: S, seed: u64) -> S {
+        if !self.link_cuts {
+            return s;
+        }
+        let Some(sp) = &self.space else {
+            return s;
+        };
+        let Some(svc) = crate::space::link_cut_target(sp) else {
+            return s;
+        };
+        let mut t = SplitMix::new(seed ^ LINK_CUT_SALT);
+        let on = t.below(100) < 60;
+        let at = t.below(self.norders.max(1));
+        let off = t.pick(&CUT_OFFS);
+        let dur = t.pick(&CUT_DURS);
+        if on {
+            s.lc = Some((svc, at, off, dur));
+        }
+        s
+    }
+
     /// `--cluster-faults` (M195): for a manifest with `groups:`, from their own stream
     /// (CLUSTER_SALT), so every other field of a seed's schedule stays as it was, and every draw
     /// is made whether it is used or not: a kill of a group's members (50% of the schedules; the
@@ -1819,6 +1929,8 @@ impl Ex {
         s = self.add_grpc_faults(s, seed);
         s = self.add_upgrades(s, seed);
         s = self.add_service_clocks(s, seed);
+        s = self.add_answer_faults(s, seed);
+        s = self.add_link_cuts(s, seed);
         let s = self.add_point_streams(s, seed);
         if self.no_faults {
             // `--no-faults` (Milestone 306): the seed's workload alone
@@ -2057,6 +2169,10 @@ impl Ex {
         if let Some((svc, at, off)) = &s.x {
             g.push(format!("X={svc}@{at}~{off}"));
         }
+        // Milestone 393: a timed cut of the browser's link (nothing without --link-cuts)
+        if let Some((svc, at, off, dur)) = &s.lc {
+            g.push(format!("N={svc}@{at}~{off}:{dur}"));
+        }
         if let Some(b) = &s.b {
             g.push(format!("B={b}"));
         }
@@ -2222,6 +2338,13 @@ impl Ex {
                     let (svc, rest) = split2(v, '@')?;
                     let (at, down) = split2(rest, '+')?;
                     s.k = Some((svc.to_string(), pint(at)?, pint(down)?));
+                }
+                "N" if v.contains('~') => {
+                    // Milestone 393: `N=<svc>@<at>~<off>:<dur>`, a timed cut of one link
+                    let (svc, rest) = split2(v, '@')?;
+                    let (at, r) = split2(rest, '~')?;
+                    let (off, dur) = split2(r, ':')?;
+                    s.lc = Some((svc.into(), pint(at)?, pint(off)?, pint(dur)?));
                 }
                 "N" => {
                     let (svc, rest) = v.split_once('@').ok_or("N=: no @")?;
@@ -2409,7 +2532,7 @@ impl Ex {
             || s.a
                 .iter()
                 .any(|r| r.kind() != "cut" && !r.kind().starts_with("clock"));
-        had[1] = s.n.is_some() || s.o.is_some();
+        had[1] = s.n.is_some() || s.o.is_some() || s.lc.is_some();
         had[2] =
             s.t.is_some() || !s.ts.is_empty() || s.a.iter().any(|r| r.kind().starts_with("clock"));
         had[3] = !s.h.is_empty();
@@ -2479,6 +2602,18 @@ impl Ex {
         }
         if s.o.is_some() {
             var(&|t| t.o = None);
+        }
+        // Milestone 393: without the link cut, with half of it, and at its step's start
+        if let Some((svc, at, off, dur)) = &s.lc {
+            var(&|t| t.lc = None);
+            if *dur > 1 {
+                let l = (svc.clone(), *at, *off, 1.max(fdiv(*dur, 2)));
+                var(&|t| t.lc = Some(l.clone()));
+            }
+            if *off > 0 {
+                let l = (svc.clone(), *at, 0, *dur);
+                var(&|t| t.lc = Some(l.clone()));
+            }
         }
         for k in &self.knob_tokens {
             if s.knob(k).is_some() {

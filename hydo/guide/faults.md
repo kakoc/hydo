@@ -617,6 +617,23 @@ A setting's place is a fact of the system, not always a bug: a project that docu
 default trades durability for speed on purpose. Make such a setting a build parameter and run its
 values with `hydo explore --configs` (`hydo guide workflow`, "Which settings break a promise").
 
+## Answers in another order, double submits, and offline pages
+
+Three faults act between a web app's page and its server. The section "Answers in another
+order" of `hydo guide web-apps` has the setup:
+
+- `H=<route>@<from>-<to>:order=<k>[,wait=<ms>]`: the answers of k requests come in another
+  order. Use it on the reads of a page that asks again at every change, such as a search box.
+- `H=<route>@<from>-<to>:twice`: each request reaches the server twice, as a double submit sends
+  it.
+- `N=<svc>@<at>~<off>:<dur>`: one service's link is cut for `dur` ms, `off` ms into step `at`.
+  With `browser:` name the browser, and its page is offline. It needs `network: bridge`.
+
+`hydo explore --answer-faults` draws the first two from a stream of their own: `order=` on a GET
+route of the fakes and HTTP proxies, `twice` on one of the other routes. `--link-cuts` draws the
+third for the browser. Without the options every seed draws what it drew before. The shrinker
+leaves a link cut out, halves it, and moves it to its step's start.
+
 ## Clock after a power cut
 
 Every boot starts its clock at `guest.clock_start`. Without `guest.clock_after_cut`, the recovery

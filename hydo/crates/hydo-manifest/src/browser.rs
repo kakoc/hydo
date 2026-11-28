@@ -137,6 +137,7 @@ pub const KNOWN_WATCH: &[&str] = &[
     "failures_of",
     "requests",
     "text",
+    "answers",
 ];
 
 /// The validated data's key that records the expansion.
@@ -234,6 +235,10 @@ pub const SCREENS_REF: &str = "hydo-screens";
 pub const HOOK: &str = include_str!("browser/hook.cjs");
 pub const REPORTER: &str = include_str!("browser/reporter.cjs");
 pub const CHECK: &str = include_str!("browser/check.mjs");
+/// Milestone 393 (`browser.watch.answers`): the watcher of the answers a page shows, and its
+/// check. Staged only with the setting, so an image without it keeps its bytes.
+pub const ANSWERS_HOOK: &str = include_str!("browser/answers.cjs");
+pub const ANSWERS_CHECK: &str = include_str!("browser/answers.mjs");
 
 /// One pinned Playwright image: the version of `@playwright/test` it matches and the manifest
 /// digest of each architecture (hydo's names: x86_64, arm64).
@@ -559,6 +564,27 @@ pub fn expand(m: &mut Value) -> R<()> {
             ))
         }
     }
+    // Milestone 393: the requests whose answers a page must not show out of date (`true`: every
+    // GET under `requests`); a manifest without the key keeps the watcher's settings
+    let answers = match get(&w, "answers") {
+        None | Some(Value::Bool(false)) => None,
+        Some(Value::Bool(true)) => Some("^GET ".to_string()),
+        Some(Value::String(s)) if !s.is_empty() && regex::Regex::new(s).is_ok() => Some(s.clone()),
+        Some(_) => {
+            return Err(err(
+                "browser.watch.answers: true (every GET request under browser.watch.requests), or a regular expression over a request's `<METHOD> <path>` such as ^GET /api/(search|tasks) (a page must show the newest answer of those requests)",
+            ))
+        }
+    };
+    if let Some(a) = &answers {
+        watch["answers"] = json!(a);
+    }
+    let hooks = match &answers {
+        None => format!("--require {WEB_DIR}/hydo/hook.cjs"),
+        Some(_) => {
+            format!("--require {WEB_DIR}/hydo/hook.cjs --require {WEB_DIR}/hydo/answers.cjs")
+        }
+    };
     let mut senv = json!({
         "HOME": format!("{RECORD_DIR}/home"),
         "TZ": "UTC",
@@ -617,7 +643,7 @@ pub fn expand(m: &mut Value) -> R<()> {
     // its own unit, and one worker still runs them in the files' order.
     let split = if shards > 1 { " --fully-parallel" } else { "" };
     let mut cmd = format!(
-        "cd {WEB_DIR}/tests && NODE_OPTIONS=\"--require {WEB_DIR}/hydo/hook.cjs\" exec node node_modules/@playwright/test/cli.js test --shard=$1/{shards}{split} --pass-with-no-tests --retries=0 --workers=1 --reporter={WEB_DIR}/hydo/reporter.cjs --output={RECORD_DIR}/results"
+        "cd {WEB_DIR}/tests && NODE_OPTIONS=\"{hooks}\" exec node node_modules/@playwright/test/cli.js test --shard=$1/{shards}{split} --pass-with-no-tests --retries=0 --workers=1 --reporter={WEB_DIR}/hydo/reporter.cjs --output={RECORD_DIR}/results"
     );
     for a in &args {
         if a.contains('\'') {
@@ -645,7 +671,7 @@ pub fn expand(m: &mut Value) -> R<()> {
     // a step of a walk: the walker in the browser's root, with the schedule's walk, its guest
     // part and the file of acknowledged work
     let walker = format!(
-        "hydo-oci {name} /bin/sh -c 'cd {WALK_DIR} && NODE_OPTIONS=\"--require {WEB_DIR}/hydo/hook.cjs\" exec node walk.mjs \"$1\" \"$2\" \"$3\" \"$4\"' sh $i \"$HYDO_WALK\" \"$HYDO_GUEST\" \"$HYDO_ACKED\""
+        "hydo-oci {name} /bin/sh -c 'cd {WALK_DIR} && NODE_OPTIONS=\"{hooks}\" exec node walk.mjs \"$1\" \"$2\" \"$3\" \"$4\"' sh $i \"$HYDO_WALK\" \"$HYDO_GUEST\" \"$HYDO_ACKED\""
     );
     let workload = match &explore {
         None => json!({
@@ -720,6 +746,13 @@ pub fn expand(m: &mut Value) -> R<()> {
             "id": format!("{name}.no_bad_text"),
             "msg": format!("no page prints {}", text.join(", ")),
             "cmd": check("text"),
+        }));
+    }
+    if answers.is_some() {
+        invs.push(json!({
+            "id": format!("{name}.newest_answer_shown"),
+            "msg": "no page shows the answer of an older request after the answer of a newer one of the same method and path",
+            "cmd": format!("hydo-oci {name} node {WEB_DIR}/hydo/answers.mjs"),
         }));
     }
     if screens == "compare" {
@@ -818,6 +851,17 @@ pub fn expand(m: &mut Value) -> R<()> {
             format!("{WEB_DIR}/hydo/{f}"),
             Value::String(body.to_string()),
         );
+    }
+    if answers.is_some() {
+        for (f, body) in [
+            ("answers.cjs", ANSWERS_HOOK),
+            ("answers.mjs", ANSWERS_CHECK),
+        ] {
+            t.insert(
+                format!("{WEB_DIR}/hydo/{f}"),
+                Value::String(body.to_string()),
+            );
+        }
     }
     if explore.is_some() {
         let stub = format!("{WALK_DIR}/node_modules/@playwright/test");
@@ -1566,6 +1610,128 @@ mod tests {
             let e = walk(bad.clone()).unwrap_err().to_string();
             assert!(e.contains(says), "{bad}: {e}");
         }
+    }
+
+    /// Milestone 393: `watch.answers` loads answers.cjs beside hook.cjs, stages it and its check,
+    /// and adds the property; without it nothing of it is in the expansion.
+    #[test]
+    fn watch_answers_adds_the_newest_answer_check() {
+        let walk = |w: Value| {
+            let mut m = json!({"name": "web", "network": "bridge",
+                "browser": {"explore": {"start": "http://localhost:3000/"}, "watch": w}});
+            expand(&mut m).map(|_| m)
+        };
+        let m = walk(json!({"requests": "/api/", "answers": true})).unwrap();
+        let run = m["workload"]["run"].as_str().unwrap();
+        assert!(
+            run.contains("NODE_OPTIONS=\"--require /opt/hydo/web/hydo/hook.cjs --require /opt/hydo/web/hydo/answers.cjs\" exec node walk.mjs"),
+            "{run}"
+        );
+        let inv = m["invariants"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["id"] == "browser.newest_answer_shown")
+            .expect("the property");
+        assert_eq!(
+            inv["cmd"],
+            "hydo-oci browser node /opt/hydo/web/hydo/answers.mjs"
+        );
+        let t = &m["root"]["text"];
+        assert_eq!(t["/opt/hydo/web/hydo/answers.cjs"], ANSWERS_HOOK);
+        assert_eq!(t["/opt/hydo/web/hydo/answers.mjs"], ANSWERS_CHECK);
+        let svc = m["services"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["name"] == "browser")
+            .unwrap();
+        let w: Value =
+            serde_json::from_str(svc["env"]["HYDO_WEB_WATCH"].as_str().unwrap()).unwrap();
+        assert_eq!(w["answers"], "^GET ");
+        let m = walk(json!({"answers": "^GET /api/search$"})).unwrap();
+        let svc = &m["services"].as_array().unwrap()[0];
+        assert!(svc["env"]["HYDO_WEB_WATCH"]
+            .as_str()
+            .unwrap()
+            .contains(r#""answers":"^GET /api/search$""#));
+        // without it: one --require, no file, no property, no key in the watcher's settings
+        for w in [json!({}), json!({"answers": false})] {
+            let m = walk(w).unwrap();
+            let run = m["workload"]["run"].as_str().unwrap();
+            assert!(run.contains(
+                "NODE_OPTIONS=\"--require /opt/hydo/web/hydo/hook.cjs\" exec node walk.mjs"
+            ));
+            assert!(m["root"]["text"]
+                .get("/opt/hydo/web/hydo/answers.cjs")
+                .is_none());
+            assert!(!m.to_string().contains("newest_answer_shown"));
+            let env = m["services"][0]["env"]["HYDO_WEB_WATCH"]
+                .as_str()
+                .unwrap()
+                .to_string();
+            assert!(!env.contains("answers"), "{env}");
+        }
+        for bad in [json!({"answers": "("}), json!({"answers": 3})] {
+            let e = walk(bad).unwrap_err().message;
+            assert!(e.contains("browser.watch.answers"), "{e}");
+        }
+    }
+
+    /// `node answers.mjs` over the given lines: its exit status and sentence (None without node).
+    fn answers_mjs(lines: &[Value]) -> Option<(i32, String)> {
+        let dir = std::env::temp_dir().join(format!(
+            "hydo-manifest-answers-mjs-{}-{}",
+            std::process::id(),
+            lines.len()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("answers.mjs"), ANSWERS_CHECK).unwrap();
+        let text: String = lines.iter().map(|e| format!("{e}\n")).collect();
+        std::fs::write(dir.join("answers.jsonl"), text).unwrap();
+        let out = std::process::Command::new("node")
+            .arg(dir.join("answers.mjs"))
+            .env("HYDO_WEB_DIR", &dir)
+            .output();
+        let _ = std::fs::remove_dir_all(&dir);
+        let out = out.ok()?;
+        Some((
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stdout).trim().to_string(),
+        ))
+    }
+
+    #[test]
+    fn answers_mjs_judges_the_lines() {
+        let pair = json!({"key": "GET /api/search",
+            "older": {"id": 1, "path": "/api/search?q=co", "status": 200},
+            "newer": {"id": 2, "path": "/api/search?q=tea", "status": 200}});
+        let mut stale = pair.clone();
+        stale["kind"] = json!("stale");
+        stale["url"] = json!("/");
+        stale["shows"] = json!(["co"]);
+        stale["misses"] = json!(["tea"]);
+        let Some((rc, said)) = answers_mjs(&[stale]) else {
+            eprintln!("no node on this machine: answers.mjs not run");
+            return;
+        };
+        assert_eq!(rc, 1, "{said}");
+        assert!(said.contains("GET /api/search?q=co was sent first and answered last, after GET /api/search?q=tea"), "{said}");
+        assert!(
+            said.contains(r#"shows "co" of the older answer and none of "tea""#),
+            "{said}"
+        );
+        let mut newest = pair.clone();
+        newest["kind"] = json!("newest");
+        let (rc, said) = answers_mjs(&[newest]).unwrap();
+        assert_eq!(rc, 0, "{said}");
+        assert!(
+            said.starts_with("1 time an answer came after a newer one's"),
+            "{said}"
+        );
+        let (rc, said) = answers_mjs(&[]).unwrap();
+        assert_eq!(rc, 0);
+        assert!(said.starts_with("no answer came after"), "{said}");
     }
 
     #[test]

@@ -703,6 +703,12 @@ fn setup(a: Args, env: &Env) -> Cx {
         die("hydo explore: --service-clocks steps one service's own clock, and no service of this image's manifest has clock: own (MANIFEST.md, \"One service's own clock\")");
     }
     cx.ex.service_clocks = a.service_clocks;
+    // Milestone 393: answers in another order and requests sent twice, and link cuts
+    cx.ex.answer_faults = a.answer_faults;
+    if a.answer_faults && cx.ex.pf_targets.is_empty() {
+        die("hydo explore: --answer-faults acts on the routes of fakes and HTTP proxies, and this image's manifest has none (or its faults: does not allow protocol)");
+    }
+    cx.ex.link_cuts = a.link_cuts;
     cx.ex.pause_max = a.pause_max;
     // Milestone 226: the earliest start and the lengths of a drawn pause
     if a.pause_min < 0 || a.pause_min > a.pause_max {
@@ -1012,6 +1018,8 @@ fn drawn(a: &Args) -> crate::space::Drawn {
         upgrades: a.upgrades,
         block: a.block_faults,
         service_clocks: a.service_clocks,
+        answer_faults: a.answer_faults,
+        link_cuts: a.link_cuts,
         aimed: a.reactive_at.is_some(),
     }
 }

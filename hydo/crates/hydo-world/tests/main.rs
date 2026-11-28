@@ -5,6 +5,7 @@
 
 mod tmpdir;
 
+mod answer_order;
 mod fake_errors;
 mod objects_sign;
 mod proxy_idempotent;

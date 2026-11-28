@@ -1,0 +1,96 @@
+# The web-shop app with a search box, explored by hydo's own walk through its pages, with
+# answers in another order, requests sent twice, and cuts of the browser's network (Milestone
+# 393, `hydo guide web-apps`, docs/design/web-apps.md "Answers in another order").
+#
+# The app is the walk's (hydo-walk.yaml), built with VITE_SEARCH=1: the product list has a search
+# box that asks GET /api/search?q=... at every change. The variant buggy shows whichever answer
+# comes last, so an older search's answer that comes after a newer one's replaces it; the variant
+# fixed shows only the newest search's answer. browser.watch.answers judges every page: when an
+# answer comes after a newer request's, the page must show the newer one
+# (browser.newest_answer_shown).
+#
+# Inputs: sh build.sh (the app's builds; the tests' node_modules are not needed here).
+#   disk=none | run I=<seed>                                    -> a walk without faults
+#   disk=none | run H=api.search@0-4:order=2 I=<seed>           -> two searches' answers swapped
+#   disk=none | run N=browser@1~500:5000 I=<seed>               -> the page offline for 5 s
+#   hydo explore --seeds 1-20 --answer-faults --link-cuts       -> drawn blind
+# (RESULTS.md, the section "Answers in another order", has every run)
+name: web-shop-search
+description: the web-shop app with a search box, explored by hydo's own walk under answers in another order and network cuts; its API is a fake
+
+params:
+  variant: buggy                # fixed | buggy: which build of the app goes into the image
+
+network: bridge                 # the browser runs in its own network namespace
+
+root:
+  files:
+    - {src: "app/dist-{{variant}}-search", dst: /opt/hydo/web/app/dist}
+    - {src: app/serve.mjs, dst: /opt/hydo/web/app/serve.mjs}
+
+browser:
+  explore:
+    start: http://localhost:3000/
+    server: node /opt/hydo/web/app/serve.mjs   # as the tests' webServer: started for each step
+    steps: 4
+    actions: 10
+  env:
+    APP_DIST: /opt/hydo/web/app/dist
+    API_URL: http://10.89.0.1:9001
+  watch:
+    busy: [.spinner]
+    alerts: ["[role=alert]"]
+    requests: /api/
+    answers: true               # Milestone 393: every GET under /api/ must show its newest answer
+  # Milestone 334: every order that the API acknowledged opens on its own page, at the end of the
+  # walk; an order is the {"id":"o1"} answer of POST /api/orders
+  read_back:
+    objects:
+      - writes: '^POST /api/orders$'
+        name: order
+        page: /orders/{id}
+        shows: 'text=Order {id} confirmed'
+
+fakes:
+  - name: api                   # the shop's API: its five routes and their usual answers
+    port: 9001
+    addr: 10.89.0.1
+    idempotency: header:Idempotency-Key
+    ref: json:cart
+    routes:
+      - name: products
+        method: GET
+        path: /api/products
+        headers: {Content-Type: application/json}
+        body: '[{"id":"p1","name":"Coffee mug","price":1200},{"id":"p2","name":"Tea pot","price":3000},{"id":"p3","name":"Notebook","price":550}]'
+      # Milestone 393: the search box's answers; the title names the query, as a page shows it
+      - name: search
+        method: GET
+        path: /api/search
+        headers: {Content-Type: application/json}
+        body: '{"title":"Results for {query:q}","query":"{query:q}","items":[{"id":"p1","name":"Coffee mug","price":1200},{"id":"p2","name":"Tea pot","price":3000},{"id":"p3","name":"Notebook","price":550}]}'
+      - name: add_item
+        method: POST
+        path: /api/cart/items
+        headers: {Content-Type: application/json}
+        body: '{"ok":true,"product":"{json:product}"}'
+      - name: place_order
+        method: POST
+        path: /api/orders
+        idempotent: true
+        save: {key: 'o{seq}', fields: {total: '{json:total}'}}
+        headers: {Content-Type: application/json}
+        body: '{"id":"o{seq}"}'
+      - name: get_order
+        method: GET
+        path: /api/orders/{id}
+        load: '{path:id}'
+        headers: {Content-Type: application/json}
+        body: '{"id":"{path:id}","total":{obj:total}}'
+
+invariants:
+  - id: api.order_placed_once
+    msg: the API took each cart's order at most once
+    cmd: hydo-world check at-most-once api.place_order
+
+faults: [protocol, clock, pause, network]

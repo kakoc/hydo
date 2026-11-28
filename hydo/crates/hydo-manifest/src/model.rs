@@ -2219,6 +2219,24 @@ pub struct BrowserWatch {
     /// Texts no page may print (default NaN, undefined, [object Object], Invalid Date).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<Vec<Text>>,
+    /// The requests whose answers a page must show up to date (Milestone 393): true for every GET
+    /// request under `requests`, or a regular expression over a request's `<METHOD> <path>`. When
+    /// an answer comes after the answer of a newer request of the same method and path, the page
+    /// must show the newer one (the property `<browser>.newest_answer_shown`). Default off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answers: Option<BrowserAnswers>,
+}
+
+/// `browser.watch.answers` (Milestone 393): true, false, or a regular expression over a
+/// request's `<METHOD> <path>`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    untagged,
+    expecting = "true, false, or a regular expression over a request's <METHOD> <path>"
+)]
+pub enum BrowserAnswers {
+    On(bool),
+    Matching(Text),
 }
 
 /// Error logs as findings: true (every default), false (off), or a mapping.

@@ -4200,9 +4200,31 @@
           "items": {
             "$ref": "#/$defs/Text"
           }
+        },
+        "answers": {
+          "description": "The requests whose answers a page must show up to date (Milestone 393): true for every GET\nrequest under `requests`, or a regular expression over a request's `<METHOD> <path>`. When\nan answer comes after the answer of a newer request of the same method and path, the page\nmust show the newer one (the property `<browser>.newest_answer_shown`). Default off.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BrowserAnswers"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false
+    },
+    "BrowserAnswers": {
+      "description": "`browser.watch.answers` (Milestone 393): true, false, or a regular expression over a\nrequest's `<METHOD> <path>`.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "$ref": "#/$defs/Text"
+        }
+      ]
     },
     "BrowserScreens": {
       "description": "Which pages of `browser:` get a screenshot (Milestone 254): those that end their test with\na busy or error element, every page at the end of its test, or every page compared with\nits reference.",

@@ -173,6 +173,7 @@ async fn control(w: Arc<World>, ln: UnixListener) {
 // ------------------------------------------------------------------ HTTP/1.1 and cleartext HTTP/2
 
 /// One request as the handler sees it.
+#[derive(Clone)]
 pub struct InReq {
     pub method: String,
     /// the decoded path (Go's URL.Path)
@@ -469,6 +470,18 @@ const PROXY_BODY_MAX: usize = 512 << 20;
 
 /// The fake and HTTP-proxy handler (Go's `handler`).
 async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> Outcome {
+    handle_one(w, idx, rq, gone, None).await
+}
+
+/// One request. `copy` (Milestone 393): this is the second sending of a request that a `twice`
+/// rule sends again, with the record number of the first; no rule acts on it.
+async fn handle_one(
+    w: &Arc<World>,
+    idx: usize,
+    rq: InReq,
+    gone: &mut dyn Gone,
+    copy: Option<i64>,
+) -> Outcome {
     let e = endpoint(w, idx);
     let grpc = e.protocol == "grpc";
     let fake = e.kind == "fake";
@@ -504,9 +517,14 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
         key.extend_from_slice(&idem);
         key
     };
-    let (rule, ans_seq, heal, missing, obj) = {
+    let (rule, ans_seq, heal, missing, obj, ord_n) = {
         let mut st = w.lock_gate().await;
-        let rule = st.request_rule(&e.name, &rname);
+        let rule = match copy {
+            Some(_) => None,
+            None => st.request_rule(&e.name, &rname),
+        };
+        // Milestone 393: an order= rule numbers its requests in their order of arrival
+        let ord_n = rule.as_ref().filter(|r| r.order > 0).map(|r| r.next_ord());
         let apply = rule.as_ref().is_none_or(|r| r.applied());
         let mut fx =
             apply && (!fake || (rt.is_some() && Route::effectful(rt, &rq.method, &e.protocol)));
@@ -573,6 +591,9 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
             out = format!("{out}+{}", r.outcome());
             extra = format!("{extra} rule={}", r.id);
         }
+        if let Some(o) = copy {
+            extra = format!("{extra} copy={o}");
+        }
         if fx && !idem.is_empty() {
             st.idem.insert(key, seq);
         }
@@ -598,162 +619,180 @@ async fn handle(w: &Arc<World>, idx: usize, rq: InReq, gone: &mut dyn Gone) -> O
                 }
             }
         }
-        (rule, ans_seq, st.heal.clone(), missing, obj)
+        (rule, ans_seq, st.heal.clone(), missing, obj, ord_n)
     };
-    let apply = rule.as_ref().is_none_or(|r| r.applied());
+    // Milestone 393: a twice rule sends the request again after the first one's answer
+    let again = rule.as_ref().filter(|r| r.twice).map(|_| rq.clone());
+    let out = async {
+        let apply = rule.as_ref().is_none_or(|r| r.applied());
 
-    let seq_s = ans_seq.to_string();
-    let ctx: [(&str, &[u8]); 5] = [
-        ("seq", seq_s.as_bytes()),
-        ("ref", &r#ref),
-        ("idem", &idem),
-        ("fake", e.name.as_bytes()),
-        ("route", rname.as_bytes()),
-    ];
-    // the real service's answer (proxy) comes first: the fault acts on what it answered
-    let mut up: Option<Result<http1::Resp, String>> = None;
-    if let Some(Some(first)) = replayed.take() {
-        up = Some(Ok(first));
-    } else if !fake && apply {
-        up = Some(match rt::or_gone(gone, forward(e, &rq)).await {
-            Some(r) => r,
-            None => Err(http1::url_err(
-                &rq.method,
-                &format!("http://{}{}", e.to, String::from_utf8_lossy(&rq.uri)),
-                "context canceled",
-            )),
-        });
-        // the first answer of an idempotent route, for the repeats of its key
-        if let (Some(Ok(resp)), Some(r)) = (&up, rt) {
-            if r.idempotent && !idem.is_empty() && e.protocol == "http" {
-                let mut st = w.lock();
-                if st.idem.get(&idem_key) == Some(&ans_seq) {
-                    st.answers.insert(idem_key.clone(), resp.clone());
-                }
-            }
-        }
-    }
-    if let Some(r) = &rule {
-        if r.delay_ms > 0 {
-            rt::wait(gone, Some(Duration::from_millis(r.delay_ms as u64)), &[]).await;
-        }
-        if r.drop {
-            // accept, never answer (until the client gives up or the fault heals)
-            rt::wait(gone, None, &[&r.release, &heal]).await;
-            return Outcome::Abort(false);
-        }
-        if r.reset {
-            return Outcome::Abort(true);
-        }
-        if r.status > 0 {
-            let mut a = Answer::default();
-            if grpc {
-                grpc_status(&mut a, r.status, "injected by hydo");
-                return Outcome::Answer(a);
-            }
-            hset(&mut a.headers, "Content-Type", b"application/json".to_vec());
-            if !r.retry_after.is_empty() {
-                hset(
-                    &mut a.headers,
-                    "Retry-After",
-                    r.retry_after.as_bytes().to_vec(),
-                );
-            }
-            a.status = r.status.clamp(0, 999) as u16;
-            // a route's own error answer for this status (Milestone 249: `errors:` of a fake;
-            // Milestone 329: of an HTTP proxy's route too, such as the s3 emulator's 412)
-            a.body = match rt.and_then(|x| x.error_body(r.status)) {
-                Some(t) => {
-                    let b = render(t, &ctx, Some(&v));
-                    match &obj {
-                        Some(o) => crate::objects::subst(b, o),
-                        None => b,
+        let seq_s = ans_seq.to_string();
+        let ctx: [(&str, &[u8]); 5] = [
+            ("seq", seq_s.as_bytes()),
+            ("ref", &r#ref),
+            ("idem", &idem),
+            ("fake", e.name.as_bytes()),
+            ("route", rname.as_bytes()),
+        ];
+        // the real service's answer (proxy) comes first: the fault acts on what it answered
+        let mut up: Option<Result<http1::Resp, String>> = None;
+        if let Some(Some(first)) = replayed.take() {
+            up = Some(Ok(first));
+        } else if !fake && apply {
+            up = Some(match rt::or_gone(gone, forward(e, &rq)).await {
+                Some(r) => r,
+                None => Err(http1::url_err(
+                    &rq.method,
+                    &format!("http://{}{}", e.to, String::from_utf8_lossy(&rq.uri)),
+                    "context canceled",
+                )),
+            });
+            // the first answer of an idempotent route, for the repeats of its key
+            if let (Some(Ok(resp)), Some(r)) = (&up, rt) {
+                if r.idempotent && !idem.is_empty() && e.protocol == "http" {
+                    let mut st = w.lock();
+                    if st.idem.get(&idem_key) == Some(&ans_seq) {
+                        st.answers.insert(idem_key.clone(), resp.clone());
                     }
                 }
-                None => {
-                    format!(r#"{{"error":"injected by hydo","status":{}}}"#, r.status).into_bytes()
-                }
-            };
-            if a.body.starts_with(b"<?xml") {
-                // an XML error answer (S3's)
-                hset(&mut a.headers, "Content-Type", b"application/xml".to_vec());
             }
-            return Outcome::Answer(a);
         }
-    }
-    if !fake {
-        return match up {
-            Some(Ok(resp)) => {
+        if let Some(r) = &rule {
+            if r.delay_ms > 0 {
+                rt::wait(gone, Some(Duration::from_millis(r.delay_ms as u64)), &[]).await;
+            }
+            if r.drop {
+                // accept, never answer (until the client gives up or the fault heals)
+                rt::wait(gone, None, &[&r.release, &heal]).await;
+                return Outcome::Abort(false);
+            }
+            if r.reset {
+                return Outcome::Abort(true);
+            }
+            if r.status > 0 {
                 let mut a = Answer::default();
-                copy_response(&mut a, resp);
-                Outcome::Answer(a)
-            }
-            Some(Err(err)) => {
-                let msg = format!("hydo proxy: upstream: {err}");
                 if grpc {
-                    let mut a = Answer::default();
-                    grpc_status(&mut a, 14, &msg);
-                    Outcome::Answer(a)
-                } else {
-                    Outcome::Answer(http1::error_answer(&msg, 502))
+                    grpc_status(&mut a, r.status, "injected by hydo");
+                    return Outcome::Answer(a);
                 }
+                hset(&mut a.headers, "Content-Type", b"application/json".to_vec());
+                if !r.retry_after.is_empty() {
+                    hset(
+                        &mut a.headers,
+                        "Retry-After",
+                        r.retry_after.as_bytes().to_vec(),
+                    );
+                }
+                a.status = r.status.clamp(0, 999) as u16;
+                // a route's own error answer for this status (Milestone 249: `errors:` of a fake;
+                // Milestone 329: of an HTTP proxy's route too, such as the s3 emulator's 412)
+                a.body = match rt.and_then(|x| x.error_body(r.status)) {
+                    Some(t) => {
+                        let b = render(t, &ctx, Some(&v));
+                        match &obj {
+                            Some(o) => crate::objects::subst(b, o),
+                            None => b,
+                        }
+                    }
+                    None => format!(r#"{{"error":"injected by hydo","status":{}}}"#, r.status)
+                        .into_bytes(),
+                };
+                if a.body.starts_with(b"<?xml") {
+                    // an XML error answer (S3's)
+                    hset(&mut a.headers, "Content-Type", b"application/xml".to_vec());
+                }
+                return Outcome::Answer(a);
             }
-            // effect=no with only a delay: Go's handler then copies a missing answer and
-            // panics, which ends the exchange without an answer
-            None => Outcome::Abort(false),
+        }
+        if !fake {
+            return match up {
+                Some(Ok(resp)) => {
+                    let mut a = Answer::default();
+                    copy_response(&mut a, resp);
+                    Outcome::Answer(a)
+                }
+                Some(Err(err)) => {
+                    let msg = format!("hydo proxy: upstream: {err}");
+                    if grpc {
+                        let mut a = Answer::default();
+                        grpc_status(&mut a, 14, &msg);
+                        Outcome::Answer(a)
+                    } else {
+                        Outcome::Answer(http1::error_answer(&msg, 502))
+                    }
+                }
+                // effect=no with only a delay: Go's handler then copies a missing answer and
+                // panics, which ends the exchange without an answer
+                None => Outcome::Abort(false),
+            };
+        }
+        let Some(r) = rt else {
+            let mut a;
+            if grpc {
+                a = Answer::default();
+                grpc_status(
+                    &mut a,
+                    12,
+                    &format!(
+                        "hydo fake: no route for {}",
+                        String::from_utf8_lossy(&rq.path)
+                    ),
+                );
+            } else {
+                a = http1::error_answer(r#"{"error":"hydo fake: no route"}"#, 404);
+            }
+            return Outcome::Answer(a);
         };
-    }
-    let Some(r) = rt else {
-        let mut a;
+        if let Some(k) = &missing {
+            return Outcome::Answer(missing_answer(k, grpc));
+        }
+        // objects.rs: {obj:<field>} of the route's object
+        let rend = |t: &str| {
+            let b = render(t, &ctx, Some(&v));
+            match &obj {
+                Some(o) => crate::objects::subst(b, o),
+                None => b,
+            }
+        };
+        let mut a = Answer::default();
+        for (k, val) in &r.headers {
+            hset(&mut a.headers, k, rend(val));
+        }
         if grpc {
-            a = Answer::default();
-            grpc_status(
-                &mut a,
-                12,
-                &format!(
-                    "hydo fake: no route for {}",
-                    String::from_utf8_lossy(&rq.path)
-                ),
-            );
-        } else {
-            a = http1::error_answer(r#"{"error":"hydo fake: no route"}"#, 404);
-        }
-        return Outcome::Answer(a);
-    };
-    if let Some(k) = &missing {
-        return Outcome::Answer(missing_answer(k, grpc));
-    }
-    // objects.rs: {obj:<field>} of the route's object
-    let rend = |t: &str| {
-        let b = render(t, &ctx, Some(&v));
-        match &obj {
-            Some(o) => crate::objects::subst(b, o),
-            None => b,
-        }
-    };
-    let mut a = Answer::default();
-    for (k, val) in &r.headers {
-        hset(&mut a.headers, k, rend(val));
-    }
-    if grpc {
-        let msg = hex_decode(&r.message);
-        hset(&mut a.headers, "Content-Type", b"application/grpc".to_vec());
-        if r.code != 0 {
-            grpc_status(&mut a, r.code, "hydo fake");
+            let msg = hex_decode(&r.message);
+            hset(&mut a.headers, "Content-Type", b"application/grpc".to_vec());
+            if r.code != 0 {
+                grpc_status(&mut a, r.code, "hydo fake");
+                return Outcome::Answer(a);
+            }
+            a.status = 200;
+            a.body = grpc_frame(&msg);
+            a.trailers.push(("Grpc-Status".into(), b"0".to_vec()));
+            a.trailers.push(("Grpc-Message".into(), Vec::new()));
             return Outcome::Answer(a);
         }
-        a.status = 200;
-        a.body = grpc_frame(&msg);
-        a.trailers.push(("Grpc-Status".into(), b"0".to_vec()));
-        a.trailers.push(("Grpc-Message".into(), Vec::new()));
-        return Outcome::Answer(a);
+        if hget(&a.headers, "Content-Type").is_none_or(<[u8]>::is_empty) {
+            hset(&mut a.headers, "Content-Type", b"application/json".to_vec());
+        }
+        a.status = r.status.clamp(0, 999) as u16;
+        a.body = rend(&r.body);
+        Outcome::Answer(a)
     }
-    if hget(&a.headers, "Content-Type").is_none_or(<[u8]>::is_empty) {
-        hset(&mut a.headers, "Content-Type", b"application/json".to_vec());
+    .await;
+    let out = match again {
+        // the client gets the second sending's answer, as a page that submitted twice
+        Some(rq2) => {
+            drop(out);
+            Box::pin(handle_one(w, idx, rq2, gone, Some(ans_seq))).await
+        }
+        None => out,
+    };
+    // Milestone 393: an order= rule's answer waits in the rule's pen for its turn
+    if let (Some(r), Some(n), Outcome::Answer(_)) = (&rule, ord_n, &out) {
+        let l = w.pens.enter(r, n);
+        rt::wait(gone, None, &[&l]).await;
     }
-    a.status = r.status.clamp(0, 999) as u16;
-    a.body = rend(&r.body);
-    Outcome::Answer(a)
+    out
 }
 
 /// The answer to a request about an object the fake does not have (objects.rs): 404 with a JSON

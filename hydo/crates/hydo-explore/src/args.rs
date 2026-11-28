@@ -5,7 +5,8 @@
 pub const USAGE: &str = "usage: hydo explore [--seeds A-B] [--strategy random|swarm|swarm-pos|process] [--workers N]
        --image IMG --out DIR [--schedule S] [--sweep KIND] [--manifest hydo.yaml] [--backend hvx|hvm|kvm]
        [--timing] [--new-faults] [--durable-only] [--concurrency] [--more-faults] [--preempt] [--buggify]
-       [--freeze-call] [--protocol-faults] [--protocol-cover] [--grpc-faults] [--vcpus N --turns [--bursts]] [--cpu v2|v3]
+       [--freeze-call] [--protocol-faults] [--protocol-cover] [--grpc-faults] [--answer-faults] [--link-cuts]
+       [--vcpus N --turns [--bursts]] [--cpu v2|v3]
        [--no-faults] [--live [--port N] [--live-against DIR]]
        [--vcpus N --sweep turns [--sweep-with S] [--turn-range LO-HI] [--turn-points N] [--turn-resolution N]]
        [--ram-mib N] [--known-errors FILE] [--errors report|fail] [--shrink-causes N]
@@ -77,6 +78,13 @@ pub struct Args {
     /// `--service-clocks` (Milestone 375): draw steps and drifts of one service's own clock
     /// (`T=<svc>@<at>:<change>`) for the services with `clock: own`.
     pub service_clocks: bool,
+    /// `--answer-faults` (Milestone 393): draw answers in another order (`H=...:order=<k>`) on
+    /// the GET routes of the fakes and HTTP proxies, and requests sent twice (`H=...:twice`) on
+    /// the others.
+    pub answer_faults: bool,
+    /// `--link-cuts` (Milestone 393): draw cuts of the browser's link while a step runs
+    /// (`N=<browser>@<at>~<off>:<dur>`).
+    pub link_cuts: bool,
     /// `--pause-workload` (Milestone 216): draw pauses of the workload's own process tree
     /// (`P=workload@<at>~<off>:<dur>`), at most `--pause-max` ms after the step's start.
     pub workload_pauses: bool,
@@ -256,6 +264,8 @@ impl Default for Args {
             workload_pauses: false,
             upgrades: false,
             service_clocks: false,
+            answer_faults: false,
+            link_cuts: false,
             pause_max: crate::gen::WP_MAX,
             pause_threads: None,
             pause_min: 0,
@@ -322,7 +332,7 @@ impl Default for Args {
     }
 }
 
-const FLAGS: [&str; 35] = [
+const FLAGS: [&str; 37] = [
     "no-shrink",
     "timing",
     "sweep-dry",
@@ -337,6 +347,8 @@ const FLAGS: [&str; 35] = [
     "cluster-faults",
     "upgrades",
     "service-clocks",
+    "answer-faults",
+    "link-cuts",
     "pause-workload",
     "freeze-call",
     "protocol-faults",
@@ -526,6 +538,8 @@ pub fn parse(argv: &[String]) -> Result<Args, String> {
             "pause-workload" => a.workload_pauses = true,
             "upgrades" => a.upgrades = true,
             "service-clocks" => a.service_clocks = true,
+            "answer-faults" => a.answer_faults = true,
+            "link-cuts" => a.link_cuts = true,
             "pause-max" => a.pause_max = int("pause-max", v)?,
             "pause-thread" => a.pause_threads = Some(val),
             "pause-min" => a.pause_min = int("pause-min", v)?,

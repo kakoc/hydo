@@ -410,3 +410,55 @@ controls by their row's text, and the records of a reaction inside a step). An i
 fingerprints and minimal walks on this page hold only for images built before. The image of
 `hydo.yaml`, which runs the Playwright tests, keeps its bytes. web-shop did not run with the new
 walker.
+
+## Answers in another order, double submits, and offline pages (Milestone 393)
+
+`hydo-search.yaml` walks the builds with the search box (`app/dist-buggy-search`,
+`app/dist-fixed-search`, from `VITE_SEARCH=1`). Its list asks `GET /api/search?q=` when the page
+opens and at every change of the box, and the fake route `search` answers with a title that names
+the query. `browser.watch.answers: true` adds `browser.newest_answer_shown`. The buggy build shows
+whichever answer came last; the fixed build drops the answer of every search but the newest.
+
+The runs used hvx on the bare-metal machine, with this branch's programs over the 0.7.0 Linux
+release's guest files and the branch's `hydo-world` (`HYDO_WORLDBIN`, sha256 `d0138fbc…`), at the
+fingerprint epoch 7. Each schedule ran twice from a fresh boot, one VM at a time, and gave one
+fingerprint both times.
+
+| image | schedule | verdict | fingerprint |
+|---|---|---|---|
+| search, buggy (`911e7d7f…`) | `disk=none \| run I=1` | OK, 7 properties held | `dfdf037d0c5c83f4` |
+| search, buggy | `disk=none \| run H=api.search@0-4:order=2 I=1` | VIOLATION `browser.newest_answer_shown`: the page `/` shows the answer of `GET /api/search?q=` after the answer of `GET /api/search?q=%23tag` (3 times in the run) | `899f47669f8c705e` |
+| search, fixed (`280f2e16…`) | the same | OK; 2 answers came after a newer one's, and the page showed the newer one; 1 was not judged | `e9cab0e71251cb5e` |
+| search, buggy | `disk=none \| run N=browser@1~500:5000 I=1` | OK: the browser's link was cut 500 ms into step 1 for 5 s, and every page check held | `92692705fa6d2b41` |
+| tests, buggy (`d398c493…`) | `disk=none \| run H=api.place_order@0-1:twice` | VIOLATION `api.order_placed_once`: one cart took effect 2 times (records 3 and 4) | `877f5ec0558fff8c` |
+| tests, fixed (`644fbb76…`) | the same | OK: the second sending had the key and was a replay | `ecede369d2009748` |
+
+**The blind exploration.** `hydo explore --seeds 1-20 --answer-faults --link-cuts --workers 1` on
+the buggy search image ran 20 schedules in 802 s. Four failed, and every failure ran again with
+its verdict:
+
+- seed 7, `N=browser@0~2000:500 H=api.search@2-4:order=3 H=api.add_item@2-4:twice I=a0d28305…`:
+  `browser.newest_answer_shown`, the planted search bug;
+- seeds 14 and 16: `api.order_placed_once`, the planted order without a key, sent twice by
+  `H=api.place_order@...:twice`;
+- seed 18, `H=api.get_order@1-4:order=3`: `browser.no_page_errors` on `/checkout`. The held
+  answer passed the client's time limit of 3 s, and the buggy page left the rejection unhandled,
+  the second planted bug. It shrank in 47 runs to `H=api.get_order@1-4:order=3
+  I=d94729ae6c47c1f6,x0.0-9,x1.0-5,x3.0-9`.
+
+The explorer's process ended with SIGPIPE (exit status 141) after 1 h 18 min, during the shrinks,
+with its first report written. `hydo shrink <explore dir> --all` (Milestone 387) finished them in
+the same folder in 52 minutes. The search bug shrank in 49 runs to `disk=none dseed=0 | run
+H=api.search@2-4:order=3 I=a0d28305209409f6,x0.2-9,x1.0-9,x2.0-9`: the link cut and the `twice`
+rule went, and so did every action but two of step 0 and the ten of step 3. The order sent twice
+shrank in 69 runs to `H=api.place_order@1-2:twice I=1bbd089acadda3c3,n7,...`, and seed 16 is one
+problem with it.
+
+**What did not move.** `hydo-walk.yaml` (the walk without the search box) built by this branch's
+`hydo` and by `main`'s (`ae19e5a8`), both with the released `hydo-world`, gave one image,
+`ddbef3ba…`. A first build from `main` differed only in two file modes, 664 against 644, because
+its tree was unpacked under another umask (open item 78); with the modes matched the bytes are
+equal. On that image `disk=none | run I=1` gave `d3ee8d5e7c289e8a` and `disk=none
+dseed=9e5651b0ef953636 | run H=api.place_order@2-4:reset I=7e1f0a19d3e49979,x0.0,x0.1,x1.0` gave
+`030ab3d6eec55b0d`, with this branch's hydo and with `main`'s alike. The builds of the app
+without `VITE_SEARCH` are byte for byte the ones before.

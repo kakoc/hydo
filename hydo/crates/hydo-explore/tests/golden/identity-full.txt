@@ -61,6 +61,7 @@ input	hydo/onboard/examples/stack/hydo-read.yaml	d3899b9ac926be02576d0f8e9b950bc
 input	hydo/onboard/examples/stack/hydo.yaml	369ed2074d0024dcbb5bf2218731bee7526fa006ff0e900aef339cc6cf69fb24
 input	hydo/onboard/examples/swupdate/hydo-devices.yaml	bb839f541c8475c32388e5f088c572e7d08e0f6936f8fea090910e66be24b4ed
 input	hydo/onboard/examples/swupdate/hydo.yaml	2c13d3b1ddef5d7e964d371a7cf999f3dba2b637b0bf406b6a78ecf93d7bd0b1
+input	hydo/onboard/examples/web-shop/hydo-search.yaml	85705850c2ecb2367f18f93918978ce6785faf999f268ac0335490d07022b8ce
 input	hydo/onboard/examples/web-shop/hydo-walk.yaml	f39ff9797a66369092f370d4135cb9ffe84fca54f4c922a73d6868af7db07581
 input	hydo/onboard/examples/web-shop/hydo.yaml	15a3d43c3de0e43da32d581a5bb199ed139ccde4349e777dbd868170183fc52f
 input	hydo/onboard/examples/blnk/hydo/hydo.yaml	7e97e5e2f1ff496ca70bf59e69bf32a213acbfe5b793f72d56bb293771353a9c
@@ -801,6 +802,7 @@ input	hydo/onboard/examples/vikunja/hydo/hydo.yaml	7ae615f4832b7cc40983c3c3b2173
 input	hydo/onboard/examples/vikunja/hydo/fetch-images.sh	77943ea8bd781ad1d3e0d6c2afa9eabe33fbc40f0b59328590ca962b7746abe8
 input	hydo/onboard/examples/vikunja/hydo/hydo-compose.lock.json	c4d673b24249044b7fa2b6e34f14c2860b47424c7f31e3c091ed613a9aa023dd
 input	hydo/onboard/examples/vikunja/hydo/hydo-kanban.yaml	74516930dae4ccf6de657da947e4cc273ef82724c7be0a8269f7989665e20f2c
+input	hydo/onboard/examples/vikunja/hydo/hydo-proxy.yaml	4f4364449139a835e04083702bb55d99b8c7f0a73e08bf06e53271cdb497a217
 input	hydo/onboard/examples/vikunja/hydo/page-rules/vikunja.mjs	3fc8156802b7de119f6ae31bdd8123af58aec7bb73a6c69f214b042b05a42222
 input	hydo/onboard/examples/yugabyte/hydo/hydo.yaml	49b022282c7f370ee71d4be2a804c2439d3654c18a2061c4645037e460b7747a
 input	hydo/onboard/examples/yugabyte/hydo/checks/always_sql_bank_live	692c9ba322cf121f2f58c584f2ae3cf52f55d61b95c6a433c4b60aeb61ba894a
@@ -2690,6 +2692,31 @@ chunk	hydo/onboard/examples/swupdate/hydo.yaml/hvm/FalseFalse	7	256	4e8e7bb994f7
 chunk	hydo/onboard/examples/swupdate/hydo.yaml/hvm/FalseFalse	8	256	1ecb3e133d3152edc8333b7ae27b6908edcdbe41858dddd071bc2249a3271938
 chunk	hydo/onboard/examples/swupdate/hydo.yaml/hvm/FalseFalse	9	256	1985a58ebd7d1db34bfb75b391feb13c5ab2b833eaa63f771614ddc5b431353f
 chunk	hydo/onboard/examples/swupdate/hydo.yaml/hvm/FalseFalse	10	163	9a7cdcd9ddd787ad0a7c050fb053d15a69ab99dfdc8712b3a15ea0e79d3bf926
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvx	0	256	32214d3be3c5b1c44d3ede3b68ede00d1ed12f32fa4e99297239216a94214a80
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvx	1	256	90591a0452cd24f0ef41896bca82d068f06316545cb7cc04c41d8457a1617afa
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvx	2	256	9d21aa605095dc83e0b4ad480f25b301384ab2f67ee875eccd1ee14685efc313
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvx	3	256	f4adb2592a9a6f945e882def6c08be67cf13529c6ae007dc58ccc94f6a07d985
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvx	4	256	4a62147bcee0f45a610f8abc789cbfd2e97c893dddee8a173f399f8e77b7a507
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvx	5	256	21cf30f8f658b19c1de7824a6eff366bc8d9f68aa98fed14f673d45d06b8373e
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvx	6	256	540b26c4849b007b4ce1a5944b0bfaf0a0eba318b3419919b73c4ee538a6bb18
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvx	7	255	070708e7ae2e86ea86a31eee34070c815d5bb9844c103cbe0c5a6ddba922b966
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/TrueTrue	0	256	e639e2060ba68a2f9d2ebe2369b167d8bd17b47094821ed34a561e0a84ec8a97
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/TrueTrue	1	256	af199428964c9eacc7cd7fdde188d0472ea95eb83cd6449c45405e118d6c42df
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/TrueTrue	2	256	9b43d820988d00b7db5ea41f58e52de18fe95e99c4918f7d4e612102fb4eb531
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/TrueTrue	3	256	eb684bae13c5e384a6ccd339e3d72a5ce96471d74e59bac56562e4a3db4b837d
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/TrueTrue	4	256	8d60ab759570a1685794bf1b31ada97f7bfe5122ace11efda5c6367bb6dbdd02
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/TrueTrue	5	256	135ef6356a63c0266e28f8f32194768c8ddb48ef6ddc3237614162440522fde2
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/TrueTrue	6	256	8b5dc771ae62156cde369dcc7d11b3fdf1582aab87563875661f9016941ce554
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/TrueTrue	7	253	3a4e8675183e0fcf7758b2f36d992448a4ca4e6f6185d795895c53197dd4bf49
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/FalseFalse	0	256	35440aad38cb9da6b25315809f4e4914b983cb96f4984c93f9bf2f7b1f38ec60
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/FalseFalse	1	256	f17d65af8b0fb9ea80b5c34ebca023cfcf9d740cd688ea2fb7015eda128fc132
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/FalseFalse	2	256	62d57169344f110976359a6f3ce2b4debd78d6d3f5fe9a5dde320af079265895
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/FalseFalse	3	256	4851d924a048cc5c91ccefa7a4eb6a9dad8f51421ddbf87a5e36b3035c6f5c9f
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/FalseFalse	4	256	06e12e4e46734e64b2ea67b0fc6053e6840a807e33e73ccf303ccf6fbbf906fd
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/FalseFalse	5	256	6462e3ecdfd7ad7788d6448179f28d94268a447fbc93595e8aea3aa2931fc666
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/FalseFalse	6	256	02cd926ba9fd2f80ce6b3f3ae77c897cc6624391c245d5492ddbfc093222e507
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/FalseFalse	7	256	22d4c13a5f1f827e151469b70ad66755564aa282e0b8ec19d0d131436b19fecc
+chunk	hydo/onboard/examples/web-shop/hydo-search.yaml/hvm/FalseFalse	8	2	96721d09498993d27ea94520fbac479d7b4ac1c52c87ce530fa25c41ec99c3b9
 chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml/hvx	0	256	27078800d2f4f8d30eadc88e1cb0276a1a699e0aa863f26ec39fb643dff116bd
 chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml/hvx	1	256	0518ab569b26a992d838cca073267e73ebf017080db4b2e52b78ef26ba260e67
 chunk	hydo/onboard/examples/web-shop/hydo-walk.yaml/hvx	2	256	c8e2a108ad4d6aae1a653d02b8b298a92c087d81a33a569875cbe9bc4e8a86ef

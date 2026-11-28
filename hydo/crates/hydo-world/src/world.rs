@@ -18,6 +18,8 @@ pub struct World {
     pub cfg: Config,
     pub log_path: String,
     st: Mutex<St>,
+    /// the pens of the `order=` rules (Milestone 393, order.rs)
+    pub pens: Arc<crate::order::Pens>,
 }
 
 pub struct St {
@@ -189,6 +191,7 @@ impl World {
                 call_n: BTreeMap::new(),
                 objects: BTreeMap::new(),
             }),
+            pens: Arc::default(),
         })
     }
 
