@@ -241,6 +241,15 @@ input	hydo/onboard/examples/ghost/hydo/workload/helper_sql.conf	54bb34f9cedb1242
 input	hydo/onboard/examples/ghost/hydo/workload/parallel_driver_audience	85e556f86ef29ffbe49f537b1ddaac4fb490234b27164d85fbcf660f45a6cee0
 input	hydo/onboard/examples/ghost/hydo/workload/parallel_driver_donate	32151e14d881929dbca333f3215aa23f316aa56b6f73611d7fcf43bd93d7c581
 input	hydo/onboard/examples/ghost/hydo/workload/parallel_driver_publish	ae710dbb670634545e8d343bc184927d96b2075f164f9bce72debfa956d111b0
+input	hydo/onboard/examples/gitea/hydo/hydo.yaml	253e68f77f2317039e92679d36c68d0544aa58c0ac0b36cbb01878079cc82bde
+input	hydo/onboard/examples/gitea/hydo/fetch-images.sh	6d45477629141ead45396b1de56e770a837dd9fa62b43e5d4a63125a43c79453
+input	hydo/onboard/examples/gitea/hydo/hydo-compose.lock.json	9f515d329c21cf77426e97f1a6e2284aa02c4725b4ad6da4617c246f3f2022de
+input	hydo/onboard/examples/gitea/hydo/hydo-gitfsync.yaml	9bbe668dec656234b1aeba7f492edc61385bcf8415c635584962585a753ce5c3
+input	hydo/onboard/examples/gitea/hydo/hydo-kvm.yaml	1166daed34a3505df1d3e9d549262d155dbb860ec6f2e777f6774953e8a7b3a9
+input	hydo/onboard/examples/gitea/hydo/page-rules/gitea.mjs	1b34c9f83ddd9ce7af4e613d34036252d80edb000c1a2051652b9ce1d1e68313
+input	hydo/onboard/examples/gitea/hydo/regressions/README.md	12626dbf5d05271968e602d2f27283b99d4e2df749d5cc83d8e4678a5ddf7664
+input	hydo/onboard/examples/gitea/hydo/regressions/power-cut-after-a-new-repository-breaks-its-branch.schedule	b1ea6c539f25aee670861c5effa37c1178def52fac220fce35a06e60fff17da8
+input	hydo/onboard/examples/gitea/hydo/regressions/timer-after-a-step-back-records-a-negative-time.schedule	662df581064acb0e1d563d4f498b709e942c5884ceb53712e63cb8b093e0799a
 input	hydo/onboard/examples/greptimedb/hydo/hydo.yaml	888bba3ab5119fbaf5526a3470cf0f3f7658e293a77e76d82f95ad04fc73e606
 input	hydo/onboard/examples/greptimedb/hydo/checks/eventually_ddl	5546e5f6fa11332a9c4dc1a21c74f02690e9bd98a03b0a017aa121e2bd28df75
 input	hydo/onboard/examples/greptimedb/hydo/checks/eventually_leaders	73b84e6f6437cdf84f36922f3c9a431aa290530d18866f9176c8fee6164d3d53
@@ -2994,6 +3003,32 @@ chunk	hydo/onboard/examples/ghost/hydo/hydo.yaml/hvm/FalseFalse	5	256	b042a25347
 chunk	hydo/onboard/examples/ghost/hydo/hydo.yaml/hvm/FalseFalse	6	256	4ff1d26c20e7fda4a269e8ffdb826c59ade58697f5d9ff9777dc9b5c5f43a673
 chunk	hydo/onboard/examples/ghost/hydo/hydo.yaml/hvm/FalseFalse	7	256	c3b36ab585ff3c7b15171b27c4043b01e20dd38dd008a59db843d90f9011f761
 chunk	hydo/onboard/examples/ghost/hydo/hydo.yaml/hvm/FalseFalse	8	111	69f398b80d1a2b60a70d9f05e95aab47f45d5d759679c42d30f838da454e471b
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvx	0	256	8e8067391348fd1da46bff9b7f8c694e28829ea84b26b3e071fd48d107e6c8d2
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvx	1	256	c630ef40bfe5f11ef320807dc30a3c7adf08ac40a2f9dc139c0d3028baf61716
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvx	2	256	40b441daaf933898e6b23a7fafe3f1e51728b65753cb971dec72af4e86224215
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvx	3	256	3786f2261074465cef033618232145e92bcae27ff252436f92833792f9db4d29
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvx	4	256	2fbb6c6068e4105b5a28eb4ea8aa3bce68ca9ac741b52f1e134a56d0f0f8f471
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvx	5	256	70eba85290485d5f9be8074fc54af789de1556fdedd58fd0f0d357def06608cc
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvx	6	256	de43e777fdb2591ed8887791e00b4522d880bbfca8e2c176814d8fc35c8c950a
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvx	7	256	0f1b2e99cdd8aeffa449883c4bd9eb5a4778d5593879480d30d86ea40dec772f
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvx	8	3	c2605e5b32550917dbccab44532a59e74d4ef2950f656249ca98015dc66515df
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/TrueTrue	0	256	250bb5155ffdcf16dd8fc67f24135daf46538bcd2c4071dc19b4a12c3cc7a07a
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/TrueTrue	1	256	9d7757eac7f8df99f191c2fee0a12882027a9119282d08d3f4a0364be3249270
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/TrueTrue	2	256	eab1f5ccfaee80fcb9e9dd4f4a23dc8918070bd246ba5d9c43ca9e530e029081
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/TrueTrue	3	256	e6ad741518cb0fa036d8b3ab7ec31c758f11bb1cd753949eab34a8ca20415d3d
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/TrueTrue	4	256	c3e1838d734289d3ad68f1b0bca1c1a05d40dfde6ab01fe5d24ae94edb4f03ea
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/TrueTrue	5	256	1e0c0b7ec6f2734402eda921c602eda5e12197c95c6f396c1fe9d548842cabc8
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/TrueTrue	6	256	a7914e5778f44007df59b7d5d65d7023ac7efec66e3201961f88324749aec3b2
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/TrueTrue	7	256	b24aba4d713f2a72e4cb13bc2fa9ca71b8680e57777d82188c888611b1648783
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/TrueTrue	8	1	42e634092467cbca4dd3a6a66a7600c1da22f5d438b30768ae586ab4cf3ac593
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/FalseFalse	0	256	4353a4ae75bf86ed4fc95eda3436d9175b2fc6103fb865a9f3eb9d253f6dde55
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/FalseFalse	1	256	6018fcaf545cdf63745bec013956906aff9ffbb7c777f7a4a161703e6c0d6eef
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/FalseFalse	2	256	918458d4dd737c11e9be79a244d9cc76ee3945a523bacbc54fd57b1da76e67be
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/FalseFalse	3	256	bf1a6340a9d9c4f44c2759dbef5ce956b96f4d9bd5435337d3f9636f095ae505
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/FalseFalse	4	256	6141783e799af841a0c016224c2e4e096ba03ac40056e7092c30ec7682ebbe6b
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/FalseFalse	5	256	18bf85b80583e57c5b807009031bd29b6050c6b6a2c7d48612557c7407edd1a9
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/FalseFalse	6	256	3ec8dd43fdf570be0491c88c78b1b464994c08620ef44ac1aa9e4726018ea98a
+chunk	hydo/onboard/examples/gitea/hydo/hydo.yaml/hvm/FalseFalse	7	255	cb35030ed804879d3e4057180b3b5e78fd52999d870c3d6fc7933bfc76036ca9
 chunk	hydo/onboard/examples/greptimedb/hydo/hydo.yaml/hvx	0	256	fc0169800d42738fc93ea07156e94a9d938808425750f33a86aa0bd665c3b043
 chunk	hydo/onboard/examples/greptimedb/hydo/hydo.yaml/hvx	1	256	d6f5745de94cca1a458777b843519af6b66db1f8bb41e5e6bdbeeb74c98ea9e3
 chunk	hydo/onboard/examples/greptimedb/hydo/hydo.yaml/hvx	2	256	166a2fda595514bfb811c2157817fcfe0886dea99621cc422381e54fe67b47fb
