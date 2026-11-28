@@ -226,9 +226,11 @@ small push as loose objects and writes `refs/heads/main`. With Git's default `co
 leaves out loose objects and refs, nothing of that is synced. Last, Gitea sets the row's status to
 ready (line 309) and answers. Its SQLite commits are synced, so the database outlives the cut and
 the Git files do not. Gitea sets no `core.fsync` of its own (`modules/git/config.go` sets other
-keys), and its documentation names none. With Gitea's
-`[git.config]` section setting `core.fsync=committed` (`hydo/hydo-gitfsync.yaml`), the same cut
-passes: FSYNC_CONTRAST.
+keys), and its documentation names none. Gitea's section `[git.config]` passes keys to every
+`git` that it runs, and `hydo/hydo-gitfsync.yaml` sets `core.fsync=committed` there. Gitea wrote
+`fsync = committed` into its Git configuration (`/var/lib/gitea/home/.gitconfig`), and the same
+cut passed twice (`e882ddb1c91a65ca`), also with a disk that keeps its write cache
+(`1c8785ced5482035`). Its run without faults passes too (`13d7785b9c08af50`).
 
 **Duplicate search.** #31834, a power outage during a merge in Gitea 1.21, has the same symptom
 after a merge. It was closed with a maintainer's answer that a power outage could cause any

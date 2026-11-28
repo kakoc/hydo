@@ -26897,7 +26897,7 @@ the database's row, written before the push, is synced. Gitea sets no `core.fsyn
 state `refs/heads/main` and two loose objects are empty files. Directed: `disk=none | run C=1
 I=1` failed twice with `5a3e89f72094688c`, and with `disk=cut` too (`dc0fa08f19c782ec`); `C=2`
 passes (`f4cd928bbc981238`). With `core.fsync=committed` the same cut passes
-(FSYNC_CONTRAST). Gitea's #31834, the same symptom after a merge's power outage, was closed as a
+(`e882ddb1c91a65ca` twice, and `1c8785ced5482035` with `disk=cut`). Gitea's #31834, the same symptom after a merge's power outage, was closed as a
 power outage's damage. The repository's pages then say "The Git data underlying this repository
 cannot be read. Contact the administrator of this instance or delete this repository".
 
