@@ -150,6 +150,9 @@ Ideas that would answer more:
 | Is a saved object still saved after a crash? | A rule over the database, with power cuts of the whole guest. | built; `vikunja` finding 1 (M273) |
 | Did a page change visually? | `browser.screens: compare` compares each page with a recorded screenshot. | partly built; M254; the Mac engine ran no comparison (open item 145) |
 | Does the frontend behave when a payment API fails? | Fakes, emulators, and `hydo explore --protocol-cover`. | built; `web-shop`, `openapi-payouts` (M257) |
+| Does a page show the newest answer when an older one comes last? | `H=...:order=<k>` holds the answers of a route's requests and gives them in another order, on a fake or on an HTTP proxy in front of the app's own backend. `browser.watch.answers` fails a page that shows an older answer than the newest one it asked for, and `hydo explore --answer-faults` draws the rule. | built; `web-shop`'s search box on hvx, `vikunja` through a proxy (M393; open item 200) |
+| Does a double submit or a retry act twice? | `H=...:twice` sends each matching request to the server twice, and the fake's record or the project's rules judge it. | built; `web-shop` (M393; open item 200) |
+| Does the page behave while it is offline, and after the network comes back? | `N=<browser>@<at>~<off>:<dur>` cuts the browser's link while a walk step runs; the page checks and `browser.read_back` judge it, and `hydo explore --link-cuts` draws it. | built; `web-shop`, `vikunja` on hvx (M393; open item 200) |
 
 Ideas that would answer more:
 
@@ -159,7 +162,7 @@ Ideas that would answer more:
 - [A reload check for web pages](#a-reload-check-for-web-pages);
 - [Two browsers in one run](#two-browsers-in-one-run);
 - [A browser's own time zone](#a-browsers-own-time-zone); and
-- [Reordered answers and partitions between the browser and the server](#reordered-answers-and-partitions-between-the-browser-and-the-server).
+- [Fast typing and a refused write in a walk](#fast-typing-and-a-refused-write-in-a-walk).
 
 ### A library author in Rust
 
@@ -544,16 +547,18 @@ that a milestone builds moves into the tables of this page with its new status.
   time of Milestone 225, and a comparison as in `hydo compare-versions`.
 - **Where it came from.** Milestone 391 (`docs/design/web-bug-benchmark.md`).
 
-### Reordered answers and partitions between the browser and the server
+### Fast typing and a refused write in a walk
 
-- **What it is.** A proxy between the browser and the app's own backend. It holds one answer
-  until a later one, sends a request twice, refuses one write, or cuts the link and restores it.
-- **Why it matters.** Reporters call answers in another order hard to reproduce more often than
-  other bugs: 9 of 43, against 25 of 409. Reordered answers reach 5 random bugs and 10 targeted
-  ones, and a partition reaches 9 targeted ones.
-- **What it needs.** `H=` faults per request on the app's own routes, walk actions that
-  double-click and type fast, and a cut of the browser's link alone.
-- **Where it came from.** Milestone 391 (`docs/design/web-bug-benchmark.md`).
+- **What it is.** A walk action that types a value key by key, so that a search box asks once per
+  key. And a drawn refusal of one write in the middle of a step.
+- **Why it matters.** Milestone 393 built answers in another order, double submits, and cuts of
+  the browser's link (`H=...:order=`, `twice`, `N=<browser>@<at>~<off>:<dur>`). A walk's fill
+  sets a field at once, so two requests of one search box come only from two actions; an order
+  rule then needs a long `wait=`.
+- **What it needs.** A walker action of Playwright's `pressSequentially`, and `H=...:status=` on
+  one request of a step, not on the whole step's window.
+- **Where it came from.** Milestones 391 and 393 (`docs/design/web-bug-benchmark.md`, open item
+  200).
 
 ### Leaving a fault kind or a known bug out of an exploration
 

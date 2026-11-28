@@ -239,6 +239,83 @@ The arm64 Playwright image is the one that the catalog pinned in Milestone 253 a
 platform manifest is `sha256:56be08aca06b…`, with 7 layers and 35,741 entries; the archive is
 988,750,336 bytes.
 
+## Answers in another order, double submits, and offline pages (Milestone 393)
+
+Milestone 391 counted the bug reports of 15 web apps (`docs/design/web-bug-benchmark.md`). Pages
+that show an older answer than the newest one, or keep an old state, were 12 of 343 random bugs
+and 31 found by targeted searches. Reporters call that class hard to reproduce more often than
+any other: 9 of 43 such bugs against 25 of 409 others. A cut of the link between the browser and
+the server reached 9 targeted bugs. These faults depend on timing that a developer's machine
+gives by chance, and hydo gives it on every run of one schedule.
+
+### The faults
+
+- **Answers in another order.** A rule `order=<k>` of `H=` on a fake's or an HTTP proxy's route
+  (hydo-world's `order.rs`) holds the answers of k matching requests in a pen. When k are in it,
+  they go out 30 ms apart, in a permutation drawn from the token, never the order of arrival.
+  For two the second request's answer goes first. An answer that waited `wait=` ms (default
+  3000) goes with the ones that came. The order is a pure function of the token and the order in
+  which the requests arrived, so a schedule gives one order on every run.
+- **A double submit.** A rule `twice` hands the request to the fake or the service a second time
+  after its answer, with no rule, recorded with `copy=<seq>`. The client gets the second answer.
+  On an idempotent route with a key the copy is a replay; without a key the world acts twice.
+- **An offline page.** `N=<svc>@<at>~<off>:<dur>` cuts one service's bridge port while a step
+  runs, from a timer of the controller, as the strict power loss of Milestone 245 cuts a node's
+  links. With `browser:` the service is the browser. Chromium's network goes away, so the page
+  sees itself offline, and its requests to the server and to the fakes fail or wait.
+
+The browser reaches a fake API through the fake, so the first two act on a fake at once. For a
+real backend the manifest puts an HTTP proxy in front of the server, and the page opens the
+proxy's address. Its routes name the API's reads and writes as `H=` targets
+(`examples/vikunja/hydo/hydo-proxy.yaml`).
+
+### The check
+
+`browser.watch.answers` loads `answers.cjs` beside the watcher. It records the requests that the
+setting names and the JSON body of each answer. When an answer comes after the answer of a newer
+request of the same method and path, it reads the page's visible text nodes 300 ms later. Each
+answer's values are the strings and numbers of its body. A value that only the older answer has,
+shown on the page, with no value that only the newer answer has, is a stale page. The property
+`<browser>.newest_answer_shown` fails on it. A comparison is left undecided, and named so, when a
+newer request still has no answer, an answer is not JSON, the two answers hold the same values,
+or the page shows neither. The check knows no app: it compares the page with the server's own
+answers. An input's value is not a text node, so a search box that shows the newest query does
+not hide a list of the older one.
+
+The files and the property are staged only with the setting. An image without it keeps its bytes:
+`hook.cjs` and `check.mjs` did not change.
+
+### The explorer
+
+`hydo explore --answer-faults` draws, from a stream of its own, `order=<k>` (k = 2 three times in
+four, else 3) on a GET route (80 % of the schedules) and `twice` on one of the other routes (40
+%). `--link-cuts` draws a cut of the browser's link in 60 % of the schedules, 0 to 4 s into a
+step, for 0.5 to 15 s. Without the options every seed draws what it drew before. The shrinker
+drops an `H=` token and narrows its window as for every rule, and leaves a link cut out, halves
+it, and moves it to its step's start.
+
+### What the proofs showed
+
+On hvx, each schedule twice with one fingerprint (the web-shop and Vikunja RESULTS.md pages have
+every run):
+
+- web-shop's search box, `H=api.search@0-4:order=2 I=1`: the buggy build fails
+  `browser.newest_answer_shown`, because the answer of the page's first search (`q=`) came after
+  that of `q=%23tag`. The fixed build holds, and its check judged two reordered answers.
+- `H=api.place_order@0-1:twice` with the Playwright tests: the buggy build, which sends no key,
+  fails `api.order_placed_once`; the fixed build's copy is a replay.
+- `N=browser@1~500:5000 I=1`: the page was offline for 5 s in step 1, and every page check held.
+- The blind exploration of the buggy build (`--answer-faults --link-cuts`, seeds 1 to 20) found
+  the search bug (seed 7), the order sent twice (seeds 14 and 16), and the unhandled rejection of
+  a held order answer (seed 18).
+- Vikunja through its proxy: 31 answers of the task and project lists held and reordered, 4 bulk
+  creations sent twice, and a cut of 5 s. Every check held. No check of the example judges a
+  duplicate task.
+
+Images and schedules without the new tokens kept their bytes and fingerprints: web-shop's walk
+image is one file from this branch and from `main`, with one fingerprint per schedule, and the
+pinned reproducers gave their values.
+
 ## Sources
 
 1. State of JavaScript 2024, testing libraries: https://2024.stateofjs.com/en-US/libraries/testing/
