@@ -26816,3 +26816,33 @@ topic, playbook, or skill changed; the lead decides.
 it` passed (16 tests). Its content test first stopped on one issue title with a version number
 that reads as an IPv4 address, and the CSV now spells that number out. A `grep` of each value of
 the list of `AGENTS.local.md` found none in the new text.
+
+## Milestone 395 (tentative number): the Mac engine's shared guest RAM off on macOS 27
+
+Status: done on 2026-11-28 on this Mac, after it was updated to macOS 27.2.1 (Darwin 27.2.0).
+
+**What happened.** The Mac panicked and restarted twice within ten minutes, each time in the
+process `hydo-hvm`, the Mac engine. Both panic reports name the same violation of the kernel's
+page-table monitor: `[SPTM] VIOLATION_ILLEGAL_DOWNGRADE: update_preflight_op(sptm.c:2304)`, with
+`new_perms(6), current_perms(0)` on a page of the type `XNU_DEFAULT`. A program in user space
+must never be able to panic the kernel, so the root cause is macOS's. The one part of the engine
+whose memory changes its permissions under Hypervisor.framework is the shared guest RAM of
+Milestone 335: guest RAM is a private mapping (`MAP_PRIVATE | MAP_FIXED`) of a RAM base file,
+and the kernel copies a page at its first write.
+
+**The change.** `HVM_RAM_SHARE` unset now means off on macOS 27 and later
+(`hydo_config::hvm::macos_27_or_later`, from `uname -r`), and on elsewhere as before. `0` turns
+it off and any other value on, on every system. Off is the mode before Milestone 335: each
+snapshot keeps its own copy of guest RAM. It changes no run's bytes, so nothing recorded moved;
+the explorer's workers hold more memory, as before Milestone 335.
+
+**Evidence.** With `HVM_RAM_SHARE=0`, the released hydo 0.7.0 explored the Mac release's Redis
+example for seeds 1-4 on one worker and seeds 1-30 on two workers, with shrinks, and the Mac did
+not panic. A hydo built from this tree printed `snapshots in files` with the variable unset. The
+same runs with the sharing on were not tried, because each try risks a panic; so the cause rests
+on the panic reports, the code, and the runs without it.
+
+**Left.** The released 0.7.0 keeps the sharing on: a user of macOS 27 sets `HVM_RAM_SHARE=0`
+until 0.8.0. The panic should go to Apple through Feedback Assistant, with the two reports.
+Whether only the private mapping or also `hv_vm_protect` triggers it was not separated.
+

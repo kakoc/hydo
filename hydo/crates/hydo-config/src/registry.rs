@@ -361,7 +361,9 @@ variables! {
     /// Milestone 335). Otherwise a snapshot is a RAM base in `HVM_SNAP_DIR` that guest RAM is mapped
     /// from privately (the kernel copies a page at its first write), shared by the engines whose
     /// snapshot has the same bytes, such as the workers of one exploration; guest RAM is not locked.
-    HVM_RAM_SHARE: Hvm, User, "flag: exactly `0` turns it off", "on", "hydo-hvm";
+    /// Unset, it is off on macOS 27 and later, whose kernel panics on that private mapping
+    /// (Milestone 395); `1` turns it on there.
+    HVM_RAM_SHARE: Hvm, User, "flag: exactly `0` turns it off", "on; off on macOS 27 and later", "hydo-hvm";
 
     // ------------------------------------------------------------------ Kvm
     /// Where the KVM engine runs: `process` as the program `hydo-kvm`; else on a thread of this

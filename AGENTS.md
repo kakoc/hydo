@@ -392,7 +392,9 @@ one chain of the word-wise mix over RAM. Since M335 a snapshot is a RAM base: a 
 kernel copies a page at its first write. The workers of one exploration find one another's bases
 and share them, a restore maps the base again, and guest RAM is no longer locked. The explorer
 counts half of the guest RAM once, and half of it and 256 MiB per worker. It lets as many workers
-boot at once as fit. `HVM_RAM_SHARE=0` turns it off (`docs/design/mac-cow.md`). The details are
+boot at once as fit. `HVM_RAM_SHARE=0` turns it off (`docs/design/mac-cow.md`). On macOS 27 and
+later it is off unless `HVM_RAM_SHARE` is set, because the kernel panics on that mapping with
+`[SPTM] VIOLATION_ILLEGAL_DOWNGRADE` (M395). The details are
 in Milestones 48, 51, 99, 143, 147, 284, 290, 294, and 335.
 
 **The KVM engine.** `hydo/crates/hydo-kvm` runs the x86_64 images on stock Linux KVM, without the
@@ -6089,6 +6091,11 @@ build machine, before 2026-10-13.
   zones 7, two users 6, and backend crashes 0. The page proposes a reload check, then two
   browsers, a browser time zone, upgrades of image services, reordered answers, and partitions.
   Nothing recorded moved
+- M395 (tentative number): the Mac engine's shared guest RAM (M335) is off by default on macOS 27
+  and later. On macOS 27.2.1 the kernel panicked twice in `hydo-hvm` with `[SPTM]
+  VIOLATION_ILLEGAL_DOWNGRADE`, the page-table monitor refusing a permission change. With the
+  sharing off, 34 schedules of the Redis example ran without a panic. `HVM_RAM_SHARE=1` turns it
+  on again. Nothing recorded moved
 
 ## Where to look
 
