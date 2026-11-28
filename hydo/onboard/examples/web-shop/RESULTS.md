@@ -401,3 +401,12 @@ frames, the traces and the read-back check cost the rest).
   filmstrip and traces.
 - The read-back check held in every run, with 1 to 4 orders each, also in seed 7, where the
   page of order o32 failed during step 3 and showed the order at the end.
+
+## Milestone 390: the walker changed again
+
+Milestone 390 changed the walker (sign-ins, checkboxes by their label, drags, a list's alike
+controls by their row's text, and the records of a reaction inside a step). An image built from
+`hydo-walk.yaml` after it has new bytes, and its walks take other actions, so the walk
+fingerprints and minimal walks on this page hold only for images built before. The image of
+`hydo.yaml`, which runs the Playwright tests, keeps its bytes. web-shop did not run with the new
+walker.

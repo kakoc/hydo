@@ -2108,6 +2108,33 @@ Images built from `browser.explore` get new bytes (the walker and `/etc/hydo/wal
 in `hydo/onboard/recorded.json`, and nothing recorded moved. The reference is `hydo guide
 web-apps`; the design is the last section of `docs/design/ui-exploration.md` (open item 168).
 
+**The walk signs in again, clicks checkboxes, drags, follows the rows, and meets faults inside a
+step (M390, tentative number).** Each its own commit; images built from `browser.explore` get
+new bytes, and none of them is in `hydo/onboard/recorded.json`:
+- `browser.explore.sign_in` (a format-1 addition, with `signed_out`) signs in again when a page
+  of the walk is the sign-in page, at a step's start or after an action. The read-back check
+  signs in again too.
+- A checkbox, a radio button or a switch that takes no click of its own is clicked through its
+  label. `browser.explore.drag` (a format-1 addition) drags items between lists, such as
+  Vikunja's Kanban cards.
+- A schedule can have a reaction to the walk (`A=walk.action#<k>@<step>`, `A=walk.write_acked`).
+  Then the walker's records reach the console as they come, so a kill, a pause, or a power cut
+  acts inside a step. `hydo explore` gives 40 % of a walking image's schedules one such
+  reaction. A run with any reaction had walked seed 0, because its workload call lacked the
+  walk; it walks its `I=` now.
+- A control whose role and name repeat, such as each memo's "More" button, is chosen by the text
+  of its row (`article`, `listitem`, `row`, `treeitem`), not by the list's order. Over five
+  Memos walks a dropped clock step moves 5.4 of 72 actions, against 13.6 for M334's walker.
+
+On hvx Vikunja's walk signs in again after a 31-day clock step. The old walker stayed on
+`/login` there, and the read-back failed falsely. The walk also marks tasks done, and
+`hydo-kanban.yaml` drags cards. `A=walk.action#3@1:kill-vikunja` gives an unhandled rejection of
+the user's refresh, a candidate that was not posted. Every schedule gave one fingerprint twice.
+
+The reference is `hydo guide web-apps`; the design is the last section of
+`docs/design/ui-exploration.md`; the details are in `docs/HISTORY.md` Milestone 390 (open items
+129, 131, 134 and 137).
+
 **Messaging checks (M196).** A `checks:` entry of `type: messages` checks a
 message-passing system. The project declares the claims; hydo checks exactly those and measures
 the history, and it knows no messaging system or API. The checker is the module `messages` of
@@ -3245,10 +3272,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       keeps them once made. Milestone 266 found that SWUpdate's bundles carried the build's time,
       which split its KVM values between runners.
 129. Walks after Milestone 264 (M267). What is left:
-    - A fault changes the page itself, and so the walk. Without a clock step, five Memos walks
-      take 7.4 of 72 actions otherwise on M267's walker, and 19.8 on M264's. One of the five
-      takes 32 otherwise. A walk that follows the page, such as one that chooses among the memos
-      by their text, is not built.
+    - A fault changes the page itself, and so the walk. Since M390 a control whose role and name
+      repeat is chosen by its row's text. Without a clock step, five Memos walks take 5.4 of 72
+      actions otherwise, against 13.6 for M334's walker on the same images. M267 counted 7.4 on
+      other images. Seed 22's walk still takes 18 otherwise with both walkers; why was not
+      traced.
     - M267 measured why M264's walker reached neither Memos finding in seeds 21-60. The share
       link is four controls deep, behind a menu and a dialog, and M258 reached it in 1 walk of
       40. Open item 131 has what is left.
@@ -3269,11 +3297,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       steps, as M258 did. It clicked Share in 21 walks and a copy button in 2. But a dropped
       clock step moved 37.4 of 72 actions on it. A breadth that depends on the page alone is
       not built.
-    - Faults inside a step. A kill, a pause or a network fault starts at a workload step, when
-      the walk's page loads, so it never meets an action in the middle of a step. `hydo explore`
-      draws a timed kill (`X=`) only for a manifest without `faults:`. Finding 2 needs a refused
-      write in the middle of a step, so no schedule of seeds 21-60 with `--durable-only` can
-      fail it.
+    - Faults inside a step. Since M390 a reaction to the walk's records acts inside a step
+      (`A=walk.action#<k>@<step>`, `A=walk.write_acked`), and `hydo explore` draws one for 40 %
+      of a walking image's schedules: a kill, a pause, or a power cut. A network fault inside a
+      step has no reaction action. Eight blind schedules of Vikunja drew such a reaction in 6
+      and found nothing new; no exploration of Memos ran with it, so finding 2 is still not
+      found blind.
     - A walk that a power cut ends is not judged by the five page checks. Two walks of that
       version clicked a share link's copy button and passed, because `C=5` cut the power (open
       item 124). Since M334 the filmstrip of the first boot shows what such a walk did.
@@ -3289,8 +3318,9 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - Memos's share-link finding has no recording yet. A walker that prints its actions changes
       the image, and with it the walks. On the first walker with M270's change, r31's and seed
       42's walks no longer open the share link's dialog, and they pass with and without `rec`.
-      Since M334 a failing run keeps its own frames and traces, so no second run is needed, but
-      no Memos image with M334's walker was built or explored.
+      Since M334 a failing run keeps its own frames and traces, so no second run is needed. In
+      M390 the walks of seeds 42 and 31 and five more walks with the new walker opened no Share
+      menu; no exploration of Memos ran with it.
     - `hydo run` and `hydo repro` of a schedule with `rec` run the schedule twice: once without
       `rec` for the actions, once recorded. A run directory's `walk-script.txt` is written but
       not read back by `hydo repro`.
@@ -3322,10 +3352,10 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       x86_64 host with Docker, or CMake's checks done once and pinned, is left.
     - Managed mode (`mender-update daemon`) shares the Artifact parser of the first candidate
       and did not run.
-137. Walks on Vikunja (M273). What is left:
-    - When the session ends, the walk does not sign in again: `setup` runs only in a step
-      without a saved session. Under disk errors seed 9's walk was on the login page from step 4
-      on; why the session ended was not traced.
+137. Walks on Vikunja (M273, M390). What is left:
+    - Since M390 a step that meets the login page signs in again (`browser.explore.sign_in`),
+      and so does the read-back check. Under disk errors seed 9's walk was on the login page from
+      step 4 on; why that session ended was not traced, and the schedule did not run again.
     - A recording replay of a walk that a power cut ends records no video: the video stays in the
       first boot's guest. Since M334 the run's filmstrip and its last step's trace leave the guest
       before the cut; `disk=none | run C=5 I=1` kept 66 frames and the trace of step 4.
@@ -3333,10 +3363,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       and the run ends in ERROR (seeds 1 and 8). Which read failed was not traced.
     - The words name ids of a JSON answer only. A write whose answer has no id, such as
       `DELETE`, gives `<METHOD>:<path>`, and a rule reads the id from the path.
-    - No walk marked a task done. Vikunja's done check boxes are hidden inputs under a styled
-      label, and they take no trial click, so the walk leaves them out. On this Mac none of the
-      three on the home page took one. Drag and drop is no action either, so no walk moved a
-      task between Kanban buckets. The Kanban rule judged only tasks that are not done.
+    - Since M390 the walk clicks a checkbox through its label, so walks mark tasks done, and
+      `browser.explore.drag` drags Kanban cards between buckets. A walk reaches the Kanban view
+      rarely: none of 4 walks of `hydo.yaml` on hvx and 13 in Docker dragged a card. So
+      `hydo-kanban.yaml` starts the walk on the Kanban view; its walk of `I=1` dragged 5 times.
+      The Kanban rule says how many places of tasks it judged, not how many of them were done.
 138. The branch tick (M274, `docs/design/exit-free-loops.md`). What is left:
     - It ran on the Xeon 6975P-C only. The other Intel event (`0x01c4`, Skylake to Comet Lake)
       and hybrid CPUs were not measured. AMD is refused, because its exact count needs root.
@@ -5910,6 +5941,13 @@ build machine, before 2026-10-13.
   passing run serves 21, watchpoints 15, thread stacks 12, a message's path 12, and the existing
   logs 9. The page proposes stacks first, then the divergence, watchpoints, and the path, each
   with five first proofs. Nothing recorded moved
+- M390 (tentative number): the walk through the pages signs in again when its session ends
+  (`browser.explore.sign_in`), and clicks a checkbox through its label. It drags between lists
+  (`browser.explore.drag`) and chooses a list's alike controls by their row's text. A reaction
+  to the walk's records acts inside a step (`A=walk.action#<k>@<step>`), and `hydo explore` draws
+  one for 40 % of a walking image's schedules; a run with a reaction had walked seed 0.
+  A dropped clock step moves 5.4 of 72 actions of five Memos walks, 13.6 before. Nothing
+  recorded moved
 - M379 (tentative number): one service's own clock on the KVM engine, for an image of
   `guest.kernel: containers`. hydo-clock's feature `words` reaches the traced memory with
   `PTRACE_PEEKDATA` where `process_vm_readv` answers `ENOSYS`, and its default build keeps its
