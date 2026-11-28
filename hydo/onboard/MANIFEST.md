@@ -1226,9 +1226,11 @@ services:
 ```
 
 The service then starts under `/bin/hydo-clock`, which `hydo build` stages from `HYDO_CLOCKBIN`
-(`hydo/crates/hydo-clock/build.sh`). Its processes read the guest's clock plus an offset of their
-own. The service's setup, its readiness check, the workload and the checks keep the guest's
-clock. The token `T=<svc>@<at>:<change>` changes the offset before step `at`:
+(`hydo/crates/hydo-clock/build.sh`). No release ships hydo-clock yet: build it with that script in
+hydo's source repository, and set `HYDO_CLOCKBIN` to the file it writes. The service's processes
+read the guest's clock plus an offset of their own. The service's setup, its readiness check, the
+workload and the checks keep the guest's clock. The token `T=<svc>@<at>:<change>` changes the
+offset before step `at`:
 
 | Change | Meaning |
 |---|---|
