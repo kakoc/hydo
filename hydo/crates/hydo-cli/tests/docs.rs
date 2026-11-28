@@ -262,24 +262,24 @@ const USER_PAGES: &[&str] = &[
 const CITED_ELSEWHERE: &[(&str, &str)] = &[
     (
         "c3b0362c14338574",
-        "wfp of the Redis example's clean run on hvx at the fingerprint epoch 6, recorded with fp \
-         2f5a6dc34e0c8ba6 (docs/HISTORY.md, the 0.6.0 release)",
+        "wfp of the Redis example's clean run on hvx at the fingerprint epochs 6 and 7, recorded \
+         with fp 2f5a6dc34e0c8ba6 (docs/HISTORY.md, the 0.6.0 and 0.8.0 releases)",
     ),
     (
         "415bc84678f62b33",
-        "wfp of the Redis power cut on hvx at the fingerprint epoch 6, recorded with fp \
-         f2715295eae4d5a2 (the 0.6.0 release)",
+        "wfp of the Redis power cut on hvx at the fingerprint epochs 6 and 7, recorded with fp \
+         f2715295eae4d5a2 (the 0.6.0 and 0.8.0 releases)",
     ),
     (
         "fd403ef8d08fa636",
         "dseed of the Redis quickstart exploration's minimal schedule for a restart after disk \
-         errors (seed 12 of 1-20, swarm, on hvx and KVM at the fingerprint epochs 5 and 6; \
-         docs/HISTORY.md, the 0.5.0 and 0.6.0 releases)",
+         errors (seed 12 of 1-20, swarm, on hvx and KVM at the fingerprint epochs 5 to 7; \
+         docs/HISTORY.md, the 0.5.0, 0.6.0 and 0.8.0 releases)",
     ),
     (
-        "45fda597d42cc65f",
+        "22e26b7951a64e6a",
         "fp of the messages tutorial's clean run on the Mac engine, twice, at the fingerprint \
-         epoch 6 (docs/ONBOARD.md; docs/HISTORY.md, the 0.6.0 release)",
+         epoch 7 (docs/ONBOARD.md; docs/HISTORY.md, the 0.8.0 release)",
     ),
 ];
 

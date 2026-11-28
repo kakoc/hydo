@@ -46,19 +46,19 @@ Homebrew, `~/.hydo` in the rest of this guide is that `libexec` directory:
 `brew uninstall hydo` removes it again.
 
 With `cargo install hydo` (the README), `hydo setup` puts the release into
-`~/.hydo/versions/0.7.0`, and `~/.hydo` in the rest of this guide is that folder:
-`cp -R ~/.hydo/versions/0.7.0/examples/redis ~/hydo-redis` copies the first example.
+`~/.hydo/versions/0.8.0`, and `~/.hydo` in the rest of this guide is that folder:
+`cp -R ~/.hydo/versions/0.8.0/examples/redis ~/hydo-redis` copies the first example.
 
 Without Homebrew, download the release and its checksums, check the tarball, unpack it, and run
 its installer. The installer copies hydo into `~/.hydo` and runs `hydo setup` there, then
 `hydo doctor`.
 
 ```sh
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.7.0/hydo-mac-0.7.0.tar.gz
-curl -LO https://github.com/kakoc/hydo/releases/download/v0.7.0/SHA256SUMS
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.8.0/hydo-mac-0.8.0.tar.gz
+curl -LO https://github.com/kakoc/hydo/releases/download/v0.8.0/SHA256SUMS
 shasum -a 256 -c --ignore-missing SHA256SUMS
-tar xzf hydo-mac-0.7.0.tar.gz
-./hydo-mac-0.7.0/install.sh
+tar xzf hydo-mac-0.8.0.tar.gz
+./hydo-mac-0.8.0/install.sh
 export PATH="$HOME/.hydo/bin:$PATH"
 ```
 
@@ -110,7 +110,7 @@ twice, so the example's `hydo-out/` holds about 160 MB after the build. The 512 
 the `hydo init` skeleton (section 5) takes about 1 GB.
 
 Building the same `hydo.yaml` again gives the same bytes:
-`shasum -a 256 hydo-out/explore-ob-redis-arm64.cpio.gz` prints `502d75403a6eebb4…` before and after
+`shasum -a 256 hydo-out/explore-ob-redis-arm64.cpio.gz` prints `efcacb4a3506b453…` before and after
 a second `hydo build hydo.yaml`. `appendfsync` is the Redis setting that
 decides when Redis writes its log to the disk: `always` (the example's default) after every
 write, `everysec` once a second.
@@ -129,12 +129,12 @@ is such a setting of the system that a guest token changes; the example's `hydo.
 knobs under `knobs:`. Each command prints a `RESULT` line. Its `verdict=` field is the outcome,
 and `HYDO-ORACLE:` marks the verdict of the invariants. `fp=` is the fingerprint; the other
 fields are hydo's own counters and hashes. The first ends `verdict=HYDO-ORACLE: OK invariants=1
-held (redis.acked_writes_survive: acked=20 all present)` (fingerprint `f7d1de1935d77df4`). The second prints a violation: an acknowledged key is gone after the power
-cut (`key k:0 lost`, fingerprint `6a3d1a0456e48e01`; the check stops at the first lost key).
+held (redis.acked_writes_survive: acked=20 all present)` (fingerprint `690ba17b113132a5`). The second prints a violation: an acknowledged key is gone after the power
+cut (`key k:0 lost`, fingerprint `620ef75eee122006`; the check stops at the first lost key).
 That is Redis's documented `everysec` window, and the run reproduces it every time. Run either command again and the fingerprint
 (`fp=`) is the same. With the default `appendfsync always`, the same cut loses nothing:
 `hydo run "disk=cut | run C=12"` ends `OK` with `acked=12 all present` (fingerprint
-`da264396142d8e52`).
+`7ba8e0d68df64e1d`).
 
 `hydo run` exits with status 0 whenever the run finishes, whatever its verdict. A script tells a
 pass from a failure by `verdict.kind` in the run's `result.json` (in the folder under
@@ -150,7 +150,7 @@ hydo run "disk=none | run O=redis@5-10:resp:loss,100%"
 ```
 
 It ends `OK ... acked=15 all present`: the 15 writes the client saw acknowledged are all there.
-Again, a second run gives the same fingerprint (`53c4fe14fd016a0c`).
+Again, a second run gives the same fingerprint (`4d39c8a41d2a86b5`).
 
 hydo can also vary thread timing. The host part of a schedule can delay the guest's timer
 interrupts by a seeded number of VM exits. That changes where the guest switches threads. In the
@@ -164,7 +164,7 @@ hydo run "disk=none tj=7 tjpm=500 tjmax=500 | run"
 
 The `RESULT` line gains `tjk=` (the first and last tick period touched) and `tjn=` (how many
 ticks were delayed). The fingerprint differs from the untimed run, because the timing changed
-the guest's state, and it is the same on every run of this schedule (`e77ede27f3996aa6`, with
+the guest's state, and it is the same on every run of this schedule (`225423eca8ee85c5`, with
 `tjk=8-17 tjn=5`). `hydo explore --timing`
 adds such timing to the schedules it generates.
 
@@ -346,7 +346,7 @@ The release carries every guest file the arm64 build stages, so these work from 
 - `network: bridge`, `addr:` and `faults: [freeze]`. With them each service runs in its own
   network namespace, which is its own network stack and address. Faults then hit the links
   between services, and a freeze stops a service at the n-th packet it sends or receives. Such an image is built
-  for the release's second guest kernel (`Image-explore-netns`). The build says so and records it
+  for the release's second guest kernel (`Image-explore-netns-io`). The build says so and records it
   in the image, and `hydo run` and `hydo explore` boot that kernel by themselves;
 - `fakes:` and `proxies:`: fake outside services, and protocol faults (wrong, late, or missing
   answers of those services);
@@ -375,7 +375,7 @@ third-party software:
 `THIRD-PARTY.md` lists each one with its version, its license, the files it is in, and where its
 source is. `licenses/` holds the full text of every license.
 
-The archive `hydo-mac-0.7.0-sources.tar.gz` accompanies this release; it is published next to
+The archive `hydo-mac-0.8.0-sources.tar.gz` accompanies this release; it is published next to
 the tarball, with the same `SHA256SUMS`. It contains the corresponding source:
 
 - the exact upstream source archives of every third-party component, including every GPL- and

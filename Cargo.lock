@@ -498,7 +498,7 @@ checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
 
 [[package]]
 name = "hydo"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "hydo-agent-proto",
@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-agents"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "hydo-manifest",
@@ -547,7 +547,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-bench"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "hydo-config",
  "hydo-control",
@@ -563,7 +563,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-build"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "hydo-agent-proto",
@@ -583,7 +583,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-compose"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "hydo-config",
@@ -601,7 +601,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-composer"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "hydo-manifest",
  "libc",
@@ -611,11 +611,11 @@ dependencies = [
 
 [[package]]
 name = "hydo-config"
-version = "0.7.0"
+version = "0.8.0"
 
 [[package]]
 name = "hydo-contracts"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "gimli",
@@ -627,7 +627,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-control"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "hydo-agent-proto",
@@ -650,7 +650,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-engine"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "hydo-agent-proto",
@@ -668,14 +668,14 @@ dependencies = [
 
 [[package]]
 name = "hydo-engine-proto"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "hydo-schedule",
 ]
 
 [[package]]
 name = "hydo-errors"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "fancy-regex",
  "hydo-manifest",
@@ -687,7 +687,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-explore"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "hydo-config",
@@ -709,7 +709,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-grpc"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bytes",
  "h2",
@@ -726,7 +726,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-grpc-gen"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bytes",
  "h2",
@@ -744,14 +744,14 @@ dependencies = [
 
 [[package]]
 name = "hydo-history"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "sha2",
 ]
 
 [[package]]
 name = "hydo-hvm"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "hydo-config",
  "hydo-contracts",
@@ -764,7 +764,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-hvx"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "cc",
  "hydo-config",
@@ -776,7 +776,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-image"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "hydo-schema-compat",
  "schemars",
@@ -787,7 +787,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-kvm"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "hydo-config",
  "hydo-contracts",
@@ -801,7 +801,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-manifest"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "hydo-schedule",
  "hydo-schema-compat",
@@ -817,7 +817,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-release"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "serde",
@@ -828,7 +828,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-results"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "hydo-schema-compat",
  "schemars",
@@ -838,18 +838,18 @@ dependencies = [
 
 [[package]]
 name = "hydo-schedule"
-version = "0.7.0"
+version = "0.8.0"
 
 [[package]]
 name = "hydo-schema-compat"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "hydo-tools"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "flate2",
  "hydo-agents",
@@ -863,7 +863,7 @@ dependencies = [
 
 [[package]]
 name = "hydo-world"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "aes-gcm",
  "bytes",

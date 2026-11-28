@@ -336,8 +336,9 @@ hydo run "disk=none | run T=n2@0:200ppm"    # from step 0, n2's clock runs fast 
 
 The other services, the workload and the checks keep the guest's clock. A read of the clock costs
 the service about 40 µs of guest time on hvx. On the KVM engine the image needs `guest.kernel:
-containers` too, and the Mac engine does not run it yet. The section "One service's own clock" of
-MANIFEST.md says which programs it covers.
+containers` too, and the Mac engine does not run it yet. No release ships hydo-clock, the program
+that keeps the service's clock: build it in hydo's source repository and set `HYDO_CLOCKBIN`. The
+section "One service's own clock" of MANIFEST.md says how, and which programs it covers.
 
 `hydo explore --service-clocks` draws these steps and drifts for the services with `clock: own`,
 when `faults:` allows `clock`. Most drawn schedules then get one such change. It is a step of

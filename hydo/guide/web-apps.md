@@ -73,8 +73,8 @@ retry would only hide it.
 
 - **The real backend.** Add the backend's services, for example from `hydo compose`, and point
   the frontend at their addresses. Every fault of the services applies: kills, pauses, network
-  faults, power cuts. The example `hydo/onboard/examples/compose-voting-browser` (Milestone
-  166) checks that the screen agrees with the database.
+  faults, power cuts. The example `hydo/onboard/examples/compose-voting-browser`
+  checks that the screen agrees with the database.
 - **The frontend alone.** Serve the API with a fake (`fakes:`), an emulator (`emulators:`), or a
   fake made from an OpenAPI description. `H=` tokens then act between the page and the API: an
   error status, a slow answer, a lost answer after the effect. This is the setup of the

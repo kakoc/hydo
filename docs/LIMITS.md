@@ -1,6 +1,6 @@
 # What hydo does not do
 
-These are the limits of hydo 0.7.0. The [README](../README.md) shows what it does.
+These are the limits of hydo 0.8.0. The [README](../README.md) shows what it does.
 
 - A run gives the same fingerprint again when four things are the same:
   - the engine;

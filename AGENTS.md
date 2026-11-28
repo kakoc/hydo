@@ -218,7 +218,21 @@ The user decided this policy (updated 2026-10-30).
 
 Each paragraph gives the current values and where the details are.
 
-**Releases.** hydo 0.7.0 was published on 2026-11-27 from the release commit `7d1b66e2` (the
+**Releases.** hydo 0.8.0 was published on 2026-11-28 from the release commit `21710089` (the
+branch `release-0.8.0`, merged into `main`). The GitHub release `v0.8.0` holds both tarballs, their
+sources archives, the Mac signatures, the skill archive and `SHA256SUMS`:
+`hydo-linux-0.8.0.tar.gz` `4953dfcd…`, `hydo-mac-0.8.0.tar.gz` (signed and notarized) `82eb06f5…`
+and `hydo-skill-0.8.0.tar.gz` `b2ea956f…`, each platform built twice to the same bytes. The tag's
+workflow (run 46170589466) published the crates of `cargo install hydo`, `hydo-assert` on
+crates.io, PyPI and npm, and the Go tag `sdk/go/v0.8.0`; the Homebrew tap names 0.8.0, and
+`hydo/dist/releases.txt` has its lines. The files and the prepared material are in
+`hydo/dist/out/0.8.0/` of the main checkout. 0.8.0 holds Milestones 368 to 388, 391, and 395 at
+the fingerprint epoch 7. Every recorded value was re-recorded at epoch 7 for it (docs/REBASELINE.md
+section 35). The final files reproduce every recorded value on the Mac, on hvx and on KVM (AMD
+hosts). Milestones 389, 390, 392 to 394 and 397 are on `main` only and wait for 0.9.0. The record
+is the section "The 0.8.0 release, prepared for publication" of `docs/HISTORY.md`.
+
+hydo 0.7.0 was published on 2026-11-27 from the release commit `7d1b66e2` (the
 branch `release-0.7.0`, merged into `main`). The GitHub release `v0.7.0` holds both tarballs, their
 sources archives, the Mac signatures, the skill archive and `SHA256SUMS`:
 `hydo-linux-0.7.0.tar.gz` `132c35ab…`, `hydo-mac-0.7.0.tar.gz` (signed and notarized) `9c84e011…`
@@ -324,8 +338,10 @@ dry-runs the packages on every pull request that changes one. The details are in
 
 **Fingerprints.** The fingerprint epoch is 7 (M376; 6 from M353, 5 from M317, 4 from M269, 3
 from M234, 2 from M204, 1 from M155). An image built at epoch 7 boots the Mac and KVM guest
-kernels with `/proc/<pid>/io` (M376, below). The list's values are still those of epoch 6, and
-every one of them waits for the 0.8.0 pass (open item 105, docs/REBASELINE.md section 34). An
+kernels with `/proc/<pid>/io` (M376, below). The pass of 0.8.0 re-recorded the list at epoch 7 on
+hvx, the Mac and KVM (docs/REBASELINE.md section 35), the Mac's voting image last, on
+2026-11-28. On hvx the epoch moved only the images' bytes. The runs that moved there are those of the
+images that carry hydo's version. An
 image built at epoch 6 carries the first boot's outcomes into a
 recovery boot and gives the controller's commands a `PATH` (M353, below). The 0.6.0 pass
 re-recorded every value of the list at epoch 6 on hvx, the Mac and KVM (docs/REBASELINE.md
@@ -350,14 +366,16 @@ give `e153f376096a072c` and `6a5c2fe208174af3` on hvx and `66da20bdbfafd6d2` and
 `~/hydo/build/rel050`) give `b6e78273b1d21304` and `b531d6bcaa8489b7` on hvx and
 `4b9f52b31c1a58b4` and `8672be7cd62d3d75` on KVM (AMD). Their epoch-6 images (`38f503b1…` and
 `cd7d31c8…`, in `~/hydo/build/rel060`) give `db33d71069816103` and `c421af1ccb714225` on hvx and
-`96b8fd4017db3274` and `87d6319a26da08c7` on KVM (AMD). Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
+`96b8fd4017db3274` and `87d6319a26da08c7` on KVM (AMD). Their epoch-7 images (`7dd445a8…` and
+`d00c6481…`, in `~/hydo/build/rel080`) give the epoch-6 values on hvx and `8460a6161dd8cd55` and
+`4c26ed448d1ad58d` on KVM (AMD). Their epoch-1 images in `~/hydo/build/m155` still give `1dc3677fb94053cf` and
 `ba0aa0612502a1df` under this hydo, because an image keeps the defaults of its own epoch
 (`hydo_image::defaults`). `hydo/onboard/examples/stack/build-reproducers.sh` rebuilds both
-images. The quickstart's Redis example (its epoch-5 values are in docs/REBASELINE.md section 29)
-gives at epoch 6 `2f5a6dc34e0c8ba6` (OK) and `f2715295eae4d5a2` (`C=12 R=everysec`, `k:1` lost)
-on hvx, and
-`b222402de473ea1b` on KVM (AMD), where `C=11 R=everysec` loses `k:1` (`3e8260560d47b5b0`). On the
-Mac it gives `f7d1de1935d77df4` and `6a3d1a0456e48e01` (`k:0` lost). Every recorded example value is
+images. The quickstart's Redis example (its epoch-6 values are in docs/REBASELINE.md section 31)
+gives at epoch 7 `2f5a6dc34e0c8ba6` (OK) and `f2715295eae4d5a2` (`C=12 R=everysec`, `k:1` lost)
+on hvx, as at epoch 6.
+On KVM (AMD) it gives `abe369f236f79c57`, and `C=11 R=everysec` loses `k:1` (`ab57b0e096f95548`). On the
+Mac it gives `690ba17b113132a5` and `620ef75eee122006` (`k:0` lost). Every recorded example value is
 in `hydo/onboard/recorded.json`, and
 `hydo-bench rebaseline` checks or re-records them (`docs/REBASELINE.md` "How to re-baseline").
 
@@ -2800,8 +2818,9 @@ has the file and does not change. On KVM (GitHub's runners, Intel and AMD) the g
 epoch-7 image reads `/proc/self/io` with 1 and 2 vCPUs and with the kernels for containers. Each
 schedule gives one fingerprint per CPU vendor, and an epoch-6 image gives its recorded values.
 The Typesense example starts there: its clean run passes, and its three regressions fail as on
-hvx. The Mac kernels are built and pinned and have no run yet. Every value of `hydo/onboard/recorded.json`
-moves at epoch 7, on hvx through the image's record only, and waits for the 0.8.0 pass (open
+hvx. The 0.8.0 pass ran the Mac kernels first. An epoch-7 image's guest reads `/proc/<pid>/io`
+there, also with the kernel for containers. An image built by 0.7.0 gives its recorded values. The
+pass re-recorded `hydo/onboard/recorded.json` at epoch 7 (docs/REBASELINE.md section 35, open
 item 105). The reference is MANIFEST.md "I/O accounting"; the details are in `docs/HISTORY.md`
 Milestone 376.
 
@@ -3055,7 +3074,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       with one vCPU it fails it at 1 of 81 starts (239 ms) on four AMD and Intel hosts. At the
       fingerprint epoch 4 it fails it at 1 of 120 starts (208 ms, M302). At epoch 5 it fails it
       at 1 of 120 (207 ms, the 0.5.0 release). At epoch 6 it fails it at 2 of 131 starts from
-      179 to 309 ms (179 and 222 ms, on AMD and Intel, the 0.6.0 pass). With two vCPUs
+      179 to 309 ms (179 and 222 ms, on AMD and Intel, the 0.6.0 pass). At epoch 7 it fails it
+      at 1 of 80 starts (243 ms, on AMD and Intel, the 0.8.0 pass). With two vCPUs
       no start from 390 to 460 ms failed it on KVM: 50 passed and 21 ended in ERROR. A wider
       window was not searched, and the ERROR's cause was not read.
     - On an image built before epoch 5 the timer's freeze script ends the run with an error. This
@@ -3164,14 +3184,12 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     `skill-v1.0.0` to `skill-v2.4.0` wait for deletion after 0.5.0 is published.
 105. Recorded values waiting for the next re-recording pass (the batch rule in "Safety and
     coordination rules"). Each change that moves recorded values adds a line here with its
-    milestone and the values it moves; the pass removes the lines. The lines since the 0.6.0
-    re-recording pass (docs/REBASELINE.md section 31):
-    - M376, the fingerprint epoch 7 (docs/REBASELINE.md section 34): every value of the list. Every
-      image built at epoch 7 has new bytes through its record. So every run moves: 43 hvx images
-      and 141 runs, 21 Mac images and 76 runs, and 6 KVM images and 19 runs. On the Mac and KVM
-      engines the guest also boots the new kernels with `/proc/<pid>/io`. So a verdict that
-      depends on where a fault falls can change there, and the pass decides each. On hvx only the record's bytes
-      move, and no verdict is expected to change. The list's `epoch` becomes 7.
+    milestone and the values it moves; the pass removes the lines. The lines since the 0.8.0
+    re-recording pass (docs/REBASELINE.md section 35):
+    - M393, `hydo-world`'s source (answers in another order and requests sent twice). `main`'s
+      source differs from the 0.8.0 pin, which stays the pin of the released bytes. The re-pin of
+      0.9.0 builds it again. The 9 hvx and 9 Mac images that every re-pin moves (those that carry
+      `hydo-world`, `hydo-grpc` or an SDK's version) move then; no KVM image moves.
 106. The terminal in plain words (M230, M247). `hydo report <run dir>` and the line `hydo
     explore` prints before its runs are in plain words since M247. The real runs of both
     milestones used the Mac engine only.
@@ -4628,8 +4646,8 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
       The KVM guest kernels of that epoch have no `/proc/self/io`, which Typesense's bundled
       brpc reads in a static initializer. Since M376 an image built at the fingerprint
       epoch 7 boots kernels with the file. On KVM the example's clean run then passes, and
-      its three regressions fail as on hvx (six runners, Intel and AMD). The Mac engine has
-      the new kernels too, but they have no run yet: its VM lock was the user's.
+      its three regressions fail as on hvx (six runners, Intel and AMD). The Mac engine's new
+      kernels ran in the 0.8.0 pass; the example did not run on the Mac.
     - Not run: five nodes. A live race of a delete by a filter with another client's writes of
       its documents did not run. Aliases, synonyms, curations, API keys, and the embedding models
       have no command.
@@ -6254,6 +6272,14 @@ build machine, before 2026-10-13.
   to 94 % of an exploration before its report. A generated client with the generic checks would
   reach 37 of the 105 bugs. The page proposes the report before the shrinks, then that client.
   Nothing recorded moved
+- The 0.8.0 release (no milestone number): published on 2026-11-28 from `21710089`. The
+  version is raised with the skill's four version fields. `hydo-world`, `hydo-world-tls` and
+  `hydo-grpc` are re-pinned, and the released schemas are copied. Every recorded value was
+  re-recorded at the fingerprint epoch 7 on hvx, the Mac and KVM (docs/REBASELINE.md section 35).
+  Qdrant's KVM pause moved to 243 ms. Release step 6a fixed five pages. Both releases were built
+  twice to the same bytes, and the Mac one is signed and notarized. They were verified on hvx, the
+  Mac and KVM, where a runner rebuilt the Linux tarball byte for byte. The release branch is
+  merged into `main`
 - M388 (tentative number): a benchmark of 72 unexplained or late-explained failures for
   debugging tools (`docs/design/debug-benchmark.md`). By primary tool, the first divergence from a
   passing run serves 21, watchpoints 15, thread stacks 12, a message's path 12, and the existing

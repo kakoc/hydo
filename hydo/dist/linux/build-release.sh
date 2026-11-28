@@ -55,7 +55,7 @@ set -e
 umask 022
 D=$(cd "$(dirname "$0")" && pwd)
 TOP=$(cd "$D/../../.." && pwd)
-VERSION=${HYDO_VERSION:-0.7.0}
+VERSION=${HYDO_VERSION:-0.8.0}
 OUTDIR=${1:-$D/out}
 A=$D/assets
 GB=$TOP/target/dist-linux     # the guest programs built from this tree (not assets: they are not pinned here)

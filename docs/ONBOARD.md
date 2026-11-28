@@ -221,7 +221,7 @@ hydo run "disk=none | run"
 hydo run "disk=none | run"
 ```
 
-On the Mac engine both runs printed `fp=45fda597d42cc65f` and the verdict `OK`. `hydo report
+On the Mac engine both runs printed `fp=22e26b7951a64e6a` and the verdict `OK`. `hydo report
 --details` with the run directory shows each claim and how many cases it judged:
 
 ```text
