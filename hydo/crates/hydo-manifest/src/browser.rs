@@ -68,7 +68,11 @@ pub const KNOWN_EXPLORE: &[&str] = &[
     "quiet_ms",
     "sign_in",
     "signed_out",
+    "drag",
 ];
+
+/// The keys of one `browser.explore.drag` entry (Milestone 390).
+pub const KNOWN_DRAG: &[&str] = &["items", "into"];
 
 /// The sign-in page's path when `browser.explore.signed_out` does not name it (Milestone 390): a
 /// regular expression, case-insensitive, over the page's path.
@@ -1065,6 +1069,38 @@ fn explore_cfg(e: &Value, m: &Value) -> R<Explore> {
             ))
         }
     };
+    // Milestone 390: the drags between lists
+    let mut drag = Vec::new();
+    match get(e, "drag") {
+        None => {}
+        Some(Value::Array(a)) => {
+            for (i, d) in a.iter().enumerate() {
+                let w = format!("browser.explore.drag[{i}]");
+                if !d.is_object() {
+                    return Err(err(format!(
+                        "{w}: a mapping {{items: <CSS selector of what can be dragged>, into: <CSS selector of where it can be dropped>}}"
+                    )));
+                }
+                crate::validate::unknown(d, KNOWN_DRAG, &w)?;
+                let sel = |k: &str| -> R<String> {
+                    match get(d, k) {
+                        Some(Value::String(s)) if !s.trim().is_empty() && !s.contains('\'') => {
+                            Ok(s.clone())
+                        }
+                        _ => Err(err(format!(
+                            "{w}.{k}: a CSS selector without a single quote, such as .kanban-card"
+                        ))),
+                    }
+                };
+                drag.push(json!({"items": sel("items")?, "into": sel("into")?}));
+            }
+        }
+        Some(_) => {
+            return Err(err(
+                "browser.explore.drag: a list of entries, each {items: <CSS selector>, into: <CSS selector>}",
+            ))
+        }
+    }
     // the fakes' routes, for repro.spec.ts: an H= fault on a route becomes a page.route
     let mut routes = Map::new();
     if let Some(Value::Array(fakes)) = m.get("fakes") {
@@ -1102,6 +1138,9 @@ fn explore_cfg(e: &Value, m: &Value) -> R<Explore> {
     }
     if !signed_out.is_null() {
         cfg["signed_out"] = signed_out;
+    }
+    if !drag.is_empty() {
+        cfg["drag"] = json!(drag);
     }
     Ok(Explore {
         cfg,
@@ -1451,10 +1490,10 @@ mod tests {
         }
     }
 
-    /// Milestone 390: `sign_in` and `signed_out` reach the walker's configuration only when
-    /// given, so a walk without them keeps its configuration as it was.
+    /// Milestone 390: `sign_in`, `signed_out` and `drag` reach the walker's configuration only
+    /// when given, so a walk without them keeps its configuration as it was.
     #[test]
-    fn explore_takes_a_sign_in_again() {
+    fn explore_takes_a_sign_in_again_and_drags_between_lists() {
         let walk = |x: Value| -> R<Value> {
             let mut m = json!({"name": "web", "network": "bridge",
                 "browser": {"explore": {"start": "http://localhost:3000/"}}});
@@ -1468,16 +1507,21 @@ mod tests {
             )
         };
         let plain = walk(json!({})).unwrap();
-        for k in ["sign_in", "signed_out"] {
+        for k in ["sign_in", "signed_out", "drag"] {
             assert!(plain.get(k).is_none(), "{k}");
         }
         let cfg = walk(json!({
             "sign_in": [{"open": "/login"}, {"fill": "User", "with": "a"}, {"click": "Login"}],
             "signed_out": "^/auth",
+            "drag": [{"items": ".kanban-card", "into": ".bucket .tasks"}],
         }))
         .unwrap();
         assert_eq!(cfg["sign_in"][1], json!({"fill": "User", "with": "a"}));
         assert_eq!(cfg["signed_out"], "^/auth");
+        assert_eq!(
+            cfg["drag"],
+            json!([{"items": ".kanban-card", "into": ".bucket .tasks"}])
+        );
         // the walker's own default is the one the documentation names
         assert!(WALK.contains(&format!("'{SIGNED_OUT}'")));
         for (bad, says) in [
@@ -1490,6 +1534,19 @@ mod tests {
                 "a regular expression",
             ),
             (json!({"sign_in": [{"klick": "Login"}]}), "klick"),
+            (
+                json!({"drag": [{"items": ".a"}]}),
+                "browser.explore.drag[0].into",
+            ),
+            (
+                json!({"drag": [{"items": ".a", "into": "a[x='1']"}]}),
+                "single quote",
+            ),
+            (
+                json!({"drag": [{"items": ".a", "into": ".b", "on": 1}]}),
+                "on",
+            ),
+            (json!({"drag": ".a"}), "a list of entries"),
         ] {
             let e = walk(bad.clone()).unwrap_err().to_string();
             assert!(e.contains(says), "{bad}: {e}");

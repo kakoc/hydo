@@ -1,0 +1,162 @@
+# The Kanban board of Vikunja for the walk's drags (Milestone 390): hydo.yaml, with the walk
+# starting on the Inbox's Kanban view (/projects/1/4 in a fresh instance) after its setup adds
+# three tasks. A walk of hydo.yaml reaches the Kanban view in few of its actions, so its drags
+# are rare; this walk opens the Kanban view when it opens its start page. RESULTS.md,
+# "Milestone 390".
+#
+#   hydo build hydo-kanban.yaml
+#   hydo run --image .hydo/explore-ob-vikunja-kanban-disk.img "disk=none | run I=1"
+format: 1
+name: vikunja-kanban
+description: "The Kanban board of Vikunja 2.8.0 explored by hydo's own walk through its pages, under kills, pauses, network faults, power cuts, clock steps and disk faults of the server"
+hydo_version: "0.3"
+
+network: bridge   # each service in its own network namespace at its addr: (MANIFEST.md "Service networks")
+
+guest:
+  ram_mib: 4096             # the browser
+  clock_start: 1794787200   # 2026-11-16 00:00 UTC, the day of the import
+  outcomes_after_cut: true  # the walk's acknowledged writes ($HYDO_ACKED) reach the recovery boot
+
+data:
+  size_mib: 512   # the data disk: Vikunja's SQLite database and its files live here (the fault target)
+  dirs: [vol/bind-files, vol/bind-db]
+
+root:
+  files:
+    - {src: page-rules, dst: /opt/hydo/web/rules}
+  text:
+    /etc/hosts: |   # Compose service names -> each service's addr:
+      127.0.0.1 localhost
+      ::1 localhost ip6-localhost ip6-loopback
+      10.89.0.11 vikunja
+
+services:
+  # Compose service vikunja
+  # image vikunja/vikunja:2.8.0 = docker.io/vikunja/vikunja@sha256:35d937baf3b5d5803bed6b9e11d007448b7b536df9e4346dc35551e1072636c3
+  #   linux/amd64: sha256:12c860da57e1d354d3a75f01ec6b88acb35ea3a38b213a1b9ecab339d59aa243
+  #   linux/arm64: sha256:7faf05f6be4b4250b3e7f3d4ef52a9b30d9f3bed758977dadb387a9f3461bc01
+  # restart: unless-stopped: an agent image starts the service again when its process ends by itself while the test runs (MANIFEST.md "Restart policies"); hydo's kill faults keep their own restart points
+  - name: vikunja
+    image: {x86_64: images/vikunja-vikunja-2.8.0-amd64.docker.tar, arm64: images/vikunja-vikunja-2.8.0-arm64-oci}
+    image_ref: "vikunja/vikunja:2.8.0"
+    env:
+      VIKUNJA_SERVICE_SECRET: "hydo-example-secret-not-for-production"
+      # the address the guest's browser uses (the documentation: the URL the browser reaches)
+      VIKUNJA_SERVICE_PUBLICURL: "http://10.89.0.11:3456/"
+      VIKUNJA_DATABASE_PATH: "/db/vikunja.db"
+    port: 3456
+    addr: 10.89.0.11
+    ready: "nc -z -w 2 10.89.0.11 3456"
+    restart: "unless-stopped"
+    # the image runs as uid 1000, and its documentation has `chown 1000` of both volumes
+    setup: chown 1000 /data/vol/bind-files /data/vol/bind-db
+    mounts:
+      - {src: /etc/hosts, dst: /etc/hosts}
+      - {tmpfs: true, dst: /run, copy_up: true}
+      - {tmpfs: true, dst: /dev/shm, size: 64m}
+      - {src: /data/vol/bind-files, dst: /app/vikunja/files}
+      - {src: /data/vol/bind-db, dst: /db}
+
+browser:
+  explore:
+    start: http://10.89.0.11:3456/projects/1/4
+    steps: 6
+    actions: 12
+    setup:                      # a fresh instance allows registration; it signs in at once
+      - {open: /register}
+      - {fill: Username, with: hydo}
+      - {fill: Email address, with: hydo@example.com}
+      - {fill: Password, with: hydo-pass-1}
+      - {click: Create account}
+      - {see: Current Tasks}    # the home page after the sign-in
+      - {fill: "Add a task…", with: first card}
+      - {press: Enter}
+      - {wait: 1000}
+      - {fill: "Add a task…", with: second card}
+      - {press: Enter}
+      - {wait: 1000}
+      - {fill: "Add a task…", with: third card}
+      - {press: Enter}
+      - {wait: 1000}
+      - {open: /projects/1/4}   # the Inbox's Kanban view
+      - {see: To-Do}
+    # Milestone 390: a session that ends during the walk (a clock step past the token's time, an
+    # account that a power cut lost) signs in again where Vikunja shows its login page
+    sign_in:
+      - {open: /login}
+      - {fill: Username Or Email Address, with: hydo}
+      - {fill: Password, with: hydo-pass-1}
+      - {click: Login}
+      - {see: Current Tasks}
+    # Milestone 390: the walk drags a Kanban card to another bucket
+    drag:
+      - {items: .kanban-card, into: ".bucket .tasks"}
+    avoid:
+      - "log ?out"
+      - "sign ?out"
+      - "^Delete (my |your )?account"
+      - "^Import your data"     # the importers reach Todoist, Trello and others on the internet
+      - "^(Language|English)$"  # another language renames every control
+      - "^change$"              # the login page's "change" points the frontend at another server
+  watch:
+    console: false              # Vikunja logs the errors it shows as toasts with console.error
+    alerts: ["[role=alert]", "[role=alertdialog]", ".vue-notification"]   # the error toasts
+    requests: /api/             # judge the API's requests (/api/v1 and /api/v2), not the static files
+    # a failed write of a project, a task, a label, a team or a saved filter must show (the
+    # pattern matches `<METHOD> <path>`); the token's refresh in the background, and the reads
+    # that refresh lists and notifications, retry by themselves
+    failures_of: "^(POST|PUT|PATCH|DELETE) /api/v[12]/(projects|tasks|labels|teams|filters)"
+  # Milestone 334: the pages show what Vikunja acknowledged. Every task that Vikunja answered as
+  # created has its own page /tasks/<id>, unless a later acknowledged write deleted it or its
+  # project. (Milestone 334 looked for a link under "Current Tasks" of the home page; since
+  # Milestone 390 the walk marks tasks done, and the home page hides a done task.) The check runs
+  # at the end of the run and in the recovery boot after a power cut, where it signs in with the
+  # account that the walk made.
+  read_back:
+    setup:
+      - {open: /login}
+      - {fill: Username Or Email Address, with: hydo}
+      - {fill: Password, with: hydo-pass-1}
+      - {click: Login}
+      - {see: Current Tasks}
+    objects:
+      - writes: '^(POST|PUT) /api/v[12]/projects/(?<project>\d+)/tasks(/bulk)?$'
+        name: task
+        page: /tasks/{id}
+        shows: .task-view
+        unless: '^DELETE /api/v[12]/(tasks/{id}|projects/{project})$'
+
+invariants:
+  - id: vikunja.saved_work_survives
+    msg: every task, project, comment, label, saved filter and team that Vikunja answered as saved is in its database
+    # a copy of the database and its WAL (SQLite rebuilds the index); a copy taken while
+    # Vikunja wrote it can be torn, and the rule then exits 3 and the copy is taken again
+    cmd: |
+      i=0
+      while [ $i -lt 5 ]; do
+        rm -rf /tmp/hydo/rules-db && mkdir -p /tmp/hydo/rules-db
+        cp /data/vol/bind-db/vikunja.db /data/vol/bind-db/vikunja.db-wal /tmp/hydo/rules-db/ 2>/dev/null
+        hydo-oci browser node --experimental-sqlite --no-warnings /opt/hydo/web/rules/vikunja.mjs saved /tmp/hydo/rules-db/vikunja.db "$HYDO_ACKED"
+        rc=$?
+        [ $rc -eq 3 ] || exit $rc
+        sleep 1
+        i=$((i + 1))
+      done
+      exit 2
+  - id: vikunja.kanban_matches_done
+    msg: on every Kanban board with a done bucket, a task is in that bucket exactly when it is done, and every task is in one bucket of the board
+    cmd: |
+      i=0
+      while [ $i -lt 5 ]; do
+        rm -rf /tmp/hydo/rules-db2 && mkdir -p /tmp/hydo/rules-db2
+        cp /data/vol/bind-db/vikunja.db /data/vol/bind-db/vikunja.db-wal /tmp/hydo/rules-db2/ 2>/dev/null
+        hydo-oci browser node --experimental-sqlite --no-warnings /opt/hydo/web/rules/vikunja.mjs kanban /tmp/hydo/rules-db2/vikunja.db "$HYDO_ACKED"
+        rc=$?
+        [ $rc -eq 3 ] || exit $rc
+        sleep 1
+        i=$((i + 1))
+      done
+      exit 2
+
+faults: [kill, pause, network, oneway, cut, clock, disk]

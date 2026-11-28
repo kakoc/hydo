@@ -2107,6 +2107,22 @@ pub struct BrowserExplore {
     /// (default `(^|/)(login|log-in|signin|sign-in|sign_in)(/|$)`); only with `sign_in`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signed_out: Option<Text>,
+    /// Milestone 390: drag and drop between lists, such as Kanban cards between buckets: each
+    /// entry names the items that can be dragged and the places they can be dropped on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drag: Option<Vec<BrowserDrag>>,
+}
+
+/// One entry of `browser.explore.drag` (Milestone 390): CSS selectors of what the walk can drag
+/// and of where it can drop it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields, expecting = "a mapping")]
+pub struct BrowserDrag {
+    /// The items that can be dragged, such as `.kanban-card`. An item is chosen by its text.
+    pub items: Text,
+    /// The places an item can be dropped on, such as `.bucket .tasks`. A place is chosen by its
+    /// place among them; the one that holds the item is left out.
+    pub into: Text,
 }
 
 /// One step of `browser.explore.setup`: one of open, click, fill, press, see or wait.

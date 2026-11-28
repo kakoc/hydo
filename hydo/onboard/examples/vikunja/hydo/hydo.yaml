@@ -84,6 +84,9 @@ browser:
       - {fill: Password, with: hydo-pass-1}
       - {click: Login}
       - {see: Current Tasks}
+    # Milestone 390: the walk drags a Kanban card to another bucket
+    drag:
+      - {items: .kanban-card, into: ".bucket .tasks"}
     avoid:
       - "log ?out"
       - "sign ?out"
