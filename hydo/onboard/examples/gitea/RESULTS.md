@@ -66,13 +66,13 @@ The other candidates were left for these reasons:
 | `hydo/page-rules/gitea.mjs` | The project's own rules over the database and the search (below). |
 | `hydo/fetch-images.sh`, `hydo/hydo-compose.lock.json` | The Gitea image by digest, written by `hydo compose`. |
 | `hydo/hydo-kvm.yaml` | The manifest for KVM: `guest.proc_io: false`, because the runners' release has no KVM kernels of epoch 7. |
-| `hydo/hydo-gitfsync.yaml` | The contrast of finding 2: Gitea runs Git with `core.fsync=committed`. |
+| `hydo/hydo-gitfsync.yaml` | The contrast of finding 2, in which Gitea runs Git with `core.fsync=committed`. |
 | `hydo/regressions/` | The saved schedules of the findings. |
 
 What changed from the import:
 
 - The workload and the placeholder invariant of `hydo compose` gave way to `browser.explore`.
-- The walk's setup registers the account `hydo`, the first account and so the administrator.
+- The walk's setup registers the account `hydo`, the first account, and so the administrator.
   It creates the repository `hydo/demo` with a README ("Initialize Repository"). It adds the
   default label set, the milestone `v1`, and one issue, and it starts that issue's timer. The
   walk then starts on `/hydo/demo/issues`, and `within: /hydo/demo/issues` keeps it on the
@@ -88,8 +88,8 @@ What changed from the import:
 - `watch.alerts` adds Gitea's error toasts (`.toastify.toast-error`) and flash messages
   (`.flash-error`). `watch.requests: /hydo/` judges the repository's requests, not the static
   files or the notification stream `/user/events`. `watch.failures_of: "^POST /hydo/demo/issues"`
-  names the issue writes. `watch.console: false`: Gitea logs each failed fetch with
-  `console.error` and shows it as an error toast.
+  names the issue writes. `watch.console: false` leaves out the `console.error` that Gitea
+  writes for each failed fetch beside its error toast.
 - `guest.clock_after_cut: 60`: the recovery boot after a power cut continues the first boot's
   clock, 60 s later, as a server's clock does.
 
@@ -115,7 +115,8 @@ word names the write's path and, for a comment, its issue, but not the new objec
 - `gitea.counters_match`: the numbers that Gitea keeps beside its rows agree with the rows. These
   are a repository's open and closed issues, an issue's comments, a label's and a milestone's open
   and closed issues, and the repository's last issue number. Gitea shows these numbers on its
-  pages: the tab "Issues 3", the line "2 Open 1 Closed", and a label's and a milestone's counts.
+  pages: the tab of the issues, the line of open and closed issues, and the counts of a label and
+  of a milestone.
 - `gitea.issues_found_by_search`: the search of the repository's issues finds every issue of the
   database by the longest word of its title of 4 to 20 letters and digits. Gitea fills its issue
   index (bleve) from a queue of its own after the commit, so the rule asks the API
@@ -145,8 +146,8 @@ word names the write's path and, for a comment, its issue, but not the new objec
 `disk=none | run I=1` registers the account, creates the repository, its labels, its milestone
 and its first issue, and starts the issue's timer. Then the walk takes 72 actions in 6 steps. In
 them it creates two more issues, closes and comments on one, starts and stops a timer, sets a due
-date, and opens the labels, milestones, assignees and dependencies of the sidebar. A run takes
-about 100 s of wall time. On the final image both runs gave FP_CLEAN and every invariant held.
+date, and opens the labels, milestones, assignees, and dependencies of the sidebar. A run takes
+about 100 s of wall time. On the final image both runs gave `3b4c104284e793a1` and every invariant held.
 The first image gave `b8cd01e4d6f4acea` twice, the image with the search rule `990b215e5399e488`
 twice, and the image with the clock across a power cut `fd2cd864ae5628c2` twice.
 
@@ -170,9 +171,10 @@ the user would, and reads every tracked time back.
 **The regression.** `regressions/timer-after-a-step-back-records-a-negative-time.schedule`:
 `disk=none | run T=2:-3600 I=1,x0.0-11,x1.0-11,x2.0-11,x3.0-11,x4.0-11,x5.0-11`. The walk
 leaves out every action, so only the setup's timer runs, from step 0 to the end. It failed twice
-with FP_BACK: "the issue #1 of hydo/demo has a tracked time of −3,5xx s". Without the step
-(FP_NONE) and with a step forward of an hour (FP_FWD) it passes; the step forward records an hour
-that nobody worked, as a timer on the wall clock does.
+with `62ea118806db865f`. The check printed that the issue #1 has a tracked time of −3,572 s. It
+passes without the step (`a761cb10f30c347d`) and with a step forward of an hour
+(`9508f61947f9ae94`). The step forward records an hour that nobody worked, as a timer on the wall
+clock does.
 
 **Why.** `finishIssueStopwatch` (`models/issues/stopwatch.go`, line 140, the same on `main`)
 computes the time as `time.Now().Unix() - int64(sw.CreatedUnix)` and stores it with no lower
@@ -193,27 +195,33 @@ table below): no issue names a negative tracked time or a timer after a clock ch
 **What a user meets.** A user creates a repository with "Initialize Repository", so Gitea commits
 a README, a license and a `.gitignore`, and shows the new repository. The machine loses its power
 within about half a minute. After the restart Gitea's database says the repository has its
-branch `main`, and the branch's ref file in the Git repository is broken: `git` says "warning:
-ignoring broken ref refs/heads/main" and finds no commit. INSPECT_PAGE
+branch `main`, and the Git repository is broken. In the run's end state (`hydo inspect start
+runs/h-cut1 --at end`) the file `refs/heads/main` is empty, and so are two of the push's loose
+objects. `git fsck` reports `badRefContent` and "object corrupt or missing", and `git log` says
+"fatal: your current branch appears to be broken". INSPECT_PAGE
 
 **How hydo found it.** Directed, by the rule `gitea.repository_readable` and the power cuts that
 the blind explorations did not draw: the process strategy put all 47 of its power cuts at the end
 of the walk (`C=6`), and no such cut came within half a minute of the setup. `disk=none | run C=1
 I=1` cuts the power after step 0, about 20 s of guest time after the setup's commit. It failed
-twice with FP_CUT1 on the final image. With a disk that keeps its write cache (`disk=cut`) it
-fails the same way (FP_DCUT1), and so does the walk without actions (FP_CUT1X). A cut after step 1
-(`C=2`) passes (FP_CUT2): by then the guest's kernel had written the files back.
+twice with `5a3e89f72094688c` on the final image. With a disk that keeps its write cache
+(`disk=cut`) it fails the same way (`dc0fa08f19c782ec`), and so does the walk without actions
+(`1afa406a3e829119`). A cut after step 1 (`C=2`) passes (`f4cd928bbc981238`): by then the guest's
+kernel had written the files back.
 
 **The regression.** `regressions/power-cut-after-a-new-repository-breaks-its-branch.schedule`:
 `disk=none | run C=1 I=1`.
 
-**Why.** Gitea writes the first commit with Git: `initRepoCommit` (`services/repository/init.go`)
-runs `git add`, `git commit` in a temporary folder and pushes to the bare repository
-(`git.PushFromLocal`). `git receive-pack` stores the objects of a small push as loose objects and
-updates `refs/heads/main` by a rename. With Git's default `core.fsync`, which leaves out loose
-objects and refs, nothing of it is synced. Gitea then commits the repository's row with
-`is_empty = false` to SQLite, which syncs. Gitea sets no `core.fsync` of its own
-(`modules/git/config.go` sets other keys), and its documentation names none. With Gitea's
+**Why.** `CreateRepositoryDirectly` (`services/repository/create.go`) first commits the
+repository's row with `is_empty = false` when the user asked for a README (lines 230 and 238). Then
+it creates the bare repository and writes the first commit with Git (line 277). `initRepoCommit`
+(`services/repository/init.go`) runs `git add` and `git commit` in a temporary folder and pushes
+to the bare repository (`git.PushFromLocal`, line 70). `git receive-pack` stores the objects of a
+small push as loose objects and writes `refs/heads/main`. With Git's default `core.fsync`, which
+leaves out loose objects and refs, nothing of that is synced. Last, Gitea sets the row's status to
+ready (line 309) and answers. Its SQLite commits are synced, so the database outlives the cut and
+the Git files do not. Gitea sets no `core.fsync` of its own (`modules/git/config.go` sets other
+keys), and its documentation names none. With Gitea's
 `[git.config]` section setting `core.fsync=committed` (`hydo/hydo-gitfsync.yaml`), the same cut
 passes: FSYNC_CONTRAST.
 
@@ -229,10 +237,10 @@ reproduction without hydo was made.
 Each exploration's first failures were the rules' own:
 
 - e1 seed 16 and KVM seeds 37, 41 and 57 failed `gitea.saved_work_survives`. Each walk had closed
-  and reopened an issue, and the rule counted Gitea's comment types 0, 2 and 3. A reopen is type
+  and reopened an issue, and the rule counted Gitea's comment types 0, 2, and 3. A reopen is type
   1 (`models/issues/comment.go`, line 71). The trace of KVM seed 41 showed both posts
   (`status=close`, `status=reopen`) answered `{"redirect": "/hydo/demo/issues/1"}`, and Gitea's
-  log showed both `200 OK` without an error. Fixed to 0, 1 and 2.
+  log showed both `200 OK` without an error. Fixed to 0, 1, and 2.
 - Four failures of the timer rule in the second KVM exploration (seeds 78, 86 and 106, and 66)
   had a power cut at the end. Without `guest.clock_after_cut` the recovery boot's clock starts at
   `clock_start` again, before the timer's start (MANIFEST.md "Clock after a power cut"), so the
@@ -271,16 +279,16 @@ search issues --include-prs`. The repository has no discussions.
 | e2, hvx, 1 worker | the clock across a cut | 21-40 | 20 | 34 min (84 s a run) | 1: finding 1 (37) |
 | k3, KVM, 20 parts | the same | 121-180 | 60 | 16 min | 3: finding 1 (122, 169), and `console.error` (174) |
 
-Of the 200 schedules, 150 had a kill of the server, 156 a pause, 138 a network fault, 67 a step
-back and 75 a step forward of the clock, and 47 a power cut. Every power cut came at the end of
+Of the 200 schedules, 150 had a kill of the server and 156 a pause. 138 had a network fault, 67
+a step back and 75 a step forward of the clock, and 47 a power cut. Every power cut came at the end of
 the walk (`C=6`). No exploration shrank: the failures were judged by directed runs.
 
 ## What held
 
-- Every issue, comment, close and reopen that Gitea answered as saved was in its database, under
-  kills, pauses, network faults, one-way network faults, clock steps and power cuts at the end of
-  the walk. Gitea's SQLite runs with its rollback journal and `synchronous=FULL`, so a commit is
-  on the disk when Gitea answers.
+- Every issue, comment, close, and reopen that Gitea answered as saved was in its database. That
+  held under kills, pauses, network faults, one-way network faults, clock steps, and power cuts
+  at the end of the walk. Gitea's SQLite runs with its rollback journal and `synchronous=FULL`,
+  so a commit is on the disk when Gitea answers.
 - The counts that Gitea keeps beside its rows (issues, closed issues, comments, labels,
   milestones, the last issue number) matched the rows in every run.
 - The search found every issue by a word of its title, also after kills and power cuts at the end
@@ -310,11 +318,11 @@ The gaps are in the order of the time they cost. The ones of the walk go to open
   each write of its fetch forms with `{"redirect": "/hydo/demo/issues/3"}`, which names the new
   issue in a path. So `$HYDO_ACKED` has no id, `browser.read_back` cannot be used, and the rule
   counts the issues of a repository instead of naming each one.
-- **No body in a word.** A word names the method and the path, not what was sent. Gitea's
+- **No body in the walk's words.** A word names the method and the path, not what was sent. Gitea's
   comment form posts a comment, a close, or both, to one path, so the rule cannot tell which, and
-  it counts comments, closes and reopens together.
+  it counts comments, closes, and reopens together.
 - **The walk wanders.** Without `within`, the first native walks spent their actions in the API's
-  Swagger pages, the settings, the code view and the search. With `within: /hydo/demo/issues` the
+  Swagger pages, the settings, the code view, and the search. With `within: /hydo/demo/issues` the
   walk stays on the issues, but `avoid` needs 13 patterns. Two of them cover the editor's toolbar,
   whose 15 buttons insert text and save nothing. In the 60 walks of the last KVM exploration, 489 of 3,408
   actions (one in seven) still filled a field without sending it, 222 of them the comment field.
@@ -340,7 +348,7 @@ The gaps are in the order of the time they cost. The ones of the walk go to open
 | Scouting and the fit check | 30 minutes |
 | Setup to the first clean run, with native walks of Gitea in Docker on this Mac | 45 minutes |
 | The explorations e1 and e2 on hvx, and k1 to k3 on KVM | 2 hours of machine time, partly in parallel |
-| Judging: the rules' mistakes, the trace of KVM seed 41, the directed runs and the contrast | 3 hours, much of it builds of 15 to 40 minutes beside another session's builds |
+| Judging: the rules' mistakes, the trace of KVM seed 41, the directed runs, and the contrast | 3 hours, much of it builds of 15 to 40 minutes beside another session's builds |
 | Duplicate search and write-up | 1 hour |
 
 Three restarts of the agent's process on this Mac, two of them reboots, stopped the waits on this

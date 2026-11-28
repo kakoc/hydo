@@ -26885,15 +26885,18 @@ sw.CreatedUnix` without a lower bound (`models/issues/stopwatch.go`, line 140), 
 issue's timeline then shows "worked for now", and its "Total Time Spent" counts the negative time
 against the times before it. Blind on KVM at seeds 72, 79, 122 and 169, and on hvx at seed 37 of
 e2. The regression `disk=none | run T=2:-3600 I=1,x0.0-11,...,x5.0-11` (the setup's timer alone)
-failed twice with FP_BACK; without the step FP_NONE and with a step forward FP_FWD it passes.
+failed twice with `62ea118806db865f` (−3,572 s); without the step (`a761cb10f30c347d`) and with a
+step forward (`9508f61947f9ae94`) it passes.
 
 **Finding 2, new.** A power cut within about half a minute after a repository is created with
 "Initialize Repository" leaves its branch broken: `git` says "warning: ignoring broken ref
 refs/heads/main", while Gitea's database says the repository is not empty. Gitea pushes the first
 commit from a temporary folder (`initRepoCommit`, `services/repository/init.go`), and with Git's
 default `core.fsync` neither the loose objects nor the ref reach the disk before Gitea answers;
-Gitea sets no `core.fsync`. Directed: `disk=none | run C=1 I=1` failed twice with FP_CUT1, and
-with `disk=cut` too (FP_DCUT1); `C=2` passes. With `core.fsync=committed` the same cut passes
+the database's row, written before the push, is synced. Gitea sets no `core.fsync`. In the end
+state `refs/heads/main` and two loose objects are empty files. Directed: `disk=none | run C=1
+I=1` failed twice with `5a3e89f72094688c`, and with `disk=cut` too (`dc0fa08f19c782ec`); `C=2`
+passes (`f4cd928bbc981238`). With `core.fsync=committed` the same cut passes
 (FSYNC_CONTRAST). Gitea's #31834, the same symptom after a merge's power outage, was closed as a
 power outage's damage. INSPECT_PAGE
 
