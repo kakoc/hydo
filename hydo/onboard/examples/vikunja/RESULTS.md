@@ -304,6 +304,51 @@ walker.
   task 3 too (two tasks before), and with `disk=cut` and `C=6` the WAL had reached the disk
   before the cut, and nothing was lost (two tasks before).
 
+## Upgrades during a walk (Milestone 392)
+
+The variant `upgrade/` runs Vikunja 2.7.1 and upgrades it to 2.8.0, the next release, on the same
+SQLite database, while the walk runs. It was imported with `hydo compose docker-compose.yaml
+--upgrade-to vikunja=vikunja/vikunja:2.8.0`, which pins both images. The rest of its manifest is
+this example's walk and read-back. 2.8.0 migrates the database at its start: it adds `deleted_at`
+to projects and tasks. So the variant keeps its own copy of the rules, which read either schema;
+the first run with this example's rules failed on 2.7.1 with `no such column: p.deleted_at`. Its
+data disk has 256 MiB, so that the root with both Vikunja images and the Playwright image fits the
+4 GiB of hvx.
+
+`U=vikunja@2~<ms>:2.8.0` sends SIGTERM to 2.7.1 `<ms>` of guest time into step 2, starts 2.8.0 when
+2.7.1 has ended, and waits for its readiness check, while the walk goes on. The walk's browser opens
+its first page about 5 s into the step. Every schedule ran twice on hvx, from fresh boots of the image
+`822fe52d…`, with one fingerprint:
+
+| schedule | verdict | fingerprint |
+|---|---|---|
+| `disk=none \| run I=1` | OK, 2.7.1 throughout | `4afa173eb515893a` |
+| `disk=none \| run I=1 U=vikunja@2:2.8.0` | OK, the upgrade between steps 1 and 2 | `6cde8fa517f6ec8e` |
+| `disk=none \| run I=1 U=vikunja@2~8000:2.8.0` | OK, the upgrade with the page of 2.7.1 open | `a42af1d1b15fa97f` |
+| `disk=none \| run I=1 U=vikunja@2~12000:2.8.0` | OK, the same 4 s later | `ac528bd552f0da8d` |
+| `disk=none \| run I=1 U=vikunja@2~1500:2.8.0` | VIOLATION `browser.no_page_errors`: the page `/` left a promise rejection unhandled, `Error: Error while refreshing user info:` | `5ee92a684aa53c60` |
+| `disk=none \| run I=1 U=vikunja@2~1500+2:2.8.0` | the same violation twice, and the rollback to 2.7.1 before step 4 started | `9db42de9179a05e4` |
+| `disk=none \| run I=1 X=vikunja@2~1500` | the same violation, with a kill and no upgrade | `5fc1602ff4019c5b` |
+| `disk=cut \| run I=1 U=vikunja@2~8000:2.8.0 C=4` | VIOLATION `vikunja.saved_work_survives`: task 3 lost (finding 1); the recovery boot started 2.8.0 | `942b51d922e4a490` |
+
+What the runs show:
+
+- The upgrade kept its promises. With the pages of 2.7.1 open across the switch, the old frontend
+  went on with the API of 2.8.0, and every page check held. Every task that either version
+  acknowledged was in the database and on the home page of 2.8.0.
+- 2.7.1 started on the database that 2.8.0 had migrated, and the rollback's runs held but for the
+  page error below. 2.7.1 does not know the column `deleted_at`, so a task that 2.8.0 keeps as
+  deleted would come back after a rollback. No walk deleted a task, so no run showed it.
+- A small candidate, not posted, of a deploy's downtime and not of the versions. A page opened while
+  the server is down shows "Failed to fetch". Then `GET /api/v2/user` fails, and the frontend
+  rejects its promise `Error while refreshing user info` without a handler. At 1.5 s into the step the
+  switch had stopped 2.7.1 before the walk opened its page. A kill of 2.7.1 at the same moment, with
+  no upgrade, gives the same error (`X=vikunja@2~1500`), and so does the example's own image of
+  2.8.0 (`3bb7a1adba79889a`).
+- After the power cut the recovery boot started the version that ran at the cut, 2.8.0, from the
+  report line `hydo-explore-versions: vikunja=2.8.0`. The task that it lost is finding 1: the
+  commit was not on the disk yet.
+
 ## What held
 
 - Apart from the power cuts of finding 1, every object that Vikunja answered as saved was in its
