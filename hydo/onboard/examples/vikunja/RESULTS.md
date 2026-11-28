@@ -315,3 +315,27 @@ walker.
   `Invalid Date`. Every failed write of a task, project, label, team or saved filter showed a toast
   but the one of finding 2. The page checks of a walk with a power cut ran in the recovery boot
   and judged no page (open item 124): 19 of the 40 walks of seeds 21-60.
+
+## Answers in another order, double submits, and offline pages (Milestone 393)
+
+`hydo-proxy.yaml` (`2d9d3639…`) puts the proxy `app` in front of the server. The
+first version's routes named `/api/v1`, and a clean run's record showed that the frontend of 2.8.0
+uses `/api/v2` (`GET /api/v2/tasks`, `GET /api/v2/projects`, `POST
+/api/v2/projects/<id>/tasks/bulk`), so the routes were fixed. Each schedule ran twice with one
+fingerprint, and a session of `hydo inspect` at each run's end read the proxy's record:
+
+| schedule | verdict | the proxy's record | fingerprint |
+|---|---|---|---|
+| `disk=none \| run I=1` | OK, 8 properties held | 1,254 requests | `b563ccc23110abff` |
+| `disk=none \| run H=app.tasks@0-6:order=2,wait=6000 H=app.projects@0-6:order=2,wait=6000 I=1` | OK; one answer came after a newer one's, and the page showed neither answer's own values | 16 answers of `tasks` and 15 of `projects` held | `ca55ff6488b7e55f` |
+| `disk=none \| run H=app.bulk@1-6:twice I=1` | OK | 4 bulk creations sent twice (`copy=`) | `ca73949ad83de3de` |
+| `disk=none \| run N=browser@2~500:5000 I=1` | OK: the link was cut 500 ms into step 2 for 5 s | | `23dc627c63eb67ab` |
+
+The pages and the database rules held under each. The 4 copies of the bulk creations reached the
+server. Whether Vikunja stored those tasks twice was not read: no check of the example judges a
+duplicate, because `vikunja.saved_work_survives` and `browser.acked_shown` look only for every
+acknowledged task.
+
+The runs used hvx on the bare-metal machine with this branch's programs over the 0.7.0 Linux
+release's guest files and the branch's `hydo-world`, at the fingerprint epoch 7. `hydo.yaml` did
+not change, so its image and its runs above stay.
