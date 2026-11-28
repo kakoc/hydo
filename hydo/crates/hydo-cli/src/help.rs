@@ -121,7 +121,11 @@ The explorer's options (hydo explore passes them on; --image and --out have the 
   whether a run without a fault reached it, only runs under faults, or none, with the runs in
   seed order and the curve of functions reached. --against DIR counts what the runs of DIR (an
   exploration made with `hydo explore --no-faults`) reached as reached without a fault. `hydo
-  explore --live` serves it while the exploration runs. Ctrl-C stops it.
+  explore --live` serves it while the exploration runs. Ctrl-C stops it. --showcase serves a
+  dark page for people new to hydo instead: the map and the flow of calls from the program's
+  entry points, the runs with their faults, and each bug in one sentence with the command that
+  replays it. --routes DIR (`hydo explore --live-routes DIR`) names the flow's entry points by
+  the routes of the sources in DIR, as `hydo rules scan --kind writes` lists them.
   --html writes it as one web page instead (FILE, default DIR/report.html), for a run, an
   exploration or a `hydo ci run` output directory: each failure with its minimal schedule and
   the command that replays it, the failing run's timeline, where it first differs from a
