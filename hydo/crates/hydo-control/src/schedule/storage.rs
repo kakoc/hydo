@@ -36,7 +36,9 @@
 //!   a run the mounts and the reads of these faults are made by busybox in a child process
 //!   ([`in_child`]), which alone waits. Every other run sends the agent's own commands as before.
 
-use super::{bb, busybox, call, die_oracle, log, run, sh, svc_sig, xassert, Conversation, Ctx, F};
+use super::{
+    bb, busybox, call, die_oracle, env, log, run, secs, sh, svc_sig, xassert, Conversation, Ctx, F,
+};
 use crate::flow::Step;
 use crate::plan::PlanStorage;
 use hydo_agent_proto::msg::{Command, Mkdir, Mount, MountFlag, Read, Reply, Sig, Signal};
@@ -483,6 +485,35 @@ fn links(fx: &mut F<'_>, ctx: &Ctx, svc: &str, up: bool) -> Step<bool> {
         );
     }
     Ok(true)
+}
+
+/// `N=<svc>@<at>~<off>:<dur>` (Milestone 393): `off` ms after the step starts, the service's
+/// bridge port goes down; `dur` ms later it comes up again, while the step runs. With
+/// `browser:` the service is the browser: its page is offline, and its requests to the server
+/// and to the fakes fail or wait until the link is back. Without network: bridge it is logged and
+/// nothing happens.
+pub(super) fn link_cut_timer(fx: &mut F<'_>, ctx: &Ctx, svc: &str, off: u64, dur: u64) -> Step<()> {
+    let e = env(fx, ctx, &[]);
+    run(
+        fx,
+        vec![bb(ctx), "sleep".into(), secs(off, 6)],
+        e.clone(),
+        None,
+    )?;
+    if !links(fx, ctx, svc, false)? {
+        return Ok(());
+    }
+    log(fx, format!("LINK of {svc} cut (timer, for {dur}ms)"));
+    xassert(
+        fx,
+        "reachable",
+        "fault.link_cut",
+        "a service's network link was cut while a step ran",
+    );
+    run(fx, vec![bb(ctx), "sleep".into(), secs(dur, 6)], e, None)?;
+    links(fx, ctx, svc, true)?;
+    log(fx, format!("LINK of {svc} back (timer)"));
+    Ok(())
 }
 
 /// A strict power loss's service is back: its links first (before it starts again).

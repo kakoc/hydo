@@ -180,6 +180,9 @@ struct RunCfg {
     z: Option<(Target, i64, Option<i64>, hydo_schedule::Corruption)>,
     /// L=: (svc, at, up, strict) (strict: Milestone 245).
     l: Option<(String, i64, i64, bool)>,
+    /// `N=<svc>@<at>~<off>:<dur>` (Milestone 393): a timed cut of one service's link, as
+    /// (svc, at, off ms, dur ms).
+    lc: Option<(String, i64, u64, u64)>,
     /// U= (Milestone 238): the upgrades, in token order (schedule/upgrade.rs).
     u: Vec<hydo_schedule::Upgrade>,
     /// I= (Milestone 258): the walk of `browser.explore`, as its value's text.
@@ -357,6 +360,12 @@ enum Part {
         off: u64,
         dur: u64,
     },
+    /// `N=<svc>@<at>~<off>:<dur>` (Milestone 393): the timed cut of one service's link.
+    LinkCutTimer {
+        svc: String,
+        off: u64,
+        dur: u64,
+    },
     /// The stack's kill_timer (X=), see `explore_run`.
     KillTimer {
         svcs: Vec<String>,
@@ -393,6 +402,7 @@ fn label(p: &Part) -> String {
         Part::Every(i, _) => format!("every:i{i}"),
         Part::PauseTimer { .. } | Part::ThreadPauseTimer { .. } => "pause-timer".into(),
         Part::KillTimer { .. } => "kill-timer".into(),
+        Part::LinkCutTimer { .. } => "link-cut-timer".into(),
         Part::Compose(j) => composer::label(j),
         Part::Live(m) => liveness::label(m),
         Part::FreezeWatch { .. } => "freeze".into(),
@@ -838,6 +848,12 @@ fn run_cfg(plan: &Plan, s: &Schedule) -> Result<RunCfg, Unsupported> {
                 });
             }
             GuestToken::Cut(at) => c.c = Some(*at as i64),
+            GuestToken::LinkCut {
+                svc,
+                at,
+                off_ms,
+                dur_ms,
+            } => c.lc = Some((svc.clone(), *at as i64, *off_ms, *dur_ms)),
             GuestToken::TimedKill { target, at, off_ms } => {
                 c.x = Some((target.clone(), *at as i64, *off_ms));
             }
@@ -1122,6 +1138,7 @@ fn body(fx: &mut F<'_>, part: &Part) -> Step<()> {
             threads::pause_threads(fx, &ctx, sel, *off, *dur)
         }
         Part::KillTimer { svcs, off } => kill_timer(fx, &ctx, svcs, *off),
+        Part::LinkCutTimer { svc, off, dur } => storage::link_cut_timer(fx, &ctx, svc, *off, *dur),
         Part::Compose(j) => composer::job(fx, &ctx, j),
         Part::Live(m) => liveness::live_monitor(fx, &ctx, m),
         Part::FreezeWatch { id, dur } => freeze::watch(fx, *id, *dur),
@@ -3338,6 +3355,8 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         .chain(reactions.iter().map(|(_, r)| r.at as i64))
         .chain(cfg.u.iter().flat_map(|u| upgrade::steps(ctx, u)))
         .chain(cfg.ts.iter().map(|(_, at, _)| *at))
+        // Milestone 393: a link cut's timer is armed before its step
+        .chain(cfg.lc.iter().map(|(_, at, ..)| *at))
         .filter(|p| *p >= from && *p <= steps)
         .collect();
     pts.sort();
@@ -3369,6 +3388,15 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
     let mut zdown: Vec<String> = Vec::new();
     let (mut ldown, mut lcut) = (false, false);
     let (mut ptimer, mut xtimer): (Option<usize>, Option<usize>) = (None, None);
+    // Milestone 393: the timed cut of one service's link (N=<svc>@<at>~<off>:<dur>)
+    let mut lctimer: Option<usize> = None;
+    let lc = cfg.lc.clone().filter(|(svc, ..)| {
+        let ok = known(svc);
+        if !ok {
+            log(fx, format!("N: no service {svc}, ignored"));
+        }
+        ok
+    });
     let mut prev: Option<i64> = None;
     // M139: the reactions' threads, and whether a reaction's power cut ended the steps
     let mut rthreads: Vec<(usize, usize)> = Vec::new();
@@ -3583,6 +3611,23 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
                 );
             }
         }
+        // Milestone 393: the link cut's timer, armed before its step
+        if let Some((svc, at, off, dur)) = &lc {
+            if *at == p {
+                lctimer = Some(fx.start(Part::LinkCutTimer {
+                    svc: svc.clone(),
+                    off: *off,
+                    dur: *dur,
+                })?);
+                log(
+                    fx,
+                    format!(
+                        "link cut timer for {svc} armed before step {p} (after {off}ms, for \
+                         {dur}ms)"
+                    ),
+                );
+            }
+        }
         // SEAM(Clock): `p == tat`: the clock step, its 5 s check, fault.clock_back/fwd.
         if p == tat {
             match &cfg.tto {
@@ -3644,6 +3689,9 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         }
         if let Some(t) = xtimer {
             fx.cancel(t);
+        }
+        if let Some(t) = lctimer {
+            fx.cancel(t); // the recovery boot sets every link up again
         }
         // SEAM(Freeze): stop_periodic's wrapper: the helper must not continue the service
         freeze::kill(fx)?;
@@ -3745,6 +3793,10 @@ fn explore_run(fx: &mut F<'_>, ctx: &Ctx) -> Step<()> {
         }
     }
     if let Some(t) = xtimer {
+        fx.join(t)?;
+    }
+    // Milestone 393: a link cut heals itself; its timer ends before the heal's restarts
+    if let Some(t) = lctimer {
         fx.join(t)?;
     }
     const NO_RESTART: &str = "HYDO-ORACLE: ERROR restart after the faults";

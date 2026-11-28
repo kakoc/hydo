@@ -390,6 +390,71 @@ faults: [kill, powerloss, network]
         .any(|c| c.contains("link set vh1")));
 }
 
+/// Milestone 393: `N=<svc>@<at>~<off>:<dur>` sets the service's bridge port down off ms into the
+/// step and up again dur ms later, from a timer beside the step; refused without network: bridge.
+#[test]
+fn a_timed_link_cut_sets_the_bridge_port_down_and_up() {
+    let text = "name: link-cut
+network: bridge
+services:
+  - name: db
+    cmd: db-server
+    ready: db-ping
+    addr: 10.89.0.11
+    port: 4001
+  - name: peer
+    cmd: peer-server
+    ready: \"true\"
+    addr: 10.89.0.12
+    port: 4002
+workload:
+  steps: 8
+  run: client
+invariants:
+  - id: all.done
+    final: true
+    cmd: final-check
+faults: [kill, network]
+";
+    let m = hydo_manifest::from_embedded(text, None)
+        .unwrap_or_else(|e| panic!("the manifest: {e}\n{text}"));
+    let p = Plan::from_manifest(&m).unwrap();
+    let s = "disk=none | run N=peer@3~250:1500";
+    let r = run(&p, s);
+    let cs = runs(&r.run.items);
+    let ns = notes(&r.run.items);
+    let at = |w: &str| {
+        cs.iter()
+            .position(|c| c.ends_with(w))
+            .unwrap_or_else(|| panic!("{w}: {cs:#?} {ns:#?}"))
+    };
+    let (sleep_off, down, sleep_dur, up) = (
+        at("sleep 0.250000"),
+        at("link set vh2 down"),
+        at("sleep 1.500000"),
+        at("link set vh2 up"),
+    );
+    assert!(
+        sleep_off < down && down < sleep_dur && sleep_dur < up,
+        "{cs:#?}"
+    );
+    assert!(
+        has(&ns, "link cut timer for peer armed before step 3"),
+        "{ns:#?}"
+    );
+    assert!(has(&ns, "LINK of peer cut (timer, for 1500ms)"), "{ns:#?}");
+    assert!(has(&ns, "LINK of peer back (timer)"), "{ns:#?}");
+    // a schedule without it sets no port down
+    let r = run(&p, "disk=none | run K=db@2+1");
+    assert!(!runs(&r.run.items).iter().any(|c| c.contains("link set vh")));
+    // an unknown service, or one network for all services, is refused before a run
+    let s = Schedule::parse("disk=none | run N=nosuch@3~250:1500").unwrap();
+    assert!(hydo_control::names::check(&p, &s).is_err());
+    let s = Schedule::parse("disk=none | run N=db@3~250:1500").unwrap();
+    let e = hydo_control::names::check(&plan(), &s).unwrap_err();
+    assert!(e.contains("needs network: bridge"), "{e}");
+}
+
 /// An image service has its storage directory bound into its root (`mounts:`); that bind kept the
 /// shut-down file system alive, and mounting the device again failed with "Resource busy" (the
 /// YugabyteDB onboarding). Its power loss unmounts every mount of the device and the launcher's

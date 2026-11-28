@@ -271,6 +271,17 @@ fn check_token(plan: &Plan, t: &GuestToken) -> Result<(), String> {
         GuestToken::Net { target, .. } | GuestToken::OneWay { target, .. } => {
             net_target(plan, t, target)
         }
+        // Milestone 393: a timed cut of one service's bridge port
+        GuestToken::LinkCut { svc, .. } => {
+            service(plan, t, svc)?;
+            if plan.bridge {
+                return Ok(());
+            }
+            Err(format!(
+                "{t} cuts the network link of {svc}, and this image's services share one \
+                 network (a cut of one service's link needs network: bridge)"
+            ))
+        }
         GuestToken::Cut(_) | GuestToken::Clock { .. } | GuestToken::ClockTo { .. } => Ok(()),
         // Milestone 372: one service's own clock needs `clock: own`, which starts the service
         // under hydo-clock
@@ -484,6 +495,7 @@ fn start_step(t: &GuestToken) -> Option<u64> {
         | GuestToken::ClockTo { at, .. }
         | GuestToken::ServiceClock { at, .. }
         | GuestToken::Corrupt { at, .. }
+        | GuestToken::LinkCut { at, .. }
         | GuestToken::PowerLoss { at, .. } => Some(*at),
         GuestToken::Net { from, .. } | GuestToken::OneWay { from, .. } => Some(*from),
         GuestToken::Protocol(h) => Some(h.from),
