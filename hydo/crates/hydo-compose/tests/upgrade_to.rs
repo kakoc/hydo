@@ -75,12 +75,16 @@ fn a_version_of_a_service_is_pinned_and_fetched_as_its_image() {
     let e = TmpDir::fresh(
         std::env::temp_dir().join(format!("hydo-compose-upgrade-to-{}-no", std::process::id())),
     );
-    assert_eq!(import(&e, &["--upgrade-to", "web=vikunja/vikunja:2.8.0"]), 1);
+    assert_eq!(
+        import(&e, &["--upgrade-to", "web=vikunja/vikunja:2.8.0"]),
+        1
+    );
     assert_eq!(import(&e, &["--upgrade-to", "vikunja"]), 2);
     // without the option the manifest has no versions
-    let f = TmpDir::fresh(
-        std::env::temp_dir().join(format!("hydo-compose-upgrade-to-{}-off", std::process::id())),
-    );
+    let f = TmpDir::fresh(std::env::temp_dir().join(format!(
+        "hydo-compose-upgrade-to-{}-off",
+        std::process::id()
+    )));
     assert_eq!(import(&f, &[]), 0);
     let m = std::fs::read_to_string(f.join("hydo/hydo.yaml")).unwrap();
     assert!(!m.contains("versions:"), "{m}");
