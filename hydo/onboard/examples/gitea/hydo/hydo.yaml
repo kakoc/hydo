@@ -122,6 +122,9 @@ browser:
       - "legacy editor"
       - "^Drop files"           # a file chooser, which the walk cannot fill
   watch:
+    # Gitea logs every failed fetch with console.error and shows it as an error toast
+    # (web_src/js/modules/fetch-action.ts), which failures_shown judges
+    console: false
     alerts: ["[role=alert]", "[role=alertdialog]", ".toastify.toast-error", ".flash-error"]   # Gitea's error toasts and flash messages
     requests: /hydo/            # the repository's pages and writes, not the static files or /user/events
     # a failed write of an issue must show: a new issue, a comment, a close or a reopen, a label,

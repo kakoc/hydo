@@ -106,7 +106,166 @@ word names the kind of write and, for a comment, its issue, but not the new obje
   (`GET /api/v1/repos/hydo/demo/times`). Gitea computes a stopped timer's time as the wall clock
   minus the timer's start (`models/issues/stopwatch.go`, line 140).
 
-<!-- RUNS -->
+## How the runs were made
+
+- hvx on the bare-metal machine, the main module (srcversion `91D86B693F4D4035C368F9B`), one VM
+  of this onboarding at a time beside another session's VMs.
+- hydo: this branch's `hydo`, `hydo-hvx` and `hydo-build` over the published 0.7.0 Linux release,
+  at the fingerprint epoch 7.
+- KVM: three explorations of `hydo/hydo-kvm.yaml` on GitHub's runners in 20 parts each
+  (`ci/remote-explore.sh`), on AMD EPYC 7763, 9V45 and 9V74 hosts and on Intel Xeon 6975P-C and
+  Platinum 8573C hosts.
+- The image was built five times as the rules and the settings changed. Each section names its
+  image by the rule it had.
+
+## Without faults
+
+`disk=none | run I=1` registers the account, creates the repository, its labels, its milestone
+and its first issue, and starts the issue's timer. Then the walk takes 72 actions in 6 steps. In
+them it creates two more issues, closes and comments on one, starts and stops a timer, sets a due
+date, and opens the labels, milestones, assignees and dependencies of the sidebar. A run takes
+about 100 s of wall time. On the final image both runs gave FP_CLEAN and every invariant held.
+The first image gave `b8cd01e4d6f4acea` twice, the image with the search rule `990b215e5399e488`
+twice, and the image with the clock across a power cut `fd2cd864ae5628c2` twice.
+
+## Finding 1 (new candidate, a clock effect): a timer stopped after the clock went back records a negative time
+
+**What a user meets.** A user starts the timer of an issue ("Start timer"). The server's wall
+clock then goes back, for example when NTP corrects a clock that ran fast, or a virtual machine
+is restored. When the user stops the timer, Gitea records a negative time. The issue's timeline
+says "hydo worked for now", and the issue's "Total Time Spent" counts the negative time against
+the times tracked before it: on this Mac, with 2 s tracked before, the total was empty. The
+repository's times, the user's times, and the API (`GET /repos/{owner}/{repo}/times`) show the
+negative number. The form "Add Time" refuses a total of zero or less, so a user cannot enter
+such a time by hand.
+
+**How hydo found it.** Blind, on KVM in the second exploration (seeds 72 and 79, `T=2:-2592000`
+and `T=2:-300`), and on the final manifest in 3 of 60 KVM schedules (seeds 122 and 169, steps
+back of an hour) and in 1 of 20 hvx schedules (seed 37 of e2, `T=4:-300`: −286 s). The rule
+`gitea.tracked_time_not_negative` stops a timer that still runs at the end through the API, as
+the user would, and reads every tracked time back.
+
+**The regression.** `regressions/timer-after-a-step-back-records-a-negative-time.schedule`:
+`disk=none | run T=2:-3600 I=1,x0.0-11,x1.0-11,x2.0-11,x3.0-11,x4.0-11,x5.0-11`. The walk
+leaves out every action, so only the setup's timer runs, from step 0 to the end. It failed twice
+with FP_BACK: "the issue #1 of hydo/demo has a tracked time of −3,5xx s". Without the step
+(FP_NONE) and with a step forward of an hour (FP_FWD) it passes; the step forward records an hour
+that nobody worked, as a timer on the wall clock does.
+
+**Why.** `finishIssueStopwatch` (`models/issues/stopwatch.go`, line 140, the same on `main`)
+computes the time as `time.Now().Unix() - int64(sw.CreatedUnix)` and stores it with no lower
+bound, in a tracked time and in the comment's text. `Stopwatch.Seconds()` (line 32) shows the
+running timer the same way. Both stops of a timer reach it: "Stop timer"
+(`routers/web/repo/issue_stopwatch.go`, line 48) and a close of the issue, which stops the timer
+in the close's transaction (`services/issue/status.go`, line 32). The manual "Add Time" refuses
+`total <= 0` (`routers/web/repo/issue_timetrack.go`, line 39). The cause is plain in the code, so
+no reproduction without hydo was made. On this Mac a check of the page only set a running timer's
+start an hour ahead in the database of Gitea in Docker and stopped it: Gitea stored −3,586 s and
+showed the entry as "worked for now".
+
+**Duplicate search** (go-gitea/gitea, issues and pull requests, open and closed, 2026-11-28; the
+table below): no issue names a negative tracked time or a timer after a clock change.
+
+## Finding 2 (new candidate): a power cut right after a repository is created leaves its branch broken
+
+**What a user meets.** A user creates a repository with "Initialize Repository", so Gitea commits
+a README, a license and a `.gitignore`, and shows the new repository. The machine loses its power
+within about half a minute. After the restart Gitea's database says the repository has its
+branch `main`, and the branch's ref file in the Git repository is broken: `git` says "warning:
+ignoring broken ref refs/heads/main" and finds no commit. INSPECT_PAGE
+
+**How hydo found it.** Directed, by the rule `gitea.repository_readable` and the power cuts that
+the blind explorations did not draw: the process strategy put all 47 of its power cuts at the end
+of the walk (`C=6`), and no such cut came within half a minute of the setup. `disk=none | run C=1
+I=1` cuts the power after step 0, about 20 s of guest time after the setup's commit. It failed
+twice with FP_CUT1 on the final image. With a disk that keeps its write cache (`disk=cut`) it
+fails the same way (FP_DCUT1), and so does the walk without actions (FP_CUT1X). A cut after step 1
+(`C=2`) passes (FP_CUT2): by then the guest's kernel had written the files back.
+
+**The regression.** `regressions/power-cut-after-a-new-repository-breaks-its-branch.schedule`:
+`disk=none | run C=1 I=1`.
+
+**Why.** Gitea writes the first commit with Git: `initRepoCommit` (`services/repository/init.go`)
+runs `git add`, `git commit` in a temporary folder and pushes to the bare repository
+(`git.PushFromLocal`). `git receive-pack` stores the objects of a small push as loose objects and
+updates `refs/heads/main` by a rename. With Git's default `core.fsync`, which leaves out loose
+objects and refs, nothing of it is synced. Gitea then commits the repository's row with
+`is_empty = false` to SQLite, which syncs. Gitea sets no `core.fsync` of its own
+(`modules/git/config.go` sets other keys), and its documentation names none. With Gitea's
+`[git.config]` section setting `core.fsync=committed` (`hydo/hydo-gitfsync.yaml`), the same cut
+passes: FSYNC_CONTRAST.
+
+**Duplicate search.** #31834 ("Power outage during merge request, causing the main branch to be
+unavailable", Gitea 1.21) has the same symptom after a merge. It was closed with "Power outage
+could cause any damage to your system". No issue names the missing sync of Git's refs and objects
+before Gitea answers, or `core.fsync`. #19551 mentions `core.fsyncObjectFiles` in a user's own
+configuration. The cause is plain in the code and in Git's documentation of `core.fsync`, so no
+reproduction without hydo was made.
+
+## The first failures: mistakes of the rules
+
+Each exploration's first failures were the rules' own:
+
+- e1 seed 16 and KVM seeds 37, 41 and 57 failed `gitea.saved_work_survives`. Each walk had closed
+  and reopened an issue, and the rule counted Gitea's comment types 0, 2 and 3. A reopen is type
+  1 (`models/issues/comment.go`, line 71). The trace of KVM seed 41 showed both posts
+  (`status=close`, `status=reopen`) answered `{"redirect": "/hydo/demo/issues/1"}`, and Gitea's
+  log showed both `200 OK` without an error. Fixed to 0, 1 and 2.
+- Four failures of the timer rule in the second KVM exploration (seeds 78, 86 and 106, and 66)
+  had a power cut at the end. Without `guest.clock_after_cut` the recovery boot's clock starts at
+  `clock_start` again, before the timer's start (MANIFEST.md "Clock after a power cut"), so the
+  rule's stop recorded a negative time. Seed 106 had no clock step at all. The manifest now
+  continues the first boot's clock 60 s after the cut.
+- KVM seed 174 of the last exploration failed `browser.no_page_errors` with `Fetch action
+  request error: TypeError: Failed to fetch`, during a loss of 81 % of the requests. Gitea logs
+  each failed fetch with `console.error` and shows it as an error toast at once
+  (`web_src/js/modules/fetch-action.ts`, lines 171 and 172), so the error was shown. The final
+  manifest sets `watch.console: false`, as the Vikunja example does.
+
+## The duplicate searches
+
+Searched in go-gitea/gitea, issues and pull requests, open and closed, on 2026-11-28, with `gh
+search issues --include-prs`. The repository has no discussions.
+
+| phrase | results | relevant |
+|---|---|---|
+| `stopwatch`, `tracked time`, `time tracking` | 25 each | none names a negative time; #38568 (spent-on dates) and #30787 (stopwatch rework) are other changes |
+| `negative tracked time`, `stopwatch negative`, `negative time spent`, `time tracking negative`, `stopwatch clock`, `tracked time wrong` | 0 | none |
+| `power outage` | 4 | #31834, the same symptom after a merge, closed as a power outage's damage; #12880 and #7235, broken repositories without a cause |
+| `power failure`, `unclean shutdown` | 3 each | #19933 (a project file damaged), #38210 (bleve), #30781 (a GPG lock file); none about refs |
+| `fsync`, `core.fsync` | 5 and 1 | #19551, a user's own `core.fsyncObjectFiles`; no issue about Gitea's Git writes |
+| `ignoring broken ref`, `broken ref`, `refs/heads empty`, `Initial commit missing`, `repository corrupted power`, `crash repository broken`, `durability` | 0 to 2 | none |
+| `repository is broken`, `git fsck`, `object not found`, `auto init` | 6 to 30 | #34443 (marking broken repositories), #39022 (health checks against bitrot); none about a power cut after a creation |
+| `num_issues wrong count`, `issue count incorrect`, `num_comments`, `label count wrong`, `milestone count`, `check_repo_stats` | 0 to 6 | #11164 (the doctor's recount); nothing broke the counters here |
+| `issue indexer queue`, `indexer not updated`, `issue not searchable`, `bleve corrupt`, `levelqueue` | 0 to 6 | #33882 and #40219, a queue broken by an interrupted push, fixed in levelqueue 0.5.1, which 28.4.0 has |
+
+## The explorations
+
+| exploration | rules | seeds | schedules | wall time | failures |
+|---|---|---|---|---|---|
+| e1, hvx, `--strategy process --no-shrink`, 1 worker | the first three rules and the search | 1-20 | 20 | 76 min (144 s a run) | 1: a mistake of the rule (seed 16) |
+| k1, KVM, 20 parts | the same | 21-60 | 40 | 12 min | 3: the same mistake (37, 41, 57) |
+| k2, KVM, 20 parts | the reopen fixed, the timer rule, no clock across a cut | 61-120 | 60 | 16 min | 6: finding 1 (72, 79), and the recovery boot's clock (66, 78, 86, 106) |
+| e2, hvx, 1 worker | the clock across a cut | 21-40 | 20 | 34 min (84 s a run) | 1: finding 1 (37) |
+| k3, KVM, 20 parts | the same | 121-180 | 60 | 16 min | 3: finding 1 (122, 169), and `console.error` (174) |
+
+Of the 200 schedules, 150 had a kill of the server, 156 a pause, 138 a network fault, 67 a step
+back and 75 a step forward of the clock, and 47 a power cut. Every power cut came at the end of
+the walk (`C=6`). No exploration shrank: the failures were judged by directed runs.
+
+## What held
+
+- Every issue, comment, close and reopen that Gitea answered as saved was in its database, under
+  kills, pauses, network faults, one-way network faults, clock steps and power cuts at the end of
+  the walk. Gitea's SQLite runs with its rollback journal and `synchronous=FULL`, so a commit is
+  on the disk when Gitea answers.
+- The counts that Gitea keeps beside its rows (issues, closed issues, comments, labels,
+  milestones, the last issue number) matched the rows in every run.
+- The search found every issue by a word of its title, also after kills and power cuts at the end
+  of the walk.
+- No page left a spinner on the screen for 10 s or printed `NaN`, `undefined` or `Invalid Date`,
+  and every failed write showed an error toast.
+
 
 ## What hydo lacked
 
@@ -118,6 +277,13 @@ The gaps are in the order of the time they cost. The ones of the walk go to open
   assertion record, so no schedule can cut the power a few milliseconds after a write that the
   walk saw acknowledged. The power cuts of this page came at the steps (`C=`) and at the k-th
   disk flush (`cf=`, hvx only).
+- **Power cuts only at the end of the walk.** The process strategy put all 47 of its power cuts
+  after the last step (`C=6`), as in the SeaweedFS example (open item 186). Finding 2 needs a cut
+  within half a minute of the setup's push, so only directed runs reached it.
+- **The recovery boot's clock.** Without `guest.clock_after_cut` a power cut set the clock back to
+  `clock_start`, and the timer rule then recorded a negative time in four KVM schedules, one of
+  them without any clock step. The import does not write the key, and the guide names it for
+  checks that compare times across a cut, not for a running timer of the system.
 - **No id in a redirect.** The walk takes ids only from a JSON field named `id`. Gitea answers
   each write of its fetch forms with `{"redirect": "/hydo/demo/issues/3"}`, which names the new
   issue in a path. So `$HYDO_ACKED` has no id, `browser.read_back` cannot be used, and the rule
