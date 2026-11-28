@@ -2,11 +2,8 @@
 # docs/design/live-map.md): which issue each failure of NSQ is, and what kind it is
 # (RESULTS.md, "What was found"). The first note that matches a run applies.
 notes:
-  # two runs of the recording's blind exploration (seeds 9 to 16) whose losses are not traced
-  # (RESULTS.md, "The demo of the live map"): left out of the playback
-  - schedule: "K=nsqlookupd@3+1 N=nsqlookupd-nsqd@7-10:loss,85% P=nsqd@12+1 T=17:-300"
-    leave_out: true
-    why: "seed 14: besides the publishes that wait, m5 is lost; its cause is not traced"
+  # a run of the recording's blind exploration (seeds 9 to 16) whose loss is not traced
+  # (RESULTS.md, "The recording of the live map"): left out of the playback, with its re-run
   - schedule: "K=nsqd@8+4 T=2:-3600"
     leave_out: true
     why: "seed 15: m1 is lost after a kill long after the queues' first syncs; not traced"

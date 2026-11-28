@@ -967,7 +967,7 @@ function bushKind(o, parent) {
 let HIT = {hairs: [], dots: [], ticks: [], ends: []};
 function drawRuns(g, now) {
   const rc = $("cv").getBoundingClientRect(), W = rc.width, Hh = rc.height;
-  const top = px(150), bot = px(64), x0 = px(130), x1 = W - px(230);
+  const top = px(150), bot = px(70), x0 = px(130), x1 = W - px(230);
   const n = RUNS.length;
   const S0 = Math.max(1, ...RUNS.map(steps), ...OTHERS.map(steps));
   const sx = (s) => x0 + (x1 - x0) * Math.min(1, s / S0);
@@ -978,7 +978,8 @@ function drawRuns(g, now) {
     const r = RUNS[k], fam = (FAMILY.get(famKey(r)) || []).map((o) => ({o, f: forkStep(o, r)}));
     rows.push({k, r, fam, members: fam.filter((m) => m.f !== null)});
   }
-  const units = rows.reduce((a, w) => a + 1 + 0.55 * w.members.length, 0) || 1;
+  const MW = 0.4;                // a bush's row, against a first run's
+  const units = rows.reduce((a, w) => a + 1 + MW * w.members.length, 0) || 1;
   const unit = Math.min(px(64), (Hh - top - bot) / units);
   let y = top + Math.max(0, (Hh - top - bot - unit * units) / 2);
   const rootY = (Hh - bot + top) / 2;
@@ -988,12 +989,13 @@ function drawRuns(g, now) {
   for (let s = 0; s <= S0; s += every) {
     g.strokeStyle = "rgba(255,255,255,.05)"; g.lineWidth = 1;
     g.beginPath(); g.moveTo(sx(s), top - px(18)); g.lineTo(sx(s), Hh - bot + px(4)); g.stroke();
-    g.fillStyle = "#5b6478"; g.fillText(`step ${s}`, sx(s), Hh - bot + px(24));
+    g.fillStyle = "#5b6478"; g.textAlign = s + every > S0 ? "right" : s === 0 ? "left" : "center";
+    g.fillText(`step ${s}`, sx(s) + (s === 0 ? -px(4) : s + every > S0 ? px(4) : 0), Hh - bot + px(30));
   }
   // the booted system
   g.fillStyle = "#e8ebf2"; g.beginPath(); g.arc(px(60), rootY, px(8), 0, 7); g.fill();
-  g.fillStyle = "#8b93a7"; g.textAlign = "left"; g.font = `600 ${px(14)}px -apple-system,Inter,sans-serif`;
-  g.fillText("booted system", px(30), rootY - px(18));
+  g.fillStyle = "#8b93a7"; g.textAlign = "center"; g.font = `600 ${px(14)}px -apple-system,Inter,sans-serif`;
+  g.fillText("booted", px(60), rootY + px(28)); g.fillText("system", px(60), rootY + px(45));
   const hair = (from, fy, ty, fs, ts, col, w, glow) => {
     const xa = from[0], xb = sx(ts);
     const mid = Math.max(xa + px(40), Math.min(xb, sx(fs) + px(60)));
@@ -1009,7 +1011,7 @@ function drawRuns(g, now) {
     const {k, r} = row, ry = y + unit / 2;
     y += unit;
     const done = k < shown && !(cur && cur.k === k), live = cur && cur.k === k;
-    if (!done && !live) { y += 0.55 * unit * row.members.length; continue; }
+    if (!done && !live) { y += MW * unit * row.members.length; continue; }
     const p = live ? Math.min(1, (now - cur.t0) / PACE) : 1, S1 = steps(r);
     const fail = r.verdict === "violation", kind = fail ? failureKind(r) : null;
     const col = fail ? "rgba(255,120,135,.62)" : r.verdict === "ok" ? "rgba(150,165,190,.55)" : "rgba(250,204,21,.5)";
@@ -1033,7 +1035,7 @@ function drawRuns(g, now) {
     // the bush: each other run forks off at its first differing step
     let by = y;
     for (const m of row.members) {
-      const my = by + 0.55 * unit / 2; by += 0.55 * unit;
+      const my = by + MW * unit / 2; by += MW * unit;
       const i = idx++;
       if (!famShown(i)) continue;
       bushes++;
@@ -1356,7 +1358,7 @@ $("stage").addEventListener("click", (ev) => {
   runsClick(ev.clientX - r.left, ev.clientY - r.top);
 });
 $("stage").addEventListener("mouseleave", () => { $("tip").style.display = "none"; });
-window.showcase = {setView, runs: () => RUNS.length, shown: () => shown, busy: () => !!cur || shown < RUNS.length || performance.now() < holdUntil || bushBusy()};
+window.showcase = {setView, runs: () => RUNS.length, shown: () => shown, hits: () => HIT, busy: () => !!cur || shown < RUNS.length || performance.now() < holdUntil || bushBusy()};
 // a bush still grows
 function bushBusy() {
   const now = performance.now();
