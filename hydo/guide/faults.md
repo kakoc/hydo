@@ -240,6 +240,39 @@ these tokens for the services with `versions:`; their failures are in the class 
 manifest reference is the section "Versions of a service and upgrades" of `hydo guide
 manifest`, and the example is `hydo/onboard/examples/etcd-upgrade`.
 
+### Upgrades of a service from an image
+
+A service from a Docker image upgrades to another image. Each version names its own image file,
+and hydo unpacks it beside the service's own. An upgrade then stops the old container's process
+and starts the new image on the same data, mounts, settings and `/tmp`, as a deploy does:
+
+```yaml
+services:
+  - name: vikunja
+    image: {x86_64: images/vikunja-vikunja-2.7.1-amd64.docker.tar, arm64: images/vikunja-vikunja-2.7.1-arm64-oci}
+    image_ref: "vikunja/vikunja:2.7.1"
+    version: "2.7.1"                   # the service's own image
+    versions:
+      - name: "2.8.0"
+        image: {x86_64: images/vikunja-vikunja-2.8.0-amd64.docker.tar, arm64: images/vikunja-vikunja-2.8.0-arm64-oci}
+        image_ref: "vikunja/vikunja:2.8.0"
+        # cmd:, entrypoint: and env: may differ per version; the rest is the service's
+```
+
+`hydo compose docker-compose.yaml --upgrade-to vikunja=vikunja/vikunja:2.8.0` writes these lines.
+It pins the second image by digest in the lock file as it pins the first, and `fetch-images.sh`
+fetches both. `hydo-oci vikunja <command>` runs in the root of the version that runs now.
+
+### An upgrade while a step runs
+
+`U=<target>@<at>~<ms>:<version>` makes the switch `ms` of guest time after step `at` starts,
+while the step's workload goes on, as a deploy comes while users work. A client in the middle
+of its requests then meets the stop, the start and the new version. A web app's walk keeps the
+pages that the old version served open: they talk to the new version's API until the walk opens
+a page again (`hydo guide web-apps`, "Upgrade the backend while the pages are open"). The next
+step's faults wait until the switch is over. For a manifest with `browser:`, `hydo explore
+--upgrades` draws half of its upgrades this way, 3 to 12 s into the step.
+
 ## Knobs (durability settings the explorer may relax)
 
 ```yaml

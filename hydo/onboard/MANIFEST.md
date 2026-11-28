@@ -941,16 +941,21 @@ services:
   then letters, digits, `.`, `_` and `-`, at most 40 bytes; each name once per service.
 - The setup, the process and the readiness check of a service with `versions:` see the name of the
   version they run as `$HYDO_VERSION`. Without `versions:` the variable is not set.
-- A service from an image (`image:`) cannot have `versions:` yet.
+- A service from an image (`image:`) gives each version an image of its own (Milestone 392): see
+  "Versions of an image service" below.
 
-**The token `U=<target>@<at>[/<gap>][+<back>]:<version>`.** Before step `at` the host stops each
+**The token `U=<target>@<at>[~<off>][/<gap>][+<back>]:<version>`.** Before step `at` the host stops each
 service of the target (SIGTERM to its process tree, SIGKILL 10 seconds of guest time later),
 switches it to `<version>` and starts it again on the same data, with its setup and its readiness
 check. The target is a service, a list (`etcd1,etcd2`) or a group selector (`etcd.all`); its
 services are switched one after another, each once the one before it is ready again. With
 `/<gap>` the k-th service (from 0) is switched before step `at + k*gap`. With `+<back>` each
 service goes back to the version it ran before, `back` steps after its own switch. A downgrade is
-also a `U=` with the older version's name, and a schedule may hold several `U=`.
+also a `U=` with the older version's name, and a schedule may hold several `U=`. With `~<off>`
+(Milestone 392) each switch of the token, its rollback too, comes `off` ms of guest time after
+its step starts instead of before it. The step's workload runs on meanwhile, and the next step's
+faults wait until the switch is over. The controller logs `UPGRADING <svc> from version <a> to
+<b> <off> ms into step <at>`.
 
 - A service that does not start on its new version ends the run with `HYDO-ORACLE: VIOLATION
   [upgrade.started] <svc> did not start on version <v> before step <at> (it ran <old>)`.
@@ -963,8 +968,48 @@ also a `U=` with the older version's name, and a schedule may hold several `U=`.
 
 `hydo explore --upgrades` draws a `U=` in 60% of the schedules for a manifest with `versions:`:
 half of them rolling upgrades of a group whose members all have versions (`<group>.all`, 0 to 3
-steps apart), a quarter with a rollback. A failure with `U=` has the class `upgrade`. The guest
+steps apart), a quarter with a rollback. For a manifest with `browser:`, half of the drawn
+upgrades come 3, 6, 9 or 12 s into their step (`~<off>`). A failure with `U=` has the class `upgrade`. The guest
 letter `U` is reserved: a knob may not use it. The example is `hydo/onboard/examples/etcd-upgrade`.
+
+**Versions of an image service** (Milestone 392). A service with `image:` lists the images of its
+other versions:
+
+```yaml
+services:
+  - name: vikunja
+    image: {x86_64: images/vikunja-vikunja-2.7.1-amd64.docker.tar, arm64: images/vikunja-vikunja-2.7.1-arm64-oci}
+    image_ref: "vikunja/vikunja:2.7.1"
+    version: "2.7.1"
+    versions:
+      - name: "2.8.0"
+        image: {x86_64: images/vikunja-vikunja-2.8.0-amd64.docker.tar, arm64: images/vikunja-vikunja-2.8.0-arm64-oci}
+        image_ref: "vikunja/vikunja:2.8.0"
+        # cmd:, entrypoint:, env:, setup: and ready: are optional
+```
+
+- Each version needs `image:`, in the forms of the service's own (a file, an OCI layout, or a
+  mapping by architecture), and may name `image_ref:`. hydo-build unpacks it into
+  `/oci/<service>@<version>` and writes its launcher `/etc/hydo/oci/<service>@<version>/run`, which
+  is the version's command.
+- The version runs with the service's `mounts:`, `workdir:`, `user:`, `env_file:` and `env:`, and
+  with the service's own `/tmp` (`/tmp/oci/<service>`), so the new image finds the old one's data.
+  The version's `cmd:` and `entrypoint:` replace the image's `Cmd` and `Entrypoint` as the
+  service's do, and default to the service's. The version's `env:` comes over the service's.
+  `setup:` and `ready:` default to the service's, as for a service from files.
+- `hydo-oci <service> <command>` runs in the root of the version that runs. The service's own
+  `setup:` and `ready:` get the root of the version they belong to (`$HYDO_VERSION`); any other
+  command gets the root that the service's launcher started last.
+- `writable: true` with `versions:` is refused: each root would need a writable layer of its own.
+- `hydo compose <file> --upgrade-to <service>=<image>:<tag>` (repeatable) writes `version:` (the
+  service's tag) and a version named by the tag, pins the image by digest in the lock file, and
+  adds its lines to `fetch-images.sh`.
+- An image without `versions:` keeps its bytes. In an image with them, the service's launchers
+  write the name of the root that runs into `/tmp/hydo/oci-ver.<service>`, and `hydo-oci` reads it.
+
+The example is `hydo/onboard/examples/vikunja/upgrade`: Vikunja 2.7.1 and 2.8.0 on one SQLite
+database, upgraded while hydo's walk has the pages open (`hydo guide web-apps`, "Upgrade the
+backend while the pages are open").
 
 ### Settings to explore (`configs:`, `hydo explore --configs`)
 

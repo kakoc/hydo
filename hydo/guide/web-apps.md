@@ -262,8 +262,54 @@ at-most-once api.place_order` (`hydo guide checks`, "Side effects at fake outsid
 | a lost answer | `H=api.place_order@0-1:drop` | the API acts, and the answer never comes |
 | a clock step | `T=...` (`hydo guide faults`) | the page's `Date.now()` and its timers jump, for example past a token's expiry |
 | a stalled browser | `P=workload@0~4:500` | every process of the tests, the browser too, stops for 500 ms |
+| a deploy of the backend | `U=web@2~8000:2.8.0` | 8 s into step 2 the server stops and its next version starts on the same data, while the pages stay open |
 
 `hydo explore --protocol-faults` draws `H=` tokens on every route of the fakes.
+
+## Upgrade the backend while the pages are open
+
+A deploy replaces the server while people use the app. Their open pages keep the frontend of
+the old version, and their next requests reach the new one: during the restart they fail, and
+afterwards the old frontend talks to the new API. To test it, give the backend's service both
+versions' images and upgrade it in the middle of a step.
+
+1. Put the next version's image in the manifest as a version of the service. With a Compose file,
+   `hydo compose docker-compose.yaml --upgrade-to <service>=<image>:<tag>` writes it and pins the
+   image, and `sh fetch-images.sh` fetches both images. By hand:
+
+   ```yaml
+   services:
+     - name: web
+       image: {x86_64: images/web-2.7.1-amd64.docker.tar, arm64: images/web-2.7.1-arm64-oci}
+       image_ref: "example/web:2.7.1"
+       version: "2.7.1"
+       versions:
+         - name: "2.8.0"
+           image: {x86_64: images/web-2.8.0-amd64.docker.tar, arm64: images/web-2.8.0-arm64-oci}
+           image_ref: "example/web:2.8.0"
+   ```
+
+   The new version runs with the service's data, mounts, `env:`, `setup:` and `ready:`. A version
+   may set its own `cmd:`, `entrypoint:` and `env:`.
+
+2. Run a walk with the upgrade inside a step: `hydo run "disk=none | run I=1 U=web@2~8000:2.8.0"`.
+   The switch comes 8 s into step 2 while the walk's pages are open. A walk opens its first page
+   some seconds into a step, after its browser starts, so an earlier switch meets no open page. hydo sends SIGTERM, starts
+   2.8.0 when the old process has ended (SIGKILL after 10 s), and waits for its readiness check.
+   The walk goes on meanwhile.
+3. Read the verdict as for any fault. The page properties judge what the old pages did against
+   the new server: a write that failed during the restart and that the page did not show
+   (`browser.failures_shown`), an error that the old frontend's code threw on a new answer
+   (`browser.no_page_errors`), or a spinner that stays. `browser.read_back` then opens the pages of
+   the new version and looks for every object that either version acknowledged.
+4. Compare with `U=web@2:2.8.0`, the same upgrade between two steps, where no page is open, and
+   with the run without `U=`. A finding of the first schedule only is a finding of the open pages.
+5. `hydo explore --upgrades` draws such upgrades: for a manifest with `browser:`, half of them
+   come 3 to 12 s into their step. `+<back>` rolls the service back to its own image, on the
+   data that the new version migrated.
+
+The example is `hydo/onboard/examples/vikunja/upgrade`, Vikunja 2.7.1 to 2.8.0, and its results
+are in the section "Upgrades during a walk" of the example's RESULTS.md.
 
 ## How it works
 
