@@ -27,6 +27,17 @@ makes the same failure happen again, tomorrow or on a colleague's laptop.
 - **Your software runs unmodified:** Linux programs, plain files, or Docker images. A Docker
   Compose file imports with one command.
 
+## Watch it break a system
+
+<p align="center"><img src="docs/img/live-map.gif" width="860" alt="hydo runs Blnk, a ledger, again and again with crashes, pauses, network cuts, and clock jumps. Each tile is one function of Blnk's code and lights up when a run first reaches it: green in a normal run, orange only when something broke. In the first run hydo finds a known Blnk bug: an all-or-nothing batch of transfers kept half of itself."></p>
+
+hydo runs [Blnk](hydo/onboard/examples/blnk/), a ledger, again and again, each time with other
+crashes, pauses, network cuts, and clock jumps. Each tile is one function of Blnk's code. It lights
+up the first time a run reaches it: green in a normal run, orange only when something broke. In the
+first run hydo finds a known Blnk bug, an all-or-nothing batch of transfers that kept half of
+itself ([#438](https://github.com/blnkfinance/blnk/issues/438)), and shows the one command that
+replays it.
+
 ## Install
 
 On a Mac, with Homebrew:
