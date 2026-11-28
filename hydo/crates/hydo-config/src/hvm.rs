@@ -119,7 +119,8 @@ pub struct Options {
     pub no_mlock: bool,
     /// `HVM_RAM_SHARE`, exactly `0`: each snapshot keeps its own copy of guest RAM, which a restore
     /// copies back (before Milestone 335); otherwise snapshots are RAM bases that guest RAM is
-    /// mapped from privately and that engines with the same bytes share.
+    /// mapped from privately and that engines with the same bytes share. Unset, it is off on
+    /// macOS 27 and later, whose kernel panics on the private mapping (Milestone 395).
     pub no_ram_share: bool,
     /// `HYDO_PREEMPT_RECORD`, set and not `0`: a record per forced preemption point.
     pub preempt_record: bool,
@@ -170,10 +171,37 @@ impl Options {
             diag_chunks: t(HVMX_DIAG_CHUNKS),
             check_restore: e.is_set(HVMX_CHECK_RESTORE),
             no_mlock: e.is_set(HVMX_NO_MLOCK),
-            no_ram_share: !e.not_0(HVM_RAM_SHARE),
+            no_ram_share: match t(HVM_RAM_SHARE).as_deref() {
+                Some("0") => true,
+                Some(_) => false,
+                None => macos_27_or_later(),
+            },
             preempt_record: e.set_not_0(HYDO_PREEMPT_RECORD),
             contracts: t(HYDO_CONTRACTS).filter(|p| !p.is_empty()),
             guest_disks: t(HYDO_GUEST_DISKS).filter(|p| !p.is_empty()),
         }
+    }
+}
+
+/// Whether this Mac runs macOS 27 or later (Darwin 27 or later). Its kernel panics with `[SPTM]
+/// VIOLATION_ILLEGAL_DOWNGRADE` when guest RAM is a private mapping of a RAM base (Milestone 395),
+/// so `HVM_RAM_SHARE` is off there unless it is set. Other systems answer false.
+pub fn macos_27_or_later() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        static ANSWER: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *ANSWER.get_or_init(|| {
+            std::process::Command::new("/usr/bin/uname")
+                .arg("-r")
+                .output()
+                .ok()
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .and_then(|r| r.trim().split('.').next()?.parse::<u32>().ok())
+                .is_some_and(|major| major >= 27)
+        })
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
     }
 }
