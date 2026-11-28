@@ -97,3 +97,42 @@ word names the kind of write and, for a comment, its issue, but not the new obje
   (`GET /api/v1/repos/hydo/demo/issues?q=`) for up to 60 s.
 - `gitea.repository_readable`: the repository `hydo/demo` has its branch `main`, and `git fsck
   --connectivity-only` reaches every object from it. The rule runs `git` in the server's image.
+
+<!-- RUNS -->
+
+## What hydo lacked
+
+The gaps are in the order of the time they cost. The ones of the walk go to open item 198 of
+`AGENTS.md`.
+
+- **No event at an acknowledged write.** The walk writes `$HYDO_ACKED` when the server answers a
+  write, but it writes no console record. A reaction `A=<event>+<ms>:cut` acts at an SDK
+  assertion record, so no schedule can cut the power a few milliseconds after a write that the
+  walk saw acknowledged. The power cuts of this page came at the steps (`C=`) and at the k-th
+  disk flush (`cf=`, hvx only).
+- **No id in a redirect.** The walk takes ids only from a JSON field named `id`. Gitea answers
+  each write of its fetch forms with `{"redirect": "/hydo/demo/issues/3"}`, which names the new
+  issue in a path. So `$HYDO_ACKED` has no id, `browser.read_back` cannot be used, and the rule
+  counts the issues of a repository instead of naming each one.
+- **No body in a word.** A word names the method and the path, not what was sent. Gitea's
+  comment form posts a comment, a close, or both, to one path, so the rule cannot tell which, and
+  it counts comments, closes and reopens together.
+- **The walk wanders.** Without `within`, the first native walks spent their actions in the API's
+  Swagger pages, the settings, the code view and the search. With `within: /hydo/demo/issues` the
+  walk stays on the issues, but `avoid` needs 13 patterns, most for the editor's toolbar, whose
+  buttons insert text and save nothing. About a third of the actions still filled the comment
+  field without sending it.
+- **A setup step's failure does not name the step.** The first walk's setup stopped with
+  `locator.click: Timeout 10000ms exceeded`. The button was `Register Account`, not `Create
+  Account`, and the message did not say which of the eleven setup steps failed. The labels are
+  `Username *` in the accessibility tree, and `{fill: Username}` still matches them.
+- **A disk 1 MiB over hvx's limit passes `--check`.** The first image's root of 3,584 MiB and the
+  import's data disk of 512 MiB made a disk of 4 GiB and 1 MiB, the partition table. `hydo build
+  --check` printed `OK`, and every run ended at once with `ERROR harness boot vm`, with
+  `HVX_SET_DISK: Invalid argument (os error 22)` only in `engine.log`.
+- **The release tree's iproute2.** `hydo build` of an unpacked release tree stopped with
+  `HYDO_IPROUTE2 not found at /nix/store/...` until `guest/store.tar` was unpacked into
+  `guest/store` by hand (open item 98).
+- **The sync audit misses writes of a program that the system runs.** `hydo rules scan --kind
+  sync` listed 24 places of Gitea's Go code. Gitea's Git repositories are written by `git`, which
+  it runs as a child process, and the audit cannot see those writes.
