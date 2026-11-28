@@ -623,7 +623,10 @@ fn answer_order_and_link_cuts() {
     refused("disk=none | run H=api@0-1:order=1", "2 to 8");
     refused("disk=none | run H=api@0-1:order=9", "2 to 8");
     refused("disk=none | run H=api@0-1:twice=2", "takes no value");
-    refused("disk=none | run N=browser@2~400", "N=<svc>@<at>~<off>:<dur>");
+    refused(
+        "disk=none | run N=browser@2~400",
+        "N=<svc>@<at>~<off>:<dur>",
+    );
     refused("disk=none | run N=browser@2~400:0", "1 ms or more");
 }
 

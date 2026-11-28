@@ -628,9 +628,7 @@ fn rules_words(rules: &[Rule]) -> (String, String) {
                 "holds the answers of {k} requests and gives them in another order"
             )),
             Rule::Wait(n) => when.push(format!("holding an answer for at most {}", ms(*n))),
-            Rule::Twice => {
-                acts.push("gets each request twice, as a double submit sends it".into())
-            }
+            Rule::Twice => acts.push("gets each request twice, as a double submit sends it".into()),
         }
     }
     if acts.is_empty() {
