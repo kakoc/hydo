@@ -31,7 +31,7 @@ data:
 
 root:
   files:
-    - {src: ../../hydo/page-rules, dst: /opt/hydo/web/rules}
+    - {src: page-rules, dst: /opt/hydo/web/rules}   # ../../hydo/page-rules, read for both versions' schemas
   text:
     /etc/hosts: |   # Compose service names -> each service's addr:
       127.0.0.1 localhost
