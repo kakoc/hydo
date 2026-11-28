@@ -432,7 +432,33 @@ pub(super) fn functions(
             size: f.high_pc - f.low_pc,
             module: paths::module_of(&f.name, f.lang == Lang::Go),
             own: own.is_some(),
+            calls: Vec::new(),
         });
+    }
+    // the static call graph of the project's own code (Milestone 397's follow-up): each direct
+    // call of an own function to another own function's first instruction
+    if elf.machine == 0xb7 {
+        let starts: HashMap<u64, u32> = out
+            .iter()
+            .filter(|p| p.own)
+            .filter_map(|p| Some((p.sites.first()?.addr, p.id)))
+            .collect();
+        for p in out.iter_mut().filter(|p| p.own) {
+            let Some(addr) = p.sites.first().map(|s| s.addr) else {
+                continue;
+            };
+            let Some(code) = elf.bytes_at(addr, p.size as usize) else {
+                continue;
+            };
+            let mut calls: Vec<u32> = paths::arm64_branch_targets(code, addr)
+                .into_iter()
+                .filter_map(|t| starts.get(&t).copied())
+                .filter(|&t| t != p.id)
+                .collect();
+            calls.sort_unstable();
+            calls.dedup();
+            p.calls = calls;
+        }
     }
     out
 }

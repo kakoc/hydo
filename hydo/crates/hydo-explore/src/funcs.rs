@@ -282,6 +282,10 @@ pub fn map(plan: &Plan) -> Value {
                                 if f.own {
                                     v["own"] = json!(true);
                                 }
+                                // the static call graph (Milestone 397's follow-up)
+                                if !f.calls.is_empty() {
+                                    v["calls"] = json!(f.calls);
+                                }
                                 if let Some(e) = eps.get(f.function.as_str()) {
                                     v["error_paths"] = json!(e);
                                 }

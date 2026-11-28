@@ -735,7 +735,23 @@ fn report_live(argv: &[String]) -> i32 {
             d.display()
         ));
     }
-    // a run directory has no map of its own: it is made from the plan next to its image
+    // a run directory has no map of its own, and an exploration whose map is gone: it is made
+    // from the plan next to its image (for an exploration, the image of its stream's start
+    // record, Milestone 397's follow-up)
+    if !d.join(hydo_explore::funcs::MAP_FILE).is_file() {
+        let start_image = std::fs::read_to_string(d.join(hydo_results::EVENTS))
+            .ok()
+            .and_then(|t| {
+                let first = t.lines().next()?.to_string();
+                let v: serde_json::Value = serde_json::from_str(&first).ok()?;
+                v.pointer("/image/path")?.as_str().map(str::to_string)
+            });
+        if let Some(i) = start_image {
+            if let Some(Ok(plan)) = hydo_contracts::plan::plan_of_image(Path::new(&i)) {
+                let _ = hydo_explore::funcs::write_map(&plan, &d);
+            }
+        }
+    }
     if !d.join(hydo_explore::funcs::MAP_FILE).is_file() {
         if let Ok(hydo_results::Results::Run { run, .. }) = hydo_results::read_dir(&d) {
             let img = run

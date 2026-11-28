@@ -363,6 +363,14 @@ fn every_function_of_a_go_program_is_a_place_at_its_first_instruction() {
     // the recovery function's error path and its own place share one address
     let rl = p.paths.iter().find(|x| x.kind == kind::RECOVERY).unwrap();
     assert_eq!(rl.sites[0].addr, m("main.retryLoad").sites[0].addr);
+    // Milestone 397's follow-up: the direct calls of the project's own code, by id; a function
+    // of the runtime or a package keeps no edges
+    let id = |n: &str| m(n).id;
+    assert_eq!(m("main.main").calls, vec![id("main.retryLoad")]);
+    assert_eq!(m("main.retryLoad").calls, vec![id("main.load")]);
+    assert_eq!(m("main.load").calls, vec![id("main.parse")]);
+    assert!(m("main.parse").calls.is_empty());
+    assert!(m("runtime.main").calls.is_empty());
 }
 
 #[test]
@@ -386,4 +394,21 @@ fn a_functions_module_is_its_package_or_its_rust_path() {
         "<alloc::vec::Vec<T> as core::ops::Drop>"
     );
     assert_eq!(module_of("main", false), "main");
+}
+
+/// Milestone 397's follow-up: the direct calls of arm64 code, `bl` and `b` with a 26-bit
+/// immediate, forwards and backwards; other instructions are no call.
+#[test]
+fn arm64_direct_calls_are_read_from_bl_and_b() {
+    let words: [u32; 4] = [
+        0x9400_0002, // bl +8
+        0xd503_201f, // nop
+        0x17ff_ffff, // b -4
+        0x9600_0000, // bl -0x8000000
+    ];
+    let code: Vec<u8> = words.iter().flat_map(|w| w.to_le_bytes()).collect();
+    assert_eq!(
+        hydo_contracts::paths::arm64_branch_targets(&code, 0x1000_0000),
+        vec![0x1000_0008, 0x1000_0004, 0x1000_000c - 0x800_0000]
+    );
 }
