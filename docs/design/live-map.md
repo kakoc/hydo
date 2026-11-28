@@ -185,6 +185,45 @@ What the tree does not show:
   copied into.
 - A call through a tail call: the link register then names the caller's caller.
 
+### The call graph, left to right
+
+The third view of the showcase page draws every function of the project's own code, also the
+ones that no run reached, as a tree that runs from left to right:
+
+- `hydo build` reads the static call graph of the project's own code from the program's machine
+  code. For each function of `fn_places` whose file is one of the sources, it reads the
+  function's bytes and takes each arm64 `bl` and `b` with a 26-bit immediate whose target is the
+  first instruction of another such function. The plan keeps the targets in the function's
+  `calls` (ids), and the map gives them to the page. On Blnk 598 of its 1,039 functions call
+  another one of them directly, with 1,347 edges.
+- The roots are on the left: the routes that `--routes DIR` names, `main.main`, and the
+  background work. A function of background work calls no function of the project's own code
+  before it, and the runs' first callers show that the language's runtime started it (a
+  goroutine). Small routes share one box.
+- A breadth-first search from every root at once places each function once, at its shortest
+  path of direct calls; a tie goes to the root above. The functions that no root reaches by
+  direct calls are in the last group, `not reached from an entry point by a direct call`, laid
+  out from their own roots the same way.
+- Each root shows its coverage: the functions its direct calls reach, and how many of them a run
+  reached (`POST /transactions 108 of 167`). The header keeps the share of the whole project.
+- When a run first reaches a function, a bolt runs from the root to the function and the
+  function stays lit, green or orange as on the map, with a red mark for error-handling code.
+  The bolt takes the function's first caller in the runs when that caller is a static caller in
+  the column before; else it takes the search's path. A run that reaches a function again
+  flashes a fainter bolt.
+
+What the call graph does not show:
+
+- A call through an interface, a closure or a function value: the code holds no direct branch
+  to the function. On Blnk 407 functions of its own code have no direct caller among them, such
+  as the closures that Go names `func1` and the methods called through interfaces. Most of them
+  are in the last group.
+- A function that the compiler copied into its callers, as in the first-caller tree.
+- The machine code of x86_64: the plan reads arm64 only, so an x86_64 program has no edges.
+- The width of a function's row is one share of its group's height, so on a screen of 1080
+  lines the functions of a large group are thin lines; the page draws each at least 1.6 pixels
+  high.
+
 The read of a register at a stop that already happens changes nothing that the guest can see.
 The proof is in `docs/HISTORY.md`, Milestone 397: the same 30 schedules with faults gave the
 same fingerprints with the engine of Milestone 394 and with the engine that reads the register.

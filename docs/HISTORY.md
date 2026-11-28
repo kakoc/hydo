@@ -27156,3 +27156,58 @@ stills. They are outside the repository, for the user to review.
 hydo-explore and hydo, their tests, `cargo test -p hydo --test it`, `cargo test -p hydo-agents
 --test it`, and `sh ci/vale.sh`. The results schema and the CLI golden were recorded again with
 `HYDO_BLESS=1`; each diff adds the new field or the new options. Nothing recorded moved.
+
+### Milestone 397, the follow-up: the call graph from left to right
+
+**What the user asked.** The flow view shows only what the runs reached. The user asked for a
+view of the whole space, as the map shows it, that runs from left to right and lights the paths
+like lightning. The first-caller tree stays as a third view, `First calls`.
+
+**What was built.**
+
+- `hydo build` records the static call graph of the project's own code in the plan. For each
+  function of `fn_places` whose file is one of the sources, it reads the function's arm64 machine
+  code and keeps each `bl` and `b` to the first instruction of another such function, as `calls`
+  (`hydo_contracts::paths::arm64_branch_targets`). The map of the live page carries them.
+- The showcase page's `Call graph` lays every function of the project's own code out from left
+  to right. The roots are the routes of `--routes DIR`, `main.main`, and the background work: the
+  functions that no function of the project calls directly and that the runs show the runtime
+  started. A breadth-first search from every root at once places each function once, at its
+  shortest path of direct calls. The rest is the group `not reached from an entry point by a
+  direct call`. Each root shows how many of the functions its direct calls reach a run reached.
+  A first reach flashes a bolt from the root to the function, which stays lit; the bolt follows
+  the runs' first caller where it is the static caller one column before.
+- `hydo report --live` makes an exploration's map again from the plan beside its image when the
+  map is missing, so an exploration made before keeps its runs and gets the edges.
+
+**The plan.** The Blnk map image was built again from the same inputs, and its sha256 stayed
+`fe492497…`; the 39,038 functions of the plan kept their ids, names and addresses. Of the 1,039
+functions of Blnk's own code, 598 call another one directly, with 1,347 edges. 407 have no direct
+caller among them; most are closures and methods called through interfaces.
+
+**The coverage per root** after the 30 runs of the exploration of the recording (the routes with
+less than 1.6 % of the functions share one box):
+
+| Root | Reached | Reachable by direct calls |
+|---|---|---|
+| `POST /transactions` | 108 | 167 |
+| `POST /transactions/bulk` | 112 | 174 |
+| `PUT /transactions/inflight/:txID` | 54 | 77 |
+| `POST /refund-transaction/:id` | 30 | 54 |
+| `POST /reconciliation/upload` | 2 | 22 |
+| 50 more routes | 148 | 315 |
+| `main` | 5 | 5 |
+| background work (14 functions) | 151 | 222 |
+| not reached from an entry point by a direct call | 147 | 609 |
+
+The search placed each function once at depth 1 to 12. The whole project's share stayed 339 of
+1,039 functions (33 %).
+
+**The media.** A second video (31 s, 1920 by 1080, 5.2 MB) and GIF (1200 by 675, 12 frames a
+second, 13.2 MB) of the same exploration, named `-v2`, show the call graph for 24 of their 31
+seconds. Two stills show the call graph at the end and during the first run. No VM ran:
+the page played back the recorded runs.
+
+**Checks.** The Go program of `tests/go-paths` gives the edges `main.main` to `retryLoad` to
+`load` to `parse`, and a unit test decodes `bl` and `b` both ways. The same tests, clippy, Vale
+and goldens as above ran again.
