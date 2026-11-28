@@ -66,7 +66,13 @@ pub const KNOWN_EXPLORE: &[&str] = &[
     "values",
     "settle_ms",
     "quiet_ms",
+    "sign_in",
+    "signed_out",
 ];
+
+/// The sign-in page's path when `browser.explore.signed_out` does not name it (Milestone 390): a
+/// regular expression, case-insensitive, over the page's path.
+pub const SIGNED_OUT: &str = "(^|/)(login|log-in|signin|sign-in|sign_in)(/|$)";
 
 /// The keys of one `browser.explore.setup` step.
 pub const KNOWN_SETUP: &[&str] = &[
@@ -1041,6 +1047,24 @@ fn explore_cfg(e: &Value, m: &Value) -> R<Explore> {
         }
     };
     let setup = setup_steps(get(e, "setup"), "browser.explore.setup")?;
+    // Milestone 390: the steps that sign in again when the walk meets the sign-in page
+    let sign_in = setup_steps(get(e, "sign_in"), "browser.explore.sign_in")?;
+    let signed_out = match get(e, "signed_out") {
+        None => Value::Null,
+        Some(Value::String(s)) if regex::Regex::new(&format!("(?i){s}")).is_ok() => {
+            if sign_in.is_empty() {
+                return Err(err(
+                    "browser.explore.signed_out: only with browser.explore.sign_in (the steps that sign in again on that page)",
+                ));
+            }
+            Value::String(s.clone())
+        }
+        Some(_) => {
+            return Err(err(
+                "browser.explore.signed_out: a regular expression over the path of the sign-in page, such as ^/login",
+            ))
+        }
+    };
     // the fakes' routes, for repro.spec.ts: an H= fault on a route becomes a page.route
     let mut routes = Map::new();
     if let Some(Value::Array(fakes)) = m.get("fakes") {
@@ -1059,20 +1083,28 @@ fn explore_cfg(e: &Value, m: &Value) -> R<Explore> {
             }
         }
     }
+    let mut cfg = json!({
+        "start": start,
+        "server": server,
+        "actions": actions,
+        "setup": setup,
+        "avoid": avoid,
+        "within": within,
+        "values": values,
+        "steps": steps,
+        "settle_ms": settle,
+        "quiet_ms": quiet,
+        "routes": Value::Object(routes),
+    });
+    // Milestone 390: only when given, so that a walk without them keeps its configuration's bytes
+    if !sign_in.is_empty() {
+        cfg["sign_in"] = json!(sign_in);
+    }
+    if !signed_out.is_null() {
+        cfg["signed_out"] = signed_out;
+    }
     Ok(Explore {
-        cfg: json!({
-            "start": start,
-            "server": server,
-            "actions": actions,
-            "setup": setup,
-            "avoid": avoid,
-            "within": within,
-            "values": values,
-            "steps": steps,
-            "settle_ms": settle,
-            "quiet_ms": quiet,
-            "routes": Value::Object(routes),
-        }),
+        cfg,
         steps,
         actions,
     })
@@ -1416,6 +1448,51 @@ mod tests {
             let mut m = base(b);
             let e = expand(&mut m).unwrap_err().message;
             assert!(e.contains(want), "{e}");
+        }
+    }
+
+    /// Milestone 390: `sign_in` and `signed_out` reach the walker's configuration only when
+    /// given, so a walk without them keeps its configuration as it was.
+    #[test]
+    fn explore_takes_a_sign_in_again() {
+        let walk = |x: Value| -> R<Value> {
+            let mut m = json!({"name": "web", "network": "bridge",
+                "browser": {"explore": {"start": "http://localhost:3000/"}}});
+            for (k, v) in x.as_object().unwrap() {
+                m["browser"]["explore"][k] = v.clone();
+            }
+            expand(&mut m)?;
+            Ok(
+                serde_json::from_str(m["services"][0]["env"]["HYDO_WEB_WALK"].as_str().unwrap())
+                    .unwrap(),
+            )
+        };
+        let plain = walk(json!({})).unwrap();
+        for k in ["sign_in", "signed_out"] {
+            assert!(plain.get(k).is_none(), "{k}");
+        }
+        let cfg = walk(json!({
+            "sign_in": [{"open": "/login"}, {"fill": "User", "with": "a"}, {"click": "Login"}],
+            "signed_out": "^/auth",
+        }))
+        .unwrap();
+        assert_eq!(cfg["sign_in"][1], json!({"fill": "User", "with": "a"}));
+        assert_eq!(cfg["signed_out"], "^/auth");
+        // the walker's own default is the one the documentation names
+        assert!(WALK.contains(&format!("'{SIGNED_OUT}'")));
+        for (bad, says) in [
+            (
+                json!({"signed_out": "^/login"}),
+                "only with browser.explore.sign_in",
+            ),
+            (
+                json!({"sign_in": [{"click": "Login"}], "signed_out": "(x"}),
+                "a regular expression",
+            ),
+            (json!({"sign_in": [{"klick": "Login"}]}), "klick"),
+        ] {
+            let e = walk(bad.clone()).unwrap_err().to_string();
+            assert!(e.contains(says), "{bad}: {e}");
         }
     }
 

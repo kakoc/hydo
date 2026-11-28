@@ -60,6 +60,10 @@ const quiet = cfg.quiet_ms ?? 3000;
 const start = new URL(cfg.start || 'http://localhost:3000/');
 const within = cfg.within || '/';
 const avoid = (cfg.avoid || ['log ?out', 'sign ?out']).map((a) => new RegExp(a, 'i'));
+// Milestone 390: the steps that sign in again when a page of the walk is the sign-in page
+// (`sign_in`, on a path that `signed_out` matches)
+const signIn = Array.isArray(cfg.sign_in) && cfg.sign_in.length ? cfg.sign_in : null;
+const signedOut = new RegExp(cfg.signed_out || '(^|/)(login|log-in|signin|sign-in|sign_in)(/|$)', 'i');
 const title = readingBack ? 'read back' : `walk step ${step}`;
 globalThis.__hydoWalkTest = title; // the stub @playwright/test hands it to hook.cjs
 const own = path.join(dir, 'walk');
@@ -845,6 +849,43 @@ async function replay(page, a) {
   return { what, lines, act: done };
 }
 
+// ------------------------------------------------------------------ signing in again
+// Milestone 390: a session that ends during the walk. Before, `setup` ran only in a step without
+// a saved session, so a walk whose session ended (Vikunja's seed 9 under disk errors) stayed on
+// the sign-in page for the rest of the run. With `sign_in`, a page whose path `signed_out`
+// matches, at a step's start or after an action, runs those steps, at most three times a step.
+// A sign-in is part of the walk: it takes no action's place, and a recording replay signs in
+// where its page asks.
+let signIns = 0;
+// whether the page is the sign-in page. An app that finds its session ended sends a page that
+// just opened there after its first requests, so on a page that just opened the requests end
+// first (at most 3 s); after an action the wait after it (settle_ms) has passed.
+async function askedToSignIn(page, opened) {
+  if (opened) await page.waitForLoadState('networkidle', { timeout: 3000 }).catch(() => {});
+  try {
+    return signedOut.test(new URL(page.url()).pathname);
+  } catch {
+    return false;
+  }
+}
+async function signInAgain(page, at) {
+  if (!signIn || signIns >= 3) return;
+  if (!(await askedToSignIn(page, at === 'start'))) return;
+  const p = new URL(page.url()).pathname;
+  signIns++;
+  const where = typeof at === 'number' ? `after ${step}.${at}` : `at the start of step ${step}`;
+  code.push(`// hydo signed in again here (${where}): the page ${p} asked for it`);
+  let what;
+  try {
+    await setup(page, signIn);
+    what = `sign in again: the page ${p} asked for it ${where}`;
+  } catch (e) {
+    what = `sign in again: the page ${p} asked for it ${where}; not done (${String((e && e.message) || e).split('\n')[0].slice(0, 120)})`;
+  }
+  log(`walk ${step}: ${what}`);
+  await frame(page, `sign-in-${signIns}`, what);
+}
+
 // ------------------------------------------------------------------ setup steps (sign in)
 // Each is one of {open: <path>}, {click: <name>[, role]}, {fill: <label>, with: <value>},
 // {press: <key>}, {see: <text>}, {wait: <ms>}.
@@ -1097,6 +1138,7 @@ async function main() {
   }
   const signedIn = status === 'passed';
   await frame(page, 'start', signedIn ? `open ${shortPath(page.url())}` : error, signedIn ? {} : { failed: true });
+  if (signedIn) await signInAgain(page, 'start');
   if (walk.rec && !script) {
     log(`walk ${step}: this recording has no script of the run it replays (${SCRIPT}), so the walk chooses its actions again and may take others`);
   }
@@ -1121,6 +1163,7 @@ async function main() {
     log(`walk-act ${step}.${k} ${JSON.stringify(done.act)}`);
     code.push(...done.lines);
     await frame(page, k, done.what, done.act.failed || done.act.missing ? { failed: true } : {});
+    await signInAgain(page, k);
   }
   if (script) {
     log(`walk ${step}: the recording replay ${missed ? `left out ${missed} action${missed === 1 ? '' : 's'}` : 'repeated every action'} of the run it replays`);
@@ -1315,10 +1358,20 @@ async function readBackMain() {
   const missing = [];
   let shot = 0;
   let n = 0;
+  let signedAgain = false;
   for (const [p, list] of byPage) {
     let open = '';
     try {
       await page.goto(new URL(p, start).href, { timeout: 30000 });
+      // Milestone 390: the walk's session ended (a clock step past the token's time): the page
+      // asks to sign in, and the check signs in with its setup steps, or the walk's sign_in, once
+      const again = rb.setup || cfg.sign_in;
+      if (again && !signedAgain && (await askedToSignIn(page, true))) {
+        signedAgain = true;
+        await setup(page, again);
+        await frame(page, 'sign-in', `sign in again: the walk's session had ended`);
+        await page.goto(new URL(p, start).href, { timeout: 30000 });
+      }
     } catch (e) {
       open = String((e && e.message) || e).split('\n')[0].slice(0, 160);
     }

@@ -2098,6 +2098,15 @@ pub struct BrowserExplore {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(extend("default" = 3000))]
     pub quiet_ms: Option<i64>,
+    /// Milestone 390: steps that sign in again, as `setup`'s, when a page of the walk is the
+    /// sign-in page (its path matches `signed_out`), at a step's start or after an action. A
+    /// session can end during a walk, and without them the walk stays on the sign-in page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sign_in: Option<Vec<BrowserSetupStep>>,
+    /// Milestone 390: a regular expression, case-insensitive, over the path of the sign-in page
+    /// (default `(^|/)(login|log-in|signin|sign-in|sign_in)(/|$)`); only with `sign_in`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub signed_out: Option<Text>,
 }
 
 /// One step of `browser.explore.setup`: one of open, click, fill, press, see or wait.

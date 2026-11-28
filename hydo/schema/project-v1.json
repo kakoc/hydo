@@ -3912,6 +3912,27 @@
           ],
           "format": "int64",
           "default": 3000
+        },
+        "sign_in": {
+          "description": "Milestone 390: steps that sign in again, as `setup`'s, when a page of the walk is the\nsign-in page (its path matches `signed_out`), at a step's start or after an action. A\nsession can end during a walk, and without them the walk stays on the sign-in page.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/BrowserSetupStep"
+          }
+        },
+        "signed_out": {
+          "description": "Milestone 390: a regular expression, case-insensitive, over the path of the sign-in page\n(default `(^|/)(login|log-in|signin|sign-in|sign_in)(/|$)`); only with `sign_in`.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Text"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false,

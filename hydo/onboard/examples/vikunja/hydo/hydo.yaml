@@ -76,6 +76,14 @@ browser:
       - {fill: Password, with: hydo-pass-1}
       - {click: Create account}
       - {see: Current Tasks}    # the home page after the sign-in
+    # Milestone 390: a session that ends during the walk (a clock step past the token's time, an
+    # account that a power cut lost) signs in again where Vikunja shows its login page
+    sign_in:
+      - {open: /login}
+      - {fill: Username Or Email Address, with: hydo}
+      - {fill: Password, with: hydo-pass-1}
+      - {click: Login}
+      - {see: Current Tasks}
     avoid:
       - "log ?out"
       - "sign ?out"
@@ -92,9 +100,11 @@ browser:
     # that refresh lists and notifications, retry by themselves
     failures_of: "^(POST|PUT|PATCH|DELETE) /api/v[12]/(projects|tasks|labels|teams|filters)"
   # Milestone 334: the pages show what Vikunja acknowledged. Every task that Vikunja answered as
-  # created is a link to /tasks/<id> under "Current Tasks" of the home page, unless a later
-  # acknowledged write deleted it or its project. The check runs at the end of the run and in
-  # the recovery boot after a power cut, where it signs in with the account that the walk made.
+  # created has its own page /tasks/<id>, unless a later acknowledged write deleted it or its
+  # project. (Milestone 334 looked for a link under "Current Tasks" of the home page; since
+  # Milestone 390 the walk marks tasks done, and the home page hides a done task.) The check runs
+  # at the end of the run and in the recovery boot after a power cut, where it signs in with the
+  # account that the walk made.
   read_back:
     setup:
       - {open: /login}
@@ -105,8 +115,8 @@ browser:
     objects:
       - writes: '^(POST|PUT) /api/v[12]/projects/(?<project>\d+)/tasks(/bulk)?$'
         name: task
-        page: /
-        shows: 'a[href$="/tasks/{id}"]'
+        page: /tasks/{id}
+        shows: .task-view
         unless: '^DELETE /api/v[12]/(tasks/{id}|projects/{project})$'
 
 invariants:
