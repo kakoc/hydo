@@ -158,3 +158,10 @@ MiB per worker.
   would not boot at all, but the host controller's state at S1 would have to move with it.
 - The estimate of half the RAM per worker comes from two examples. A run that writes more makes
   the pool too large for the memory, and macOS then compresses and swaps.
+
+## macOS 27
+
+On macOS 27.2.1 the kernel panicked twice in `hydo-hvm` with `[SPTM] VIOLATION_ILLEGAL_DOWNGRADE`
+while guest RAM was a private mapping of a RAM base. So the sharing is off by default on macOS 27
+and later (Milestone 395); `HVM_RAM_SHARE=1` turns it on there.
+

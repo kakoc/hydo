@@ -129,7 +129,7 @@ Generated from `hydo/crates/hydo-config/src/registry.rs` by `hydo_config::regist
 | `HVMX_DIAG_CHUNKS` | developer | list | - | hydo-hvm | With HVMX_DIAG: raw copies of these 1 MiB chunks of RAM (comma-separated offsets). |
 | `HVMX_CHECK_RESTORE` | developer | flag: set | - | hydo-hvm | Set: read the registers back after every restore and report differences. |
 | `HVMX_NO_MLOCK` | developer | flag: set | - | hydo-hvm | Set: do not mlock guest RAM. |
-| `HVM_RAM_SHARE` | user | flag: exactly `0` turns it off | on | hydo-hvm | `0`: each snapshot keeps its own copy of guest RAM, which a restore copies back (before Milestone 335). Otherwise a snapshot is a RAM base in `HVM_SNAP_DIR` that guest RAM is mapped from privately (the kernel copies a page at its first write), shared by the engines whose snapshot has the same bytes, such as the workers of one exploration; guest RAM is not locked. |
+| `HVM_RAM_SHARE` | user | flag: exactly `0` turns it off | on; off on macOS 27 and later | hydo-hvm | `0`: each snapshot keeps its own copy of guest RAM, which a restore copies back (before Milestone 335). Otherwise a snapshot is a RAM base in `HVM_SNAP_DIR` that guest RAM is mapped from privately (the kernel copies a page at its first write), shared by the engines whose snapshot has the same bytes, such as the workers of one exploration; guest RAM is not locked. Unset, it is off on macOS 27 and later, whose kernel panics on that private mapping (Milestone 395); `1` turns it on there. |
 
 ## The KVM engine (`hydo_config::kvm::Engine`, `hydo_config::kvm::Options`)
 
