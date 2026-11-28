@@ -176,6 +176,42 @@ the page is then its place in the playback, not its seed, and so it is when a no
 out. The example is the NSQ recording (`hydo/onboard/examples/nsq/RESULTS.md`, "The recording
 of the live map").
 
+### The tree of runs
+
+Status: Milestone 397's fourth follow-up, a view of the showcase page (`Runs`, `#view=runs`).
+
+The code map and the call graph show what the runs reached. The tree of runs shows the runs
+themselves, every run of the exploration, so that a reader sees how hydo found a failure and
+then ran it again and shrank it:
+
+- Each run is one thin line, a hair, from left to right over the workload's steps. Every first
+  run starts at one point on the left, the booted system that every run starts from (its
+  snapshot S1), and fans out from there to a row of its own.
+- The server gives the page the other runs of the stream too (`others`: re-runs, shrink
+  candidates, minimal schedules), each with its seed and its folder, without their functions.
+  A run of a seed's family forks off the seed's first run at the step where their schedules
+  first differ: the least step of a token that one schedule has and the other has not (a token
+  without a step, such as a changed composition, counts as step 0). So the shrink candidates of
+  a failure grow a small bush under it, brighter and thicker than the plain hairs, with their
+  own faults and ends. A re-run of the same schedule has no fork: it is a thicker, glowing
+  strand along its first run, one more for each re-run.
+- A dot on a hair is a fault at its step, in the colours of the run track: crash, power cut,
+  clock jump, network fault, pause. A green tick is a step where a first run reached functions of
+  the project's own code that no earlier first run had reached, from its records of the live
+  map; its height grows with their number. Only first runs carry their functions to the page,
+  so a bush's runs have no ticks.
+- A hair ends in a dot: grey for a pass, and for a broken promise a larger dot coloured and
+  labelled as the banner names the failure: `BUG`, `KNOWN BUG` or `DOCUMENTED LIMIT`. A bush's
+  run that breaks the check its first run broke takes its first run's kind. One that breaks
+  another check is `ANOTHER FAILURE`, with no claim about it and no banner.
+- A hover names a hair's run with its schedule in words and its replay command, a dot's fault,
+  or a tick's functions. A click on a red end shows its banner.
+
+The page plays the first runs as before. A failure's bush grows right after its first run ends,
+one run every 0.22 seconds, although the explorer ran the re-runs and the shrinks after every
+first run (Milestone 387). The tree shows which run came from which, not when each ran. A note
+that leaves a first run out leaves its re-runs and shrink candidates out with it.
+
 ### The flow of calls
 
 The call flow draws the project's own code as a tree that grows from the top. It is the

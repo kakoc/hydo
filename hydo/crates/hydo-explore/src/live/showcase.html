@@ -120,13 +120,23 @@ footer .lab b{display:block;color:var(--fg);font-size:calc(var(--s) * 22);letter
   <div class="stage" id="stage">
     <canvas id="cv"></canvas>
     <div class="tag"><b id="tagT">Every function of the code</b><span id="tagS">A tile lights up the first time a run reaches it</span></div>
-    <div class="legend">
+    <div class="legend" id="legRuns" style="display:none">
+      <span><i style="background:#f87171;border-radius:50%"></i>crash</span>
+      <span><i style="background:#facc15;border-radius:50%"></i>power cut</span>
+      <span><i style="background:#a78bfa;border-radius:50%"></i>clock jump</span>
+      <span><i style="background:#38bdf8;border-radius:50%"></i>network fault</span>
+      <span><i style="background:#a3b1c6;border-radius:50%"></i>pause</span>
+      <span><i style="background:#34d399;width:calc(var(--s) * 3);height:calc(var(--s) * 15)"></i>new code reached</span>
+      <span><i style="background:#ff5468;border-radius:50%"></i>promise broken</span>
+      <span><i style="background:#5b6478;border-radius:50%"></i>run passed</span>
+    </div>
+    <div class="legend" id="legMap">
       <span><i style="background:var(--clean)"></i>reached in a normal run</span>
       <span><i style="background:var(--faults)"></i>reached only when something broke</span>
       <span><i class="ring"></i>error-handling code</span>
       <span><i style="background:#2a3040"></i>not reached yet</span>
     </div>
-    <div class="views"><button data-v="map" class="on">Code map</button><button data-v="graph">Call graph</button><button data-v="flow">First calls</button></div>
+    <div class="views"><button data-v="map" class="on">Code map</button><button data-v="graph">Call graph</button><button data-v="flow">First calls</button><button data-v="runs">Runs</button></div>
     <div id="wait">Waiting for the first run…</div>
     <div class="banner" id="banner">
       <div class="k" id="bK">Bug found</div>
@@ -168,7 +178,7 @@ const pass = new Map();        // id -> time: a later run that reached it again
 const epRan = new Set();
 const broken = new Set();      // checks that broke (with the issue a note names)
 const bugs = new Set();        // the ones that are bugs: no documented limit or trade-off
-let faults = 0, view = ["flow", "graph"].includes(H.get("view")) ? H.get("view") : "map";
+let faults = 0, view = ["flow", "graph", "runs"].includes(H.get("view")) ? H.get("view") : "map";
 let S = 1, DPR = 1;            // the page's scale (1 at 1920x1080) and the device pixels
 
 function scale() {
@@ -897,6 +907,185 @@ function drawGraph(g, now) {
 }
 
 // ---------------------------------------------------------------- the runs' track
+// ---------------------------------------------------------------- the tree of runs
+// Milestone 397's fourth follow-up: every run of the exploration is one hair from left to
+// right over the workload's steps, from the booted system. A failure's re-runs and shrink
+// candidates fork off it at the step where their schedule first differs, so a failure grows a
+// bush; a re-run of the same schedule is a thicker strand along it. The page shows each
+// failure's bush right after its first run, not at the moment the explorer ran it.
+const OTHERS = [];             // every other run the server gave (re-runs, shrink candidates)
+const FAMILY = new Map();      // "<part>:<seed>" -> its other runs, in the stream's order
+let ofrom = 0;
+const bushAt = new Map();      // first run's index -> the time its bush starts to grow
+// a run without step ranges of its own (only first runs carry their functions) has its parent's
+const stepsOf = (o, parent) => (o.steps ? steps(o) : steps(parent));
+const famKey = (r) => `${r.part ?? 0}:${r.seed ?? "m" + (r.schedule || "")}`;
+function addOther(o) {
+  OTHERS.push(o);
+  const k = famKey(o);
+  if (!FAMILY.has(k)) FAMILY.set(k, []);
+  FAMILY.get(k).push(o);
+}
+// the step where a run's schedule first differs from its parent's: the least step of a token
+// that one of them has and the other has not; null when they are the same schedule
+function forkStep(r, parent) {
+  const tok = (x) => (x.said || []).map((t) => [t.token, t.step ?? 0]);
+  const a = tok(r), b = tok(parent), as = new Set(a.map((t) => t[0])), bs = new Set(b.map((t) => t[0]));
+  let f = null;
+  for (const [t, s] of a) if (!bs.has(t)) f = f === null ? s : Math.min(f, s);
+  for (const [t, s] of b) if (!as.has(t)) f = f === null ? s : Math.min(f, s);
+  if (f === null && r.schedule !== parent.schedule) f = 0;
+  return f;
+}
+// the new code a first run reached: per step, the functions that no earlier first run reached
+const TICKS = [];              // first run's index -> [[step, [function ids]]]
+const everReached = new Set();
+function noteTicks(r, k) {
+  const by = new Map();
+  for (const t of r.functions || []) {
+    if (everReached.has(t[0])) continue;
+    everReached.add(t[0]);
+    const f = FN.get(t[0]);
+    if (f && !f.own) continue;
+    const s = Math.max(0, t[1]);
+    if (!by.has(s)) by.set(s, []);
+    by.get(s).push(t[0]);
+  }
+  TICKS[k] = [...by.entries()].sort((a, b) => a[0] - b[0]);
+}
+const ENDCOL = {bug: "#ff5468", new: "#ff5468", reported: "#ff5468", known: "#fb923c", documented: "#38bdf8", setting: "#38bdf8", expected: "#38bdf8"};
+const ENDLABEL = {bug: "bug", new: "bug", reported: "bug", known: "known bug", documented: "documented limit", setting: "documented trade-off", expected: "expected"};
+// a failure's kind for a run of a bush: its own note, else its parent's when it breaks the same
+// check (the failure being shrunk), else none (another failure, labelled as such)
+function bushKind(o, parent) {
+  if (o.verdict !== "violation") return null;
+  if (o.note && o.note.kind) return o.note.kind;
+  const c = (x) => x.what && x.what.check;
+  if (parent && c(o) && c(o) === c(parent)) return failureKind(parent);
+  return "other";
+}
+let HIT = {hairs: [], dots: [], ticks: [], ends: []};
+function drawRuns(g, now) {
+  const rc = $("cv").getBoundingClientRect(), W = rc.width, Hh = rc.height;
+  const top = px(150), bot = px(64), x0 = px(130), x1 = W - px(230);
+  const n = RUNS.length;
+  const S0 = Math.max(1, ...RUNS.map(steps), ...OTHERS.map(steps));
+  const sx = (s) => x0 + (x1 - x0) * Math.min(1, s / S0);
+  HIT = {hairs: [], dots: [], ticks: [], ends: []};
+  // the rows: each first run, and under it the runs of its bush that are no same-schedule re-run
+  const rows = [];
+  for (let k = 0; k < n; k++) {
+    const r = RUNS[k], fam = (FAMILY.get(famKey(r)) || []).map((o) => ({o, f: forkStep(o, r)}));
+    rows.push({k, r, fam, members: fam.filter((m) => m.f !== null)});
+  }
+  const units = rows.reduce((a, w) => a + 1 + 0.55 * w.members.length, 0) || 1;
+  const unit = Math.min(px(64), (Hh - top - bot) / units);
+  let y = top + Math.max(0, (Hh - top - bot - unit * units) / 2);
+  const rootY = (Hh - bot + top) / 2;
+  // the step grid
+  g.font = `500 ${px(13)}px -apple-system,Inter,sans-serif`; g.textAlign = "center"; g.textBaseline = "alphabetic";
+  const every = S0 > 30 ? 10 : 5;
+  for (let s = 0; s <= S0; s += every) {
+    g.strokeStyle = "rgba(255,255,255,.05)"; g.lineWidth = 1;
+    g.beginPath(); g.moveTo(sx(s), top - px(18)); g.lineTo(sx(s), Hh - bot + px(4)); g.stroke();
+    g.fillStyle = "#5b6478"; g.fillText(`step ${s}`, sx(s), Hh - bot + px(24));
+  }
+  // the booted system
+  g.fillStyle = "#e8ebf2"; g.beginPath(); g.arc(px(60), rootY, px(8), 0, 7); g.fill();
+  g.fillStyle = "#8b93a7"; g.textAlign = "left"; g.font = `600 ${px(14)}px -apple-system,Inter,sans-serif`;
+  g.fillText("booted system", px(30), rootY - px(18));
+  const hair = (from, fy, ty, fs, ts, col, w, glow) => {
+    const xa = from[0], xb = sx(ts);
+    const mid = Math.max(xa + px(40), Math.min(xb, sx(fs) + px(60)));
+    g.beginPath(); g.moveTo(xa, fy);
+    g.bezierCurveTo(xa + (mid - xa) * 0.55, fy, xa + (mid - xa) * 0.35, ty, mid, ty);
+    if (xb > mid) g.lineTo(xb, ty);
+    g.strokeStyle = col; g.lineWidth = w;
+    if (glow) { g.shadowColor = glow; g.shadowBlur = px(10); }
+    g.stroke(); g.shadowBlur = 0;
+  };
+  let bushes = 0;
+  for (const row of rows) {
+    const {k, r} = row, ry = y + unit / 2;
+    y += unit;
+    const done = k < shown && !(cur && cur.k === k), live = cur && cur.k === k;
+    if (!done && !live) { y += 0.55 * unit * row.members.length; continue; }
+    const p = live ? Math.min(1, (now - cur.t0) / PACE) : 1, S1 = steps(r);
+    const fail = r.verdict === "violation", kind = fail ? failureKind(r) : null;
+    const col = fail ? "rgba(255,120,135,.62)" : r.verdict === "ok" ? "rgba(150,165,190,.55)" : "rgba(250,204,21,.5)";
+    hair([px(60), rootY], rootY, ry, 0, S1 * p, col, px(fail ? 1.8 : 1.3), null);
+    HIT.hairs.push({r, k, y: ry, xa: sx(0), xb: sx(S1 * p), what: "run"});
+    // a re-run of the same schedule: a glowing strand along the hair, thicker with each
+    const same = row.fam.filter((m) => m.f === null);
+    const t0 = bushAt.get(k);
+    const famShown = (i) => t0 !== undefined && now >= t0 + i * 220;
+    let idx = 0;
+    same.forEach((m, j) => {
+      const i = idx++;
+      if (!famShown(i)) return;
+      const q = Math.min(1, (now - (t0 + i * 220)) / 220);
+      const ec = ENDCOL[bushKind(m.o, r)] || "#9fb0c8";
+      g.beginPath(); g.moveTo(sx(0), ry + px(3 + 2 * j)); g.lineTo(sx(stepsOf(m.o, r) * q), ry + px(3 + 2 * j));
+      g.strokeStyle = ec; g.globalAlpha = 0.85; g.lineWidth = px(2.6); g.shadowColor = ec; g.shadowBlur = px(12); g.stroke();
+      g.shadowBlur = 0; g.globalAlpha = 1;
+      HIT.hairs.push({r: m.o, k, y: ry + px(3 + 2 * j), xa: sx(0), xb: sx(stepsOf(m.o, r)), what: "rerun"});
+    });
+    // the bush: each other run forks off at its first differing step
+    let by = y;
+    for (const m of row.members) {
+      const my = by + 0.55 * unit / 2; by += 0.55 * unit;
+      const i = idx++;
+      if (!famShown(i)) continue;
+      bushes++;
+      const q = Math.min(1, (now - (t0 + i * 220)) / 220), so = stepsOf(m.o, r);
+      const bk = bushKind(m.o, r), ec = bk ? ENDCOL[bk] || "#c4a7ff" : "#9fb0c8";
+      const bcol = m.o.verdict === "violation" ? ec : "rgba(190,205,225,.85)";
+      g.globalAlpha = 0.9;
+      hair([sx(m.f), ry], ry, my, m.f, m.f + (so - m.f) * q, bcol, px(1.9), bcol);
+      g.globalAlpha = 1;
+      HIT.hairs.push({r: m.o, k, y: my, xa: sx(m.f), xb: sx(so), what: m.o.role, parent: r});
+      if (q >= 1) {
+        for (const fa of runFaults(m.o)) if (fa.step >= m.f) {
+          g.fillStyle = KIND[fa.kind] || "#fff"; g.beginPath(); g.arc(sx(fa.step + 0.5), my, px(3.2), 0, 7); g.fill();
+          HIT.dots.push({x: sx(fa.step + 0.5), y: my, fa});
+        }
+        endMark(g, sx(so), my, m.o, bk, px(4.2), false);
+        HIT.ends.push({x: sx(so), y: my, r: m.o, k, kind: bk});
+      }
+    }
+    y = by;
+    // its faults and its new code
+    for (const fa of runFaults(r)) if (fa.step <= S1 * p) {
+      g.fillStyle = KIND[fa.kind] || "#fff"; g.beginPath(); g.arc(sx(fa.step + 0.5), ry, px(4.4), 0, 7); g.fill();
+      HIT.dots.push({x: sx(fa.step + 0.5), y: ry, fa});
+    }
+    for (const [s, ids] of TICKS[k] || []) if (s <= S1 * p) {
+      const h = px(6 + Math.min(10, 3 * Math.log2(1 + ids.length)));
+      g.strokeStyle = "#34d399"; g.lineWidth = px(2); g.globalAlpha = 0.95;
+      g.beginPath(); g.moveTo(sx(s + 0.5) + px(5), ry - h); g.lineTo(sx(s + 0.5) + px(5), ry + h); g.stroke(); g.globalAlpha = 1;
+      HIT.ticks.push({x: sx(s + 0.5) + px(5), y: ry, h, ids, s});
+    }
+    if (p >= 1) {
+      endMark(g, sx(S1), ry, r, kind, px(fail ? 7.5 : 3), true);
+      HIT.ends.push({x: sx(S1), y: ry, r, k, kind});
+    }
+  }
+  const nb = OTHERS.filter((o) => rows.some((w) => w.fam.some((m) => m.o === o))).length;
+  g.fillStyle = "#8b93a7"; g.textAlign = "left"; g.font = `500 ${px(15)}px -apple-system,Inter,sans-serif`;
+  g.fillText(`${Math.min(shown, n)} runs, and ${bushes + rows.reduce((a, w) => a + (bushAt.has(w.k) ? w.fam.filter((m) => m.f === null).length : 0), 0)} of the ${nb} re-runs and shrink candidates of their failures`, px(26), px(112));
+}
+function endMark(g, x, y, r, kind, rad, label) {
+  if (r.verdict === "violation") {
+    const c = ENDCOL[kind] || "#c4a7ff";
+    g.fillStyle = c; g.shadowColor = c; g.shadowBlur = px(14); g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill(); g.shadowBlur = 0;
+    if (label) {
+      g.font = `700 ${px(14)}px -apple-system,Inter,sans-serif`; g.textAlign = "left"; g.textBaseline = "middle";
+      g.fillText((ENDLABEL[kind] || "another failure").toUpperCase(), x + rad + px(8), y); g.textBaseline = "alphabetic";
+    }
+  } else {
+    g.fillStyle = r.verdict === "ok" ? "#5b6478" : "#facc15"; g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill();
+  }
+}
 const pulses = [];             // [time, x, y, colour, label]
 function drawTimeline(now) {
   const c = $("tl"), r = c.getBoundingClientRect();
@@ -972,7 +1161,8 @@ function step(now) {
     c.width = Math.round(r.width * DPR); c.height = Math.round(r.height * DPR); layoutMap(); if (TREE.gs) layoutTree(); layoutGraph();
   }
   const g = c.getContext("2d"); g.setTransform(DPR, 0, 0, DPR, 0, 0); g.clearRect(0, 0, r.width, r.height);
-  if (MAP) { if (view === "map") drawMap(g, now); else if (view === "graph") drawGraph(g, now); else drawFlow(g, now, dt); }
+  if (view === "runs") drawRuns(g, now);
+  else if (MAP) { if (view === "map") drawMap(g, now); else if (view === "graph") drawGraph(g, now); else drawFlow(g, now, dt); }
   drawTimeline(now);
   requestAnimationFrame(step);
 }
@@ -998,6 +1188,7 @@ function advance(now) {
   }
   if (p >= 1) {
     const r = cur.r, k = cur.k;
+    if ((FAMILY.get(famKey(r)) || []).length) bushAt.set(k, now);
     shown++;
     cur = null;
     if (r.verdict === "violation") {
@@ -1080,9 +1271,11 @@ async function poll() {
   try {
     if (!MAP) { const m = await (await fetch("map.json", {cache: "no-store"})).json(); if (m) loadMap(m); }
     if (ENTRIES === null) { ENTRIES = await (await fetch("entries.json", {cache: "no-store"})).json() || {}; matchRoutes(); graphDirty = true; }
-    const j = await (await fetch(`runs?from=${from}`, {cache: "no-store"})).json();
+    const j = await (await fetch(`runs?from=${from}&ofrom=${ofrom}`, {cache: "no-store"})).json();
     INFO = j;
-    for (const r of j.runs) { RUNS.push(r); noteCallers(r); }
+    for (const r of j.runs) { RUNS.push(r); noteCallers(r); noteTicks(r, RUNS.length - 1); }
+    for (const o of j.others || []) addOther(o);
+    ofrom = j.others_total ?? ofrom;
     if (j.runs.length) graphDirty = true;
     if (!started && RUNS.length) { started = true; $("wait").style.display = "none"; holdUntil = performance.now() + (+(H.get("start") || 0)) * 1000; }
     from = j.total;
@@ -1099,12 +1292,19 @@ function setView(v) {
   for (const b of document.querySelectorAll(".views button")) b.classList.toggle("on", b.dataset.v === v);
   $("tagT").textContent = v === "map" ? `Every function of ${NAME}'s own code` : v === "graph" ? `Every function of ${NAME}, by its calls from each entry point` : `Who calls what in ${NAME}, from each entry point`;
   $("tagS").textContent = v === "map" ? "A tile lights up the first time a run reaches it" : v === "graph" ? "A path lights up from its entry point the first time a run takes it" : "A branch grows the first time a run takes that call";
+  if (v === "runs") {
+    $("tagT").textContent = `Every run of ${NAME}, from the booted system`;
+    $("tagS").textContent = "A failure's re-runs and shrink candidates fork off it where their faults first differ";
+  }
+  $("legRuns").style.display = v === "runs" ? "flex" : "none";
+  $("legMap").style.display = v === "runs" ? "none" : "flex";
   if (v === "flow") treeDirty = true;
 }
 for (const b of document.querySelectorAll(".views button")) b.addEventListener("click", () => setView(b.dataset.v));
 $("stage").addEventListener("mousemove", (ev) => {
   const r = $("cv").getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, tip = $("tip");
   let f = null;
+  if (view === "runs") { tip.style.display = "none"; return; }
   if (view === "map") { for (const l of LEAVES) if (x >= l.x && x < l.x + l.w && y >= l.y && y < l.y + l.h) { f = l.f; break; } }
   else if (view === "graph") { if (G) for (const [k, n] of G.rect) if (x >= n.x - px(4) && x < n.x + n.w && y >= n.y && y < n.y + Math.max(n.h, 1)) { f = FN.get(k); break; } }
   else for (const [k, n] of NODES) if (!n.t.group && x >= n.c.x && x < n.c.x + n.c.w && y >= n.c.y && y < n.c.y + n.c.h) { f = FN.get(k); break; }
@@ -1120,7 +1320,13 @@ $("stage").addEventListener("mousemove", (ev) => {
   tip.style.left = Math.min(x + 18, r.width - px(540)) + "px"; tip.style.top = Math.min(y + 18, r.height - px(150)) + "px";
 });
 $("stage").addEventListener("mouseleave", () => { $("tip").style.display = "none"; });
-window.showcase = {setView, runs: () => RUNS.length, shown: () => shown, busy: () => !!cur || shown < RUNS.length || performance.now() < holdUntil};
+window.showcase = {setView, runs: () => RUNS.length, shown: () => shown, busy: () => !!cur || shown < RUNS.length || performance.now() < holdUntil || bushBusy()};
+// a bush still grows
+function bushBusy() {
+  const now = performance.now();
+  for (const [k, t0] of bushAt) if (now < t0 + ((FAMILY.get(famKey(RUNS[k])) || []).length + 1) * 220) return true;
+  return false;
+}
 setView(view);
 scale(); poll(); requestAnimationFrame(step);
 </script>

@@ -148,6 +148,12 @@ struct State {
     part_image: Option<String>,
     /// The runs that a note left out.
     left_out: usize,
+    /// The folders and seeds whose first run a note left out: their re-runs and shrink
+    /// candidates are left out with it.
+    left_seeds: Vec<(usize, i64)>,
+    /// Every other run of the stream (re-runs, shrink candidates, minimal schedules; Milestone
+    /// 397's fourth follow-up, the tree of runs) in a short form without its functions.
+    others: Vec<Value>,
     /// The first runs in the short form, in the order the stream has them.
     runs: Vec<Value>,
     /// The image and the engine of the start record, for the `hydo run` command.
@@ -330,7 +336,12 @@ impl Server {
                     .find_map(|kv| kv.strip_prefix("from="))
                     .and_then(|v| v.parse::<usize>().ok())
                     .unwrap_or(0);
-                let body = self.runs_after(from);
+                let ofrom = query
+                    .split('&')
+                    .find_map(|kv| kv.strip_prefix("ofrom="))
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .unwrap_or(0);
+                let body = self.runs_after(from, ofrom);
                 reply(
                     &mut c,
                     200,
@@ -345,10 +356,11 @@ impl Server {
     }
 
     /// The first runs after the first `from`, with what the page needs besides.
-    fn runs_after(&self, from: usize) -> Value {
+    fn runs_after(&self, from: usize, ofrom: usize) -> Value {
         let mut st = self.state.lock().expect("live state");
         self.read_more(&mut st);
         let runs: Vec<Value> = st.runs.iter().skip(from).cloned().collect();
+        let others: Vec<Value> = st.others.iter().skip(ofrom).cloned().collect();
         let baseline = (from == 0)
             .then_some(())
             .and(self.baseline.as_ref())
@@ -364,6 +376,8 @@ impl Server {
             "total": st.runs.len(),
             "from": from.min(st.runs.len()),
             "runs": runs,
+            "others_total": st.others.len(),
+            "others": others,
         })
     }
 
@@ -397,9 +411,22 @@ impl Server {
 
     /// A run of the folder being read, with its note, or none when a note leaves it out.
     fn add_run(&self, st: &mut State, mut r: Value) {
+        let other = r.get("role").and_then(Value::as_str).is_some_and(|x| {
+            x != hydo_results::role::FIRST && x != hydo_results::role::MANUAL && x != "the run"
+        });
+        let seed = r.get("seed").and_then(Value::as_i64);
+        if other && seed.is_some_and(|s| st.left_seeds.contains(&(st.part, s))) {
+            return;
+        }
         if let Some(n) = self.opts.notes.iter().find(|n| n.matches(&r)) {
             if n.leave_out {
+                if other {
+                    return;
+                }
                 st.left_out += 1;
+                if let Some(s) = seed {
+                    st.left_seeds.push((st.part, s));
+                }
                 return;
             }
             r["note"] = json!({"kind": n.kind, "issue": n.issue, "words": n.words});
@@ -407,7 +434,12 @@ impl Server {
         if let Some(i) = &st.part_image {
             r["image"] = json!(i);
         }
-        st.runs.push(r);
+        r["part"] = json!(st.part);
+        if other {
+            st.others.push(r);
+        } else {
+            st.runs.push(r);
+        }
     }
 
     /// Read the stream's new whole lines of `dir` (or, for a run directory, its `result.json`
@@ -464,6 +496,8 @@ impl Server {
                 Some("end") => *ended = true,
                 Some("run") => {
                     if let Some(r) = short_run(&v, false) {
+                        self.add_run(st, r);
+                    } else if let Some(r) = other_run(&v) {
                         self.add_run(st, r);
                     }
                 }
@@ -553,6 +587,7 @@ fn short_run(v: &Value, any: bool) -> Option<Value> {
         w => json!({"words": crate::advice::what_words(&w)}),
     };
     Some(json!({
+        "role": role,
         "said": said,
         "what": what,
         "seed": v.get("seed"),
@@ -574,6 +609,29 @@ fn short_run(v: &Value, any: bool) -> Option<Value> {
         "functions": reached,
         "paths": paths,
     }))
+}
+
+/// A run record that is no first run (a re-run, a shrink candidate, a minimal schedule) in the
+/// page's short form, for the tree of runs (Milestone 397's fourth follow-up): the first run's
+/// form without the functions and the error paths, which only first runs carry to the page.
+fn other_run(v: &Value) -> Option<Value> {
+    let role = v.get("role").and_then(Value::as_str)?;
+    if !matches!(
+        role,
+        hydo_results::role::RERUN
+            | hydo_results::role::SHRINK
+            | hydo_results::role::MINIMAL
+            | hydo_results::role::ERROR_SHRINK
+            | hydo_results::role::ERROR_MINIMAL
+    ) {
+        return None;
+    }
+    let mut r = short_run(v, true)?;
+    if let Some(o) = r.as_object_mut() {
+        o.remove("functions");
+        o.remove("paths");
+    }
+    Some(r)
 }
 
 fn reply(c: &mut TcpStream, code: u16, ty: &str, body: &[u8]) {
@@ -675,32 +733,35 @@ mod tests {
         for d in [&a, &b] {
             std::fs::create_dir_all(d).unwrap();
         }
-        let run = |seed: u64, sch: &str, verdict: &str| {
+        let run_as = |role: &str, seed: u64, sch: &str, verdict: &str| {
             let kind = if verdict.is_empty() {
                 "ok"
             } else {
                 "violation"
             };
             format!(
-                "{{\"type\":\"run\",\"role\":\"first\",\"seed\":{seed},\"schedule\":\"{sch}\",\
+                "{{\"type\":\"run\",\"role\":\"{role}\",\"seed\":{seed},\"schedule\":\"{sch}\",\
                  \"class\":\"process\",\"verdict\":{{\"kind\":\"{kind}\",\"text\":\"{verdict}\"}}}}\n"
             )
         };
+        let run = |seed: u64, sch: &str, verdict: &str| run_as("first", seed, sch, verdict);
         std::fs::write(
             a.join(hydo_results::EVENTS),
             format!(
-                "{{\"type\":\"start\",\"image\":{{\"path\":\"one.img\"}}}}\n{}{}{{\"type\":\"end\"}}\n",
+                "{{\"type\":\"start\",\"image\":{{\"path\":\"one.img\"}}}}\n{}{}{}{{\"type\":\"end\"}}\n",
                 run(1, "disk=none | run", ""),
                 run(2, "disk=none | run K=nsqd@4+1", "VIOLATION [jobs.no-loss] m0 lost"),
+                run_as("rerun", 2, "disk=none | run K=nsqd@4+1", "VIOLATION [jobs.no-loss] m0 lost"),
             ),
         )
         .unwrap();
         std::fs::write(
             b.join(hydo_results::EVENTS),
             format!(
-                "{{\"type\":\"start\",\"image\":{{\"path\":\"/x/one.img\"}}}}\n{}{}{{\"type\":\"end\"}}\n",
+                "{{\"type\":\"start\",\"image\":{{\"path\":\"/x/one.img\"}}}}\n{}{}{}{{\"type\":\"end\"}}\n",
                 run(1, "disk=none | run A=nsq.msg_received+2200:kill-nsqd", "VIOLATION [jobs.acked-outcome] m0 has no final state"),
                 run(2, "disk=none | run P=nsqd@3+1", "VIOLATION [jobs.no-loss] m3 lost"),
+                run_as("shrink", 2, "disk=none | run P=nsqd@3+0", "VIOLATION [jobs.no-loss] m3 lost"),
             ),
         )
         .unwrap();
@@ -743,6 +804,15 @@ mod tests {
         );
         assert_eq!(r[2]["note"]["kind"], "documented");
         assert_eq!(r[2]["image"], "/x/one.img");
+        // Milestone 397's fourth follow-up: the other runs, without the left-out seed's
+        let o = v["others"].as_array().unwrap();
+        assert_eq!(v["others_total"], 1);
+        assert_eq!(o[0]["role"], "rerun");
+        assert_eq!(o[0]["seed"], 2);
+        assert_eq!(o[0]["part"], 0);
+        assert_eq!(o[0]["note"]["issue"], "nsqio/nsq#1542");
+        assert!(o[0].get("functions").is_none());
+        assert_eq!(r[2]["part"], 1);
         // a kind that is none of the four, and a note that names nothing
         std::fs::write(&notes_file, "notes:\n  - {check: x, kind: bug}\n").unwrap();
         assert!(read_notes(&notes_file)
