@@ -1916,8 +1916,13 @@ breakpoints execute-only, and a read puts its instructions back first (`HVM_BRK_
 macOS 27 that is off by default, as the kernel's panic of M395 names a change of permissions. On
 Blnk (39,038 functions, 1,039 its own), 30 runs without faults kept their fingerprints. 15 of 30
 with faults kept theirs; the other 15 start Blnk again during the run. 236 of its own functions
-ran without a fault, 103 only under faults, and 700 never. The design is
-`docs/design/live-map.md`, the how-to `hydo guide error-paths` section 6 (open item 201).
+ran without a fault, 103 only under faults, and 700 never. Since M397 (tentative number)
+`--showcase` serves a dark page for people new to hydo. It has the map and a tree of each
+function's first caller from the entry points (the routes of `--routes DIR`, `main`, the
+background work). It also has the runs with their faults, and each bug in one sentence with its
+replay command. The engine reads x30 at each function's stop (`caller` of each first run); on
+Blnk 30 runs kept the fingerprints of M394's engine. The design is `docs/design/live-map.md`, the
+how-to `hydo guide error-paths` section 6 (open item 201).
 
 **Faults of the disk's blocks (M313, tentative number; the Mac and KVM engines).** Four host
 tokens make faults that a real disk makes, on the data disk, decided from `dseed=` and from the
@@ -4832,6 +4837,11 @@ milestone where it is described. The full text of each item as of 2026-11-08 is 
     - The page was checked with a headless browser's screenshots and by hand, not by a test that
       clicks it. It reads `events.jsonl` again from the last whole line, so a stream that a
       merge (`hydo explore --merge`) wrote is read as one.
+    - The flow of M397 is the tree of first callers. Without a static call graph, calls that no
+      run made are not drawn. A one-shot stop names one caller per run. An inlined function has
+      no node, and a tail call names the caller's caller. Only HTTP routes that write (and POST
+      routes that read) name roots, so a GET handler hangs under the middleware that first called
+      it. Queue consumers are named only by the library that called them.
 
 ## Milestone index
 
@@ -6179,6 +6189,11 @@ build machine, before 2026-10-13.
   VIOLATION_ILLEGAL_DOWNGRADE`, the page-table monitor refusing a permission change. With the
   sharing off, 34 schedules of the Redis example ran without a panic. `HVM_RAM_SHARE=1` turns it
   on again. Nothing recorded moved
+- M397 (tentative number): the showcase page of the live map (`--showcase`), and the flow of
+  first calls. The Mac engine reads x30 at each function's one-shot stop to name its first
+  caller, and the page draws the code as a tree from the entry points that `--routes DIR` names.
+  On Blnk 30 runs kept the fingerprints of M394's engine; the first run broke the atomic bulk.
+  A video, a GIF and stills of the played-back exploration stay local. Nothing recorded moved
 - M394 (tentative number): the live map of the code an exploration reaches. `all_functions: true`
   watches every function of a program with the Mac engine's one-shot breakpoints, and
   `result.json` gets each function's first run. `hydo explore --live` and `hydo report --live`
