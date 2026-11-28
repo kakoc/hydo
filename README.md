@@ -31,13 +31,14 @@ makes the same failure happen again, tomorrow or on a colleague's laptop.
 
 https://github.com/user-attachments/assets/a7d4f724-c105-425b-ae6f-a0e4382c50b2
 
-hydo runs [NSQ](hydo/onboard/examples/nsq/), a message queue, again and again, each time with
-other crashes, pauses, network cuts, and clock jumps. First you see a map of NSQ's code: each tile
-lights up the first time a run reaches it. Then each thin line is one run, from the start on the
-left to its end on the right. The dots are the faults hydo made, and a red end is a run where NSQ
-broke a promise. hydo then runs that failure again with fewer and fewer faults, to find the
-smallest cause, and those runs grow as a small bush on its branch. hydo finds three things, each
-with the one command that replays it:
+hydo runs [NSQ](hydo/onboard/examples/nsq/), a message queue, again and again under crashes,
+pauses, network cuts, and clock jumps.
+
+- **Tiles:** each is one function of NSQ. It lights up when a run first reaches it.
+- **Lines:** each is one run. Dots are faults, and a red end is a broken promise.
+- **Bushes:** hydo replays a failure with fewer faults to find its smallest cause.
+
+It finds three issues, each with the command that replays it:
 
 - a crash in a new topic's first seconds loses its messages
   ([#1542](https://github.com/nsqio/nsq/issues/1542), reported by hydo);
